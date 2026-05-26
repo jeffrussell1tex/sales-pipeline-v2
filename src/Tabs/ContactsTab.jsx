@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
@@ -312,6 +312,17 @@ function CompanyTwoPane({
     handleEditContact,
 }) {
     const [coSearch, setCoSearch] = useState('');
+    const [stickyTop, setStickyTop] = useState(0);
+    const rightPanelRef = useRef(null);
+
+    // Measure the actual pixel distance from the right panel's natural top edge
+    // to the top of the viewport on mount. This accounts for the fixed AppHeader
+    // + nav-tabs above the tab content without needing to know their CSS height.
+    useLayoutEffect(() => {
+        if (!rightPanelRef.current) return;
+        const rect = rightPanelRef.current.getBoundingClientRect();
+        setStickyTop(rect.top);
+    }, []);
 
     const filteredCompanies = useMemo(() => {
         if (!coSearch.trim()) return companyList;
@@ -423,7 +434,7 @@ function CompanyTwoPane({
             </div>
 
             {/* RIGHT — Company detail + contacts — sticky so it stays in view while left list scrolls */}
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, alignSelf: 'flex-start', maxHeight: '100vh', overflow: 'hidden' }}>
+            <div ref={rightPanelRef} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'sticky', top: stickyTop, alignSelf: 'flex-start', maxHeight: `calc(100vh - ${stickyTop}px)`, overflow: 'hidden' }}>
                 {/* Company header card */}
                 <div style={{
                     background: T.surface, border: `1px solid ${T.border}`,
