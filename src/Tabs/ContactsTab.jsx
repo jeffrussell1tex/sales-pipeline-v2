@@ -364,10 +364,10 @@ function CompanyTwoPane({
     );
 
     return (
-        <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0, overflow: 'visible' }}>
 
             {/* LEFT — Company list */}
-            <div style={{ width: 280, flexShrink: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ width: 280, flexShrink: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
                 {/* Search */}
                 <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, background: T.surface2 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '5px 10px' }}>
@@ -389,7 +389,7 @@ function CompanyTwoPane({
                 </div>
 
                 {/* Company list */}
-                <div style={{ flex: 1, overflowY: 'auto' }}>
+                <div style={{ flex: 1, overflowY: 'visible' }}>
                     {filteredCompanies.map(co => {
                         const active = co.name === (activeCompany?.name);
                         return (
@@ -422,8 +422,8 @@ function CompanyTwoPane({
                 </div>
             </div>
 
-            {/* RIGHT — Company detail + contacts */}
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* RIGHT — Company detail + contacts — sticky so it stays in view while left list scrolls */}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, alignSelf: 'flex-start', maxHeight: '100vh', overflowY: 'auto' }}>
                 {/* Company header card */}
                 <div style={{
                     background: T.surface, border: `1px solid ${T.border}`,
@@ -752,7 +752,7 @@ export default function ContactsTab() {
     }, [sorted, contactsSortBy, sortField]);
 
     return (
-        <div className="tab-page" style={{ fontFamily: T.sans, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div className="tab-page" style={{ fontFamily: T.sans, display: 'flex', flexDirection: 'column' }}>
 
             {/* ── Page header ── */}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, paddingBottom: 12, flexShrink: 0 }}>
@@ -841,7 +841,7 @@ export default function ContactsTab() {
 
             {/* ── Company two-pane (Company mode) ── */}
             {contactsSortBy === 'company' && (
-                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', paddingTop: 12 }}>
+                <div style={{ paddingTop: 12 }}>
                     {sorted.length === 0
                         ? <EmptyState search={search} canEdit={canEdit} handleAddContact={handleAddContact} />
                         : <CompanyTwoPane
