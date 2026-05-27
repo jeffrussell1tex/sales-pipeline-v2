@@ -310,7 +310,7 @@ export default function ContactRail() {
         {/* Click-catcher: blocks background interaction */}
         <div
             onClick={!isEditing ? closeRail : undefined}
-            style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(42,38,34,0.25)' }}
+            style={{ position: 'fixed', inset: 0, zIndex: 10999, background: 'rgba(42,38,34,0.25)' }}
         />
 
         {/* Rail panel */}
@@ -318,7 +318,7 @@ export default function ContactRail() {
             position: 'fixed', top: 0, right: 0, bottom: 0, width: 480,
             background: T.surface, borderLeft: `1px solid ${T.border}`,
             display: 'flex', flexDirection: 'column',
-            zIndex: 1101, boxShadow: '-8px 0 32px rgba(42,38,34,0.12)',
+            zIndex: 11000, boxShadow: '-8px 0 32px rgba(42,38,34,0.12)',
             fontFamily: T.sans,
             transform: 'translateX(0)',
         }}>
