@@ -148,6 +148,9 @@ function App() {
         showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal, csvImportType, setCsvImportType,
+        contactRailId, setContactRailId, contactRailMode, setContactRailMode,
+        accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
+        railStack, setRailStack,
         editingOpp, setEditingOpp, editingAccount, setEditingAccount, editingSubAccount, setEditingSubAccount,
         editingUser, setEditingUser, editingTask, setEditingTask, editingContact, setEditingContact,
         editingActivity, setEditingActivity, activityInitialContext, setActivityInitialContext,
@@ -402,11 +405,11 @@ dbFetch('/.netlify/functions/users?me=true')
                     break;
                 case 'a': case 'A':
                     e.preventDefault();
-                    setEditingAccount(null); setShowAccountModal(true);
+                    setAccountRailId('new'); setAccountRailMode('new');
                     break;
                 case 'c': case 'C':
                     e.preventDefault();
-                    setEditingContact(null); setShowContactModal(true);
+                    setContactRailId('new'); setContactRailMode('new');
                     break;
                 case 't': case 'T':
                     e.preventDefault();
@@ -713,13 +716,13 @@ dbFetch('/.netlify/functions/users?me=true')
     // handleAddTaskToCalendar managed by useTasks hook
 
     const handleAddContact = () => {
-        setEditingContact(null);
-        setShowContactModal(true);
+        setContactRailId('new');
+        setContactRailMode('new');
     };
 
     const handleEditContact = (contact) => {
-        setEditingContact(contact);
-        setShowContactModal(true);
+        setContactRailId(contact.id);
+        setContactRailMode('view');
     };
 
     // handleDeleteContact managed by useContacts hook
@@ -740,30 +743,20 @@ dbFetch('/.netlify/functions/users?me=true')
     // completeLostSave managed by useOpportunities hook
 
     const handleAddAccount = () => {
-        setEditingAccount(null);
-        setEditingSubAccount(null);
-        setParentAccountForSub(null);
-        setShowAccountModal(true);
+        setAccountRailId('new');
+        setAccountRailMode('new');
     };
 
     const handleAddSubAccount = (parentAccount) => {
-        setEditingAccount(null);
-        setEditingSubAccount(null);
+        setAccountRailId('new');
+        setAccountRailMode('new');
         setParentAccountForSub(parentAccount);
-        setShowAccountModal(true);
     };
     // getSubAccounts managed by useAccounts hook
 
     const handleEditAccount = (account, isSubAccount = false) => {
-        if (isSubAccount) {
-            setEditingSubAccount(account);
-            setEditingAccount(null);
-        } else {
-            setEditingAccount(account);
-            setEditingSubAccount(null);
-        }
-        setParentAccountForSub(null);
-        setShowAccountModal(true);
+        setAccountRailId(account.id);
+        setAccountRailMode('view');
     };
 
     // handleDeleteAccount managed by useAccounts hook
