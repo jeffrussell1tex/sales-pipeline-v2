@@ -7,7 +7,7 @@ import AccountRail from '../rails/AccountRail';
 import TaskRail from '../rails/TaskRail';
 import TaskModal from '../modals/TaskModal'; // kept for legacy inline usage
 import UserModal from '../modals/UserModal';
-import ActivityModal from '../modals/ActivityModal';
+import ActivityRail from '../rails/ActivityRail';
 import CsvImportModal from '../modals/CsvImportModal';
 import OutlookImportModal from '../modals/OutlookImportModal';
 import LeadImportModal from '../modals/LeadImportModal';
@@ -329,53 +329,7 @@ export default function ModalLayer() {
                 );
             })()}
 
-            {showActivityModal && (
-                <ActivityModal
-                    key={editingActivity?.id || ('new-activity-' + (showActivityModal ? 'open' : 'closed'))}
-                    activity={editingActivity}
-                    opportunities={opportunities}
-                    contacts={contacts}
-                    accounts={accounts}
-                    onClose={() => { document.activeElement?.blur(); setShowActivityModal(false); setActivityModalError(null); setActivityModalSaving(false); }}
-                    onDismissError={() => setActivityModalError(null)}
-                    onSave={(activityData) => handleSaveActivity(activityData, { editingActivity, currentUser, opportunities, setShowActivityModal, setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults })}
-                    errorMessage={activityModalError}
-                    saving={activityModalSaving}
-                    initialContext={activityInitialContext}
-                    onSaveNewContact={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
-                        setContacts(prev => [...prev, nc]);
-                        dbFetch('/.netlify/functions/contacts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(nc)
-                        }).catch(err => console.error('Failed to save inline contact:', err));
-                        return nc;
-                    }}
-                    onSaveNewAccount={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const na = { ...data, id: newId };
-                        setAccounts(prev => [...prev, na]);
-                        dbFetch('/.netlify/functions/accounts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(na)
-                        }).catch(err => console.error('Failed to save inline account:', err));
-                        return na;
-                    }}
-                    onAddContact={() => {
-                        setContactRailId('new'); setContactRailMode('new');
-                    }}
-                    onAddAccount={() => {
-                        setAccountRailId('new'); setAccountRailMode('new');
-                    }}
-                    onAddOpportunity={() => {
-                        setShowModal(true);
-                        setEditingOpp(null);
-                    }}
-                />
-            )}
+            {/* ActivityModal replaced by ActivityRail */}
 
             {showCsvImportModal && (
                 <CsvImportModal
@@ -1093,6 +1047,7 @@ export default function ModalLayer() {
                 );
             })()}
 
+            <ActivityRail />
             <TaskRail />
             <ContactRail />
             <AccountRail />

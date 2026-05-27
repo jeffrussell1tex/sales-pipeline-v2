@@ -111,7 +111,7 @@ const EMPTY_TASK = {
 
 export default function TaskRail() {
     const {
-        tasks, opportunities, accounts, contacts, activities, settings,
+        tasks, opportunities, accounts, contacts, activities, settings, currentUser,
         taskRailId, setTaskRailId,
         taskRailMode, setTaskRailMode,
         railStack, setRailStack,
@@ -121,9 +121,11 @@ export default function TaskRail() {
         handleSaveTask,
         handleDeleteTask,
         handleCompleteTask,
+        handleSaveActivity,
+        setShowActivityModal, setEditingActivity, setActivityInitialContext,
+        setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults,
         taskModalError, setTaskModalError,
         taskModalSaving,
-        opportunities: opps,
     } = useApp();
 
     const isNew     = taskRailId === 'new';
@@ -139,6 +141,9 @@ export default function TaskRail() {
     const [assignSearch, setAssignSearch] = useState('');
     const [dirty,        setDirty]        = useState(false);
     const [saveError,    setSaveError]    = useState(null);
+    const [completionPrompt, setCompletionPrompt] = useState(false); // show notes prompt on complete
+    const [completionNotes,  setCompletionNotes]  = useState('');
+    const [completionType,   setCompletionType]   = useState('');
 
     // Seed form when rail opens
     useEffect(() => {
@@ -248,7 +253,42 @@ export default function TaskRail() {
 
     const handleComplete = () => {
         if (!task) return;
+        // Show inline notes prompt — notes optional
+        setCompletionType(task.type || (settings?.taskTypes?.[0]) || 'Call');
+        setCompletionNotes('');
+        setCompletionPrompt(true);
+    };
+
+    const handleConfirmComplete = async () => {
+        if (!task) return;
+        // 1. Mark task complete
         handleCompleteTask && handleCompleteTask(task.id);
+        // 2. Auto-create activity record if notes provided
+        if (completionNotes.trim()) {
+            const today = new Date();
+            const dateStr = [today.getFullYear(), String(today.getMonth()+1).padStart(2,'0'), String(today.getDate()).padStart(2,'0')].join('-');
+            const activityData = {
+                type:          completionType || task.type || 'Call',
+                date:          dateStr,
+                notes:         completionNotes.trim(),
+                opportunityId: task.opportunityId || '',
+                contactId:     task.contactId     || '',
+                company:       task.accountId ? (accounts||[]).find(a => a.id === task.accountId)?.name || '' : '',
+                addToCalendar: false,
+            };
+            handleSaveActivity && await handleSaveActivity(activityData, {
+                editingActivity: null,
+                currentUser,
+                opportunities,
+                setShowActivityModal: () => {},
+                setFollowUpPrompt,
+                setQuickLogOpen,
+                setQuickLogForm,
+                setQuickLogContactResults,
+            });
+        }
+        setCompletionPrompt(false);
+        setCompletionNotes('');
         closeRail();
     };
 
@@ -283,7 +323,7 @@ export default function TaskRail() {
             position: 'fixed', top: 0, right: 480, bottom: 0, width: 440,
             background: T.surface, borderLeft: `1px solid ${T.border}`,
             display: 'flex', flexDirection: 'column',
-            zIndex: 11003, boxShadow: '-8px 0 32px rgba(42,38,34,0.14)',
+            zIndex: 11003, boxShadow: '-8px 0 32px rgba(42,38,34,0.14)', position: 'relative',
             fontFamily: T.sans,
         }}>
 
@@ -321,6 +361,44 @@ export default function TaskRail() {
                         style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.ink, border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, color: '#f5f1eb', cursor: 'pointer', fontFamily: T.sans }}>
                         Edit
                     </button>
+                </div>
+            )}
+
+            {/* ── Completion notes prompt (inline overlay) ─────────────────── */}
+            {completionPrompt && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(42,38,34,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                    <div style={{ background: T.surface, borderRadius: T.r + 2, padding: 20, width: '100%', maxWidth: 400, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Complete task</div>
+                        <div style={{ fontSize: 12, color: T.ink3, marginBottom: 14 }}>Add completion notes? (optional)</div>
+
+                        <div style={{ marginBottom: 10 }}>
+                            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Activity Type</label>
+                            <select value={completionType} onChange={e => setCompletionType(e.target.value)}
+                                style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans }}>
+                                {(settings?.taskTypes || ['Call','Meeting','Email','Demo','Follow-up']).map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                            </select>
+                        </div>
+
+                        <div style={{ marginBottom: 14 }}>
+                            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Notes <span style={{ fontWeight: 400, textTransform: 'none', color: T.ink3 }}>(optional)</span></label>
+                            <textarea value={completionNotes} onChange={e => setCompletionNotes(e.target.value)}
+                                rows={4} placeholder="What was discussed? Any next steps?"
+                                autoFocus
+                                style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', resize: 'vertical' }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => { setCompletionPrompt(false); setCompletionNotes(''); }}
+                                style={{ padding: '8px 14px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                Cancel
+                            </button>
+                            <button onClick={handleConfirmComplete}
+                                style={{ flex: 1, padding: '8px 14px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: T.sans }}>
+                                ✓ Mark Complete
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 

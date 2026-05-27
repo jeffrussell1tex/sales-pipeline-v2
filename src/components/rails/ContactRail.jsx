@@ -122,6 +122,7 @@ export default function ContactRail() {
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
         railStack, setRailStack,
+        showActivityModal, setShowActivityModal, setActivityInitialContext,
         handleSaveContact,
         handleDeleteContact,
         handleAddActivity,
@@ -769,7 +770,7 @@ export default function ContactRail() {
 
                         <div style={{ display: 'flex', gap: 8 }}>
                             <button
-                                onClick={() => handleAddActivity && handleAddActivity(null, contact?.id)}
+                                onClick={() => { setActivityInitialContext && setActivityInitialContext({ contactId: contact?.id }); setShowActivityModal(true); }}
                                 style={{ flex: 1, padding: '8px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Log Activity
                             </button>

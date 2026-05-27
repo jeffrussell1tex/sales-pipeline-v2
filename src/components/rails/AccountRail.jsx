@@ -135,6 +135,7 @@ export default function AccountRail() {
         contactRailId, setContactRailId,
         contactRailMode, setContactRailMode,
         railStack, setRailStack,
+        showActivityModal, setShowActivityModal, setActivityInitialContext,
         handleSaveAccount,
         handleDeleteAccount,
         accountModalError, setAccountModalError,
@@ -775,7 +776,7 @@ export default function AccountRail() {
 
                         <div style={{ display: 'flex', gap: 8 }}>
                             <button
-                                onClick={() => handleAddActivity && handleAddActivity(null, null, account?.id)}
+                                onClick={() => { setActivityInitialContext && setActivityInitialContext({ opportunityId: '' }); setShowActivityModal(true); }}
                                 style={{ flex: 1, padding: '8px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Log Activity
                             </button>
