@@ -16,6 +16,28 @@ export function useModalState() {
     const [showOutlookImportModal, setShowOutlookImportModal] = useState(false);
     const [csvImportType, setCsvImportType] = useState('contacts');
 
+    // ── Contact Rail ──────────────────────────────────────────────────────────
+    // contactRailId: null (closed) | string id (view/edit existing) | 'new' (create)
+    // contactRailMode: 'view' | 'edit' | 'new'
+    const [contactRailId,   setContactRailId]   = useState(null);
+    const [contactRailMode, setContactRailMode] = useState('view');
+
+    // ── Account Rail ──────────────────────────────────────────────────────────
+    // accountRailId: null (closed) | string id (view/edit existing) | 'new' (create)
+    // accountRailMode: 'view' | 'edit' | 'new'
+    const [accountRailId,   setAccountRailId]   = useState(null);
+    const [accountRailMode, setAccountRailMode] = useState('view');
+
+    // ── Task Rail ───────────────────────────────────────────────────────────────
+    // taskRailId: null (closed) | string id (view/edit) | 'new' (create)
+    // taskRailMode: 'view' | 'edit' | 'new'
+    const [taskRailId,   setTaskRailId]   = useState(null);
+    const [taskRailMode, setTaskRailMode] = useState('view');
+
+    // ── Rail stack — supports Option B stacking (Contact → Account → back) ───
+    // Each entry: { type: 'contact'|'account', id: string|'new', mode: string }
+    const [railStack, setRailStack] = useState([]);
+
     const [editingOpp, setEditingOpp] = useState(null);
     const [editingAccount, setEditingAccount] = useState(null);
     const [editingSubAccount, setEditingSubAccount] = useState(null);
@@ -32,7 +54,7 @@ export function useModalState() {
     const [lastCreatedRepName, setLastCreatedRepName] = useState(null);
 
     const [confirmModal, setConfirmModal] = useState(null);
-    const [blockedDeleteModal, setBlockedDeleteModal] = useState(null); // { title, message }
+    const [blockedDeleteModal, setBlockedDeleteModal] = useState(null);
     const [lostReasonModal, setLostReasonModal] = useState(null);
     const [notesPopover, setNotesPopover] = useState(null);
     const [undoToast, setUndoToast] = useState(null);
@@ -62,6 +84,14 @@ export function useModalState() {
         showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal,
         csvImportType, setCsvImportType,
+        // Rail state
+        taskRailId,      setTaskRailId,
+        taskRailMode,    setTaskRailMode,
+        contactRailId,   setContactRailId,
+        contactRailMode, setContactRailMode,
+        accountRailId,   setAccountRailId,
+        accountRailMode, setAccountRailMode,
+        railStack,       setRailStack,
         editingOpp, setEditingOpp,
         editingAccount, setEditingAccount,
         editingSubAccount, setEditingSubAccount,

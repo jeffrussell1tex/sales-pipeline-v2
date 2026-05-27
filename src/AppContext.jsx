@@ -17,8 +17,6 @@ import AccountsTab from './Tabs/AccountsTab';
 import PipelineTab from './Tabs/PipelineTab';
 import TasksTab from './Tabs/TasksTab';
 import HomeTab from './Tabs/HomeTab';
-import ViewingContactPanel from './components/panels/ViewingContactPanel';
-import ViewingAccountPanel from './components/panels/ViewingAccountPanel';
 import ViewingTaskPanel from './components/panels/ViewingTaskPanel';
 import SettingsTab from './Tabs/SettingsTab';
 import LeadImportModal from './components/modals/LeadImportModal';
@@ -27,8 +25,7 @@ import PipelinesSettingsPanel from './components/modals/PipelinesSettingsPanel';
 import LostReasonModal from './components/modals/LostReasonModal';
 import ActivityModal from './components/modals/ActivityModal';
 import OpportunityModal from './components/modals/OpportunityModal';
-import ContactModal, { NestedNewContactForm, NestedNewAccountForm } from './components/modals/ContactModal';
-import AccountModal from './components/modals/AccountModal';
+// ContactModal and AccountModal replaced by ContactRail and AccountRail
 import TaskModal from './components/modals/TaskModal';
 import UserModal from './components/modals/UserModal';
 import TaskItem from './components/ui/TaskItem';
@@ -164,6 +161,9 @@ function App() {
         showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal, csvImportType, setCsvImportType,
+        contactRailId, setContactRailId, contactRailMode, setContactRailMode,
+        accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
+        railStack, setRailStack,
         editingOpp, setEditingOpp, editingAccount, setEditingAccount, editingSubAccount, setEditingSubAccount,
         editingUser, setEditingUser, editingTask, setEditingTask, editingContact, setEditingContact,
         editingActivity, setEditingActivity, activityInitialContext, setActivityInitialContext,
@@ -727,13 +727,13 @@ dbFetch('/.netlify/functions/users?me=true')
     // handleAddTaskToCalendar managed by useTasks hook
 
     const handleAddContact = () => {
-        setEditingContact(null);
-        setShowContactModal(true);
+        setContactRailId('new');
+        setContactRailMode('new');
     };
 
     const handleEditContact = (contact) => {
-        setEditingContact(contact);
-        setShowContactModal(true);
+        setContactRailId(contact.id);
+        setContactRailMode('view');
     };
 
     // handleDeleteContact managed by useContacts hook
@@ -754,30 +754,20 @@ dbFetch('/.netlify/functions/users?me=true')
     // completeLostSave managed by useOpportunities hook
 
     const handleAddAccount = () => {
-        setEditingAccount(null);
-        setEditingSubAccount(null);
-        setParentAccountForSub(null);
-        setShowAccountModal(true);
+        setAccountRailId('new');
+        setAccountRailMode('new');
     };
 
     const handleAddSubAccount = (parentAccount) => {
-        setEditingAccount(null);
-        setEditingSubAccount(null);
+        setAccountRailId('new');
+        setAccountRailMode('new');
         setParentAccountForSub(parentAccount);
-        setShowAccountModal(true);
     };
     // getSubAccounts managed by useAccounts hook
 
     const handleEditAccount = (account, isSubAccount = false) => {
-        if (isSubAccount) {
-            setEditingSubAccount(account);
-            setEditingAccount(null);
-        } else {
-            setEditingAccount(account);
-            setEditingSubAccount(null);
-        }
-        setParentAccountForSub(null);
-        setShowAccountModal(true);
+        setAccountRailId(account.id);
+        setAccountRailMode('view');
     };
 
     // handleDeleteAccount managed by useAccounts hook
@@ -1329,9 +1319,9 @@ dbFetch('/.netlify/functions/users?me=true')
         loadContacts,
         loadTasks,
         loadActivities,
-        // Detail panel state
-        viewingContact, setViewingContact,
-        viewingAccount, setViewingAccount,
+        // Detail panel state — now routes to rails
+        viewingContact, setViewingContact: (c) => { if (c) { setContactRailId(c.id); setContactRailMode('view'); } else { setContactRailId(null); } },
+        viewingAccount, setViewingAccount: (a) => { if (a) { setAccountRailId(a.id); setAccountRailMode('view'); } else { setAccountRailId(null); } },
         viewingTask, setViewingTask,
         contactShowAllDeals, setContactShowAllDeals,
         accShowAllClosed, setAccShowAllClosed,
@@ -1400,6 +1390,11 @@ dbFetch('/.netlify/functions/users?me=true')
         parentAccountForSub, setParentAccountForSub,
         showContactModal, setShowContactModal,
         editingContact, setEditingContact,
+        contactRailId, setContactRailId,
+        contactRailMode, setContactRailMode,
+        accountRailId, setAccountRailId,
+        accountRailMode, setAccountRailMode,
+        railStack, setRailStack,
         contactModalError, setContactModalError,
         contactModalSaving, setContactModalSaving,
         showTaskModal, setShowTaskModal,

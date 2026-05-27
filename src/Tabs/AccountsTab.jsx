@@ -36,14 +36,35 @@ const avatarBg = name => {
 };
 
 // ── Warmth scoring ────────────────────────────────────────────
-function getWarmth(account, opportunities, activities) {
+// ── Merge completed tasks into activity feed for lastTouch / warmth ──────────
+function mergeWithCompletedTasks(activities, tasks, oppIds, accName) {
+    const completedTasks = (tasks || [])
+        .filter(t => t.completed || t.status === 'Completed')
+        .filter(t =>
+            (t.account||'').toLowerCase() === accName ||
+            (t.opportunityId && oppIds.includes(t.opportunityId))
+        )
+        .map(t => ({
+            id:            t.id,
+            type:          t.type || 'Task',
+            date:          t.completedDate || t.dueDate || '',
+            notes:         t.title || '',
+            opportunityId: t.opportunityId || '',
+            company:       t.account || accName,
+            _fromTask:     true,
+        }));
+    return [...(activities || []), ...completedTasks];
+}
+
+function getWarmth(account, opportunities, activities, tasks) {
     const accName  = (account.name || '').toLowerCase();
     const accOpps  = opportunities.filter(o => (o.account||'').toLowerCase() === accName);
     const activeOpps = accOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
     const pipeline = activeOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
 
     const oppIds   = accOpps.map(o => o.id);
-    const accActs  = activities.filter(a =>
+    const merged   = mergeWithCompletedTasks(activities, tasks, oppIds, accName);
+    const accActs  = merged.filter(a =>
         (a.company||'').toLowerCase() === accName ||
         (a.opportunityId && oppIds.includes(a.opportunityId))
     ).sort((a,b) => (b.date||'').localeCompare(a.date||''));
@@ -558,7 +579,7 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
 export default function AccountsTab({ initialAccountSegmentFilter = '__all__', initialIndustryFilter = '__all__', onDeepFilterConsumed } = {}) {
     const {
         accounts, setAccounts,
-        opportunities, contacts, activities, settings,
+        opportunities, contacts, activities, tasks, settings,
         currentUser, userRole, canSeeAll,
         exportToCSV, exportingCSV,
         showConfirm, softDelete,
@@ -620,9 +641,9 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     // ── Warmth map ────────────────────────────────────────────
     const warmthMap = useMemo(() => {
         const map = {};
-        visibleAccounts.forEach(acc => { map[acc.id] = getWarmth(acc, opportunities, activities); });
+        visibleAccounts.forEach(acc => { map[acc.id] = getWarmth(acc, opportunities, activities, tasks); });
         return map;
-    }, [visibleAccounts, opportunities, activities]);
+    }, [visibleAccounts, opportunities, activities, tasks]);
 
     // ── Filtered accounts ─────────────────────────────────────
     const filtered = useMemo(() => {

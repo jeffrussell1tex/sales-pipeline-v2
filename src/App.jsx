@@ -148,6 +148,10 @@ function App() {
         showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal, csvImportType, setCsvImportType,
+        taskRailId, setTaskRailId, taskRailMode, setTaskRailMode,
+        contactRailId, setContactRailId, contactRailMode, setContactRailMode,
+        accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
+        railStack, setRailStack,
         editingOpp, setEditingOpp, editingAccount, setEditingAccount, editingSubAccount, setEditingSubAccount,
         editingUser, setEditingUser, editingTask, setEditingTask, editingContact, setEditingContact,
         editingActivity, setEditingActivity, activityInitialContext, setActivityInitialContext,
@@ -371,6 +375,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 if (showModal) { setShowModal(false); setEditingOpp(null); return; }
                 if (showAccountModal) { setShowAccountModal(false); setEditingAccount(null); return; }
                 if (showContactModal) { setShowContactModal(false); setEditingContact(null); return; }
+                if (taskRailId) { setTaskRailId(null); setTaskRailMode('view'); return; }
                 if (showTaskModal) { setShowTaskModal(false); setEditingTask(null); return; }
                 if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
                 if (showProfilePanel) { setShowProfilePanel(false); return; }
@@ -402,15 +407,15 @@ dbFetch('/.netlify/functions/users?me=true')
                     break;
                 case 'a': case 'A':
                     e.preventDefault();
-                    setEditingAccount(null); setShowAccountModal(true);
+                    setAccountRailId('new'); setAccountRailMode('new');
                     break;
                 case 'c': case 'C':
                     e.preventDefault();
-                    setEditingContact(null); setShowContactModal(true);
+                    setContactRailId('new'); setContactRailMode('new');
                     break;
                 case 't': case 'T':
                     e.preventDefault();
-                    setEditingTask(null); setShowTaskModal(true);
+                    setTaskRailId('new'); setTaskRailMode('new');
                     break;
                 case '1':
                     e.preventDefault(); setActiveTab('home'); break;
@@ -691,13 +696,13 @@ dbFetch('/.netlify/functions/users?me=true')
     };
 
     const handleAddTask = () => {
-        setEditingTask(null);
-        setShowTaskModal(true);
+        setTaskRailId('new');
+        setTaskRailMode('new');
     };
 
     const handleEditTask = (task) => {
-        setEditingTask(task);
-        setShowTaskModal(true);
+        setTaskRailId(task.id);
+        setTaskRailMode('view');
     };
 
     // handleDeleteTask managed by useTasks hook
@@ -713,13 +718,13 @@ dbFetch('/.netlify/functions/users?me=true')
     // handleAddTaskToCalendar managed by useTasks hook
 
     const handleAddContact = () => {
-        setEditingContact(null);
-        setShowContactModal(true);
+        setContactRailId('new');
+        setContactRailMode('new');
     };
 
     const handleEditContact = (contact) => {
-        setEditingContact(contact);
-        setShowContactModal(true);
+        setContactRailId(contact.id);
+        setContactRailMode('view');
     };
 
     // handleDeleteContact managed by useContacts hook
@@ -740,30 +745,20 @@ dbFetch('/.netlify/functions/users?me=true')
     // completeLostSave managed by useOpportunities hook
 
     const handleAddAccount = () => {
-        setEditingAccount(null);
-        setEditingSubAccount(null);
-        setParentAccountForSub(null);
-        setShowAccountModal(true);
+        setAccountRailId('new');
+        setAccountRailMode('new');
     };
 
     const handleAddSubAccount = (parentAccount) => {
-        setEditingAccount(null);
-        setEditingSubAccount(null);
+        setAccountRailId('new');
+        setAccountRailMode('new');
         setParentAccountForSub(parentAccount);
-        setShowAccountModal(true);
     };
     // getSubAccounts managed by useAccounts hook
 
     const handleEditAccount = (account, isSubAccount = false) => {
-        if (isSubAccount) {
-            setEditingSubAccount(account);
-            setEditingAccount(null);
-        } else {
-            setEditingAccount(account);
-            setEditingSubAccount(null);
-        }
-        setParentAccountForSub(null);
-        setShowAccountModal(true);
+        setAccountRailId(account.id);
+        setAccountRailMode('view');
     };
 
     // handleDeleteAccount managed by useAccounts hook
@@ -1363,8 +1358,11 @@ dbFetch('/.netlify/functions/users?me=true')
         handleSaveContact,
         handleDeleteTask,
         handleSaveTask,
+        handleAddTask,
+        handleEditTask,
         handleCompleteTask,
         handleAddTaskToCalendar,
+        handleAddActivity,
         handleDeleteActivity,
         handleSaveActivity,
         handleUpdateFiscalYearStart,
@@ -1375,9 +1373,12 @@ dbFetch('/.netlify/functions/users?me=true')
         loadTasks,
         loadActivities,
         // Detail panel state
-        viewingContact, setViewingContact,
-        viewingAccount, setViewingAccount,
-        viewingTask, setViewingTask,
+        viewingContact,
+        setViewingContact: (c) => { if (c) { setContactRailId(c.id); setContactRailMode('view'); } else { setContactRailId(null); } },
+        viewingAccount,
+        setViewingAccount: (a) => { if (a) { setAccountRailId(a.id); setAccountRailMode('view'); } else { setAccountRailId(null); } },
+        viewingTask,
+        setViewingTask: (t) => { if (t) { setTaskRailId(t.id); setTaskRailMode('view'); } else { setTaskRailId(null); } },
         contactShowAllDeals, setContactShowAllDeals,
         accShowAllClosed, setAccShowAllClosed,
         accShowAllContacts, setAccShowAllContacts,
@@ -1447,6 +1448,13 @@ dbFetch('/.netlify/functions/users?me=true')
         editingContact, setEditingContact,
         contactModalError, setContactModalError,
         contactModalSaving, setContactModalSaving,
+        taskRailId, setTaskRailId,
+        taskRailMode, setTaskRailMode,
+        contactRailId, setContactRailId,
+        contactRailMode, setContactRailMode,
+        accountRailId, setAccountRailId,
+        accountRailMode, setAccountRailMode,
+        railStack, setRailStack,
         showTaskModal, setShowTaskModal,
         editingTask, setEditingTask,
         taskModalError, setTaskModalError,
@@ -1907,7 +1915,7 @@ dbFetch('/.netlify/functions/users?me=true')
                                     style={{ flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', background: '#1c1917', color: '#f5f1eb', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     + Log Activity
                                 </button>
-                                <button onClick={() => { setMeetingPrepOpen(false); setEditingTask({ opportunityId: matchedOpp?.id || '', relatedTo: matchedOpp?.id || '' }); setShowTaskModal(true); }}
+                                <button onClick={() => { setMeetingPrepOpen(false); setTaskRailId('new'); setTaskRailMode('new'); setEditingTask({ opportunityId: matchedOpp?.id || '', relatedTo: matchedOpp?.id || '' }); }}
                                     style={{ flex: 1, padding: '0.5rem', border: '1px solid #ddd8cf', borderRadius: '8px', background: '#e8e3da', color: '#78716c', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     + Add Task
                                 </button>

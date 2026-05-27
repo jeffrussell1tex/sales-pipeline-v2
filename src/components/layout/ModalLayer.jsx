@@ -2,18 +2,18 @@ import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import OpportunityModal from '../modals/OpportunityModal';
-import ContactModal from '../modals/ContactModal';
-import AccountModal from '../modals/AccountModal';
-import TaskModal from '../modals/TaskModal';
+import ContactRail from '../rails/ContactRail';
+import AccountRail from '../rails/AccountRail';
+import TaskRail from '../rails/TaskRail';
+import TaskModal from '../modals/TaskModal'; // kept for legacy inline usage
 import UserModal from '../modals/UserModal';
-import ActivityModal from '../modals/ActivityModal';
+import ActivityRail from '../rails/ActivityRail';
 import CsvImportModal from '../modals/CsvImportModal';
 import OutlookImportModal from '../modals/OutlookImportModal';
 import LeadImportModal from '../modals/LeadImportModal';
 import LeadModal from '../modals/LeadModal';
 import LostReasonModal from '../modals/LostReasonModal';
-import ViewingContactPanel from '../panels/ViewingContactPanel';
-import ViewingAccountPanel from '../panels/ViewingAccountPanel';
+// ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
 export default function ModalLayer() {
     const {
@@ -28,8 +28,12 @@ export default function ModalLayer() {
         parentAccountForSub, setParentAccountForSub,
         showContactModal, setShowContactModal, editingContact, setEditingContact,
         contactModalError, setContactModalError, contactModalSaving, setContactModalSaving,
+        contactRailId, setContactRailId, contactRailMode, setContactRailMode,
+        accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
+        railStack, setRailStack,
         showTaskModal, setShowTaskModal, editingTask, setEditingTask,
         taskModalError, setTaskModalError, taskModalSaving, setTaskModalSaving,
+        taskRailId, setTaskRailId, taskRailMode, setTaskRailMode,
         showUserModal, setShowUserModal, editingUser, setEditingUser,
         userModalError, setUserModalError, userModalSaving, setUserModalSaving, handleSaveUser,
         showActivityModal, setShowActivityModal, editingActivity, setEditingActivity,
@@ -150,8 +154,7 @@ export default function ModalLayer() {
                         return na;
                     }}
                     onAddContact={() => {
-                        setShowContactModal(true);
-                        setEditingContact(null);
+                        setContactRailId('new'); setContactRailMode('new');
                     }}
                     onAddRep={() => {
                         setShowUserModal(true);
@@ -174,135 +177,16 @@ export default function ModalLayer() {
                 />
             )}
 
-            {showTaskModal && (
-                <TaskModal
-                    task={editingTask}
-                    taskTypes={settings.taskTypes || ['Call', 'Meeting', 'Email']}
-                    opportunities={opportunities}
-                    accounts={accounts}
-                    contacts={contacts}
-                    settings={settings}
-                    onClose={() => { document.activeElement?.blur(); setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
-                    onDismissError={() => setTaskModalError(null)}
-                    onSave={(taskData) => handleSaveTask(taskData, { editingTask, setShowTaskModal, opportunities })}
-                    errorMessage={taskModalError}
-                    saving={taskModalSaving}
-                    onAddTaskType={handleAddTaskType}
-                    onSaveNewContact={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
-                        setContacts(prev => [...prev, nc]);
-                        dbFetch('/.netlify/functions/contacts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(nc)
-                        }).catch(err => console.error('Failed to save inline contact:', err));
-                        return nc;
-                    }}
-                    onSaveNewAccount={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const na = { ...data, id: newId };
-                        setAccounts(prev => [...prev, na]);
-                        dbFetch('/.netlify/functions/accounts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(na)
-                        }).catch(err => console.error('Failed to save inline account:', err));
-                        return na;
-                    }}
-                    onAddOpportunity={() => {
-                        setShowModal(true);
-                        setEditingOpp(null);
-                    }}
-                    onAddContact={() => {
-                        setShowContactModal(true);
-                        setEditingContact(null);
-                    }}
-                    onOpenNestedContact={(prefill) => {
-                        document.activeElement?.blur();
-                        setEditingContact(prefill || null);
-                        setShowContactModal(true);
-                    }}
-                    onAddAccount={() => {
-                        setShowAccountModal(true);
-                        setEditingAccount(null);
-                    }}
-                />
-            )}
+            {/* TaskModal replaced by TaskRail */}
 
 
-            {showContactModal && (
-                <ContactModal
-                    contact={editingContact}
-                    contacts={contacts}
-                    accounts={accounts}
-                    settings={settings}
-                    onClose={() => { document.activeElement?.blur(); setShowContactModal(false); setContactModalError(null); setContactModalSaving(false); }}
-                    onDismissError={() => setContactModalError(null)}
-                    onSave={(contactData) => handleSaveContact(contactData, { editingContact, setShowContactModal })}
-                    errorMessage={contactModalError}
-                    saving={contactModalSaving}
-                    onSaveNewContact={(newContactData) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const nc = { ...newContactData, id: newId, createdAt: new Date().toISOString() };
-                        setContacts(prev => [...prev, nc]);
-                        dbFetch('/.netlify/functions/contacts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(nc)
-                        }).catch(err => console.error('Failed to save inline contact:', err));
-                        return nc;
-                    }}
-                    onAddAccount={() => {
-                        setShowAccountModal(true);
-                        setEditingAccount(null);
-                        setEditingSubAccount(null);
-                        setParentAccountForSub(null);
-                    }}
-                />
-            )}
+            {/* ContactModal replaced by ContactRail */}
 
-            <ViewingAccountPanel
-                    setEditingOpp={setEditingOpp} setShowModal={setShowModal}
-                    setEditingContact={setEditingContact} setShowContactModal={setShowContactModal}
-                    setEditingAccount={setEditingAccount} setEditingSubAccount={setEditingSubAccount} setShowAccountModal={setShowAccountModal}
-                    setEditingTask={setEditingTask} setShowTaskModal={setShowTaskModal}
-                    setEditingActivity={setEditingActivity}
-                    setShowSpiffClaimModal={setShowSpiffClaimModal} setSpiffClaimContext={setSpiffClaimContext}
-                    setShowCsvImportModal={setShowCsvImportModal} setShowLeadImportModal={setShowLeadImportModal} setShowOutlookImportModal={setShowOutlookImportModal}
-                    setShowShortcuts={setShowShortcuts}
-                />
+            {/* ViewingAccountPanel replaced by AccountRail */}
 
-            <ViewingContactPanel
-                    setEditingOpp={setEditingOpp} setShowModal={setShowModal}
-                    setEditingContact={setEditingContact} setShowContactModal={setShowContactModal}
-                    setEditingAccount={setEditingAccount} setEditingSubAccount={setEditingSubAccount} setShowAccountModal={setShowAccountModal}
-                    setEditingTask={setEditingTask} setShowTaskModal={setShowTaskModal}
-                    setEditingActivity={setEditingActivity}
-                    setShowSpiffClaimModal={setShowSpiffClaimModal} setSpiffClaimContext={setSpiffClaimContext}
-                />
+            {/* ViewingContactPanel replaced by ContactRail */}
 
-            {/* AccountModal rendered after panels so DOM order guarantees it paints above panel backdrops at equal z-index */}
-            {showAccountModal && (
-                <AccountModal
-                    account={editingAccount || editingSubAccount}
-                    isSubAccount={!!parentAccountForSub || !!editingSubAccount}
-                    parentTier={parentAccountForSub?._forceTier
-                        || parentAccountForSub?.accountTier
-                        || (parentAccountForSub?.parentAccountId ? 'business_unit' : parentAccountForSub ? 'account' : null)}
-                    settings={settings}
-                    onClose={() => { document.activeElement?.blur(); setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
-                    onDismissError={() => setAccountModalError(null)}
-                    onSave={(formData) => handleSaveAccount(
-                        { ...formData, _forceTier: parentAccountForSub?._forceTier },
-                        { editingAccount, editingSubAccount, parentAccountForSub, accountCreatedFromOppForm, pendingOppFormData, setShowAccountModal, setLastCreatedAccountName, setEditingOpp, setShowModal, setAccountCreatedFromOppForm, setPendingOppFormData }
-                    )}
-                    onAddRep={() => { setShowUserModal(true); setEditingUser(null); }}
-                    existingAccounts={accounts}
-                    errorMessage={accountModalError}
-                    saving={accountModalSaving}
-                />
-            )}
+            {/* AccountModal replaced by AccountRail */}
 
             {/* Notes Popover */}
             {/* ── Keyboard Shortcuts Overlay ───────────────────────── */}
@@ -445,57 +329,7 @@ export default function ModalLayer() {
                 );
             })()}
 
-            {showActivityModal && (
-                <ActivityModal
-                    key={editingActivity?.id || ('new-activity-' + (showActivityModal ? 'open' : 'closed'))}
-                    activity={editingActivity}
-                    opportunities={opportunities}
-                    contacts={contacts}
-                    accounts={accounts}
-                    onClose={() => { document.activeElement?.blur(); setShowActivityModal(false); setActivityModalError(null); setActivityModalSaving(false); }}
-                    onDismissError={() => setActivityModalError(null)}
-                    onSave={(activityData) => handleSaveActivity(activityData, { editingActivity, currentUser, opportunities, setShowActivityModal, setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults })}
-                    errorMessage={activityModalError}
-                    saving={activityModalSaving}
-                    initialContext={activityInitialContext}
-                    onSaveNewContact={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
-                        setContacts(prev => [...prev, nc]);
-                        dbFetch('/.netlify/functions/contacts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(nc)
-                        }).catch(err => console.error('Failed to save inline contact:', err));
-                        return nc;
-                    }}
-                    onSaveNewAccount={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const na = { ...data, id: newId };
-                        setAccounts(prev => [...prev, na]);
-                        dbFetch('/.netlify/functions/accounts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(na)
-                        }).catch(err => console.error('Failed to save inline account:', err));
-                        return na;
-                    }}
-                    onAddContact={() => {
-                        setShowContactModal(true);
-                        setEditingContact(null);
-                    }}
-                    onAddAccount={() => {
-                        setShowAccountModal(true);
-                        setEditingAccount(null);
-                        setEditingSubAccount(null);
-                        setParentAccountForSub(null);
-                    }}
-                    onAddOpportunity={() => {
-                        setShowModal(true);
-                        setEditingOpp(null);
-                    }}
-                />
-            )}
+            {/* ActivityModal replaced by ActivityRail */}
 
             {showCsvImportModal && (
                 <CsvImportModal
@@ -949,8 +783,8 @@ export default function ModalLayer() {
                                         setTaskReminderPopup(null);
                                         setActiveTab('tasks');
                                         setTimeout(() => {
-                                            setEditingTask(task);
-                                            setShowTaskModal(true);
+                                            setTaskRailId(task.id);
+                                            setTaskRailMode('view');
                                         }, 150);
                                     }}
                                     style={{ flex: 1, padding: '0.625rem 1rem', background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
@@ -1071,7 +905,7 @@ export default function ModalLayer() {
                                             setTaskDuePopup(null);
                                         }
                                         setActiveTab('tasks');
-                                        setTimeout(() => { setEditingTask(task); setShowTaskModal(true); }, 150);
+                                        setTimeout(() => { setTaskRailId(task.id); setTaskRailMode('view'); }, 150);
                                     }}
                                     style={{ flex: 1, padding: '0.7rem 1rem', background: 'linear-gradient(135deg, #dc2626, #ef4444)', color: '#ffffff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', boxShadow: '0 2px 8px rgba(220,38,38,0.3)' }}
                                     onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(220,38,38,0.45)'}
@@ -1213,6 +1047,10 @@ export default function ModalLayer() {
                 );
             })()}
 
+            <ActivityRail />
+            <TaskRail />
+            <ContactRail />
+            <AccountRail />
         </>
     );
 }

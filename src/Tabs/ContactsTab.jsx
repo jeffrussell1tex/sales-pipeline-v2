@@ -305,7 +305,7 @@ function EmptyState({ search, canEdit, handleAddContact }) {
 // ── Company two-pane (Company sort mode) ──────────────────────
 function CompanyTwoPane({
     companyList, selectedCompany, setSelectedCompany,
-    accounts, opportunities, activities, oppCount,
+    accounts, opportunities, activities, tasks, oppCount,
     getAccountRollup, canEdit,
     setViewingContact, setViewingAccount,
     setEditingContact, setShowContactModal,
@@ -359,12 +359,20 @@ function CompanyTwoPane({
         const coName = activeCompany.name.toLowerCase();
         const coOpps = (opportunities || []).filter(o => (o.account||'').toLowerCase() === coName);
         const oppIds = new Set(coOpps.map(o => o.id));
-        const acts   = (activities || []).filter(a =>
-            (a.company||'').toLowerCase() === coName ||
-            (a.opportunityId && oppIds.has(a.opportunityId))
-        ).sort((a, b) => (b.date||'').localeCompare(a.date||''));
-        return acts[0]?.date || null;
-    }, [activeCompany, opportunities, activities]);
+        const completedTaskDates = (tasks || [])
+            .filter(t => (t.completed || t.status === 'Completed') &&
+                ((t.account||'').toLowerCase() === coName ||
+                 (t.opportunityId && oppIds.has(t.opportunityId))))
+            .map(t => t.completedDate || t.dueDate || '');
+        const acts   = [
+            ...(activities || []).filter(a =>
+                (a.company||'').toLowerCase() === coName ||
+                (a.opportunityId && oppIds.has(a.opportunityId))
+            ).map(a => a.date || ''),
+            ...completedTaskDates,
+        ].filter(Boolean).sort((a, b) => b.localeCompare(a));
+        return acts[0] || null;
+    }, [activeCompany, opportunities, activities, tasks]);
 
     const initials = (activeCompany?.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
@@ -573,7 +581,7 @@ function CompanyTwoPane({
 export default function ContactsTab() {
     const {
         contacts, setContacts,
-        opportunities, accounts, activities, settings,
+        opportunities, accounts, activities, tasks, settings,
         currentUser, userRole, canSeeAll,
         showConfirm, softDelete,
         visibleContacts,
