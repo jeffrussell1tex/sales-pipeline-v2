@@ -1368,8 +1368,10 @@ dbFetch('/.netlify/functions/users?me=true')
         loadTasks,
         loadActivities,
         // Detail panel state
-        viewingContact, setViewingContact,
-        viewingAccount, setViewingAccount,
+        viewingContact,
+        setViewingContact: (c) => { if (c) { setContactRailId(c.id); setContactRailMode('view'); } else { setContactRailId(null); } },
+        viewingAccount,
+        setViewingAccount: (a) => { if (a) { setAccountRailId(a.id); setAccountRailMode('view'); } else { setAccountRailId(null); } },
         viewingTask, setViewingTask,
         contactShowAllDeals, setContactShowAllDeals,
         accShowAllClosed, setAccShowAllClosed,

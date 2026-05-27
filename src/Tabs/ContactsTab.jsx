@@ -688,8 +688,8 @@ export default function ContactsTab() {
     }, [openRowMenu]);
 
     // ── Handlers ─────────────────────────────────────────────
-    const handleAddContact  = () => { console.log('[ContactsTab] handleAddContact fired'); setContactRailId('new'); setContactRailMode('new'); };
-    const handleEditContact = (c) => { console.log('[ContactsTab] handleEditContact fired', c.id, { setContactRailId, contactRailId }); setContactRailId(c.id); setContactRailMode('view'); };
+    const handleAddContact  = () => { setContactRailId('new'); setContactRailMode('new'); };
+    const handleEditContact = (c) => { setContactRailId(c.id); setContactRailMode('view'); };
 
     const handleDeleteOne = (contact) => {
         const snapshot = [...(contacts || [])];
