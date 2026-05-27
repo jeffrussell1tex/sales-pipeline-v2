@@ -283,6 +283,7 @@ export default function ContactRail() {
         return () => document.removeEventListener('keydown', onKey);
     }, [isOpen, isEditing]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    console.log('[ContactRail] state check:', { contactRailId, contactRailMode, isOpen });
     if (!isOpen) return null;
 
     const fullName = ((formData.firstName || '') + ' ' + (formData.lastName || '')).trim() || 'New Contact';
