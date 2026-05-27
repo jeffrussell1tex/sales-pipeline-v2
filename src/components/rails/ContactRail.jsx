@@ -70,13 +70,18 @@ function TextInput({ value, onChange, placeholder, type = 'text' }) {
 
 function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp }) {
     const [open, setOpen] = useState(false);
-    const filtered = suggestions.filter(s => s.toLowerCase().includes((value || '').toLowerCase()));
+    const safeVal = value || '';
+    const filtered = (suggestions || []).filter(s => (s || '').toLowerCase().includes(safeVal.toLowerCase()));
     return (
         <div style={{ position: 'relative' }}>
-            <TextInput
-                value={value}
-                onChange={v => { onChange(v); setOpen(true); }}
+            <input
+                type="text"
+                value={safeVal}
+                onChange={e => { onChange(e.target.value); setOpen(true); }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 200)}
                 placeholder={placeholder}
+                style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', outline: 'none' }}
             />
             {open && filtered.length > 0 && (
                 <div style={{
@@ -86,7 +91,7 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                     maxHeight: 180, overflowY: 'auto', zIndex: 200,
                     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                 }}>
-                    {filtered.slice(0, 8).map((s, i) => (
+                    {filtered.slice(0, 20).map((s, i) => (
                         <div key={i}
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { onSelect(s); setOpen(false); }}
@@ -164,7 +169,7 @@ export default function ContactRail() {
 
     // ── Derived lists ─────────────────────────────────────────────────────────
     const allRepNames = [...new Set(
-        (settings?.users || []).filter(u => u.name && u.userType === 'Sales Rep').map(u => u.name)
+        (settings?.users || []).filter(u => u.name && u.userType !== 'Manager' && u.userType !== 'Admin').map(u => u.name)
     )].sort();
 
     const allAccountNames = (accounts || []).map(a => a.name).sort();
