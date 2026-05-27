@@ -323,7 +323,7 @@ export default function TaskRail() {
             position: 'fixed', top: 0, right: (contactRailId || accountRailId) ? 480 : 0, bottom: 0, width: 440,
             background: T.surface, borderLeft: `1px solid ${T.border}`,
             display: 'flex', flexDirection: 'column',
-            zIndex: 11003, boxShadow: '-8px 0 32px rgba(42,38,34,0.14)', position: 'relative',
+            zIndex: 11003, boxShadow: '-8px 0 32px rgba(42,38,34,0.14)',
             fontFamily: T.sans,
         }}>
 
