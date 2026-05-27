@@ -1358,6 +1358,8 @@ dbFetch('/.netlify/functions/users?me=true')
         handleSaveContact,
         handleDeleteTask,
         handleSaveTask,
+        handleAddTask,
+        handleEditTask,
         handleCompleteTask,
         handleAddTaskToCalendar,
         handleAddActivity,

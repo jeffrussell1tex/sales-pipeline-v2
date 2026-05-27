@@ -320,7 +320,7 @@ export default function TaskRail() {
 
         {/* Task rail — offset left of contact/account rail so both are visible */}
         <div style={{
-            position: 'fixed', top: 0, right: 480, bottom: 0, width: 440,
+            position: 'fixed', top: 0, right: (contactRailId || accountRailId) ? 480 : 0, bottom: 0, width: 440,
             background: T.surface, borderLeft: `1px solid ${T.border}`,
             display: 'flex', flexDirection: 'column',
             zIndex: 11003, boxShadow: '-8px 0 32px rgba(42,38,34,0.14)', position: 'relative',

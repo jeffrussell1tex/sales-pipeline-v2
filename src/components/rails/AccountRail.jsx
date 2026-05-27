@@ -662,9 +662,9 @@ export default function AccountRail() {
                         ) : (
                             <div style={grid2}>
                                 <ReadRow label="Total Employees" value={account?.totalEmployees ? Number(account.totalEmployees).toLocaleString() : undefined} />
-                                <ReadRow label="Annual Revenue" value={account?.annualRevenue} />
+                                <ReadRow label="Annual Revenue" value={account?.annualRevenue ? '$' + Number(String(account.annualRevenue).replace(/[^0-9.]/g,'')).toLocaleString() : undefined} />
                                 <ReadRow label="Founded" value={account?.foundedYear} />
-                                <ReadRow label="Fiscal Year End" value={account?.fiscalYearEnd} />
+                                <ReadRow label="Fiscal Year End" value={account?.fiscalYearEnd ? (['January','February','March','April','May','June','July','August','September','October','November','December'][parseInt(account.fiscalYearEnd, 10) - 1] || account.fiscalYearEnd) : undefined} />
                                 <ReadRow label="SIC Code" value={account?.sicCode} />
                                 <ReadRow label="NAICS Code" value={account?.naicsCode} />
                                 {account?.linkedInUrl && (
