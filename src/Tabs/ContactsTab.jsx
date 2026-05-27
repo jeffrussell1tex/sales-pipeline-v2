@@ -495,7 +495,7 @@ function CompanyTwoPane({
                         )}
                         {canEdit && (
                             <button
-                                onClick={() => { setEditingContact(null); setShowContactModal(true); }}
+                                onClick={() => { setContactRailId('new'); setContactRailMode('new'); }}
                                 style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.ink, border: 'none', borderRadius: T.r, color: T.surface, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
                                 <Icon name="plus" size={12} color={T.surface} />
                                 Add contact
@@ -579,6 +579,8 @@ export default function ContactsTab() {
         visibleContacts,
         handleDeleteContact,
         setEditingContact, setShowContactModal,
+        contactRailId, setContactRailId,
+        contactRailMode, setContactRailMode,
         viewingContact, setViewingContact,
         viewingAccount, setViewingAccount,
         contactsSortBy, setContactsSortBy,
@@ -686,8 +688,8 @@ export default function ContactsTab() {
     }, [openRowMenu]);
 
     // ── Handlers ─────────────────────────────────────────────
-    const handleAddContact  = () => { setEditingContact(null); setShowContactModal(true); };
-    const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
+    const handleAddContact  = () => { setContactRailId('new'); setContactRailMode('new'); };
+    const handleEditContact = (c) => { setContactRailId(c.id); setContactRailMode('view'); };
 
     const handleDeleteOne = (contact) => {
         const snapshot = [...(contacts || [])];

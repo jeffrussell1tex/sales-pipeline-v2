@@ -566,6 +566,8 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
         visibleAccounts,
         handleDeleteAccount,
         setEditingAccount, setEditingSubAccount, setParentAccountForSub, setShowAccountModal,
+        accountRailId, setAccountRailId,
+        accountRailMode, setAccountRailMode,
         setCsvImportType, setShowCsvImportModal,
         viewingAccount, setViewingAccount,
         selectedAccounts, setSelectedAccounts,
@@ -707,8 +709,8 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     }, [filtered, sortField, sortDir, warmthMap]);
 
     // ── Handlers ──────────────────────────────────────────────
-    const handleAddAccount  = () => { setEditingAccount(null); setEditingSubAccount(null); setParentAccountForSub(null); setShowAccountModal(true); };
-    const handleEditAccount = (a) => { setEditingAccount(a); setEditingSubAccount(null); setParentAccountForSub(null); setShowAccountModal(true); };
+    const handleAddAccount  = () => { setAccountRailId('new'); setAccountRailMode('new'); };
+    const handleEditAccount = (a) => { setAccountRailId(a.id); setAccountRailMode('view'); };
 
     const handleDeleteSelected = () => {
         if (!selectedIds.length) return;
