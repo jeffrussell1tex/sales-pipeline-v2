@@ -116,7 +116,7 @@ const EMPTY_CONTACT = {
 
 export default function ContactRail() {
     const {
-        contacts, accounts, settings, opportunities,
+        contacts, accounts, settings, opportunities, activities,
         contactRailId, setContactRailId,
         contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId,
@@ -127,7 +127,7 @@ export default function ContactRail() {
         handleAddActivity,
         contactModalError, setContactModalError,
         contactModalSaving,
-        setShowTaskModal, setEditingTask,
+        taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode,
     } = useApp();
 
     // ── Resolve the contact being viewed/edited ───────────────────────────────
@@ -179,6 +179,14 @@ export default function ContactRail() {
                 ((contact.firstName || '') + ' ' + (contact.lastName || '')).trim()
             );
     });
+
+    // Activities linked to this contact — by direct contactId or via involved opportunities
+    const contactActivities = (activities || []).filter(a => {
+        if (!contact) return false;
+        if (a.contactId && a.contactId === contact.id) return true;
+        const involvedOppIds = openOpps.map(o => o.id);
+        return a.opportunityId && involvedOppIds.includes(a.opportunityId);
+    }).sort((a, b) => new Date(b.date || '2000') - new Date(a.date || '2000'));
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const hc = useCallback((field, value) => {
@@ -718,9 +726,8 @@ export default function ContactRail() {
                 {/* ════════ TAB: Activity (view only) ════════ */}
                 {activeTab === 'activity' && !isNew && (
                     <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                            <SectionHeading label="Open Opportunities" />
-                        </div>
+                        {/* Open Opportunities */}
+                        <SectionHeading label="Open Opportunities" />
                         {openOpps.length === 0 ? (
                             <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', marginBottom: 16 }}>No open opportunities</div>
                         ) : (
@@ -736,14 +743,38 @@ export default function ContactRail() {
                             </div>
                         )}
 
-                        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        {/* Activity History */}
+                        <SectionHeading label={`Activity History (${contactActivities.length})`} />
+                        {contactActivities.length === 0 ? (
+                            <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', marginBottom: 16 }}>No activity history</div>
+                        ) : (
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden', marginBottom: 16 }}>
+                                {contactActivities.map((a, idx) => {
+                                    const relOpp = a.opportunityId ? (opportunities || []).find(o => o.id === a.opportunityId) : null;
+                                    return (
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderBottom: idx < contactActivities.length - 1 ? `1px solid ${T.border}` : 'none', background: idx % 2 === 0 ? '#fff' : T.surface }}>
+                                            <span style={{ fontSize: 11, color: T.ink3, flexShrink: 0, width: 52, paddingTop: 1 }}>
+                                                {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                                            </span>
+                                            <span style={{ background: 'rgba(58,90,122,0.1)', color: T.ink, padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{a.type || 'Note'}</span>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: 12, color: T.ink2 }}>{a.notes || a.subject || 'No details'}</div>
+                                                {relOpp && <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>{relOpp.opportunityName || relOpp.account}</div>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: 8 }}>
                             <button
                                 onClick={() => handleAddActivity && handleAddActivity(null, contact?.id)}
                                 style={{ flex: 1, padding: '8px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Log Activity
                             </button>
                             <button
-                                onClick={() => { setEditingTask({ contactId: contact?.id }); setShowTaskModal(true); }}
+                                onClick={() => { setTaskRailId('new'); setTaskRailMode('new'); }}
                                 style={{ flex: 1, padding: '8px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Add Task
                             </button>

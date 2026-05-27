@@ -129,7 +129,7 @@ const EMPTY_ACCOUNT = {
 
 export default function AccountRail() {
     const {
-        accounts, contacts, settings, opportunities,
+        accounts, contacts, settings, opportunities, activities,
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
         contactRailId, setContactRailId,
@@ -139,7 +139,7 @@ export default function AccountRail() {
         handleDeleteAccount,
         accountModalError, setAccountModalError,
         accountModalSaving,
-        setShowTaskModal, setEditingTask,
+        taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode,
         handleAddActivity,
         editingAccount, setEditingAccount,
         editingSubAccount, setEditingSubAccount,
@@ -210,6 +210,13 @@ export default function AccountRail() {
         const closed = ['closed won','closed lost','won','lost'];
         return o.account === account.name && !closed.includes((o.stage || '').toLowerCase());
     });
+
+    // Activities linked to this account — via any opportunity belonging to the account
+    const accountActivities = (activities || []).filter(a => {
+        if (!account) return false;
+        const accountOppIds = openOpps.map(o => o.id);
+        return a.opportunityId && accountOppIds.includes(a.opportunityId);
+    }).sort((a, b) => new Date(b.date || '2000') - new Date(a.date || '2000'));
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const hc = useCallback((field, value) => {
@@ -743,6 +750,29 @@ export default function AccountRail() {
                             </div>
                         )}
 
+                        <SectionHeading label={`Activity History (${accountActivities.length})`} />
+                        {accountActivities.length === 0 ? (
+                            <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', marginBottom: 14 }}>No activity history</div>
+                        ) : (
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden', marginBottom: 14 }}>
+                                {accountActivities.map((a, idx) => {
+                                    const relOpp = a.opportunityId ? (opportunities || []).find(o => o.id === a.opportunityId) : null;
+                                    return (
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderBottom: idx < accountActivities.length - 1 ? `1px solid ${T.border}` : 'none', background: idx % 2 === 0 ? '#fff' : T.surface }}>
+                                            <span style={{ fontSize: 11, color: T.ink3, flexShrink: 0, width: 52, paddingTop: 1 }}>
+                                                {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                                            </span>
+                                            <span style={{ background: 'rgba(58,90,122,0.1)', color: T.ink, padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{a.type || 'Note'}</span>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: 12, color: T.ink2 }}>{a.notes || a.subject || 'No details'}</div>
+                                                {relOpp && <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>{relOpp.opportunityName || relOpp.account}</div>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
                         <div style={{ display: 'flex', gap: 8 }}>
                             <button
                                 onClick={() => handleAddActivity && handleAddActivity(null, null, account?.id)}
@@ -750,7 +780,7 @@ export default function AccountRail() {
                                 + Log Activity
                             </button>
                             <button
-                                onClick={() => { setEditingTask({ accountId: account?.id }); setShowTaskModal(true); }}
+                                onClick={() => { setTaskRailId('new'); setTaskRailMode('new'); }}
                                 style={{ flex: 1, padding: '8px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Add Task
                             </button>

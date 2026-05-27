@@ -148,6 +148,7 @@ function App() {
         showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal, csvImportType, setCsvImportType,
+        taskRailId, setTaskRailId, taskRailMode, setTaskRailMode,
         contactRailId, setContactRailId, contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
         railStack, setRailStack,
@@ -374,6 +375,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 if (showModal) { setShowModal(false); setEditingOpp(null); return; }
                 if (showAccountModal) { setShowAccountModal(false); setEditingAccount(null); return; }
                 if (showContactModal) { setShowContactModal(false); setEditingContact(null); return; }
+                if (taskRailId) { setTaskRailId(null); setTaskRailMode('view'); return; }
                 if (showTaskModal) { setShowTaskModal(false); setEditingTask(null); return; }
                 if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
                 if (showProfilePanel) { setShowProfilePanel(false); return; }
@@ -413,7 +415,7 @@ dbFetch('/.netlify/functions/users?me=true')
                     break;
                 case 't': case 'T':
                     e.preventDefault();
-                    setEditingTask(null); setShowTaskModal(true);
+                    setTaskRailId('new'); setTaskRailMode('new');
                     break;
                 case '1':
                     e.preventDefault(); setActiveTab('home'); break;
@@ -694,13 +696,13 @@ dbFetch('/.netlify/functions/users?me=true')
     };
 
     const handleAddTask = () => {
-        setEditingTask(null);
-        setShowTaskModal(true);
+        setTaskRailId('new');
+        setTaskRailMode('new');
     };
 
     const handleEditTask = (task) => {
-        setEditingTask(task);
-        setShowTaskModal(true);
+        setTaskRailId(task.id);
+        setTaskRailMode('view');
     };
 
     // handleDeleteTask managed by useTasks hook
@@ -1358,6 +1360,7 @@ dbFetch('/.netlify/functions/users?me=true')
         handleSaveTask,
         handleCompleteTask,
         handleAddTaskToCalendar,
+        handleAddActivity,
         handleDeleteActivity,
         handleSaveActivity,
         handleUpdateFiscalYearStart,
@@ -1372,7 +1375,8 @@ dbFetch('/.netlify/functions/users?me=true')
         setViewingContact: (c) => { if (c) { setContactRailId(c.id); setContactRailMode('view'); } else { setContactRailId(null); } },
         viewingAccount,
         setViewingAccount: (a) => { if (a) { setAccountRailId(a.id); setAccountRailMode('view'); } else { setAccountRailId(null); } },
-        viewingTask, setViewingTask,
+        viewingTask,
+        setViewingTask: (t) => { if (t) { setTaskRailId(t.id); setTaskRailMode('view'); } else { setTaskRailId(null); } },
         contactShowAllDeals, setContactShowAllDeals,
         accShowAllClosed, setAccShowAllClosed,
         accShowAllContacts, setAccShowAllContacts,
@@ -1442,6 +1446,8 @@ dbFetch('/.netlify/functions/users?me=true')
         editingContact, setEditingContact,
         contactModalError, setContactModalError,
         contactModalSaving, setContactModalSaving,
+        taskRailId, setTaskRailId,
+        taskRailMode, setTaskRailMode,
         contactRailId, setContactRailId,
         contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId,
@@ -1907,7 +1913,7 @@ dbFetch('/.netlify/functions/users?me=true')
                                     style={{ flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', background: '#1c1917', color: '#f5f1eb', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     + Log Activity
                                 </button>
-                                <button onClick={() => { setMeetingPrepOpen(false); setEditingTask({ opportunityId: matchedOpp?.id || '', relatedTo: matchedOpp?.id || '' }); setShowTaskModal(true); }}
+                                <button onClick={() => { setMeetingPrepOpen(false); setTaskRailId('new'); setTaskRailMode('new'); setEditingTask({ opportunityId: matchedOpp?.id || '', relatedTo: matchedOpp?.id || '' }); }}
                                     style={{ flex: 1, padding: '0.5rem', border: '1px solid #ddd8cf', borderRadius: '8px', background: '#e8e3da', color: '#78716c', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     + Add Task
                                 </button>

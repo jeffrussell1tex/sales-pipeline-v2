@@ -4,7 +4,8 @@ import { dbFetch } from '../../utils/storage';
 import OpportunityModal from '../modals/OpportunityModal';
 import ContactRail from '../rails/ContactRail';
 import AccountRail from '../rails/AccountRail';
-import TaskModal from '../modals/TaskModal';
+import TaskRail from '../rails/TaskRail';
+import TaskModal from '../modals/TaskModal'; // kept for legacy inline usage
 import UserModal from '../modals/UserModal';
 import ActivityModal from '../modals/ActivityModal';
 import CsvImportModal from '../modals/CsvImportModal';
@@ -32,6 +33,7 @@ export default function ModalLayer() {
         railStack, setRailStack,
         showTaskModal, setShowTaskModal, editingTask, setEditingTask,
         taskModalError, setTaskModalError, taskModalSaving, setTaskModalSaving,
+        taskRailId, setTaskRailId, taskRailMode, setTaskRailMode,
         showUserModal, setShowUserModal, editingUser, setEditingUser,
         userModalError, setUserModalError, userModalSaving, setUserModalSaving, handleSaveUser,
         showActivityModal, setShowActivityModal, editingActivity, setEditingActivity,
@@ -175,58 +177,7 @@ export default function ModalLayer() {
                 />
             )}
 
-            {showTaskModal && (
-                <TaskModal
-                    task={editingTask}
-                    taskTypes={settings.taskTypes || ['Call', 'Meeting', 'Email']}
-                    opportunities={opportunities}
-                    accounts={accounts}
-                    contacts={contacts}
-                    settings={settings}
-                    onClose={() => { document.activeElement?.blur(); setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
-                    onDismissError={() => setTaskModalError(null)}
-                    onSave={(taskData) => handleSaveTask(taskData, { editingTask, setShowTaskModal, opportunities })}
-                    errorMessage={taskModalError}
-                    saving={taskModalSaving}
-                    onAddTaskType={handleAddTaskType}
-                    onSaveNewContact={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
-                        setContacts(prev => [...prev, nc]);
-                        dbFetch('/.netlify/functions/contacts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(nc)
-                        }).catch(err => console.error('Failed to save inline contact:', err));
-                        return nc;
-                    }}
-                    onSaveNewAccount={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const na = { ...data, id: newId };
-                        setAccounts(prev => [...prev, na]);
-                        dbFetch('/.netlify/functions/accounts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(na)
-                        }).catch(err => console.error('Failed to save inline account:', err));
-                        return na;
-                    }}
-                    onAddOpportunity={() => {
-                        setShowModal(true);
-                        setEditingOpp(null);
-                    }}
-                    onAddContact={() => {
-                        setContactRailId('new'); setContactRailMode('new');
-                    }}
-                    onOpenNestedContact={(prefill) => {
-                        document.activeElement?.blur();
-                        setContactRailId('new'); setContactRailMode('new');
-                    }}
-                    onAddAccount={() => {
-                        setAccountRailId('new'); setAccountRailMode('new');
-                    }}
-                />
-            )}
+            {/* TaskModal replaced by TaskRail */}
 
 
             {/* ContactModal replaced by ContactRail */}
@@ -878,8 +829,8 @@ export default function ModalLayer() {
                                         setTaskReminderPopup(null);
                                         setActiveTab('tasks');
                                         setTimeout(() => {
-                                            setEditingTask(task);
-                                            setShowTaskModal(true);
+                                            setTaskRailId(task.id);
+                                            setTaskRailMode('view');
                                         }, 150);
                                     }}
                                     style={{ flex: 1, padding: '0.625rem 1rem', background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
@@ -1000,7 +951,7 @@ export default function ModalLayer() {
                                             setTaskDuePopup(null);
                                         }
                                         setActiveTab('tasks');
-                                        setTimeout(() => { setEditingTask(task); setShowTaskModal(true); }, 150);
+                                        setTimeout(() => { setTaskRailId(task.id); setTaskRailMode('view'); }, 150);
                                     }}
                                     style={{ flex: 1, padding: '0.7rem 1rem', background: 'linear-gradient(135deg, #dc2626, #ef4444)', color: '#ffffff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', boxShadow: '0 2px 8px rgba(220,38,38,0.3)' }}
                                     onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(220,38,38,0.45)'}
@@ -1142,6 +1093,7 @@ export default function ModalLayer() {
                 );
             })()}
 
+            <TaskRail />
             <ContactRail />
             <AccountRail />
         </>

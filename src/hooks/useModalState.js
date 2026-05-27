@@ -28,6 +28,12 @@ export function useModalState() {
     const [accountRailId,   setAccountRailId]   = useState(null);
     const [accountRailMode, setAccountRailMode] = useState('view');
 
+    // ── Task Rail ───────────────────────────────────────────────────────────────
+    // taskRailId: null (closed) | string id (view/edit) | 'new' (create)
+    // taskRailMode: 'view' | 'edit' | 'new'
+    const [taskRailId,   setTaskRailId]   = useState(null);
+    const [taskRailMode, setTaskRailMode] = useState('view');
+
     // ── Rail stack — supports Option B stacking (Contact → Account → back) ───
     // Each entry: { type: 'contact'|'account', id: string|'new', mode: string }
     const [railStack, setRailStack] = useState([]);
@@ -79,6 +85,8 @@ export function useModalState() {
         showOutlookImportModal, setShowOutlookImportModal,
         csvImportType, setCsvImportType,
         // Rail state
+        taskRailId,      setTaskRailId,
+        taskRailMode,    setTaskRailMode,
         contactRailId,   setContactRailId,
         contactRailMode, setContactRailMode,
         accountRailId,   setAccountRailId,
