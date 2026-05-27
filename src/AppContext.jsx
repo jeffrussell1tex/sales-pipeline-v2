@@ -17,8 +17,6 @@ import AccountsTab from './Tabs/AccountsTab';
 import PipelineTab from './Tabs/PipelineTab';
 import TasksTab from './Tabs/TasksTab';
 import HomeTab from './Tabs/HomeTab';
-import ContactRail from './components/rails/ContactRail';
-import AccountRail from './components/rails/AccountRail';
 import ViewingTaskPanel from './components/panels/ViewingTaskPanel';
 import SettingsTab from './Tabs/SettingsTab';
 import LeadImportModal from './components/modals/LeadImportModal';
@@ -1859,8 +1857,6 @@ dbFetch('/.netlify/functions/users?me=true')
         </div>
         <ModalLayer />
         <QuickLogFab />
-        <ContactRail />
-        <AccountRail />
         </AppProvider>
     );
 }
