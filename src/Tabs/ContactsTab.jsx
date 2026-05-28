@@ -309,11 +309,13 @@ function CompanyTwoPane({
     getAccountRollup, canEdit,
     setViewingContact, setViewingAccount,
     setEditingContact, setShowContactModal,
-    handleEditContact,
+    handleEditContact, handleDeleteOne,
 }) {
     const [coSearch, setCoSearch] = useState('');
     const [stickyTop, setStickyTop] = useState(0);
     const rightPanelRef = useRef(null);
+    const [openRowMenu, setOpenRowMenu] = useState(null);
+    const [menuUp,      setMenuUp]      = useState(false);
 
     // Measure the actual pixel distance from the right panel's natural top edge
     // to the top of the viewport on mount. This accounts for the fixed AppHeader
@@ -323,6 +325,20 @@ function CompanyTwoPane({
         const rect = rightPanelRef.current.getBoundingClientRect();
         setStickyTop(rect.top);
     }, []);
+
+    // Close company-view kebab on outside click
+    useEffect(() => {
+        if (!openRowMenu) return;
+        const close = (e) => {
+            const menu = document.getElementById('co-contact-menu-' + openRowMenu);
+            const btn  = document.getElementById('co-contact-btn-'  + openRowMenu);
+            if (menu && menu.contains(e.target)) return;
+            if (btn  && btn.contains(e.target))  return;
+            setOpenRowMenu(null);
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [openRowMenu]);
 
     const filteredCompanies = useMemo(() => {
         if (!coSearch.trim()) return companyList;
@@ -560,10 +576,53 @@ function CompanyTwoPane({
                                             {c.email && <div style={{ fontSize: 11, color: T.info, marginBottom: 2 }}>{c.email}</div>}
                                             {c.phone && <div style={{ fontSize: 11, color: T.inkMuted }}>{c.phone}</div>}
                                         </div>
-                                        {/* Edit */}
-                                        <div onClick={e => { e.stopPropagation(); handleEditContact(c); }} style={{ color: T.border, cursor: 'pointer' }}>
-                                            <Icon name="dots" size={14} color={T.inkMuted} />
-                                        </div>
+                                        {/* Actions ⋯ — full dropdown matching list view */}
+                                        {canEdit && (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}
+                                                onClick={e => e.stopPropagation()}>
+                                                <button
+                                                    id={'co-contact-btn-' + c.id}
+                                                    onClick={e => {
+                                                        e.stopPropagation();
+                                                        if (openRowMenu !== c.id) {
+                                                            const r = e.currentTarget.getBoundingClientRect();
+                                                            setMenuUp(r ? window.innerHeight - r.bottom < 180 : false);
+                                                        }
+                                                        setOpenRowMenu(openRowMenu === c.id ? null : c.id);
+                                                    }}
+                                                    style={{ background: openRowMenu === c.id ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 3 }}>
+                                                    <Icon name="dots" size={14} color={openRowMenu === c.id ? T.goldInk : T.inkMuted} />
+                                                </button>
+                                                {openRowMenu === c.id && (
+                                                    <div id={'co-contact-menu-' + c.id} onClick={e => e.stopPropagation()}
+                                                        style={{ position: 'absolute', right: 0, zIndex: 300,
+                                                            ...(menuUp ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }),
+                                                            width: 180, background: T.surface, border: `1px solid ${T.borderStrong}`,
+                                                            borderRadius: 4, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.12)', fontFamily: T.sans }}>
+                                                        <div style={{ position: 'absolute', top: -6, right: 10, width: 12, height: 12,
+                                                            background: T.surface, border: `1px solid ${T.borderStrong}`,
+                                                            borderRight: 'none', borderBottom: 'none', transform: 'rotate(45deg)' }}/>
+                                                        {[
+                                                            { icon: '✎', label: 'Edit contact',  fn: () => { handleEditContact(c); setOpenRowMenu(null); } },
+                                                            { icon: '👁', label: 'View profile',   fn: () => { setViewingContact(c); setOpenRowMenu(null); } },
+                                                            null,
+                                                            { icon: '🗑', label: 'Delete',         fn: () => { handleDeleteOne && handleDeleteOne(c); setOpenRowMenu(null); }, danger: true },
+                                                        ].map((item, idx) => item === null ? (
+                                                            <div key={idx} style={{ height: 1, background: T.border, margin: '2px 6px' }}/>
+                                                        ) : (
+                                                            <div key={idx} onClick={item.fn}
+                                                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                                                                    borderRadius: 3, cursor: 'pointer', color: item.danger ? T.danger : T.ink }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                                <span style={{ fontSize: 12, width: 14, textAlign: 'center' }}>{item.icon}</span>
+                                                                <span style={{ fontSize: 12.5, fontWeight: 500 }}>{item.label}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })
@@ -871,6 +930,7 @@ export default function ContactsTab() {
                             accounts={accounts}
                             opportunities={opportunities}
                             activities={activities}
+                            tasks={tasks}
                             oppCount={oppCount}
                             getAccountRollup={getAccountRollup}
                             canEdit={canEdit}
@@ -879,6 +939,7 @@ export default function ContactsTab() {
                             setEditingContact={setEditingContact}
                             setShowContactModal={setShowContactModal}
                             handleEditContact={handleEditContact}
+                            handleDeleteOne={handleDeleteOne}
                           />
                     }
                 </div>
