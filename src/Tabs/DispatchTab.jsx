@@ -709,6 +709,13 @@ export default function DispatchTab() {
     const [view, setView] = useState('board'); // 'board' | 'queue'
     const [selectedJobId, setSelectedJobId] = useState(null);
 
+    // ── New Job form state ────────────────────────────────────────────────────
+    const [showNewJobForm, setShowNewJobForm] = useState(false);
+    const [newJobSaving,   setNewJobSaving]   = useState(false);
+    const [newJobError,    setNewJobError]    = useState('');
+    const EMPTY_JOB = { customer: '', address: '', window: '', priority: 'Medium', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman', opportunityId: '', needSkills: [] };
+    const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
+
     // ── DB-backed state ───────────────────────────────────────────────────────
     const [jobs,       setJobs]       = useState([]);
     const [techs,      setTechs]      = useState([]);
@@ -886,7 +893,54 @@ export default function DispatchTab() {
         return () => { cancelled = true; };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ── Apply filters ────────────────────────────────────────────────────────
+    // ── Save new job ──────────────────────────────────────────────────────────
+    const handleSaveNewJob = async () => {
+        if (!newJobForm.customer.trim()) { setNewJobError('Customer name is required.'); return; }
+        setNewJobSaving(true);
+        setNewJobError('');
+        try {
+            const payload = {
+                title:           newJobForm.customer.trim(),
+                jobType:         'service',
+                priority:        newJobForm.priority.toLowerCase(),
+                status:          'unscheduled',
+                durationMinutes: Math.round((parseFloat(newJobForm.durationHrs) || 2) * 60),
+                scheduledDate:   newJobForm.window || null,
+                opportunityId:   newJobForm.opportunityId || null,
+            };
+            const res  = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Save failed');
+            // Optimistically add to local state
+            const optimistic = {
+                id:              data.id || ('tmp_' + Date.now()),
+                opportunityId:   newJobForm.opportunityId || null,
+                customer:        newJobForm.customer.trim(),
+                address:         newJobForm.address || '',
+                needSkills:      newJobForm.needSkills || [],
+                crewSize:        parseInt(newJobForm.crewSize) || 1,
+                durationHrs:     parseFloat(newJobForm.durationHrs) || 2,
+                priority:        newJobForm.priority,
+                window:          newJobForm.window || 'TBD',
+                equipment:       '',
+                value:           0,
+                minLicense:      newJobForm.minLicense,
+                preferredTechId: null,
+                assignedTechIds: [],
+                start:           null,
+                status:          'unscheduled',
+                _raw:            data,
+            };
+            setJobs(prev => [optimistic, ...prev]);
+            setSelectedJobId(optimistic.id);
+            setNewJobForm(EMPTY_JOB);
+            setShowNewJobForm(false);
+        } catch (err) {
+            setNewJobError(err.message || 'Failed to save job.');
+        } finally {
+            setNewJobSaving(false);
+        }
+    };
     const filteredTechs = useMemo(() => {
         let t = techs;
         if (filterSkill)   t = t.filter(tech => (tech.dispatchSkills || []).includes(filterSkill));
@@ -963,7 +1017,7 @@ export default function DispatchTab() {
                         borderRadius: T.r, fontSize: 12.5, fontWeight: 500, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                         Mass-schedule next week
                     </button>
-                    <button style={{ padding: '6px 14px', background: T.ink, color: '#fbf8f3', border: 'none',
+                    <button onClick={() => { setNewJobForm(EMPTY_JOB); setNewJobError(''); setShowNewJobForm(true); }} style={{ padding: '6px 14px', background: T.ink, color: '#fbf8f3', border: 'none',
                         borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                         + New job
                     </button>
@@ -1091,6 +1145,107 @@ export default function DispatchTab() {
                     boxShadow: '0 4px 16px rgba(42,38,34,0.1)', textAlign: 'center', zIndex: 10 }}>
                     No techs configured. Go to <strong>Settings → People & Teams → Crew</strong> to assign dispatch profiles.
                 </div>
+            )}
+
+            {/* ── New Job modal ──────────────────────────────────────────────── */}
+            {showNewJobForm && (
+                <>
+                    <div onClick={() => setShowNewJobForm(false)}
+                        style={{ position: 'fixed', inset: 0, background: 'rgba(42,38,34,0.45)', zIndex: 1000 }} />
+                    <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+                        zIndex: 1001, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r + 2,
+                        boxShadow: '0 8px 40px rgba(42,38,34,0.22)', width: 480, maxWidth: '92vw', fontFamily: T.sans }}>
+                        {/* Header */}
+                        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>New Job</div>
+                            <button onClick={() => setShowNewJobForm(false)}
+                                style={{ background: 'none', border: 'none', fontSize: 18, color: T.inkMuted, cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+                        </div>
+                        {/* Body */}
+                        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            {/* Customer */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Customer *</label>
+                                <input value={newJobForm.customer}
+                                    onChange={e => setNewJobForm(f => ({ ...f, customer: e.target.value }))}
+                                    placeholder="Customer or company name"
+                                    style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
+                            </div>
+                            {/* Address */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Job Address</label>
+                                <input value={newJobForm.address}
+                                    onChange={e => setNewJobForm(f => ({ ...f, address: e.target.value }))}
+                                    placeholder="Street address"
+                                    style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
+                            </div>
+                            {/* Row: Priority + Duration */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Priority</label>
+                                    <select value={newJobForm.priority}
+                                        onChange={e => setNewJobForm(f => ({ ...f, priority: e.target.value }))}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
+                                        {['Low', 'Medium', 'High', 'Urgent'].map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Duration (hrs)</label>
+                                    <input type="number" min="0.5" max="24" step="0.5"
+                                        value={newJobForm.durationHrs}
+                                        onChange={e => setNewJobForm(f => ({ ...f, durationHrs: e.target.value }))}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
+                                </div>
+                            </div>
+                            {/* Row: Crew size + Scheduled date */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Crew Size</label>
+                                    <input type="number" min="1" max="10"
+                                        value={newJobForm.crewSize}
+                                        onChange={e => setNewJobForm(f => ({ ...f, crewSize: e.target.value }))}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Scheduled Date</label>
+                                    <input type="date"
+                                        value={newJobForm.window}
+                                        onChange={e => setNewJobForm(f => ({ ...f, window: e.target.value }))}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
+                                </div>
+                            </div>
+                            {/* Opportunity link (optional) */}
+                            {(opportunities || []).filter(o => o.stage === 'Closed Won').length > 0 && (
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Linked Opportunity (optional)</label>
+                                    <select value={newJobForm.opportunityId}
+                                        onChange={e => setNewJobForm(f => ({ ...f, opportunityId: e.target.value }))}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
+                                        <option value="">— None —</option>
+                                        {(opportunities || []).filter(o => o.stage === 'Closed Won').map(o => (
+                                            <option key={o.id} value={o.id}>{o.opportunityName || o.account}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            {/* Error */}
+                            {newJobError && (
+                                <div style={{ fontSize: 12, color: T.danger, fontWeight: 500 }}>{newJobError}</div>
+                            )}
+                        </div>
+                        {/* Footer */}
+                        <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                            <button onClick={() => setShowNewJobForm(false)}
+                                style={{ padding: '7px 16px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 500, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                                Cancel
+                            </button>
+                            <button onClick={handleSaveNewJob} disabled={newJobSaving}
+                                style={{ padding: '7px 18px', background: newJobSaving ? T.inkMuted : T.ink, border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600, color: T.surface, cursor: newJobSaving ? 'not-allowed' : 'pointer', fontFamily: T.sans }}>
+                                {newJobSaving ? 'Saving…' : 'Create Job'}
+                            </button>
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );

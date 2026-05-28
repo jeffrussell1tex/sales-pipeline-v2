@@ -1389,7 +1389,7 @@ export default function QuotesTab() {
                     </div>
                 </div>
                 {canEdit && (
-                    <button onClick={() => setTab('deals')} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.ink, border: 'none', color: T.surface, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                    <button onClick={() => { setConfiguratorOppId(null); setTab('configurator'); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.ink, border: 'none', color: T.surface, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                         + New Quote
                     </button>
                 )}
@@ -1547,11 +1547,55 @@ export default function QuotesTab() {
             {subTab === 'configurator' && (
                 <div>
                     {!configuratorOpp ? (
-                        <div style={{ padding: '4rem', textAlign: 'center' }}>
-                            <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚙</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 700, color: T.ink, marginBottom: '0.5rem', fontFamily: T.sans }}>Configurator</div>
-                            <div style={{ fontSize: '0.875rem', color: T.inkMuted, marginBottom: '1.5rem', fontFamily: T.sans }}>Select a deal from the Deals tab to open the CPQ workspace.</div>
-                            <button onClick={() => setTab('deals')} style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: T.r, padding: '0.625rem 1.5rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Go to Deals →</button>
+                        <div>
+                            <div style={{ marginBottom: 14 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, marginBottom: 4, fontFamily: T.sans }}>Select a deal to quote</div>
+                                <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>Pick an open opportunity below to open the CPQ workspace.</div>
+                            </div>
+                            {/* Active opps that don't yet have a quote — shown first */}
+                            {(() => {
+                                const quotedIds = new Set((visibleQuotes || []).map(q => q.opportunityId));
+                                const openOpps = (opportunities || [])
+                                    .filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost')
+                                    .sort((a, b) => {
+                                        const aHasQ = quotedIds.has(a.id) ? 1 : 0;
+                                        const bHasQ = quotedIds.has(b.id) ? 1 : 0;
+                                        return aHasQ - bHasQ || (parseFloat(b.arr) || 0) - (parseFloat(a.arr) || 0);
+                                    });
+                                if (openOpps.length === 0) return (
+                                    <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+                                        No open opportunities yet. Create a deal in the Pipeline tab first.
+                                    </div>
+                                );
+                                return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        {openOpps.map(opp => {
+                                            const oppQuotes = (visibleQuotes || []).filter(q => q.opportunityId === opp.id);
+                                            const latestQ   = oppQuotes.sort((a, b) => (b.version || 1) - (a.version || 1))[0];
+                                            const hasQuote  = oppQuotes.length > 0;
+                                            return (
+                                                <div key={opp.id}
+                                                    onClick={() => openConfigurator(opp.id, latestQ?.id)}
+                                                    style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, cursor: 'pointer', transition: 'border-color 120ms, background 120ms' }}
+                                                    onMouseEnter={e => { e.currentTarget.style.borderColor = T.borderStrong; e.currentTarget.style.background = T.surface2; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.surface; }}>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.opportunityName || opp.account}</div>
+                                                        <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2, fontFamily: T.sans }}>{opp.account} · {opp.stage}</div>
+                                                    </div>
+                                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                        <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{fmt(opp.arr)}</div>
+                                                        <div style={{ fontSize: 11, color: hasQuote ? T.ok : T.inkMuted, fontFamily: T.sans, marginTop: 2 }}>
+                                                            {hasQuote ? `${oppQuotes.length} quote${oppQuotes.length > 1 ? 's' : ''}` : 'No quotes yet'}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ color: T.inkMuted, fontSize: 16, flexShrink: 0 }}>›</div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     ) : (
                         <div>

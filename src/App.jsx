@@ -1505,6 +1505,8 @@ dbFetch('/.netlify/functions/users?me=true')
         selectedAccounts, setSelectedAccounts,
         contactsSortBy, setContactsSortBy,
         selectedContacts, setSelectedContacts,
+        // Responsive
+        isMobile, setIsMobile,
     };
 
     return (
