@@ -755,7 +755,7 @@ export default function ContactsTab() {
 
     // ── Handlers ─────────────────────────────────────────────
     const handleAddContact  = () => { setContactRailId('new'); setContactRailMode('new'); };
-    const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
+    const handleEditContact = (c) => { setContactRailId(c.id); setContactRailMode('edit'); };
 
     const handleDeleteOne = (contact) => {
         const snapshot = [...(contacts || [])];
