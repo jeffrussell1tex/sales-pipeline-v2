@@ -1084,6 +1084,7 @@ export default function TasksTab() {
         calendarEvents, calendarConnected, calendarLoading,
         allPipelines, activePipeline,
         setEditingTask, setShowTaskModal,
+        taskRailId, setTaskRailId, taskRailMode, setTaskRailMode,
         setActivityInitialContext, setEditingActivity, setShowActivityModal,
         viewingTask, setViewingTask,
         isMobile,
@@ -1175,7 +1176,7 @@ export default function TasksTab() {
 
     // ── Row props ──────────────────────────────────────────────
     const qRowProps = { opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal };
-    const handleAddTask = () => { setEditingTask(null); setShowTaskModal(true); };
+    const handleAddTask = () => { setTaskRailId('new'); setTaskRailMode('new'); };
 
     // ── View tabs config ───────────────────────────────────────
     const views = [

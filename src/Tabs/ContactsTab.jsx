@@ -587,6 +587,7 @@ export default function ContactsTab() {
         visibleContacts,
         handleDeleteContact,
         setEditingContact, setShowContactModal,
+        contactRailId, setContactRailId, contactRailMode, setContactRailMode,
         viewingContact, setViewingContact,
         viewingAccount, setViewingAccount,
         contactsSortBy, setContactsSortBy,
@@ -694,7 +695,7 @@ export default function ContactsTab() {
     }, [openRowMenu]);
 
     // ── Handlers ─────────────────────────────────────────────
-    const handleAddContact  = () => { setEditingContact(null); setShowContactModal(true); };
+    const handleAddContact  = () => { setContactRailId('new'); setContactRailMode('new'); };
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
 
     const handleDeleteOne = (contact) => {
