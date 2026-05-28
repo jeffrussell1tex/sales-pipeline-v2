@@ -170,6 +170,7 @@ export default function AccountRail() {
     const [verticalSearch,    setVerticalSearch]    = useState('');
     const [repSearch,         setRepSearch]         = useState('');
     const [territorySearch,   setTerritorySearch]   = useState('');
+    const [parentSearch,      setParentSearch]      = useState('');
     const [customerTypeInput, setCustomerTypeInput] = useState('');
     const [activeTab,         setActiveTab]         = useState('general');
     const [dupWarning,        setDupWarning]        = useState(null);
@@ -184,6 +185,10 @@ export default function AccountRail() {
         setVerticalSearch(src.verticalMarket || src.industry || '');
         setRepSearch(src.assignedRep || '');
         setTerritorySearch(src.assignedTerritory || '');
+        const parentAcct = src.parentAccountId
+            ? (accounts || []).find(a => a.id === src.parentAccountId)
+            : null;
+        setParentSearch(parentAcct?.name || '');
         setActiveTab('general');
         setDupWarning(null);
         setDirty(false);
@@ -285,7 +290,9 @@ export default function AccountRail() {
         await handleSaveAccount(saveData, {
             editingAccount:   isNew ? null : account,
             editingSubAccount: null,
-            parentAccountForSub: null,
+            parentAccountForSub: saveData.parentAccountId
+                ? (accounts || []).find(a => a.id === saveData.parentAccountId) || null
+                : null,
             accountCreatedFromOppForm,
             pendingOppFormData,
             setShowAccountModal: (open) => {
@@ -316,6 +323,10 @@ export default function AccountRail() {
             setVerticalSearch(src.verticalMarket || '');
             setRepSearch(src.assignedRep || '');
             setTerritorySearch(src.assignedTerritory || '');
+            const parentAcct = src.parentAccountId
+                ? (accounts || []).find(a => a.id === src.parentAccountId)
+                : null;
+            setParentSearch(parentAcct?.name || '');
             setAccountRailMode('view');
             setDirty(false);
             setDupWarning(null);
@@ -541,6 +552,35 @@ export default function AccountRail() {
                                         ).map(t => <option key={t} value={t}>{t}</option>)}
                                     </select>
                                 </FieldGroup>
+                                {/* Parent Account — committed chip when selected, typeahead when not */}
+                                <FieldGroup label="Parent Account" wide>
+                                    {formData.parentAccountId ? (() => {
+                                        const parent = (accounts || []).find(a => a.id === formData.parentAccountId);
+                                        return (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, width: 'fit-content' }}>
+                                                <span>{parent?.name || parentSearch}</span>
+                                                <button type="button"
+                                                    onClick={() => { hc('parentAccountId', null); setParentSearch(''); }}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.ink3, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
+                                            </div>
+                                        );
+                                    })() : (
+                                        <Typeahead
+                                            value={parentSearch}
+                                            onChange={v => { setParentSearch(v); if (formData.parentAccountId) hc('parentAccountId', null); }}
+                                            suggestions={(accounts || [])
+                                                .filter(a => a.id !== accountRailId && a.name)
+                                                .map(a => a.name)
+                                                .sort()
+                                            }
+                                            onSelect={v => {
+                                                const selected = (accounts || []).find(a => a.name === v);
+                                                if (selected) { hc('parentAccountId', selected.id); setParentSearch(v); }
+                                            }}
+                                            placeholder="Search accounts…"
+                                        />
+                                    )}
+                                </FieldGroup>
                             </div>
                         ) : (
                             <div style={grid2}>
@@ -555,6 +595,10 @@ export default function AccountRail() {
                                 <ReadRow label="Segment" value={account?.accountSegment} />
                                 <ReadRow label="Assigned Rep" value={account?.assignedRep} />
                                 <ReadRow label="Territory" value={account?.assignedTerritory} />
+                                {account?.parentAccountId && (() => {
+                                    const parent = (accounts || []).find(a => a.id === account.parentAccountId);
+                                    return parent ? <ReadRow label="Parent Account" value={parent.name} wide /> : null;
+                                })()}
                                 {account?.doNotContact && (
                                     <div style={{ gridColumn: '1 / -1', marginBottom: 10, background: '#fef2f2', border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '6px 10px', fontSize: 12, fontWeight: 600, color: T.danger }}>
                                         🚫 Do Not Contact — flagged
