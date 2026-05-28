@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
@@ -9,6 +9,7 @@ import { useAccounts } from './hooks/useAccounts';
 import { useContacts } from './hooks/useContacts';
 import { useTasks } from './hooks/useTasks';
 import { useActivities } from './hooks/useActivities';
+import { AppProvider, useApp } from './AppContext';
 import SalesManagerTab from './Tabs/SalesManagerTab';
 import ReportsTab from './Tabs/ReportsTab';
 import ContactsTab from './Tabs/ContactsTab';
@@ -17,6 +18,8 @@ import AccountsTab from './Tabs/AccountsTab';
 import PipelineTab from './Tabs/PipelineTab';
 import TasksTab from './Tabs/TasksTab';
 import HomeTab from './Tabs/HomeTab';
+import ViewingContactPanel from './components/panels/ViewingContactPanel';
+import ViewingAccountPanel from './components/panels/ViewingAccountPanel';
 import ViewingTaskPanel from './components/panels/ViewingTaskPanel';
 import SettingsTab from './Tabs/SettingsTab';
 import LeadImportModal from './components/modals/LeadImportModal';
@@ -25,7 +28,8 @@ import PipelinesSettingsPanel from './components/modals/PipelinesSettingsPanel';
 import LostReasonModal from './components/modals/LostReasonModal';
 import ActivityModal from './components/modals/ActivityModal';
 import OpportunityModal from './components/modals/OpportunityModal';
-// ContactModal and AccountModal replaced by ContactRail and AccountRail
+import ContactModal, { NestedNewContactForm, NestedNewAccountForm } from './components/modals/ContactModal';
+import AccountModal from './components/modals/AccountModal';
 import TaskModal from './components/modals/TaskModal';
 import UserModal from './components/modals/UserModal';
 import TaskItem from './components/ui/TaskItem';
@@ -45,26 +49,9 @@ import { useCalendarState } from './hooks/useCalendarState';
 import { useUserHandlers } from './hooks/useUserHandlers';
 import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
+import DispatchTab from './Tabs/DispatchTab';
 import ErrorBoundary from './components/ErrorBoundary';
 
-// ── App Context ───────────────────────────────────────────────────────────────
-const AppContext = createContext(null);
-
-export function AppProvider({ children, value }) {
-    return (
-        <AppContext.Provider value={value}>
-            {children}
-        </AppContext.Provider>
-    );
-}
-
-export function useApp() {
-    const ctx = useContext(AppContext);
-    if (!ctx) throw new Error('useApp must be used within AppProvider');
-    return ctx;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 function App() {
     // Clerk auth — powered by @clerk/clerk-react
@@ -159,11 +146,7 @@ function App() {
         showTaskModal, setShowTaskModal, showContactModal, setShowContactModal,
         showActivityModal, setShowActivityModal, showShortcuts, setShowShortcuts,
         showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
-        showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal, csvImportType, setCsvImportType,
-        contactRailId, setContactRailId, contactRailMode, setContactRailMode,
-        accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
-        railStack, setRailStack,
         editingOpp, setEditingOpp, editingAccount, setEditingAccount, editingSubAccount, setEditingSubAccount,
         editingUser, setEditingUser, editingTask, setEditingTask, editingContact, setEditingContact,
         editingActivity, setEditingActivity, activityInitialContext, setActivityInitialContext,
@@ -534,9 +517,6 @@ dbFetch('/.netlify/functions/users?me=true')
         ? settings.pipelines
         : [{ id: 'default', name: 'New Business', color: '#2563eb' }];
     const activePipeline = allPipelines.find(p => p.id === activePipelineId) || allPipelines[0];
-    // The ID of whichever pipeline is flagged as default (or the first one).
-    // Used to resolve legacy pipelineId: 'default' on opps created before pipelines were renamed.
-    const defaultPipelineId = (allPipelines.find(p => p.isDefault) || allPipelines[0])?.id || 'default';
 
     // Shared Viewing bar helpers — build option lists for Rep/Team/Territory
     const allRepNames = [...new Set((settings.users || []).filter(u => u.userType !== 'Manager' && u.userType !== 'Admin').map(u => u.name).filter(Boolean))].sort();
@@ -561,11 +541,7 @@ dbFetch('/.netlify/functions/users?me=true')
     const visibleOpportunities = applyViewingFilter(
         (opportunities || [])
         .filter(opp => isRepVisible(opp.salesRep))
-        .filter(opp => {
-            // Resolve legacy 'default' pipelineId to the current default pipeline
-            const pid = (!opp.pipelineId || opp.pipelineId === 'default') ? defaultPipelineId : opp.pipelineId;
-            return pid === activePipeline.id;
-        })
+        .filter(opp => (opp.pipelineId || 'default') === activePipeline.id)
     );
     const visibleAccounts = (accounts || [])
         .filter(acc => isRepVisible(acc.accountOwner))
@@ -597,7 +573,7 @@ dbFetch('/.netlify/functions/users?me=true')
     const getQuarter = (dateString) => {
         const date = new Date(dateString);
         const month = date.getMonth() + 1; // 1-12
-        const fiscalStart = parseInt(settings.fiscalYearStart) || 1;
+        const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
         // How many months into the fiscal year is this date?
         // monthsIn = 0 means first month of FY, 1 = second, etc.
         const monthsIn = ((month - fiscalStart + 12) % 12);
@@ -611,7 +587,7 @@ dbFetch('/.netlify/functions/users?me=true')
         const date = new Date(dateString);
         const month = date.getMonth() + 1;
         const year = date.getFullYear();
-        const fiscalStart = parseInt(settings.fiscalYearStart) || 1;
+        const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
         // Fiscal year number = calendar year of the fiscal year END
         // If fiscal starts Oct, then Oct 2025 → FY2026, Jan 2026 → FY2026
         // monthsIn tells how far into the FY we are
@@ -727,13 +703,13 @@ dbFetch('/.netlify/functions/users?me=true')
     // handleAddTaskToCalendar managed by useTasks hook
 
     const handleAddContact = () => {
-        setContactRailId('new');
-        setContactRailMode('new');
+        setEditingContact(null);
+        setShowContactModal(true);
     };
 
     const handleEditContact = (contact) => {
-        setContactRailId(contact.id);
-        setContactRailMode('view');
+        setEditingContact(contact);
+        setShowContactModal(true);
     };
 
     // handleDeleteContact managed by useContacts hook
@@ -754,20 +730,30 @@ dbFetch('/.netlify/functions/users?me=true')
     // completeLostSave managed by useOpportunities hook
 
     const handleAddAccount = () => {
-        setAccountRailId('new');
-        setAccountRailMode('new');
+        setEditingAccount(null);
+        setEditingSubAccount(null);
+        setParentAccountForSub(null);
+        setShowAccountModal(true);
     };
 
     const handleAddSubAccount = (parentAccount) => {
-        setAccountRailId('new');
-        setAccountRailMode('new');
+        setEditingAccount(null);
+        setEditingSubAccount(null);
         setParentAccountForSub(parentAccount);
+        setShowAccountModal(true);
     };
     // getSubAccounts managed by useAccounts hook
 
     const handleEditAccount = (account, isSubAccount = false) => {
-        setAccountRailId(account.id);
-        setAccountRailMode('view');
+        if (isSubAccount) {
+            setEditingSubAccount(account);
+            setEditingAccount(null);
+        } else {
+            setEditingAccount(account);
+            setEditingSubAccount(null);
+        }
+        setParentAccountForSub(null);
+        setShowAccountModal(true);
     };
 
     // handleDeleteAccount managed by useAccounts hook
@@ -1319,9 +1305,9 @@ dbFetch('/.netlify/functions/users?me=true')
         loadContacts,
         loadTasks,
         loadActivities,
-        // Detail panel state — now routes to rails
-        viewingContact, setViewingContact: (c) => { if (c) { setContactRailId(c.id); setContactRailMode('view'); } else { setContactRailId(null); } },
-        viewingAccount, setViewingAccount: (a) => { if (a) { setAccountRailId(a.id); setAccountRailMode('view'); } else { setAccountRailId(null); } },
+        // Detail panel state
+        viewingContact, setViewingContact,
+        viewingAccount, setViewingAccount,
         viewingTask, setViewingTask,
         contactShowAllDeals, setContactShowAllDeals,
         accShowAllClosed, setAccShowAllClosed,
@@ -1390,11 +1376,6 @@ dbFetch('/.netlify/functions/users?me=true')
         parentAccountForSub, setParentAccountForSub,
         showContactModal, setShowContactModal,
         editingContact, setEditingContact,
-        contactRailId, setContactRailId,
-        contactRailMode, setContactRailMode,
-        accountRailId, setAccountRailId,
-        accountRailMode, setAccountRailMode,
-        railStack, setRailStack,
         contactModalError, setContactModalError,
         contactModalSaving, setContactModalSaving,
         showTaskModal, setShowTaskModal,
@@ -1414,7 +1395,6 @@ dbFetch('/.netlify/functions/users?me=true')
         activityModalSaving, setActivityModalSaving,
         showCsvImportModal, setShowCsvImportModal,
         showLeadImportModal, setShowLeadImportModal,
-        showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal,
         showSpiffClaimModal, setShowSpiffClaimModal,
         spiffClaimContext, setSpiffClaimContext,
@@ -1438,6 +1418,8 @@ dbFetch('/.netlify/functions/users?me=true')
         quickLogOpen, setQuickLogOpen,
         quickLogForm, setQuickLogForm,
         quickLogContactResults, setQuickLogContactResults,
+        // Responsive
+        isMobile, setIsMobile,
         // Tab UI state (persists across tab switches)
         feedFilter, setFeedFilter,
         feedLastRead, setFeedLastRead,
@@ -1563,6 +1545,15 @@ dbFetch('/.netlify/functions/users?me=true')
                         SALES MANAGER
                     </button>
                 )}
+                {settings.dispatchEnabled !== false && (
+                    <button
+                        className={`nav-tab ${activeTab === 'dispatch' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('dispatch')}
+                        style={{ display: settings.dispatchEnabled === false ? 'none' : '' }}
+                    >
+                        DISPATCH
+                    </button>
+                )}
                 {isAdmin && (
                     <button 
                         className={`nav-tab ${activeTab === 'settings' ? 'active' : ''}`}
@@ -1629,6 +1620,12 @@ dbFetch('/.netlify/functions/users?me=true')
             {activeTab === 'salesManager' && (
                 <ErrorBoundary tabName="Sales Manager">
                     <SalesManagerTab />
+                </ErrorBoundary>
+            )}
+
+            {activeTab === 'dispatch' && settings.dispatchEnabled !== false && (
+                <ErrorBoundary tabName="Dispatch">
+                    <DispatchTab />
                 </ErrorBoundary>
             )}
 
