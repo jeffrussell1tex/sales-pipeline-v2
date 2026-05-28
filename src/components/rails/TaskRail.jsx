@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../AppContext';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -47,12 +47,15 @@ function ReadRow({ label, value, wide }) {
     );
 }
 
-function TextInput({ value, onChange, placeholder, type = 'text' }) {
+function TextInput({ value, onChange, placeholder, type = 'text', onFocus, onBlur, inputRef }) {
     return (
         <input
+            ref={inputRef}
             type={type}
             value={value || ''}
             onChange={e => onChange(e.target.value)}
+            onFocus={onFocus}
+            onBlur={onBlur}
             placeholder={placeholder}
             style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', outline: 'none' }}
         />
@@ -61,10 +64,17 @@ function TextInput({ value, onChange, placeholder, type = 'text' }) {
 
 function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp }) {
     const [open, setOpen] = useState(false);
-    const filtered = (suggestions || []).filter(s => (s || '').toLowerCase().includes((value || '').toLowerCase()));
+    const q = (value || '').toLowerCase();
+    const filtered = (suggestions || []).filter(s => !q || (s || '').toLowerCase().includes(q));
     return (
         <div style={{ position: 'relative' }}>
-            <TextInput value={value} onChange={v => { onChange(v); setOpen(true); }} placeholder={placeholder} />
+            <TextInput
+                value={value}
+                onChange={v => { onChange(v); setOpen(true); }}
+                placeholder={placeholder}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 200)}
+            />
             {open && filtered.length > 0 && (
                 <div style={{
                     position: 'absolute', [dropUp ? 'bottom' : 'top']: '100%', left: 0, right: 0,
@@ -134,13 +144,16 @@ export default function TaskRail() {
     const isEditing = taskRailMode === 'edit' || taskRailMode === 'new';
 
     // ── Form state ────────────────────────────────────────────────────────────
-    const [formData,     setFormData]     = useState(EMPTY_TASK);
-    const [oppSearch,    setOppSearch]    = useState('');
-    const [contactSearch,setContactSearch]= useState('');
-    const [accountSearch,setAccountSearch]= useState('');
-    const [assignSearch, setAssignSearch] = useState('');
-    const [dirty,        setDirty]        = useState(false);
-    const [saveError,    setSaveError]    = useState(null);
+    const [formData,      setFormData]      = useState(EMPTY_TASK);
+    const [oppSearch,     setOppSearch]     = useState('');
+    const [contactSearch, setContactSearch] = useState('');
+    const [showContactSugg, setShowContactSugg] = useState(false);
+    const [selectedContacts, setSelectedContacts] = useState([]);
+    const contactInputRef = useRef(null);
+    const [accountSearch, setAccountSearch] = useState('');
+    const [assignSearch,  setAssignSearch]  = useState('');
+    const [dirty,         setDirty]         = useState(false);
+    const [saveError,     setSaveError]     = useState(null);
     const [completionPrompt, setCompletionPrompt] = useState(false); // show notes prompt on complete
     const [completionNotes,  setCompletionNotes]  = useState('');
     const [completionType,   setCompletionType]   = useState('');
@@ -155,7 +168,17 @@ export default function TaskRail() {
         const relContact = src.contactId     ? (contacts || []).find(c => c.id === src.contactId)         : null;
         const relAccount = src.accountId     ? (accounts || []).find(a => a.id === src.accountId)         : null;
         setOppSearch(relOpp     ? (relOpp.opportunityName || relOpp.account) : '');
-        setContactSearch(relContact ? ((relContact.firstName || '') + ' ' + (relContact.lastName || '')).trim() : '');
+        setContactSearch('');
+        setShowContactSugg(false);
+        // Seed selectedContacts: prefer task.contacts[], fall back to legacy contactId
+        if (Array.isArray(src.contacts) && src.contacts.length > 0) {
+            setSelectedContacts(src.contacts);
+        } else if (src.contactId) {
+            const c = (contacts || []).find(x => x.id === src.contactId);
+            setSelectedContacts(c ? [{ id: c.id, name: ((c.firstName || '') + ' ' + (c.lastName || '')).trim(), title: c.title || '', primary: true }] : []);
+        } else {
+            setSelectedContacts([]);
+        }
         setAccountSearch(relAccount ? relAccount.name : '');
         setAssignSearch(src.assignedTo || '');
         setDirty(false);
@@ -202,7 +225,8 @@ export default function TaskRail() {
             ...formData,
             assignedTo:    assignSearch,
             opportunityId: selOpp     ? selOpp.id     : (formData.opportunityId || ''),
-            contactId:     selContact ? selContact.id : (formData.contactId     || ''),
+            contacts:      selectedContacts,
+            contactId:     (selectedContacts.find(c => c.primary) || selectedContacts[0])?.id || (selContact ? selContact.id : (formData.contactId || '')),
             accountId:     selAccount ? selAccount.id : (formData.accountId     || ''),
         };
 
@@ -449,7 +473,16 @@ export default function TaskRail() {
                                     style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box' }} />
                             </FieldGroup>
                             <FieldGroup label="Assigned To" wide>
-                                <Typeahead value={assignSearch} onChange={setAssignSearch} suggestions={allRepNames} onSelect={setAssignSearch} placeholder="Select or type name…" dropUp />
+                                {/* Committed chip — shown when a valid user is selected */}
+                                {assignSearch && allRepNames.includes(assignSearch) ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, width: 'fit-content', fontFamily: T.sans }}>
+                                        <span>{assignSearch}</span>
+                                        <button type="button" onClick={() => setAssignSearch('')}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.ink3, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
+                                    </div>
+                                ) : (
+                                    <Typeahead value={assignSearch} onChange={setAssignSearch} suggestions={allRepNames} onSelect={v => { setAssignSearch(v); setDirty(true); }} placeholder="Search users…" dropUp />
+                                )}
                             </FieldGroup>
                             <FieldGroup label="Description" wide>
                                 <textarea value={formData.description || ''} onChange={e => hc('description', e.target.value)} rows={3}
@@ -463,8 +496,80 @@ export default function TaskRail() {
                             <FieldGroup label="Opportunity" wide>
                                 <Typeahead value={oppSearch} onChange={setOppSearch} suggestions={oppNames} onSelect={setOppSearch} placeholder="Search opportunities…" />
                             </FieldGroup>
-                            <FieldGroup label="Contact">
-                                <Typeahead value={contactSearch} onChange={setContactSearch} suggestions={contactNames} onSelect={setContactSearch} placeholder="Search contacts…" dropUp />
+                            {/* Contact — multi-select with chips */}
+                            <FieldGroup label="Contact" wide>
+                                {/* Selected chips */}
+                                {selectedContacts.length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+                                        {selectedContacts.map((c, i) => (
+                                            <div key={c.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 7px 3px 9px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, fontFamily: T.sans }}>
+                                                {c.primary && (
+                                                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: T.warn, background: 'rgba(184,115,51,0.12)', padding: '1px 4px', borderRadius: 2, flexShrink: 0 }}>Primary</span>
+                                                )}
+                                                <span>{c.name}</span>
+                                                <button type="button"
+                                                    onClick={() => {
+                                                        const next = selectedContacts.filter((_, j) => j !== i);
+                                                        const hasPrimary = next.some(x => x.primary);
+                                                        setSelectedContacts(!hasPrimary && next.length > 0 ? next.map((x, j) => j === 0 ? { ...x, primary: true } : x) : next);
+                                                        setDirty(true);
+                                                    }}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.ink3, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px', flexShrink: 0 }}>×</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {/* Search input */}
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        ref={contactInputRef}
+                                        type="text"
+                                        value={contactSearch}
+                                        onChange={e => { setContactSearch(e.target.value); setShowContactSugg(true); }}
+                                        onFocus={() => setShowContactSugg(true)}
+                                        onBlur={() => setTimeout(() => setShowContactSugg(false), 200)}
+                                        placeholder={selectedContacts.length > 0 ? 'Add another contact…' : 'Search contacts…'}
+                                        autoComplete="off"
+                                        style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', outline: 'none' }}
+                                    />
+                                    {showContactSugg && (() => {
+                                        const alreadyIds = new Set(selectedContacts.map(c => c.id));
+                                        const q = contactSearch.toLowerCase();
+                                        const matched = (contacts || []).filter(c =>
+                                            !alreadyIds.has(c.id) && (
+                                                q === '' ||
+                                                `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) ||
+                                                (c.company || '').toLowerCase().includes(q)
+                                            )
+                                        ).slice(0, 8);
+                                        return (
+                                            <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.border}`, borderRadius: T.r, marginBottom: 2, maxHeight: 200, overflowY: 'auto', zIndex: 300, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                                                {matched.map(c => (
+                                                    <div key={c.id}
+                                                        onMouseDown={e => e.preventDefault()}
+                                                        onClick={() => {
+                                                            const newEntry = { id: c.id, name: `${c.firstName || ''} ${c.lastName || ''}`.trim(), title: c.title || '', primary: selectedContacts.length === 0 };
+                                                            setSelectedContacts(prev => [...prev, newEntry]);
+                                                            setContactSearch('');
+                                                            setDirty(true);
+                                                            setTimeout(() => contactInputRef.current?.focus(), 0);
+                                                        }}
+                                                        style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = T.surface3}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                        <div style={{ fontWeight: 600, color: T.ink }}>{c.firstName} {c.lastName}</div>
+                                                        {(c.title || c.company) && <div style={{ fontSize: 11, color: T.ink3 }}>{[c.title, c.company].filter(Boolean).join(' · ')}</div>}
+                                                    </div>
+                                                ))}
+                                                {matched.length === 0 && (
+                                                    <div style={{ padding: '10px', fontSize: 12, color: T.ink3, fontFamily: T.sans }}>
+                                                        {contactSearch ? 'No matches found' : 'No contacts available'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
                             </FieldGroup>
                             <FieldGroup label="Account">
                                 <Typeahead value={accountSearch} onChange={setAccountSearch} suggestions={accountNames} onSelect={setAccountSearch} placeholder="Search accounts…" dropUp />
