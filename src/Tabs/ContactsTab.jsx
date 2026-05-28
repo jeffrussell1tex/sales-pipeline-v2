@@ -327,7 +327,7 @@ function CompanyTwoPane({
     }, []);
 
     // Close company-view kebab on outside click
-    useEffect(() => {
+    React.useEffect(() => {
         if (!openRowMenu) return;
         const close = (e) => {
             const menu = document.getElementById('co-contact-menu-' + openRowMenu);
