@@ -44,6 +44,7 @@ import FunnelView from './components/FunnelView';
 import KanbanView from './components/KanbanView';
 import QuotaRepCard from './components/QuotaRepCard';
 import { useModalState } from './hooks/useModalState';
+import { useMerge } from './hooks/useMerge';
 import { useUIState } from './hooks/useUIState';
 import { useCalendarState } from './hooks/useCalendarState';
 import { useUserHandlers } from './hooks/useUserHandlers';
@@ -168,6 +169,7 @@ function App() {
         taskDueSnoozeH, setTaskDueSnoozeH, taskDueSnoozeM, setTaskDueSnoozeM,
         dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
         dismissedReminders, setDismissedReminders,
+        mergeModal, setMergeModal,
     } = modalState;
 
     const {
@@ -293,6 +295,10 @@ function App() {
             }),
         }).catch(err => console.warn('addAudit write failed:', err.message));
     };
+
+    // Duplicate-merge (accounts) — scan + commit + reverse, exposed via context.
+    const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge, reverseMerge } =
+        useMerge({ setAccounts, loadAccounts, addAudit, currentUser: { name: currentUser } });
 
     const softDelete = (label, deleteFunc, restoreFunc) => {
         if (undoToast) clearTimeout(undoToast.timerId);
@@ -1325,6 +1331,10 @@ dbFetch('/.netlify/functions/users?me=true')
         products, setProducts,
         totalRevenue,
         avgRevenue,
+        // Duplicate merge (accounts)
+        mergeModal, setMergeModal,
+        mergeSaving, mergeError, setMergeError,
+        findDuplicates, handleMerge, reverseMerge,
         // Auth
         currentUser,
         userRole,
