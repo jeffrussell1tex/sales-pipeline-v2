@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../AppContext';
+import { dbFetch } from '../../utils/storage';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -235,40 +236,28 @@ export default function ContactRail() {
         setDirty(true);
     };
 
-    // On-create duplicate check: same email, or same / near-identical full name.
-    // Returns an array of candidate contacts, or null.
-    const normC = v => (v || '').toLowerCase().trim();
-    const nameKeyOf = c => (normC(c.firstName) + normC(c.lastName)).replace(/[^a-z0-9]/g, '');
-    const checkDuplicate = (data) => {
-        const email = normC(data.email), persEmail = normC(data.personalEmail);
-        const key = nameKeyOf(data);
-        if (!email && !persEmail && !key) return null;
-        const candidates = (contacts || []).filter(c => {
-            if (contact && c.id === contact.id) return false;
-            if (c.mergeArchived) return false;
-            const ce = normC(c.email), cpe = normC(c.personalEmail);
-            if (email && (ce === email || cpe === email)) return true;
-            if (persEmail && (ce === persEmail || cpe === persEmail)) return true;
-            const ck = nameKeyOf(c);
-            if (key && ck) {
-                if (ck === key) return true;
-                const longer = Math.max(ck.length, key.length);
-                if (longer > 6) {
-                    let dp = Array.from({ length: key.length + 1 }, (_, i) => i);
-                    for (let j = 1; j <= ck.length; j++) {
-                        let prev = j;
-                        for (let i = 1; i <= key.length; i++) {
-                            const val = ck[j-1] === key[i-1] ? dp[i-1] : 1 + Math.min(dp[i-1], dp[i], prev);
-                            dp[i-1] = prev; prev = val;
-                        }
-                        dp[key.length] = prev;
-                    }
-                    if (dp[key.length] <= 2) return true;
-                }
-            }
-            return false;
+    // On-create duplicate check — uses the authoritative backend probe
+    // (/duplicates mode=create), the same detector the Settings scan uses, so it
+    // reflects the live DB rather than the in-memory contacts list. Returns an
+    // array of candidate contacts (duplicates first, then looser matches), or null.
+    const checkDuplicate = async (data) => {
+        const params = new URLSearchParams({
+            entityType: 'contact', mode: 'create',
+            firstName: data.firstName || '', lastName: data.lastName || '',
+            email:     data.email     || '', company:  data.company  || '',
+            phone:     data.phone     || '', mobile:   data.mobile   || '',
         });
-        return candidates.length > 0 ? candidates : null;
+        if (contact?.id) params.set('excludeId', contact.id);
+        try {
+            const res = await dbFetch('/.netlify/functions/duplicates?' + params.toString());
+            const d = await res.json();
+            if (!res.ok) return null;
+            const matches = [...(d.duplicates || []), ...(d.related || [])];
+            return matches.length > 0 ? matches : null;
+        } catch (e) {
+            console.error('Contact duplicate check failed:', e);
+            return null; // fail open — never block creation on a check error
+        }
     };
 
     const handleSave = async () => {
@@ -277,7 +266,7 @@ export default function ContactRail() {
 
         // Duplicate check for new contacts — email match or same / near name.
         if (isNew && !dupWarning) {
-            const dups = checkDuplicate(saveData);
+            const dups = await checkDuplicate(saveData);
             if (dups) { setDupWarning(dups); return; }
         }
 
