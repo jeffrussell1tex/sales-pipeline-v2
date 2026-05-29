@@ -3,32 +3,60 @@ import { accounts } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
-// ── Matching ──────────────────────────────────────────────────────────────────
-// Shares the normalize + Levenshtein<=2 spirit of the client-side checkDuplicate()
-// in AccountRail.jsx, but is TIGHTER for the org-wide scan: the bare substring rule
-// (which inflated the scan to ~600 noisy pairs) now requires a contained token of
-// >=6 chars, and only reaches the "strong" tier with a corroborating signal
-// (same domain / phone / city). The rail's create-time check is intentionally left
-// looser and unchanged — one new name vs. the list is fine to be generous about.
+// ── Duplicate detection for a site-based account model ─────────────────────────
+// Accelerep customers model accounts per site/location: a parent company (e.g.
+// "Mosaic") owns many sub-accounts ("Mosaic - Esterhazy K1/K2/K3", etc.) that
+// legitimately share a domain, a phone, and a name prefix. So domain/phone/prefix
+// similarity means "same parent", NOT "duplicate". We split detection into two
+// tiers with very different safety levels:
 //
-// Score tiers (used by the scan view to default-show strong, toggle to reveal rest):
-//   100 identical name · 95 same domain · 90 same phone · 88 near-identical name
-//   85 substring + corroborating detail · 70 substring only (possible)
+//   tier 'duplicate' (default scan, the ONLY tier pre-staged for one-click merge):
+//     exact name match after stripping case, punctuation, and legal suffixes.
+//     Includes same-named siblings (a genuine double-entry of one sub-account).
+//
+//   tier 'related' (opt-in "possibly related" view, never pre-staged):
+//     near-identical name / shared domain / shared phone / substring. Surfaced
+//     for human review only. Pairs already in a parent/child or shared-parent
+//     hierarchy are excluded entirely — the system already knows they're distinct
+//     sites, so they are not duplicates and not noise worth showing.
+//
+// The rail's create-time checkDuplicate() is intentionally left looser/unchanged.
+
+const LEGAL = new Set([
+    'inc', 'incorporated', 'llc', 'llp', 'lp', 'ltd', 'limited', 'corp',
+    'corporation', 'co', 'company', 'plc', 'gmbh', 'ag', 'sa', 'nv', 'bv',
+    'pllc', 'pc',
+]);
+
+// Strict identity key: lowercase, &->and, strip punctuation, drop a leading "the"
+// and trailing legal suffixes, then join. "Acme, Inc." and "The Acme Co" -> "acme".
+const normalizeName = (s) => {
+    if (!s) return '';
+    let toks = String(s).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+    while (toks.length > 1 && toks[0] === 'the') toks.shift();
+    while (toks.length > 1 && LEGAL.has(toks[toks.length - 1])) toks.pop();
+    return toks.join('');
+};
+
+// Loose key for fuzzy comparisons (alphanumeric only).
 const normalize = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
 const digits = (s) => (s || '').replace(/\D/g, '');
 
-// Robust host extraction — tolerates markdown links "[text](href)", any scheme,
-// www. prefixes, and trailing paths/queries. Returns '' for non-domain values.
+// Split "Company - Location" style names on SPACED separators only, so hyphenated
+// words ("Coca-Cola") are not split.
+const splitSegments = (s) => String(s || '').split(/\s+[-–—|/]\s+/).map(x => x.trim()).filter(Boolean);
+
+// Robust host extraction — tolerates markdown links, any scheme, www., and paths.
 const domainOf = (url) => {
     if (!url) return '';
     let s = String(url).trim().toLowerCase();
-    const md = s.match(/\]\(([^)]+)\)/);          // markdown [text](href) -> href
+    const md = s.match(/\]\(([^)]+)\)/);
     if (md) s = md[1].trim();
-    s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, '');  // strip any scheme://
+    s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, '');
     s = s.replace(/^www\./, '');
-    s = s.split(/[/?#]/)[0];                        // drop path/query/hash
+    s = s.split(/[/?#]/)[0];
     s = s.replace(/^www\./, '');
-    const host = s.match(/[a-z0-9-]+(?:\.[a-z0-9-]+)+/); // require at least one dot
+    const host = s.match(/[a-z0-9-]+(?:\.[a-z0-9-]+)+/);
     return host ? host[0] : '';
 };
 
@@ -46,49 +74,65 @@ const levWithin = (a, b, max) => {
     return dp[a.length] <= max;
 };
 
-// Returns { score, reasons } if a and b look like duplicates, else null.
-const scorePair = (a, b) => {
-    const an = normalize(a.name), bn = normalize(b.name);
+const inHierarchy = (a, b) =>
+    a.parentAccountId === b.id ||
+    b.parentAccountId === a.id ||
+    (!!a.parentAccountId && a.parentAccountId === b.parentAccountId);
+
+// Classify a pair -> { tier:'duplicate'|'related', score, reasons, relationship } | null
+const classifyPair = (a, b) => {
+    const coreA = normalizeName(a.name), coreB = normalizeName(b.name);
+
+    // Tier 1 — exact identity (safe to pre-stage). Siblings included on purpose.
+    if (coreA && coreA === coreB) {
+        return { tier: 'duplicate', score: 100, reasons: ['identical name'], relationship: null };
+    }
+
+    // Deliberate hierarchy => distinct sites, not duplicates; keep them out of the
+    // "related" noise entirely.
+    if (inHierarchy(a, b)) return null;
+
+    // Tier 2 — related signals (review only).
+    const ln = normalize(a.name), rn = normalize(b.name);
     const ad = domainOf(a.website), bd = domainOf(b.website);
     const ap = digits(a.phone), bp = digits(b.phone);
-    const reasons = [];
-    let score = 0;
-
     const sameDomain = !!(ad && bd && ad === bd);
     const samePhone = ap.length >= 10 && ap === bp;
-    const aCity = normalize(a.city), bCity = normalize(b.city);
-    const sameCity = !!(aCity && aCity === bCity && normalize(a.state) === normalize(b.state));
 
-    // Strong standalone signals
-    if (an && bn && an === bn) { score = Math.max(score, 100); reasons.push('identical name'); }
-    if (sameDomain) { score = Math.max(score, 95); reasons.push('same website domain'); }
-    if (samePhone) { score = Math.max(score, 90); reasons.push('same phone'); }
+    const segA = splitSegments(a.name), segB = splitSegments(b.name);
+    const sharedPrefixDiffSuffix = segA.length > 1 && segB.length > 1 &&
+        normalize(segA[0]) === normalize(segB[0]) &&
+        normalize(segA.slice(1).join(' ')) !== normalize(segB.slice(1).join(' '));
 
-    // Near-identical name (typo distance) on longer names
-    if (an && bn && an !== bn && Math.max(an.length, bn.length) > 6 && levWithin(an, bn, 2)) {
-        score = Math.max(score, 88); reasons.push('near-identical name');
+    const reasons = [];
+    let score = 0;
+    let relationship = null;
+
+    if (sharedPrefixDiffSuffix) {
+        relationship = 'different-location';
+        reasons.push('same company name, different location');
+        score = Math.max(score, 45);
+    }
+    if (ln && rn && ln !== rn && Math.max(ln.length, rn.length) > 6 && levWithin(ln, rn, 2)) {
+        reasons.push('near-identical name');
+        score = Math.max(score, sharedPrefixDiffSuffix ? 55 : 80);
+    }
+    if (sameDomain) { reasons.push('same website domain'); score = Math.max(score, sharedPrefixDiffSuffix ? 50 : 72); }
+    if (samePhone) { reasons.push('same phone'); score = Math.max(score, sharedPrefixDiffSuffix ? 48 : 68); }
+    if (ln && rn && ln !== rn && (ln.includes(rn) || rn.includes(ln))) {
+        const shorter = ln.length <= rn.length ? ln : rn;
+        if (shorter.length >= 6) { reasons.push('one name contains the other'); score = Math.max(score, 60); }
     }
 
-    // Substring containment — the noisy rule. Require the *contained* token to be
-    // >=6 chars; only reach the strong tier with a corroborating detail.
-    if (an && bn && an !== bn && (an.includes(bn) || bn.includes(an))) {
-        const shorter = an.length <= bn.length ? an : bn;
-        if (shorter.length >= 6) {
-            if (sameDomain || samePhone || sameCity) {
-                score = Math.max(score, 85); reasons.push('one name contains the other (+ shared detail)');
-            } else {
-                score = Math.max(score, 70); reasons.push('one name contains the other');
-            }
-        }
-    }
-
-    return score > 0 ? { score, reasons } : null;
+    if (reasons.length === 0) return null;
+    return { tier: 'related', score, reasons, relationship };
 };
 
 const slim = (a) => ({
     id: a.id, name: a.name, website: a.website, phone: a.phone,
     industry: a.industry, accountOwner: a.accountOwner, assignedRep: a.assignedRep,
-    city: a.city, state: a.state, createdAt: a.createdAt, updatedAt: a.updatedAt,
+    city: a.city, state: a.state, parentAccountId: a.parentAccountId || null,
+    accountTier: a.accountTier, createdAt: a.createdAt, updatedAt: a.updatedAt,
 });
 
 export const handler = async (event) => {
@@ -115,47 +159,53 @@ export const handler = async (event) => {
             return { statusCode: 400, headers, body: JSON.stringify({ error: 'Only account duplicate detection is enabled in this phase.' }) };
         }
 
-        // minScore lets the scan view request just the strong tier (>=85) by default
-        // and drop to >=70 when the user toggles "show possible matches".
-        const minScore = Number(q.minScore) > 0 ? Number(q.minScore) : 70;
-
-        // Active (non-archived) accounts for this org.
         const rows = (await db.select().from(accounts).where(eq(accounts.orgId, orgId)))
             .filter(a => !a.mergeArchived);
 
-        // ── On-create lookup ───────────────────────────────────────────────────
+        // ── On-create lookup — returns both tiers split out ──────────────────────
         if (q.mode === 'create') {
-            const probe = { name: q.name || '', website: q.website || '' };
+            const probe = { name: q.name || '', website: q.website || '', phone: q.phone || '', parentAccountId: q.parentAccountId || null, id: '__probe__' };
             const excludeId = q.excludeId || null;
-            const matches = [];
+            const duplicates = [], related = [];
             for (const a of rows) {
                 if (excludeId && a.id === excludeId) continue;
-                const m = scorePair(probe, a);
-                if (m && m.score >= minScore) matches.push({ ...slim(a), score: m.score, reasons: m.reasons });
+                const m = classifyPair(probe, a);
+                if (!m) continue;
+                (m.tier === 'duplicate' ? duplicates : related).push({ ...slim(a), score: m.score, reasons: m.reasons, relationship: m.relationship });
             }
-            matches.sort((x, y) => y.score - x.score);
-            return { statusCode: 200, headers, body: JSON.stringify({ matches }) };
+            duplicates.sort((x, y) => y.score - x.score);
+            related.sort((x, y) => y.score - x.score);
+            return { statusCode: 200, headers, body: JSON.stringify({ duplicates, related }) };
         }
 
-        // ── Org-wide scan (default) ──────────────────────────────────────────────
-        // Pairwise O(n^2). Fine for typical org sizes; capped to keep payloads sane.
+        // ── Org-wide scan ────────────────────────────────────────────────────────
+        const tier = q.tier === 'related' ? 'related' : 'duplicate';
         const MAX_PAIRS = Number(q.limit) > 0 ? Math.min(Number(q.limit), 500) : 200;
-        const pairs = [];
+
+        const buckets = { duplicate: [], related: [] };
         for (let i = 0; i < rows.length; i++) {
             for (let j = i + 1; j < rows.length; j++) {
-                const m = scorePair(rows[i], rows[j]);
-                if (m && m.score >= minScore) {
-                    pairs.push({ score: m.score, reasons: m.reasons, a: slim(rows[i]), b: slim(rows[j]) });
-                }
+                const m = classifyPair(rows[i], rows[j]);
+                if (!m) continue;
+                buckets[m.tier].push({ score: m.score, reasons: m.reasons, relationship: m.relationship, a: slim(rows[i]), b: slim(rows[j]) });
             }
         }
-        pairs.sort((x, y) => y.score - x.score);
-        const truncated = pairs.length > MAX_PAIRS;
+        buckets.duplicate.sort((x, y) => y.score - x.score);
+        buckets.related.sort((x, y) => y.score - x.score);
+
+        const selected = buckets[tier];
+        const truncated = selected.length > MAX_PAIRS;
 
         return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({ pairs: pairs.slice(0, MAX_PAIRS), total: pairs.length, scanned: rows.length, minScore, truncated }),
+            body: JSON.stringify({
+                tier,
+                pairs: selected.slice(0, MAX_PAIRS),
+                counts: { duplicate: buckets.duplicate.length, related: buckets.related.length },
+                scanned: rows.length,
+                truncated,
+            }),
         };
     } catch (err) {
         console.error('Duplicates error:', err.message);
