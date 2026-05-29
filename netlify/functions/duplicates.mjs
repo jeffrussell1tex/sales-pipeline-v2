@@ -119,10 +119,11 @@ const classifyPair = (a, b) => {
     }
     if (sameDomain) { reasons.push('same website domain'); score = Math.max(score, sharedPrefixDiffSuffix ? 50 : 72); }
     if (samePhone) { reasons.push('same phone'); score = Math.max(score, sharedPrefixDiffSuffix ? 48 : 68); }
-    if (ln && rn && ln !== rn && (ln.includes(rn) || rn.includes(ln))) {
-        const shorter = ln.length <= rn.length ? ln : rn;
-        if (shorter.length >= 6) { reasons.push('one name contains the other'); score = Math.max(score, 60); }
-    }
+    // Note: a standalone "one name contains the other" rule was removed deliberately.
+    // In a site-based account model it just re-flags the naming convention
+    // ("Syensqo Cytec - Winder" contains "Syensqo"), which is noise, not a duplicate.
+    // The genuinely useful contained-name case (Acme vs Acme Corp) is already caught
+    // by normalizeName collapsing legal suffixes into the 'duplicate' tier.
 
     if (reasons.length === 0) return null;
     return { tier: 'related', score, reasons, relationship };
