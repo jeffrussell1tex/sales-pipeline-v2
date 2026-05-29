@@ -730,7 +730,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
 
     // ── Handlers ──────────────────────────────────────────────
     const handleAddAccount  = () => { setAccountRailId('new'); setAccountRailMode('new'); };
-    const handleEditAccount = (a) => { setEditingAccount(a); setEditingSubAccount(null); setParentAccountForSub(null); setShowAccountModal(true); };
+    const handleEditAccount = (a) => { setAccountRailId(a.id); setAccountRailMode('edit'); };
 
     const handleDeleteSelected = () => {
         if (!selectedIds.length) return;
@@ -1151,7 +1151,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
                     subAccounts={drawerAccount.subs}
                     contacts={contacts}
                     onClose={() => setDrawerAccount(null)}
-                    onView={setViewingAccount}
+                    onView={(acc) => { setDrawerAccount(null); setViewingAccount(acc); }}
                 />
             )}
 
