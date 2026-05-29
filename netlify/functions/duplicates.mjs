@@ -108,11 +108,12 @@ const classifyPair = (a, b) => {
     let score = 0;
     let relationship = null;
 
-    if (sharedPrefixDiffSuffix) {
-        relationship = 'different-location';
-        reasons.push('same company name, different location');
-        score = Math.max(score, 45);
-    }
+    // different-location is a DEMOTING LABEL, not a surfacing signal. "Koch - Enid"
+    // vs "Koch - Fertilizer" are obviously distinct sites and must not fill the
+    // review list on their own — so this only tags / down-weights a pair that ALSO
+    // has a real signal below (e.g. "same phone, but looks like a different location").
+    if (sharedPrefixDiffSuffix) relationship = 'different-location';
+
     if (ln && rn && ln !== rn && Math.max(ln.length, rn.length) > 6 && levWithin(ln, rn, 2)) {
         reasons.push('near-identical name');
         score = Math.max(score, sharedPrefixDiffSuffix ? 55 : 80);
