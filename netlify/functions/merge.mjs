@@ -24,6 +24,16 @@ const ACCOUNT_FIELDS = [
     'fiscalYearEnd', 'foundedYear', 'linkedInUrl', 'sicCode', 'naicsCode',
 ];
 
+// Survivor fields a user can resolve for a contact merge. managers/directReports
+// are org-chart arrays handled structurally (unioned), never via this map.
+const CONTACT_FIELDS = [
+    'prefix', 'firstName', 'middleName', 'lastName', 'suffix', 'nickName', 'title',
+    'company', 'department', 'workLocation', 'email', 'personalEmail', 'phone',
+    'mobile', 'address', 'address2', 'city', 'state', 'zip', 'country',
+    'assistantName', 'homeAddress', 'notes', 'assignedRep', 'assignedTerritory',
+    'doNotContact', 'buyerPersona',
+];
+
 // Lookup used by the reversal path to resolve a snapshotted table name back to its
 // Drizzle table object.
 const TABLE_BY_NAME = {
@@ -58,6 +68,10 @@ export const handler = async (event) => {
 
         // ── REVERSAL ──────────────────────────────────────────────────────────
         if (body.reverse) {
+            if (body.mergeLogId) {
+                const [lg] = await db.select({ entityType: mergeLog.entityType }).from(mergeLog).where(and(eq(mergeLog.id, body.mergeLogId), eq(mergeLog.orgId, orgId)));
+                if (lg?.entityType === 'contact') return await reverseContactMerge({ body, orgId, headers });
+            }
             return await reverseAccountMerge({ body, orgId, headers });
         }
 
@@ -68,8 +82,11 @@ export const handler = async (event) => {
             performedBy = null,
         } = body;
 
+        if (entityType === 'contact') {
+            return await mergeContacts({ body, orgId, userId, headers });
+        }
         if (entityType !== 'account') {
-            return { statusCode: 400, headers, body: JSON.stringify({ error: 'Only account merge is enabled in this phase. Contact merge is coming next.' }) };
+            return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unsupported entityType.' }) };
         }
         if (!survivorId || !archivedId) {
             return { statusCode: 400, headers, body: JSON.stringify({ error: 'survivorId and archivedId are required.' }) };
@@ -234,5 +251,191 @@ async function reverseAccountMerge({ body, orgId, headers }) {
 
     await db.batch(ops);
 
+    return { statusCode: 200, headers, body: JSON.stringify({ success: true, reversed: mergeLogId, restoredId: log.archivedId }) };
+}
+
+// ── Contact merge ──────────────────────────────────────────────────────────────
+// Contacts have no single name column (firstName/lastName) and no account FK
+// (linked to accounts by company NAME). The new rewrite wrinkle vs accounts is
+// JSONB references: opportunities.contactIds (array of ids) and every other
+// contact's managers/directReports ({id,name} arrays). Those are rewritten per
+// affected row, with each row's pre-merge array snapshotted for exact reversal.
+async function mergeContacts({ body, orgId, userId, headers }) {
+    const {
+        survivorId, archivedId,
+        resolvedFields = {}, survivorUpdatedAt, archivedUpdatedAt,
+        performedBy = null,
+    } = body;
+
+    if (!survivorId || !archivedId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'survivorId and archivedId are required.' }) };
+    if (survivorId === archivedId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Cannot merge a record into itself.' }) };
+
+    const [surv] = await db.select().from(contacts).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId)));
+    const [arch] = await db.select().from(contacts).where(and(eq(contacts.id, archivedId), eq(contacts.orgId, orgId)));
+    if (!surv) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Survivor contact not found.' }) };
+    if (!arch) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Contact to archive not found.' }) };
+    if (arch.mergeArchived) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That record has already been merged.' }) };
+    if (surv.mergeArchived) return { statusCode: 409, headers, body: JSON.stringify({ error: 'The survivor was archived by a prior merge — refresh and try again.' }) };
+
+    const tsMatch = (current, sent) => !sent || new Date(current).getTime() === new Date(sent).getTime();
+    if (!tsMatch(surv.updatedAt, survivorUpdatedAt) || !tsMatch(arch.updatedAt, archivedUpdatedAt)) {
+        return { statusCode: 409, headers, body: JSON.stringify({ error: 'One of these records changed since you opened the merge. Please re-open and review again.' }) };
+    }
+
+    const resolved = {};
+    for (const f of CONTACT_FIELDS) if (f in resolvedFields) resolved[f] = resolvedFields[f];
+
+    const nameOf = (c) => [c.firstName, c.lastName].filter(Boolean).join(' ').trim() || c.email || c.id;
+    const survFirst = resolved.firstName != null ? resolved.firstName : surv.firstName;
+    const survLast  = resolved.lastName  != null ? resolved.lastName  : surv.lastName;
+    const survName  = [survFirst, survLast].filter(Boolean).join(' ').trim() || surv.email || surv.id;
+    const archName  = nameOf(arch);
+
+    const now = new Date();
+    const rewrites = [];
+    const ops = [];
+
+    // 1) scalar id FK rewrites: tasks.contactId, activities.contactId
+    const idTargets = [
+        { name: 'tasks', table: tasks, column: 'contactId', col: tasks.contactId },
+        { name: 'activities', table: activities, column: 'contactId', col: activities.contactId },
+    ];
+    for (const t of idTargets) {
+        const found = await db.select({ id: t.table.id }).from(t.table).where(and(eq(t.col, archivedId), eq(t.table.orgId, orgId)));
+        const ids = found.map(r => r.id);
+        if (ids.length) {
+            rewrites.push({ table: t.name, column: t.column, kind: 'id', ids, oldValue: archivedId, newValue: survivorId });
+            ops.push(db.update(t.table).set({ [t.column]: survivorId, updatedAt: now }).where(and(eq(t.col, archivedId), eq(t.table.orgId, orgId))));
+        }
+    }
+
+    // 2) opportunities.contactIds (jsonb array of ids) — per-row rewrite + dedupe
+    const allOpps = await db.select().from(opportunities).where(eq(opportunities.orgId, orgId));
+    const oppRows = [];
+    for (const o of allOpps) {
+        const arr = Array.isArray(o.contactIds) ? o.contactIds : [];
+        if (!arr.includes(archivedId)) continue;
+        const next = [];
+        for (const id of arr) { const v = id === archivedId ? survivorId : id; if (!next.includes(v)) next.push(v); }
+        oppRows.push({ id: o.id, old: arr, new: next });
+        ops.push(db.update(opportunities).set({ contactIds: next, updatedAt: now }).where(and(eq(opportunities.id, o.id), eq(opportunities.orgId, orgId))));
+    }
+    if (oppRows.length) rewrites.push({ table: 'opportunities', column: 'contactIds', kind: 'jsonbArray', rows: oppRows });
+
+    // 3) other contacts' managers/directReports ({id,name} arrays) — per-row rewrite
+    const allContacts = await db.select().from(contacts).where(eq(contacts.orgId, orgId));
+    const repointObjArr = (arr, ownerId) => {
+        const list = Array.isArray(arr) ? arr : [];
+        if (!list.some(x => x && x.id === archivedId)) return null;
+        const out = []; const seen = new Set();
+        for (const item of list) {
+            if (!item || !item.id) continue;
+            const it = item.id === archivedId ? { id: survivorId, name: survName } : item;
+            if (it.id === ownerId) continue;   // drop self-reference
+            if (seen.has(it.id)) continue;      // dedupe
+            seen.add(it.id); out.push(it);
+        }
+        return out;
+    };
+    for (const c of allContacts) {
+        if (c.id === archivedId || c.id === survivorId) continue; // survivor handled via union below
+        for (const col of ['managers', 'directReports']) {
+            const next = repointObjArr(c[col], c.id);
+            if (next === null) continue;
+            const entry = rewrites.find(r => r.table === 'contacts' && r.column === col && r.kind === 'jsonbObjArray');
+            const row = { id: c.id, old: c[col] || [], new: next };
+            if (entry) entry.rows.push(row);
+            else rewrites.push({ table: 'contacts', column: col, kind: 'jsonbObjArray', rows: [row] });
+            ops.push(db.update(contacts).set({ [col]: next, updatedAt: now }).where(and(eq(contacts.id, c.id), eq(contacts.orgId, orgId))));
+        }
+    }
+
+    // 4) Survivor: resolved fields + unioned org-chart arrays (archived merged in).
+    const unionObjArr = (a, b) => {
+        const out = []; const seen = new Set();
+        for (const item of [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]) {
+            if (!item || !item.id) continue;
+            const id = item.id === archivedId ? survivorId : item.id;
+            if (id === survivorId) continue;   // survivor can't reference itself
+            if (seen.has(id)) continue;
+            seen.add(id); out.push(item);
+        }
+        return out;
+    };
+    const survSet = {
+        ...resolved,
+        firstName: survFirst, lastName: survLast,
+        managers: unionObjArr(surv.managers, arch.managers),
+        directReports: unionObjArr(surv.directReports, arch.directReports),
+        updatedAt: now,
+    };
+    ops.push(db.update(contacts).set(survSet).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId))));
+
+    // 5) Soft-archive the loser.
+    ops.push(db.update(contacts).set({ mergeArchived: true, mergedIntoId: survivorId, archivedAt: now, updatedAt: now }).where(and(eq(contacts.id, archivedId), eq(contacts.orgId, orgId))));
+
+    // 6) Reversible audit log.
+    const logId = 'mrg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    ops.push(db.insert(mergeLog).values({
+        id: logId, orgId, entityType: 'contact',
+        survivorId, survivorName: survName, archivedId, archivedName: archName,
+        rewrites, resolvedFields: resolved,
+        survivorSnapshot: surv, archivedSnapshot: arch,
+        status: 'merged', performedBy, performedById: userId,
+    }));
+
+    await db.batch(ops);
+
+    const [updatedSurvivor] = await db.select().from(contacts).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId)));
+    const summary = {};
+    for (const r of rewrites) summary[r.table + '.' + r.column] = (r.ids ? r.ids.length : (r.rows ? r.rows.length : 0));
+
+    return { statusCode: 200, headers, body: JSON.stringify({ contact: updatedSurvivor, archivedId, mergeLogId: logId, rewriteSummary: summary }) };
+}
+
+// ── Reverse a contact merge ─────────────────────────────────────────────────────
+async function reverseContactMerge({ body, orgId, headers }) {
+    const { mergeLogId } = body;
+    if (!mergeLogId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'mergeLogId is required to reverse a merge.' }) };
+
+    const [log] = await db.select().from(mergeLog).where(and(eq(mergeLog.id, mergeLogId), eq(mergeLog.orgId, orgId)));
+    if (!log) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Merge record not found.' }) };
+    if (log.status === 'reversed') return { statusCode: 409, headers, body: JSON.stringify({ error: 'This merge has already been reversed.' }) };
+    if (log.entityType !== 'contact') return { statusCode: 400, headers, body: JSON.stringify({ error: 'Not a contact merge.' }) };
+
+    const now = new Date();
+    const ops = [];
+
+    for (const rw of (log.rewrites || [])) {
+        const table = TABLE_BY_NAME[rw.table];
+        if (!table) continue;
+        if (rw.kind === 'id' || rw.kind === 'name') {
+            if (Array.isArray(rw.ids) && rw.ids.length) ops.push(db.update(table).set({ [rw.column]: rw.oldValue }).where(and(inArray(table.id, rw.ids), eq(table.orgId, orgId))));
+        } else if (rw.kind === 'jsonbArray' || rw.kind === 'jsonbObjArray') {
+            for (const row of (rw.rows || [])) ops.push(db.update(table).set({ [rw.column]: row.old }).where(and(eq(table.id, row.id), eq(table.orgId, orgId))));
+        }
+    }
+
+    // Un-archive the loser.
+    ops.push(db.update(contacts).set({ mergeArchived: false, mergedIntoId: null, archivedAt: null, updatedAt: now }).where(and(eq(contacts.id, log.archivedId), eq(contacts.orgId, orgId))));
+
+    // Restore the survivor's merge-touched fields from its pre-merge snapshot.
+    const snapS = log.survivorSnapshot || {};
+    const restore = {
+        updatedAt: now,
+        firstName: snapS.firstName ?? null,
+        lastName: snapS.lastName ?? null,
+        managers: snapS.managers ?? [],
+        directReports: snapS.directReports ?? [],
+    };
+    for (const k of Object.keys(log.resolvedFields || {})) {
+        if (k === 'firstName' || k === 'lastName') continue;
+        restore[k] = snapS[k] ?? null;
+    }
+    ops.push(db.update(contacts).set(restore).where(and(eq(contacts.id, log.survivorId), eq(contacts.orgId, orgId))));
+
+    ops.push(db.update(mergeLog).set({ status: 'reversed', reversedAt: now }).where(and(eq(mergeLog.id, mergeLogId), eq(mergeLog.orgId, orgId))));
+
+    await db.batch(ops);
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, reversed: mergeLogId, restoredId: log.archivedId }) };
 }

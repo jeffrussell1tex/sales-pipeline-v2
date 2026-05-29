@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { accounts } from '../../db/schema.js';
+import { accounts, contacts } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
@@ -137,6 +137,43 @@ const slim = (a) => ({
     accountTier: a.accountTier, createdAt: a.createdAt, updatedAt: a.updatedAt,
 });
 
+// ── Contact duplicate detection ────────────────────────────────────────────────
+// Email is a near-unique key, so it (or full-name + same company) gets the merge
+// button. Name-only, near-name, and shared phone are review-only — phone is NOT a
+// merge signal because per-site contacts often share one main line.
+const normEmail = (s) => (s || '').toLowerCase().trim();
+const nameKey   = (c) => normalize([c.firstName, c.lastName].filter(Boolean).join(''));
+const phonesOf  = (c) => [digits(c.phone), digits(c.mobile)].filter(p => p.length >= 10);
+
+const classifyContactPair = (a, b) => {
+    const ea = normEmail(a.email), eb = normEmail(b.email);
+    const na = nameKey(a), nb = nameKey(b);
+    const ca = normalize(a.company), cb = normalize(b.company);
+
+    // Tier 1 — duplicate (merge button): same email, OR same full name + same company.
+    if (ea && eb && ea === eb) return { tier: 'duplicate', score: 100, reasons: ['same email'], relationship: null };
+    if (na && nb && na === nb && ca && cb && ca === cb) return { tier: 'duplicate', score: 95, reasons: ['same name & company'], relationship: null };
+
+    // Tier 2 — related (review only).
+    const reasons = []; let score = 0;
+    if (na && nb && na === nb) { reasons.push('same name'); score = Math.max(score, 70); }
+    else if (na && nb && Math.max(na.length, nb.length) > 6 && levWithin(na, nb, 2)) { reasons.push('near-identical name'); score = Math.max(score, 60); }
+    const pa = phonesOf(a), pb = phonesOf(b);
+    if (pa.some(p => pb.includes(p))) { reasons.push('same phone'); score = Math.max(score, 50); }
+
+    if (reasons.length === 0) return null;
+    return { tier: 'related', score, reasons, relationship: null };
+};
+
+const slimContact = (c) => ({
+    id: c.id,
+    name: [c.firstName, c.lastName].filter(Boolean).join(' ').trim() || c.email || '(no name)',
+    firstName: c.firstName, lastName: c.lastName,
+    email: c.email, phone: c.phone, mobile: c.mobile,
+    company: c.company, title: c.title, assignedRep: c.assignedRep,
+    city: c.city, state: c.state, createdAt: c.createdAt, updatedAt: c.updatedAt,
+});
+
 export const handler = async (event) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -157,8 +194,41 @@ export const handler = async (event) => {
     try {
         const q = event.queryStringParameters || {};
         const entityType = q.entityType || 'account';
+        if (entityType === 'contact') {
+            const rows = (await db.select().from(contacts).where(eq(contacts.orgId, orgId))).filter(c => !c.mergeArchived);
+
+            if (q.mode === 'create') {
+                const probe = { firstName: q.firstName || '', lastName: q.lastName || '', email: q.email || '', company: q.company || '', phone: q.phone || '', mobile: q.mobile || '', id: '__probe__' };
+                const excludeId = q.excludeId || null;
+                const duplicates = [], related = [];
+                for (const c of rows) {
+                    if (excludeId && c.id === excludeId) continue;
+                    const m = classifyContactPair(probe, c);
+                    if (!m) continue;
+                    (m.tier === 'duplicate' ? duplicates : related).push({ ...slimContact(c), score: m.score, reasons: m.reasons, relationship: m.relationship });
+                }
+                duplicates.sort((x, y) => y.score - x.score);
+                related.sort((x, y) => y.score - x.score);
+                return { statusCode: 200, headers, body: JSON.stringify({ duplicates, related }) };
+            }
+
+            const tier = q.tier === 'related' ? 'related' : 'duplicate';
+            const MAX_PAIRS = Number(q.limit) > 0 ? Math.min(Number(q.limit), 500) : 200;
+            const buckets = { duplicate: [], related: [] };
+            for (let i = 0; i < rows.length; i++) {
+                for (let j = i + 1; j < rows.length; j++) {
+                    const m = classifyContactPair(rows[i], rows[j]);
+                    if (!m) continue;
+                    buckets[m.tier].push({ score: m.score, reasons: m.reasons, relationship: m.relationship, a: slimContact(rows[i]), b: slimContact(rows[j]) });
+                }
+            }
+            buckets.duplicate.sort((x, y) => y.score - x.score);
+            buckets.related.sort((x, y) => y.score - x.score);
+            const selected = buckets[tier];
+            return { statusCode: 200, headers, body: JSON.stringify({ tier, pairs: selected.slice(0, MAX_PAIRS), counts: { duplicate: buckets.duplicate.length, related: buckets.related.length }, scanned: rows.length, truncated: selected.length > MAX_PAIRS }) };
+        }
         if (entityType !== 'account') {
-            return { statusCode: 400, headers, body: JSON.stringify({ error: 'Only account duplicate detection is enabled in this phase.' }) };
+            return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unsupported entityType.' }) };
         }
 
         const rows = (await db.select().from(accounts).where(eq(accounts.orgId, orgId)))
