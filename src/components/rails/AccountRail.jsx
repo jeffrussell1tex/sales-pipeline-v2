@@ -500,6 +500,10 @@ export default function AccountRail() {
                             <div key={d.id} style={{ fontSize: 12, color: '#78350f', marginBottom: 2 }}><strong>{d.name}</strong>{d.verticalMarket ? ` · ${d.verticalMarket}` : ''}</div>
                         ))}
                         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                            <button onClick={() => { const d = dupWarning[0]; setDupWarning(null); if (d) { setAccountRailId(d.id); setAccountRailMode('view'); } }}
+                                style={{ padding: '4px 10px', background: '#fff', color: '#92400e', border: '1px solid #fde68a', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
+                                Open existing
+                            </button>
                             <button onClick={() => { setDupWarning(null); handleSave(); }}
                                 style={{ padding: '4px 10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
                                 Create anyway

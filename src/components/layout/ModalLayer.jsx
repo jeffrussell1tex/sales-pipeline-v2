@@ -13,6 +13,7 @@ import OutlookImportModal from '../modals/OutlookImportModal';
 import LeadImportModal from '../modals/LeadImportModal';
 import LeadModal from '../modals/LeadModal';
 import LostReasonModal from '../modals/LostReasonModal';
+import MergeReviewModal from '../modals/MergeReviewModal';
 // ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
 export default function ModalLayer() {
@@ -1051,6 +1052,7 @@ export default function ModalLayer() {
             <TaskRail />
             <ContactRail />
             <AccountRail />
+            <MergeReviewModal />
         </>
     );
 }

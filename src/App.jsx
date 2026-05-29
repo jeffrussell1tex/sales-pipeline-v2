@@ -9,6 +9,7 @@ import { useAccounts } from './hooks/useAccounts';
 import { useContacts } from './hooks/useContacts';
 import { useTasks } from './hooks/useTasks';
 import { useActivities } from './hooks/useActivities';
+import { useMerge } from './hooks/useMerge';
 import { AppProvider, useApp } from './AppContext';
 import SalesManagerTab from './Tabs/SalesManagerTab';
 import ReportsTab from './Tabs/ReportsTab';
@@ -160,6 +161,7 @@ function App() {
         accountCreatedFromOppForm, setAccountCreatedFromOppForm,
         pendingOppFormData, setPendingOppFormData,
         lastCreatedRepName, setLastCreatedRepName,
+        mergeModal, setMergeModal,
         confirmModal, setConfirmModal, blockedDeleteModal, setBlockedDeleteModal, lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover, undoToast, setUndoToast,
         taskReminderPopup, setTaskReminderPopup,
@@ -262,6 +264,16 @@ function App() {
         loadActivities,
         handleDeleteActivity, handleSaveActivity,
     } = useActivities({ showConfirm: (...a) => _showConfirmRef.current?.(...a) });
+
+    const {
+        mergeSaving, mergeError, setMergeError,
+        findDuplicates, handleMerge, reverseMerge,
+    } = useMerge({
+        setAccounts,
+        loadAccounts,
+        currentUser,
+        addAudit: (...a) => _addAuditRef.current?.(...a),
+    });
 
     const [leads, setLeads] = React.useState([]);
     const [spiffClaims, setSpiffClaims] = React.useState([]);
@@ -1372,6 +1384,10 @@ dbFetch('/.netlify/functions/users?me=true')
         loadContacts,
         loadTasks,
         loadActivities,
+        // Duplicate merge
+        mergeModal, setMergeModal,
+        mergeSaving, mergeError, setMergeError,
+        findDuplicates, handleMerge, reverseMerge,
         // Detail panel state
         viewingContact,
         setViewingContact: (c) => { if (c) { setContactRailId(c.id); setContactRailMode('view'); } else { setContactRailId(null); } },
