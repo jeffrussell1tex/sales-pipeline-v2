@@ -14,6 +14,7 @@ import LeadImportModal from '../modals/LeadImportModal';
 import LeadModal from '../modals/LeadModal';
 import LostReasonModal from '../modals/LostReasonModal';
 import MergeReviewModal from '../modals/MergeReviewModal';
+import ContactMergeReviewModal from '../modals/ContactMergeReviewModal';
 // ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
 export default function ModalLayer() {
@@ -1053,6 +1054,7 @@ export default function ModalLayer() {
             <ContactRail />
             <AccountRail />
             <MergeReviewModal />
+            <ContactMergeReviewModal />
         </>
     );
 }

@@ -170,6 +170,7 @@ function App() {
         dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
         dismissedReminders, setDismissedReminders,
         mergeModal, setMergeModal,
+        contactMergeModal, setContactMergeModal,
     } = modalState;
 
     const {
@@ -297,8 +298,9 @@ function App() {
     };
 
     // Duplicate-merge (accounts) — scan + commit + reverse, exposed via context.
-    const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge, reverseMerge } =
-        useMerge({ setAccounts, loadAccounts, addAudit, currentUser: { name: currentUser } });
+    const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge, reverseMerge,
+        findContactDuplicates, handleContactMerge, reverseContactMerge } =
+        useMerge({ setAccounts, loadAccounts, setContacts, loadContacts, addAudit, currentUser: { name: currentUser } });
 
     const softDelete = (label, deleteFunc, restoreFunc) => {
         if (undoToast) clearTimeout(undoToast.timerId);
@@ -1335,6 +1337,9 @@ dbFetch('/.netlify/functions/users?me=true')
         mergeModal, setMergeModal,
         mergeSaving, mergeError, setMergeError,
         findDuplicates, handleMerge, reverseMerge,
+        // Duplicate merge (contacts)
+        contactMergeModal, setContactMergeModal,
+        findContactDuplicates, handleContactMerge, reverseContactMerge,
         // Auth
         currentUser,
         userRole,
