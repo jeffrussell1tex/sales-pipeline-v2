@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
+import DuplicateScanView from './DuplicateScanView';
 
 // ── Design tokens ────────────────────────────────────────────
 const T = {
@@ -173,6 +174,7 @@ const SETTINGS_ITEMS = [
     // Data
     { id:'import',           scope:'workspace', category:'Data', name:'Import',                    desc:'CSV import for accounts, contacts, leads, opportunities',     status:'ok',      statusDetail:'Last: 812 rows',              updatedBy:'Admin', updatedAt:'3 days ago',  isNew:true },
     { id:'export',           scope:'workspace', category:'Data', name:'Export',                    desc:'Scheduled and ad-hoc exports; GDPR data requests',            status:'ok',      statusDetail:'Weekly export · Mondays',     updatedBy:'Admin', updatedAt:'3 months ago', isNew:true },
+    { id:'duplicates',       scope:'workspace', category:'Data', name:'Find & merge duplicates',    desc:'Scan accounts for likely duplicates and merge them — fully reversible', status:'ok',      statusDetail:'Scan on demand',              updatedBy:'Admin', updatedAt:'—', isNew:true },
     { id:'backup',           scope:'workspace', category:'Data', name:'Backup & restore',           desc:'Automated daily backups and point-in-time restore',           status:'ok',      statusDetail:'Daily · last: 03:14 UTC',     updatedBy:'System', updatedAt:'4 hours ago' },
     { id:'features',         scope:'workspace', category:'Data', name:'Features & AI',              desc:'Enable app features and AI (deal scoring, writing assist)',   status:'ok',      statusDetail:'14 of 18 on · AI enabled',    updatedBy:'Admin', updatedAt:'1 month ago' },
 ];
@@ -18245,6 +18247,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'dsp-techs')     return <DispatchTechDetail      settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'dsp-templates') return <DispatchJobTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
+        if (id === 'duplicates')      return <DuplicateScanView onBack={onBack}/>;
 
         // Generic wrapper for all other panels
         const panel = DETAIL_PANELS[id];
