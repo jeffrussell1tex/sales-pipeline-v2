@@ -151,10 +151,28 @@ export default function ContactRail() {
     const [dupWarning,      setDupWarning]      = useState(null);
     const [dirty,           setDirty]           = useState(false);
     const [saveError,       setSaveError]       = useState(null);
+    // Snapshot of an in-progress NEW contact, stashed when the user jumps to an
+    // existing match via "Open existing" so "← Back" can restore the draft intact.
+    const restoreNewRef = useRef(null);
 
     // Seed form when rail opens or contact changes
     useEffect(() => {
         if (!isOpen) return;
+        // Returning to an in-progress new contact via "← Back" after "Open existing".
+        if (contactRailId === 'new' && restoreNewRef.current) {
+            const snap = restoreNewRef.current;
+            restoreNewRef.current = null;
+            setFormData(snap.formData);
+            setCompanySearch(snap.companySearch || '');
+            setRepSearch(snap.repSearch || '');
+            setPersonaSearch(snap.personaSearch || '');
+            setActiveTab(snap.activeTab || 'primary');
+            setDupWarning(null);
+            setDirty(true);
+            setSaveError(null);
+            setContactModalError?.(null);
+            return;
+        }
         const src = contact || EMPTY_CONTACT;
         setFormData({ ...EMPTY_CONTACT, ...src });
         setCompanySearch(src.company || '');
@@ -198,6 +216,7 @@ export default function ContactRail() {
     const hc = useCallback((field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
         setDirty(true);
+        setDupWarning(null);
     }, []);
 
     const handleSelectCompany = (name) => {
@@ -216,17 +235,50 @@ export default function ContactRail() {
         setDirty(true);
     };
 
+    // On-create duplicate check: same email, or same / near-identical full name.
+    // Returns an array of candidate contacts, or null.
+    const normC = v => (v || '').toLowerCase().trim();
+    const nameKeyOf = c => (normC(c.firstName) + normC(c.lastName)).replace(/[^a-z0-9]/g, '');
+    const checkDuplicate = (data) => {
+        const email = normC(data.email), persEmail = normC(data.personalEmail);
+        const key = nameKeyOf(data);
+        if (!email && !persEmail && !key) return null;
+        const candidates = (contacts || []).filter(c => {
+            if (contact && c.id === contact.id) return false;
+            if (c.mergeArchived) return false;
+            const ce = normC(c.email), cpe = normC(c.personalEmail);
+            if (email && (ce === email || cpe === email)) return true;
+            if (persEmail && (ce === persEmail || cpe === persEmail)) return true;
+            const ck = nameKeyOf(c);
+            if (key && ck) {
+                if (ck === key) return true;
+                const longer = Math.max(ck.length, key.length);
+                if (longer > 6) {
+                    let dp = Array.from({ length: key.length + 1 }, (_, i) => i);
+                    for (let j = 1; j <= ck.length; j++) {
+                        let prev = j;
+                        for (let i = 1; i <= key.length; i++) {
+                            const val = ck[j-1] === key[i-1] ? dp[i-1] : 1 + Math.min(dp[i-1], dp[i], prev);
+                            dp[i-1] = prev; prev = val;
+                        }
+                        dp[key.length] = prev;
+                    }
+                    if (dp[key.length] <= 2) return true;
+                }
+            }
+            return false;
+        });
+        return candidates.length > 0 ? candidates : null;
+    };
+
     const handleSave = async () => {
         setSaveError(null);
         const saveData = { ...formData, company: companySearch, assignedRep: repSearch, buyerPersona: personaSearch };
 
-        // Duplicate check for new contacts
+        // Duplicate check for new contacts — email match or same / near name.
         if (isNew && !dupWarning) {
-            const dup = (contacts || []).find(c =>
-                (c.firstName || '').toLowerCase().trim() === (saveData.firstName || '').toLowerCase().trim() &&
-                (c.lastName  || '').toLowerCase().trim() === (saveData.lastName  || '').toLowerCase().trim()
-            );
-            if (dup) { setDupWarning(dup); return; }
+            const dups = checkDuplicate(saveData);
+            if (dups) { setDupWarning(dups); return; }
         }
 
         await handleSaveContact(saveData, {
@@ -421,14 +473,20 @@ export default function ContactRail() {
                 {/* ── Duplicate warning ─────────────────────────────────────── */}
                 {dupWarning && (
                     <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: T.r, padding: '10px 12px', marginBottom: 12 }}>
-                        <div style={{ fontWeight: 700, color: '#92400e', fontSize: 12, marginBottom: 4 }}>⚠ Duplicate contact found</div>
-                        <div style={{ fontSize: 12, color: '#78350f', marginBottom: 8 }}>
-                            <strong>{dupWarning.firstName} {dupWarning.lastName}</strong>{dupWarning.company ? ` at ${dupWarning.company}` : ''} already exists. Create anyway?
-                        </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ fontWeight: 700, color: '#92400e', fontSize: 12, marginBottom: 4 }}>⚠ Possible duplicate{dupWarning.length > 1 ? 's' : ''} found</div>
+                        {dupWarning.slice(0, 3).map(d => (
+                            <div key={d.id} style={{ fontSize: 12, color: '#78350f', marginBottom: 2 }}>
+                                <strong>{[d.firstName, d.lastName].filter(Boolean).join(' ') || d.name || d.email}</strong>{d.company ? ` · ${d.company}` : ''}{d.email ? ` · ${d.email}` : ''}
+                            </div>
+                        ))}
+                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                            <button onClick={() => { const d = dupWarning[0]; if (!d) return; restoreNewRef.current = { formData, companySearch, repSearch, personaSearch, activeTab }; setDupWarning(null); setRailStack(prev => [...prev, { type: 'contact', id: contactRailId, mode: contactRailMode }]); setContactRailId(d.id); setContactRailMode('view'); }}
+                                style={{ padding: '4px 10px', background: '#fff', color: '#92400e', border: '1px solid #fde68a', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
+                                Open existing
+                            </button>
                             <button onClick={() => { setDupWarning(null); handleSave(); }}
                                 style={{ padding: '4px 10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
-                                Yes, create duplicate
+                                Create anyway
                             </button>
                             <button onClick={() => setDupWarning(null)}
                                 style={{ padding: '4px 10px', background: '#fff', color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
