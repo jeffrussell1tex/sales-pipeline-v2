@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../AppContext';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -177,9 +177,30 @@ export default function AccountRail() {
     const [dirty,             setDirty]             = useState(false);
     const [saveError,         setSaveError]         = useState(null);
 
+    // Holds the in-progress NEW account while the user peeks at an existing
+    // dup via "Open existing", so "← Back" can restore it intact.
+    const restoreNewRef = useRef(null);
+
     // Seed form when rail opens
     useEffect(() => {
         if (!isOpen) return;
+        // Returning to an in-progress new account (Back from "Open existing")
+        if (accountRailId === 'new' && restoreNewRef.current) {
+            const snap = restoreNewRef.current;
+            restoreNewRef.current = null;
+            setFormData(snap.formData);
+            setVerticalSearch(snap.verticalSearch);
+            setRepSearch(snap.repSearch);
+            setTerritorySearch(snap.territorySearch);
+            setParentSearch(snap.parentSearch);
+            setCustomerTypeInput(snap.customerTypeInput);
+            setActiveTab(snap.activeTab || 'general');
+            setDupWarning(null);
+            setDirty(true);
+            setSaveError(null);
+            setAccountModalError?.(null);
+            return;
+        }
         const src = account || EMPTY_ACCOUNT;
         setFormData({ ...EMPTY_ACCOUNT, ...src });
         setVerticalSearch(src.verticalMarket || src.industry || '');
@@ -335,17 +356,24 @@ export default function AccountRail() {
     };
 
     const closeRail = () => {
-        setAccountRailId(null);
-        setAccountRailMode('view');
-        // If we have a stack, pop back — otherwise clear
         if (railStack.length > 0) {
             const prev = railStack[railStack.length - 1];
             setRailStack(s => s.slice(0, -1));
-            if (prev.type === 'contact') {
-                setContactRailId(prev.id);
-                setContactRailMode(prev.mode);
+            if (prev.type === 'account') {
+                setAccountRailId(prev.id);
+                setAccountRailMode(prev.mode);
+            } else {
+                setAccountRailId(null);
+                setAccountRailMode('view');
+                if (prev.type === 'contact') {
+                    setContactRailId(prev.id);
+                    setContactRailMode(prev.mode);
+                }
             }
         } else {
+            restoreNewRef.current = null;
+            setAccountRailId(null);
+            setAccountRailMode('view');
             setRailStack([]);
         }
     };
@@ -354,11 +382,16 @@ export default function AccountRail() {
         const prev = railStack[railStack.length - 1];
         if (!prev) return;
         setRailStack(s => s.slice(0, -1));
-        setAccountRailId(null);
-        setAccountRailMode('view');
-        if (prev.type === 'contact') {
-            setContactRailId(prev.id);
-            setContactRailMode(prev.mode);
+        if (prev.type === 'account') {
+            setAccountRailId(prev.id);
+            setAccountRailMode(prev.mode);
+        } else {
+            setAccountRailId(null);
+            setAccountRailMode('view');
+            if (prev.type === 'contact') {
+                setContactRailId(prev.id);
+                setContactRailMode(prev.mode);
+            }
         }
     };
 
@@ -500,7 +533,7 @@ export default function AccountRail() {
                             <div key={d.id} style={{ fontSize: 12, color: '#78350f', marginBottom: 2 }}><strong>{d.name}</strong>{d.verticalMarket ? ` · ${d.verticalMarket}` : ''}</div>
                         ))}
                         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                            <button onClick={() => { const d = dupWarning[0]; setDupWarning(null); if (d) { setAccountRailId(d.id); setAccountRailMode('view'); } }}
+                            <button onClick={() => { const d = dupWarning[0]; if (!d) return; restoreNewRef.current = { formData, verticalSearch, repSearch, territorySearch, parentSearch, customerTypeInput, activeTab }; setDupWarning(null); setRailStack(prev => [...prev, { type: 'account', id: accountRailId, mode: accountRailMode }]); setAccountRailId(d.id); setAccountRailMode('view'); }}
                                 style={{ padding: '4px 10px', background: '#fff', color: '#92400e', border: '1px solid #fde68a', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
                                 Open existing
                             </button>
