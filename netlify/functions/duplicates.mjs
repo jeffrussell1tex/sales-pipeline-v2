@@ -149,9 +149,16 @@ const classifyContactPair = (a, b) => {
     const ea = normEmail(a.email), eb = normEmail(b.email);
     const na = nameKey(a), nb = nameKey(b);
     const ca = normalize(a.company), cb = normalize(b.company);
+    const la = normalize(a.lastName), lb = normalize(b.lastName);
 
     // Tier 1 — duplicate (merge button): same email, OR same full name + same company.
-    if (ea && eb && ea === eb) return { tier: 'duplicate', score: 100, reasons: ['same email'], relationship: null };
+    if (ea && eb && ea === eb) {
+        const sameSurname = !!(la && lb && la === lb);
+        const closeName = !!(na && nb && (na === nb || (Math.max(na.length, nb.length) > 5 && levWithin(na, nb, 2))));
+        if (sameSurname || closeName) return { tier: 'duplicate', score: 100, reasons: ['same email'], relationship: null };
+        // Same email, clearly different person — likely a data-entry error. Review only.
+        return { tier: 'related', score: 90, reasons: ['same email \u00b7 different name'], relationship: 'email-mismatch' };
+    }
     if (na && nb && na === nb && ca && cb && ca === cb) return { tier: 'duplicate', score: 95, reasons: ['same name & company'], relationship: null };
 
     // Tier 2 — related (review only).
