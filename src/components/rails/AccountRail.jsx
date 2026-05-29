@@ -411,6 +411,13 @@ export default function AccountRail() {
         setContactRailMode('view');
     };
 
+    // Open a sub-account from the parent's rail (stacked, so ← Back returns here)
+    const handleOpenSubAccount = (subId) => {
+        setRailStack(prev => [...prev, { type: 'account', id: accountRailId, mode: accountRailMode }]);
+        setAccountRailId(subId);
+        setAccountRailMode('view');
+    };
+
     if (!isOpen) return null;
 
     const bg = avatarBg(account?.name || '');
@@ -687,10 +694,15 @@ export default function AccountRail() {
                                 <SectionHeading label={`Sub-Accounts (${subAccounts.length})`} />
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                                     {subAccounts.map(s => (
-                                        <div key={s.id} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '7px 10px', fontSize: 12 }}>
-                                            <div style={{ fontWeight: 600, color: T.ink }}>{s.name}</div>
-                                            {s.verticalMarket && <div style={{ color: T.ink3, marginTop: 1 }}>{s.verticalMarket}</div>}
-                                        </div>
+                                        <button key={s.id}
+                                            onClick={() => handleOpenSubAccount(s.id)}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '7px 10px', cursor: 'pointer', textAlign: 'left', fontFamily: T.sans, width: '100%' }}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: 12, fontWeight: 600, color: T.ink }}>{s.name}</div>
+                                                {s.verticalMarket && <div style={{ fontSize: 11, color: T.ink3, marginTop: 1 }}>{s.verticalMarket}</div>}
+                                            </div>
+                                            <span style={{ fontSize: 11, color: T.ink3 }}>→</span>
+                                        </button>
                                     ))}
                                 </div>
                             </>
