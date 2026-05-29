@@ -558,6 +558,35 @@ export default function AccountRail() {
                                 <FieldGroup label="Account Name *" wide>
                                     <TextInput value={formData.name} onChange={v => { hc('name', v); if (dupWarning) setDupWarning(null); }} />
                                 </FieldGroup>
+                                {/* Parent Account — committed chip when selected, typeahead when not */}
+                                <FieldGroup label="Parent Account" wide>
+                                    {formData.parentAccountId ? (() => {
+                                        const parent = (accounts || []).find(a => a.id === formData.parentAccountId);
+                                        return (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, width: 'fit-content' }}>
+                                                <span>{parent?.name || parentSearch}</span>
+                                                <button type="button"
+                                                    onClick={() => { hc('parentAccountId', null); setParentSearch(''); }}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.ink3, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
+                                            </div>
+                                        );
+                                    })() : (
+                                        <Typeahead
+                                            value={parentSearch}
+                                            onChange={v => { setParentSearch(v); if (formData.parentAccountId) hc('parentAccountId', null); }}
+                                            suggestions={(accounts || [])
+                                                .filter(a => a.id !== accountRailId && a.name)
+                                                .map(a => a.name)
+                                                .sort()
+                                            }
+                                            onSelect={v => {
+                                                const selected = (accounts || []).find(a => a.name === v);
+                                                if (selected) { hc('parentAccountId', selected.id); setParentSearch(v); }
+                                            }}
+                                            placeholder="Search accounts…"
+                                        />
+                                    )}
+                                </FieldGroup>
                                 <FieldGroup label="Phone">
                                     <TextInput value={formData.phone} onChange={v => hc('phone', v)} type="tel" />
                                 </FieldGroup>
@@ -588,35 +617,6 @@ export default function AccountRail() {
                                             : ['Enterprise','Mid-Market','Partner','SMB','Strategic']
                                         ).map(t => <option key={t} value={t}>{t}</option>)}
                                     </select>
-                                </FieldGroup>
-                                {/* Parent Account — committed chip when selected, typeahead when not */}
-                                <FieldGroup label="Parent Account" wide>
-                                    {formData.parentAccountId ? (() => {
-                                        const parent = (accounts || []).find(a => a.id === formData.parentAccountId);
-                                        return (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, width: 'fit-content' }}>
-                                                <span>{parent?.name || parentSearch}</span>
-                                                <button type="button"
-                                                    onClick={() => { hc('parentAccountId', null); setParentSearch(''); }}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.ink3, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
-                                            </div>
-                                        );
-                                    })() : (
-                                        <Typeahead
-                                            value={parentSearch}
-                                            onChange={v => { setParentSearch(v); if (formData.parentAccountId) hc('parentAccountId', null); }}
-                                            suggestions={(accounts || [])
-                                                .filter(a => a.id !== accountRailId && a.name)
-                                                .map(a => a.name)
-                                                .sort()
-                                            }
-                                            onSelect={v => {
-                                                const selected = (accounts || []).find(a => a.name === v);
-                                                if (selected) { hc('parentAccountId', selected.id); setParentSearch(v); }
-                                            }}
-                                            placeholder="Search accounts…"
-                                        />
-                                    )}
                                 </FieldGroup>
                             </div>
                         ) : (
