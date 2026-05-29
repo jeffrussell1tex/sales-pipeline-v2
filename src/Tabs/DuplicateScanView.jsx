@@ -76,9 +76,10 @@ function PairCard({ pair, tier, onMerge }) {
                         Review &amp; merge
                     </button>
                 ) : (
-                    <span style={{ fontSize: 11, fontStyle: 'italic', color: T.inkMuted, fontFamily: T.sans }}>
-                        Review only — not staged for merge
-                    </span>
+                    <button onClick={() => onMerge(pair)}
+                        style={{ padding: '7px 16px', background: T.surface, color: T.ink, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                        Review &amp; merge
+                    </button>
                 )}
             </div>
         </div>
@@ -177,7 +178,7 @@ export default function DuplicateScanView({ onBack }) {
             <div style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans, marginBottom: 14, lineHeight: 1.5 }}>
                 {tier === 'duplicate'
                     ? 'Accounts whose names match exactly once normalized (case, punctuation, and Inc/LLC/Corp suffixes ignored). These are safe to merge.'
-                    : 'Accounts that share a domain, phone, or near-identical name. Often distinct sites of the same company — shown for awareness, not staged for one-click merge.'}
+                    : 'Accounts that share a domain, phone, or near-identical name — often distinct sites of the same company. Not pre-vetted as duplicates: review each pair in the merge dialog before confirming.'}
             </div>
 
             {/* Body */}

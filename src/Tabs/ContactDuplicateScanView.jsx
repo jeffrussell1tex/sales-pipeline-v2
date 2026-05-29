@@ -78,9 +78,10 @@ function PairCard({ pair, tier, onMerge }) {
                         Review &amp; merge
                     </button>
                 ) : (
-                    <span style={{ fontSize: 11, fontStyle: 'italic', color: T.inkMuted, fontFamily: T.sans }}>
-                        Review only — not staged for merge
-                    </span>
+                    <button onClick={() => onMerge(pair)}
+                        style={{ padding: '7px 16px', background: T.surface, color: T.ink, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                        Review &amp; merge
+                    </button>
                 )}
             </div>
         </div>
@@ -179,7 +180,7 @@ export default function ContactDuplicateScanView({ onBack }) {
             <div style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans, marginBottom: 14, lineHeight: 1.5 }}>
                 {tier === 'duplicate'
                     ? 'Contacts that share an email address with a matching name, or the same name at the same company. These are safe to merge.'
-                    : 'Contacts with a matching name, shared phone, or the same email on different people. Shown for awareness — review before acting, not staged for one-click merge.'}
+                    : 'Contacts with a matching name, shared phone, or the same email on different people. Not pre-vetted as duplicates: review each pair in the merge dialog before confirming. Pairs flagged as a data-entry error are usually two different people — fix the email rather than merging.'}
             </div>
 
             {/* Body */}
