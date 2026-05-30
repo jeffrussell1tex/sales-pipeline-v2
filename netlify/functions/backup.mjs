@@ -9,6 +9,7 @@ import {
 } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -377,6 +378,6 @@ export const handler = async (event) => {
     } catch (err) {
         console.error('Backup error:', err.message);
         console.error('Backup error stack:', err.stack);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message, detail: err.stack?.split('\n')[0] }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'backup') };
     }
 };

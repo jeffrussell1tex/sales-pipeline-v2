@@ -1,3 +1,4 @@
+import { serverErrorBody } from './_lib.mjs';
 /**
  * send-sms.mjs
  * Shared SMS utility — all text message sending flows through this function.
@@ -268,6 +269,6 @@ export const handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify(result) };
     } catch (err) {
         console.error('send-sms handler error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'send-sms') };
     }
 };

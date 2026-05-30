@@ -5,6 +5,7 @@ import { verifyAuth, canSeeAll, isManager } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -329,6 +330,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('Opportunities function error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'opportunities') };
     }
 };

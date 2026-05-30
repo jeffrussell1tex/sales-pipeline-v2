@@ -4,6 +4,7 @@ import { exportRuns, exportSchedules,
          tasks, activities, leads }                                   from '../../db/schema.js';
 import { eq, and, desc }                                              from 'drizzle-orm';
 import { verifyAuth }                                                 from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -153,6 +154,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('export-runs error:', err.message);
-        return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers: HEADERS, body: serverErrorBody(err, 'export-runs') };
     }
 };

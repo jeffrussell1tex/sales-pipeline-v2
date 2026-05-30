@@ -26,6 +26,7 @@ import { webhookSubscriptions } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { createHmac, randomBytes } from 'crypto';
+import { serverErrorBody } from './_lib.mjs';
 
 // ── Supported event types ─────────────────────────────────────────────────────
 export const WEBHOOK_EVENTS = [
@@ -264,6 +265,6 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed.' }) };
     } catch (err) {
         console.error('webhooks error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'webhooks') };
     }
 };

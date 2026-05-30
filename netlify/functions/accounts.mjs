@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { accounts, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
 // Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
@@ -139,6 +140,6 @@ export const handler = async (event) => {
         console.error('Accounts error:', err.message);
         console.error('Accounts error stack:', err.stack);
         console.error('Accounts error detail:', JSON.stringify({ method: event.httpMethod, body: event.body?.slice(0, 500) }));
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message, detail: err.stack?.split('\n')[0] }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'accounts') };
     }
 };

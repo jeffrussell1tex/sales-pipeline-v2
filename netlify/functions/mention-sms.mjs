@@ -26,6 +26,7 @@ import { users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 export const handler = async (event) => {
     const headers = {
@@ -151,6 +152,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('mention-sms error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'mention-sms') };
     }
 };

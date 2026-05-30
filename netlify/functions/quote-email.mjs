@@ -15,6 +15,7 @@ import { quotes, opportunities, contacts, accounts } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { sendEmail } from './send-email.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const APP_URL = process.env.APP_URL || 'https://accelerep.netlify.app';
 
@@ -219,6 +220,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('quote-email error:', err.message);
-        return { statusCode: 500, headers: responseHeaders, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers: responseHeaders, body: serverErrorBody(err, 'quote-email') };
     }
 };

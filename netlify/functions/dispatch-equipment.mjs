@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { dispatchEquipment } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -149,6 +150,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('dispatch-equipment error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'dispatch-equipment') };
     }
 };

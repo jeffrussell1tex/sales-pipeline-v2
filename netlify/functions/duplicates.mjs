@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { accounts, contacts } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 // ── Duplicate detection for a site-based account model ─────────────────────────
 // Accelerep customers model accounts per site/location: a parent company (e.g.
@@ -288,6 +289,6 @@ export const handler = async (event) => {
         };
     } catch (err) {
         console.error('Duplicates error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'duplicates') };
     }
 };

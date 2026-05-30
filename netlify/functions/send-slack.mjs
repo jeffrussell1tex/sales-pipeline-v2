@@ -25,6 +25,7 @@
 import { db }      from '../../db/index.js';
 import { settings } from '../../db/schema.js';
 import { eq }      from 'drizzle-orm';
+import { serverErrorBody } from './_lib.mjs';
 
 // ── Core send function ────────────────────────────────────────────────────────
 /**
@@ -285,6 +286,6 @@ export const handler = async (event) => {
         return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ success: true }) };
     } catch (err) {
         console.error('send-slack handler error:', err.message);
-        return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers: HEADERS, body: serverErrorBody(err, 'send-slack') };
     }
 };

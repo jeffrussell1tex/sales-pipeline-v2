@@ -17,6 +17,7 @@ import { userCalendarConnections, orgCalendarConnections } from '../../db/schema
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { decrypt } from './crypto.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -142,6 +143,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('calendar-add-event error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'calendar-add-event') };
     }
 };
