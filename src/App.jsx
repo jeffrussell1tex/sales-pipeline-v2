@@ -280,7 +280,7 @@ function App() {
 
     const addAudit = (action, entity, entityId, label, detail = '') => {
         // Fire-and-forget POST to Neon — never blocks the UI
-        const id = 'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+        const id = 'audit_' + crypto.randomUUID();
         dbFetch('/.netlify/functions/audit-log', {
             method: 'POST',
             body: JSON.stringify({

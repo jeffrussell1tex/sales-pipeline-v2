@@ -511,7 +511,7 @@ export default function ViewingContactPanel({
                     });
                 }}
                 onSaveNewContact={(data) => {
-                    const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                    const newId = 'id_' + crypto.randomUUID();
                     const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
                     setContacts(prev => [...prev, nc]);
                     dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })

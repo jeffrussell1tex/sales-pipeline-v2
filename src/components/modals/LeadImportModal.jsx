@@ -119,7 +119,7 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
             const rawSource = get('source');
             const source    = VALID_SOURCES.includes(rawSource) ? rawSource : (rawSource || 'CSV Import');
 
-            const id = 'lead_' + Date.now() + '_' + Math.random().toString(36).slice(2,7) + '_' + i;
+            const id = 'lead_' + crypto.randomUUID() + '_' + i;
             leads.push({ id, firstName, lastName, company:get('company'), title:get('title'),
                          email:get('email'), phone:get('phone'), source, status, score,
                          estimatedARR: estARR, assignedTo:get('assignedTo'), notes:get('notes') });

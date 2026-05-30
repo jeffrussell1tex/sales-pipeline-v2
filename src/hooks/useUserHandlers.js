@@ -67,7 +67,7 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
                 setUserModalSaving(false);
             }
         } else {
-            const newId = 'usr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const newId = 'usr_' + crypto.randomUUID();
             const payload = { ...userData, id: newId, email: userData.email || '' };
             try {
                 const res = await dbFetch('/.netlify/functions/users', {

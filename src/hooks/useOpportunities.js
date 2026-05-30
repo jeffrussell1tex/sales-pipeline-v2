@@ -145,7 +145,7 @@ export function useOpportunities(deps) {
                 .catch(err => { console.error('Failed to update opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
                 .finally(() => setOppModalSaving(false));
         } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const newId = 'id_' + crypto.randomUUID();
             const newOpp = { ...enrichedData, id: newId, pipelineId: activePipeline.id, createdBy: currentUser || '' };
             setOppModalSaving(true); setOppModalError(null);
             dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
@@ -181,7 +181,7 @@ export function useOpportunities(deps) {
                 .catch(err => console.error('Failed to save lost opportunity:', err));
             addAudit('update', 'opportunity', editingOppRef.id, enriched.opportunityName || enriched.account || editingOppRef.id, `Closed Lost: ${lostCategory || lostReason || ''}`);
         } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const newId = 'id_' + crypto.randomUUID();
             const newOpp = { ...enriched, id: newId, pipelineId: activePipeline.id };
             setOpportunities(prev => [...prev, newOpp]);
             dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })

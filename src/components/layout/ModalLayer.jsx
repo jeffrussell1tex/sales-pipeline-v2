@@ -90,7 +90,7 @@ export default function ModalLayer() {
                     currentUser={currentUser}
                     activities={activities}
                     onSaveActivity={(activityData) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                        const newId = 'id_' + crypto.randomUUID();
                         setActivities(prev => [...prev, { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' }]);
                     }}
                     onDeleteActivity={(activityId) => {
@@ -134,7 +134,7 @@ export default function ModalLayer() {
                     lastCreatedAccountName={lastCreatedAccountName}
                     lastCreatedRepName={lastCreatedRepName}
                     onSaveNewContact={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                        const newId = 'id_' + crypto.randomUUID();
                         const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
                         setContacts(prev => [...prev, nc]);
                         dbFetch('/.netlify/functions/contacts', {
@@ -145,7 +145,7 @@ export default function ModalLayer() {
                         return nc;
                     }}
                     onSaveNewAccount={(data) => {
-                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                        const newId = 'id_' + crypto.randomUUID();
                         const na = { ...data, id: newId };
                         setAccounts(prev => [...prev, na]);
                         dbFetch('/.netlify/functions/accounts', {
@@ -574,10 +574,9 @@ export default function ModalLayer() {
                     activities={activities}
                     onClose={() => { document.activeElement?.blur(); setShowOutlookImportModal(false); }}
                     onImport={async (newActivities) => {
-                        const startId = Date.now();
-                        const activitiesWithIds = newActivities.map((a, i) => ({
+                        const activitiesWithIds = newActivities.map((a) => ({
                             ...a,
-                            id: 'id_' + (startId + i) + '_' + Math.random().toString(36).slice(2, 7),
+                            id: 'id_' + crypto.randomUUID(),
                             createdAt: new Date().toISOString()
                         }));
                         setActivities([...activities, ...activitiesWithIds]);
@@ -1005,7 +1004,7 @@ export default function ModalLayer() {
                                                 </div>
                                                 <button onClick={async () => {
                                                     const newClaim = {
-                                                        id: 'claim_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+                                                        id: 'claim_' + crypto.randomUUID(),
                                                         spiffId: spiff.id,
                                                         spiffName: spiff.name || 'Unnamed SPIFF',
                                                         opportunityId: opp.id,

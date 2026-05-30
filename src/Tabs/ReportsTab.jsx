@@ -2504,7 +2504,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const handleSaveReport = React.useCallback(async ({ name, source, dims, metrics, chartType, description }) => {
         setSaveState('saving');
         setSaveError(null);
-        const id = 'rpt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        const id = 'rpt_' + crypto.randomUUID();
         const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, ownerId: currentUser, ownerName: currentUser };
         try {
             const data = await dbFetch('/.netlify/functions/saved-reports', {
@@ -5751,7 +5751,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
 
     const handleSaveAsReport = React.useCallback(async (entityName, entityType) => {
         setSaveReportState('saving');
-        const id = 'rpt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        const id = 'rpt_' + crypto.randomUUID();
         const name = entityName ? `${entityType} history — ${entityName}` : `${entityType} history report`;
         const payload = {
             id, name, source: entityType === 'Account' ? 'Accounts' : 'Contacts',

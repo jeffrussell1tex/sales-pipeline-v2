@@ -122,7 +122,7 @@ export function useTasks(deps) {
                 setTaskModalError('Failed to save task. Please check your connection and try again.');
             } finally { setTaskModalSaving(false); }
         } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const newId = 'id_' + crypto.randomUUID();
             const newTask = { ...taskData, id: newId };
             try {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) });

@@ -111,7 +111,7 @@ export function useActivities(deps) {
                 setActivityModalError('Failed to save activity. Please check your connection and try again.');
             } finally { setActivityModalSaving(false); }
         } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const newId = 'id_' + crypto.randomUUID();
             const newActivity = { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' };
             try {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
