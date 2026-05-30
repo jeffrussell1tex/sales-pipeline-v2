@@ -80,7 +80,7 @@ export const handler = async (event) => {
             };
             const [updated] = await db
                 .insert(products).values({ ...payload, createdAt: new Date() })
-                .onConflictDoUpdate({ target: products.id, set: payload })
+                .onConflictDoUpdate({ target: products.id, setWhere: eq(products.orgId, orgId), set: payload })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ product: updated }) };
         }

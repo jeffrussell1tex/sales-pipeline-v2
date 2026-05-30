@@ -115,7 +115,7 @@ export const handler = async (event) => {
             const mergedPut = { ...clean, ...(territoryAssignPut || {}) };
             const { id: _putId, ...updateDataMerged } = mergedPut;
             const [upserted] = await db.insert(accounts).values({ ...mergedPut, orgId })
-                .onConflictDoUpdate({ target: accounts.id, set: { ...updateDataMerged, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: accounts.id, setWhere: eq(accounts.orgId, orgId), set: { ...updateDataMerged, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ account: upserted }) };
         }

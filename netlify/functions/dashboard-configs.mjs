@@ -32,7 +32,7 @@ export const handler = async (event) => {
             const [upserted] = await db.insert(dashboardConfigs)
                 .values({ id, userId, orgId, widgets })
                 .onConflictDoUpdate({
-                    target: dashboardConfigs.id,
+                    target: dashboardConfigs.id, setWhere: eq(dashboardConfigs.orgId, orgId),
                     set: { widgets, updatedAt: new Date() },
                 })
                 .returning();

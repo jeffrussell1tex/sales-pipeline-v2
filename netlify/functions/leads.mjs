@@ -101,7 +101,7 @@ export const handler = async (event) => {
 
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(leads).values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: leads.id, set: { ...updateData, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: leads.id, setWhere: eq(leads.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
 
             // Webhook: lead.converted — only fires the first time status flips to Converted

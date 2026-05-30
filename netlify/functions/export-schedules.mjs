@@ -77,7 +77,7 @@ export const handler = async (event) => {
                 .insert(exportSchedules)
                 .values({ ...clean, orgId })
                 .onConflictDoUpdate({
-                    target: exportSchedules.id,
+                    target: exportSchedules.id, setWhere: eq(exportSchedules.orgId, orgId),
                     set: { ...updateFields, updatedAt: new Date() },
                 })
                 .returning();

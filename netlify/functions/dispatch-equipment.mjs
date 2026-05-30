@@ -79,7 +79,7 @@ export const handler = async (event) => {
 
             await db.insert(dispatchEquipment).values(row)
                 .onConflictDoUpdate({
-                    target: dispatchEquipment.id,
+                    target: dispatchEquipment.id, setWhere: eq(dispatchEquipment.orgId, orgId),
                     set: { ...row, createdAt: undefined },
                 });
 

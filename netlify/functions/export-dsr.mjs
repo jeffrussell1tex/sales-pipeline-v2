@@ -119,7 +119,7 @@ export const handler = async (event) => {
                 .insert(dsrQueue)
                 .values({ ...clean, orgId, slaDeadline: data.slaDeadline ? new Date(data.slaDeadline) : addDays(new Date(), SLA_DAYS) })
                 .onConflictDoUpdate({
-                    target: dsrQueue.id,
+                    target: dsrQueue.id, setWhere: eq(dsrQueue.orgId, orgId),
                     set: {
                         ...updateFields,
                         ...(completedAt ? { completedAt } : {}),

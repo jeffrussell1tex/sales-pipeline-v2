@@ -41,7 +41,7 @@ export const handler = async (event) => {
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(activities).values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: activities.id, set: { ...updateData, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: activities.id, setWhere: eq(activities.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ activity: upserted }) };
         }

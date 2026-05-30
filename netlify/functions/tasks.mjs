@@ -54,7 +54,7 @@ export const handler = async (event) => {
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(tasks).values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: tasks.id, set: { ...updateData, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: tasks.id, setWhere: eq(tasks.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
 
             // Webhook: task.completed — only fires the first time completed flips to true

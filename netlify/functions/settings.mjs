@@ -204,7 +204,7 @@ export const handler = async (event) => {
                 updatedAt:       new Date(),
             };
             await db.insert(settings).values(dbRow).onConflictDoUpdate({
-                target: settings.id,
+                target: settings.id, setWhere: eq(settings.orgId, orgId),
                 set: { orgId, companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, fieldVisibility: dbRow.fieldVisibility, extra: dbRow.extra, updatedAt: dbRow.updatedAt }
             });
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };

@@ -226,7 +226,7 @@ export const handler = async (event) => {
 
             const [updated] = await db
                 .insert(quotes).values({ ...payload, createdAt: new Date() })
-                .onConflictDoUpdate({ target: quotes.id, set: payload })
+                .onConflictDoUpdate({ target: quotes.id, setWhere: eq(quotes.orgId, orgId), set: payload })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ quote: updated }) };
         }

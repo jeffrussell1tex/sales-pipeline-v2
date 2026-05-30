@@ -221,7 +221,7 @@ export const handler = async (event) => {
                 notifyOnFailure: notifyOnFailure || '',
                 updatedAt:       new Date(),
             }).onConflictDoUpdate({
-                target: backupSchedule.id,
+                target: backupSchedule.id, setWhere: eq(backupSchedule.orgId, orgId),
                 set: {
                     frequency:       frequency       || 'Daily',
                     timeUtc:         timeUtc         || '03:00',

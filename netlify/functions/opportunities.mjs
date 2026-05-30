@@ -214,7 +214,7 @@ export const handler = async (event) => {
             const [upserted] = await db.insert(opportunities)
                 .values({ ...clean, orgId })
                 .onConflictDoUpdate({
-                    target: opportunities.id,
+                    target: opportunities.id, setWhere: eq(opportunities.orgId, orgId),
                     set: { ...updateData, updatedAt: new Date() }
                 })
                 .returning();

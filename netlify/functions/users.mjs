@@ -231,7 +231,7 @@ export const handler = async (event) => {
                     .insert(users)
                     .values({ ...clean, orgId })
                     .onConflictDoUpdate({
-                        target: users.id,
+                        target: users.id, setWhere: eq(users.orgId, orgId),
                         set: { ...updateData, updatedAt: new Date() },
                     })
                     .returning();
