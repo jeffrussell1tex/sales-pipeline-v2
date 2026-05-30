@@ -2,6 +2,16 @@
   command = "npm run build"
   publish = "dist"
 
+# Run the live Vite dev server under `netlify dev` (with HMR) and proxy to it,
+# instead of serving the last-built static dist/. Without this block, `netlify
+# dev` can fall back to the stale dist build — which is why local edits
+# sometimes didn't show up until a manual rebuild.
+#   - command:    must match your package.json "dev" script (usually `vite`)
+#   - targetPort: the port Vite prints on startup (Vite default is 5173)
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+
 [functions."digest"]
 schedule = "0 * * * *"
 
