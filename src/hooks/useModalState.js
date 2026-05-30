@@ -15,6 +15,8 @@ export function useModalState() {
     const [showLeadModal, setShowLeadModal] = useState(false);
     const [showOutlookImportModal, setShowOutlookImportModal] = useState(false);
     const [csvImportType, setCsvImportType] = useState('contacts');
+    const [mergeModal, setMergeModal] = useState(null); // { aId, bId } | null
+    const [contactMergeModal, setContactMergeModal] = useState(null); // { aId, bId } | null
 
     // ── Contact Rail ──────────────────────────────────────────────────────────
     // contactRailId: null (closed) | string id (view/edit existing) | 'new' (create)
@@ -84,6 +86,8 @@ export function useModalState() {
         showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal,
         csvImportType, setCsvImportType,
+        mergeModal, setMergeModal,
+        contactMergeModal, setContactMergeModal,
         // Rail state
         taskRailId,      setTaskRailId,
         taskRailMode,    setTaskRailMode,

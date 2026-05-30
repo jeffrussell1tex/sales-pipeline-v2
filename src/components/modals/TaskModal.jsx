@@ -91,6 +91,9 @@ export default function TaskModal({
         return '';
     });
     const [showOpportunitySuggestions, setShowOpportunitySuggestions] = useState(false);
+    const [assignedToSearch, setAssignedToSearch] = useState('');
+    const [showAssignSugg,   setShowAssignSugg]   = useState(false);
+    const assignedToRef = useRef(null);
     const [contactSearch,    setContactSearch]    = useState('');
     const [showContactSugg,  setShowContactSugg]  = useState(false);
     const contactInputRef = useRef(null);
@@ -217,33 +220,61 @@ export default function TaskModal({
                         {modalTab === 'task' && (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
-                                {/* Assign To */}
+                                {/* Assign To — typeahead dropdown with committed-chip pattern */}
                                 <div style={formGroupStyle}>
                                     <label style={labelStyle}>Assign To</label>
                                     <div style={{ position: 'relative' }}>
-                                        <input
-                                            type="text"
-                                            value={formData.assignedTo || ''}
-                                            onChange={e => handleChange('assignedTo', e.target.value)}
-                                            placeholder="Type to search users…"
-                                            onFocus={e => e.target.nextSibling.style.display = 'block'}
-                                            onBlur={e => setTimeout(() => { if (e.target.nextSibling) e.target.nextSibling.style.display = 'none'; }, 200)}
-                                            style={inputStyle}
-                                        />
-                                        <div style={{ display: 'none', ...suggBoxStyle }}>
-                                            {(settings?.users || [])
-                                                .filter(u => !formData.assignedTo || u.name.toLowerCase().includes((formData.assignedTo || '').toLowerCase()))
-                                                .map(u => (
-                                                    <div key={u.id}
-                                                        style={suggItemStyle(false)}
-                                                        onMouseDown={() => handleChange('assignedTo', u.name)}
-                                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                        {u.name} <span style={{ color: T.inkMuted, fontSize: 12 }}>({u.role || 'User'})</span>
-                                                    </div>
-                                                ))
-                                            }
-                                        </div>
+                                        {/* Committed chip — shown when a user is selected */}
+                                        {formData.assignedTo ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', background: T.surface2, border: `1px solid ${T.borderStrong}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, fontFamily: T.sans, width: 'fit-content' }}>
+                                                <span>{formData.assignedTo}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { handleChange('assignedTo', ''); setAssignedToSearch(''); setTimeout(() => assignedToRef.current?.focus(), 0); }}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px', flexShrink: 0 }}>×</button>
+                                            </div>
+                                        ) : (
+                                            /* Search input — shown when no user committed */
+                                            <input
+                                                ref={assignedToRef}
+                                                type="text"
+                                                value={assignedToSearch}
+                                                onChange={e => { setAssignedToSearch(e.target.value); setShowAssignSugg(true); }}
+                                                onFocus={() => setShowAssignSugg(true)}
+                                                onBlur={() => setTimeout(() => setShowAssignSugg(false), 200)}
+                                                placeholder="Type to search users…"
+                                                autoComplete="off"
+                                                style={inputStyle}
+                                            />
+                                        )}
+                                        {/* Dropdown — filters as you type, shows all on empty */}
+                                        {showAssignSugg && !formData.assignedTo && (() => {
+                                            const q = assignedToSearch.toLowerCase();
+                                            const matched = (settings?.users || []).filter(u =>
+                                                u.active !== false && (
+                                                    q === '' ||
+                                                    u.name?.toLowerCase().includes(q)
+                                                )
+                                            );
+                                            return (
+                                                <div style={{ ...suggBoxStyle }}>
+                                                    {matched.map(u => (
+                                                        <div key={u.id || u.name}
+                                                            onMouseDown={e => e.preventDefault()}
+                                                            onClick={() => { handleChange('assignedTo', u.name); setAssignedToSearch(''); setShowAssignSugg(false); }}
+                                                            style={suggItemStyle(false)}
+                                                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                            <div style={{ fontWeight: 600 }}>{u.name}</div>
+                                                            {u.role && <div style={{ fontSize: 12, color: T.inkMuted }}>{u.role}</div>}
+                                                        </div>
+                                                    ))}
+                                                    {matched.length === 0 && (
+                                                        <div style={{ padding: '10px 12px', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No users found</div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
 
@@ -391,19 +422,21 @@ export default function TaskModal({
                                         ref={contactInputRef}
                                         type="text"
                                         value={contactSearch}
-                                        onChange={e => { setContactSearch(e.target.value); setShowContactSugg(e.target.value.length > 0); }}
-                                        onFocus={() => setShowContactSugg(contactSearch.length > 0)}
-                                        placeholder={(formData.contacts || []).length > 0 ? 'Add another contact…' : 'Type contact name…'}
+                                        onChange={e => { setContactSearch(e.target.value); setShowContactSugg(true); }}
+                                        onFocus={() => setShowContactSugg(true)}
+                                        onBlur={() => setTimeout(() => setShowContactSugg(false), 200)}
+                                        placeholder={(formData.contacts || []).length > 0 ? 'Add another contact…' : 'Type to search contacts…'}
                                         autoComplete="off"
                                         style={inputStyle}
                                     />
 
-                                    {/* Dropdown suggestions */}
+                                    {/* Dropdown suggestions — shows all when search is empty, filters as you type */}
                                     {showContactSugg && (() => {
                                         const alreadyIds = new Set((formData.contacts || []).map(c => c.id));
                                         const q = contactSearch.toLowerCase();
-                                        const matched = contacts.filter(c =>
+                                        const matched = (contacts || []).filter(c =>
                                             !alreadyIds.has(c.id) && (
+                                                q === '' ||
                                                 `${c.firstName} ${c.lastName}`.toLowerCase().startsWith(q) ||
                                                 c.firstName?.toLowerCase().startsWith(q) ||
                                                 c.lastName?.toLowerCase().startsWith(q)
@@ -435,7 +468,9 @@ export default function TaskModal({
                                                     </div>
                                                 ))}
                                                 {matched.length === 0 && (
-                                                    <div style={{ padding: '10px 12px', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No matches found</div>
+                                                    <div style={{ padding: '10px 12px', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+                                                        {contactSearch ? 'No matches found' : 'No contacts available'}
+                                                    </div>
                                                 )}
                                                 <div onMouseDown={e => e.preventDefault()}
                                                     onClick={e => { e.stopPropagation(); setShowContactSugg(false); onOpenNestedContact && onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}

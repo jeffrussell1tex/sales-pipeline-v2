@@ -44,6 +44,7 @@ import FunnelView from './components/FunnelView';
 import KanbanView from './components/KanbanView';
 import QuotaRepCard from './components/QuotaRepCard';
 import { useModalState } from './hooks/useModalState';
+import { useMerge } from './hooks/useMerge';
 import { useUIState } from './hooks/useUIState';
 import { useCalendarState } from './hooks/useCalendarState';
 import { useUserHandlers } from './hooks/useUserHandlers';
@@ -168,6 +169,8 @@ function App() {
         taskDueSnoozeH, setTaskDueSnoozeH, taskDueSnoozeM, setTaskDueSnoozeM,
         dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
         dismissedReminders, setDismissedReminders,
+        mergeModal, setMergeModal,
+        contactMergeModal, setContactMergeModal,
     } = modalState;
 
     const {
@@ -293,6 +296,11 @@ function App() {
             }),
         }).catch(err => console.warn('addAudit write failed:', err.message));
     };
+
+    // Duplicate-merge (accounts) — scan + commit + reverse, exposed via context.
+    const { mergeSaving, mergeError, setMergeError, findDuplicates, handleMerge, reverseMerge,
+        findContactDuplicates, handleContactMerge, reverseContactMerge } =
+        useMerge({ setAccounts, loadAccounts, setContacts, loadContacts, addAudit, currentUser: { name: currentUser } });
 
     const softDelete = (label, deleteFunc, restoreFunc) => {
         if (undoToast) clearTimeout(undoToast.timerId);
@@ -1325,6 +1333,13 @@ dbFetch('/.netlify/functions/users?me=true')
         products, setProducts,
         totalRevenue,
         avgRevenue,
+        // Duplicate merge (accounts)
+        mergeModal, setMergeModal,
+        mergeSaving, mergeError, setMergeError,
+        findDuplicates, handleMerge, reverseMerge,
+        // Duplicate merge (contacts)
+        contactMergeModal, setContactMergeModal,
+        findContactDuplicates, handleContactMerge, reverseContactMerge,
         // Auth
         currentUser,
         userRole,
@@ -1376,7 +1391,7 @@ dbFetch('/.netlify/functions/users?me=true')
         viewingContact,
         setViewingContact: (c) => { if (c) { setContactRailId(c.id); setContactRailMode('view'); } else { setContactRailId(null); } },
         viewingAccount,
-        setViewingAccount: (a) => { if (a) { setAccountRailId(a.id); setAccountRailMode('view'); } else { setAccountRailId(null); } },
+        setViewingAccount: (a) => { if (a) { setRailStack(a.parentAccountId ? [{ type: 'account', id: a.parentAccountId, mode: 'view' }] : []); setAccountRailId(a.id); setAccountRailMode('view'); } else { setAccountRailId(null); setRailStack([]); } },
         viewingTask,
         setViewingTask: (t) => { if (t) { setTaskRailId(t.id); setTaskRailMode('view'); } else { setTaskRailId(null); } },
         contactShowAllDeals, setContactShowAllDeals,

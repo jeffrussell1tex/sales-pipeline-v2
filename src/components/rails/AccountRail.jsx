@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../AppContext';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -170,20 +170,46 @@ export default function AccountRail() {
     const [verticalSearch,    setVerticalSearch]    = useState('');
     const [repSearch,         setRepSearch]         = useState('');
     const [territorySearch,   setTerritorySearch]   = useState('');
+    const [parentSearch,      setParentSearch]      = useState('');
     const [customerTypeInput, setCustomerTypeInput] = useState('');
     const [activeTab,         setActiveTab]         = useState('general');
     const [dupWarning,        setDupWarning]        = useState(null);
     const [dirty,             setDirty]             = useState(false);
     const [saveError,         setSaveError]         = useState(null);
 
+    // Holds the in-progress NEW account while the user peeks at an existing
+    // dup via "Open existing", so "← Back" can restore it intact.
+    const restoreNewRef = useRef(null);
+
     // Seed form when rail opens
     useEffect(() => {
         if (!isOpen) return;
+        // Returning to an in-progress new account (Back from "Open existing")
+        if (accountRailId === 'new' && restoreNewRef.current) {
+            const snap = restoreNewRef.current;
+            restoreNewRef.current = null;
+            setFormData(snap.formData);
+            setVerticalSearch(snap.verticalSearch);
+            setRepSearch(snap.repSearch);
+            setTerritorySearch(snap.territorySearch);
+            setParentSearch(snap.parentSearch);
+            setCustomerTypeInput(snap.customerTypeInput);
+            setActiveTab(snap.activeTab || 'general');
+            setDupWarning(null);
+            setDirty(true);
+            setSaveError(null);
+            setAccountModalError?.(null);
+            return;
+        }
         const src = account || EMPTY_ACCOUNT;
         setFormData({ ...EMPTY_ACCOUNT, ...src });
         setVerticalSearch(src.verticalMarket || src.industry || '');
         setRepSearch(src.assignedRep || '');
         setTerritorySearch(src.assignedTerritory || '');
+        const parentAcct = src.parentAccountId
+            ? (accounts || []).find(a => a.id === src.parentAccountId)
+            : null;
+        setParentSearch(parentAcct?.name || '');
         setActiveTab('general');
         setDupWarning(null);
         setDirty(false);
@@ -285,7 +311,9 @@ export default function AccountRail() {
         await handleSaveAccount(saveData, {
             editingAccount:   isNew ? null : account,
             editingSubAccount: null,
-            parentAccountForSub: null,
+            parentAccountForSub: saveData.parentAccountId
+                ? (accounts || []).find(a => a.id === saveData.parentAccountId) || null
+                : null,
             accountCreatedFromOppForm,
             pendingOppFormData,
             setShowAccountModal: (open) => {
@@ -316,6 +344,10 @@ export default function AccountRail() {
             setVerticalSearch(src.verticalMarket || '');
             setRepSearch(src.assignedRep || '');
             setTerritorySearch(src.assignedTerritory || '');
+            const parentAcct = src.parentAccountId
+                ? (accounts || []).find(a => a.id === src.parentAccountId)
+                : null;
+            setParentSearch(parentAcct?.name || '');
             setAccountRailMode('view');
             setDirty(false);
             setDupWarning(null);
@@ -324,17 +356,24 @@ export default function AccountRail() {
     };
 
     const closeRail = () => {
-        setAccountRailId(null);
-        setAccountRailMode('view');
-        // If we have a stack, pop back — otherwise clear
         if (railStack.length > 0) {
             const prev = railStack[railStack.length - 1];
             setRailStack(s => s.slice(0, -1));
-            if (prev.type === 'contact') {
-                setContactRailId(prev.id);
-                setContactRailMode(prev.mode);
+            if (prev.type === 'account') {
+                setAccountRailId(prev.id);
+                setAccountRailMode(prev.mode);
+            } else {
+                setAccountRailId(null);
+                setAccountRailMode('view');
+                if (prev.type === 'contact') {
+                    setContactRailId(prev.id);
+                    setContactRailMode(prev.mode);
+                }
             }
         } else {
+            restoreNewRef.current = null;
+            setAccountRailId(null);
+            setAccountRailMode('view');
             setRailStack([]);
         }
     };
@@ -343,11 +382,16 @@ export default function AccountRail() {
         const prev = railStack[railStack.length - 1];
         if (!prev) return;
         setRailStack(s => s.slice(0, -1));
-        setAccountRailId(null);
-        setAccountRailMode('view');
-        if (prev.type === 'contact') {
-            setContactRailId(prev.id);
-            setContactRailMode(prev.mode);
+        if (prev.type === 'account') {
+            setAccountRailId(prev.id);
+            setAccountRailMode(prev.mode);
+        } else {
+            setAccountRailId(null);
+            setAccountRailMode('view');
+            if (prev.type === 'contact') {
+                setContactRailId(prev.id);
+                setContactRailMode(prev.mode);
+            }
         }
     };
 
@@ -365,6 +409,13 @@ export default function AccountRail() {
         setAccountRailId(null);
         setContactRailId(contactId);
         setContactRailMode('view');
+    };
+
+    // Open a sub-account from the parent's rail (stacked, so ← Back returns here)
+    const handleOpenSubAccount = (subId) => {
+        setRailStack(prev => [...prev, { type: 'account', id: accountRailId, mode: accountRailMode }]);
+        setAccountRailId(subId);
+        setAccountRailMode('view');
     };
 
     if (!isOpen) return null;
@@ -489,6 +540,10 @@ export default function AccountRail() {
                             <div key={d.id} style={{ fontSize: 12, color: '#78350f', marginBottom: 2 }}><strong>{d.name}</strong>{d.verticalMarket ? ` · ${d.verticalMarket}` : ''}</div>
                         ))}
                         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                            <button onClick={() => { const d = dupWarning[0]; if (!d) return; restoreNewRef.current = { formData, verticalSearch, repSearch, territorySearch, parentSearch, customerTypeInput, activeTab }; setDupWarning(null); setRailStack(prev => [...prev, { type: 'account', id: accountRailId, mode: accountRailMode }]); setAccountRailId(d.id); setAccountRailMode('view'); }}
+                                style={{ padding: '4px 10px', background: '#fff', color: '#92400e', border: '1px solid #fde68a', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
+                                Open existing
+                            </button>
                             <button onClick={() => { setDupWarning(null); handleSave(); }}
                                 style={{ padding: '4px 10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
                                 Create anyway
@@ -509,6 +564,35 @@ export default function AccountRail() {
                             <div style={grid2}>
                                 <FieldGroup label="Account Name *" wide>
                                     <TextInput value={formData.name} onChange={v => { hc('name', v); if (dupWarning) setDupWarning(null); }} />
+                                </FieldGroup>
+                                {/* Parent Account — committed chip when selected, typeahead when not */}
+                                <FieldGroup label="Parent Account" wide>
+                                    {formData.parentAccountId ? (() => {
+                                        const parent = (accounts || []).find(a => a.id === formData.parentAccountId);
+                                        return (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, width: 'fit-content' }}>
+                                                <span>{parent?.name || parentSearch}</span>
+                                                <button type="button"
+                                                    onClick={() => { hc('parentAccountId', null); setParentSearch(''); }}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.ink3, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
+                                            </div>
+                                        );
+                                    })() : (
+                                        <Typeahead
+                                            value={parentSearch}
+                                            onChange={v => { setParentSearch(v); if (formData.parentAccountId) hc('parentAccountId', null); }}
+                                            suggestions={(accounts || [])
+                                                .filter(a => a.id !== accountRailId && a.name)
+                                                .map(a => a.name)
+                                                .sort()
+                                            }
+                                            onSelect={v => {
+                                                const selected = (accounts || []).find(a => a.name === v);
+                                                if (selected) { hc('parentAccountId', selected.id); setParentSearch(v); }
+                                            }}
+                                            placeholder="Search accounts…"
+                                        />
+                                    )}
                                 </FieldGroup>
                                 <FieldGroup label="Phone">
                                     <TextInput value={formData.phone} onChange={v => hc('phone', v)} type="tel" />
@@ -555,6 +639,10 @@ export default function AccountRail() {
                                 <ReadRow label="Segment" value={account?.accountSegment} />
                                 <ReadRow label="Assigned Rep" value={account?.assignedRep} />
                                 <ReadRow label="Territory" value={account?.assignedTerritory} />
+                                {account?.parentAccountId && (() => {
+                                    const parent = (accounts || []).find(a => a.id === account.parentAccountId);
+                                    return parent ? <ReadRow label="Parent Account" value={parent.name} wide /> : null;
+                                })()}
                                 {account?.doNotContact && (
                                     <div style={{ gridColumn: '1 / -1', marginBottom: 10, background: '#fef2f2', border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '6px 10px', fontSize: 12, fontWeight: 600, color: T.danger }}>
                                         🚫 Do Not Contact — flagged
@@ -606,10 +694,15 @@ export default function AccountRail() {
                                 <SectionHeading label={`Sub-Accounts (${subAccounts.length})`} />
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                                     {subAccounts.map(s => (
-                                        <div key={s.id} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '7px 10px', fontSize: 12 }}>
-                                            <div style={{ fontWeight: 600, color: T.ink }}>{s.name}</div>
-                                            {s.verticalMarket && <div style={{ color: T.ink3, marginTop: 1 }}>{s.verticalMarket}</div>}
-                                        </div>
+                                        <button key={s.id}
+                                            onClick={() => handleOpenSubAccount(s.id)}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '7px 10px', cursor: 'pointer', textAlign: 'left', fontFamily: T.sans, width: '100%' }}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: 12, fontWeight: 600, color: T.ink }}>{s.name}</div>
+                                                {s.verticalMarket && <div style={{ fontSize: 11, color: T.ink3, marginTop: 1 }}>{s.verticalMarket}</div>}
+                                            </div>
+                                            <span style={{ fontSize: 11, color: T.ink3 }}>→</span>
+                                        </button>
                                     ))}
                                 </div>
                             </>

@@ -3,6 +3,19 @@ import { accounts, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
+// ── Website normalizer ────────────────────────────────────────────────────────
+// Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
+// — and trims whitespace so junk never lands in the DB. Normal URLs pass through
+// untouched. Keeps the website field clean for display AND for domain-based
+// duplicate detection (see duplicates.mjs domainOf).
+const cleanWebsite = (w) => {
+    if (!w) return null;
+    let s = String(w).trim();
+    const md = s.match(/\]\(([^)]+)\)/);   // markdown [text](href) -> href
+    if (md) s = md[1].trim();
+    return s || null;
+};
+
 // ── Territory auto-assign ─────────────────────────────────────────────────────
 // Reads assignmentRules from settings and returns territory/rep assignment if a rule matches.
 // Rule shape: { field: 'industry'|'verticalMarket'|'name', contains: string, territory: string, rep?: string }
@@ -50,7 +63,7 @@ export const handler = async (event) => {
         state:             d.state             || null,
         zip:               d.zip               || null,
         country:           d.country           || null,
-        website:           d.website           || null,
+        website:           cleanWebsite(d.website),
         phone:             d.phone             || null,
         accountOwner:      d.accountOwner      || null,
         assignedRep:       d.assignedRep       || null,

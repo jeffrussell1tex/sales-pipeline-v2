@@ -58,6 +58,10 @@ export const accounts = pgTable('accounts', {
     linkedInUrl:       varchar('linked_in_url', { length: 500 }),
     sicCode:           varchar('sic_code', { length: 6 }),
     naicsCode:         varchar('naics_code', { length: 8 }),
+    // ── Duplicate-merge (soft archive) ───────────────────────────────────
+    mergeArchived:     boolean('merge_archived').default(false),
+    mergedIntoId:      text('merged_into_id'),
+    archivedAt:        timestamp('archived_at'),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
@@ -94,6 +98,10 @@ export const contacts = pgTable('contacts', {
     assignedTerritory: varchar('assigned_territory', { length: 255 }),
     doNotContact:      boolean('do_not_contact').default(false),
     buyerPersona:      varchar('buyer_persona', { length: 255 }),
+    // ── Duplicate-merge (soft archive) ───────────────────────────────────
+    mergeArchived:     boolean('merge_archived').default(false),
+    mergedIntoId:      text('merged_into_id'),
+    archivedAt:        timestamp('archived_at'),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
@@ -804,4 +812,28 @@ export const dispatchScheduleBlocks = pgTable('dispatch_schedule_blocks', {
     createdBy:   varchar('created_by', { length: 255 }),
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── MERGE LOG ─────────────────────────────────────────────────────────────────
+// One row per executed duplicate-merge. `rewrites` snapshots every FK / name-string
+// rewrite (with the exact affected row ids and their pre-merge values) so a merge
+// can be deterministically reversed within the retention window. `survivorSnapshot`
+// and `archivedSnapshot` hold the full pre-merge rows for field-level restore.
+export const mergeLog = pgTable('merge_log', {
+    id:               text('id').primaryKey(),
+    orgId:            text('org_id').notNull(),
+    entityType:       varchar('entity_type', { length: 20 }).notNull(),   // 'account' | 'contact'
+    survivorId:       text('survivor_id').notNull(),
+    survivorName:     varchar('survivor_name', { length: 255 }),
+    archivedId:       text('archived_id').notNull(),
+    archivedName:     varchar('archived_name', { length: 255 }),
+    rewrites:         jsonb('rewrites').notNull().default('[]'),          // [{ table, column, kind, ids:[], oldValue, newValue }]
+    resolvedFields:   jsonb('resolved_fields').default('{}'),
+    survivorSnapshot: jsonb('survivor_snapshot').default('{}'),
+    archivedSnapshot: jsonb('archived_snapshot').default('{}'),
+    status:           varchar('status', { length: 20 }).notNull().default('merged'), // 'merged' | 'reversed'
+    performedBy:      varchar('performed_by', { length: 255 }),
+    performedById:    text('performed_by_id'),
+    reversedAt:       timestamp('reversed_at'),
+    createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
