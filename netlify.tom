@@ -1,3 +1,0 @@
-
-[functions."digest"]
-schedule = "0 * * * *"
