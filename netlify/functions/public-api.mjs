@@ -19,7 +19,7 @@
 
 import { db } from '../../db/index.js';
 import { apiKeys, opportunities, accounts, contacts, activities, leads, tasks } from '../../db/schema.js';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, sql, desc } from 'drizzle-orm';
 import { createHash } from 'crypto';
 
 // ── In-memory rate limiter (resets on cold start — good enough for now) ───────
@@ -134,19 +134,25 @@ export const handler = async (event) => {
     try {
         // ── opportunities ────────────────────────────────────────────────────
         if (resource === 'opportunities') {
-            const rows = await db
+            // Org-scoped filters pushed to the DB (filter + count + page in SQL)
+            const conds = [eq(opportunities.orgId, orgId)];
+            if (params.stage) conds.push(eq(opportunities.stage, params.stage));
+            if (params.rep) conds.push(eq(opportunities.salesRep, params.rep));
+            if (params.pipeline_id) conds.push(eq(opportunities.pipelineId, params.pipeline_id));
+            const whereExpr = and(...conds);
+
+            const [{ total }] = await db
+                .select({ total: sql`count(*)::int` })
+                .from(opportunities)
+                .where(whereExpr);
+
+            const paged = await db
                 .select()
                 .from(opportunities)
-                .where(eq(opportunities.orgId, orgId));
-
-            // Optional filters
-            let filtered = rows;
-            if (params.stage) filtered = filtered.filter(r => r.stage === params.stage);
-            if (params.rep)   filtered = filtered.filter(r => r.salesRep === params.rep);
-            if (params.pipeline_id) filtered = filtered.filter(r => r.pipelineId === params.pipeline_id);
-
-            const total   = filtered.length;
-            const paged   = filtered.slice(offset, offset + limit);
+                .where(whereExpr)
+                .orderBy(desc(opportunities.createdAt), desc(opportunities.id))
+                .limit(limit)
+                .offset(offset);
 
             // Shape output — omit internal fields like aiScore internals
             const shaped = paged.map(r => ({
@@ -189,16 +195,23 @@ export const handler = async (event) => {
 
         // ── accounts ─────────────────────────────────────────────────────────
         if (resource === 'accounts') {
-            const rows = await db
+            // Org-scoped filters pushed to the DB (filter + count + page in SQL)
+            const conds = [eq(accounts.orgId, orgId)];
+            if (params.tier) conds.push(eq(accounts.accountTier, params.tier));
+            const whereExpr = and(...conds);
+
+            const [{ total }] = await db
+                .select({ total: sql`count(*)::int` })
+                .from(accounts)
+                .where(whereExpr);
+
+            const paged = await db
                 .select()
                 .from(accounts)
-                .where(eq(accounts.orgId, orgId));
-
-            let filtered = rows;
-            if (params.tier) filtered = filtered.filter(r => r.accountTier === params.tier);
-
-            const total = filtered.length;
-            const paged = filtered.slice(offset, offset + limit);
+                .where(whereExpr)
+                .orderBy(desc(accounts.createdAt), desc(accounts.id))
+                .limit(limit)
+                .offset(offset);
 
             const shaped = paged.map(r => ({
                 id:                  r.id,
@@ -231,16 +244,23 @@ export const handler = async (event) => {
 
         // ── contacts ─────────────────────────────────────────────────────────
         if (resource === 'contacts') {
-            const rows = await db
+            // Org-scoped filters pushed to the DB (filter + count + page in SQL)
+            const conds = [eq(contacts.orgId, orgId)];
+            if (params.company) conds.push(eq(contacts.company, params.company));
+            const whereExpr = and(...conds);
+
+            const [{ total }] = await db
+                .select({ total: sql`count(*)::int` })
+                .from(contacts)
+                .where(whereExpr);
+
+            const paged = await db
                 .select()
                 .from(contacts)
-                .where(eq(contacts.orgId, orgId));
-
-            let filtered = rows;
-            if (params.company) filtered = filtered.filter(r => r.company === params.company);
-
-            const total = filtered.length;
-            const paged = filtered.slice(offset, offset + limit);
+                .where(whereExpr)
+                .orderBy(desc(contacts.createdAt), desc(contacts.id))
+                .limit(limit)
+                .offset(offset);
 
             const shaped = paged.map(r => ({
                 id:                r.id,
@@ -272,17 +292,24 @@ export const handler = async (event) => {
 
         // ── activities ───────────────────────────────────────────────────────
         if (resource === 'activities') {
-            const rows = await db
+            // Org-scoped filters pushed to the DB (filter + count + page in SQL)
+            const conds = [eq(activities.orgId, orgId)];
+            if (params.type) conds.push(eq(activities.type, params.type));
+            if (params.rep) conds.push(eq(activities.rep, params.rep));
+            const whereExpr = and(...conds);
+
+            const [{ total }] = await db
+                .select({ total: sql`count(*)::int` })
+                .from(activities)
+                .where(whereExpr);
+
+            const paged = await db
                 .select()
                 .from(activities)
-                .where(eq(activities.orgId, orgId));
-
-            let filtered = rows;
-            if (params.type)    filtered = filtered.filter(r => r.type === params.type);
-            if (params.rep)     filtered = filtered.filter(r => r.rep === params.rep);
-
-            const total = filtered.length;
-            const paged = filtered.slice(offset, offset + limit);
+                .where(whereExpr)
+                .orderBy(desc(activities.createdAt), desc(activities.id))
+                .limit(limit)
+                .offset(offset);
 
             const shaped = paged.map(r => ({
                 id:               r.id,
@@ -309,17 +336,24 @@ export const handler = async (event) => {
 
         // ── leads ────────────────────────────────────────────────────────────
         if (resource === 'leads') {
-            const rows = await db
+            // Org-scoped filters pushed to the DB (filter + count + page in SQL)
+            const conds = [eq(leads.orgId, orgId)];
+            if (params.status) conds.push(eq(leads.status, params.status));
+            if (params.assigned_to) conds.push(eq(leads.assignedTo, params.assigned_to));
+            const whereExpr = and(...conds);
+
+            const [{ total }] = await db
+                .select({ total: sql`count(*)::int` })
+                .from(leads)
+                .where(whereExpr);
+
+            const paged = await db
                 .select()
                 .from(leads)
-                .where(eq(leads.orgId, orgId));
-
-            let filtered = rows;
-            if (params.status)      filtered = filtered.filter(r => r.status === params.status);
-            if (params.assigned_to) filtered = filtered.filter(r => r.assignedTo === params.assigned_to);
-
-            const total = filtered.length;
-            const paged = filtered.slice(offset, offset + limit);
+                .where(whereExpr)
+                .orderBy(desc(leads.createdAt), desc(leads.id))
+                .limit(limit)
+                .offset(offset);
 
             const shaped = paged.map(r => ({
                 id:            r.id,
@@ -349,17 +383,24 @@ export const handler = async (event) => {
 
         // ── tasks ────────────────────────────────────────────────────────────
         if (resource === 'tasks') {
-            const rows = await db
+            // Org-scoped filters pushed to the DB (filter + count + page in SQL)
+            const conds = [eq(tasks.orgId, orgId)];
+            if (params.status) conds.push(eq(tasks.status, params.status));
+            if (params.rep) conds.push(eq(tasks.assignedTo, params.rep));
+            const whereExpr = and(...conds);
+
+            const [{ total }] = await db
+                .select({ total: sql`count(*)::int` })
+                .from(tasks)
+                .where(whereExpr);
+
+            const paged = await db
                 .select()
                 .from(tasks)
-                .where(eq(tasks.orgId, orgId));
-
-            let filtered = rows;
-            if (params.status)  filtered = filtered.filter(r => r.status === params.status);
-            if (params.rep)     filtered = filtered.filter(r => r.assignedTo === params.rep);
-
-            const total = filtered.length;
-            const paged = filtered.slice(offset, offset + limit);
+                .where(whereExpr)
+                .orderBy(desc(tasks.createdAt), desc(tasks.id))
+                .limit(limit)
+                .offset(offset);
 
             const shaped = paged.map(r => ({
                 id:              r.id,

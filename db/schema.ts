@@ -71,6 +71,7 @@ export const accounts = pgTable('accounts', {
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('accounts_org_id_parent_idx').on(t.orgId, t.parentAccountId),
+    index('accounts_org_id_created_idx').on(t.orgId, t.createdAt),
 ]);
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
 export const contacts = pgTable('contacts', {
@@ -113,6 +114,7 @@ export const contacts = pgTable('contacts', {
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('contacts_org_id_idx').on(t.orgId),
+    index('contacts_org_id_created_idx').on(t.orgId, t.createdAt),
 ]);
 // ── OPPORTUNITIES ─────────────────────────────────────────────────────────────
 export const opportunities = pgTable('opportunities', {
@@ -154,6 +156,7 @@ export const opportunities = pgTable('opportunities', {
     updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('opportunities_org_id_stage_idx').on(t.orgId, t.stage),
+    index('opportunities_org_id_created_idx').on(t.orgId, t.createdAt),
 ]);
 // ── TASKS ─────────────────────────────────────────────────────────────────────
 export const tasks = pgTable('tasks', {
@@ -180,6 +183,7 @@ export const tasks = pgTable('tasks', {
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('tasks_org_id_idx').on(t.orgId),
+    index('tasks_org_id_created_idx').on(t.orgId, t.createdAt),
 ]);
 // ── ACTIVITIES ────────────────────────────────────────────────────────────────
 export const activities = pgTable('activities', {
@@ -199,6 +203,7 @@ export const activities = pgTable('activities', {
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('activities_org_id_opp_idx').on(t.orgId, t.opportunityId),
+    index('activities_org_id_created_idx').on(t.orgId, t.createdAt),
 ]);
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
 export const settings = pgTable('settings', {
@@ -300,6 +305,7 @@ export const leads = pgTable('leads', {
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('leads_org_id_idx').on(t.orgId),
+    index('leads_org_id_created_idx').on(t.orgId, t.createdAt),
 ]);
 // ── DASHBOARD CONFIGS ─────────────────────────────────────────────────────────
 export const dashboardConfigs = pgTable('dashboard_configs', {
