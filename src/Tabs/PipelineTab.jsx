@@ -236,6 +236,111 @@ function SaveViewDialog({ open, onSave, onClose }) {
 }
 
 // ── Main PipelineTab ──────────────────────────────────────────
+const fmtA = n => n >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' : '$' + Math.round(n/1000) + 'K';
+
+// ── Pipeline-view icon ──────
+function ViewIcon({ name, active }) {
+    const c = active ? T.ink : T.inkMuted;
+    const p = { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: c, strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' };
+    switch (name) {
+        case 'list':     return <svg {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
+        case 'funnel':   return <svg {...p}><path d="M4 4h16l-6.5 8v6l-3-1.5V12L4 4z"/></svg>;
+        case 'kanban':   return <svg {...p}><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="4" height="15" rx="1"/></svg>;
+        case 'forecast': return <svg {...p}><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="1"/></svg>;
+        default: return null;
+    }
+}
+
+// ── Chip button ──────
+function Chip({ label, active, count, onClick, onDelete }) {
+    return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
+        <button onClick={onClick} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '5px 10px', paddingRight: onDelete ? 7 : 10,
+            border: `1px solid ${active ? T.ink : T.border}`,
+            borderRight: onDelete ? 'none' : undefined,
+            borderRadius: onDelete ? `${T.rSm}px 0 0 ${T.rSm}px` : T.rSm,
+            background: active ? T.ink : 'transparent',
+            color: active ? T.surface : T.ink,
+            fontSize: 12, fontWeight: active ? 600 : 400,
+            cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms', whiteSpace: 'nowrap',
+        }}>
+            {label}
+            {count != null && count > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 500, color: active ? 'rgba(255,255,255,0.75)' : T.inkMuted, marginLeft: 1 }}>{count}</span>
+            )}
+        </button>
+        {onDelete && (
+            <button onClick={onDelete} style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 20, padding: '5px 0',
+                border: `1px solid ${active ? T.ink : T.border}`,
+                borderLeft: `1px solid ${active ? 'rgba(255,255,255,0.2)' : T.border}`,
+                borderRadius: `0 ${T.rSm}px ${T.rSm}px 0`,
+                background: active ? T.ink : 'transparent',
+                color: active ? 'rgba(255,255,255,0.55)' : T.inkMuted,
+                fontSize: 9, cursor: 'pointer', fontFamily: T.sans, lineHeight: 1,
+            }}>✕</button>
+        )}
+    </div>
+);
+}
+
+// ── Forecast card / lane (module scope — stable identity) ──
+function ForecastCard({ opp, deps }) {
+    const { dealScoringOn, calculateDealHealth, setEditingOpp, setShowModal } = deps;
+    const closedays = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate+'T12:00:00') - new Date()) / 86400000) : null;
+    const overdue   = closedays !== null && closedays < 0;
+    const health    = dealScoringOn ? calculateDealHealth(opp) : null;
+    const hColor    = health ? (health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger) : T.border;
+    const relDay    = d => {
+        if (!d) return '—';
+        const diff = Math.round((new Date(d+'T12:00:00') - new Date()) / 86400000);
+        if (diff === 0) return 'today';
+        if (diff < 0)  return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        if (diff <= 14) return diff+'d';
+        return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    };
+    return (
+        <div onClick={() => { setEditingOpp(opp); setShowModal(true); }}
+            style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${stageColor(opp.stage)}`, borderRadius: T.rSm, padding: '9px 12px', minWidth: 200, maxWidth: 220, flexShrink: 0, cursor: 'pointer', transition: 'box-shadow 120ms', fontFamily: T.sans }}
+            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px -4px rgba(42,38,34,0.15)'}
+            onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: T.ink, marginBottom: 2, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{opp.account}</div>
+            <div style={{ fontSize: 10, color: T.inkMuted, marginBottom: 6, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{opp.opportunityName || ''}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, fontVariantNumeric: 'tabular-nums' }}>{fmtA(parseFloat(opp.arr)||0)}</div>
+                <div style={{ fontSize: 10, color: overdue ? T.danger : T.inkMuted, fontWeight: overdue ? 600 : 400 }}>{relDay(opp.forecastedCloseDate)}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${T.border}`, fontSize: 10, color: T.inkMuted, alignItems: 'center' }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: hColor }}/>
+                {opp.aiScore && <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>{opp.aiScore.score}</>}
+                <span style={{ flex: 1 }}/><span style={{ color: T.inkMuted }}>{opp.stage}</span>
+            </div>
+        </div>
+    );
+}
+
+function ForecastLane({ label, subtitle, opps, total, accent, deps }) {
+    return (
+    <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                <div style={{ width: 4, height: 16, background: accent, borderRadius: 1, flexShrink: 0 }}/>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, letterSpacing: -0.2, fontFamily: T.sans }}>{label}</div>
+                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{subtitle}</div>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.ink, fontVariantNumeric: 'tabular-nums', fontFamily: T.sans }}>{fmtA(total)}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+            {opps.map(o => <ForecastCard key={o.id} opp={o} deps={deps} />)}
+            {opps.length === 0 && <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', padding: '20px 0', fontFamily: T.sans }}>— nothing here —</div>}
+        </div>
+    </div>
+);
+}
+
 export default function PipelineTab() {
     const {
         opportunities, setOpportunities,
@@ -441,7 +546,6 @@ export default function PipelineTab() {
         .filter(o => !['Closed Won','Closed Lost'].includes(o.stage))
         .reduce((s, o) => s + ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100), 0);
 
-    const fmtA = n => n >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' : '$' + Math.round(n/1000) + 'K';
 
     // ── Bulk AI score ─────────────────────────────────────────
     useEffect(() => {
@@ -497,57 +601,13 @@ export default function PipelineTab() {
     };
 
     // ── View icons ────────────────────────────────────────────
-    const ViewIcon = ({ name, active }) => {
-        const c = active ? T.ink : T.inkMuted;
-        const p = { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: c, strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' };
-        switch (name) {
-            case 'list':     return <svg {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
-            case 'funnel':   return <svg {...p}><path d="M4 4h16l-6.5 8v6l-3-1.5V12L4 4z"/></svg>;
-            case 'kanban':   return <svg {...p}><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="4" height="15" rx="1"/></svg>;
-            case 'forecast': return <svg {...p}><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="1"/></svg>;
-            default: return null;
-        }
-    };
+
     const views = [
         { id: 'table',    label: 'List',     icon: <ViewIcon name="list"     active={pipelineView === 'table'}    /> },
         { id: 'funnel',   label: 'Funnel',   icon: <ViewIcon name="funnel"   active={pipelineView === 'funnel'}   /> },
         { id: 'kanban',   label: 'Kanban',   icon: <ViewIcon name="kanban"   active={pipelineView === 'kanban'}   /> },
         { id: 'forecast', label: 'Forecast', icon: <ViewIcon name="forecast" active={pipelineView === 'forecast'} /> },
     ];
-
-    // ── Chip button ───────────────────────────────────────────
-    const Chip = ({ label, active, count, onClick, onDelete }) => (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
-            <button onClick={onClick} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '5px 10px', paddingRight: onDelete ? 7 : 10,
-                border: `1px solid ${active ? T.ink : T.border}`,
-                borderRight: onDelete ? 'none' : undefined,
-                borderRadius: onDelete ? `${T.rSm}px 0 0 ${T.rSm}px` : T.rSm,
-                background: active ? T.ink : 'transparent',
-                color: active ? T.surface : T.ink,
-                fontSize: 12, fontWeight: active ? 600 : 400,
-                cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms', whiteSpace: 'nowrap',
-            }}>
-                {label}
-                {count != null && count > 0 && (
-                    <span style={{ fontSize: 11, fontWeight: 500, color: active ? 'rgba(255,255,255,0.75)' : T.inkMuted, marginLeft: 1 }}>{count}</span>
-                )}
-            </button>
-            {onDelete && (
-                <button onClick={onDelete} style={{
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    width: 20, padding: '5px 0',
-                    border: `1px solid ${active ? T.ink : T.border}`,
-                    borderLeft: `1px solid ${active ? 'rgba(255,255,255,0.2)' : T.border}`,
-                    borderRadius: `0 ${T.rSm}px ${T.rSm}px 0`,
-                    background: active ? T.ink : 'transparent',
-                    color: active ? 'rgba(255,255,255,0.55)' : T.inkMuted,
-                    fontSize: 9, cursor: 'pointer', fontFamily: T.sans, lineHeight: 1,
-                }}>✕</button>
-            )}
-        </div>
-    );
 
     // ── Grid template — rep col only for canSeeAll ────────────
     // Columns: [checkbox] [deal] [account] [rep?] [stage] [arr] [close] [ai] [health] [days] [⋯]
@@ -880,57 +940,7 @@ export default function PipelineTab() {
                         return prev && new Date(o.forecastedCloseDate) < new Date(prev.date);
                     }).length;
 
-                    const ForecastCard = ({ opp }) => {
-                        const closedays = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate+'T12:00:00') - new Date()) / 86400000) : null;
-                        const overdue   = closedays !== null && closedays < 0;
-                        const forecastDealScoringOn = isFeatureEnabled('deal-scoring');
-                        const health    = forecastDealScoringOn ? calculateDealHealth(opp) : null;
-                        const hColor    = health ? (health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger) : T.border;
-                        const relDay    = d => {
-                            if (!d) return '—';
-                            const diff = Math.round((new Date(d+'T12:00:00') - new Date()) / 86400000);
-                            if (diff === 0) return 'today';
-                            if (diff < 0)  return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
-                            if (diff <= 14) return diff+'d';
-                            return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
-                        };
-                        return (
-                            <div onClick={() => { setEditingOpp(opp); setShowModal(true); }}
-                                style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${stageColor(opp.stage)}`, borderRadius: T.rSm, padding: '9px 12px', minWidth: 200, maxWidth: 220, flexShrink: 0, cursor: 'pointer', transition: 'box-shadow 120ms', fontFamily: T.sans }}
-                                onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px -4px rgba(42,38,34,0.15)'}
-                                onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: T.ink, marginBottom: 2, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{opp.account}</div>
-                                <div style={{ fontSize: 10, color: T.inkMuted, marginBottom: 6, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{opp.opportunityName || ''}</div>
-                                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                                    <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, fontVariantNumeric: 'tabular-nums' }}>{fmtA(parseFloat(opp.arr)||0)}</div>
-                                    <div style={{ fontSize: 10, color: overdue ? T.danger : T.inkMuted, fontWeight: overdue ? 600 : 400 }}>{relDay(opp.forecastedCloseDate)}</div>
-                                </div>
-                                <div style={{ display: 'flex', gap: 6, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${T.border}`, fontSize: 10, color: T.inkMuted, alignItems: 'center' }}>
-                                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: hColor }}/>
-                                    {opp.aiScore && <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>{opp.aiScore.score}</>}
-                                    <span style={{ flex: 1 }}/><span style={{ color: T.inkMuted }}>{opp.stage}</span>
-                                </div>
-                            </div>
-                        );
-                    };
-
-                    const ForecastLane = ({ label, subtitle, opps, total, accent }) => (
-                        <div style={{ marginBottom: 20 }}>
-                            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                                    <div style={{ width: 4, height: 16, background: accent, borderRadius: 1, flexShrink: 0 }}/>
-                                    <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, letterSpacing: -0.2, fontFamily: T.sans }}>{label}</div>
-                                    <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{subtitle}</div>
-                                </div>
-                                <div style={{ fontSize: 16, fontWeight: 700, color: T.ink, fontVariantNumeric: 'tabular-nums', fontFamily: T.sans }}>{fmtA(total)}</div>
-                            </div>
-                            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-                                {opps.map(o => <ForecastCard key={o.id} opp={o}/>)}
-                                {opps.length === 0 && <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', padding: '20px 0', fontFamily: T.sans }}>— nothing here —</div>}
-                            </div>
-                        </div>
-                    );
-
+                    const cardCtx = { dealScoringOn: isFeatureEnabled('deal-scoring'), calculateDealHealth, setEditingOpp, setShowModal };
                     return (
                         <div style={{ paddingBottom: 20 }}>
                             <div style={{ marginBottom: 14 }}>
@@ -945,9 +955,9 @@ export default function PipelineTab() {
                                 <span><span style={{ color: T.ink, fontWeight: 700 }}>{fmtA(forecastTotalARR)}</span> <span style={{ color: T.inkMid }}>total pipeline</span></span>
                                 <div style={{ flex: 1 }}/>
                             </div>
-                            <ForecastLane label="Commit"    subtitle={`${commitDeals.length} deal${commitDeals.length !== 1 ? 's' : ''} you're betting on`} opps={commitDeals} total={sumARR(commitDeals)} accent={T.ok}/>
-                            <ForecastLane label="Best case" subtitle={`${bestDeals.length} in proposal stage`}                                               opps={bestDeals}   total={sumARR(bestDeals)}   accent={T.warn}/>
-                            <ForecastLane label="Pipeline"  subtitle={`${pipeDeals.length} earlier stages`}                                                   opps={pipeDeals}   total={sumARR(pipeDeals)}   accent={T.info}/>
+                            <ForecastLane label="Commit"    subtitle={`${commitDeals.length} deal${commitDeals.length !== 1 ? 's' : ''} you're betting on`} opps={commitDeals} total={sumARR(commitDeals)} accent={T.ok} deps={cardCtx}/>
+                            <ForecastLane label="Best case" subtitle={`${bestDeals.length} in proposal stage`}                                               opps={bestDeals}   total={sumARR(bestDeals)}   accent={T.warn} deps={cardCtx}/>
+                            <ForecastLane label="Pipeline"  subtitle={`${pipeDeals.length} earlier stages`}                                                   opps={pipeDeals}   total={sumARR(pipeDeals)}   accent={T.info} deps={cardCtx}/>
                         </div>
                     );
                 })()}
