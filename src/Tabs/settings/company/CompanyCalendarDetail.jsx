@@ -18,6 +18,39 @@ const FEDERAL_HOLIDAYS = [
     { date:'Dec 25', name:'Christmas Day',                 source:'US · Federal', type:'observed' },
 ];
 
+// Build 12-month grid
+const MonthGrid = ({ m, year, allHolidays }) => {
+    const first = new Date(year, m, 1).getDay();
+    const days  = new Date(year, m + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < first; i++) cells.push({ empty:true });
+    for (let d = 1; d <= days; d++) {
+        const dateStr = `${MONTHS_SHORT[m]} ${d}`;
+        const hit = allHolidays.find(h => h.date === dateStr);
+        cells.push({ d, hit });
+    }
+    const DAYS = ['S','M','T','W','T','F','S'];
+    return (
+        <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:10.5, fontWeight:700, color:T.ink, marginBottom:5, fontFamily:T.sans }}>{MONTHS_SHORT[m]} <span style={{ color:T.inkMuted, fontWeight:500 }}>{year}</span></div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:1, fontSize:9, color:T.inkMuted, marginBottom:2 }}>
+                {DAYS.map((d,i) => <div key={i} style={{ textAlign:'center', padding:'1px 0', fontFamily:T.sans }}>{d}</div>)}
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:1 }}>
+                {cells.map((c,ci) => (
+                    <div key={ci} style={{ aspectRatio:'1', textAlign:'center', fontSize:9.5, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:2, fontFamily:T.sans,
+                        color: c.hit ? (c.hit.type === 'custom' ? T.goldInk : T.ink) : T.inkMid,
+                        fontWeight: c.hit ? 700 : 400,
+                        background: c.hit ? (c.hit.type === 'custom' ? 'rgba(200,185,154,0.35)' : 'rgba(77,107,61,0.18)') : 'transparent',
+                    }}>
+                        {c.empty ? '' : c.d}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     const now = new Date();
     const [year, setYear]         = useState(now.getFullYear());
@@ -90,39 +123,6 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         try {
             await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ customHolidays: updated }) });
         } catch(e) { console.error('delete holiday', e); }
-    };
-
-    // Build 12-month grid
-    const MonthGrid = ({ m }) => {
-        const first = new Date(year, m, 1).getDay();
-        const days  = new Date(year, m + 1, 0).getDate();
-        const cells = [];
-        for (let i = 0; i < first; i++) cells.push({ empty:true });
-        for (let d = 1; d <= days; d++) {
-            const dateStr = `${MONTHS_SHORT[m]} ${d}`;
-            const hit = allHolidays.find(h => h.date === dateStr);
-            cells.push({ d, hit });
-        }
-        const DAYS = ['S','M','T','W','T','F','S'];
-        return (
-            <div style={{ minWidth:0 }}>
-                <div style={{ fontSize:10.5, fontWeight:700, color:T.ink, marginBottom:5, fontFamily:T.sans }}>{MONTHS_SHORT[m]} <span style={{ color:T.inkMuted, fontWeight:500 }}>{year}</span></div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:1, fontSize:9, color:T.inkMuted, marginBottom:2 }}>
-                    {DAYS.map((d,i) => <div key={i} style={{ textAlign:'center', padding:'1px 0', fontFamily:T.sans }}>{d}</div>)}
-                </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:1 }}>
-                    {cells.map((c,ci) => (
-                        <div key={ci} style={{ aspectRatio:'1', textAlign:'center', fontSize:9.5, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:2, fontFamily:T.sans,
-                            color: c.hit ? (c.hit.type === 'custom' ? T.goldInk : T.ink) : T.inkMid,
-                            fontWeight: c.hit ? 700 : 400,
-                            background: c.hit ? (c.hit.type === 'custom' ? 'rgba(200,185,154,0.35)' : 'rgba(77,107,61,0.18)') : 'transparent',
-                        }}>
-                            {c.empty ? '' : c.d}
-                        </div>
-                    ))}
-                </div>
-            </div>
-        );
     };
 
     const fedCount    = federalHolidays.length;
@@ -212,7 +212,7 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                 {/* Calendar grid */}
                 <CSectionCard title={`Calendar ${year}`} description="Federal holidays auto-sync from the US holiday list. Custom entries are highlighted in gold.">
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
-                        {Array.from({ length:12 }).map((_,m) => <MonthGrid key={m} m={m}/>)}
+                        {Array.from({ length:12 }).map((_,m) => <MonthGrid key={m} m={m} year={year} allHolidays={allHolidays}/>)}
                     </div>
                     <div style={{ marginTop:14, display:'flex', gap:18, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
                         <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>

@@ -48,7 +48,7 @@ export const CSectionCard = ({ title, description, children, headAction }) => (
 );
 
 // Shared chrome wrapper for all three detail pages
-export const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, updatedAt, onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, children }) => (
+export const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, updatedAt, onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, rightActions, children }) => (
     <div style={{ fontFamily:T.sans }}>
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
@@ -74,9 +74,11 @@ export const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updated
                     <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited {updatedAt} by <span style={{ color:T.inkMid, fontWeight:500 }}>{updatedBy}</span></span>
                 </div>
             </div>
-            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+            <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>
+                {rightActions || (<>
                 <button onClick={onCancel} style={{ padding:'8px 16px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
                 <button onClick={primaryAction} disabled={disablePrimary !== undefined ? disablePrimary : !dirty} style={{ padding:'8px 16px', background: (disablePrimary !== undefined ? !disablePrimary : dirty) ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: (disablePrimary !== undefined ? !disablePrimary : dirty) ? 'pointer' : 'default', fontFamily:T.sans, transition:'background 120ms' }}>{primaryLabel}</button>
+                </>)}
             </div>
         </div>
 
