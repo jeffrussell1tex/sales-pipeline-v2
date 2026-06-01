@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
-import { SecCrumb, SecTitle, SecBtn, SecCard } from './shared.jsx';
+import { SecCrumb, SecTitle, SecBtn, SecCard, DropdownPanel, DropdownOption, PolicySelect } from './shared.jsx';
 
 const SEC_SESSION = {
     idleTimeout: '480 minutes',
@@ -102,81 +102,6 @@ const IpRangeModal = ({ existing, onClose, onSave }) => {
                     <SecBtn label={existing ? 'Save changes' : 'Add range'} primary onClick={handleSave}/>
                 </div>
             </div>
-        </div>
-    );
-};
-
-const DropdownPanel = ({ children, width=280 }) => (
-    <div style={{ width, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
-        boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)',
-        padding:4, fontFamily:T.sans, maxHeight:360, overflowY:'auto' }}>
-        {children}
-    </div>
-);
-
-const DropdownOption = ({ label, sub, selected, recommended, danger, blocked, onClick }) => (
-    <div onClick={blocked ? ()=>alert('Blocked by workspace policy') : onClick}
-        style={{ display:'grid', gridTemplateColumns:'18px 1fr auto', gap:10, alignItems:'center',
-            padding:'8px 10px', borderRadius:3, cursor: blocked ? 'not-allowed' : 'pointer',
-            background: selected ? 'rgba(200,185,154,0.18)' : 'transparent' }}
-        onMouseEnter={e=>{ if (!selected && !blocked) e.currentTarget.style.background='rgba(200,185,154,0.10)'; }}
-        onMouseLeave={e=>{ e.currentTarget.style.background = selected ? 'rgba(200,185,154,0.18)' : 'transparent'; }}>
-        <span style={{ fontSize:12, color: selected ? T.goldInk : 'transparent', textAlign:'center', fontWeight:700 }}>✓</span>
-        <div style={{ minWidth:0 }}>
-            <div style={{ fontSize:12.5, fontWeight: selected ? 700 : 500,
-                color: (danger || blocked) ? T.danger : T.ink, lineHeight:1.2 }}>{label}</div>
-            {sub && <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.4 }}>{sub}</div>}
-        </div>
-        {recommended && (
-            <span style={{ fontSize:9, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase',
-                color:T.goldInk, padding:'2px 6px', background:'rgba(200,185,154,0.25)', borderRadius:2, flexShrink:0 }}>Rec.</span>
-        )}
-    </div>
-);
-
-const PolicySelect = ({ label, value, children, width=260 }) => {
-    const [open, setOpen] = React.useState(false);
-    const ref    = React.useRef(null);
-    const btnRef = React.useRef(null);
-    const [pos,  setPos]  = React.useState({ top:0, left:0 });
-
-    React.useEffect(() => {
-        if (!open) return;
-        const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target) && btnRef.current && !btnRef.current.contains(e.target)) setOpen(false); };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-        document.addEventListener('mousedown', onDoc);
-        document.addEventListener('keydown', onKey);
-        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
-    }, [open]);
-
-    const openDropdown = () => {
-        if (btnRef.current) {
-            const r = btnRef.current.getBoundingClientRect();
-            setPos({ top: r.bottom + 2, left: r.left });
-        }
-        setOpen(o => !o);
-    };
-
-    return (
-        <div>
-            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>
-            <button ref={btnRef} onClick={openDropdown}
-                style={{ width:'100%', padding:'8px 10px', border:`1px solid ${open ? T.borderStrong : T.border}`, borderRadius:T.r,
-                    fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer',
-                    display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, textAlign:'left' }}>
-                <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value}</span>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                    style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform 100ms', flexShrink:0 }}>
-                    <path d="M6 9l6 6 6-6"/>
-                </svg>
-            </button>
-            {open && (
-                <div ref={ref} style={{ position:'fixed', top:pos.top, left:pos.left, zIndex:9999 }}>
-                    <DropdownPanel width={width}>{React.Children.map(children, child =>
-                        child ? React.cloneElement(child, { onClick: child.props.onClick ? () => { child.props.onClick(); setOpen(false); } : () => setOpen(false) }) : null
-                    )}</DropdownPanel>
-                </div>
-            )}
         </div>
     );
 };

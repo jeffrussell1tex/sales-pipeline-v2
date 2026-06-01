@@ -43,6 +43,7 @@ import { SsoDetail } from './settings/security/SsoDetail.jsx';
 import { MfaDetail } from './settings/security/MfaDetail.jsx';
 import { SessionDetail } from './settings/security/SessionDetail.jsx';
 import { FlsDetail } from './settings/security/FlsDetail.jsx';
+import { SecCrumb, SecTitle, SecBtn, DropdownPanel, DropdownOption, PolicySelect } from './settings/security/shared.jsx';
 
 // ── SETTINGS_ITEMS ─────────────────────────────────────────────
 // Static catalogue matching the design's settings-shared.jsx
