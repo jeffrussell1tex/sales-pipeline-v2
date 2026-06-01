@@ -103,3 +103,19 @@ export const LIcon = ({ name, size = 16, color = 'currentColor', sw = 1.5, style
 };
 
 // Shared form primitives
+
+// -- Avatar (name -> initials -> deterministic color) --
+// Deterministic avatar color from initials
+export const AVATAR_COLORS = ['#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#4a6b5a'];
+export const avatarColor = (name='') => AVATAR_COLORS[(name.charCodeAt(0)||0) % AVATAR_COLORS.length];
+export const initials   = (name='') => name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+
+export const UserAvatar = ({ name, size=24 }) => (
+    <span style={{
+        display:'inline-flex', alignItems:'center', justifyContent:'center',
+        width:size, height:size, borderRadius:'50%',
+        background: avatarColor(name), color:'#fff',
+        fontSize: size*0.38, fontWeight:700, fontFamily:T.sans,
+        flexShrink:0, letterSpacing:0,
+    }}>{initials(name)}</span>
+);
