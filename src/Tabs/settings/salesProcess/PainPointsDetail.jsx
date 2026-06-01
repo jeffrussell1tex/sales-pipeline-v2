@@ -1,0 +1,182 @@
+// settings/salesProcess/PainPointsDetail.jsx
+import React, { useState, useEffect } from 'react';
+import { dbFetch } from '../../../utils/storage';
+import { T } from '../shared/tokens.js';
+import { CSectionCard } from '../shared/form.jsx';
+import { LIcon } from '../shared/ui.jsx';
+import { SPDetailPageChrome, SPDrag } from './shared.jsx';
+
+const DEFAULT_PAIN_POINTS = [
+    { cat:'Cost & ROI',       items:['High TCO vs incumbent','Unpredictable renewal costs','Low ROI on current stack','Hidden implementation fees'] },
+    { cat:'Efficiency',       items:['Manual data entry across tools','Reps hopping between 5+ apps','Reports take > 2 days to compile','Forecasting is a spreadsheet game'] },
+    { cat:'Data & reporting', items:['Pipeline hygiene is poor','Leadership distrusts forecast','No single source of truth'] },
+    { cat:'Team & adoption',  items:['Low CRM adoption','High rep turnover','Training onboarding > 30 days','Managers coach blind'] },
+    { cat:'Integrations',     items:['Quote-to-cash is disjointed','Email sync is unreliable','Slack alerts are noisy'] },
+    { cat:'Compliance',       items:['No audit trail','GDPR requests are manual','Field-level permissions are coarse'] },
+];
+
+const MOST_USED_PAIN_POINTS = [
+    { k:'Manual data entry across tools',   n:38 },
+    { k:'Forecasting is a spreadsheet game',n:31 },
+    { k:'Low CRM adoption',                 n:27 },
+    { k:'Reps hopping between 5+ apps',     n:24 },
+    { k:'Pipeline hygiene is poor',         n:19 },
+];
+
+export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+    const saved    = settings?.painPoints?.length ? settings.painPoints : DEFAULT_PAIN_POINTS;
+    const [groups, setGroups]   = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty, setDirty]     = useState(false);
+    const [saving, setSaving]   = useState(false);
+    const [search, setSearch]   = useState('');
+    const [addingCat, setAddingCat] = useState(false);
+    const [newCat, setNewCat]   = useState('');
+    const [addingItem, setAddingItem] = useState(null); // category name
+    const [newItem, setNewItem] = useState('');
+
+    const handleCancel = () => { setGroups(JSON.parse(JSON.stringify(saved))); setDirty(false); };
+    const handleSave   = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, painPoints: groups }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ painPoints: groups }) }); }
+        catch(e) { console.error('save pain points', e); }
+        setSaving(false); setDirty(false);
+    };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
+
+    const addCategory = () => {
+        if (!newCat.trim()) return;
+        if (groups.some(g => g.cat === newCat.trim())) return;
+        setGroups(prev => [...prev, { cat: newCat.trim(), items: [] }]);
+        setNewCat(''); setAddingCat(false); setDirty(true);
+    };
+    const addItem = (cat) => {
+        if (!newItem.trim()) return;
+        setGroups(prev => prev.map(g => g.cat === cat ? { ...g, items: [...g.items, newItem.trim()] } : g));
+        setNewItem(''); setAddingItem(null); setDirty(true);
+    };
+    const removeItem = (cat, item) => {
+        setGroups(prev => prev.map(g => g.cat === cat ? { ...g, items: g.items.filter(i => i !== item) } : g));
+        setDirty(true);
+    };
+
+    const totalItems = groups.reduce((a,g) => a + g.items.length, 0);
+    const filtered   = groups.map(g => ({
+        ...g,
+        items: search ? g.items.filter(item => item.toLowerCase().includes(search.toLowerCase())) : g.items,
+    })).filter(g => !search || g.items.length > 0);
+
+    return (
+        <SPDetailPageChrome
+            crumb="Pain points library" title="Pain points library"
+            subtitle="Reusable customer pain point templates"
+            statusDetail={`${totalItems} pain points`}
+            updatedBy="Admin" updatedAt="2 weeks ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            rightActions={
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        <LIcon name="upload" size={13}/> Import CSV
+                    </button>
+                    <button onClick={() => setAddingCat(true)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        + New pain point
+                    </button>
+                    <button onClick={handleCancel} disabled={!dirty} style={{ padding:'7px 14px', background:T.surface, color: dirty ? T.ink : T.inkMuted, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: dirty ? 'pointer' : 'default', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={handleSave} disabled={!dirty || saving} style={{ padding:'7px 14px', background: dirty ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: dirty && !saving ? 'pointer' : 'default', fontFamily:T.sans }}>{saving ? 'Saving…' : 'Save changes'}</button>
+                </div>
+            }
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20 }}>
+                {/* Left */}
+                <div>
+                    {/* Search + count */}
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, width:260 }}>
+                            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search pain points…" style={{ flex:1, border:'none', outline:'none', background:'transparent', fontSize:12, color:T.ink, fontFamily:T.sans }}/>
+                            {search && <button onClick={() => setSearch('')} style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:13, padding:0 }}>×</button>}
+                        </div>
+                        <div style={{ flex:1 }}/>
+                        <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Showing {totalItems} of {totalItems} · grouped by category</span>
+                    </div>
+
+                    {/* New category form */}
+                    {addingCat && (
+                        <div style={{ display:'flex', gap:8, marginBottom:14, padding:12, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2 }}>
+                            <input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="Category name…" onKeyDown={e => { if (e.key==='Enter') addCategory(); if (e.key==='Escape') { setAddingCat(false); setNewCat(''); } }}
+                                autoFocus style={{ flex:1, padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
+                            <button onClick={addCategory} style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                            <button onClick={() => { setAddingCat(false); setNewCat(''); }} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                        </div>
+                    )}
+
+                    {filtered.map((g,gi) => (
+                        <CSectionCard
+                            key={g.cat}
+                            title={`${g.cat} · ${g.items.length}`}
+                            description="Drag any pain point onto an opportunity to associate it."
+                            headAction={
+                                <button onClick={() => { setAddingItem(g.cat); setNewItem(''); }}
+                                    style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'4px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                    + Add
+                                </button>
+                            }
+                        >
+                            {addingItem === g.cat && (
+                                <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+                                    <input value={newItem} onChange={e => setNewItem(e.target.value)} placeholder="Pain point description…" onKeyDown={e => { if (e.key==='Enter') addItem(g.cat); if (e.key==='Escape') { setAddingItem(null); setNewItem(''); } }}
+                                        autoFocus style={{ flex:1, padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
+                                    <button onClick={() => addItem(g.cat)} style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                                    <button onClick={() => { setAddingItem(null); setNewItem(''); }} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                                </div>
+                            )}
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                                {g.items.map((item, ii) => (
+                                    <div key={ii} style={{ padding:'10px 12px', display:'flex', alignItems:'center', gap:10, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r+2 }}>
+                                        <SPDrag/>
+                                        <div style={{ flex:1, fontSize:12.5, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{item}</div>
+                                        <button onClick={() => removeItem(g.cat, item)}
+                                            style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0, lineHeight:1, flexShrink:0 }}
+                                            onMouseEnter={e => e.currentTarget.style.color = T.danger}
+                                            onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </CSectionCard>
+                    ))}
+                </div>
+
+                {/* Right */}
+                <div>
+                    <div style={{ position:'sticky', top:20 }}>
+                        <CSectionCard title="Most-used pain points" description="Across all open opportunities this quarter.">
+                            {MOST_USED_PAIN_POINTS.map((p,i) => (
+                                <div key={i} style={{ padding:'9px 0', borderBottom: i<4 ? `1px solid ${T.border}` : 'none', display:'flex', gap:10, alignItems:'center' }}>
+                                    <div style={{ fontSize:12.5, color:T.ink, flex:1, fontFamily:T.sans }}>{p.k}</div>
+                                    <div style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:15, fontWeight:700, color:T.goldInk }}>{p.n}</div>
+                                </div>
+                            ))}
+                        </CSectionCard>
+                        <CSectionCard title="Categories" description="Reorder or hide whole categories.">
+                            {groups.map((g,i) => (
+                                <div key={i} style={{ padding:'8px 0', borderBottom: i<groups.length-1 ? `1px solid ${T.border}` : 'none', display:'flex', alignItems:'center', gap:10 }}>
+                                    <SPDrag/>
+                                    <div style={{ flex:1, fontSize:12.5, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{g.cat}</div>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{g.items.length}</span>
+                                </div>
+                            ))}
+                        </CSectionCard>
+                    </div>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
