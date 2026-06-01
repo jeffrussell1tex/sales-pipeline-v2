@@ -11,7 +11,7 @@ export const SPDetailPageChrome = ({ crumb, title, subtitle, statusDetail, updat
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
             <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
             <span>/</span>
-            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Company</button>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Sales process</button>
             <span>/</span>
             <span style={{ color:T.ink, fontWeight:600 }}>{crumb}</span>
         </div>
