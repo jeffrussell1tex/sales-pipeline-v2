@@ -3,6 +3,7 @@ import { users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
+import { serverErrorBody } from './_lib.mjs';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
 
@@ -169,7 +170,7 @@ export const handler = async (event) => {
             return { statusCode: 200, headers, body: JSON.stringify({ user: row ? flatten(row) : null }) };
         } catch (err) {
             console.error('Users /me GET error:', err.message);
-            return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+            return { statusCode: 500, headers, body: serverErrorBody(err, 'users') };
         }
     }
 
@@ -200,7 +201,7 @@ export const handler = async (event) => {
             return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(upsertResult) }) };
         } catch (err) {
             console.error('Users /me PUT error:', err.message);
-            return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+            return { statusCode: 500, headers, body: serverErrorBody(err, 'users') };
         }
     }
 
@@ -231,7 +232,7 @@ export const handler = async (event) => {
                     .insert(users)
                     .values({ ...clean, orgId })
                     .onConflictDoUpdate({
-                        target: users.id,
+                        target: users.id, setWhere: eq(users.orgId, orgId),
                         set: { ...updateData, updatedAt: new Date() },
                     })
                     .returning();
@@ -384,6 +385,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('Users function error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'users') };
     }
 };

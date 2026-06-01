@@ -119,7 +119,7 @@ export function useContacts(deps) {
                 setContactModalError('Failed to save contact. Please check your connection and try again.');
             } finally { setContactModalSaving(false); }
         } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const newId = 'id_' + crypto.randomUUID();
             const newContact = { ...contactData, id: newId };
             try {
                 const res = await dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newContact) });

@@ -2,6 +2,7 @@ import { db }         from '../../db/index.js';
 import { dsrQueue }   from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -119,7 +120,7 @@ export const handler = async (event) => {
                 .insert(dsrQueue)
                 .values({ ...clean, orgId, slaDeadline: data.slaDeadline ? new Date(data.slaDeadline) : addDays(new Date(), SLA_DAYS) })
                 .onConflictDoUpdate({
-                    target: dsrQueue.id,
+                    target: dsrQueue.id, setWhere: eq(dsrQueue.orgId, orgId),
                     set: {
                         ...updateFields,
                         ...(completedAt ? { completedAt } : {}),
@@ -153,6 +154,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('export-dsr error:', err.message);
-        return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers: HEADERS, body: serverErrorBody(err, 'export-dsr') };
     }
 };

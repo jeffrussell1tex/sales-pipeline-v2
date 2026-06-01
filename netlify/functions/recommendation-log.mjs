@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { recommendationLog, opportunities, activities, tasks } from '../../db/schema.js';
 import { eq, and, desc, gte } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -190,6 +191,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('Recommendation-log error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'recommendation-log') };
     }
 };

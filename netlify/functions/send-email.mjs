@@ -1,3 +1,4 @@
+import { serverErrorBody } from './_lib.mjs';
 /**
  * send-email.mjs
  * Shared mailer utility — all email sending flows through this function.
@@ -551,6 +552,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('send-email handler error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'send-email') };
     }
 };

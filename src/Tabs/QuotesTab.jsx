@@ -37,7 +37,7 @@ const relDate = (iso) => {
     return `${Math.round(diff / 30)}mo ago`;
 };
 
-function genQuoteId() { return 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7); }
+function genQuoteId() { return 'q_' + crypto.randomUUID(); }
 
 // ─── Approval tiers ───────────────────────────────────────────
 // Fallback used before settings load or when not configured

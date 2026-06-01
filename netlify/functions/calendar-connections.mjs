@@ -17,6 +17,7 @@ import { db } from '../../db/index.js';
 import { userCalendarConnections, orgCalendarConnections } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 export const handler = async (event) => {
     const headers = {
@@ -139,6 +140,6 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
         console.error('calendar-connections error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'calendar-connections') };
     }
 };

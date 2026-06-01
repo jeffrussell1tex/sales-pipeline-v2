@@ -6,6 +6,7 @@ import {
 } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -139,7 +140,7 @@ export const handler = async (event) => {
                     updatedAt:   new Date(),
                 };
                 await db.insert(dispatchJobLineItems).values(row)
-                    .onConflictDoUpdate({ target: dispatchJobLineItems.id, set: { ...row, createdAt: undefined } });
+                    .onConflictDoUpdate({ target: dispatchJobLineItems.id, setWhere: eq(dispatchJobLineItems.orgId, orgId), set: { ...row, createdAt: undefined } });
                 const [inserted] = await db.select().from(dispatchJobLineItems)
                     .where(and(eq(dispatchJobLineItems.id, data.id), eq(dispatchJobLineItems.orgId, orgId)));
                 return { statusCode: 201, headers, body: JSON.stringify({ lineItem: normaliseLineItem(inserted) }) };
@@ -238,7 +239,7 @@ export const handler = async (event) => {
             };
 
             await db.insert(dispatchJobs).values(row)
-                .onConflictDoUpdate({ target: dispatchJobs.id, set: { ...row, createdAt: undefined } });
+                .onConflictDoUpdate({ target: dispatchJobs.id, setWhere: eq(dispatchJobs.orgId, orgId), set: { ...row, createdAt: undefined } });
 
             await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');
 
@@ -315,6 +316,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('dispatch-jobs error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'dispatch-jobs') };
     }
 };

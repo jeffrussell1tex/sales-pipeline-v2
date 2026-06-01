@@ -124,7 +124,7 @@ export function useAccounts(deps) {
                 method = 'PUT'; auditAction = 'update'; auditId = editingSubAccount.id;
                 auditName = formData.name || editingSubAccount.id; auditDetail = '';
             } else if (parentAccountForSub) {
-                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                const newId = 'id_' + crypto.randomUUID();
                 const parentDepth = getAccountDepth(parentAccountForSub.id);
                 const forceTier = parentAccountForSub._forceTier || formData._forceTier;
                 let tier;
@@ -140,7 +140,7 @@ export function useAccounts(deps) {
                 method = 'POST'; auditAction = 'create'; auditId = newId;
                 auditName = formData.name || newId; auditDetail = 'Sub-account of ' + parentAccountForSub.name;
             } else {
-                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                const newId = 'id_' + crypto.randomUUID();
                 payload = { ...formData, id: newId };
                 method = 'POST'; auditAction = 'create'; auditId = newId;
                 auditName = formData.name || newId; auditDetail = formData.industry || '';

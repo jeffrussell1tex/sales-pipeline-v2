@@ -4,6 +4,7 @@ import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, canSeeAll } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -101,7 +102,7 @@ export const handler = async (event) => {
 
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(leads).values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: leads.id, set: { ...updateData, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: leads.id, setWhere: eq(leads.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
 
             // Webhook: lead.converted — only fires the first time status flips to Converted
@@ -136,6 +137,6 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
         console.error('Leads error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'leads') };
     }
 };

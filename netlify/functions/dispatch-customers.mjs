@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { dispatchCustomers, dispatchServiceLocations } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -119,7 +120,7 @@ export const handler = async (event) => {
                     updatedAt:     new Date(),
                 };
                 await db.insert(dispatchServiceLocations).values(row)
-                    .onConflictDoUpdate({ target: dispatchServiceLocations.id, set: { ...row, createdAt: undefined } });
+                    .onConflictDoUpdate({ target: dispatchServiceLocations.id, setWhere: eq(dispatchServiceLocations.orgId, orgId), set: { ...row, createdAt: undefined } });
                 const [inserted] = await db.select().from(dispatchServiceLocations)
                     .where(and(eq(dispatchServiceLocations.id, data.id), eq(dispatchServiceLocations.orgId, orgId)));
                 return { statusCode: 201, headers, body: JSON.stringify({ location: normaliseLoc(inserted) }) };
@@ -196,7 +197,7 @@ export const handler = async (event) => {
                 updatedAt:          new Date(),
             };
             await db.insert(dispatchCustomers).values(row)
-                .onConflictDoUpdate({ target: dispatchCustomers.id, set: { ...row, createdAt: undefined } });
+                .onConflictDoUpdate({ target: dispatchCustomers.id, setWhere: eq(dispatchCustomers.orgId, orgId), set: { ...row, createdAt: undefined } });
             const [inserted] = await db.select().from(dispatchCustomers)
                 .where(and(eq(dispatchCustomers.id, data.id), eq(dispatchCustomers.orgId, orgId)));
             return { statusCode: 201, headers, body: JSON.stringify({ customer: normaliseCust(inserted) }) };
@@ -235,6 +236,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('dispatch-customers error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'dispatch-customers') };
     }
 };

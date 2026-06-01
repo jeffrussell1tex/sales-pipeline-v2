@@ -367,7 +367,7 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
     const buildPayload = () => {
         const revNum = parseFloat((form.rev || '').replace(/[^0-9.]/g, '')) || 0;
         return {
-            id:          'id_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+            id:          'id_' + crypto.randomUUID(),
             firstName:   form.firstName.trim(),
             lastName:    form.lastName.trim(),
             name:        form.firstName.trim() + ' ' + form.lastName.trim(),

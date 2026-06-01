@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { dashboardConfigs } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 export const handler = async (event) => {
     const headers = {
@@ -32,7 +33,7 @@ export const handler = async (event) => {
             const [upserted] = await db.insert(dashboardConfigs)
                 .values({ id, userId, orgId, widgets })
                 .onConflictDoUpdate({
-                    target: dashboardConfigs.id,
+                    target: dashboardConfigs.id, setWhere: eq(dashboardConfigs.orgId, orgId),
                     set: { widgets, updatedAt: new Date() },
                 })
                 .returning();
@@ -42,6 +43,6 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
         console.error('Dashboard configs error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'dashboard-configs') };
     }
 };

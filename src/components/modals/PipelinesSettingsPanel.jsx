@@ -12,7 +12,7 @@ export default function PipelinesSettingsPanel({ settings, setSettings, opportun
 
     const addPipeline = () => {
         if (!newPipelineName.trim()) return;
-        const newId = 'pl_' + Date.now();
+        const newId = 'pl_' + crypto.randomUUID();
         setSettings(prev => ({
             ...prev,
             pipelines: [...(prev.pipelines || [{ id:'default', name:'New Business', color:'#2563eb' }]), { id: newId, name: newPipelineName.trim(), color: newPipelineColor }]

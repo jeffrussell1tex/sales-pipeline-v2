@@ -2,6 +2,7 @@ import { db }            from '../../db/index.js';
 import { savedReports }  from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth }    from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Content-Type':                 'application/json',
@@ -61,7 +62,7 @@ export const handler = async (event) => {
             const [updated] = await db
                 .insert(savedReports)
                 .values(payload)
-                .onConflictDoUpdate({ target: savedReports.id, set: { ...payload, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: savedReports.id, setWhere: eq(savedReports.orgId, orgId), set: { ...payload, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ report: updated }) };
         }
@@ -79,6 +80,6 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
         console.error('saved-reports error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'saved-reports') };
     }
 };

@@ -22,6 +22,7 @@ import { opportunities, activities, settings } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { createDecipheriv, createHash } from 'crypto';
+import { serverErrorBody } from './_lib.mjs';
 
 // ── Decrypt org-level BYOK key (mirrors settings.mjs decrypt helper) ──────────
 function decryptOrgKey(stored) {
@@ -219,6 +220,6 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
 
     } catch (err) {
         console.error('ai-score error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'ai-score') };
     }
 };

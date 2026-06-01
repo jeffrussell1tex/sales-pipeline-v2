@@ -15839,7 +15839,7 @@ const ExportDetail = ({ onBack }) => {
         setAdhocLoading(true);
         setAdhocError(null);
         try {
-            const id  = 'run_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+            const id  = 'run_' + crypto.randomUUID();
             const res = await dbFetch('/.netlify/functions/export-runs', {
                 method: 'POST',
                 body: JSON.stringify({ id, scope: adHocScope, format: adHocFmt }),
@@ -15929,7 +15929,7 @@ const ExportDetail = ({ onBack }) => {
                 try {
                     const isEdit = !!payload.id && schedules.find(s => s.id === payload.id);
                     const method = isEdit ? 'PUT' : 'POST';
-                    if (!isEdit) payload.id = 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                    if (!isEdit) payload.id = 'sch_' + crypto.randomUUID();
                     const res  = await dbFetch('/.netlify/functions/export-schedules', { method, body: JSON.stringify(payload) });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error);
@@ -15940,7 +15940,7 @@ const ExportDetail = ({ onBack }) => {
             }}/>}
             {showDsrModal && <NewDsrModal onClose={() => setShowDsrModal(false)} onSave={async (payload) => {
                 try {
-                    payload.id = 'dsr_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                    payload.id = 'dsr_' + crypto.randomUUID();
                     const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'POST', body: JSON.stringify(payload) });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error);
@@ -17301,7 +17301,7 @@ const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
 
     const addCrew = () => {
         if (!newCrew.name.trim()) return;
-        const id = 'crew_' + Date.now();
+        const id = 'crew_' + crypto.randomUUID();
         setCrews(prev => [...prev, { id, ...newCrew, members: [], lead: null, activeJobs: 0, hoursWeek: 0 }]);
         setSelectedId(id);
         setNewCrew({ name: '', area: '', color: '#3a5a7a', defaultVehicle: '' });

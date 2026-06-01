@@ -72,7 +72,7 @@ export function useQuotes() {
             const isEdit = !!editingQuote;
             const payload = isEdit
                 ? { ...formData, id: editingQuote.id }
-                : { ...formData, id: 'qt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) };
+                : { ...formData, id: 'qt_' + crypto.randomUUID() };
 
             const res = await dbFetch('/.netlify/functions/quotes', {
                 method: isEdit ? 'PUT' : 'POST',
@@ -125,7 +125,7 @@ export function useQuotes() {
             const isEdit = !!editingProduct;
             const payload = isEdit
                 ? { ...formData, id: editingProduct.id }
-                : { ...formData, id: 'prod_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) };
+                : { ...formData, id: 'prod_' + crypto.randomUUID() };
 
             const res = await dbFetch('/.netlify/functions/products', {
                 method: isEdit ? 'PUT' : 'POST',

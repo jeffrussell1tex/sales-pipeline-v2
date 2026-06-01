@@ -11,6 +11,7 @@
 
 import { createClerkClient } from '@clerk/backend';
 import { verifyAuth }        from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -121,6 +122,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('clerk-mfa-status error:', err.message);
-        return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers: HEADERS, body: serverErrorBody(err, 'clerk-mfa-status') };
     }
 };

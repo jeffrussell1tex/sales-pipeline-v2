@@ -827,7 +827,7 @@ function NestedNewContactForm({ firstName, lastName, onSave, onCancel }) {
                 <GhostBtn onClick={onCancel}>Cancel</GhostBtn>
                 <PrimaryBtn type="button" onClick={() => {
                     if (form.firstName.trim() || form.lastName.trim()) {
-                        const id = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                        const id = 'id_' + crypto.randomUUID();
                         onSave({ ...form, id });
                     }
                 }}>Save Contact</PrimaryBtn>

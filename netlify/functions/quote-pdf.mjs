@@ -14,6 +14,7 @@
 
 import PDFDocument from 'pdfkit';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -378,7 +379,7 @@ export const handler = async (event) => {
         return {
             statusCode: 500,
             headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: err.message }),
+            body: serverErrorBody(err, 'quote-pdf'),
         };
     }
 };

@@ -5,6 +5,7 @@ import {
 } from '../../db/schema.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 // ── Notes on atomicity ────────────────────────────────────────────────────────
 // This project runs drizzle-orm/neon-http (@netlify/neon). That driver has NO
@@ -208,7 +209,7 @@ export const handler = async (event) => {
     } catch (err) {
         console.error('Merge error:', err.message);
         console.error('Merge error stack:', err.stack);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message, detail: err.stack?.split('\n')[0] }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'merge') };
     }
 };
 

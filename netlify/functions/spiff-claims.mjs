@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { spiffClaims } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -76,7 +77,7 @@ export const handler = async (event) => {
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(spiffClaims)
                 .values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: spiffClaims.id, set: { ...updateData, updatedAt: new Date() } })
+                .onConflictDoUpdate({ target: spiffClaims.id, setWhere: eq(spiffClaims.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ spiffClaim: upserted }) };
         }
@@ -96,6 +97,6 @@ export const handler = async (event) => {
 
     } catch (err) {
         console.error('spiff-claims error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'spiff-claims') };
     }
 };

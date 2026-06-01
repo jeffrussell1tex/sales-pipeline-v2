@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { quotes, opportunities, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -226,7 +227,7 @@ export const handler = async (event) => {
 
             const [updated] = await db
                 .insert(quotes).values({ ...payload, createdAt: new Date() })
-                .onConflictDoUpdate({ target: quotes.id, set: payload })
+                .onConflictDoUpdate({ target: quotes.id, setWhere: eq(quotes.orgId, orgId), set: payload })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ quote: updated }) };
         }
@@ -245,6 +246,6 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
         console.error('quotes error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'quotes') };
     }
 };

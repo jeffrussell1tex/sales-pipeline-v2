@@ -1,5 +1,5 @@
 import {
-    pgTable, text, integer, boolean, timestamp, jsonb, varchar, decimal
+    pgTable, text, integer, boolean, timestamp, jsonb, varchar, decimal, index
 } from 'drizzle-orm/pg-core';
 // ── USERS ─────────────────────────────────────────────────────────────────────
 // Sales reps, managers, admins — one row per user account
@@ -16,7 +16,9 @@ export const users = pgTable('users', {
     createdAt:     timestamp('created_at').notNull().defaultNow(),
     orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('users_org_id_idx').on(t.orgId),
+]);
 // ── PIPELINES ─────────────────────────────────────────────────────────────────
 export const pipelines = pgTable('pipelines', {
     id:        text('id').primaryKey(),
@@ -25,7 +27,9 @@ export const pipelines = pgTable('pipelines', {
     isDefault: boolean('is_default').notNull().default(false),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('pipelines_org_id_idx').on(t.orgId),
+]);
 // ── ACCOUNTS ──────────────────────────────────────────────────────────────────
 export const accounts = pgTable('accounts', {
     id:                text('id').primaryKey(),
@@ -65,7 +69,10 @@ export const accounts = pgTable('accounts', {
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('accounts_org_id_parent_idx').on(t.orgId, t.parentAccountId),
+    index('accounts_org_id_created_idx').on(t.orgId, t.createdAt),
+]);
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
 export const contacts = pgTable('contacts', {
     id:                text('id').primaryKey(),
@@ -105,7 +112,10 @@ export const contacts = pgTable('contacts', {
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('contacts_org_id_idx').on(t.orgId),
+    index('contacts_org_id_created_idx').on(t.orgId, t.createdAt),
+]);
 // ── OPPORTUNITIES ─────────────────────────────────────────────────────────────
 export const opportunities = pgTable('opportunities', {
     id:                   text('id').primaryKey(),
@@ -144,7 +154,10 @@ export const opportunities = pgTable('opportunities', {
     createdAt:            timestamp('created_at').notNull().defaultNow(),
     orgId:                text('org_id').notNull(),
     updatedAt:            timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('opportunities_org_id_stage_idx').on(t.orgId, t.stage),
+    index('opportunities_org_id_created_idx').on(t.orgId, t.createdAt),
+]);
 // ── TASKS ─────────────────────────────────────────────────────────────────────
 export const tasks = pgTable('tasks', {
     id:            text('id').primaryKey(),
@@ -168,7 +181,10 @@ export const tasks = pgTable('tasks', {
     createdAt:     timestamp('created_at').notNull().defaultNow(),
     orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('tasks_org_id_idx').on(t.orgId),
+    index('tasks_org_id_created_idx').on(t.orgId, t.createdAt),
+]);
 // ── ACTIVITIES ────────────────────────────────────────────────────────────────
 export const activities = pgTable('activities', {
     id:            text('id').primaryKey(),
@@ -185,7 +201,10 @@ export const activities = pgTable('activities', {
     createdAt:     timestamp('created_at').notNull().defaultNow(),
     orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('activities_org_id_opp_idx').on(t.orgId, t.opportunityId),
+    index('activities_org_id_created_idx').on(t.orgId, t.createdAt),
+]);
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
 export const settings = pgTable('settings', {
     id:              text('id').primaryKey().default('default'),
@@ -202,7 +221,9 @@ export const settings = pgTable('settings', {
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
     // ── NEW: added for Quotes feature ────────────────────────────────────────
     quotesEnabled:   boolean('quotes_enabled').default(false),
-});
+}, (t) => [
+    index('settings_org_id_idx').on(t.orgId),
+]);
 // ── AUDIT LOG ─────────────────────────────────────────────────────────────────
 export const auditLog = pgTable('audit_log', {
     id:         text('id').primaryKey(),
@@ -215,7 +236,9 @@ export const auditLog = pgTable('audit_log', {
     userName:   varchar('user_name', { length: 255 }),
     orgId:      text('org_id').notNull(),
     timestamp:  timestamp('timestamp').notNull().defaultNow(),
-});
+}, (t) => [
+    index('audit_log_org_id_idx').on(t.orgId),
+]);
 // ── SPIFF CLAIMS ──────────────────────────────────────────────────────────────
 export const spiffClaims = pgTable('spiff_claims', {
     id:              text('id').primaryKey(),
@@ -238,7 +261,9 @@ export const spiffClaims = pgTable('spiff_claims', {
     paidAt:          timestamp('paid_at'),
     createdAt:       timestamp('created_at').notNull().defaultNow(),
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('spiff_claims_org_id_idx').on(t.orgId),
+]);
 // ── RECOMMENDATION LOG ────────────────────────────────────────────────────────
 export const recommendationLog = pgTable('recommendation_log', {
     id:             text('id').primaryKey(),
@@ -255,7 +280,9 @@ export const recommendationLog = pgTable('recommendation_log', {
     resolvedAt:     timestamp('resolved_at'),
     daysToResolve:  integer('days_to_resolve'),
     createdAt:      timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('recommendation_log_org_id_idx').on(t.orgId),
+]);
 // ── LEADS ─────────────────────────────────────────────────────────────────────
 export const leads = pgTable('leads', {
     id:           text('id').primaryKey(),
@@ -276,7 +303,10 @@ export const leads = pgTable('leads', {
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     orgId:        text('org_id').notNull(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('leads_org_id_idx').on(t.orgId),
+    index('leads_org_id_created_idx').on(t.orgId, t.createdAt),
+]);
 // ── DASHBOARD CONFIGS ─────────────────────────────────────────────────────────
 export const dashboardConfigs = pgTable('dashboard_configs', {
     id:        text('id').primaryKey(),
@@ -285,7 +315,9 @@ export const dashboardConfigs = pgTable('dashboard_configs', {
     widgets:   jsonb('widgets').notNull().default('[]'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dashboard_configs_org_id_user_idx').on(t.orgId, t.userId),
+]);
 // ── USER CALENDAR CONNECTIONS ─────────────────────────────────────────────────
 export const userCalendarConnections = pgTable('user_calendar_connections', {
     id:                    text('id').primaryKey(),
@@ -296,7 +328,9 @@ export const userCalendarConnections = pgTable('user_calendar_connections', {
     calendarEmail:         varchar('calendar_email', { length: 255 }),
     connectedAt:           timestamp('connected_at').notNull().defaultNow(),
     updatedAt:             timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('user_calendar_connections_org_id_user_idx').on(t.orgId, t.userId),
+]);
 // ── ORG CALENDAR CONNECTIONS ──────────────────────────────────────────────────
 export const orgCalendarConnections = pgTable('org_calendar_connections', {
     id:                    text('id').primaryKey(),
@@ -308,7 +342,9 @@ export const orgCalendarConnections = pgTable('org_calendar_connections', {
     connectedAt:           timestamp('connected_at').notNull().defaultNow(),
     connectedBy:           varchar('connected_by', { length: 255 }),
     updatedAt:             timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('org_calendar_connections_org_id_idx').on(t.orgId),
+]);
 // ── API KEYS ──────────────────────────────────────────────────────────────────
 export const apiKeys = pgTable('api_keys', {
     id:          text('id').primaryKey(),
@@ -322,7 +358,10 @@ export const apiKeys = pgTable('api_keys', {
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     revokedAt:   timestamp('revoked_at'),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('api_keys_org_id_idx').on(t.orgId),
+    index('api_keys_key_hash_idx').on(t.keyHash),
+]);
 // ── WEBHOOK SUBSCRIPTIONS ─────────────────────────────────────────────────────
 export const webhookSubscriptions = pgTable('webhook_subscriptions', {
     id:          text('id').primaryKey(),
@@ -337,7 +376,9 @@ export const webhookSubscriptions = pgTable('webhook_subscriptions', {
     lastStatus:  integer('last_status'),
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('webhook_subscriptions_org_id_idx').on(t.orgId),
+]);
 
 // ── PRODUCTS (PRICE BOOK) ─────────────────────────────────────────────────────
 // NEW — added for Quotes feature
@@ -359,7 +400,9 @@ export const products = pgTable('products', {
     createdBy:    varchar('created_by', { length: 255 }),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('products_org_id_idx').on(t.orgId),
+]);
 
 // ── QUOTES ────────────────────────────────────────────────────────────────────
 // NEW — added for Quotes feature
@@ -394,7 +437,9 @@ export const quotes = pgTable('quotes', {
     createdBy:       varchar('created_by', { length: 255 }),
     createdAt:       timestamp('created_at').notNull().defaultNow(),
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('quotes_org_id_idx').on(t.orgId),
+]);
 
 // ── BACKUPS ───────────────────────────────────────────────────────────────────
 // One row per snapshot. payload stores the full JSON export for download.
@@ -409,7 +454,9 @@ export const backups = pgTable('backups', {
     triggeredBy:  varchar('triggered_by', { length: 255 }),        // userId or 'system'
     // payload intentionally not stored — export is regenerated fresh on each download request
     createdAt:    timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('backups_org_id_idx').on(t.orgId),
+]);
 
 // ── BACKUP SCHEDULE ───────────────────────────────────────────────────────────
 // One row per org — stores schedule configuration
@@ -439,7 +486,9 @@ export const savedReports = pgTable('saved_reports', {
     isShared:    boolean('is_shared').default(false),
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('saved_reports_org_id_idx').on(t.orgId),
+]);
 
 // ── EXPORT SCHEDULES ──────────────────────────────────────────────────────────
 // One row per recurring export definition.
@@ -464,7 +513,9 @@ export const exportSchedules = pgTable('export_schedules', {
     createdBy:   varchar('created_by', { length: 255 }),
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('export_schedules_org_id_idx').on(t.orgId),
+]);
 
 // ── EXPORT RUNS ───────────────────────────────────────────────────────────────
 // One row per completed or failed export run (ad-hoc or scheduled).
@@ -484,7 +535,9 @@ export const exportRuns = pgTable('export_runs', {
     status:      varchar('status', { length: 20 }).notNull().default('ok'),
     errorMsg:    text('error_msg'),
     createdAt:   timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('export_runs_org_id_idx').on(t.orgId),
+]);
 
 // ── DSR QUEUE ─────────────────────────────────────────────────────────────────
 // GDPR Data Subject Requests. SLA is 30 days from submission.
@@ -502,7 +555,9 @@ export const dsrQueue = pgTable('dsr_queue', {
     createdBy:   varchar('created_by', { length: 255 }),
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dsr_queue_org_id_idx').on(t.orgId),
+]);
 
 // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
 // Trigger-based rules: each rule has a triggerEvent, optional conditions, and actions.
@@ -522,7 +577,9 @@ export const automations = pgTable('automations', {
     lastRunAt:    timestamp('last_run_at'),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('automations_org_id_idx').on(t.orgId),
+]);
 
 // ── AUTOMATION RUNS ───────────────────────────────────────────────────────────
 // One row per execution — for run history and debugging.
@@ -537,7 +594,9 @@ export const automationRuns = pgTable('automation_runs', {
     actionsExecuted:  integer('actions_executed').notNull().default(0),
     error:            text('error'),
     createdAt:        timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('automation_runs_org_id_idx').on(t.orgId),
+]);
 
 // ╔══════════════════════════════════════════════════════════════════════════════╗
 // ║  DISPATCH MODULE                                                            ║
@@ -577,7 +636,9 @@ export const dispatchTechnicians = pgTable('dispatch_technicians', {
     avatarInitials:  varchar('avatar_initials', { length: 4 }),
     createdAt:       timestamp('created_at').notNull().defaultNow(),
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dispatch_technicians_org_id_idx').on(t.orgId),
+]);
 
 // ── DISPATCH VEHICLES ─────────────────────────────────────────────────────────
 // Company vehicles and trailers used for field service dispatch.
@@ -608,7 +669,9 @@ export const dispatchVehicles = pgTable('dispatch_vehicles', {
     notes:            text('notes'),
     createdAt:        timestamp('created_at').notNull().defaultNow(),
     updatedAt:        timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dispatch_vehicles_org_id_idx').on(t.orgId),
+]);
 
 // ── DISPATCH SHARED EQUIPMENT ─────────────────────────────────────────────────
 // Shared tools and equipment that are checked out to techs or vehicles for a job.
@@ -637,7 +700,9 @@ export const dispatchEquipment = pgTable('dispatch_equipment', {
     notes:            text('notes'),
     createdAt:        timestamp('created_at').notNull().defaultNow(),
     updatedAt:        timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dispatch_equipment_org_id_idx').on(t.orgId),
+]);
 
 // ── DISPATCH CUSTOMERS ────────────────────────────────────────────────────────
 // Field-service customer records. Mirrors/extends CRM accounts for dispatch use.
@@ -676,7 +741,9 @@ export const dispatchCustomers = pgTable('dispatch_customers', {
     tags:               jsonb('tags').default('[]'),
     createdAt:          timestamp('created_at').notNull().defaultNow(),
     updatedAt:          timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dispatch_customers_org_id_idx').on(t.orgId),
+]);
 
 // ── DISPATCH SERVICE LOCATIONS ────────────────────────────────────────────────
 // A customer may have multiple service locations (e.g. a property manager with
@@ -701,7 +768,9 @@ export const dispatchServiceLocations = pgTable('dispatch_service_locations', {
     notes:        text('notes'),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dispatch_service_locations_org_id_customer_idx').on(t.orgId, t.customerId),
+]);
 
 // ── DISPATCH JOBS (WORK ORDERS) ───────────────────────────────────────────────
 // The core work-order entity. One row per job/visit.
@@ -760,7 +829,9 @@ export const dispatchJobs = pgTable('dispatch_jobs', {
     dispatchedBy:       varchar('dispatched_by', { length: 255 }),
     createdAt:          timestamp('created_at').notNull().defaultNow(),
     updatedAt:          timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dispatch_jobs_org_id_idx').on(t.orgId),
+]);
 
 // ── DISPATCH JOB LINE ITEMS ───────────────────────────────────────────────────
 // Parts, materials, and labor lines on a work order.
@@ -779,7 +850,9 @@ export const dispatchJobLineItems = pgTable('dispatch_job_line_items', {
     sortOrder:   integer('sort_order').default(0),
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dispatch_job_line_items_org_id_job_idx').on(t.orgId, t.jobId),
+]);
 
 // ── DISPATCH JOB STATUS HISTORY ───────────────────────────────────────────────
 // Immutable audit trail of every status transition on a job.
@@ -792,7 +865,9 @@ export const dispatchJobStatusHistory = pgTable('dispatch_job_status_history', {
     changedBy:    varchar('changed_by', { length: 255 }),
     note:         text('note'),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dispatch_job_status_history_org_id_job_idx').on(t.orgId, t.jobId),
+]);
 
 // ── DISPATCH SCHEDULE BLOCKS ──────────────────────────────────────────────────
 // Non-job blocks on the dispatch board: PTO, training, vehicle service, etc.
@@ -812,7 +887,9 @@ export const dispatchScheduleBlocks = pgTable('dispatch_schedule_blocks', {
     createdBy:   varchar('created_by', { length: 255 }),
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('dispatch_schedule_blocks_org_id_idx').on(t.orgId),
+]);
 
 // ── MERGE LOG ─────────────────────────────────────────────────────────────────
 // One row per executed duplicate-merge. `rewrites` snapshots every FK / name-string
@@ -836,4 +913,6 @@ export const mergeLog = pgTable('merge_log', {
     performedById:    text('performed_by_id'),
     reversedAt:       timestamp('reversed_at'),
     createdAt:        timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+    index('merge_log_org_id_idx').on(t.orgId),
+]);
