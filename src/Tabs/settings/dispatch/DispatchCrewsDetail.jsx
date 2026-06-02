@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
-import { SPDetailPageChrome } from '../salesProcess/shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchCrews || [];
@@ -63,7 +63,7 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
     };
 
     return (
-        <SPDetailPageChrome crumb="Dispatch · Crews" title="Crews"
+        <CategoryDetailChrome crumb="Crews" category="Dispatch" title="Crews"
             subtitle="Named groups of techs who work together in the field. Distinct from CRM Sales teams (which structure reps for reporting)."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setCrews(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
@@ -317,6 +317,6 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                     </div>
                 )}
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

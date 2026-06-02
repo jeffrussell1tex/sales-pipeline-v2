@@ -4,7 +4,7 @@ import { useApp } from '../../../AppContext';
 import { dbFetch } from '../../../utils/storage';
 import { T, eb } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { SPDetailPageChrome } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const DEFAULT_PERSONAS = [
     { id: 'champion',   name: 'Champion',          color: '#4d6b3d', icon: '★', desc: 'Internal advocate who sells the deal on your behalf.',   titles: ['Director of Operations', 'VP Sales', 'Head of RevOps'], cares: ['Quick wins for the team', 'Looking great to leadership'], objections: ["My team won't adopt another tool"],  active: true },
@@ -165,7 +165,7 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
     const COLS = '24px 1.6fr 2fr 80px 90px 28px';
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Buyer personas" title="Buyer personas"
             subtitle="Contact persona tags used in the contact form"
             statusDetail={`${personas.filter(p => p.active !== false).length} active personas`}
@@ -371,6 +371,6 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
                     </div>
                 </div>
             )}
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

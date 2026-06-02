@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { SPDetailPageChrome, SPTable } from '../salesProcess/shared.jsx';
+import { SPTable } from '../salesProcess/shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const savedSkills   = settings?.dispatchSkills   || [];
@@ -46,7 +47,7 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
     const COLORS = ['#7a5a3c','#3a5a7a','#b87333','#4d6b3d','#9c3a2e','#7a6a48','#2a2622'];
 
     return (
-        <SPDetailPageChrome crumb="Skills & certifications" title="Skills & certifications"
+        <CategoryDetailChrome crumb="Skills & certifications" category="Dispatch" title="Skills & certifications"
             subtitle="Skills, certs, and license levels your dispatchers schedule around."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setSkills(JSON.parse(JSON.stringify(savedSkills))); setCerts(JSON.parse(JSON.stringify(savedCerts))); setLicenses([...savedLicenses]); setDirty(false); }}
@@ -201,6 +202,6 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
                     </>
                 );
             })()}
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

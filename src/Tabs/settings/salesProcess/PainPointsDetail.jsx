@@ -4,7 +4,8 @@ import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
-import { SPDetailPageChrome, SPDrag } from './shared.jsx';
+import { SPDrag } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const DEFAULT_PAIN_POINTS = [
     { cat:'Cost & ROI',       items:['High TCO vs incumbent','Unpredictable renewal costs','Low ROI on current stack','Hidden implementation fees'] },
@@ -74,7 +75,7 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
     })).filter(g => !search || g.items.length > 0);
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Pain points library" title="Pain points library"
             subtitle="Reusable customer pain point templates"
             statusDetail={`${totalItems} pain points`}
@@ -177,6 +178,6 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
                     </div>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

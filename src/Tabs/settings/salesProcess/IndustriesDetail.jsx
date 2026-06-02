@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { SPDetailPageChrome, SPDrag } from './shared.jsx';
+import { SPDrag } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const DEFAULT_INDUSTRIES = [
     { k:'Technology',          subs:['SaaS','Hardware','IT services','Cybersecurity','Fintech'],              n:118 },
@@ -103,7 +104,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     const totalSubs = industries.reduce((a,i) => a+i.subs.length, 0);
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Industries" title="Industries"
             subtitle="Primary and sub-industry taxonomy"
             statusDetail={`${industries.length} industries · ${totalSubs} sub-types`}
@@ -290,6 +291,6 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                     </div>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

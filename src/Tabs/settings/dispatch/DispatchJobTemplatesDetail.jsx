@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { SPDetailPageChrome } from '../salesProcess/shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchJobTemplates || [];
@@ -71,7 +71,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     ] : [];
 
     return (
-        <SPDetailPageChrome crumb="Dispatch · Job templates" title="Job templates"
+        <CategoryDetailChrome crumb="Job templates" category="Dispatch" title="Job templates"
             subtitle="When an opportunity moves to Closed Won, Accelerep can auto-create a Job using the template tied to the customer's type. Defaults pre-fill — dispatchers can still edit before scheduling."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
@@ -246,6 +246,6 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                     </div>
                 </>);
             })()}
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

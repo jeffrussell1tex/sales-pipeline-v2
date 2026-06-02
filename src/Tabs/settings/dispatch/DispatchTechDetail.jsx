@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
-import { SPDetailPageChrome } from '../salesProcess/shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const DspKebabBtn = ({ id, openId, onOpen }) => (
     <button onClick={e => onOpen(e, id)}
@@ -100,7 +100,7 @@ export const DispatchTechDetail = ({ settings, setSettings, onBack, setSettingsD
     };
 
     return (
-        <SPDetailPageChrome crumb="Dispatch · Tech profiles" title="Tech profiles"
+        <CategoryDetailChrome crumb="Tech profiles" category="Dispatch" title="Tech profiles"
             subtitle="Dispatcher view of every user with dispatch enabled. Edit skills, certs, license, vehicle, and hours cap in one place."
             onBack={onBack} dirty={false} onCancel={onBack}
             disablePrimary={true} primaryLabel="Auto-saved"
@@ -210,6 +210,6 @@ export const DispatchTechDetail = ({ settings, setSettings, onBack, setSettingsD
                     })}
                 </div>
             )}
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { SPDetailPageChrome, SPTable } from '../salesProcess/shared.jsx';
+import { SPTable } from '../salesProcess/shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchVehicles || [];
@@ -37,7 +38,7 @@ export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSetti
 
     const TYPES = ['Van','Truck','Car','Trailer','Other'];
     return (
-        <SPDetailPageChrome crumb="Vehicles & equipment" title="Vehicles & equipment"
+        <CategoryDetailChrome crumb="Vehicles & equipment" category="Dispatch" title="Vehicles & equipment"
             subtitle="Fleet vehicles available to assign to techs."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setVehicles(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
@@ -140,6 +141,6 @@ export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSetti
                     </div>
                 </>);
             })()}
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

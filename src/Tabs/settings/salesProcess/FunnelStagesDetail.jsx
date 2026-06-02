@@ -4,7 +4,8 @@ import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { StatusChip } from '../shared/ui.jsx';
-import { SPDetailPageChrome, SPTable, SPDrag } from './shared.jsx';
+import { SPTable, SPDrag } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const DEFAULT_FUNNEL_STAGES = [
     { name:'Prospecting',  prob:10,  type:'Open', color:'#e07b4a' },
@@ -48,7 +49,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
     const openStages = stages.filter(s => s.type === 'Open');
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Funnel stages" title="Funnel stages"
             subtitle="Stage names and default win probability"
             statusDetail={`${stages.length} stages`}
@@ -154,6 +155,6 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                     </div>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

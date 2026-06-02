@@ -4,7 +4,8 @@ import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
-import { SPDetailPageChrome, SPTable, SPDrag } from './shared.jsx';
+import { SPTable, SPDrag } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const STAGE_COLORS = {
     'Prospecting':'#e07b4a','Qualification':'#d4a847','Discovery':'#8aab5a',
@@ -236,7 +237,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
     const selStyle = { padding:'4px 8px', fontSize:12, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, cursor:'pointer', outline:'none' };
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Pipelines" title="Pipelines"
             subtitle="Manage multiple pipelines and their stages"
             statusDetail={`${pipelines.length} pipelines · ${pipelines.reduce((a,p) => a + (p.stages?.length||0), 0)} stages`}
@@ -548,6 +549,6 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                     </CSectionCard>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

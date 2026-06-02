@@ -4,7 +4,7 @@ import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
-import { SPDetailPageChrome } from '../salesProcess/shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { QPill, ATToggle } from './shared.jsx';
 
 // TODO: read currentUser from session/AppContext — hard-coded for dev
@@ -1105,7 +1105,7 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
     const brandName    = settings?.companyDisplayName   || QT_BRANDING.companyName;
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Quote templates & branding" category="Quoting" title="Quote templates & branding"
             subtitle="Header, footer, terms boilerplate, and PDF styling for sent quotes"
             statusDetail={`${templates.length} templates · brand locked`}
@@ -1251,6 +1251,6 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
                     </div>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

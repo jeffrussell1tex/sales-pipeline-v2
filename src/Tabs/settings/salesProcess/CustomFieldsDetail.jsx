@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { SPDetailPageChrome, SPTable, SPDrag } from './shared.jsx';
+import { SPTable, SPDrag } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const FIELD_OBJECTS = ['Accounts', 'Contacts', 'Leads', 'Opportunities'];
 
@@ -114,7 +115,7 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
     const cancelEdit = () => setEditingFieldIdx(null);
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Custom fields" title="Custom fields"
             subtitle="Extend Accounts, Contacts, Leads, and Opportunities"
             statusDetail={`${totalFields} custom fields`}
@@ -324,6 +325,6 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
                     </div>
                 ))}
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

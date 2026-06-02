@@ -4,7 +4,8 @@ import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { StatusChip } from '../shared/ui.jsx';
-import { SPDetailPageChrome, SPDrag } from './shared.jsx';
+import { SPDrag } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const DEFAULT_CUST_TYPES = [
     { tier:'SMB',        hex:'#8a9a7a', range:'< $10M',       sla:'24h', owner:'SMB teams',   count:312 },
@@ -78,7 +79,7 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
     const total = tiers.reduce((a,t) => a+t.count, 0)||1;
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Customer types" title="Customer types"
             subtitle="Account classification tags (SMB, Mid-market, Enterprise…)"
             statusDetail={`${tiers.length} tiers`}
@@ -258,6 +259,6 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
                     </div>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

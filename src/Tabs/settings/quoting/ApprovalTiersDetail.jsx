@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { SPDetailPageChrome, SPDrag } from '../salesProcess/shared.jsx';
+import { SPDrag } from '../salesProcess/shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { QPill, ATToggle } from './shared.jsx';
 
 const DEFAULT_APPROVAL_TIERS = [
@@ -145,7 +146,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
     };
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Approval tiers" category="Quoting" title="Approval tiers"
             subtitle="Discount thresholds that trigger manager or VP approval"
             statusDetail={`${tiers.length} tiers · advanced rules off`}
@@ -454,6 +455,6 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                     </div>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

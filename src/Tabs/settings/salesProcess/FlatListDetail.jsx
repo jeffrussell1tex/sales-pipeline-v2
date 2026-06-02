@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { SPDetailPageChrome } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 function FlatListDetail({ title, description, placeholder, settingsKey, settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) {
     const saved   = settings?.[settingsKey] || [];
@@ -55,7 +55,7 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
     };
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb={title} title={title} subtitle={description}
             statusDetail={`${items.length} ${items.length === 1 ? title.toLowerCase().replace(/s$/, '') : title.toLowerCase()}`}
             updatedBy="Admin" updatedAt="now"
@@ -119,7 +119,7 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
                     </CSectionCard>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 }
 

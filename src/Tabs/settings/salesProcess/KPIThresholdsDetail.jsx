@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { SPDetailPageChrome, SPSparkline } from './shared.jsx';
+import { SPSparkline } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const DEFAULT_KPI_THRESHOLDS = [
     { k:'Quota attainment',     unit:'%',  good:100, ok:80,  poor:60,  reverse:false, sample:[62,70,68,75,82,88,94,97,103] },
@@ -116,7 +117,7 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
     const inpSt = { padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
 
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="KPI thresholds" title="KPI thresholds"
             subtitle="Thresholds, colors, and sparkline ranges for dashboards"
             statusDetail={`${rows.filter(r=>!r.hidden).length} KPIs configured`}
@@ -288,6 +289,6 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
                     </div>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };

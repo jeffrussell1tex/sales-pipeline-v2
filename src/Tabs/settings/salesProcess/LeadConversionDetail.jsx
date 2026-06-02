@@ -4,7 +4,7 @@ import { dbFetch } from '../../../utils/storage';
 import { T, eb } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
-import { SPDetailPageChrome } from './shared.jsx';
+import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const DEFAULT_LEAD_CONV_BENCHMARKS = [
     { source: 'Referral / Partner',  good: 30, avg: 15, poor: 15 },
@@ -176,7 +176,7 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
 
 export const LeadConversionDetail = ({ settings, setSettings, onBack }) => {
     return (
-        <SPDetailPageChrome
+        <CategoryDetailChrome
             crumb="Lead conversion benchmarks" title="Lead conversion benchmarks"
             subtitle="Good / average / poor conversion rate targets by lead source"
             statusDetail="8 sources configured"
@@ -221,6 +221,6 @@ export const LeadConversionDetail = ({ settings, setSettings, onBack }) => {
                     </div>
                 </div>
             </div>
-        </SPDetailPageChrome>
+        </CategoryDetailChrome>
     );
 };
