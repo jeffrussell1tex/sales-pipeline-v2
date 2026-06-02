@@ -28,6 +28,10 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
         setStages(prev => prev.map((s, si) => si === i ? { ...s, [field]: val } : s));
         setDirty(true);
     };
+    const addStage = () => {
+        setStages(prev => [...prev, { name:'New stage', prob:50, type:'Open', color:'#8a8378' }]);
+        setDirty(true);
+    };
     const handleCancel = () => { setStages(JSON.parse(JSON.stringify(saved))); setDirty(false); };
     const handleSave   = async () => {
         setSaving(true);
@@ -63,7 +67,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
                     <CSectionCard
                         title="Canonical stages"
                         description="The master list of stages used across all pipelines. Disabling a stage removes it from any pipeline that references it."
-                        headAction={<button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ Add stage</button>}
+                        headAction={<button onClick={addStage} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ Add stage</button>}
                     >
                         <SPTable
                             columns={[

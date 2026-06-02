@@ -74,6 +74,7 @@ export const handler = async (event) => {
                 // Sales process Group 2
                 customFieldsByObject: row.extra?.customFieldsByObject || null,
                 customerTypeTiers:    row.extra?.customerTypeTiers    || null,
+                accountSegmentTiers:  row.extra?.accountSegmentTiers  || null,
                 industries:           row.extra?.industries            || null,
                 buyerPersonas:        row.extra?.buyerPersonas         || [],
                 quotesEnabled:        row.extra?.quotesEnabled         ?? true,
@@ -162,6 +163,7 @@ export const handler = async (event) => {
                 // Sales process Group 2
                 customFieldsByObject: 'customFieldsByObject' in data ? (data.customFieldsByObject || null) : existingExtra.customFieldsByObject || null,
                 customerTypeTiers:    'customerTypeTiers'    in data ? (data.customerTypeTiers    || null) : existingExtra.customerTypeTiers    || null,
+                accountSegmentTiers:  'accountSegmentTiers'  in data ? (data.accountSegmentTiers  || null) : existingExtra.accountSegmentTiers  || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 buyerPersonas:        'buyerPersonas'        in data ? (data.buyerPersonas        || [])   : existingExtra.buyerPersonas        || [],
                 quotesEnabled:        'quotesEnabled'        in data ? !!data.quotesEnabled                : existingExtra.quotesEnabled        ?? true,

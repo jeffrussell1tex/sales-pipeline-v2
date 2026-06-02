@@ -233,6 +233,12 @@ export default function AccountRail() {
         return raw.map(m => typeof m === 'string' ? m : m.name || '').filter(Boolean).sort();
     })();
 
+    const allCustomerTypes = (() => {
+        const tiers = settings?.customerTypeTiers;
+        if (Array.isArray(tiers) && tiers.length) return [...new Set(tiers.map(t => typeof t === 'object' ? t.tier : t).filter(Boolean))];
+        return [...new Set((settings?.customerTypes || []).filter(Boolean))].sort();
+    })();
+
     const subAccounts = (accounts || []).filter(a =>
         (a.parentAccountId || a.parentId) === accountRailId
     );
@@ -619,11 +625,32 @@ export default function AccountRail() {
                                     <select value={formData.accountSegment || ''} onChange={e => hc('accountSegment', e.target.value)}
                                         style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans }}>
                                         <option value="">— Not set —</option>
-                                        {(settings?.customerTypeTiers?.length > 0
-                                            ? settings.customerTypeTiers.map(t => typeof t === 'object' ? t.tier : t)
+                                        {(settings?.accountSegmentTiers?.length > 0
+                                            ? settings.accountSegmentTiers.map(t => typeof t === 'object' ? t.tier : t)
                                             : ['Enterprise','Mid-Market','Partner','SMB','Strategic']
                                         ).map(t => <option key={t} value={t}>{t}</option>)}
                                     </select>
+                                </FieldGroup>
+                                <FieldGroup label="Customer type" wide>
+                                    {(formData.customerTypes || []).length > 0 && (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                                            {(formData.customerTypes || []).map(ct => (
+                                                <span key={ct} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 6px 3px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink }}>
+                                                    {ct}
+                                                    <button type="button" onClick={() => hc('customerTypes', (formData.customerTypes || []).filter(x => x !== ct))}
+                                                        style={{ background: 'none', border: 'none', color: T.ink3, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <Typeahead
+                                        value={customerTypeInput}
+                                        onChange={setCustomerTypeInput}
+                                        suggestions={allCustomerTypes.filter(t => !(formData.customerTypes || []).includes(t))}
+                                        onSelect={(v) => { if (v && !(formData.customerTypes || []).includes(v)) hc('customerTypes', [...(formData.customerTypes || []), v]); setCustomerTypeInput(''); }}
+                                        placeholder="Add customer type…"
+                                        dropUp
+                                    />
                                 </FieldGroup>
                             </div>
                         ) : (
@@ -637,6 +664,7 @@ export default function AccountRail() {
                                 )}
                                 <ReadRow label="Industry" value={account?.verticalMarket || account?.industry} />
                                 <ReadRow label="Segment" value={account?.accountSegment} />
+                                <ReadRow label="Customer type" value={((account?.customerTypes && account.customerTypes.length) ? account.customerTypes : (account?.customerType ? [account.customerType] : [])).join(', ')} />
                                 <ReadRow label="Assigned Rep" value={account?.assignedRep} />
                                 <ReadRow label="Territory" value={account?.assignedTerritory} />
                                 {account?.parentAccountId && (() => {

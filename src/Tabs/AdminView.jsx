@@ -16,6 +16,7 @@ import { CustomFieldsDetail } from './settings/salesProcess/CustomFieldsDetail.j
 import { PainPointsDetail } from './settings/salesProcess/PainPointsDetail.jsx';
 import { BuyerPersonasDetail } from './settings/salesProcess/BuyerPersonasDetail.jsx';
 import { CustomerTypesDetail } from './settings/salesProcess/CustomerTypesDetail.jsx';
+import { AccountSegmentsDetail } from './settings/salesProcess/AccountSegmentsDetail.jsx';
 import { IndustriesDetail } from './settings/salesProcess/IndustriesDetail.jsx';
 import { CompetitorsDetail, ReasonsWonDetail, ReasonsLostDetail } from './settings/salesProcess/FlatListDetail.jsx';
 import { ApprovalTiersDetail } from './settings/quoting/ApprovalTiersDetail.jsx';
@@ -310,6 +311,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         'custom-fields':        'custom-fields',
         'pain-points':          'pain-points',
         'customer-types':       'customer-types',
+        'account-segments':     'account-segments',
         'industries':           'industries',
         'duplicates':           'duplicates',
         'contact-duplicates':   'contact-duplicates',
@@ -468,6 +470,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         if (id === 'reasons-won')     return <ReasonsWonDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
+        if (id === 'account-segments') return <AccountSegmentsDetail settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
         if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         // Dispatch detail pages
         if (id === 'dsp-skills'    || id === 'dispatch-skills')   return <DispatchSkillsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
