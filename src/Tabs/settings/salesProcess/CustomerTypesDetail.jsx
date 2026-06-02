@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
-import { StatusChip } from '../shared/ui.jsx';
 import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
@@ -15,13 +14,6 @@ const DEFAULT_CUST_TYPES = [
     { tier:'Partner',    hex:'#3a5a7a', range:'n/a',          sla:'4h',  owner:'Channel',     count:18  },
 ];
 
-const AUTO_CLASS_RULES = [
-    { when:'Annual revenue < $10M',      then:'SMB' },
-    { when:'Annual revenue $10M–$250M',  then:'Mid-Market' },
-    { when:'Annual revenue $250M–$1B',   then:'Enterprise' },
-    { when:'Annual revenue ≥ $1B',       then:'Strategic' },
-    { when:'Account type = Partner',     then:'Partner' },
-];
 
 export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTab, setAccountsDeepFilter }) => {
     const saved    = settings?.customerTypeTiers?.length ? settings.customerTypeTiers : DEFAULT_CUST_TYPES;
@@ -49,7 +41,6 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
     };
 
     // Kebab state
-    const SYSTEM_TIERS = new Set(['SMB','Mid-Market','Enterprise','Strategic','Partner']);
     const [openTierKebab, setOpenTierKebab]   = useState(null); // tier index
 
     // Close kebab on click-outside
@@ -76,7 +67,6 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
 
     const inpSm = { padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' };
 
-    const total = tiers.reduce((a,t) => a+t.count, 0)||1;
 
     return (
         <CategoryDetailChrome
@@ -94,7 +84,7 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
                 </div>
             }
         >
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:20 }}>
                 {/* Left */}
                 <div>
                     {/* Add tier form */}
@@ -129,13 +119,13 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
                     <CSectionCard title="Tiers" description="Drag to reorder. Classification drives auto-assignment rules, SLA, and dashboard grouping.">
                         <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'visible' }}>
                             {/* Header */}
-                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.3fr 140px 90px 70px 130px 28px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10, borderRadius:`${T.r+2}px ${T.r+2}px 0 0` }}>
-                                {['','Tier','Revenue','Accounts','SLA','Owning team',''].map((h,i) => (
-                                    <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i===3||i===4 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
+                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.3fr 140px 70px 130px 28px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10, borderRadius:`${T.r+2}px ${T.r+2}px 0 0` }}>
+                                {['','Tier','Revenue','SLA','Owning team',''].map((h,i) => (
+                                    <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i===3 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
                                 ))}
                             </div>
                             {tiers.map((t,i) => (
-                                <div key={i} style={{ display:'grid', gridTemplateColumns:'28px 1.3fr 140px 90px 70px 130px 28px', padding:'12px 14px', gap:10, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background:T.surface, fontSize:13, fontFamily:T.sans, position:'relative' }}>
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'28px 1.3fr 140px 70px 130px 28px', padding:'12px 14px', gap:10, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background:T.surface, fontSize:13, fontFamily:T.sans, position:'relative' }}>
                                     <div><SPDrag/></div>
 
                                     {/* Tier name — inline edit or display */}
@@ -162,8 +152,6 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
                                             : t.range}
                                     </div>
 
-                                    {/* Accounts */}
-                                    <div style={{ textAlign:'right', fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink }}>{t.count}</div>
 
                                     {/* SLA */}
                                     <div style={{ textAlign:'right', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>
@@ -194,15 +182,7 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
                                                         {[
                                                             { label:'Edit tier', action: () => { setEditingTierIdx(i); setEditingTierVal({}); setOpenTierKebab(null); } },
                                                             { label:'Duplicate',  action: () => handleDuplicateTier(i) },
-                                                            { label:'View accounts', note:'Filter Accounts tab by this tier', action: () => {
-                                                                setOpenTierKebab(null);
-                                                                if (setAccountsDeepFilter && setActiveTab) {
-                                                                    setAccountsDeepFilter({ accountSegment: t.tier });
-                                                                    setActiveTab('accounts');
-                                                                }
-                                                            }},
-                                                            { label:'Where this is used', note: AUTO_CLASS_RULES.filter(r => r.then === t.tier).length > 0 ? `${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length} auto-classification rule${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length!==1?'s':''}` : 'No rules reference this tier', action: () => setOpenTierKebab(null) },
-                                                            { label:'Delete', danger:true, disabled: SYSTEM_TIERS.has(t.tier), note: SYSTEM_TIERS.has(t.tier) ? 'System tier' : null, action: () => { if (!SYSTEM_TIERS.has(t.tier)) handleDeleteTier(i); } },
+                                                            { label:'Delete', danger:true, action: () => handleDeleteTier(i) },
                                                         ].map((item, mi) => (
                                                             <button key={mi} onClick={item.action} disabled={item.disabled}
                                                                 style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.disabled ? T.inkMuted : item.danger ? T.danger : T.ink, cursor: item.disabled ? 'default' : 'pointer', fontFamily:T.sans, opacity: item.disabled ? 0.5 : 1 }}
@@ -221,42 +201,6 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
                             ))}
                         </div>
                     </CSectionCard>
-
-                    <CSectionCard title="Auto-classification" description="Rules that assign a tier when an account is created or revenue changes.">
-                        {AUTO_CLASS_RULES.map((r,i) => (
-                            <div key={i} style={{ padding:'10px 0', borderBottom: i<AUTO_CLASS_RULES.length-1 ? `1px solid ${T.border}` : 'none', display:'flex', gap:14, alignItems:'center' }}>
-                                <div style={{ flex:1, fontSize:12.5, color:T.ink, fontFamily:T.sans }}>
-                                    <span style={{ color:T.inkMuted }}>When</span> <b>{r.when}</b>
-                                    <span style={{ color:T.inkMuted }}> → tag as </span>
-                                    <b style={{ color:T.goldInk }}>{r.then}</b>
-                                </div>
-                                <StatusChip status="ok" detail="Active" small/>
-                                <span style={{ fontSize:11, color:T.goldInk, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Edit</span>
-                            </div>
-                        ))}
-                    </CSectionCard>
-                </div>
-
-                {/* Right — distribution chart */}
-                <div>
-                    <div style={{ position:'sticky', top:20 }}>
-                        <CSectionCard title="Distribution" description="Accounts by tier.">
-                            {/* Stacked bar */}
-                            <div style={{ display:'flex', gap:2, height:12, borderRadius:2, overflow:'hidden', border:`1px solid ${T.border}`, marginBottom:14 }}>
-                                {tiers.map((t,i) => (
-                                    <div key={i} style={{ flex:t.count, background:t.hex }} title={`${t.tier} — ${t.count}`}/>
-                                ))}
-                            </div>
-                            {tiers.map((t,i) => (
-                                <div key={i} style={{ padding:'6px 0', display:'flex', alignItems:'center', gap:8, fontSize:12, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none' }}>
-                                    <span style={{ width:8, height:8, background:t.hex, borderRadius:2, flexShrink:0 }}/>
-                                    <span style={{ flex:1, color:T.ink, fontFamily:T.sans }}>{t.tier}</span>
-                                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid }}>{t.count}</span>
-                                    <span style={{ width:44, textAlign:'right', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{Math.round(t.count/total*100)}%</span>
-                                </div>
-                            ))}
-                        </CSectionCard>
-                    </div>
                 </div>
             </div>
         </CategoryDetailChrome>
