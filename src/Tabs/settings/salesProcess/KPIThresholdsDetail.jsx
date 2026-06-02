@@ -14,8 +14,6 @@ const DEFAULT_KPI_THRESHOLDS = [
     { k:'Opportunity pipeline', unit:'$M', good:4,   ok:2.5, poor:1.5, reverse:false, sample:[1.8,2.1,2.5,2.8,3.2,3.5,3.8,4.1,4.3] },
 ];
 
-const CORE_KPI_IDS = new Set(['Quota attainment','Win rate','Avg deal size','Sales cycle length','Activities per deal','Opportunity pipeline']);
-
 export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.kpiThresholds?.length ? settings.kpiThresholds : DEFAULT_KPI_THRESHOLDS;
     const [rows, setRows]     = useState(() => JSON.parse(JSON.stringify(saved)));

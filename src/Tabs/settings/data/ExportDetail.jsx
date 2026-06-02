@@ -4,10 +4,12 @@ import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
 
+const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+const FLm = ({ label, children }) => (<div style={{ marginBottom:14 }}><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+
 const NewExportModal = ({ onClose, onSave, existing }) => {
     const selStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
     const inpStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
-    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
     const nameRef  = React.useRef(null);
     const [scope,  setScope]  = React.useState(existing?.scope       || 'accounts');
     const [fmt,    setFmt]    = React.useState(existing?.format      || 'CSV');
@@ -421,7 +423,6 @@ const NewDsrModal = ({ onClose, onSave }) => {
     const [notes,   setNotes]   = React.useState('');
     const [saving,  setSaving]  = React.useState(false);
     const inpStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
-    const FL = ({ label, children }) => (<div style={{ marginBottom:14 }}><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
     const handleSave = async () => {
         if (!subject.trim()) return;
         setSaving(true);
@@ -432,14 +433,14 @@ const NewDsrModal = ({ onClose, onSave }) => {
         <DataModal onClose={onClose}>
             <DataModalHead title="New DSR request" sub="Log a GDPR Data Subject Request. 30-day SLA starts today." onClose={onClose}/>
             <div style={{ flex:1, overflowY:'auto', padding:22 }}>
-                <FL label="Subject (email or identifier)"><input value={subject} onChange={e => setSubject(e.target.value)} placeholder="user@example.com" style={inpStyle}/></FL>
-                <FL label="Request type">
+                <FLm label="Subject (email or identifier)"><input value={subject} onChange={e => setSubject(e.target.value)} placeholder="user@example.com" style={inpStyle}/></FLm>
+                <FLm label="Request type">
                     <select value={type} onChange={e => setType(e.target.value)} style={{ ...inpStyle, appearance:'none', cursor:'pointer' }}>
                         <option value="access">Access — provide a copy of their data</option>
                         <option value="erasure">Erasure — delete all their data (Right to be forgotten)</option>
                     </select>
-                </FL>
-                <FL label="Notes (optional)"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Any context…" style={{ ...inpStyle, resize:'vertical' }}/></FL>
+                </FLm>
+                <FLm label="Notes (optional)"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Any context…" style={{ ...inpStyle, resize:'vertical' }}/></FLm>
             </div>
             <DataModalFoot>
                 <DataBtn label="Cancel" onClick={onClose}/>

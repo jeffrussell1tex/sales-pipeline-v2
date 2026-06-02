@@ -2,29 +2,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
-import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter } from './shared.jsx';
+import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow } from './shared.jsx';
 
 const WebhookRowMenu = ({ wh, onToggle, onDelete, onClose }) => {
-    const MR = ({ icon, label, danger:isDanger, onClick }) => (
-        <div onClick={() => { onClick(); onClose(); }}
-            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderRadius:3,
-                cursor:'pointer', color:isDanger?T.danger:T.ink, fontFamily:T.sans }}
-            onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.10)'}
-            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-            <span style={{ width:14, textAlign:'center', fontSize:13 }}>{icon}</span>
-            <span style={{ fontSize:12.5, fontWeight:500 }}>{label}</span>
-        </div>
-    );
     return (
         <div style={{ width:192, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
             boxShadow:'0 8px 24px rgba(42,38,34,0.12)', padding:4, position:'relative' }}>
             <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
                 background:T.surface, border:`1px solid ${T.borderStrong}`,
                 borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
-            <MR icon={wh.active?'⏸':'▶'} label={wh.active?'Pause':'Resume'} onClick={onToggle}/>
-            <MR icon="🔁" label="Send test event" onClick={() => {}}/>
+            <MenuRow icon={wh.active?'⏸':'▶'} label={wh.active?'Pause':'Resume'} onClick={onToggle} onClose={onClose}/>
+            <MenuRow icon="🔁" label="Send test event" onClick={() => {}} onClose={onClose}/>
             <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
-            <MR icon="🗑" label="Delete endpoint" danger onClick={onDelete}/>
+            <MenuRow icon="🗑" label="Delete endpoint" danger onClick={onDelete} onClose={onClose}/>
         </div>
     );
 };

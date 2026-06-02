@@ -5,17 +5,6 @@ import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
 
-const PT_TERRITORIES = [
-    { id:'tr1', name:'NAM West',    parent:'NAM',  rule:"State ∈ {CA, OR, WA, NV, AZ, UT, ID}", accounts:412, pipeline:'$2.4M', ownerInit:'JH', owner:'Jeff Hammond',  reps:4, status:'Active' },
-    { id:'tr2', name:'NAM East',    parent:'NAM',  rule:"State ∈ {NY, MA, PA, NJ, CT, VA, NC, DC, FL, GA}", accounts:386, pipeline:'$2.1M', ownerInit:'DP', owner:'Devon Park',   reps:4, status:'Active' },
-    { id:'tr3', name:'NAM Central', parent:'NAM',  rule:"State ∈ {TX, IL, OH, MI, MN, CO, MO}", accounts:264, pipeline:'$1.5M', ownerInit:'DP', owner:'Devon Park',   reps:2, status:'Active' },
-    { id:'tr4', name:'NAM Strategic',parent:'NAM', rule:'Account ∈ "Top 200 Named Accounts"',   accounts:200, pipeline:'$5.8M', ownerInit:'NT', owner:'Naomi Tran',   reps:4, status:'Active' },
-    { id:'tr5', name:'EMEA North',  parent:'EMEA', rule:"Country ∈ {UK, IE, DE, NL, SE, NO, DK, FI}", accounts:184, pipeline:'$1.0M', ownerInit:'BW', owner:'Ben Whitaker',reps:2, status:'Active' },
-    { id:'tr6', name:'EMEA South',  parent:'EMEA', rule:"Country ∈ {FR, ES, IT, PT}",           accounts:96,  pipeline:'$0.6M', ownerInit:'BW', owner:'Ben Whitaker',reps:1, status:'Active' },
-    { id:'tr7', name:'APAC',        parent:'—',    rule:'Region = APAC',                         accounts:41,  pipeline:'$0.2M', ownerInit:null,  owner:'Unassigned',   reps:0, status:'Unassigned' },
-    { id:'tr8', name:'LATAM',       parent:'—',    rule:'Region = LATAM',                        accounts:22,  pipeline:'$0.1M', ownerInit:null,  owner:'Unassigned',   reps:0, status:'Unassigned' },
-];
-
 const TerritoryModal = ({ mode, territory, settings, setSettings, onClose }) => {
     // mode: 'new' | 'edit' | 'owner' | 'reps' | 'rule'
     const allUsers   = (settings.users || []).filter(u => u.name);

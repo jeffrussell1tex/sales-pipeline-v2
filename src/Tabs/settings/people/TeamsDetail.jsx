@@ -17,17 +17,6 @@ const AttainBar = ({ pct }) => {
     );
 };
 
-const PT_TEAMS = [
-    { id:'tm1', name:'Leadership',      color:'#2a2622', manager:'Morgan Reyes',  managerInit:'MR', members:1,  pipeline:'—',           quotaQ:null,  attainPct:null, region:'—' },
-    { id:'tm2', name:'RevOps',          color:'#5e4e7a', manager:'Priya Sharma',  managerInit:'PS', members:1,  pipeline:'—',           quotaQ:null,  attainPct:null, region:'—' },
-    { id:'tm3', name:'SMB West',        color:'#4d6b3d', manager:'Jeff Hammond',  managerInit:'JH', members:4,  pipeline:'New business', quotaQ:'$1.2M', attainPct:78, region:'NAM-West' },
-    { id:'tm4', name:'SMB East',        color:'#3a5a7a', manager:'Devon Park',    managerInit:'DP', members:4,  pipeline:'New business', quotaQ:'$1.2M', attainPct:92, region:'NAM-East' },
-    { id:'tm5', name:'Mid-Market',      color:'#7a6a48', manager:'Naomi Tran',    managerInit:'NT', members:4,  pipeline:'New business', quotaQ:'$2.4M', attainPct:104,region:'NAM-Strategic' },
-    { id:'tm6', name:'EMEA',            color:'#9c5a3a', manager:'Ben Whitaker',  managerInit:'BW', members:3,  pipeline:'New business', quotaQ:'$1.6M', attainPct:66, region:'EMEA' },
-    { id:'tm7', name:'Customer Success',color:'#3a6a6a', manager:'Alia Karim',    managerInit:'AK', members:3,  pipeline:'Renewals',     quotaQ:'$2.1M', attainPct:95, region:'Global' },
-    { id:'tm8', name:'Finance',         color:'#6b2a22', manager:'Theo Mensah',   managerInit:'TM', members:1,  pipeline:'—',           quotaQ:null,  attainPct:null, region:'—' },
-];
-
 const TEAM_COLORS = ['#2a2622','#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#3a5530','#7a4a6a'];
 
 const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {

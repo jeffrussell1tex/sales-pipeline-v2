@@ -41,49 +41,7 @@ const fmtRunAge = (iso) => {
     return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
 };
 
-const NewAutomationModal = ({ onClose, onCreated }) => {
-    const [step,    setStep]    = React.useState(1); // 1=trigger 2=conditions 3=actions 4=review
-    const [name,    setName]    = React.useState('');
-    const [trigger, setTrigger] = React.useState('opportunity.stage_changed');
-    const [conditions, setConds] = React.useState([]); // [{field,operator,value}]
-    const [actions,    setActs]  = React.useState([{ type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
-    const [saving,  setSaving]  = React.useState(false);
-    const [error,   setError]   = React.useState('');
-
-    const inp = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, width:'100%', boxSizing:'border-box' };
-    const sel = { ...inp, appearance:'none', cursor:'pointer' };
-
-    const addCond = () => setConds(p => [...p, { field:'stage', operator:'eq', value:'' }]);
-    const delCond = (i) => setConds(p => p.filter((_,j) => j!==i));
-    const setCond = (i, k, v) => setConds(p => p.map((c,j) => j===i ? {...c,[k]:v} : c));
-
-    const addAction = () => setActs(p => [...p, { type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
-    const delAction = (i) => setActs(p => p.filter((_,j) => j!==i));
-    const setAction = (i, k, v) => setActs(p => p.map((a,j) => j===i ? (k==='type' ? { type:v, params:{} } : {...a, params:{...a.params,[k]:v}}) : a));
-
-    const steps = ['Trigger','Conditions','Actions','Review'];
-
-    const handleSave = async () => {
-        if (!name.trim()) { setError('Name is required'); return; }
-        if (actions.length === 0) { setError('Add at least one action'); return; }
-        setSaving(true); setError('');
-        try {
-            const res  = await dbFetch('/.netlify/functions/automations', {
-                method: 'POST',
-                body: JSON.stringify({ name: name.trim(), triggerEvent: trigger, conditions, actions }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to create');
-            if (onCreated) onCreated(data.automation);
-            onClose();
-        } catch(e) {
-            setError(e.message);
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const ActionEditor = ({ action, idx }) => (
+const ActionEditor = ({ action, idx, actions, setAction, delAction }) => (
         <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, padding:'14px 16px', marginBottom:10 }}>
             <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:10 }}>
                 <select value={action.type} onChange={e => setAction(idx,'type',e.target.value)} style={{ ...sel, flex:1 }}>
@@ -132,6 +90,48 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
             )}
         </div>
     );
+
+const NewAutomationModal = ({ onClose, onCreated }) => {
+    const [step,    setStep]    = React.useState(1); // 1=trigger 2=conditions 3=actions 4=review
+    const [name,    setName]    = React.useState('');
+    const [trigger, setTrigger] = React.useState('opportunity.stage_changed');
+    const [conditions, setConds] = React.useState([]); // [{field,operator,value}]
+    const [actions,    setActs]  = React.useState([{ type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
+    const [saving,  setSaving]  = React.useState(false);
+    const [error,   setError]   = React.useState('');
+
+    const inp = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, width:'100%', boxSizing:'border-box' };
+    const sel = { ...inp, appearance:'none', cursor:'pointer' };
+
+    const addCond = () => setConds(p => [...p, { field:'stage', operator:'eq', value:'' }]);
+    const delCond = (i) => setConds(p => p.filter((_,j) => j!==i));
+    const setCond = (i, k, v) => setConds(p => p.map((c,j) => j===i ? {...c,[k]:v} : c));
+
+    const addAction = () => setActs(p => [...p, { type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
+    const delAction = (i) => setActs(p => p.filter((_,j) => j!==i));
+    const setAction = (i, k, v) => setActs(p => p.map((a,j) => j===i ? (k==='type' ? { type:v, params:{} } : {...a, params:{...a.params,[k]:v}}) : a));
+
+    const steps = ['Trigger','Conditions','Actions','Review'];
+
+    const handleSave = async () => {
+        if (!name.trim()) { setError('Name is required'); return; }
+        if (actions.length === 0) { setError('Add at least one action'); return; }
+        setSaving(true); setError('');
+        try {
+            const res  = await dbFetch('/.netlify/functions/automations', {
+                method: 'POST',
+                body: JSON.stringify({ name: name.trim(), triggerEvent: trigger, conditions, actions }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to create');
+            if (onCreated) onCreated(data.automation);
+            onClose();
+        } catch(e) {
+            setError(e.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     return (
         <IntModal width={680} onClose={onClose}>
@@ -199,7 +199,7 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
                 {/* Step 3: Actions */}
                 {step === 3 && (<>
                     <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>Actions <span style={{ fontSize:12, fontWeight:400, color:T.inkMuted }}>(run in order)</span></div>
-                    {actions.map((a,i) => <ActionEditor key={i} action={a} idx={i}/>)}
+                    {actions.map((a,i) => <ActionEditor key={i} action={a} idx={i} actions={actions} setAction={setAction} delAction={delAction}/>)}
                     <button onClick={addAction} style={{ fontSize:12.5, fontWeight:600, color:T.info, background:'none', border:`1px dashed ${T.border}`, borderRadius:T.r, padding:'7px 14px', cursor:'pointer', fontFamily:T.sans, width:'100%' }}>
                         + Add action
                     </button>

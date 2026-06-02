@@ -62,3 +62,15 @@ export const IntModalFooter = ({ left, children }) => (
         <div style={{ display:'flex', gap:8 }}>{children}</div>
     </div>
 );
+
+// Shared row-menu item (used by WebhookRowMenu, ApiKeyRowMenu)
+export const MenuRow = ({ icon, label, danger:isDanger, onClick, onClose }) => (
+    <div onClick={() => { onClick(); onClose && onClose(); }}
+    style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderRadius:3,
+    cursor:'pointer', color:isDanger?T.danger:T.ink, fontFamily:T.sans }}
+    onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.10)'}
+    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+    <span style={{ width:14, textAlign:'center', fontSize:13 }}>{icon}</span>
+    <span style={{ fontSize:12.5, fontWeight:500 }}>{label}</span>
+    </div>
+    );

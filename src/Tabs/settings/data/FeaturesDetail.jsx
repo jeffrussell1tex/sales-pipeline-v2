@@ -77,6 +77,8 @@ const ResetAiModal = ({ onClose }) => {
     );
 };
 
+const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>{children}</div>);
+
 export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
     const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true, dispatchEnabled: false });
@@ -191,7 +193,6 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
 
     const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
     const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
-    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>{children}</div>);
 
     const CAT_FILTERS = ['All', 'Live', 'Coming soon', 'Beta'];
     const visibleFlags = FLAG_DEFS.filter(f => {

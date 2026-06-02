@@ -21,6 +21,33 @@ const SEC_SESSION = {
     ],
 };
 
+const FL = ({ label: lbl, hint, children }) => (
+    <div style={{ marginBottom:14 }}>
+    <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{lbl}</label>
+    {children}
+    {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
+    </div>
+    );
+
+const MenuRow = ({ icon, label, sub, kbd, danger:isDanger, onClick, action }) => (
+    <div onClick={() => action(onClick || (() => {}))}
+    style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:3, cursor:'pointer',
+    color: isDanger ? T.danger : T.ink }}
+    onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+    <span style={{ width:16, textAlign:'center', fontSize:13, flexShrink:0 }}>{icon}</span>
+    <div style={{ flex:1 }}>
+    <div style={{ fontSize:12.5, fontWeight:500 }}>{label}</div>
+    {sub && <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:1 }}>{sub}</div>}
+    </div>
+    {kbd && <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>{kbd}</span>}
+    </div>
+    );
+
+const GL = ({ children }) => (
+    <div style={{ padding:'6px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>{children}</div>
+    );
+
 const IpRangeModal = ({ existing, onClose, onSave }) => {
     const [cidr,    setCidr]    = React.useState(existing?.cidr    || '');
     const [label,   setLabel]   = React.useState(existing?.label   || '');
@@ -44,14 +71,6 @@ const IpRangeModal = ({ existing, onClose, onSave }) => {
         if (err) { setCidrErr(err); return; }
         onSave({ cidr: cidr.trim(), label: label.trim() || cidr.trim(), status, hits: existing?.hits || '0' });
     };
-
-    const FL = ({ label: lbl, hint, children }) => (
-        <div style={{ marginBottom:14 }}>
-            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{lbl}</label>
-            {children}
-            {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
-        </div>
-    );
 
     return (
         <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:800,
@@ -131,21 +150,6 @@ const IpRowMenu = ({ row, onEdit, onRemove, onToggleEnforced }) => {
 
     const action = (fn) => { fn(); setOpen(false); };
 
-    const MenuRow = ({ icon, label, sub, kbd, danger:isDanger, onClick }) => (
-        <div onClick={() => action(onClick || (() => {}))}
-            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:3, cursor:'pointer',
-                color: isDanger ? T.danger : T.ink }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-            <span style={{ width:16, textAlign:'center', fontSize:13, flexShrink:0 }}>{icon}</span>
-            <div style={{ flex:1 }}>
-                <div style={{ fontSize:12.5, fontWeight:500 }}>{label}</div>
-                {sub && <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:1 }}>{sub}</div>}
-            </div>
-            {kbd && <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>{kbd}</span>}
-        </div>
-    );
-
     return (
         <div style={{ position:'relative' }}>
             <button ref={btnRef} onClick={openMenu}
@@ -164,15 +168,15 @@ const IpRowMenu = ({ row, onEdit, onRemove, onToggleEnforced }) => {
                     <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
                         background:T.surface, border:`1px solid ${T.borderStrong}`,
                         borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
-                    <MenuRow icon="✎" label="Edit range" kbd="↵" onClick={() => onEdit && onEdit(row)}/>
-                    <MenuRow icon="⊕" label="Duplicate" kbd="⌘D" onClick={() => {}}/>
+                    <MenuRow icon="✎" label="Edit range" kbd="↵" onClick={() => onEdit && onEdit(row)} action={action}/>
+                    <MenuRow icon="⊕" label="Duplicate" kbd="⌘D" onClick={() => {}} action={action}/>
                     <MenuRow icon="◑"
                         label={row.status === 'Enforced' ? 'Switch to logged-only' : 'Enforce'}
                         sub={row.status === 'Enforced' ? 'Record attempts only' : 'Block sign-ins outside'}
-                        onClick={() => onToggleEnforced && onToggleEnforced(row)}/>
-                    <MenuRow icon="⌕" label={`View ${row.hits || '0'} sign-ins`}  onClick={() => {}}/>
+                        onClick={() => onToggleEnforced && onToggleEnforced(row)} action={action}/>
+                    <MenuRow icon="⌕" label={`View ${row.hits || '0'} sign-ins`}  onClick={() => {}} action={action}/>
                     <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
-                    <MenuRow icon="🗑" label="Remove" danger onClick={() => onRemove && onRemove(row)}/>
+                    <MenuRow icon="🗑" label="Remove" danger onClick={() => onRemove && onRemove(row)} action={action}/>
                 </div>
             )}
         </div>
@@ -262,10 +266,6 @@ export const SessionDetail = ({ onBack }) => {
     };
 
     // GroupLabel shorthand
-    const GL = ({ children }) => (
-        <div style={{ padding:'6px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>{children}</div>
-    );
-
     const handleSaveIp = (row) => {
         if (editingIp) {
             // Edit existing
