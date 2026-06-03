@@ -126,6 +126,7 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
     const update = (patch) => { setCfg(prev => ({ ...prev, ...patch })); setDirty(true); };
     const updateFitRules = (rules) => { setCfg(prev => ({ ...prev, fit: { ...prev.fit, rules } })); setDirty(true); };
     const updateEngRules = (rules) => { setCfg(prev => ({ ...prev, engagement: { ...prev.engagement, rules } })); setDirty(true); };
+    const updatePredictive = (patch) => { setCfg(prev => ({ ...prev, predictive: { ...(prev.predictive || {}), ...patch } })); setDirty(true); };
     const setBand = (which, idx, val) => {
         setCfg(prev => {
             const b = JSON.parse(JSON.stringify(prev.buckets));
@@ -201,6 +202,22 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
                     </div>
                     <div style={{ marginTop: 16 }}>
                         <button onClick={handleReset} style={{ padding: '6px 12px', background: 'none', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Reset to defaults</button>
+                    </div>
+                </CSectionCard>
+
+                <CSectionCard title="Predictive scoring" description="Per-org model that predicts each lead's conversion probability from fit, engagement, and source history. Trains nightly once enough leads are decided. Shown alongside Fit/Engagement, never replacing them.">
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 14 }}>
+                        <input type="checkbox" checked={cfg.predictive?.enabled === true} onChange={e => updatePredictive({ enabled: e.target.checked })} />
+                        <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Predictive scoring {cfg.predictive?.enabled ? 'enabled' : 'disabled'}</span>
+                    </label>
+                    <div style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5, fontFamily: T.sans }}>Min. decided leads to train</div>
+                        <input type="number" value={cfg.predictive?.minClosedRecords ?? 150} onChange={e => updatePredictive({ minClosedRecords: Number(e.target.value) || 0 })} style={{ ...inputStyle, width: 90 }} />
+                    </div>
+                    <div style={{ padding: '10px 12px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, color: T.inkMid, fontFamily: T.sans }}>
+                        {cfg.predictive?.model
+                            ? <>Model trained on <b style={{ color: T.ink }}>{cfg.predictive.model.n}</b> decided leads · <b style={{ color: T.ink }}>{cfg.predictive.model.accuracy}%</b> training accuracy · last trained {cfg.predictive.model.trainedAt ? new Date(cfg.predictive.model.trainedAt).toLocaleDateString() : '—'}. A win-probability now shows on each lead.</>
+                            : <>No model yet. Enable predictive scoring and accumulate at least <b style={{ color: T.ink }}>{cfg.predictive?.minClosedRecords ?? 150}</b> decided (Converted / Dead) leads — the model trains automatically on the nightly run.</>}
                     </div>
                 </CSectionCard>
             </div>

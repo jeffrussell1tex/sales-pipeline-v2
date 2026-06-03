@@ -111,7 +111,7 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
                 {headline}
             </div>
             {hasAxes && size !== 'sm' && (
-                <div style={{ fontSize: 9.5, color: T.inkMuted, fontFamily: T.sans, textAlign: 'center', marginTop: 2, whiteSpace: 'nowrap' }}>F{fit || 0}·E{eng || 0}</div>
+                <div style={{ fontSize: 9.5, color: T.inkMuted, fontFamily: T.sans, textAlign: 'center', marginTop: 2, whiteSpace: 'nowrap' }}>F{fit || 0}·E{eng || 0}{bd && bd.probability != null ? ` ·P${bd.probability}` : ''}</div>
             )}
             {open && canExplain && (
                 <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 60, width: 232, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', padding: '10px 12px' }}>
@@ -119,6 +119,12 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
                         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: T.ink, fontFamily: T.sans }}>Why this score</span>
                         <span style={{ fontSize: 10.5, fontWeight: 700, color, textTransform: 'uppercase', fontFamily: T.sans }}>{band}</span>
                     </div>
+                    {bd.probability != null && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', marginBottom: 8, background: T.surface2, borderRadius: T.r }}>
+                            <span style={{ fontSize: 11.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Win probability</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: T.goldInk, fontFamily: T.sans }}>{bd.probability}%</span>
+                        </div>
+                    )}
                     <BDSection title={`Fit · ${fit || 0}`} rows={bd.fit} />
                     <BDSection title={`Engagement · ${eng || 0}`} rows={bd.engagement} />
                 </div>

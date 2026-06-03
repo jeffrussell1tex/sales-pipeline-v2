@@ -97,13 +97,19 @@ export function scoreLead(lead, leadScoring, now = Date.now(), events = null) {
     const fit = computeFit(lead, cfg.fit);
     const eng = computeEngagement(lead, cfg.engagement, now, events);
     const bucket = bucketOf(fit.score, eng.score, cfg.buckets);
-    return {
+    const out = {
         leadScoreFit:        fit.score,
         leadScoreEngagement: eng.score,
         leadScoreBucket:     bucket,
         scoreBreakdown:      { fit: fit.matched, engagement: eng.matched, scoredAt: new Date(now).toISOString() },
         score:               Math.max(fit.score, eng.score), // legacy headline number
     };
+    const pred = cfg.predictive;
+    if (pred && pred.enabled && pred.model && pred.model.coefficients) {
+        const prob = predictLead(lead, events, pred.model, now);
+        if (prob != null) out.scoreBreakdown.probability = prob;
+    }
+    return out;
 }
 
 export const DEFAULT_LEAD_SCORING = {
@@ -139,5 +145,85 @@ export const DEFAULT_LEAD_SCORING = {
         ],
     },
     buckets: { cold: [0, 40], warm: [41, 70], hot: [71, 100] },
-    predictive: { enabled: false, minClosedRecords: 200, lastTrainedAt: null, coefficients: null },
+    predictive: { enabled: false, minClosedRecords: 150, model: null },
 };
+
+// --- Phase 2: predictive (per-org logistic regression) ----------------------
+// Predicts conversion probability from signals that PRECEDE the outcome.
+// `status` is excluded (it defines the train label -> would be target leakage).
+// Trained per org; never pooled across tenants.
+
+const PRED_SENIORITY = [
+    { kw: ['ceo','founder','owner','president','chief','cxo','cfo','cto','coo','partner'], v: 1 },
+    { kw: ['vp','vice president','head of'], v: 0.75 },
+    { kw: ['director'], v: 0.55 },
+    { kw: ['manager','lead'], v: 0.35 },
+];
+function seniorityScore(title) {
+    const t = String(title || '').toLowerCase();
+    for (const s of PRED_SENIORITY) if (s.kw.some(k => t.includes(k))) return s.v;
+    return 0.15;
+}
+
+export const PREDICTIVE_FEATURES = ['seniority', 'dealSize', 'recency', 'events', 'sourceWinRate'];
+
+export function leadFeatures(lead, events, sourceWinRate, now = Date.now()) {
+    const arr = Number(lead.estimatedARR) || 0;
+    const dstr = lead.firstTouchDate || lead.createdAt;
+    const t = dstr ? new Date(dstr).getTime() : NaN;
+    const recency = isNaN(t) ? 0 : Math.exp(-Math.max(0, (now - t) / 86400000) / 30);
+    const ec = Math.min(1, (events ? events.length : 0) / 5);
+    const swr = (sourceWinRate && (sourceWinRate[lead.source] != null ? sourceWinRate[lead.source] : sourceWinRate._avg)) ?? 0.3;
+    return [seniorityScore(lead.title), Math.min(1, arr / 250000), recency, ec, swr];
+}
+
+export function computeSourceWinRate(decided) {
+    const by = {}; let won = 0, tot = 0;
+    for (const r of decided) {
+        const s = r.source || '_unknown';
+        (by[s] = by[s] || { won: 0, tot: 0 }).tot++; tot++;
+        if (r.label === 1) { by[s].won++; won++; }
+    }
+    const avg = tot ? won / tot : 0.3;
+    const out = { _avg: avg };
+    for (const s in by) out[s] = by[s].tot >= 3 ? by[s].won / by[s].tot : avg;
+    return out;
+}
+
+export function trainLeadModel(rows, { iters = 400, lr = 0.3, l2 = 0.01 } = {}) {
+    if (!rows || rows.length < 20) return null;
+    const k = rows[0].features.length;
+    const means = Array(k).fill(0), stds = Array(k).fill(0);
+    for (const r of rows) for (let j = 0; j < k; j++) means[j] += r.features[j];
+    for (let j = 0; j < k; j++) means[j] /= rows.length;
+    for (const r of rows) for (let j = 0; j < k; j++) stds[j] += (r.features[j] - means[j]) ** 2;
+    for (let j = 0; j < k; j++) stds[j] = Math.sqrt(stds[j] / rows.length) || 1;
+    const X = rows.map(r => r.features.map((v, j) => (v - means[j]) / stds[j]));
+    const y = rows.map(r => r.label);
+    const sig = z => 1 / (1 + Math.exp(-z));
+    let w = Array(k).fill(0), b = 0;
+    for (let it = 0; it < iters; it++) {
+        const gw = Array(k).fill(0); let gb = 0;
+        for (let i = 0; i < X.length; i++) {
+            const e = sig(X[i].reduce((s, v, j) => s + v * w[j], 0) + b) - y[i];
+            for (let j = 0; j < k; j++) gw[j] += e * X[i][j];
+            gb += e;
+        }
+        for (let j = 0; j < k; j++) w[j] -= lr * (gw[j] / X.length + l2 * w[j]);
+        b -= lr * (gb / X.length);
+    }
+    let correct = 0;
+    for (let i = 0; i < X.length; i++) {
+        const p = sig(X[i].reduce((s, v, j) => s + v * w[j], 0) + b);
+        if ((p >= 0.5 ? 1 : 0) === y[i]) correct++;
+    }
+    return { coefficients: w, bias: b, means, stds, featureNames: PREDICTIVE_FEATURES, n: rows.length, accuracy: Math.round((correct / rows.length) * 100), trainedAt: new Date().toISOString() };
+}
+
+export function predictLead(lead, events, model, now = Date.now()) {
+    if (!model || !model.coefficients) return null;
+    const f = leadFeatures(lead, events, model.sourceWinRate, now);
+    let z = model.bias || 0;
+    for (let j = 0; j < f.length; j++) z += ((f[j] - model.means[j]) / (model.stds[j] || 1)) * model.coefficients[j];
+    return Math.round((1 / (1 + Math.exp(-z))) * 100);
+}
