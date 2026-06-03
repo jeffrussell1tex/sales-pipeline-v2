@@ -123,7 +123,7 @@ export const handler = async (event) => {
     // ── 3. Update lastUsedAt (fire and forget — don't await, keep response fast)
     db.update(apiKeys)
       .set({ lastUsedAt: new Date(), updatedAt: new Date() })
-      .where(eq(apiKeys.id, keyRow.id))
+      .where(and(eq(apiKeys.id, keyRow.id), eq(apiKeys.orgId, keyRow.orgId)))
       .catch(err => console.error('lastUsedAt update failed:', err.message));
 
     // ── 4. Route by resource ──────────────────────────────────────────────────

@@ -179,7 +179,7 @@ export const handler = async (event) => {
                 const outcome = resolved ? 'resolved' : 'ignored';
                 await db.update(recommendationLog)
                     .set({ outcome, resolvedAt: resolved ? new Date() : null, daysToResolve })
-                    .where(eq(recommendationLog.id, log.id));
+                    .where(and(eq(recommendationLog.id, log.id), eq(recommendationLog.orgId, orgId)));
                 return { id: log.id, outcome };
             }));
 
