@@ -1,11 +1,12 @@
 // settings/salesProcess/IndustriesDetail.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
+import { useApp } from '../../../AppContext';
 
 const DEFAULT_INDUSTRIES = [
     { k:'Technology',          subs:['SaaS','Hardware','IT services','Cybersecurity','Fintech'],              n:118 },
@@ -125,7 +126,21 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
         setDirty(true);
     };
 
-    const total = industries.reduce((a,i) => a+i.n, 0) || 1;
+    const { accounts = [] } = useApp();
+    const counts = useMemo(() => {
+        const idx = industries.map(ind => ({ k: ind.k, set: new Set([String(ind.k).toLowerCase(), ...(ind.subs || []).map(s => String(s).toLowerCase())]) }));
+        const c = {};
+        for (const a of accounts) {
+            const ai = String(a.industry || a.verticalMarket || '').trim().toLowerCase();
+            if (!ai) continue;
+            const hit = idx.find(x => x.set.has(ai));
+            if (hit) c[hit.k] = (c[hit.k] || 0) + 1;
+        }
+        return c;
+    }, [accounts, industries]);
+    const totalAccounts = accounts.length || 1;
+    const categorized = Object.values(counts).reduce((a, n) => a + n, 0);
+    const distItems = [...industries].map(ind => ({ k: ind.k, n: counts[ind.k] || 0 })).sort((a, b) => b.n - a.n);
     const totalSubs = industries.reduce((a,i) => a+i.subs.length, 0);
 
     return (
@@ -307,21 +322,25 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                 <div>
                     <div style={{ position:'sticky', top:20 }}>
                         <CSectionCard title="Distribution" description="Accounts per primary industry.">
-                            {industries.map((ind,i) => {
-                                const pct = (ind.n/total)*100;
+                            {distItems.map((ind,i) => {
+                                const n = ind.n;
+                                const pct = (n / totalAccounts) * 100;
                                 return (
-                                    <div key={i} style={{ padding:'6px 0', borderBottom: i<industries.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                    <div key={ind.k} style={{ padding:'6px 0', borderBottom: i<distItems.length-1 ? `1px solid ${T.border}` : 'none' }}>
                                         <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, marginBottom:4 }}>
-                                            <span style={{ flex:1, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{ind.k}</span>
-                                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid, fontSize:11 }}>{ind.n}</span>
-                                            <span style={{ width:36, textAlign:'right', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{pct.toFixed(1)}%</span>
+                                            <span style={{ flex:1, color: n>0 ? T.ink : T.inkMuted, fontWeight:500, fontFamily:T.sans }}>{ind.k}</span>
+                                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid, fontSize:11 }}>{n}</span>
+                                            <span style={{ width:42, textAlign:'right', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{pct.toFixed(1)}%</span>
                                         </div>
                                         <div style={{ height:4, background:T.surface2, borderRadius:1 }}>
-                                            <div style={{ width:`${pct}%`, height:'100%', background:T.goldInk, opacity:0.7, borderRadius:1 }}/>
+                                            <div style={{ width:`${Math.min(100, pct)}%`, height:'100%', background:T.goldInk, opacity:0.7, borderRadius:1 }}/>
                                         </div>
                                     </div>
                                 );
                             })}
+                            <div style={{ marginTop:10, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                                {categorized} of {accounts.length} accounts matched to a primary industry
+                            </div>
                         </CSectionCard>
                     </div>
                 </div>
