@@ -33,6 +33,8 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     const [newSub, setNewSub]   = useState('');
     const [showAddInd, setShowAddInd] = useState(false);
     const [newInd, setNewInd]   = useState('');
+    const [dragIdx, setDragIdx] = useState(null);
+    const [overIdx, setOverIdx] = useState(null);
 
     const handleCancel = () => { setIndustries(JSON.parse(JSON.stringify(saved))); setDirty(false); };
     const handleSave   = async () => {
@@ -100,6 +102,17 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
         setDirty(true); setOpenIndKebab(null);
     };
 
+    const moveIndustry = (from, to) => {
+        if (from === null || to === null || from === to || from < 0 || to < 0) return;
+        setIndustries(prev => {
+            const next = [...prev];
+            const [m] = next.splice(from, 1);
+            next.splice(to, 0, m);
+            return next;
+        });
+        setDirty(true);
+    };
+
     const total = industries.reduce((a,i) => a+i.n, 0) || 1;
     const totalSubs = industries.reduce((a,i) => a+i.subs.length, 0);
 
@@ -138,10 +151,10 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                             {industries.map((ind,i) => {
                                 const isExp = expanded[ind.k];
                                 return (
-                                    <div key={ind.k} style={{ borderBottom: i<industries.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                    <div key={ind.k} onDragOver={e => { if (dragIdx !== null) { e.preventDefault(); setOverIdx(i); } }} onDrop={e => { e.preventDefault(); moveIndustry(dragIdx, i); setDragIdx(null); setOverIdx(null); }} style={{ borderBottom: i<industries.length-1 ? `1px solid ${T.border}` : 'none', opacity: dragIdx===i ? 0.4 : 1, boxShadow: (overIdx===i && dragIdx!==null && dragIdx!==i) ? `inset 0 2px 0 ${T.goldInk}` : 'none', transition:'box-shadow 80ms, opacity 80ms' }}>
                                         {/* Row header */}
                                         <div style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:10, opacity: ind.hidden ? 0.5 : 1 }}>
-                                            <SPDrag/>
+                                            <span draggable onDragStart={e => { setDragIdx(i); e.dataTransfer.effectAllowed='move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch(_) {} }} onDragEnd={() => { setDragIdx(null); setOverIdx(null); }} style={{ cursor:'grab', display:'inline-flex', alignItems:'center' }}><SPDrag/></span>
                                             <span onClick={() => setExpanded(p => ({ ...p, [ind.k]: !isExp }))}
                                                 style={{ fontSize:11, color:T.inkMuted, cursor:'pointer', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)', display:'inline-block', transition:'transform 120ms', userSelect:'none' }}>▾</span>
 
