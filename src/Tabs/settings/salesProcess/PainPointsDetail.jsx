@@ -1,5 +1,5 @@
 // settings/salesProcess/PainPointsDetail.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -24,10 +24,33 @@ const MOST_USED_PAIN_POINTS = [
     { k:'Pipeline hygiene is poor',         n:19 },
 ];
 
+// Minimal CSV parser (quoted fields + commas)
+const parsePainCSV = (text) => {
+    const rows = [];
+    for (const line of String(text).replace(/\r\n/g, '\n').split('\n')) {
+        if (line.trim() === '') continue;
+        const cells = []; let cur = '', inQ = false;
+        for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (inQ) {
+                if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+                else if (c === '"') inQ = false;
+                else cur += c;
+            } else if (c === '"') inQ = true;
+            else if (c === ',') { cells.push(cur); cur = ''; }
+            else cur += c;
+        }
+        cells.push(cur);
+        rows.push(cells.map(s => s.trim()));
+    }
+    return rows;
+};
+
 export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved    = settings?.painPoints?.length ? settings.painPoints : DEFAULT_PAIN_POINTS;
     const [groups, setGroups]   = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
+    const fileInputRef = useRef(null);
     const [saving, setSaving]   = useState(false);
     const [search, setSearch]   = useState('');
     const [addingCat, setAddingCat] = useState(false);
@@ -66,6 +89,33 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
     const removeItem = (cat, item) => {
         setGroups(prev => prev.map(g => g.cat === cat ? { ...g, items: g.items.filter(i => i !== item) } : g));
         setDirty(true);
+
+    const importCSV = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            let rows = parsePainCSV(reader.result || '');
+            if (!rows.length) { e.target.value = ''; return; }
+            const h0 = (rows[0][0] || '').toLowerCase(), h1 = (rows[0][1] || '').toLowerCase();
+            if (h0.includes('categ') || h1.includes('pain') || h1.includes('point')) rows = rows.slice(1);
+            setGroups(prev => {
+                const next = JSON.parse(JSON.stringify(prev));
+                const byCat = {}; next.forEach(g => { byCat[g.cat.toLowerCase()] = g; });
+                for (const r of rows) {
+                    const cat = (r[0] || '').trim(), item = (r[1] || '').trim();
+                    if (!cat) continue;
+                    let grp = byCat[cat.toLowerCase()];
+                    if (!grp) { grp = { cat, items: [] }; next.push(grp); byCat[cat.toLowerCase()] = grp; }
+                    if (item && !grp.items.some(x => x.toLowerCase() === item.toLowerCase())) grp.items.push(item);
+                }
+                return next;
+            });
+            setDirty(true);
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
     };
 
     const totalItems = groups.reduce((a,g) => a + g.items.length, 0);
@@ -84,9 +134,10 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             rightActions={
                 <div style={{ display:'flex', gap:8 }}>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                    <button onClick={() => fileInputRef.current?.click()} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
                         <LIcon name="upload" size={13}/> Import CSV
                     </button>
+                    <input ref={fileInputRef} type="file" accept=".csv,text/csv" style={{ display:'none' }} onChange={importCSV}/>
                     <button onClick={() => setAddingCat(true)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
                         + New pain point
                     </button>
