@@ -1,5 +1,5 @@
 // settings/salesProcess/IndustriesDetail.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
@@ -49,13 +49,17 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     // Industry kebab state
     const [openIndKebab, setOpenIndKebab]     = useState(null); // industry key
     const [kebabPos, setKebabPos]             = useState(null);
+    const kebabMenuRef = useRef(null);
     const [renamingInd,  setRenamingInd]      = useState(null); // industry key
     const [renameIndVal, setRenameIndVal]     = useState('');
 
     // Close kebab on click-outside
     React.useEffect(() => {
         if (openIndKebab === null) return;
-        const handler = () => setOpenIndKebab(null);
+        const handler = (e) => {
+            if (kebabMenuRef.current && e && e.target && kebabMenuRef.current.contains(e.target)) return;
+            setOpenIndKebab(null);
+        };
         document.addEventListener('click', handler);
         window.addEventListener('scroll', handler, true);
         window.addEventListener('resize', handler);
@@ -199,7 +203,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                                                     }}
                                                     style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
                                                 {openIndKebab === ind.k && kebabPos && createPortal(
-                                                    <div onClick={e => e.stopPropagation()} style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), zIndex:1000, width:224, maxHeight:kebabPos.maxHeight, overflowY:'auto', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 10px 30px rgba(42,38,34,0.20)' }}>
+                                                    <div ref={kebabMenuRef} onClick={e => e.stopPropagation()} style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), zIndex:1000, width:224, maxHeight:kebabPos.maxHeight, overflowY:'auto', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 10px 30px rgba(42,38,34,0.20)' }}>
 
                                                         {/* Edit */}
                                                         {[
