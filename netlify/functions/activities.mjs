@@ -1,8 +1,30 @@
 import { db } from '../../db/index.js';
-import { activities } from '../../db/schema.js';
+import { activities, leads, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
+import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
+
+async function rescoreLead(orgId, leadId) {
+    if (!leadId) return;
+    const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.orgId, orgId)));
+    if (!lead) return;
+    let cfg = DEFAULT_LEAD_SCORING;
+    try {
+        const [srow] = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+        cfg = srow?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
+    } catch (e) { /* defaults */ }
+    if (cfg.enabled === false) return;
+    const acts = await db.select().from(activities).where(and(eq(activities.orgId, orgId), eq(activities.leadId, leadId)));
+    const events = acts.map(a => ({ type: a.type, at: a.date || a.createdAt }));
+    const sc = scoreLead(lead, cfg, Date.now(), events);
+    if (!sc) return;
+    await db.update(leads).set({
+        leadScoreFit: sc.leadScoreFit, leadScoreEngagement: sc.leadScoreEngagement,
+        leadScoreBucket: sc.leadScoreBucket, scoreBreakdown: sc.scoreBreakdown,
+        score: sc.score, scoreUpdatedAt: new Date(),
+    }).where(and(eq(leads.id, leadId), eq(leads.orgId, orgId)));
+}
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -22,6 +44,7 @@ export const handler = async (event) => {
         opportunityId: d.opportunityId || null,
         contactId:     d.contactId     || null,
         accountId:     d.accountId     || null,
+        leadId:        d.leadId        || null,
         author:        d.author        || null,
     });
 
@@ -34,6 +57,7 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const [inserted] = await db.insert(activities).values({ ...sanitize(data), orgId }).returning();
+            if (inserted.leadId) { try { await rescoreLead(orgId, inserted.leadId); } catch (e) { console.warn('lead rescore (post) failed:', e.message); } }
             return { statusCode: 201, headers, body: JSON.stringify({ activity: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -44,6 +68,7 @@ export const handler = async (event) => {
             const [upserted] = await db.insert(activities).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: activities.id, setWhere: eq(activities.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
+            if (upserted.leadId) { try { await rescoreLead(orgId, upserted.leadId); } catch (e) { console.warn('lead rescore (put) failed:', e.message); } }
             return { statusCode: 200, headers, body: JSON.stringify({ activity: upserted }) };
         }
         if (event.httpMethod === 'DELETE') {
@@ -53,7 +78,9 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
+            const [delActy] = await db.select({ leadId: activities.leadId }).from(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId)));
             await db.delete(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId)));
+            if (delActy?.leadId) { try { await rescoreLead(orgId, delActy.leadId); } catch (e) { console.warn('lead rescore (del) failed:', e.message); } }
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };

@@ -1,10 +1,12 @@
 // settings/salesProcess/IndustriesDetail.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
+import { useApp } from '../../../AppContext';
 
 const DEFAULT_INDUSTRIES = [
     { k:'Technology',          subs:['SaaS','Hardware','IT services','Cybersecurity','Fintech'],              n:118 },
@@ -33,6 +35,8 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     const [newSub, setNewSub]   = useState('');
     const [showAddInd, setShowAddInd] = useState(false);
     const [newInd, setNewInd]   = useState('');
+    const [dragIdx, setDragIdx] = useState(null);
+    const [overIdx, setOverIdx] = useState(null);
 
     const handleCancel = () => { setIndustries(JSON.parse(JSON.stringify(saved))); setDirty(false); };
     const handleSave   = async () => {
@@ -45,15 +49,26 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
 
     // Industry kebab state
     const [openIndKebab, setOpenIndKebab]     = useState(null); // industry key
+    const [kebabPos, setKebabPos]             = useState(null);
+    const kebabMenuRef = useRef(null);
     const [renamingInd,  setRenamingInd]      = useState(null); // industry key
     const [renameIndVal, setRenameIndVal]     = useState('');
 
     // Close kebab on click-outside
     React.useEffect(() => {
         if (openIndKebab === null) return;
-        const handler = () => setOpenIndKebab(null);
+        const handler = (e) => {
+            if (kebabMenuRef.current && e && e.target && kebabMenuRef.current.contains(e.target)) return;
+            setOpenIndKebab(null);
+        };
         document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
+        window.addEventListener('scroll', handler, true);
+        window.addEventListener('resize', handler);
+        return () => {
+            document.removeEventListener('click', handler);
+            window.removeEventListener('scroll', handler, true);
+            window.removeEventListener('resize', handler);
+        };
     }, [openIndKebab]);
 
     const addSub = (indKey) => {
@@ -100,7 +115,34 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
         setDirty(true); setOpenIndKebab(null);
     };
 
-    const total = industries.reduce((a,i) => a+i.n, 0) || 1;
+    const moveIndustry = (from, to) => {
+        if (from === null || to === null || from === to || from < 0 || to < 0) return;
+        setIndustries(prev => {
+            const next = [...prev];
+            const [m] = next.splice(from, 1);
+            next.splice(to, 0, m);
+            return next;
+        });
+        setDirty(true);
+    };
+
+    const { accounts = [] } = useApp();
+    const counts = useMemo(() => {
+        const idx = industries.map(ind => ({ k: ind.k, set: new Set([String(ind.k).toLowerCase(), ...(ind.subs || []).map(s => String(s).toLowerCase())]) }));
+        const c = {};
+        for (const a of accounts) {
+            if (a.parentAccountId) continue;
+            const ai = String(a.verticalMarket || a.industry || '').trim().toLowerCase();
+            if (!ai) continue;
+            const hit = idx.find(x => x.set.has(ai));
+            if (hit) c[hit.k] = (c[hit.k] || 0) + 1;
+        }
+        return c;
+    }, [accounts, industries]);
+    const topLevelCount = accounts.filter(a => !a.parentAccountId).length;
+    const totalAccounts = topLevelCount || 1;
+    const categorized = Object.values(counts).reduce((a, n) => a + n, 0);
+    const distItems = [...industries].map(ind => ({ k: ind.k, n: counts[ind.k] || 0 })).sort((a, b) => b.n - a.n);
     const totalSubs = industries.reduce((a,i) => a+i.subs.length, 0);
 
     return (
@@ -138,10 +180,10 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                             {industries.map((ind,i) => {
                                 const isExp = expanded[ind.k];
                                 return (
-                                    <div key={ind.k} style={{ borderBottom: i<industries.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                    <div key={ind.k} onDragOver={e => { if (dragIdx !== null) { e.preventDefault(); setOverIdx(i); } }} onDrop={e => { e.preventDefault(); moveIndustry(dragIdx, i); setDragIdx(null); setOverIdx(null); }} style={{ borderBottom: i<industries.length-1 ? `1px solid ${T.border}` : 'none', opacity: dragIdx===i ? 0.4 : 1, boxShadow: (overIdx===i && dragIdx!==null && dragIdx!==i) ? `inset 0 2px 0 ${T.goldInk}` : 'none', transition:'box-shadow 80ms, opacity 80ms' }}>
                                         {/* Row header */}
                                         <div style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:10, opacity: ind.hidden ? 0.5 : 1 }}>
-                                            <SPDrag/>
+                                            <span draggable onDragStart={e => { setDragIdx(i); e.dataTransfer.effectAllowed='move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch(_) {} }} onDragEnd={() => { setDragIdx(null); setOverIdx(null); }} style={{ cursor:'grab', display:'inline-flex', alignItems:'center' }}><SPDrag/></span>
                                             <span onClick={() => setExpanded(p => ({ ...p, [ind.k]: !isExp }))}
                                                 style={{ fontSize:11, color:T.inkMuted, cursor:'pointer', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)', display:'inline-block', transition:'transform 120ms', userSelect:'none' }}>▾</span>
 
@@ -164,11 +206,21 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
 
                                             {/* Kebab */}
                                             <div style={{ position:'relative', marginLeft:8 }} onClick={e => e.stopPropagation()}>
-                                                <button onClick={() => setOpenIndKebab(openIndKebab === ind.k ? null : ind.k)}
+                                                <button onClick={(e) => {
+                                                        if (openIndKebab === ind.k) { setOpenIndKebab(null); return; }
+                                                        const r = e.currentTarget.getBoundingClientRect();
+                                                        const MENU_W = 224;
+                                                        const below = window.innerHeight - r.bottom, above = r.top;
+                                                        const openUp = below < 300 && above > below;
+                                                        const left = Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8));
+                                                        setKebabPos(openUp
+                                                            ? { left, bottom: window.innerHeight - r.top + 4, maxHeight: above - 16 }
+                                                            : { left, top: r.bottom + 4, maxHeight: below - 16 });
+                                                        setOpenIndKebab(ind.k);
+                                                    }}
                                                     style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
-                                                {openIndKebab === ind.k && (
-                                                    <div style={{ position:'absolute', right:0, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 20px rgba(42,38,34,0.14)', minWidth:220, overflow:'hidden',
-                                                ...(i >= industries.length - 4 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }) }}>
+                                                {openIndKebab === ind.k && kebabPos && createPortal(
+                                                    <div ref={kebabMenuRef} onClick={e => e.stopPropagation()} style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), zIndex:1000, width:224, maxHeight:kebabPos.maxHeight, overflowY:'auto', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 10px 30px rgba(42,38,34,0.20)' }}>
 
                                                         {/* Edit */}
                                                         {[
@@ -235,7 +287,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                                                             <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Removes tag from all accounts</div>
                                                         </button>
                                                     </div>
-                                                )}
+                                                , document.body)}
                                             </div>
                                         </div>
                                         {/* Sub-industries */}
@@ -272,21 +324,25 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                 <div>
                     <div style={{ position:'sticky', top:20 }}>
                         <CSectionCard title="Distribution" description="Accounts per primary industry.">
-                            {industries.map((ind,i) => {
-                                const pct = (ind.n/total)*100;
+                            {distItems.map((ind,i) => {
+                                const n = ind.n;
+                                const pct = (n / totalAccounts) * 100;
                                 return (
-                                    <div key={i} style={{ padding:'6px 0', borderBottom: i<industries.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                    <div key={ind.k} style={{ padding:'6px 0', borderBottom: i<distItems.length-1 ? `1px solid ${T.border}` : 'none' }}>
                                         <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, marginBottom:4 }}>
-                                            <span style={{ flex:1, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{ind.k}</span>
-                                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid, fontSize:11 }}>{ind.n}</span>
-                                            <span style={{ width:36, textAlign:'right', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{pct.toFixed(1)}%</span>
+                                            <span style={{ flex:1, color: n>0 ? T.ink : T.inkMuted, fontWeight:500, fontFamily:T.sans }}>{ind.k}</span>
+                                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid, fontSize:11 }}>{n}</span>
+                                            <span style={{ width:42, textAlign:'right', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{pct.toFixed(1)}%</span>
                                         </div>
                                         <div style={{ height:4, background:T.surface2, borderRadius:1 }}>
-                                            <div style={{ width:`${pct}%`, height:'100%', background:T.goldInk, opacity:0.7, borderRadius:1 }}/>
+                                            <div style={{ width:`${Math.min(100, pct)}%`, height:'100%', background:T.goldInk, opacity:0.7, borderRadius:1 }}/>
                                         </div>
                                     </div>
                                 );
                             })}
+                            <div style={{ marginTop:10, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                                {categorized} of {topLevelCount} accounts matched to a primary industry
+                            </div>
                         </CSectionCard>
                     </div>
                 </div>

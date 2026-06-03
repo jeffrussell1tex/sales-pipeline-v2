@@ -7,11 +7,11 @@ import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 const DEFAULT_CUST_TYPES = [
-    { tier:'SMB',        hex:'#8a9a7a', range:'< $10M',       sla:'24h', owner:'SMB teams',   count:312 },
-    { tier:'Mid-Market', hex:'#b87333', range:'$10M–$250M',   sla:'8h',  owner:'Mid-Market',  count:148 },
-    { tier:'Enterprise', hex:'#7a5a3c', range:'$250M–$1B',    sla:'2h',  owner:'Enterprise',  count:42  },
-    { tier:'Strategic',  hex:'#4d6b3d', range:'$1B+',         sla:'30m', owner:'Strategic',   count:11  },
-    { tier:'Partner',    hex:'#3a5a7a', range:'n/a',          sla:'4h',  owner:'Channel',     count:18  },
+    { tier:'SMB', hex:'#8a9a7a' },
+    { tier:'Mid-Market', hex:'#b87333' },
+    { tier:'Enterprise', hex:'#7a5a3c' },
+    { tier:'Strategic', hex:'#4d6b3d' },
+    { tier:'Partner', hex:'#3a5a7a' },
 ];
 
 
@@ -21,7 +21,7 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
     const [dirty, setDirty]     = useState(false);
     const [saving, setSaving]   = useState(false);
     const [showAdd, setShowAdd] = useState(false);
-    const [newTier, setNewTier] = useState({ tier:'', hex:'#7a6a48', range:'', sla:'', owner:'', count:0 });
+    const [newTier, setNewTier] = useState({ tier:'', hex:'#7a6a48' });
     const [addErr, setAddErr]   = useState('');
 
     const handleCancel = () => { setTiers(JSON.parse(JSON.stringify(saved))); setDirty(false); setShowAdd(false); };
@@ -36,7 +36,7 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
     const handleAddTier = () => {
         if (!newTier.tier.trim()) { setAddErr('Tier name is required.'); return; }
         setTiers(prev => [...prev, { ...newTier, count:0 }]);
-        setNewTier({ tier:'', hex:'#7a6a48', range:'', sla:'', owner:'', count:0 });
+        setNewTier({ tier:'', hex:'#7a6a48' });
         setAddErr(''); setShowAdd(false); setDirty(true);
     };
 
@@ -91,12 +91,9 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
                     {showAdd && (
                         <div style={{ background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2, padding:16, marginBottom:14, boxShadow:'0 2px 12px rgba(42,38,34,0.08)' }}>
                             <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:12, fontFamily:T.sans }}>New tier</div>
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 120px 80px 1fr auto auto', gap:10, alignItems:'flex-end' }}>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto auto', gap:10, alignItems:'flex-end' }}>
                                 {[
                                     { label:'Tier name', key:'tier', placeholder:'e.g. Enterprise' },
-                                    { label:'Revenue', key:'range', placeholder:'$250M+' },
-                                    { label:'Owning team', key:'owner', placeholder:'e.g. Enterprise' },
-                                    { label:'SLA', key:'sla', placeholder:'2h' },
                                 ].map(f => (
                                     <div key={f.key}>
                                         <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>{f.label}</label>
@@ -119,13 +116,13 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
                     <CSectionCard title="Tiers" description="Drag to reorder. Classification drives auto-assignment rules, SLA, and dashboard grouping.">
                         <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'visible' }}>
                             {/* Header */}
-                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.3fr 140px 70px 130px 28px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10, borderRadius:`${T.r+2}px ${T.r+2}px 0 0` }}>
-                                {['','Tier','Revenue','SLA','Owning team',''].map((h,i) => (
+                            <div style={{ display:'grid', gridTemplateColumns:'28px 1fr 28px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10, borderRadius:`${T.r+2}px ${T.r+2}px 0 0` }}>
+                                {['','Tier',''].map((h,i) => (
                                     <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i===3 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
                                 ))}
                             </div>
                             {tiers.map((t,i) => (
-                                <div key={i} style={{ display:'grid', gridTemplateColumns:'28px 1.3fr 140px 70px 130px 28px', padding:'12px 14px', gap:10, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background:T.surface, fontSize:13, fontFamily:T.sans, position:'relative' }}>
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'28px 1fr 28px', padding:'12px 14px', gap:10, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background:T.surface, fontSize:13, fontFamily:T.sans, position:'relative' }}>
                                     <div><SPDrag/></div>
 
                                     {/* Tier name — inline edit or display */}
@@ -144,29 +141,6 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
                                             </span>
                                         )}
                                     </div>
-
-                                    {/* Revenue */}
-                                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>
-                                        {editingTierIdx === i
-                                            ? <input value={editingTierVal.range??t.range} onChange={e => setEditingTierVal(p => ({ ...p, range:e.target.value }))} style={{ ...inpSm, fontFamily:'ui-monospace,Menlo,monospace' }}/>
-                                            : t.range}
-                                    </div>
-
-
-                                    {/* SLA */}
-                                    <div style={{ textAlign:'right', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>
-                                        {editingTierIdx === i
-                                            ? <input value={editingTierVal.sla??t.sla} onChange={e => setEditingTierVal(p => ({ ...p, sla:e.target.value }))} style={{ ...inpSm, textAlign:'right', fontFamily:'ui-monospace,Menlo,monospace', width:56 }}/>
-                                            : t.sla}
-                                    </div>
-
-                                    {/* Owning team */}
-                                    <div style={{ color:T.inkMid, fontSize:12 }}>
-                                        {editingTierIdx === i
-                                            ? <input value={editingTierVal.owner??t.owner} onChange={e => setEditingTierVal(p => ({ ...p, owner:e.target.value }))} style={{ ...inpSm }}/>
-                                            : t.owner}
-                                    </div>
-
                                     {/* Kebab */}
                                     <div style={{ position:'relative' }}>
                                         {editingTierIdx === i ? (

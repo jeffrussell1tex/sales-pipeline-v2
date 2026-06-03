@@ -3,6 +3,7 @@ import { settings } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { encrypt, decrypt } from './crypto.mjs';
+import { DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export const handler = async (event) => {
@@ -75,6 +76,9 @@ export const handler = async (event) => {
                 customFieldsByObject: row.extra?.customFieldsByObject || null,
                 customerTypeTiers:    row.extra?.customerTypeTiers    || null,
                 accountSegmentTiers:  row.extra?.accountSegmentTiers  || null,
+                leadScoring:          row.extra?.leadScoring          || DEFAULT_LEAD_SCORING,
+                rolePermissions:      row.extra?.rolePermissions      || null,
+                ssoConfig:            row.extra?.ssoConfig            || null,
                 industries:           row.extra?.industries            || null,
                 buyerPersonas:        row.extra?.buyerPersonas         || [],
                 quotesEnabled:        row.extra?.quotesEnabled         ?? true,
@@ -164,6 +168,9 @@ export const handler = async (event) => {
                 customFieldsByObject: 'customFieldsByObject' in data ? (data.customFieldsByObject || null) : existingExtra.customFieldsByObject || null,
                 customerTypeTiers:    'customerTypeTiers'    in data ? (data.customerTypeTiers    || null) : existingExtra.customerTypeTiers    || null,
                 accountSegmentTiers:  'accountSegmentTiers'  in data ? (data.accountSegmentTiers  || null) : existingExtra.accountSegmentTiers  || null,
+                leadScoring:          'leadScoring'          in data ? (data.leadScoring          || null) : existingExtra.leadScoring          || null,
+                rolePermissions:      'rolePermissions'      in data ? (data.rolePermissions      || null) : existingExtra.rolePermissions      || null,
+                ssoConfig:            'ssoConfig'            in data ? (data.ssoConfig            || null) : existingExtra.ssoConfig            || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 buyerPersonas:        'buyerPersonas'        in data ? (data.buyerPersonas        || [])   : existingExtra.buyerPersonas        || [],
                 quotesEnabled:        'quotesEnabled'        in data ? !!data.quotesEnabled                : existingExtra.quotesEnabled        ?? true,

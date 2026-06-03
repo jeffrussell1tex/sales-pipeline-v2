@@ -395,28 +395,28 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // ---------------------------------------------------------------------------
 
     const thStyle = {
-        padding: '0.5rem 0.75rem',
+        padding: '8px 12px',
         background: T.border,
         borderBottom: `1px solid ${T.border}`,
         textAlign: 'left',
         fontWeight: '600',
         whiteSpace: 'nowrap',
-        fontSize: '0.75rem',
+        fontSize: '12px',
         color: T.inkMid,
         textTransform: 'uppercase',
         letterSpacing: '0.04em',
     };
 
     const tdStyle = {
-        padding: '0.5rem 0.75rem',
+        padding: '8px 12px',
         borderBottom: `1px solid ${T.border}`,
-        fontSize: '0.8125rem',
+        fontSize: '13px',
         color: T.ink,
     };
 
     const conflictSelectStyle = {
-        fontSize: '0.75rem',
-        padding: '0.25rem 0.5rem',
+        fontSize: '12px',
+        padding: '4px 8px',
         border: `1px solid ${T.border}`,
         borderRadius: '6px',
         background: T.surface,
@@ -430,7 +430,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         background: T.surface,
         border: `1px solid ${accent === 'warn' ? 'rgba(184,115,51,0.20)' : T.border}`,
         borderRadius: '8px',
-        padding: '0.625rem 0.875rem',
+        padding: '10px 14px',
     });
 
     const entityLabel = importType === 'contacts' ? 'contacts'
@@ -481,10 +481,10 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
             {/* ── Header ── */}
             <h2 {...dragHandleProps} style={{
                 margin: 0,
-                padding: '1rem 1.25rem',
+                padding: '16px 20px',
                 background: '#1c1917',
                 color: T.surface,
-                fontSize: '0.9375rem',
+                fontSize: '15px',
                 fontWeight: '600',
                 display: 'flex',
                 alignItems: 'center',
@@ -497,12 +497,12 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 Import {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : 'Accounts'} from CSV
                 <button
                     onClick={onClose}
-                    style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: T.surface, borderRadius: '6px', width: '28px', height: '28px', fontSize: '1.125rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
+                    style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: T.surface, borderRadius: '6px', width: '28px', height: '28px', fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
                 >×</button>
             </h2>
 
             {/* ── Step indicator ── */}
-            <div style={{ padding: '0.75rem 1.5rem', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+            <div style={{ padding: '12px 24px', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
                     {visibleLabels.map((label, idx) => {
                         const isDone = idx < currentStepIdx;
@@ -521,7 +521,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                         {isDone ? '✓' : idx + 1}
                                     </div>
                                     <span style={{
-                                        fontSize: '0.75rem',
+                                        fontSize: '12px',
                                         fontWeight: isActive ? '600' : '400',
                                         color: isActive ? '#1c1917' : isDone ? T.inkMid : T.inkMuted,
                                         whiteSpace: 'nowrap',
@@ -537,17 +537,17 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
             </div>
 
             {/* ── Body ── */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
 
                 {/* ── Step: Upload ── */}
                 {step === 'upload' && (
                     <div>
-                        <p style={{ color: T.inkMid, marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+                        <p style={{ color: T.inkMid, marginBottom: '24px', fontSize: '14px' }}>
                             Upload a CSV file with your {entityLabel}. The first row should contain column headers.
                         </p>
                         <div
                             style={{
-                                border: `2px dashed ${T.border}`, borderRadius: '8px', padding: '3rem',
+                                border: `2px dashed ${T.border}`, borderRadius: '8px', padding: '48px',
                                 textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
                                 background: T.surface2
                             }}
@@ -556,16 +556,16 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                             onDragLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.surface2; }}
                             onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = T.border; handleFileUpload(e.dataTransfer.files[0]); }}
                         >
-                            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📄</div>
-                            <div style={{ fontWeight: '600', color: T.ink, marginBottom: '0.5rem' }}>
+                            <div style={{ fontSize: '40px', marginBottom: '12px' }}>📄</div>
+                            <div style={{ fontWeight: '600', color: T.ink, marginBottom: '8px' }}>
                                 Drop your CSV file here or click to browse
                             </div>
-                            <div style={{ fontSize: '0.875rem', color: T.inkMid }}>Supports .csv files</div>
+                            <div style={{ fontSize: '14px', color: T.inkMid }}>Supports .csv files</div>
                         </div>
                         <input id="csv-file-input" type="file" accept=".csv,.txt" style={{ display: 'none' }}
                             onChange={e => handleFileUpload(e.target.files[0])} />
                         {parseError && (
-                            <div style={{ color: T.danger, padding: '0.75rem', background: 'rgba(156,58,46,0.08)', borderRadius: '6px', marginTop: '1rem', fontSize: '0.875rem' }}>
+                            <div style={{ color: T.danger, padding: '12px', background: 'rgba(156,58,46,0.08)', borderRadius: '6px', marginTop: '16px', fontSize: '14px' }}>
                                 {parseError}
                             </div>
                         )}
@@ -578,16 +578,16 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 {/* ── Step: Mapping ── */}
                 {step === 'mapping' && (
                     <div>
-                        <p style={{ color: T.inkMid, marginBottom: '1rem', fontSize: '0.875rem' }}>
+                        <p style={{ color: T.inkMid, marginBottom: '16px', fontSize: '14px' }}>
                             Found <strong>{csvRows.length}</strong> rows and <strong>{csvHeaders.length}</strong> columns. Map your CSV columns to app fields:
                         </p>
-                        <div style={{ display: 'grid', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'grid', gap: '12px', marginBottom: '24px' }}>
                             {appFields.map(field => (
                                 <div key={field.key} style={{
-                                    display: 'grid', gridTemplateColumns: '180px 1fr 104px', gap: '1rem', alignItems: 'center',
-                                    padding: '0.5rem 0', borderBottom: `1px solid ${T.border}`
+                                    display: 'grid', gridTemplateColumns: '180px 1fr 104px', gap: '16px', alignItems: 'center',
+                                    padding: '8px 0', borderBottom: `1px solid ${T.border}`
                                 }}>
-                                    <label style={{ fontWeight: '600', fontSize: '0.875rem', color: T.ink }}>
+                                    <label style={{ fontWeight: '600', fontSize: '14px', color: T.ink }}>
                                         {field.label}{field.required ? ' *' : ''}
                                     </label>
                                     <select
@@ -598,9 +598,9 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                             setMappingConfidence({ ...mappingConfidence, [field.key]: v === undefined ? undefined : 1 });
                                         }}
                                         style={{
-                                            padding: '0.5rem', border: `1px solid ${T.border}`, borderRadius: '6px',
+                                            padding: '8px', border: `1px solid ${T.border}`, borderRadius: '6px',
                                             background: fieldMapping[field.key] !== undefined ? 'rgba(58,90,122,0.08)' : T.surface,
-                                            fontSize: '0.875rem', color: T.ink
+                                            fontSize: '14px', color: T.ink
                                         }}
                                     >
                                         <option value="">— Skip this field —</option>
@@ -635,16 +635,16 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 {/* ── Step: Preview ── */}
                 {step === 'preview' && (
                     <div>
-                        <p style={{ color: T.inkMid, marginBottom: '1rem', fontSize: '0.875rem' }}>
+                        <p style={{ color: T.inkMid, marginBottom: '16px', fontSize: '14px' }}>
                             <strong>{previewData.length}</strong> valid records ready to import. Review a sample below:
                         </p>
                         {importType === 'contacts' && previewData.length > 0 && (
-                            <div style={{ fontSize: '0.8125rem', color: T.ok, marginBottom: '1rem', padding: '0.5rem 0.75rem', background: 'rgba(77,107,61,0.10)', borderRadius: '6px' }}>
+                            <div style={{ fontSize: '13px', color: T.ok, marginBottom: '16px', padding: '8px 12px', background: 'rgba(77,107,61,0.10)', borderRadius: '6px' }}>
                                 💡 Companies from imported contacts will be auto-added to your Accounts list if they don't already exist.
                             </div>
                         )}
                         <div style={{ overflowX: 'auto', maxHeight: '300px', overflowY: 'auto', border: `1px solid ${T.border}`, borderRadius: '6px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                 <thead>
                                     <tr>
                                         <th style={thStyle}>#</th>
@@ -668,7 +668,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                             </table>
                         </div>
                         {previewData.length > 10 && (
-                            <div style={{ textAlign: 'center', padding: '0.75rem', color: T.inkMid, fontSize: '0.875rem' }}>
+                            <div style={{ textAlign: 'center', padding: '12px', color: T.inkMid, fontSize: '14px' }}>
                                 ...and {previewData.length - 10} more records
                             </div>
                         )}
@@ -679,7 +679,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 style={priBtn}
                                 onClick={handleCheckDuplicates}
                                 disabled={importing}
-                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: importing ? 0.8 : 1 }}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: importing ? 0.8 : 1 }}
                             >
                                 {importing ? (
                                     <>
@@ -702,31 +702,31 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 {step === 'conflicts' && (
                     <div>
                         {/* Summary cards */}
-                        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
                             <div style={summaryCardStyle('neutral')}>
-                                <div style={{ fontSize: '1.375rem', fontWeight: '700', color: '#1c1917' }}>
+                                <div style={{ fontSize: '22px', fontWeight: '700', color: '#1c1917' }}>
                                     {previewData.length - conflicts.length}
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: T.inkMid, marginTop: '2px' }}>New records</div>
+                                <div style={{ fontSize: '12px', color: T.inkMid, marginTop: '2px' }}>New records</div>
                             </div>
                             <div style={summaryCardStyle('warn')}>
-                                <div style={{ fontSize: '1.375rem', fontWeight: '700', color: T.warn }}>
+                                <div style={{ fontSize: '22px', fontWeight: '700', color: T.warn }}>
                                     {conflicts.length}
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: T.warn, marginTop: '2px' }}>Possible duplicates</div>
+                                <div style={{ fontSize: '12px', color: T.warn, marginTop: '2px' }}>Possible duplicates</div>
                             </div>
                         </div>
 
                         {/* Bulk action row */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                            <p style={{ fontSize: '0.875rem', color: T.inkMid, margin: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <p style={{ fontSize: '14px', color: T.inkMid, margin: 0 }}>
                                 Choose how to handle each duplicate:
                             </p>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
                                 <button
                                     type="button"
                                     style={secBtn}
-                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.75rem' }}
+                                    style={{ fontSize: '12px', padding: '4px 12px' }}
                                     onClick={() => setAllConflictActions('skip')}
                                 >
                                     Skip all
@@ -734,7 +734,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 <button
                                     type="button"
                                     style={secBtn}
-                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.75rem' }}
+                                    style={{ fontSize: '12px', padding: '4px 12px' }}
                                     onClick={() => setAllConflictActions('overwrite')}
                                 >
                                     Overwrite all
@@ -743,8 +743,8 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                         </div>
 
                         {/* Conflicts table */}
-                        <div style={{ border: `1px solid ${T.border}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '0.75rem' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                        <div style={{ border: `1px solid ${T.border}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                 <thead>
                                     <tr>
                                         <th style={{ ...thStyle, width: '32px' }}>#</th>
@@ -762,11 +762,11 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                                 <td style={{ ...tdStyle, color: T.inkMuted, textAlign: 'center' }}>{idx + 1}</td>
                                                 <td style={tdStyle}>
                                                     <div style={{ fontWeight: '600', color: T.ink }}>{inLabel.primary}</div>
-                                                    {inLabel.secondary && <div style={{ fontSize: '0.75rem', color: T.inkMid }}>{inLabel.secondary}</div>}
+                                                    {inLabel.secondary && <div style={{ fontSize: '12px', color: T.inkMid }}>{inLabel.secondary}</div>}
                                                 </td>
                                                 <td style={tdStyle}>
                                                     <div style={{ color: T.ink }}>{exLabel.primary}</div>
-                                                    <div style={{ fontSize: '0.75rem', color: T.inkMuted }}>{c.matchReason}</div>
+                                                    <div style={{ fontSize: '12px', color: T.inkMuted }}>{c.matchReason}</div>
                                                 </td>
                                                 <td style={tdStyle}>
                                                     <select
@@ -785,7 +785,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                             </table>
                         </div>
 
-                        <div style={{ fontSize: '0.8125rem', color: T.inkMid, marginBottom: '1rem' }}>
+                        <div style={{ fontSize: '13px', color: T.inkMid, marginBottom: '16px' }}>
                             <strong>Skip</strong> leaves the existing record unchanged.&nbsp;
                             <strong>Overwrite</strong> replaces it with the data from your CSV.
                         </div>
@@ -797,7 +797,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 style={priBtn}
                                 onClick={handleImportFromConflicts}
                                 disabled={importing}
-                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: importing ? 0.8 : 1 }}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: importing ? 0.8 : 1 }}
                             >
                                 {importing ? (
                                     <>
@@ -820,52 +820,52 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
 
                 {/* ── Step: Results ── */}
                 {step === 'results' && (
-                    <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+                    <div style={{ textAlign: 'center', padding: '32px 0' }}>
                         {importStats?.error ? (
                             <>
-                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>
+                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>
                                     {importStats.partial && importStats.savedCount > 0 ? '⚠️' : '❌'}
                                 </div>
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem', color: importStats.partial && importStats.savedCount > 0 ? T.warn : T.danger }}>
+                                <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: importStats.partial && importStats.savedCount > 0 ? T.warn : T.danger }}>
                                     {importStats.partial && importStats.savedCount > 0 ? 'Partially Imported' : 'Import Failed'}
                                 </h3>
-                                <p style={{ color: T.inkMid, marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+                                <p style={{ color: T.inkMid, marginBottom: '24px', fontSize: '14px' }}>
                                     {importStats.partial && importStats.savedCount != null
                                         ? importStats.savedCount > 0
                                             ? `${importStats.savedCount} of ${importStats.total} records saved. The remaining ${importStats.total - importStats.savedCount} failed — try re-importing them.`
                                             : `All ${importStats.total} records failed to save. This is likely a server error — please try again.`
                                         : importStats.error}
                                 </p>
-                                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                                     <button style={secBtn} onClick={() => setStep('preview')}>← Back</button>
                                     <button style={priBtn} onClick={onClose}>Close</button>
                                 </div>
                             </>
                         ) : (
                             <>
-                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem' }}>
+                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+                                <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px' }}>
                                     Import Complete!
                                 </h3>
-                                <p style={{ color: T.inkMid, marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+                                <p style={{ color: T.inkMid, marginBottom: '24px', fontSize: '14px' }}>
                                     {importType === 'contacts' && ' Any new companies have been added to your Accounts list.'}
                                 </p>
                                 {/* Results breakdown */}
-                                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                                    <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '0.625rem 1.25rem', minWidth: '80px' }}>
-                                        <div style={{ fontSize: '1.375rem', fontWeight: '700', color: '#1c1917' }}>{importStats?.total ?? 0}</div>
-                                        <div style={{ fontSize: '0.75rem', color: T.inkMid }}>imported</div>
+                                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '24px' }}>
+                                    <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '10px 20px', minWidth: '80px' }}>
+                                        <div style={{ fontSize: '22px', fontWeight: '700', color: '#1c1917' }}>{importStats?.total ?? 0}</div>
+                                        <div style={{ fontSize: '12px', color: T.inkMid }}>imported</div>
                                     </div>
                                     {importStats?.skipped > 0 && (
-                                        <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '0.625rem 1.25rem', minWidth: '80px' }}>
-                                            <div style={{ fontSize: '1.375rem', fontWeight: '700', color: T.inkMid }}>{importStats.skipped}</div>
-                                            <div style={{ fontSize: '0.75rem', color: T.inkMid }}>skipped</div>
+                                        <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '10px 20px', minWidth: '80px' }}>
+                                            <div style={{ fontSize: '22px', fontWeight: '700', color: T.inkMid }}>{importStats.skipped}</div>
+                                            <div style={{ fontSize: '12px', color: T.inkMid }}>skipped</div>
                                         </div>
                                     )}
                                     {importStats?.overwritten > 0 && (
-                                        <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '0.625rem 1.25rem', minWidth: '80px' }}>
-                                            <div style={{ fontSize: '1.375rem', fontWeight: '700', color: T.info }}>{importStats.overwritten}</div>
-                                            <div style={{ fontSize: '0.75rem', color: T.inkMid }}>overwritten</div>
+                                        <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '10px 20px', minWidth: '80px' }}>
+                                            <div style={{ fontSize: '22px', fontWeight: '700', color: T.info }}>{importStats.overwritten}</div>
+                                            <div style={{ fontSize: '12px', color: T.inkMid }}>overwritten</div>
                                         </div>
                                     )}
                                 </div>

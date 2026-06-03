@@ -48,6 +48,10 @@ const norm = (l) => ({
     notes:    l.notes      || '',
     createdAt: l.createdAt || l.created_at  || null,
     lastTouch: l.lastActivity || l.lastTouch || null,
+    fit:       (l.leadScoreFit != null ? Number(l.leadScoreFit) : null),
+    eng:       (l.leadScoreEngagement != null ? Number(l.leadScoreEngagement) : null),
+    bucket:    l.leadScoreBucket || null,
+    breakdown: l.scoreBreakdown || null,
     raw:      l,
 });
 
@@ -72,15 +76,59 @@ const Av = ({ name, size=28 }) => {
 };
 
 // ── Shared lead primitives ────────────────────────────────────
-const LeadScore = ({ score, size='md' }) => {
-    const band = scoreBand(score);
-    const color = SCORE_COLORS[band];
-    const w = size==='sm' ? 30 : size==='lg' ? 42 : 36;
-    const h = size==='sm' ? 22 : size==='lg' ? 30 : 26;
-    const fs = size==='sm' ? 11 : size==='lg' ? 15 : 13;
+const bucketColor = (b) => b === 'hot' ? SCORE_COLORS.hot : b === 'warm' ? SCORE_COLORS.warm : SCORE_COLORS.cold;
+
+const BDSection = ({ title, rows }) => (
+    <div style={{ marginBottom: 6 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, marginBottom: 3, fontFamily: T.sans }}>{title}</div>
+        {(rows && rows.length) ? rows.map((r, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11.5, color: T.inkMid, padding: '1px 0', fontFamily: T.sans }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+                <span style={{ fontWeight: 700, color: T.ink }}>+{r.points}</span>
+            </div>
+        )) : <div style={{ fontSize: 11, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No matching signals</div>}
+    </div>
+);
+
+const LeadScore = ({ lead, score, size = 'md' }) => {
+    const fit = lead?.fit, eng = lead?.eng;
+    const hasAxes = lead && lead.bucket && (fit != null || eng != null);
+    const band = hasAxes ? lead.bucket : scoreBand(score ?? lead?.score ?? 0);
+    const color = hasAxes ? bucketColor(band) : (SCORE_COLORS[band] || SCORE_COLORS.cold);
+    const headline = hasAxes ? Math.max(fit || 0, eng || 0) : (score ?? lead?.score ?? 0);
+    const w = size === 'sm' ? 30 : size === 'lg' ? 42 : 36;
+    const h = size === 'sm' ? 22 : size === 'lg' ? 30 : 26;
+    const fs = size === 'sm' ? 11 : size === 'lg' ? 15 : 13;
+    const [open, setOpen] = useState(false);
+    const bd = lead?.breakdown;
+    const canExplain = hasAxes && bd && (((bd.fit || []).length) || ((bd.engagement || []).length));
     return (
-        <div style={{ width:w, height:h, borderRadius:T.r, background: band==='hot' ? color : 'transparent', border: band==='hot' ? 'none' : `1.5px solid ${color}`, color: band==='hot' ? '#fbf8f3' : T.ink, display:'flex', alignItems:'center', justifyContent:'center', fontSize:fs, fontWeight:700, flexShrink:0 }}>
-            {score || 0}
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+            <div
+                onClick={canExplain ? (e => { e.stopPropagation(); setOpen(o => !o); }) : undefined}
+                title={hasAxes ? `Fit ${fit || 0} · Eng ${eng || 0} · ${String(band).toUpperCase()}` : undefined}
+                style={{ width: w, height: h, borderRadius: T.r, background: band === 'hot' ? color : 'transparent', border: `1.5px solid ${color}`, color: band === 'hot' ? T.surface : color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fs, fontWeight: 700, fontFamily: T.sans, cursor: canExplain ? 'pointer' : 'default' }}>
+                {headline}
+            </div>
+            {hasAxes && size !== 'sm' && (
+                <div style={{ fontSize: 9.5, color: T.inkMuted, fontFamily: T.sans, textAlign: 'center', marginTop: 2, whiteSpace: 'nowrap' }}>F{fit || 0}·E{eng || 0}{bd && bd.probability != null ? ` ·P${bd.probability}` : ''}</div>
+            )}
+            {open && canExplain && (
+                <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 60, width: 232, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: T.ink, fontFamily: T.sans }}>Why this score</span>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color, textTransform: 'uppercase', fontFamily: T.sans }}>{band}</span>
+                    </div>
+                    {bd.probability != null && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', marginBottom: 8, background: T.surface2, borderRadius: T.r }}>
+                            <span style={{ fontSize: 11.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Win probability</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: T.goldInk, fontFamily: T.sans }}>{bd.probability}%</span>
+                        </div>
+                    )}
+                    <BDSection title={`Fit · ${fit || 0}`} rows={bd.fit} />
+                    <BDSection title={`Engagement · ${eng || 0}`} rows={bd.engagement} />
+                </div>
+            )}
         </div>
     );
 };
@@ -187,7 +235,7 @@ const TriageCard = ({ lead, accent, onClick }) => {
             onClick={onClick}
             style={{ flex:'0 0 260px', background:T.surface, border:`1px solid ${hov ? T.borderStrong : T.border}`, borderLeft:`3px solid ${accent}`, borderRadius:T.r, padding:'10px 12px', cursor:'pointer', transition:'all 120ms', transform: hov ? 'translateY(-1px)' : 'none' }}>
             <div style={{ display:'flex', alignItems:'flex-start', gap:8, marginBottom:8 }}>
-                <LeadScore score={lead.score} size="sm"/>
+                <LeadScore lead={lead} size="sm"/>
                 <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:13, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T.sans }}>{lead.first} {lead.last}</div>
                     <div style={{ fontSize:11, color:T.inkMuted, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T.sans }}>{lead.company}</div>
@@ -375,7 +423,7 @@ const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm, saveLe
                                             style={{ width:16, height:16, borderRadius:3, border:`1.5px solid ${isSel ? T.ink : T.borderStrong}`, background: isSel ? T.ink : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
                                             {isSel && <span style={{ color:T.surface, fontSize:9, fontWeight:800 }}>✓</span>}
                                         </div>
-                                        <LeadScore score={l.score}/>
+                                        <LeadScore lead={l}/>
                                         <div style={{ minWidth:0 }}>
                                             <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{l.first} {l.last}</div>
                                             <div style={{ fontSize:11, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{l.company} {l.title && <span style={{ opacity:0.5 }}>· {l.title}</span>}</div>
@@ -416,7 +464,7 @@ const CockpitListRow = ({ lead, active, onClick }) => (
         style={{ display:'grid', gridTemplateColumns:'38px 1fr auto', gap:10, padding:'10px 12px', borderLeft:`3px solid ${active ? SCORE_COLORS[scoreBand(lead.score)] : 'transparent'}`, background: active ? T.surface2 : 'transparent', borderBottom:`1px solid ${T.border}`, alignItems:'center', cursor:'pointer' }}
         onMouseEnter={e => { if (!active) e.currentTarget.style.background='rgba(200,185,154,0.06)'; }}
         onMouseLeave={e => { if (!active) e.currentTarget.style.background=active?T.surface2:'transparent'; }}>
-        <LeadScore score={lead.score} size="sm"/>
+        <LeadScore lead={lead} size="sm"/>
         <div style={{ minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight: active ? 700 : 600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T.sans }}>{lead.first} {lead.last}</div>
             <div style={{ fontSize:11, color:T.inkMuted, marginTop:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T.sans }}>{lead.company}</div>
@@ -452,7 +500,7 @@ const CockpitDetail = ({ lead, saveLead, convertLead, logActivity, showConfirm }
             {/* Hero */}
             <div style={{ padding:'18px 22px 16px', borderBottom:`1px solid ${T.border}`, background:T.surface2 }}>
                 <div style={{ display:'flex', alignItems:'flex-start', gap:14 }}>
-                    <LeadScore score={lead.score} size="lg"/>
+                    <LeadScore lead={lead} size="lg"/>
                     <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:'flex', alignItems:'baseline', gap:10, flexWrap:'wrap' }}>
                             <div style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:300, fontSize:24, color:T.ink, letterSpacing:-0.4, lineHeight:1 }}>{lead.first} {lead.last}</div>
@@ -693,6 +741,7 @@ export default function LeadsTab() {
     // ── Open activity modal pre-filled for a lead ─────────────
     const logActivity = useCallback((lead, type) => {
         setActivityInitialContext({
+            leadId: lead.id,
             type,
             contactSearch: [lead.first, lead.last].filter(Boolean).join(' '),
             company: lead.company || '',

@@ -1,11 +1,12 @@
 // settings/salesProcess/AccountSegmentsDetail.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { StatusChip } from '../shared/ui.jsx';
 import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
+import { useApp } from '../../../AppContext';
 
 const DEFAULT_ACCT_SEGMENTS = [
     { tier:'SMB',        hex:'#8a9a7a', range:'< $10M',       sla:'24h', owner:'SMB teams',   count:312 },
@@ -49,7 +50,6 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
     };
 
     // Kebab state
-    const SYSTEM_TIERS = new Set(['SMB','Mid-Market','Enterprise','Strategic','Partner']);
     const [openTierKebab, setOpenTierKebab]   = useState(null); // tier index
 
     // Close kebab on click-outside
@@ -76,7 +76,23 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
 
     const inpSm = { padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' };
 
-    const total = tiers.reduce((a,t) => a+t.count, 0)||1;
+    const { accounts = [] } = useApp();
+    const segCounts = useMemo(() => {
+        const byLower = {}; tiers.forEach(t => { byLower[String(t.tier).toLowerCase()] = t.tier; });
+        const c = {};
+        for (const a of accounts) {
+            if (a.parentAccountId) continue;
+            const seg = String(a.accountSegment || '').trim().toLowerCase();
+            if (!seg) continue;
+            const canon = byLower[seg];
+            if (canon) c[canon] = (c[canon] || 0) + 1;
+        }
+        return c;
+    }, [accounts, tiers]);
+    const cnt = (t) => segCounts[t.tier] || 0;
+    const topLevelCount = accounts.filter(a => !a.parentAccountId).length;
+    const categorized = tiers.reduce((a, t) => a + cnt(t), 0);
+    const total = categorized || 1;
 
     return (
         <CategoryDetailChrome
@@ -163,7 +179,7 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
                                     </div>
 
                                     {/* Accounts */}
-                                    <div style={{ textAlign:'right', fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink }}>{t.count}</div>
+                                    <div style={{ textAlign:'right', fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink }}>{cnt(t)}</div>
 
                                     {/* SLA */}
                                     <div style={{ textAlign:'right', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>
@@ -202,7 +218,7 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
                                                                 }
                                                             }},
                                                             { label:'Where this is used', note: AUTO_CLASS_RULES.filter(r => r.then === t.tier).length > 0 ? `${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length} auto-classification rule${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length!==1?'s':''}` : 'No rules reference this tier', action: () => setOpenTierKebab(null) },
-                                                            { label:'Delete', danger:true, disabled: SYSTEM_TIERS.has(t.tier), note: SYSTEM_TIERS.has(t.tier) ? 'System tier' : null, action: () => { if (!SYSTEM_TIERS.has(t.tier)) handleDeleteTier(i); } },
+                                                            { label:'Delete', danger:true, action: () => handleDeleteTier(i) },
                                                         ].map((item, mi) => (
                                                             <button key={mi} onClick={item.action} disabled={item.disabled}
                                                                 style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.disabled ? T.inkMuted : item.danger ? T.danger : T.ink, cursor: item.disabled ? 'default' : 'pointer', fontFamily:T.sans, opacity: item.disabled ? 0.5 : 1 }}
@@ -244,17 +260,20 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
                             {/* Stacked bar */}
                             <div style={{ display:'flex', gap:2, height:12, borderRadius:2, overflow:'hidden', border:`1px solid ${T.border}`, marginBottom:14 }}>
                                 {tiers.map((t,i) => (
-                                    <div key={i} style={{ flex:t.count, background:t.hex }} title={`${t.tier} — ${t.count}`}/>
+                                    <div key={i} style={{ flex: cnt(t), background:t.hex }} title={`${t.tier} — ${cnt(t)}`}/>
                                 ))}
                             </div>
                             {tiers.map((t,i) => (
                                 <div key={i} style={{ padding:'6px 0', display:'flex', alignItems:'center', gap:8, fontSize:12, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none' }}>
                                     <span style={{ width:8, height:8, background:t.hex, borderRadius:2, flexShrink:0 }}/>
                                     <span style={{ flex:1, color:T.ink, fontFamily:T.sans }}>{t.tier}</span>
-                                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid }}>{t.count}</span>
-                                    <span style={{ width:44, textAlign:'right', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{Math.round(t.count/total*100)}%</span>
+                                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid }}>{cnt(t)}</span>
+                                    <span style={{ width:44, textAlign:'right', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{Math.round(cnt(t)/total*100)}%</span>
                                 </div>
                             ))}
+                            <div style={{ marginTop:10, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                                {categorized} of {topLevelCount} accounts assigned a segment
+                            </div>
                         </CSectionCard>
                     </div>
                 </div>
