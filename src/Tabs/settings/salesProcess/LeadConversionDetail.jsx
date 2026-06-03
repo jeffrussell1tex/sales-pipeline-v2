@@ -182,16 +182,7 @@ export const LeadConversionDetail = ({ settings, setSettings, onBack }) => {
             statusDetail="8 sources configured"
             updatedBy="Admin" updatedAt="today"
             onBack={onBack} dirty={false}
-            rightActions={
-                <div style={{ display:'flex', gap:8 }}>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
-                        <LIcon name="refresh" size={13}/> Recompute from history
-                    </button>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
-                        Save changes
-                    </button>
-                </div>
-            }
+            rightActions={<></>}
         >
             <div style={{ display:'grid', gridTemplateColumns:'1fr 380px', gap:20 }}>
                 <div>
