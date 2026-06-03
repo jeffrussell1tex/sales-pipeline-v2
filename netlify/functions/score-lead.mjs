@@ -15,6 +15,12 @@
 const decay = (points, ageDays, halfLife) =>
     (halfLife > 0 ? points * Math.pow(0.5, ageDays / halfLife) : points);
 
+// whole-word, case-insensitive match (so 'coo' matches 'COO' but NOT 'coordinator')
+function wordMatch(hay, needle) {
+    const n = String(needle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('\\b' + n + '\\b', 'i').test(String(hay == null ? '' : hay));
+}
+
 function evalRule(actual, op, expected) {
     const s = (v) => String(v ?? '').toLowerCase();
     switch (op) {
@@ -24,7 +30,7 @@ function evalRule(actual, op, expected) {
         case 'gte':        return actual != null && actual !== '' && Number(actual) >= Number(expected);
         case 'lte':        return actual != null && actual !== '' && Number(actual) <= Number(expected);
         case 'contains':   return s(actual).includes(s(expected));
-        case 'matchesAny': return Array.isArray(expected) && expected.some(e => s(actual).includes(s(e)));
+        case 'matchesAny': return Array.isArray(expected) && expected.some(e => wordMatch(actual, e));
         case 'exists':     return actual !== null && actual !== undefined && actual !== '';
         default:           return false;
     }
@@ -161,7 +167,7 @@ const PRED_SENIORITY = [
 ];
 function seniorityScore(title) {
     const t = String(title || '').toLowerCase();
-    for (const s of PRED_SENIORITY) if (s.kw.some(k => t.includes(k))) return s.v;
+    for (const s of PRED_SENIORITY) if (s.kw.some(k => wordMatch(title, k))) return s.v;
     return 0.15;
 }
 

@@ -1,0 +1,20 @@
+name: Tests
+
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Layer-1 logic tests import only pure modules (no DB / no deps), so no
+      # install step is needed yet. When DB-backed tests arrive (layer 2),
+      # add: - run: npm ci
+      - name: Run unit tests
+        run: node --test
