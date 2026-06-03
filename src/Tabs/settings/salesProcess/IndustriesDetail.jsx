@@ -1,5 +1,6 @@
 // settings/salesProcess/IndustriesDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -47,6 +48,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
 
     // Industry kebab state
     const [openIndKebab, setOpenIndKebab]     = useState(null); // industry key
+    const [kebabPos, setKebabPos]             = useState(null);
     const [renamingInd,  setRenamingInd]      = useState(null); // industry key
     const [renameIndVal, setRenameIndVal]     = useState('');
 
@@ -55,7 +57,13 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
         if (openIndKebab === null) return;
         const handler = () => setOpenIndKebab(null);
         document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
+        window.addEventListener('scroll', handler, true);
+        window.addEventListener('resize', handler);
+        return () => {
+            document.removeEventListener('click', handler);
+            window.removeEventListener('scroll', handler, true);
+            window.removeEventListener('resize', handler);
+        };
     }, [openIndKebab]);
 
     const addSub = (indKey) => {
@@ -177,11 +185,21 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
 
                                             {/* Kebab */}
                                             <div style={{ position:'relative', marginLeft:8 }} onClick={e => e.stopPropagation()}>
-                                                <button onClick={() => setOpenIndKebab(openIndKebab === ind.k ? null : ind.k)}
+                                                <button onClick={(e) => {
+                                                        if (openIndKebab === ind.k) { setOpenIndKebab(null); return; }
+                                                        const r = e.currentTarget.getBoundingClientRect();
+                                                        const MENU_W = 224;
+                                                        const below = window.innerHeight - r.bottom, above = r.top;
+                                                        const openUp = below < 300 && above > below;
+                                                        const left = Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8));
+                                                        setKebabPos(openUp
+                                                            ? { left, bottom: window.innerHeight - r.top + 4, maxHeight: above - 16 }
+                                                            : { left, top: r.bottom + 4, maxHeight: below - 16 });
+                                                        setOpenIndKebab(ind.k);
+                                                    }}
                                                     style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
-                                                {openIndKebab === ind.k && (
-                                                    <div style={{ position:'absolute', right:0, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 20px rgba(42,38,34,0.14)', minWidth:220, overflow:'hidden',
-                                                ...(i >= industries.length - 4 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }) }}>
+                                                {openIndKebab === ind.k && kebabPos && createPortal(
+                                                    <div onClick={e => e.stopPropagation()} style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), zIndex:1000, width:224, maxHeight:kebabPos.maxHeight, overflowY:'auto', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 10px 30px rgba(42,38,34,0.20)' }}>
 
                                                         {/* Edit */}
                                                         {[
@@ -248,7 +266,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                                                             <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Removes tag from all accounts</div>
                                                         </button>
                                                     </div>
-                                                )}
+                                                , document.body)}
                                             </div>
                                         </div>
                                         {/* Sub-industries */}
