@@ -89,6 +89,7 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
     const removeItem = (cat, item) => {
         setGroups(prev => prev.map(g => g.cat === cat ? { ...g, items: g.items.filter(i => i !== item) } : g));
         setDirty(true);
+    };
 
     const importCSV = (e) => {
         const file = e.target.files?.[0];
@@ -115,7 +116,6 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
         };
         reader.readAsText(file);
         e.target.value = '';
-    };
     };
 
     const totalItems = groups.reduce((a,g) => a + g.items.length, 0);
