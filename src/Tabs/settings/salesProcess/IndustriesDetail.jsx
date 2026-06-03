@@ -131,14 +131,16 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
         const idx = industries.map(ind => ({ k: ind.k, set: new Set([String(ind.k).toLowerCase(), ...(ind.subs || []).map(s => String(s).toLowerCase())]) }));
         const c = {};
         for (const a of accounts) {
-            const ai = String(a.industry || a.verticalMarket || '').trim().toLowerCase();
+            if (a.parentAccountId) continue;
+            const ai = String(a.verticalMarket || a.industry || '').trim().toLowerCase();
             if (!ai) continue;
             const hit = idx.find(x => x.set.has(ai));
             if (hit) c[hit.k] = (c[hit.k] || 0) + 1;
         }
         return c;
     }, [accounts, industries]);
-    const totalAccounts = accounts.length || 1;
+    const topLevelCount = accounts.filter(a => !a.parentAccountId).length;
+    const totalAccounts = topLevelCount || 1;
     const categorized = Object.values(counts).reduce((a, n) => a + n, 0);
     const distItems = [...industries].map(ind => ({ k: ind.k, n: counts[ind.k] || 0 })).sort((a, b) => b.n - a.n);
     const totalSubs = industries.reduce((a,i) => a+i.subs.length, 0);
@@ -339,7 +341,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
                                 );
                             })}
                             <div style={{ marginTop:10, paddingTop:8, borderTop:`1px solid ${T.border}`, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
-                                {categorized} of {accounts.length} accounts matched to a primary industry
+                                {categorized} of {topLevelCount} accounts matched to a primary industry
                             </div>
                         </CSectionCard>
                     </div>
