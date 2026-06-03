@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test"
+    "test": "node --test",
+    "test:int": "node --env-file-if-exists=.env --import tsx --test --experimental-test-module-mocks tests/integration/accounts.itest.mjs tests/integration/leads.itest.mjs"
   },
   "dependencies": {
     "@clerk/backend": "^3.0.1",
@@ -23,6 +24,7 @@
     "@playwright/test": "^1.60.0",
     "@vitejs/plugin-react": "^4.3.1",
     "drizzle-kit": "^0.31.9",
+    "tsx": "^4.22.4",
     "vite": "^5.4.2"
   }
 }

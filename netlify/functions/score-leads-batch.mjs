@@ -8,7 +8,7 @@
 // grows very large.
 import { db } from '../../db/index.js';
 import { leads, settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { scoreLead, DEFAULT_LEAD_SCORING, leadFeatures, computeSourceWinRate, trainLeadModel } from './score-lead.mjs';
 
 export const handler = async () => {
@@ -66,7 +66,7 @@ export const handler = async () => {
                     scoreBreakdown:      sc.scoreBreakdown,
                     score:               sc.score,
                     scoreUpdatedAt:      new Date(),
-                }).where(eq(leads.id, lead.id));
+                }).where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
                 leadsUpdated++;
             }
         }

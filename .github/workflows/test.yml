@@ -13,8 +13,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      # Layer-1 logic tests import only pure modules (no DB / no deps), so no
-      # install step is needed yet. When DB-backed tests arrive (layer 2),
-      # add: - run: npm ci
-      - name: Run unit tests
+      # Unit + static guard import only pure modules (no DB, no deps).
+      - name: Unit tests + org-scoping guard
         run: node --test
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Org-isolation integration tests (real Neon test branch)
+        env:
+          DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+        run: |
+          if [ -z "$DATABASE_URL_TEST" ]; then
+            echo "DATABASE_URL_TEST secret not set — skipping integration tests."
+            echo "Add it under Settings -> Secrets and variables -> Actions to enable."
+            exit 0
+          fi
+          npm run test:int
