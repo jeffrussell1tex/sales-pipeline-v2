@@ -1,6 +1,7 @@
 // settings/people/RolesDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
+import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 
 const ScopeBadge = ({ scope }) => {
@@ -318,10 +319,10 @@ const PermCellPopover = ({ anchor, currentValue, roleName, onApply, onClose }) =
 export const RolesDetail = ({ settings, onBack }) => {
     const [activeRole, setActiveRole] = useState('r3'); // default: Sales Rep
     const [openRoleKebab, setOpenRoleKebab] = useState(null);
-    const { showConfirm } = useApp();
+    const { showConfirm, setSettings } = useApp();
 
     // Local perms state — starts from PT_PERMS, updated on Apply
-    const [localPerms, setLocalPerms] = useState(() => JSON.parse(JSON.stringify(PT_PERMS)));
+    const [localPerms, setLocalPerms] = useState(() => JSON.parse(JSON.stringify(settings?.rolePermissions || PT_PERMS)));
 
     // Popover state
     const [popover, setPopover] = useState(null); // { objectId, objectName, action, currentValue } | null
@@ -350,16 +351,16 @@ export const RolesDetail = ({ settings, onBack }) => {
     const perms = localPerms[activeRole] || {};
 
     const handleApply = (objectId, action, value) => {
-        setLocalPerms(prev => ({
-            ...prev,
+        const next = {
+            ...localPerms,
             [activeRole]: {
-                ...(prev[activeRole] || {}),
-                [objectId]: {
-                    ...(prev[activeRole]?.[objectId] || {}),
-                    [action]: value,
-                },
+                ...(localPerms[activeRole] || {}),
+                [objectId]: { ...(localPerms[activeRole]?.[objectId] || {}), [action]: value },
             },
-        }));
+        };
+        setLocalPerms(next);
+        if (setSettings) setSettings(s => ({ ...s, rolePermissions: next }));
+        dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ rolePermissions: next }) }).catch(e => console.error('save roles', e));
     };
 
     const handleCellClick = (obj, action) => {

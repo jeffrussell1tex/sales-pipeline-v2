@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { T, eb } from '../shared/tokens.js';
 import { SecCrumb, SecTitle, SecBtn, SecCallout, SecCard } from './shared.jsx';
+import { useApp } from '../../../AppContext';
+import { dbFetch } from '../../../utils/storage';
 
 const SEC_SSO = {
     configured: false,
@@ -111,12 +113,25 @@ const ConfigureSsoModal = ({ onClose }) => {
 };
 
 export const SsoDetail = ({ onBack }) => {
-    const [provider, setProvider] = useState(SEC_SSO.provider);
+    const { settings, setSettings } = useApp();
+    const cfg = settings?.ssoConfig || SEC_SSO;
+    const [dirty, setDirty]   = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [provider, setProvider] = useState(cfg.provider || SEC_SSO.provider);
     const [showWizard, setShowWizard] = useState(false);
-    const [idpSsoUrl, setIdpSsoUrl] = useState(SEC_SSO.idp.ssoUrl);
-    const [idpEntityId, setIdpEntityId] = useState(SEC_SSO.idp.entityId);
-    const [idpCert, setIdpCert] = useState(SEC_SSO.idp.cert);
+    const [idpSsoUrl, setIdpSsoUrl] = useState(cfg.idp?.ssoUrl ?? SEC_SSO.idp.ssoUrl);
+    const [idpEntityId, setIdpEntityId] = useState(cfg.idp?.entityId ?? SEC_SSO.idp.entityId);
+    const [idpCert, setIdpCert] = useState(cfg.idp?.cert ?? SEC_SSO.idp.cert);
     const providers = ['Okta','Azure AD','Google','OneLogin','Generic'];
+    const handleSave = async () => {
+        setSaving(true);
+        const base = settings?.ssoConfig || SEC_SSO;
+        const ssoConfig = { ...base, provider, idp: { ...(base.idp || {}), ssoUrl: idpSsoUrl, entityId: idpEntityId, cert: idpCert } };
+        if (setSettings) setSettings(s => ({ ...s, ssoConfig }));
+        try { await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ ssoConfig }) }); }
+        catch (e) { console.error('save sso', e); }
+        setSaving(false); setDirty(false);
+    };
     const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
 
     return (
@@ -129,6 +144,7 @@ export const SsoDetail = ({ onBack }) => {
                 badge={SEC_SSO.configured ? 'Active · 412 logins / 30d' : undefined}
                 updatedAt={SEC_SSO.configured ? 'Last edited by Morgan' : 'Last edited never by —'}
                 actions={[
+                    <SecBtn key="save" label={saving ? 'Saving…' : 'Save changes'} primary onClick={handleSave} disabled={!dirty || saving}/>,
                     <SecBtn key="dl" label="Download metadata"/>,
                     <SecBtn key="tl" label="Test login" disabled/>,
                     <div key="act" title="SSO is available on the Enterprise plan" style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 14px', background:'rgba(138,131,120,0.12)', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans, cursor:'default', userSelect:'none' }}>
@@ -150,7 +166,7 @@ export const SsoDetail = ({ onBack }) => {
             <SecCard title="Provider" desc="Pick a preset or use a generic SAML / OIDC provider.">
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8, marginBottom:16 }}>
                     {providers.map(p => (
-                        <button key={p} onClick={()=>setProvider(p)}
+                        <button key={p} onClick={()=>{ setProvider(p); setDirty(true); }}
                             style={{ padding:'10px 8px', border:`1.5px solid ${provider===p?T.goldInk:T.border}`, borderRadius:6, background:provider===p?'rgba(200,185,154,0.12)':T.surface, cursor:'pointer', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, transition:'border-color 100ms, background 100ms' }}>
                             {p}
                         </button>
@@ -185,15 +201,15 @@ export const SsoDetail = ({ onBack }) => {
             <SecCard title="Identity provider" desc="From your IdP application.">
                 <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center', marginBottom:10 }}>
                     <label style={{ fontSize:12.5, fontWeight:600, color:T.inkMid }}>SSO URL</label>
-                    <input value={idpSsoUrl} onChange={e=>setIdpSsoUrl(e.target.value)} style={inp}/>
+                    <input value={idpSsoUrl} onChange={e=>{ setIdpSsoUrl(e.target.value); setDirty(true); }} style={inp}/>
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center', marginBottom:10 }}>
                     <label style={{ fontSize:12.5, fontWeight:600, color:T.inkMid }}>IdP entity ID</label>
-                    <input value={idpEntityId} onChange={e=>setIdpEntityId(e.target.value)} style={inp}/>
+                    <input value={idpEntityId} onChange={e=>{ setIdpEntityId(e.target.value); setDirty(true); }} style={inp}/>
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'flex-start', marginBottom:4 }}>
                     <label style={{ fontSize:12.5, fontWeight:600, color:T.inkMid, paddingTop:8 }}>X.509 certificate</label>
-                    <textarea value={idpCert} onChange={e=>setIdpCert(e.target.value)} rows={4}
+                    <textarea value={idpCert} onChange={e=>{ setIdpCert(e.target.value); setDirty(true); }} rows={4}
                         style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, resize:'vertical', lineHeight:1.5 }}/>
                 </div>
             </SecCard>
