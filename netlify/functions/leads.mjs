@@ -5,6 +5,20 @@ import { verifyAuth, canSeeAll } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import { serverErrorBody } from './_lib.mjs';
+import { settings as settingsTable } from '../../db/schema.js';
+import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
+
+async function getLeadScoring(orgId) {
+    try {
+        const [row] = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+        return row?.extra?.leadScoring || DEFAULT_LEAD_SCORING;
+    } catch (e) { return DEFAULT_LEAD_SCORING; }
+}
+
+function scoreColumns(lead, cfg) {
+    const sc = scoreLead(lead, cfg);
+    return sc ? { ...sc, scoreUpdatedAt: new Date() } : {};
+}
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -50,7 +64,10 @@ export const handler = async (event) => {
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const [inserted] = await db.insert(leads).values({ ...sanitize(data), orgId }).returning();
+            const cleanPost = sanitize(data);
+            const cfgPost = await getLeadScoring(orgId);
+            const scoredPost = scoreColumns({ ...cleanPost, createdAt: new Date().toISOString() }, cfgPost);
+            const [inserted] = await db.insert(leads).values({ ...cleanPost, ...scoredPost, orgId }).returning();
 
             // Webhook: lead.created
             await dispatchWebhook(orgId, 'lead.created', {
@@ -99,6 +116,9 @@ export const handler = async (event) => {
                 // Preserve existing value — sanitize may have nulled it if not in payload
                 clean.firstTouchDate = existing.firstTouchDate;
             }
+
+            const cfgPut = await getLeadScoring(orgId);
+            Object.assign(clean, scoreColumns(clean, cfgPut));
 
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(leads).values({ ...clean, orgId })
