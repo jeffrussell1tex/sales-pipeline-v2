@@ -197,6 +197,7 @@ export const activities = pgTable('activities', {
     opportunityId: text('opportunity_id'),
     contactId:     text('contact_id'),
     accountId:     text('account_id'),
+    leadId:        text('lead_id'),
     author:        varchar('author', { length: 255 }),
     createdAt:     timestamp('created_at').notNull().defaultNow(),
     orgId:         text('org_id').notNull(),
@@ -204,6 +205,7 @@ export const activities = pgTable('activities', {
 }, (t) => [
     index('activities_org_id_opp_idx').on(t.orgId, t.opportunityId),
     index('activities_org_id_created_idx').on(t.orgId, t.createdAt),
+    index('activities_org_id_lead_idx').on(t.orgId, t.leadId),
 ]);
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
 export const settings = pgTable('settings', {

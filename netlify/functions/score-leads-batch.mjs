@@ -7,7 +7,7 @@
 // rest fresh. Paged per org; per-row update keeps it simple — chunk if a tenant
 // grows very large.
 import { db } from '../../db/index.js';
-import { leads, settings as settingsTable } from '../../db/schema.js';
+import { leads, settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
@@ -26,9 +26,12 @@ export const handler = async () => {
             orgsProcessed++;
 
             const rows = await db.select().from(leads).where(eq(leads.orgId, orgId));
+            const acts = await db.select().from(activitiesTable).where(eq(activitiesTable.orgId, orgId));
+            const eventsByLead = {};
+            for (const a of acts) { if (!a.leadId) continue; (eventsByLead[a.leadId] = eventsByLead[a.leadId] || []).push({ type: a.type, at: a.date || a.createdAt }); }
             const now = Date.now();
             for (const lead of rows) {
-                const sc = scoreLead(lead, cfg, now);
+                const sc = scoreLead(lead, cfg, now, eventsByLead[lead.id] || []);
                 if (!sc) continue;
                 // skip the write if nothing actually changed (avoids churn)
                 if (lead.leadScoreFit === sc.leadScoreFit &&

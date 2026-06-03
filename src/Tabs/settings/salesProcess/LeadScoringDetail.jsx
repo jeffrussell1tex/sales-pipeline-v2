@@ -53,6 +53,7 @@ const OP_OPTS = [
     { v: 'lte',        l: '≤' },
     { v: 'contains',   l: 'contains' },
     { v: 'exists',     l: 'is present' },
+    { v: 'event',      l: 'activity logged' },
     { v: 'recency',    l: 'recency (decays)' },
 ];
 
@@ -77,16 +78,22 @@ const RuleTable = ({ kind, rules, onChange }) => {
             </div>
             {rules.map((r, i) => {
                 const isRecency = r.op === 'recency';
+                const isEvent = r.op === 'event';
                 return (
                     <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '1.4fr 110px 130px 1.3fr 70px 28px', gap: 8, alignItems: 'center', padding: '5px 4px', borderTop: `1px solid ${T.border}` }}>
                         <input value={r.label || ''} onChange={e => set(i, { label: e.target.value })} style={inputStyle} />
-                        <select value={r.field || ''} disabled={isRecency} onChange={e => set(i, { field: e.target.value })} style={{ ...inputStyle, opacity: isRecency ? 0.5 : 1 }}>
+                        <select value={r.field || ''} disabled={isRecency || isEvent} onChange={e => set(i, { field: e.target.value })} style={{ ...inputStyle, opacity: isRecency ? 0.5 : 1 }}>
                             {FIELD_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
                         </select>
-                        <select value={r.op || 'equals'} onChange={e => { const op = e.target.value; set(i, { op, value: op === 'recency' ? undefined : parseVal(op, dispVal(r)) }); }} style={inputStyle}>
+                        <select value={r.op || 'equals'} onChange={e => { const op = e.target.value; set(i, { op, value: (op === 'recency' || op === 'event') ? undefined : parseVal(op, dispVal(r)), ...(op === 'event' ? { event: r.event || '' } : {}) }); }} style={inputStyle}>
                             {OP_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
                         </select>
-                        {isRecency ? (
+                        {isEvent ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <input value={r.event || ''} onChange={e => set(i, { event: e.target.value })} placeholder="Activity type" style={inputStyle} />
+                                <input type="number" value={r.decayHalfLifeDays ?? 30} onChange={e => set(i, { decayHalfLifeDays: Number(e.target.value) || 0 })} title="half-life days" style={{ ...inputStyle, width: 54 }} />
+                            </div>
+                        ) : isRecency ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans, whiteSpace: 'nowrap' }}>half-life</span>
                                 <input type="number" value={r.decayHalfLifeDays ?? 21} onChange={e => set(i, { decayHalfLifeDays: Number(e.target.value) || 0 })} style={{ ...inputStyle, width: 64 }} />

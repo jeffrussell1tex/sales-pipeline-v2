@@ -735,6 +735,7 @@ export default function LeadsTab() {
     // ── Open activity modal pre-filled for a lead ─────────────
     const logActivity = useCallback((lead, type) => {
         setActivityInitialContext({
+            leadId: lead.id,
             type,
             contactSearch: [lead.first, lead.last].filter(Boolean).join(' '),
             company: lead.company || '',

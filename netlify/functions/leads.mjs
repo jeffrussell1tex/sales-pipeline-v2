@@ -5,7 +5,7 @@ import { verifyAuth, canSeeAll } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import { serverErrorBody } from './_lib.mjs';
-import { settings as settingsTable } from '../../db/schema.js';
+import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
 async function getLeadScoring(orgId) {
@@ -15,8 +15,15 @@ async function getLeadScoring(orgId) {
     } catch (e) { return DEFAULT_LEAD_SCORING; }
 }
 
-function scoreColumns(lead, cfg) {
-    const sc = scoreLead(lead, cfg);
+async function scoreColumns(orgId, lead, cfg) {
+    let events = [];
+    if (lead.id) {
+        try {
+            const acts = await db.select().from(activitiesTable).where(and(eq(activitiesTable.orgId, orgId), eq(activitiesTable.leadId, lead.id)));
+            events = acts.map(a => ({ type: a.type, at: a.date || a.createdAt }));
+        } catch (e) { /* no events */ }
+    }
+    const sc = scoreLead(lead, cfg, Date.now(), events);
     return sc ? { ...sc, scoreUpdatedAt: new Date() } : {};
 }
 
@@ -66,7 +73,7 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const cleanPost = sanitize(data);
             const cfgPost = await getLeadScoring(orgId);
-            const scoredPost = scoreColumns({ ...cleanPost, createdAt: new Date().toISOString() }, cfgPost);
+            const scoredPost = await scoreColumns(orgId, { ...cleanPost, createdAt: new Date().toISOString() }, cfgPost);
             const [inserted] = await db.insert(leads).values({ ...cleanPost, ...scoredPost, orgId }).returning();
 
             // Webhook: lead.created
@@ -118,7 +125,7 @@ export const handler = async (event) => {
             }
 
             const cfgPut = await getLeadScoring(orgId);
-            Object.assign(clean, scoreColumns(clean, cfgPut));
+            Object.assign(clean, await scoreColumns(orgId, clean, cfgPut));
 
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(leads).values({ ...clean, orgId })

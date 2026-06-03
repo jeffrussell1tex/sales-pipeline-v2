@@ -29,6 +29,7 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
         type: 'Call',
         date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
         opportunityId: initialContext?.opportunityId || '',
+        leadId: initialContext?.leadId || '',
         contactId: '',
         contactIds: [],
         companyName: '',
