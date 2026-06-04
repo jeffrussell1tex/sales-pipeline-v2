@@ -6,6 +6,23 @@ import { T, eb } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
+// Small status pill (restored — was a dropped local helper during the SettingsTab split).
+const QPill = ({ tone = 'neutral', children }) => {
+    const tones = {
+        rep:     { bg: 'rgba(77,107,61,0.14)',   fg: T.ok },      // active / positive
+        neutral: { bg: 'rgba(138,131,120,0.15)', fg: T.inkMid },  // archived / muted
+        admin:   { bg: 'rgba(200,185,154,0.22)', fg: T.goldInk },
+        warn:    { bg: 'rgba(184,115,51,0.15)',  fg: T.warn },
+        danger:  { bg: 'rgba(156,58,46,0.12)',   fg: T.danger },
+    };
+    const c = tones[tone] || tones.neutral;
+    return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 9px', background: c.bg, color: c.fg, borderRadius: 999, fontSize: 11, fontWeight: 600, letterSpacing: 0.2, whiteSpace: 'nowrap', fontFamily: T.sans }}>
+            {children}
+        </span>
+    );
+};
+
 const DEFAULT_PERSONAS = [
     { id: 'champion',   name: 'Champion',          color: '#4d6b3d', icon: '★', desc: 'Internal advocate who sells the deal on your behalf.',   titles: ['Director of Operations', 'VP Sales', 'Head of RevOps'], cares: ['Quick wins for the team', 'Looking great to leadership'], objections: ["My team won't adopt another tool"],  active: true },
     { id: 'eb',         name: 'Economic Buyer',    color: '#7a5a3c', icon: '$',      desc: 'Controls the budget and signs the order. Final yes/no.', titles: ['CFO', 'VP Finance', 'COO'],                             cares: ['ROI', 'Total cost of ownership', 'Risk of vendor lock-in'], objections: ["What's the payback period?"],   active: true },
