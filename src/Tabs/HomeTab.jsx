@@ -94,6 +94,8 @@ export default function HomeTab() {
     } = useApp();
 
     const { userId, orgId } = useAuth();
+    const [calSrc, setCalSrc] = React.useState('all'); // 'all' | 'user' | 'org'
+    const hasCorpEvents = (calendarEvents || []).some(ev => ev.source === 'org');
 
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit    = !isReadOnly;
@@ -126,6 +128,7 @@ export default function HomeTab() {
                 const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];
                 return d === todayStr;
             })
+            .filter(ev => calSrc === 'all' || (ev.source || 'user') === calSrc)
             .sort((a,b) => (a.start?.dateTime||'').localeCompare(b.start?.dateTime||''))
         : [];
 
@@ -163,7 +166,7 @@ export default function HomeTab() {
             timeLabel: timeStr,
             timeColor: T.inkMid,
             title:     ev.summary,
-            sub:       ev.attendees?.[0]?.displayName || ev.location || 'Meeting',
+            sub:       (ev.source === 'org' ? 'Corporate · ' : '') + (ev.attendees?.[0]?.displayName || ev.location || 'Meeting'),
             arr:       linkedOpp ? parseFloat(linkedOpp.arr)||0 : null,
             stage:     linkedOpp?.stage || null,
             // "Open prep" wires to Meeting Prep panel
@@ -410,7 +413,16 @@ export default function HomeTab() {
                     <div>
                         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '0.625rem' }}>
                             <div style={eyebrow()}>On your plate</div>
-                            <div style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>Ordered by time · urgency</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {hasCorpEvents && (
+                                    <div style={{ display: 'flex', border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                        {[{ k: 'all', l: 'Both' }, { k: 'user', l: 'Mine' }, { k: 'org', l: 'Corporate' }].map(o => (
+                                            <button key={o.k} onClick={() => setCalSrc(o.k)} style={{ padding: '3px 9px', fontSize: '0.6875rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, border: 'none', background: calSrc === o.k ? T.ink : T.surface, color: calSrc === o.k ? '#fbf8f3' : T.inkMid }}>{o.l}</button>
+                                        ))}
+                                    </div>
+                                )}
+                                <div style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>Ordered by time · urgency</div>
+                            </div>
                         </div>
 
                         {plate.length === 0 ? (

@@ -1,10 +1,12 @@
 // settings/company/CompanyCalendarDetail.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard, DetailPageChrome } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
 import { MONTHS_SHORT, MONTHS_FULL } from './constants.js';
+import { useApp } from '../../../AppContext';
+import { useAuth } from '@clerk/clerk-react';
 
 const FEDERAL_HOLIDAYS = [
     { date:'Jan 1',  name:"New Year's Day",                source:'US · Federal', type:'observed' },
@@ -52,6 +54,34 @@ const MonthGrid = ({ m, year, allHolidays }) => {
 };
 
 export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
+    const { userRole } = useApp();
+    const { userId, orgId } = useAuth();
+    const isAdmin = userRole === 'Admin';
+    const [orgCals, setOrgCals]       = useState([]);
+    const [orgCalsLoading, setOcl]    = useState(false);
+
+    const loadOrgCals = async () => {
+        setOcl(true);
+        try {
+            const res = await dbFetch('/.netlify/functions/calendar-connections');
+            const data = await res.json();
+            setOrgCals(data.orgConnections || []);
+        } catch (e) { console.error('load org calendars', e); }
+        setOcl(false);
+    };
+    useEffect(() => { loadOrgCals(); /* eslint-disable-next-line */ }, []);
+
+    const connectCorporateCalendar = () => {
+        const qs = new URLSearchParams({ provider: 'google', scope: 'org', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User' });
+        window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
+    };
+    const disconnectCorporateCalendar = async (id) => {
+        try {
+            await dbFetch(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=org`, { method: 'DELETE' });
+            loadOrgCals();
+        } catch (e) { console.error('disconnect org calendar', e); }
+    };
+
     const now = new Date();
     const [year, setYear]         = useState(now.getFullYear());
     const [showForm, setShowForm] = useState(false);
@@ -207,6 +237,35 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                     {syncMsg && <div style={{ fontSize:11, color: syncMsg.startsWith('✓') ? T.ok : T.danger, fontFamily:T.sans, fontWeight:600 }}>{syncMsg}</div>}
                 </div>
             </div>
+
+            <CSectionCard title="Corporate calendar (Google)" description="Connect a shared company Google calendar. Its events appear on every user's Home calendar alongside their own — each user can toggle Mine / Corporate / Both.">
+                {orgCals.length > 0 ? (
+                    <div>
+                        {orgCals.map(c => (
+                            <div key={c.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
+                                <div style={{ width:34, height:34, borderRadius:T.r, background:'#fff', border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, color:'#4285f4' }}>G</div>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{c.calendarEmail || 'Google calendar'}</div>
+                                    <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Corporate · connected{c.connectedAt ? ' ' + new Date(c.connectedAt).toLocaleDateString() : ''}</div>
+                                </div>
+                                {isAdmin && (
+                                    <button onClick={() => disconnectCorporateCalendar(c.id)} style={{ padding:'5px 10px', fontSize:11, fontWeight:600, background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Disconnect</button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>
+                        {orgCalsLoading ? 'Loading…' : 'No corporate calendar connected. Events from a connected company calendar show on every user’s Home calendar.'}
+                    </div>
+                )}
+                {isAdmin && (
+                    <button onClick={connectCorporateCalendar} style={{ marginTop:14, display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        <LIcon name="calendar" size={13}/> {orgCals.length > 0 ? 'Connect another corporate calendar' : 'Connect corporate Google calendar'}
+                    </button>
+                )}
+                {!isAdmin && <div style={{ marginTop:10, fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Only an admin can connect or disconnect the corporate calendar.</div>}
+            </CSectionCard>
 
             <div style={{ display:'grid', gridTemplateColumns:'1fr 440px', gap:20 }}>
                 {/* Calendar grid */}
