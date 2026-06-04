@@ -79,6 +79,13 @@ export const handler = async (event) => {
                 leadScoring:          row.extra?.leadScoring          || DEFAULT_LEAD_SCORING,
                 rolePermissions:      row.extra?.rolePermissions      || null,
                 ssoConfig:            row.extra?.ssoConfig            || null,
+                // Quoting (persisted via quoting settings panels)
+                approvalTiers:        row.extra?.approvalTiers        || null,
+                approvalTriggers:     row.extra?.approvalTriggers     || null,
+                priceBookProducts:    row.extra?.priceBookProducts    || [],
+                quoteTemplates:       row.extra?.quoteTemplates       || null,
+                quoteDefaults:        row.extra?.quoteDefaults        || null,
+                quoteBoilerplate:     row.extra?.quoteBoilerplate     || null,
                 industries:           row.extra?.industries            || null,
                 buyerPersonas:        row.extra?.buyerPersonas         || [],
                 quotesEnabled:        row.extra?.quotesEnabled         ?? true,
@@ -160,6 +167,10 @@ export const handler = async (event) => {
                 // Quoting
                 approvalTiers:        'approvalTiers'        in data ? (data.approvalTiers        || null) : existingExtra.approvalTiers        || null,
                 approvalTriggers:     'approvalTriggers'     in data ? (data.approvalTriggers     || null) : existingExtra.approvalTriggers     || null,
+                priceBookProducts:    'priceBookProducts'    in data ? (data.priceBookProducts    || [])   : existingExtra.priceBookProducts    || [],
+                quoteTemplates:       'quoteTemplates'       in data ? (data.quoteTemplates       || null) : existingExtra.quoteTemplates       || null,
+                quoteDefaults:        'quoteDefaults'        in data ? (data.quoteDefaults        || null) : existingExtra.quoteDefaults        || null,
+                quoteBoilerplate:     'quoteBoilerplate'     in data ? (data.quoteBoilerplate     || null) : existingExtra.quoteBoilerplate     || null,
                 // Sales process Group 1
                 funnelStages:         'funnelStages'         in data ? (data.funnelStages         || [])   : existingExtra.funnelStages         || [],
                 kpiThresholds:        'kpiThresholds'        in data ? (data.kpiThresholds        || null) : existingExtra.kpiThresholds        || null,
