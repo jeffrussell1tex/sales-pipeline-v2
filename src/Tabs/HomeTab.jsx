@@ -695,15 +695,21 @@ function PlateRow({ item, idx, total, urgencyBorder, getStageColor, T, fmtArr })
         }
     };
 
+    const baseBg = idx === 0 && item.urgency === 'overdue' ? 'rgba(156,58,46,0.03)' : 'transparent';
     return (
-        <div style={{
-            display: 'flex', alignItems: 'center', gap: '1rem',
-            padding: '0.875rem 1.125rem',
-            borderBottom: idx < total - 1 ? `1px solid ${T.border}` : 'none',
-            borderLeft: `3px solid ${urgencyBorder(item.urgency)}`,
-            background: idx === 0 && item.urgency === 'overdue' ? 'rgba(156,58,46,0.03)' : 'transparent',
-            transition: 'background 0.1s',
-        }}>
+        <div
+            onClick={item.onClick || undefined}
+            onMouseEnter={item.onClick ? (e => { e.currentTarget.style.background = T.surface2; }) : undefined}
+            onMouseLeave={item.onClick ? (e => { e.currentTarget.style.background = baseBg; }) : undefined}
+            style={{
+                display: 'flex', alignItems: 'center', gap: '1rem',
+                padding: '0.875rem 1.125rem',
+                borderBottom: idx < total - 1 ? `1px solid ${T.border}` : 'none',
+                borderLeft: `3px solid ${urgencyBorder(item.urgency)}`,
+                background: baseBg,
+                transition: 'background 0.1s',
+                cursor: item.onClick ? 'pointer' : 'default',
+            }}>
             {/* Inline complete checkbox — tasks only */}
             {!item.isMeeting && item.onComplete && (
                 <button
@@ -748,7 +754,7 @@ function PlateRow({ item, idx, total, urgencyBorder, getStageColor, T, fmtArr })
 
             {/* CTA button */}
             {item.ctaLabel && item.onClick && (
-                <button onClick={item.onClick} style={{
+                <button onClick={(e) => { e.stopPropagation(); item.onClick(); }} style={{
                     flexShrink: 0, padding: '0.375rem 0.875rem',
                     border: `1px solid ${T.border}`,
                     borderRadius: T.rSm, background: T.surface,
