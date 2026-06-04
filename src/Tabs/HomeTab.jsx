@@ -447,12 +447,6 @@ export default function HomeTab() {
                             </div>
                         </div>
 
-                        {!calendarConnected && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, border: `1px dashed ${T.borderStrong}`, borderRadius: T.rMd, padding: '10px 12px', marginBottom: '0.625rem' }}>
-                                <div style={{ flex: 1, fontSize: '0.8125rem', color: T.inkMid, fontFamily: T.sans }}>Connect your calendar to see your meetings on Home.</div>
-                                <button onClick={connectMyCalendar} style={{ padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Connect calendar</button>
-                            </div>
-                        )}
                         {plate.length === 0 ? (
                             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '2rem', textAlign: 'center' }}>
                                 <div style={{ color: T.inkMuted, fontSize: '0.875rem', fontFamily: T.sans, marginBottom: '0.75rem' }}>
@@ -567,6 +561,13 @@ export default function HomeTab() {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {!calendarConnected && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, border: `1px dashed ${T.borderStrong}`, borderRadius: T.rMd, padding: '10px 12px', marginTop: '0.25rem' }}>
+                            <div style={{ flex: 1, fontSize: '0.8125rem', color: T.inkMid, fontFamily: T.sans }}>Connect your calendar to see your meetings on Home.</div>
+                            <button onClick={connectMyCalendar} style={{ padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Connect calendar</button>
                         </div>
                     )}
 
