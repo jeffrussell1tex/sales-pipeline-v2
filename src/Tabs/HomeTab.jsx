@@ -87,6 +87,7 @@ export default function HomeTab() {
         setActiveTab, isMobile,
         setEditingOpp, setShowModal,
         setEditingTask, setShowTaskModal,
+        setTaskRailId, setTaskRailMode,
         setActivityInitialContext, setEditingActivity, setShowActivityModal,
         meetingPrepEvent, setMeetingPrepEvent,
         meetingPrepOpen, setMeetingPrepOpen,
@@ -158,7 +159,7 @@ export default function HomeTab() {
             ctaLabel:  'View task',
             // Inline complete — tasks only
             onComplete: canEdit ? () => handleCompleteTask(t.id || t._id) : null,
-            onClick:   () => { setEditingTask(t); setShowTaskModal(true); },
+            onClick:   () => { setTaskRailId(t.id || t._id); setTaskRailMode('view'); },
             item:      t,
             isMeeting: false,
         });
@@ -221,7 +222,7 @@ export default function HomeTab() {
             onComplete: canEdit ? () => handleCompleteTask(t.id || t._id) : null,
             onClick: relOpp
                 ? () => { setEditingOpp(relOpp); setShowModal(true); }
-                : () => { setEditingTask(t); setShowTaskModal(true); },
+                : () => { setTaskRailId(t.id || t._id); setTaskRailMode('view'); },
             item:      t,
             isMeeting: false,
         });
@@ -454,7 +455,7 @@ export default function HomeTab() {
                                 </div>
                                 {canEdit && (
                                     <button
-                                        onClick={() => { setEditingTask(null); setShowTaskModal(true); }}
+                                        onClick={() => { setTaskRailId('new'); setTaskRailMode('new'); }}
                                         style={{ fontSize: '0.8125rem', color: T.goldInk, fontWeight: '600', background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.sans }}>
                                         + Add a task
                                     </button>
