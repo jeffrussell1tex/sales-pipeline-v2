@@ -75,6 +75,11 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
         setTiers(prev => [...prev, { id: 'tier_' + crypto.randomUUID(), label: 'New tier', color: '#8a8378', maxDiscount: 1.00, approver: '', sla: '24h', fallback: '', active: true }]);
         setDirty(true);
     };
+    const deleteTier = (i) => {
+        setTiers(prev => prev.filter((_, idx) => idx !== i));
+        setOpenTierMenu(null);
+        setDirty(true);
+    };
     const toneForIdx = (i) => ['rep','mgr','vp','cfo'][i] || 'neutral';
 
     // ── Live approval stats ──────────────────────────────────
@@ -331,6 +336,15 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                                                             {item.sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.sub}</div>}
                                                         </button>
                                                     ))}
+
+                                                    {/* Delete */}
+                                                    <button onClick={() => deleteTier(i)}
+                                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:T.surface2, border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', cursor:'pointer', fontFamily:T.sans }}
+                                                        onMouseEnter={e => e.currentTarget.style.background='rgba(156,58,46,0.08)'}
+                                                        onMouseLeave={e => e.currentTarget.style.background=T.surface2}>
+                                                        <div style={{ fontSize:13, color:T.danger, fontWeight:600 }}>Delete tier</div>
+                                                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Remove this approval tier</div>
+                                                    </button>
                                                 </div>
                                             )}
                                         </div>
