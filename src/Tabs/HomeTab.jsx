@@ -95,7 +95,10 @@ export default function HomeTab() {
 
     const { userId, orgId } = useAuth();
     const [calSrc, setCalSrc] = React.useState('all'); // 'all' | 'user' | 'org'
-    const hasCorpEvents = (calendarEvents || []).some(ev => ev.source === 'org');
+    const connectMyCalendar = () => {
+        const qs = new URLSearchParams({ provider: 'google', scope: 'user', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User' });
+        window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
+    };
 
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit    = !isReadOnly;
@@ -104,6 +107,12 @@ export default function HomeTab() {
     const now        = new Date();
     const todayStr   = now.toISOString().split('T')[0];
     const today12    = new Date(todayStr + 'T12:00:00');
+    // Company calendar (Settings → Company → Company calendar) acts as the corporate calendar.
+    // Entries are stored as 'MMM D' (e.g. 'Jun 4'), so match on that.
+    const todayMMMD = now.toLocaleString('en-US', { month: 'short' }) + ' ' + now.getDate();
+    const todayCompanyEntries = [...(settings?.federalHolidays || []), ...(settings?.customHolidays || [])]
+        .filter(h => h.date === todayMMMD);
+    const hasCorpEvents = (calendarEvents || []).some(ev => ev.source === 'org') || todayCompanyEntries.length > 0;
     const firstName  = currentUser ? currentUser.split(' ')[0] : 'there';
     const hour       = now.getHours();
     const greeting   = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -183,6 +192,19 @@ export default function HomeTab() {
             isMeeting: true,
         });
     });
+
+    // Corporate: company-calendar entries (holidays / company days) for today
+    if (calSrc !== 'user') {
+        todayCompanyEntries.forEach(h => {
+            plate.push({
+                type: 'meeting', urgency: 'meeting',
+                timeLabel: 'All day', timeColor: T.inkMid,
+                title: h.name, sub: 'Corporate · Company calendar',
+                arr: null, stage: null, ctaLabel: null, onComplete: null, onClick: null,
+                item: h, isMeeting: true,
+            });
+        });
+    }
 
     todayTasks.filter(t => !overdueTasks.includes(t)).forEach(t => {
         const relOpp = t.opportunityId ? visibleOpportunities.find(o => o.id === t.opportunityId) : null;
@@ -425,6 +447,12 @@ export default function HomeTab() {
                             </div>
                         </div>
 
+                        {!calendarConnected && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, border: `1px dashed ${T.borderStrong}`, borderRadius: T.rMd, padding: '10px 12px', marginBottom: '0.625rem' }}>
+                                <div style={{ flex: 1, fontSize: '0.8125rem', color: T.inkMid, fontFamily: T.sans }}>Connect your calendar to see your meetings on Home.</div>
+                                <button onClick={connectMyCalendar} style={{ padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Connect calendar</button>
+                            </div>
+                        )}
                         {plate.length === 0 ? (
                             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '2rem', textAlign: 'center' }}>
                                 <div style={{ color: T.inkMuted, fontSize: '0.875rem', fontFamily: T.sans, marginBottom: '0.75rem' }}>
