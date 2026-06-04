@@ -534,7 +534,7 @@ function ContactRowMenu({ contact, isPrimary, onSetPrimary, onRemove, onClose, a
 
 // ── TaskViewRail — right-rail task detail panel ─────────────────
 // Module-scope so React never unmounts on re-render.
-function TaskViewRail({ task, opportunities, contacts, accounts, activities, canEdit, currentUser, handleCompleteTask, handleSaveTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, setActivityInitialContext, setEditingActivity, setShowActivityModal }) {
+function TaskViewRail({ task, opportunities, contacts, accounts, activities, canEdit, currentUser, handleCompleteTask, handleSaveTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, setTaskRailId, setTaskRailMode, setActivityInitialContext, setEditingActivity, setShowActivityModal }) {
     const [completing,    setCompleting]    = useState(false);
     const [snoozeOpen,    setSnoozeOpen]    = useState(false);
     const [snoozeRect,    setSnoozeRect]    = useState(null);
@@ -658,8 +658,9 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
 
     const handleEdit = e => {
         e.stopPropagation();
-        setEditingTask(task);
-        setShowTaskModal(true);
+        setViewingTask(null);
+        setTaskRailId(task.id);
+        setTaskRailMode('edit');
     };
 
     return (
@@ -1205,6 +1206,8 @@ export default function TasksTab() {
                     setViewingTask={setViewingTask}
                     setEditingTask={setEditingTask}
                     setShowTaskModal={setShowTaskModal}
+                    setTaskRailId={setTaskRailId}
+                    setTaskRailMode={setTaskRailMode}
                     setActivityInitialContext={setActivityInitialContext}
                     setEditingActivity={setEditingActivity}
                     setShowActivityModal={setShowActivityModal}
