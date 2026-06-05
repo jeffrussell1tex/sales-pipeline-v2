@@ -262,7 +262,7 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
             onMouseLeave={() => { setHov(false); setSnoozeOpen(false); }}
             onClick={() => setViewingTask(task)}
             style={{
-                display: 'grid', gridTemplateColumns: '22px 18px 1fr auto',
+                display: 'grid', gridTemplateColumns: '18px 1fr auto',
                 gap: 12, padding: '11px 14px',
                 borderBottom: `1px solid ${T.border}`,
                 background: hov ? 'rgba(200,185,154,0.06)' : 'transparent',
