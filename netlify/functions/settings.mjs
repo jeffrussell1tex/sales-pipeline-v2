@@ -84,6 +84,7 @@ export const handler = async (event) => {
                 approvalTriggers:     row.extra?.approvalTriggers     || null,
                 priceBookProducts:    row.extra?.priceBookProducts    || [],
                 quoteTemplates:       row.extra?.quoteTemplates       || null,
+                quoteBrand:       row.extra?.quoteBrand       || null,
                 quoteDefaults:        row.extra?.quoteDefaults        || null,
                 quoteBoilerplate:     row.extra?.quoteBoilerplate     || null,
                 industries:           row.extra?.industries            || null,
@@ -170,6 +171,7 @@ export const handler = async (event) => {
                 approvalTriggers:     'approvalTriggers'     in data ? (data.approvalTriggers     || null) : existingExtra.approvalTriggers     || null,
                 priceBookProducts:    'priceBookProducts'    in data ? (data.priceBookProducts    || [])   : existingExtra.priceBookProducts    || [],
                 quoteTemplates:       'quoteTemplates'       in data ? (data.quoteTemplates       || null) : existingExtra.quoteTemplates       || null,
+                quoteBrand:       'quoteBrand'       in data ? (data.quoteBrand       || null) : existingExtra.quoteBrand       || null,
                 quoteDefaults:        'quoteDefaults'        in data ? (data.quoteDefaults        || null) : existingExtra.quoteDefaults        || null,
                 quoteBoilerplate:     'quoteBoilerplate'     in data ? (data.quoteBoilerplate     || null) : existingExtra.quoteBoilerplate     || null,
                 // Sales process Group 1

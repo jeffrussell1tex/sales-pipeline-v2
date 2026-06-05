@@ -167,6 +167,40 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
 
     const openModal = (mode, territory = null) => { setOpenTerrKebab(null); setModal({ mode, territory }); };
 
+    const handleImportCSV = () => {
+        const input = document.createElement('input');
+        input.type = 'file'; input.accept = '.csv,text/csv';
+        input.onchange = async (ev) => {
+            const file = ev.target.files?.[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const rows = text.split(/\r?\n/).filter(l => l.trim());
+                if (rows.length < 2) { window.alert('No rows found in the CSV.'); return; }
+                const parseLine = (line) => { const c=[]; let cur=''; let q=false; for (let i=0;i<line.length;i++){ const ch=line[i]; if(q){ if(ch==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; } else if(ch===','){ c.push(cur); cur=''; } else if(ch==='"'){ q=true; } else cur+=ch; } c.push(cur); return c; };
+                const header = parseLine(rows[0]).map(h => h.trim().toLowerCase());
+                const col = (names) => { for (const n of names) { const i = header.indexOf(n); if (i>=0) return i; } return -1; };
+                const iName = col(['name','territory','territory name']);
+                if (iName < 0) { window.alert('CSV must include a "Name" column.'); return; }
+                const iParent = col(['parent']); const iRule = col(['rule']);
+                const parsed = rows.slice(1).map(parseLine).filter(c => (c[iName]||'').trim());
+                const byName = new Map(territories.map(tr => [String(tr.name||'').toLowerCase(), tr]));
+                parsed.forEach(c => {
+                    const name = (c[iName]||'').trim(); const key = name.toLowerCase();
+                    const parent = iParent>=0 ? (c[iParent]||'').trim() : '';
+                    const rule   = iRule>=0   ? (c[iRule]||'').trim()   : '';
+                    if (byName.has(key)) byName.set(key, { ...byName.get(key), parent, rule });
+                    else byName.set(key, { id:'terr_'+crypto.randomUUID(), name, parent, rule, ownerId:'', repIds:[], accounts:0, pipeline:'—', status:'Unassigned' });
+                });
+                const updated = Array.from(byName.values());
+                const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ territories: updated }) });
+                if (res.ok) { setSettings(prev => ({ ...prev, territories: updated })); window.alert(`Imported ${parsed.length} territor${parsed.length===1?'y':'ies'}.`); }
+                else window.alert('Import failed to save. Please try again.');
+            } catch (e) { console.error('territory CSV import', e); window.alert('Could not import the CSV. Please check the format.'); }
+        };
+        input.click();
+    };
+
     const handleDelete = (tr) => {
         setOpenTerrKebab(null);
         showConfirm(`Delete territory "${tr.name}"? Assigned reps will become unassigned.`, async () => {
@@ -235,7 +269,7 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
                 </div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
-                <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                <button onClick={handleImportCSV} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                     onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
                     onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Import CSV</button>
                 <button onClick={() => openModal('new')}
