@@ -711,28 +711,6 @@ function PlateRow({ item, idx, total, urgencyBorder, getStageColor, T, fmtArr })
                 transition: 'background 0.1s',
                 cursor: item.onClick ? 'pointer' : 'default',
             }}>
-            {/* Inline complete checkbox — tasks only */}
-            {!item.isMeeting && item.onComplete && (
-                <button
-                    onClick={handleComplete}
-                    title="Mark complete"
-                    style={{
-                        flexShrink: 0,
-                        width: '18px', height: '18px',
-                        borderRadius: '50%',
-                        border: `1.5px solid ${completing ? T.ok : T.borderStrong}`,
-                        background: completing ? T.ok : 'transparent',
-                        cursor: completing ? 'default' : 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all 0.15s',
-                        padding: 0,
-                    }}>
-                    {completing && (
-                        <span style={{ color: '#fff', fontSize: '10px', lineHeight: 1 }}>✓</span>
-                    )}
-                </button>
-            )}
-
             {/* Time / urgency label */}
             <div style={{ width: '68px', flexShrink: 0 }}>
                 <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: item.timeColor, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: T.sans }}>

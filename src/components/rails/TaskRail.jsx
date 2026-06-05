@@ -230,7 +230,7 @@ export default function TaskRail() {
             accountId:     selAccount ? selAccount.id : (formData.accountId     || ''),
         };
 
-        const editingTaskForSave = isNew ? (editingTask || null) : task;
+        const editingTaskForSave = isNew ? null : task;
 
         await handleSaveTask(saveData, {
             editingTask: editingTaskForSave,

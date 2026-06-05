@@ -275,26 +275,6 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
                 <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: T.danger }}/>
             )}
 
-            {/* Status circle */}
-            <div onClick={handleComplete} style={{ paddingTop: 0 }}>
-                <div style={{
-                    width: 18, height: 18, borderRadius: '50%',
-                    border: `1.5px solid ${completing ? T.ok : isCompleted ? T.ok : isOverdue ? T.danger : T.borderStrong}`,
-                    background: (isCompleted || completing) ? T.ok : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: canEdit && !isCompleted ? 'pointer' : 'default',
-                    transition: 'all 120ms', flexShrink: 0,
-                }}>
-                    {(isCompleted || completing || hov) && (
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                            stroke={(isCompleted || completing) ? '#fff' : T.inkMuted}
-                            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M4 12l5 5L20 6"/>
-                        </svg>
-                    )}
-                </div>
-            </div>
-
             {/* Type icon — bare glyph, no chip */}
             <span style={{ color: isCompleted ? T.inkMuted : meta.color, display: 'flex', alignItems: 'center' }}>
                 {meta.icon}
@@ -586,7 +566,19 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
         e.stopPropagation();
         if (!canEdit || completing) return;
         setCompleting(true);
-        try { await handleCompleteTask(task.id, 'Completed'); } finally { setCompleting(false); }
+        const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
+        const updated = { ...task, status: 'Completed', completed: true, completedDate: today };
+        setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+        try {
+            const data = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+            if (data?.task) {
+                setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
+            } else {
+                setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+            }
+        } catch {
+            setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+        } finally { setCompleting(false); }
     };
 
     const handleSnooze = async newDate => {
