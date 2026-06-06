@@ -347,7 +347,8 @@ export const RolesDetail = ({ settings, onBack }) => {
         return () => document.removeEventListener('mousedown', h);
     }, [popover]);
 
-    const role  = PT_ROLES.find(r => r.id === activeRole);
+    const roles = settings?.roles || PT_ROLES;
+    const role  = roles.find(r => r.id === activeRole);
     const perms = localPerms[activeRole] || {};
 
     const handleApply = (objectId, action, value) => {
@@ -361,6 +362,44 @@ export const RolesDetail = ({ settings, onBack }) => {
         setLocalPerms(next);
         if (setSettings) setSettings(s => ({ ...s, rolePermissions: next }));
         dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ rolePermissions: next }) }).catch(e => console.error('save roles', e));
+    };
+
+    // Roles list — standard persistence (setSettings + dbFetch PUT settings.roles)
+    const saveRoles = (next) => {
+        if (setSettings) setSettings(s => ({ ...s, roles: next }));
+        dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ roles: next }) }).catch(e => console.error('save roles list', e));
+    };
+    const savePerms = (nextPerms) => {
+        setLocalPerms(nextPerms);
+        if (setSettings) setSettings(s => ({ ...s, rolePermissions: nextPerms }));
+        dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ rolePermissions: nextPerms }) }).catch(e => console.error('save role perms', e));
+    };
+    const addRole = () => {
+        const id = 'role_' + crypto.randomUUID();
+        saveRoles([...roles, { id, name: 'New role', userCount: 0, sys: false }]);
+        setActiveRole(id);
+    };
+    const duplicateRole = (srcId) => {
+        const src = roles.find(r => r.id === srcId) || role;
+        if (!src) return;
+        const id = 'role_' + crypto.randomUUID();
+        saveRoles([...roles, { ...src, id, name: src.name + ' (copy)', userCount: 0, sys: false }]);
+        savePerms({ ...localPerms, [id]: JSON.parse(JSON.stringify(localPerms[srcId] || {})) });
+        setActiveRole(id);
+    };
+    const renameRole = (id) => {
+        const r = roles.find(x => x.id === id); if (!r) return;
+        const name = window.prompt('Rename role', r.name);
+        if (name && name.trim()) saveRoles(roles.map(x => x.id === id ? { ...x, name: name.trim() } : x));
+    };
+    const deleteRole = (id) => {
+        const r = roles.find(x => x.id === id); if (!r) return;
+        setOpenRoleKebab(null);
+        showConfirm(`Delete role "${r.name}"? Users will need reassignment.`, () => {
+            const next = roles.filter(x => x.id !== id);
+            saveRoles(next);
+            if (activeRole === id && next.length) setActiveRole(next[0].id);
+        });
     };
 
     const handleCellClick = (obj, action) => {
@@ -384,24 +423,22 @@ export const RolesDetail = ({ settings, onBack }) => {
                 <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
                     <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Roles & permissions</div>
                     <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                        <span>{PT_ROLES.length} roles · {PT_PERM_OBJECTS.length} objects · {PT_PERM_ACTIONS.length} actions</span>
+                        <span>{roles.length} roles · {PT_PERM_OBJECTS.length} objects · {PT_PERM_ACTIONS.length} actions</span>
                         <span style={{ color:T.inkMuted }}>•</span>
                         <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
                         <span>Editing — <b style={{ color:T.ink }}>{role?.name}</b></span>
                     </div>
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
-                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                    <button onClick={() => duplicateRole(activeRole)} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                         onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Duplicate role</button>
-                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Compare</button>
-                    <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New role</button>
+                    <button onClick={addRole} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New role</button>
                 </div>
             </div>
 
             {/* Role tabs */}
             <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
-                {PT_ROLES.map(r => {
+                {roles.map(r => {
                     const active = r.id === activeRole;
                     return (
                         <div key={r.id} style={{ position:'relative', display:'flex', alignItems:'center' }}>
@@ -419,10 +456,10 @@ export const RolesDetail = ({ settings, onBack }) => {
                                 {openRoleKebab === r.id && (
                                     <div onClick={e=>e.stopPropagation()} style={{ position:'absolute', left:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:190 }}>
                                         {[
-                                            { label:'Duplicate role',         action: () => setOpenRoleKebab(null) },
-                                            { label:'Rename',                 action: () => setOpenRoleKebab(null) },
+                                            { label:'Duplicate role',         action: () => { setOpenRoleKebab(null); duplicateRole(r.id); } },
+                                            { label:'Rename',                 action: () => { setOpenRoleKebab(null); renameRole(r.id); } },
                                             { label:`View ${r.userCount} users`, action: () => setOpenRoleKebab(null) },
-                                            ...(!r.sys ? [{ label:'Delete role', action: () => { setOpenRoleKebab(null); showConfirm(`Delete role "${r.name}"? Users will need reassignment.`, ()=>{}); }, danger: true }] : []),
+                                            ...(!r.sys ? [{ label:'Delete role', action: () => { deleteRole(r.id); }, danger: true }] : []),
                                         ].map((item, mi) => (
                                             <button key={mi} onClick={item.action}
                                                 style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0?`1px solid ${T.border}`:'none', textAlign:'left', fontSize:13, color: item.danger?T.danger:T.ink, cursor:'pointer', fontFamily:T.sans }}

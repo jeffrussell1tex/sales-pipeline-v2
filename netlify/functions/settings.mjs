@@ -78,6 +78,7 @@ export const handler = async (event) => {
                 accountSegmentTiers:  row.extra?.accountSegmentTiers  || null,
                 leadScoring:          row.extra?.leadScoring          || DEFAULT_LEAD_SCORING,
                 rolePermissions:      row.extra?.rolePermissions      || null,
+                roles:      row.extra?.roles      || null,
                 ssoConfig:            row.extra?.ssoConfig            || null,
                 // Quoting (persisted via quoting settings panels)
                 approvalTiers:        row.extra?.approvalTiers        || null,
@@ -184,6 +185,7 @@ export const handler = async (event) => {
                 accountSegmentTiers:  'accountSegmentTiers'  in data ? (data.accountSegmentTiers  || null) : existingExtra.accountSegmentTiers  || null,
                 leadScoring:          'leadScoring'          in data ? (data.leadScoring          || null) : existingExtra.leadScoring          || null,
                 rolePermissions:      'rolePermissions'      in data ? (data.rolePermissions      || null) : existingExtra.rolePermissions      || null,
+                roles:      'roles'      in data ? (data.roles      || null) : existingExtra.roles      || null,
                 ssoConfig:            'ssoConfig'            in data ? (data.ssoConfig            || null) : existingExtra.ssoConfig            || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 buyerPersonas:        'buyerPersonas'        in data ? (data.buyerPersonas        || [])   : existingExtra.buyerPersonas        || [],
