@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
+import RecordDocuments from '../documents/RecordDocuments';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -446,6 +447,7 @@ export default function ContactRail() {
                 {tabBtn('primary', 'Primary Info')}
                 {tabBtn('additional', 'Additional Info')}
                 {!isNew && tabBtn('activity', 'Activity')}
+                {!isNew && tabBtn('documents', 'Documents')}
             </div>
 
             {/* ── Scrollable body ────────────────────────────────────────────── */}
@@ -777,6 +779,10 @@ export default function ContactRail() {
                 )}
 
                 {/* ════════ TAB: Activity (view only) ════════ */}
+                {activeTab === 'documents' && !isNew && contact && (
+                    <RecordDocuments recordType="contact" recordId={contact.id} recordName={fullName} recordSub={contact?.title} />
+                )}
+
                 {activeTab === 'activity' && !isNew && (
                     <div>
                         {/* Open Opportunities */}

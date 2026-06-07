@@ -122,11 +122,13 @@ export const SsoDetail = ({ onBack }) => {
     const [idpSsoUrl, setIdpSsoUrl] = useState(cfg.idp?.ssoUrl ?? SEC_SSO.idp.ssoUrl);
     const [idpEntityId, setIdpEntityId] = useState(cfg.idp?.entityId ?? SEC_SSO.idp.entityId);
     const [idpCert, setIdpCert] = useState(cfg.idp?.cert ?? SEC_SSO.idp.cert);
+    const [attributeMap, setAttributeMap] = useState(() => (cfg.attributeMap || SEC_SSO.attributeMap).map(r => ({ ...r })));
+    const [editingAttr, setEditingAttr] = useState(null);
     const providers = ['Okta','Azure AD','Google','OneLogin','Generic'];
     const handleSave = async () => {
         setSaving(true);
         const base = settings?.ssoConfig || SEC_SSO;
-        const ssoConfig = { ...base, provider, idp: { ...(base.idp || {}), ssoUrl: idpSsoUrl, entityId: idpEntityId, cert: idpCert } };
+        const ssoConfig = { ...base, provider, attributeMap, idp: { ...(base.idp || {}), ssoUrl: idpSsoUrl, entityId: idpEntityId, cert: idpCert } };
         if (setSettings) setSettings(s => ({ ...s, ssoConfig }));
         try { await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ ssoConfig }) }); }
         catch (e) { console.error('save sso', e); }
@@ -222,18 +224,36 @@ export const SsoDetail = ({ onBack }) => {
                             <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
                         ))}
                     </div>
-                    {SEC_SSO.attributeMap.map((row,i) => (
-                        <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 120px 60px', gap:8, padding:'9px 14px', borderBottom:i<SEC_SSO.attributeMap.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{row.idp}</span>
-                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.inkMid }}>{row.local}</span>
-                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                                background: row.required?'rgba(77,107,61,0.12)':'rgba(184,115,51,0.10)',
-                                color: row.required?T.ok:T.warn }}>
-                                {row.required?'Required':'Optional'}
-                            </span>
-                            <button style={{ fontSize:12.5, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Edit</button>
+                    {attributeMap.map((row,i) => {
+                        const upd = (patch) => { setAttributeMap(prev => prev.map((r,j) => j===i ? { ...r, ...patch } : r)); setDirty(true); };
+                        const editing = editingAttr === i;
+                        const inp = { fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, padding:'4px 7px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, outline:'none', width:'100%', boxSizing:'border-box' };
+                        return (
+                        <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 120px 60px', gap:8, padding:'9px 14px', borderBottom:i<attributeMap.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                            {editing ? (
+                                <>
+                                    <input value={row.idp} onChange={e=>upd({ idp:e.target.value })} style={{ ...inp, color:T.ink }}/>
+                                    <input value={row.local} onChange={e=>upd({ local:e.target.value })} style={{ ...inp, color:T.inkMid }}/>
+                                    <select value={row.required?'Required':'Optional'} onChange={e=>upd({ required:e.target.value==='Required' })} style={{ fontSize:12, padding:'4px 6px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontFamily:T.sans, outline:'none' }}>
+                                        <option>Required</option><option>Optional</option>
+                                    </select>
+                                    <button onClick={()=>setEditingAttr(null)} style={{ fontSize:12.5, color:T.ok, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>Done</button>
+                                </>
+                            ) : (
+                                <>
+                                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{row.idp}</span>
+                                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.inkMid }}>{row.local}</span>
+                                    <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                        background: row.required?'rgba(77,107,61,0.12)':'rgba(184,115,51,0.10)',
+                                        color: row.required?T.ok:T.warn }}>
+                                        {row.required?'Required':'Optional'}
+                                    </span>
+                                    <button onClick={()=>setEditingAttr(i)} style={{ fontSize:12.5, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Edit</button>
+                                </>
+                            )}
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </SecCard>
 

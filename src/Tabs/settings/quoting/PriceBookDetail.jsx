@@ -514,6 +514,7 @@ export const PriceBookDetail = ({ settings, setSettings, onBack }) => {
     const [dirty,     setDirty]       = useState(false);
     const [saving,    setSaving]       = useState(false);
     const [modal, setModal] = useState(null); // null | { mode:'new'|'edit', product, scrollTo }
+    const fileInputRef = useRef(null);
 
     const filtered = products.filter(p => {
         const matchCat = catFilter === 'All' || p.category === catFilter;
@@ -553,6 +554,80 @@ export const PriceBookDetail = ({ settings, setSettings, onBack }) => {
         if (!window.confirm(`Archive "${product.name}"? It will no longer appear in new quotes.`)) return;
         setProducts(prev => prev.map(p => p.id === product.id ? { ...p, active:false } : p));
         setDirty(true);
+    };
+
+    // ── CSV export / import (flat product fields) ──────────────────────────
+    const CSV_COLS    = ['sku','name','category','type','unit','listPrice','cost','active'];
+    const CSV_HEADERS = ['SKU','Name','Category','Type','Unit','List Price','Cost','Active'];
+    const handleExportCSV = () => {
+        const esc = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
+        const lines = [CSV_HEADERS.join(',')];
+        products.forEach(p => lines.push(CSV_COLS.map(c => esc(c === 'active' ? (p.active ? 'Yes' : 'No') : p[c])).join(',')));
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'price-book.csv';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+    const parseCSVLine = (line) => {
+        const cells = []; let cur = ''; let q = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (q) { if (ch === '"') { if (line[i+1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+            else if (ch === ',') { cells.push(cur); cur = ''; }
+            else if (ch === '"') { q = true; }
+            else cur += ch;
+        }
+        cells.push(cur); return cells;
+    };
+    const handleImportFile = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const rows = String(reader.result || '').split(/\r?\n/).filter(l => l.trim());
+                if (rows.length < 2) { window.alert('No rows found in the CSV.'); return; }
+                const header = parseCSVLine(rows[0]).map(h => h.trim().toLowerCase());
+                const col = (names) => { for (const n of names) { const i = header.indexOf(n); if (i >= 0) return i; } return -1; };
+                const iSku = col(['sku']); const iName = col(['name','product','product name']);
+                if (iSku < 0 || iName < 0) { window.alert('CSV must include at least "SKU" and "Name" columns.'); return; }
+                const iCat = col(['category']); const iType = col(['type']); const iUnit = col(['unit']);
+                const iList = col(['list price','listprice','list','price']); const iCost = col(['cost']); const iActive = col(['active']);
+                const num = (v) => Number(String(v ?? '').replace(/[^0-9.\-]/g,'')) || 0;
+                const parsed = rows.slice(1).map(parseCSVLine).filter(c => (c[iSku]||'').trim() || (c[iName]||'').trim());
+                setProducts(prev => {
+                    const bySku = new Map(prev.map(p => [String(p.sku||'').toLowerCase(), p]));
+                    parsed.forEach(c => {
+                        const sku = (c[iSku]||'').trim(); const key = sku.toLowerCase();
+                        const flat = {
+                            sku,
+                            name:     (c[iName]||'').trim(),
+                            category: iCat  >= 0 ? ((c[iCat]||'').trim() || 'Uncategorized') : 'Uncategorized',
+                            type:     iType >= 0 ? ((c[iType]||'').trim() || 'Recurring')     : 'Recurring',
+                            unit:     iUnit >= 0 ? (c[iUnit]||'').trim() : '',
+                            listPrice: iList >= 0 ? num(c[iList]) : 0,
+                            cost:      iCost >= 0 ? num(c[iCost]) : 0,
+                            active:    iActive >= 0 ? !/^(no|false|0|inactive|archived)$/i.test((c[iActive]||'').trim()) : true,
+                        };
+                        if (key && bySku.has(key)) bySku.set(key, { ...bySku.get(key), ...flat });
+                        else bySku.set(key || ('new_' + crypto.randomUUID()), {
+                            id: 'p_' + crypto.randomUUID(), ...flat, tags: [],
+                            volumeTiers: DEFAULT_TIERS.map(tt => ({ ...tt })), segMatrix: makeMatrix(), customRules: [],
+                        });
+                    });
+                    return Array.from(bySku.values());
+                });
+                setDirty(true);
+                window.alert(`Imported ${parsed.length} product${parsed.length === 1 ? '' : 's'}. Review the list, then click Save changes to persist.`);
+            } catch (err) {
+                console.error('price book CSV import error', err);
+                window.alert('Could not parse the CSV. Please check the format and try again.');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
     };
 
     // Catalog health stats
@@ -605,12 +680,13 @@ export const PriceBookDetail = ({ settings, setSettings, onBack }) => {
                     </div>
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
-                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                    <input type="file" ref={fileInputRef} accept=".csv,text/csv" onChange={handleImportFile} style={{ display:'none' }} />
+                    <button onClick={() => fileInputRef.current?.click()} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                         onMouseEnter={e => e.currentTarget.style.background=T.surface2}
                         onMouseLeave={e => e.currentTarget.style.background=T.surface}>
                         Import CSV
                     </button>
-                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                    <button onClick={handleExportCSV} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                         onMouseEnter={e => e.currentTarget.style.background=T.surface2}
                         onMouseLeave={e => e.currentTarget.style.background=T.surface}>
                         Export

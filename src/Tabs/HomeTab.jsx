@@ -87,6 +87,7 @@ export default function HomeTab() {
         setActiveTab, isMobile,
         setEditingOpp, setShowModal,
         setEditingTask, setShowTaskModal,
+        setTaskRailId, setTaskRailMode,
         setActivityInitialContext, setEditingActivity, setShowActivityModal,
         meetingPrepEvent, setMeetingPrepEvent,
         meetingPrepOpen, setMeetingPrepOpen,
@@ -94,6 +95,11 @@ export default function HomeTab() {
     } = useApp();
 
     const { userId, orgId } = useAuth();
+    const [calSrc, setCalSrc] = React.useState('all'); // 'all' | 'user' | 'org'
+    const connectMyCalendar = () => {
+        const qs = new URLSearchParams({ provider: 'google', scope: 'user', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User' });
+        window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
+    };
 
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit    = !isReadOnly;
@@ -102,6 +108,12 @@ export default function HomeTab() {
     const now        = new Date();
     const todayStr   = now.toISOString().split('T')[0];
     const today12    = new Date(todayStr + 'T12:00:00');
+    // Company calendar (Settings → Company → Company calendar) acts as the corporate calendar.
+    // Entries are stored as 'MMM D' (e.g. 'Jun 4'), so match on that.
+    const todayMMMD = now.toLocaleString('en-US', { month: 'short' }) + ' ' + now.getDate();
+    const todayCompanyEntries = [...(settings?.federalHolidays || []), ...(settings?.customHolidays || [])]
+        .filter(h => h.date === todayMMMD);
+    const hasCorpEvents = (calendarEvents || []).some(ev => ev.source === 'org') || todayCompanyEntries.length > 0;
     const firstName  = currentUser ? currentUser.split(' ')[0] : 'there';
     const hour       = now.getHours();
     const greeting   = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -126,6 +138,7 @@ export default function HomeTab() {
                 const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];
                 return d === todayStr;
             })
+            .filter(ev => calSrc === 'all' || (ev.source || 'user') === calSrc)
             .sort((a,b) => (a.start?.dateTime||'').localeCompare(b.start?.dateTime||''))
         : [];
 
@@ -146,7 +159,7 @@ export default function HomeTab() {
             ctaLabel:  'View task',
             // Inline complete — tasks only
             onComplete: canEdit ? () => handleCompleteTask(t.id || t._id) : null,
-            onClick:   () => { setEditingTask(t); setShowTaskModal(true); },
+            onClick:   () => { setTaskRailId(t.id || t._id); setTaskRailMode('view'); },
             item:      t,
             isMeeting: false,
         });
@@ -163,7 +176,7 @@ export default function HomeTab() {
             timeLabel: timeStr,
             timeColor: T.inkMid,
             title:     ev.summary,
-            sub:       ev.attendees?.[0]?.displayName || ev.location || 'Meeting',
+            sub:       (ev.source === 'org' ? 'Corporate · ' : '') + (ev.attendees?.[0]?.displayName || ev.location || 'Meeting'),
             arr:       linkedOpp ? parseFloat(linkedOpp.arr)||0 : null,
             stage:     linkedOpp?.stage || null,
             // "Open prep" wires to Meeting Prep panel
@@ -181,6 +194,19 @@ export default function HomeTab() {
         });
     });
 
+    // Corporate: company-calendar entries (holidays / company days) for today
+    if (calSrc !== 'user') {
+        todayCompanyEntries.forEach(h => {
+            plate.push({
+                type: 'meeting', urgency: 'meeting',
+                timeLabel: 'All day', timeColor: T.inkMid,
+                title: h.name, sub: 'Corporate · Company calendar',
+                arr: null, stage: null, ctaLabel: null, onComplete: null, onClick: null,
+                item: h, isMeeting: true,
+            });
+        });
+    }
+
     todayTasks.filter(t => !overdueTasks.includes(t)).forEach(t => {
         const relOpp = t.opportunityId ? visibleOpportunities.find(o => o.id === t.opportunityId) : null;
         plate.push({
@@ -196,7 +222,7 @@ export default function HomeTab() {
             onComplete: canEdit ? () => handleCompleteTask(t.id || t._id) : null,
             onClick: relOpp
                 ? () => { setEditingOpp(relOpp); setShowModal(true); }
-                : () => { setEditingTask(t); setShowTaskModal(true); },
+                : () => { setTaskRailId(t.id || t._id); setTaskRailMode('view'); },
             item:      t,
             isMeeting: false,
         });
@@ -410,7 +436,16 @@ export default function HomeTab() {
                     <div>
                         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '0.625rem' }}>
                             <div style={eyebrow()}>On your plate</div>
-                            <div style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>Ordered by time · urgency</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {hasCorpEvents && (
+                                    <div style={{ display: 'flex', border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                        {[{ k: 'all', l: 'Both' }, { k: 'user', l: 'Mine' }, { k: 'org', l: 'Corporate' }].map(o => (
+                                            <button key={o.k} onClick={() => setCalSrc(o.k)} style={{ padding: '3px 9px', fontSize: '0.6875rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, border: 'none', background: calSrc === o.k ? T.ink : T.surface, color: calSrc === o.k ? '#fbf8f3' : T.inkMid }}>{o.l}</button>
+                                        ))}
+                                    </div>
+                                )}
+                                <div style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>Ordered by time · urgency</div>
+                            </div>
                         </div>
 
                         {plate.length === 0 ? (
@@ -420,7 +455,7 @@ export default function HomeTab() {
                                 </div>
                                 {canEdit && (
                                     <button
-                                        onClick={() => { setEditingTask(null); setShowTaskModal(true); }}
+                                        onClick={() => { setTaskRailId('new'); setTaskRailMode('new'); }}
                                         style={{ fontSize: '0.8125rem', color: T.goldInk, fontWeight: '600', background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.sans }}>
                                         + Add a task
                                     </button>
@@ -527,6 +562,13 @@ export default function HomeTab() {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {!calendarConnected && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, border: `1px dashed ${T.borderStrong}`, borderRadius: T.rMd, padding: '10px 12px', marginTop: '0.25rem' }}>
+                            <div style={{ flex: 1, fontSize: '0.8125rem', color: T.inkMid, fontFamily: T.sans }}>Connect your calendar to see your meetings on Home.</div>
+                            <button onClick={connectMyCalendar} style={{ padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Connect calendar</button>
                         </div>
                     )}
 
@@ -654,37 +696,21 @@ function PlateRow({ item, idx, total, urgencyBorder, getStageColor, T, fmtArr })
         }
     };
 
+    const baseBg = idx === 0 && item.urgency === 'overdue' ? 'rgba(156,58,46,0.03)' : 'transparent';
     return (
-        <div style={{
-            display: 'flex', alignItems: 'center', gap: '1rem',
-            padding: '0.875rem 1.125rem',
-            borderBottom: idx < total - 1 ? `1px solid ${T.border}` : 'none',
-            borderLeft: `3px solid ${urgencyBorder(item.urgency)}`,
-            background: idx === 0 && item.urgency === 'overdue' ? 'rgba(156,58,46,0.03)' : 'transparent',
-            transition: 'background 0.1s',
-        }}>
-            {/* Inline complete checkbox — tasks only */}
-            {!item.isMeeting && item.onComplete && (
-                <button
-                    onClick={handleComplete}
-                    title="Mark complete"
-                    style={{
-                        flexShrink: 0,
-                        width: '18px', height: '18px',
-                        borderRadius: '50%',
-                        border: `1.5px solid ${completing ? T.ok : T.borderStrong}`,
-                        background: completing ? T.ok : 'transparent',
-                        cursor: completing ? 'default' : 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all 0.15s',
-                        padding: 0,
-                    }}>
-                    {completing && (
-                        <span style={{ color: '#fff', fontSize: '10px', lineHeight: 1 }}>✓</span>
-                    )}
-                </button>
-            )}
-
+        <div
+            onClick={item.onClick || undefined}
+            onMouseEnter={item.onClick ? (e => { e.currentTarget.style.background = T.surface2; }) : undefined}
+            onMouseLeave={item.onClick ? (e => { e.currentTarget.style.background = baseBg; }) : undefined}
+            style={{
+                display: 'flex', alignItems: 'center', gap: '1rem',
+                padding: '0.875rem 1.125rem',
+                borderBottom: idx < total - 1 ? `1px solid ${T.border}` : 'none',
+                borderLeft: `3px solid ${urgencyBorder(item.urgency)}`,
+                background: baseBg,
+                transition: 'background 0.1s',
+                cursor: item.onClick ? 'pointer' : 'default',
+            }}>
             {/* Time / urgency label */}
             <div style={{ width: '68px', flexShrink: 0 }}>
                 <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: item.timeColor, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: T.sans }}>
@@ -707,7 +733,7 @@ function PlateRow({ item, idx, total, urgencyBorder, getStageColor, T, fmtArr })
 
             {/* CTA button */}
             {item.ctaLabel && item.onClick && (
-                <button onClick={item.onClick} style={{
+                <button onClick={(e) => { e.stopPropagation(); item.onClick(); }} style={{
                     flexShrink: 0, padding: '0.375rem 0.875rem',
                     border: `1px solid ${T.border}`,
                     borderRadius: T.rSm, background: T.surface,

@@ -315,7 +315,7 @@ export const handler = async (event) => {
         if (event.httpMethod === 'DELETE') {
             const clear = event.queryStringParameters?.clear;
             if (clear === 'true') {
-                await db.delete(opportunities);
+                await db.delete(opportunities).where(eq(opportunities.orgId, orgId));
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
             }
             const id = event.queryStringParameters?.id;

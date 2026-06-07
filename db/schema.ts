@@ -1,5 +1,5 @@
 import {
-    pgTable, text, integer, boolean, timestamp, jsonb, varchar, decimal, index
+    pgTable, text, integer, boolean, timestamp, jsonb, varchar, decimal, index, uniqueIndex
 } from 'drizzle-orm/pg-core';
 // ── USERS ─────────────────────────────────────────────────────────────────────
 // Sales reps, managers, admins — one row per user account
@@ -924,4 +924,69 @@ export const mergeLog = pgTable('merge_log', {
     createdAt:        timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
     index('merge_log_org_id_idx').on(t.orgId),
+]);
+// ── DOCUMENTS ────────────────────────────────────────────────────────────────
+// File metadata. Blob bytes live in Cloudflare R2 (S3 API), never in Postgres;
+// `storageKey` points at the current version's object. Visibility is per-document
+// (private | team | specific) and independent of any linked record's ACL.
+export const documents = pgTable('documents', {
+    id:                text('id').primaryKey(),  // 'doc_' + crypto.randomUUID()
+    orgId:             text('org_id').notNull(),  // tenant boundary
+    name:              varchar('name', { length: 255 }).notNull(),
+    ext:               varchar('ext', { length: 16 }),  // 'pdf' | 'docx' | 'xlsx' | ...
+    category:          varchar('category', { length: 50 }),  // Contract | NDA | SOW | ...
+    sizeKb:            integer('size_kb').default(0),  // current-version size
+    ownerId:           text('owner_id'),  // Clerk userId of uploader
+    ownerName:         varchar('owner_name', { length: 255 }),  // denormalized for display
+    visibilityKind:    varchar('visibility_kind', { length: 20 }).notNull().default('team'),  // private | team | specific
+    visibilityUserIds: jsonb('visibility_user_ids').default('[]'),  // string[] for 'specific'
+    version:           integer('version').notNull().default(1),  // current version number
+    storageKey:        text('storage_key'),  // current R2 object key
+    contentType:       varchar('content_type', { length: 128 }),
+    note:              text('note'),  // description
+    uploadedAt:        timestamp('uploaded_at').notNull().defaultNow(),
+    modifiedAt:        timestamp('modified_at').notNull().defaultNow(),
+    createdAt:         timestamp('created_at').notNull().defaultNow(),
+    updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+    index('documents_org_id_idx').on(t.orgId),
+    index('documents_org_id_category_idx').on(t.orgId, t.category),
+    index('documents_org_id_owner_idx').on(t.orgId, t.ownerId),
+]);
+
+// ── DOCUMENT LINKS ───────────────────────────────────────────────────────────
+// Normalized join: a document <-> a record (account|contact|opportunity|task|activity).
+// Indexed BOTH directions so record->docs and doc->records are index lookups.
+export const documentLinks = pgTable('document_links', {
+    id:         text('id').primaryKey(),  // 'dlk_' + crypto.randomUUID()
+    orgId:      text('org_id').notNull(),
+    documentId: text('document_id').notNull(),
+    recordType: varchar('record_type', { length: 20 }).notNull(),  // account|contact|opportunity|task|activity
+    recordId:   text('record_id').notNull(),
+    recordName: varchar('record_name', { length: 255 }),  // denormalized for display
+    recordSub:  varchar('record_sub', { length: 255 }),  // e.g. 'Proposal . $184K', 'CMO'
+    createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+    index('document_links_org_record_idx').on(t.orgId, t.recordType, t.recordId),
+    index('document_links_org_doc_idx').on(t.orgId, t.documentId),
+    uniqueIndex('document_links_unique_idx').on(t.documentId, t.recordType, t.recordId),
+]);
+
+// ── DOCUMENT VERSIONS ────────────────────────────────────────────────────────
+// One row per uploaded version; each points at its own R2 object so any version
+// is independently downloadable / restorable.
+export const documentVersions = pgTable('document_versions', {
+    id:          text('id').primaryKey(),  // 'dvr_' + crypto.randomUUID()
+    orgId:       text('org_id').notNull(),
+    documentId:  text('document_id').notNull(),
+    v:           integer('v').notNull(),  // version number
+    storageKey:  text('storage_key').notNull(),  // this version's R2 object
+    sizeKb:      integer('size_kb').default(0),
+    contentType: varchar('content_type', { length: 128 }),
+    byId:        text('by_id'),
+    byName:      varchar('by_name', { length: 255 }),
+    note:        text('note'),  // changelog line
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+    index('document_versions_org_doc_idx').on(t.orgId, t.documentId),
 ]);

@@ -9,7 +9,7 @@ export default function QuickLogFab() {
         quickLogForm, setQuickLogForm,
         quickLogContactResults, setQuickLogContactResults,
         followUpPrompt, setFollowUpPrompt,
-        setEditingTask, setShowTaskModal, isMobile,
+        setEditingTask, setTaskRailId, setTaskRailMode, isMobile,
     } = useApp();
 
     const inputStyle = {
@@ -184,7 +184,8 @@ export default function QuickLogFab() {
                         </button>
                         <button onClick={() => {
                             setEditingTask({ relatedTo: followUpPrompt.opportunityId, opportunityId: followUpPrompt.opportunityId, type: 'Follow-up', dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0] });
-                            setShowTaskModal(true);
+                            setTaskRailId('new');
+                            setTaskRailMode('new');
                             setFollowUpPrompt(null);
                         }} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', background: '#1c1917', color: '#f5f1eb', fontSize: '0.875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                             + Add Task

@@ -22,8 +22,8 @@ export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSetti
 
     const handleSave = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, dispatchVehicles: vehicles }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ dispatchVehicles: vehicles }) }); }
+        setSettings(prev => ({ ...prev, dispatchVehicles: vehicles, dispatchEquipment: equipment }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ dispatchVehicles: vehicles, dispatchEquipment: equipment }) }); }
         catch(e) { console.error('save vehicles', e); }
         setSaving(false); setDirty(false);
     };
@@ -46,7 +46,6 @@ export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSetti
             extraActions={
                 <>
                     <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Export CSV</button>
-                    <button onClick={()=>setShowAdd(true)} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ Add vehicle</button>
                 </>
             }>
             <CSectionCard title="Fleet vehicles" desc="Assign vehicles to techs in Settings → People & Teams.">
@@ -67,6 +66,7 @@ export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSetti
                     status: <span style={{ fontSize:11, padding:'2px 8px', borderRadius:3, fontWeight:600, background:v.status==='Active'?`${T.ok}14`:`${T.warn}14`, color:v.status==='Active'?T.ok:T.warn }}>{v.status||'Active'}</span>,
                     more:   <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setVehMenu(vehMenu?.id===v.id?null:{id:v.id,idx:i,v,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>,
                 }))}/>
+                {showAdd ? (
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 90px 100px 1.5fr auto auto', gap:8, alignItems:'center', padding:'10px 0' }}>
                         <input value={newV.name} onChange={e=>setNewV(p=>({...p,name:e.target.value}))} placeholder="Van 1, Truck A…" autoFocus
                             style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none' }}/>
@@ -83,7 +83,9 @@ export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSetti
                         <button onClick={()=>setShowAdd(false)}
                             style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
                     </div>
-                ) : null}
+                ) : (
+                    <button onClick={()=>setShowAdd(true)} style={{ marginTop:10, padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>+ Add vehicle</button>
+                )}
             </CSectionCard>
 
             <CSectionCard title="Shared equipment" desc="Tools/kits stored at HQ or shared across vehicles. Match scoring deducts when a job needs an item that isn't available.">

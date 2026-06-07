@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../AppContext';
+import AttachmentsStrip from '../documents/AttachmentsStrip';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -230,7 +231,7 @@ export default function TaskRail() {
             accountId:     selAccount ? selAccount.id : (formData.accountId     || ''),
         };
 
-        const editingTaskForSave = isNew ? (editingTask || null) : task;
+        const editingTaskForSave = isNew ? null : task;
 
         await handleSaveTask(saveData, {
             editingTask: editingTaskForSave,
@@ -632,6 +633,12 @@ export default function TaskRail() {
                                 ✓ Completed{task.completedDate ? ` on ${new Date(task.completedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                             </div>
                         )}
+                    </div>
+                )}
+
+                {!isNew && task && (
+                    <div style={{ marginTop: 14 }}>
+                        <AttachmentsStrip recordType="task" recordId={task.id} recordName={task.name} recordSub={task.dueDate ? `Due ${task.dueDate}` : ''} />
                     </div>
                 )}
             </div>

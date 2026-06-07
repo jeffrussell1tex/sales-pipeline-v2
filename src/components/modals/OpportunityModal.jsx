@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
 import { dbFetch } from '../../utils/storage';
 import { useApp } from '../../AppContext';
+import RecordDocuments from '../documents/RecordDocuments';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 
@@ -1358,6 +1359,7 @@ export default function OpportunityModal({
                                     { id: 'contacts',  label: 'Contacts'  },
                                     ...(settings?.aiScoringEnabled ? [{ id: 'ai-score', label: 'AI Score' }] : []),
                                     { id: 'quotes',    label: 'Quotes'    },
+                                    { id: 'documents', label: 'Documents' },
                                 ].map(tab => (
                                     <button key={tab.id} type="button" onClick={() => setDetailTab(detailTab === tab.id ? null : tab.id)}
                                         style={{ padding: '3px 10px', fontSize: 11, fontWeight: detailTab === tab.id ? 700 : 500, fontFamily: T.sans,
@@ -1407,6 +1409,9 @@ export default function OpportunityModal({
                             )}
                             {detailTab === 'quotes' && (
                                 <OppQuotesPanel opportunity={opportunity} contacts={contacts} onClose={onClose}/>
+                            )}
+                            {detailTab === 'documents' && (
+                                <RecordDocuments recordType="opportunity" recordId={opportunity.id} recordName={opportunity.opportunityName || opportunity.account} recordSub={opportunity.stage} />
                             )}
                         </div>
                     )}

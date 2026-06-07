@@ -68,6 +68,9 @@ export const handler = async (event) => {
             const [upserted] = await db.insert(activities).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: activities.id, setWhere: eq(activities.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
+            if (!upserted) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Activity not found in your organization' }) };
+            }
             if (upserted.leadId) { try { await rescoreLead(orgId, upserted.leadId); } catch (e) { console.warn('lead rescore (put) failed:', e.message); } }
             return { statusCode: 200, headers, body: JSON.stringify({ activity: upserted }) };
         }

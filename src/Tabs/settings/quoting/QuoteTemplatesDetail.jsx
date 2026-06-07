@@ -6,6 +6,7 @@ import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { QPill, ATToggle } from './shared.jsx';
+import { EditBrandModal, BRAND_PRESET } from './EditBrandModal.jsx';
 
 // TODO: read currentUser from session/AppContext — hard-coded for dev
 const CURRENT_USER = { id:'u_42', name:'Bea Chen', role:'admin' };
@@ -1100,11 +1101,14 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
         </select>
     );
 
-    // Brand — read from company profile settings
-    const brandColor   = settings?.companyBrandColor   || QT_BRANDING.primary;
-    const brandName    = settings?.companyDisplayName   || QT_BRANDING.companyName;
+    // Brand — read from saved quote brand (settings.quoteBrand)
+    const [showEditBrand, setShowEditBrand] = useState(false);
+    const brand        = settings?.quoteBrand || BRAND_PRESET;
+    const brandColor   = brand.primary;
+    const brandName    = brand.companyName;
 
     return (
+        <>
         <CategoryDetailChrome
             crumb="Quote templates & branding" category="Quoting" title="Quote templates & branding"
             subtitle="Header, footer, terms boilerplate, and PDF styling for sent quotes"
@@ -1135,13 +1139,13 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
                     </div>
                     <div>
                         <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:2, fontFamily:T.sans }}>Display font</div>
-                        <div style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:14 }}>Editorial</div>
+                        <div style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:14 }}>{brand.displayFont}</div>
                     </div>
                     <div>
                         <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:2, fontFamily:T.sans }}>Body font</div>
-                        <div style={{ fontSize:13, fontFamily:T.sans }}>Söhne</div>
+                        <div style={{ fontSize:13, fontFamily:T.sans }}>{brand.bodyFont}</div>
                     </div>
-                    <button style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                    <button onClick={() => setShowEditBrand(true)} style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                         onMouseEnter={e => e.currentTarget.style.background=T.surface2}
                         onMouseLeave={e => e.currentTarget.style.background=T.surface}>
                         Edit brand
@@ -1252,5 +1256,7 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
                 </div>
             </div>
         </CategoryDetailChrome>
+        {showEditBrand && <EditBrandModal initial={brand} onClose={() => setShowEditBrand(false)}/>}
+        </>
     );
 };

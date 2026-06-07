@@ -158,7 +158,7 @@ export const handler = async (event) => {
                                 profile:   { ...(row.profile || {}), status: 'Active', userType: realRole },
                                 updatedAt: new Date(),
                             })
-                            .where(eq(users.id, row.id));
+                            .where(and(eq(users.id, row.id), eq(users.orgId, orgId)));
                         row = { ...row, id: userId, name: realName, role: realRole, active: true };
                         console.log(`users.mjs: reconciled pending_ → ${userId} (${realName}) for ${clerkEmail}`);
                     } catch (reconcileErr) {

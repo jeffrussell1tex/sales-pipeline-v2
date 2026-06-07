@@ -8,6 +8,9 @@ import TaskRail from '../rails/TaskRail';
 import TaskModal from '../modals/TaskModal'; // kept for legacy inline usage
 import UserModal from '../modals/UserModal';
 import ActivityRail from '../rails/ActivityRail';
+import DocumentRail from '../documents/DocumentRail';
+import DocumentUploadRail from '../documents/DocumentUploadRail';
+import DocumentLinkPicker from '../documents/DocumentLinkPicker';
 import CsvImportModal from '../modals/CsvImportModal';
 import OutlookImportModal from '../modals/OutlookImportModal';
 import LeadImportModal from '../modals/LeadImportModal';
@@ -1052,6 +1055,9 @@ export default function ModalLayer() {
             <TaskRail />
             <ContactRail />
             <AccountRail />
+            <DocumentRail />
+            <DocumentUploadRail />
+            <DocumentLinkPicker />
             <MergeReviewModal />
             <ContactMergeReviewModal />
         </>

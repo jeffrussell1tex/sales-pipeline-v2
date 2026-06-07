@@ -9,6 +9,7 @@ import { useAccounts } from './hooks/useAccounts';
 import { useContacts } from './hooks/useContacts';
 import { useTasks } from './hooks/useTasks';
 import { useActivities } from './hooks/useActivities';
+import { useDocuments } from './hooks/useDocuments';
 import { AppProvider, useApp } from './AppContext';
 import SalesManagerTab from './Tabs/SalesManagerTab';
 import ReportsTab from './Tabs/ReportsTab';
@@ -18,6 +19,7 @@ import AccountsTab from './Tabs/AccountsTab';
 import PipelineTab from './Tabs/PipelineTab';
 import TasksTab from './Tabs/TasksTab';
 import HomeTab from './Tabs/HomeTab';
+import DocumentsTab from './Tabs/DocumentsTab';
 import ViewingContactPanel from './components/panels/ViewingContactPanel';
 import ViewingAccountPanel from './components/panels/ViewingAccountPanel';
 import ViewingTaskPanel from './components/panels/ViewingTaskPanel';
@@ -153,6 +155,9 @@ function App() {
         contactRailId, setContactRailId, contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
         railStack, setRailStack,
+        documentRailId, setDocumentRailId,
+        showUploadRail, setShowUploadRail, uploadRailContext, setUploadRailContext,
+        showDocLinkPicker, setShowDocLinkPicker, docLinkPickerContext, setDocLinkPickerContext,
         editingOpp, setEditingOpp, editingAccount, setEditingAccount, editingSubAccount, setEditingSubAccount,
         editingUser, setEditingUser, editingTask, setEditingTask, editingContact, setEditingContact,
         editingActivity, setEditingActivity, activityInitialContext, setActivityInitialContext,
@@ -266,6 +271,8 @@ function App() {
         handleDeleteActivity, handleSaveActivity,
     } = useActivities({ showConfirm: (...a) => _showConfirmRef.current?.(...a) });
 
+    const documentsHook = useDocuments(_deps);
+
     const [leads, setLeads] = React.useState([]);
     const [spiffClaims, setSpiffClaims] = React.useState([]);
 
@@ -333,6 +340,7 @@ function App() {
         loadContacts(setDbOffline);
         loadTasks(setDbOffline);
         loadActivities(setDbOffline);
+        documentsHook.loadDocuments(setDbOffline);
 
         // Load quotes and products if quotes feature is enabled
         loadQuotes(setDbOffline);
@@ -1320,6 +1328,11 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // ── AppContext value ─────────────────────────────────────────────
     const appContextValue = {
+        // ── Documents ──
+        ...documentsHook,
+        documentRailId, setDocumentRailId,
+        showUploadRail, setShowUploadRail, uploadRailContext, setUploadRailContext,
+        showDocLinkPicker, setShowDocLinkPicker, docLinkPickerContext, setDocLinkPickerContext,
         // Data
         settings, setSettings,
         settingsDirty, setSettingsDirty, settingsSaveRef,
@@ -1631,6 +1644,12 @@ dbFetch('/.netlify/functions/users?me=true')
                 >
                     DISPATCH
                 </button>
+                <button
+                    className={`nav-tab ${activeTab === 'documents' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('documents')}
+                >
+                    DOCUMENTS
+                </button>
                 <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
                     onClick={() => setActiveTab('reports')}
@@ -1705,6 +1724,12 @@ dbFetch('/.netlify/functions/users?me=true')
             {activeTab === 'dispatch' && settings.dispatchEnabled !== false && (
                 <ErrorBoundary tabName="Dispatch">
                     <DispatchTab />
+                </ErrorBoundary>
+            )}
+
+            {activeTab === 'documents' && (
+                <ErrorBoundary tabName="Documents">
+                    <DocumentsTab />
                 </ErrorBoundary>
             )}
 

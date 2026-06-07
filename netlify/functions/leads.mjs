@@ -132,6 +132,12 @@ export const handler = async (event) => {
                 .onConflictDoUpdate({ target: leads.id, setWhere: eq(leads.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
 
+            // Org-scoped upsert returns nothing if the row isn't in this org
+            // (e.g. a cross-tenant id) — treat as not-found instead of crashing.
+            if (!upserted) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Lead not found in your organization' }) };
+            }
+
             // Webhook: lead.converted — only fires the first time status flips to Converted
             if (!wasConverted && upserted.status === 'Converted') {
                 await dispatchWebhook(orgId, 'lead.converted', {
@@ -153,7 +159,7 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
-                await db.delete(leads);
+                await db.delete(leads).where(eq(leads.orgId, orgId));
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
             }
             const id = event.queryStringParameters?.id;
