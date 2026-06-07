@@ -15,7 +15,7 @@
 //
 // REQUIRED ENV (Netlify UI):
 //   R2_ENDPOINT           https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-//   R2_BUCKET             e.g. accelerep-documents
+//   R2_BUCKET             your bucket name
 //   R2_ACCESS_KEY_ID      from an R2 API token
 //   R2_SECRET_ACCESS_KEY  from an R2 API token
 //
