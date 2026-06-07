@@ -628,17 +628,17 @@ export default function TaskRail() {
                             </>
                         )}
 
-                        {!isNew && task && (
-                            <div style={{ marginTop: 14 }}>
-                                <AttachmentsStrip recordType="task" recordId={task.id} recordName={task.name} recordSub={task.dueDate ? `Due ${task.dueDate}` : ''} />
-                            </div>
-                        )}
-
                         {task?.completed && (
                             <div style={{ marginTop: 14, padding: '8px 12px', background: 'rgba(77,107,61,0.08)', border: `1px solid rgba(77,107,61,0.2)`, borderRadius: T.r, fontSize: 12, color: T.ok, fontWeight: 600 }}>
                                 ✓ Completed{task.completedDate ? ` on ${new Date(task.completedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                             </div>
                         )}
+                    </div>
+                )}
+
+                {!isNew && task && (
+                    <div style={{ marginTop: 14 }}>
+                        <AttachmentsStrip recordType="task" recordId={task.id} recordName={task.name} recordSub={task.dueDate ? `Due ${task.dueDate}` : ''} />
                     </div>
                 )}
             </div>
