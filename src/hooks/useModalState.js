@@ -40,6 +40,13 @@ export function useModalState() {
     // Each entry: { type: 'contact'|'account', id: string|'new', mode: string }
     const [railStack, setRailStack] = useState([]);
 
+    // ── Document Rail / Upload / Link picker ──────────────────────────────────
+    const [documentRailId,       setDocumentRailId]       = useState(null);
+    const [showUploadRail,       setShowUploadRail]       = useState(false);
+    const [uploadRailContext,    setUploadRailContext]    = useState(null);
+    const [showDocLinkPicker,    setShowDocLinkPicker]    = useState(false);
+    const [docLinkPickerContext, setDocLinkPickerContext] = useState(null);
+
     const [editingOpp, setEditingOpp] = useState(null);
     const [editingAccount, setEditingAccount] = useState(null);
     const [editingSubAccount, setEditingSubAccount] = useState(null);
@@ -96,6 +103,9 @@ export function useModalState() {
         accountRailId,   setAccountRailId,
         accountRailMode, setAccountRailMode,
         railStack,       setRailStack,
+        documentRailId, setDocumentRailId,
+        showUploadRail, setShowUploadRail, uploadRailContext, setUploadRailContext,
+        showDocLinkPicker, setShowDocLinkPicker, docLinkPickerContext, setDocLinkPickerContext,
         editingOpp, setEditingOpp,
         editingAccount, setEditingAccount,
         editingSubAccount, setEditingSubAccount,

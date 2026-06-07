@@ -165,6 +165,19 @@ export const handler = async (event) => {
         return { statusCode: 200, headers, body: JSON.stringify({ url, expiresIn: GET_TTL }) };
       }
 
+      // Version history for one document (detail rail)
+      if (action === 'versions') {
+        if (!qs.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+        const [doc] = await db.select().from(documents)
+          .where(and(eq(documents.id, qs.id), eq(documents.orgId, orgId)));
+        if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+        if (!canSee(doc, userId, userRole)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) };
+        const vers = await db.select().from(documentVersions)
+          .where(and(eq(documentVersions.orgId, orgId), eq(documentVersions.documentId, qs.id)))
+          .orderBy(desc(documentVersions.v));
+        return { statusCode: 200, headers, body: JSON.stringify({ versions: vers }) };
+      }
+
       // A record's documents (reverse view: a tab or attachments strip)
       if (qs.linkedTo) {
         const recType = qs.type;
