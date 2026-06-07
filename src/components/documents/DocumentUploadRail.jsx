@@ -7,7 +7,7 @@
 //   • { mode:'version', documentId, name, ext } → new version of an existing doc
 //     (just a file + optional note), triggered from the detail rail.
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../AppContext';
 import {
     T, fmtSize, baseName, fileMeta, FileTypeBadge, CategoryPill, LinkChip,
@@ -38,6 +38,15 @@ export default function DocumentUploadRail() {
     const [error, setError] = useState(null);
     const [drag, setDrag] = useState(false);
     const inputRef = useRef(null);
+
+    // Seed from context when the rail opens — e.g. pre-linked when launched from
+    // a record's Documents tab (ctx.links) so the upload attaches automatically.
+    useEffect(() => {
+        if (showUploadRail && !isVersion) {
+            setLinks(Array.isArray(ctx.links) ? ctx.links : []);
+            if (ctx.category) setCategory(ctx.category);
+        }
+    }, [showUploadRail]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!showUploadRail) return null;
 
