@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../AppContext';
+import AttachmentsStrip from '../documents/AttachmentsStrip';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -625,6 +626,12 @@ export default function TaskRail() {
                                     ))}
                                 </div>
                             </>
+                        )}
+
+                        {!isNew && task && (
+                            <div style={{ marginTop: 14 }}>
+                                <AttachmentsStrip recordType="task" recordId={task.id} recordName={task.name} recordSub={task.dueDate ? `Due ${task.dueDate}` : ''} />
+                            </div>
                         )}
 
                         {task?.completed && (

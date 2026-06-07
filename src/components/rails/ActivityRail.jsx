@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../AppContext';
+import AttachmentsStrip from '../documents/AttachmentsStrip';
 import { dbFetch } from '../../utils/storage';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -246,6 +247,13 @@ export default function ActivityRail() {
                         <Typeahead value={oppSearch} onChange={setOppSearch} suggestions={oppNames} onSelect={v => { setOppSearch(v); const o = (opportunities||[]).find(x => (x.opportunityName||x.account) === v); if (o) setCompanySearch(prev => prev || o.account || ''); }} placeholder="Type opportunity or account name…" dropUp />
                     </FieldGroup>
                 </div>
+
+                {editingActivity && editingActivity.id && (
+                    <>
+                        <SectionHeading label="Attachments" />
+                        <AttachmentsStrip recordType="activity" recordId={editingActivity.id} recordName={editingActivity.name || editingActivity.type || 'Activity'} recordSub={editingActivity.date || ''} />
+                    </>
+                )}
             </div>
 
             {/* ── Footer ────────────────────────────────────────────────────── */}

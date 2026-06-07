@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../AppContext';
+import RecordDocuments from '../documents/RecordDocuments';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -525,6 +526,7 @@ export default function AccountRail() {
                 {tabBtn('details', 'Details')}
                 {!isNew && tabBtn('people', 'People')}
                 {!isNew && tabBtn('activity', 'Activity')}
+                {!isNew && tabBtn('documents', 'Documents')}
             </div>
 
             {/* ── Scrollable body ────────────────────────────────────────────── */}
@@ -862,6 +864,10 @@ export default function AccountRail() {
                 )}
 
                 {/* ════════ TAB: Activity ════════ */}
+                {activeTab === 'documents' && !isNew && account && (
+                    <RecordDocuments recordType="account" recordId={account.id} recordName={account.name} recordSub={account?.verticalMarket || account?.industry} />
+                )}
+
                 {activeTab === 'activity' && !isNew && (
                     <>
                         <SectionHeading label={`Open Opportunities (${openOpps.length})`} />
