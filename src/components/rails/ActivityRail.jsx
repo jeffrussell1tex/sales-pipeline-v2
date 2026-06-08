@@ -166,6 +166,7 @@ export default function ActivityRail() {
         setFormData(src);
 
         const relOpp = src.opportunityId ? (opportunities || []).find(o => o.id === src.opportunityId) : null;
+        const relAccount = src.accountId ? (accounts || []).find(a => a.id === src.accountId) : null;
 
         // Seed selected contacts from the array (source of truth), falling back to the
         // legacy singular contactId so existing activities and Email/Call prefills work.
@@ -175,7 +176,9 @@ export default function ActivityRail() {
         setSelectedContactIds(seedContactIds);
 
         setOppSearch(relOpp ? (relOpp.opportunityName || relOpp.account) : '');
-        setCompanySearch(src.company || (relOpp?.account) || '');
+        // Company persists as accountId (no `company` column), so seed from the linked
+        // account; fall back to the opp's account, then any legacy company string.
+        setCompanySearch(relAccount ? relAccount.name : (src.company || relOpp?.account || ''));
         setSaveError(null);
         setActivityModalError?.(null);
     }, [showActivityModal, editingActivity, activityInitialContext]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -200,11 +203,18 @@ export default function ActivityRail() {
         if (!formData.notes?.trim()) { setSaveError('Notes are required.'); return; }
 
         const selOpp = (opportunities || []).find(o => (o.opportunityName || o.account) === oppSearch);
+        // Company persists as accountId (activities have no `company` column). Resolve the
+        // typed/selected name to an account; fall back to the linked opp's account.
+        const companyName = companySearch || selOpp?.account || '';
+        const selAccount = (accounts || []).find(a => a.name === companyName);
 
         const saveData = {
             ...formData,
-            company:       companySearch || selOpp?.account || '',
-            opportunityId: selOpp ? selOpp.id : (formData.opportunityId || ''),
+            company:       companyName,
+            // Matched account -> its id; typed-but-unmatched -> keep existing link (don't drop
+            // on a typo); empty -> '' so clearing the field unlinks. Same shape for opportunity.
+            accountId:     selAccount ? selAccount.id : (companyName ? (formData.accountId || '') : ''),
+            opportunityId: selOpp ? selOpp.id : (oppSearch ? (formData.opportunityId || '') : ''),
             contactIds:    selectedContactIds,
             contactId:     selectedContactIds[0] || '',
         };
