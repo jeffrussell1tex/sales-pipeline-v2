@@ -254,12 +254,20 @@ export default function AccountRail() {
         return o.account === account.name && !closed.includes((o.stage || '').toLowerCase());
     });
 
-    // Activities linked to this account — via any opportunity belonging to the account
-    const accountActivities = (activities || []).filter(a => {
-        if (!account) return false;
-        const accountOppIds = openOpps.map(o => o.id);
-        return a.opportunityId && accountOppIds.includes(a.opportunityId);
-    }).sort((a, b) => new Date(b.date || '2000') - new Date(a.date || '2000'));
+    // Activities that roll up to this account, via ANY of:
+    //   - a direct accountId link (the Email/Call quick-log writes this)
+    //   - a contact that belongs to this company (same set as the People tab)
+    //   - any opportunity belonging to this account (open OR closed)
+    const accountActivities = (() => {
+        if (!account) return [];
+        const acctContactIds = new Set(accountContacts.map(c => c.id));
+        const acctOppIds = new Set((opportunities || []).filter(o => o.account === account.name).map(o => o.id));
+        return (activities || []).filter(a =>
+            (a.accountId && a.accountId === account.id) ||
+            (a.contactId && acctContactIds.has(a.contactId)) ||
+            (a.opportunityId && acctOppIds.has(a.opportunityId))
+        ).sort((a, b) => new Date(b.date || '2000') - new Date(a.date || '2000'));
+    })();
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const hc = useCallback((field, value) => {
