@@ -210,6 +210,7 @@ export default function ContactRail() {
     const contactActivities = (activities || []).filter(a => {
         if (!contact) return false;
         if (a.contactId && a.contactId === contact.id) return true;
+        if (Array.isArray(a.contactIds) && a.contactIds.includes(contact.id)) return true;
         const involvedOppIds = openOpps.map(o => o.id);
         return a.opportunityId && involvedOppIds.includes(a.opportunityId);
     }).sort((a, b) => new Date(b.date || '2000') - new Date(a.date || '2000'));
@@ -343,6 +344,7 @@ export default function ContactRail() {
         setActivityInitialContext && setActivityInitialContext({
             type,
             contactId: contact.id,
+            contactIds: [contact.id],
             company: contact.company || '',
             accountId: acct?.id || '',
             opportunityId: openOpps.length === 1 ? openOpps[0].id : '',

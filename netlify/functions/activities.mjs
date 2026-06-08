@@ -33,20 +33,29 @@ export const handler = async (event) => {
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { userId, orgId, userRole, managedReps } = auth;
 
-    const sanitize = (d) => ({
-        id:            d.id,
-        type:          d.type          || null,
-        date:          d.date          || null,
-        subject:       d.subject       || null,
-        notes:         d.notes         || null,
-        outcome:       d.outcome       || null,
-        duration:      d.duration      ?? null,
-        opportunityId: d.opportunityId || null,
-        contactId:     d.contactId     || null,
-        accountId:     d.accountId     || null,
-        leadId:        d.leadId        || null,
-        author:        d.author        || null,
-    });
+    const sanitize = (d) => {
+        // contactIds is the source of truth (multi-contact); contactId is kept as the
+        // primary/first mirror for back-compat with any singular reader. A legacy
+        // payload sending only contactId is migrated forward into the array here.
+        const contactIds = Array.isArray(d.contactIds)
+            ? [...new Set(d.contactIds.filter(Boolean))]
+            : (d.contactId ? [d.contactId] : []);
+        return {
+            id:            d.id,
+            type:          d.type          || null,
+            date:          d.date          || null,
+            subject:       d.subject       || null,
+            notes:         d.notes         || null,
+            outcome:       d.outcome       || null,
+            duration:      d.duration      ?? null,
+            opportunityId: d.opportunityId || null,
+            contactId:     contactIds[0]   || null,
+            contactIds,
+            accountId:     d.accountId     || null,
+            leadId:        d.leadId        || null,
+            author:        d.author        || null,
+        };
+    };
 
     try {
         if (event.httpMethod === 'GET') {

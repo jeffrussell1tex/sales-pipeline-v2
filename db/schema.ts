@@ -196,6 +196,7 @@ export const activities = pgTable('activities', {
     duration:      integer('duration'),
     opportunityId: text('opportunity_id'),
     contactId:     text('contact_id'),
+    contactIds:    jsonb('contact_ids').default('[]'),
     accountId:     text('account_id'),
     leadId:        text('lead_id'),
     author:        varchar('author', { length: 255 }),

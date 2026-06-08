@@ -64,6 +64,60 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
     );
 }
 
+// Multi-select contacts: removable chips inside the field + typeahead (Option A).
+// Module scope (never an inline sub-component) so React keeps the input mounted.
+function ContactMultiSelect({ contacts, value, onChange, placeholder }) {
+    const [query, setQuery] = useState('');
+    const [open, setOpen]   = useState(false);
+    const selected = value || [];
+    const nameOf = (c) => ((c?.firstName || '') + ' ' + (c?.lastName || '')).trim() || (c?.email || 'Unknown contact');
+    const q = query.toLowerCase();
+    const suggestions = (contacts || [])
+        .filter(c => !selected.includes(c.id))
+        .filter(c => !q || nameOf(c).toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q))
+        .slice(0, 8);
+    const add    = (id) => { onChange([...selected, id]); setQuery(''); setOpen(false); };
+    const remove = (id) => onChange(selected.filter(x => x !== id));
+    return (
+        <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, padding: '5px 6px', minHeight: 34, boxSizing: 'border-box' }}>
+                {selected.map(id => {
+                    const c = (contacts || []).find(x => x.id === id);
+                    return (
+                        <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: T.surface3, border: `1px solid ${T.border}`, borderRadius: 999, padding: '2px 4px 2px 9px', fontSize: 12, color: T.ink2 }}>
+                            {nameOf(c)}
+                            <button type="button" aria-label={'Remove ' + nameOf(c)} onMouseDown={e => e.preventDefault()} onClick={() => remove(id)}
+                                style={{ border: 'none', background: 'none', color: T.ink3, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
+                        </span>
+                    );
+                })}
+                <input
+                    type="text"
+                    value={query}
+                    onChange={e => { setQuery(e.target.value); setOpen(true); }}
+                    onFocus={() => setOpen(true)}
+                    onBlur={() => setTimeout(() => setOpen(false), 200)}
+                    placeholder={selected.length ? '' : placeholder}
+                    style={{ flex: 1, minWidth: 90, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: T.ink, fontFamily: T.sans, padding: 2 }}
+                />
+            </div>
+            {open && suggestions.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.border}`, borderRadius: T.r, marginTop: 2, maxHeight: 180, overflowY: 'auto', zIndex: 300, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                    {suggestions.map(c => (
+                        <div key={c.id}
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => add(c.id)}
+                            style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}`, color: T.ink }}
+                            onMouseEnter={e => e.currentTarget.style.background = T.surface3}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            {nameOf(c)}{c.company ? <span style={{ color: T.ink3 }}> · {c.company}</span> : ''}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 const today = () => {
     const d = new Date();
     return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
@@ -100,7 +154,7 @@ export default function ActivityRail() {
     // ── Form state ─────────────────────────────────────────────────────────────
     const [formData,     setFormData]     = useState({ ...EMPTY_ACTIVITY, date: today() });
     const [oppSearch,    setOppSearch]    = useState('');
-    const [contactSearch,setContactSearch]= useState('');
+    const [selectedContactIds, setSelectedContactIds] = useState([]);
     const [companySearch,setCompanySearch]= useState('');
     const [saveError,    setSaveError]    = useState(null);
 
@@ -111,11 +165,16 @@ export default function ActivityRail() {
 
         setFormData(src);
 
-        const relOpp     = src.opportunityId ? (opportunities || []).find(o => o.id === src.opportunityId) : null;
-        const relContact = src.contactId     ? (contacts     || []).find(c => c.id === src.contactId)     : null;
+        const relOpp = src.opportunityId ? (opportunities || []).find(o => o.id === src.opportunityId) : null;
 
-        setOppSearch(relOpp     ? (relOpp.opportunityName || relOpp.account) : '');
-        setContactSearch(relContact ? ((relContact.firstName || '') + ' ' + (relContact.lastName || '')).trim() : '');
+        // Seed selected contacts from the array (source of truth), falling back to the
+        // legacy singular contactId so existing activities and Email/Call prefills work.
+        const seedContactIds = Array.isArray(src.contactIds) && src.contactIds.length
+            ? src.contactIds.filter(Boolean)
+            : (src.contactId ? [src.contactId] : []);
+        setSelectedContactIds(seedContactIds);
+
+        setOppSearch(relOpp ? (relOpp.opportunityName || relOpp.account) : '');
         setCompanySearch(src.company || (relOpp?.account) || '');
         setSaveError(null);
         setActivityModalError?.(null);
@@ -124,7 +183,6 @@ export default function ActivityRail() {
     // ── Derived lists ──────────────────────────────────────────────────────────
     const taskTypes   = settings?.taskTypes || ['Call', 'Meeting', 'Email', 'Demo', 'Follow-up'];
     const oppNames    = (opportunities || []).map(o => o.opportunityName || o.account).filter(Boolean);
-    const contactNames = (contacts || []).map(c => ((c.firstName||'') + ' ' + (c.lastName||'')).trim()).filter(Boolean);
     const accountNames = (accounts  || []).map(a => a.name).filter(Boolean);
 
     const hc = useCallback((field, value) => setFormData(prev => ({ ...prev, [field]: value })), []);
@@ -141,14 +199,14 @@ export default function ActivityRail() {
         setSaveError(null);
         if (!formData.notes?.trim()) { setSaveError('Notes are required.'); return; }
 
-        const selOpp     = (opportunities || []).find(o => (o.opportunityName || o.account) === oppSearch);
-        const selContact = (contacts     || []).find(c => ((c.firstName||'') + ' ' + (c.lastName||'')).trim() === contactSearch);
+        const selOpp = (opportunities || []).find(o => (o.opportunityName || o.account) === oppSearch);
 
         const saveData = {
             ...formData,
             company:       companySearch || selOpp?.account || '',
-            opportunityId: selOpp     ? selOpp.id     : (formData.opportunityId || ''),
-            contactId:     selContact ? selContact.id : (formData.contactId     || ''),
+            opportunityId: selOpp ? selOpp.id : (formData.opportunityId || ''),
+            contactIds:    selectedContactIds,
+            contactId:     selectedContactIds[0] || '',
         };
 
         await handleSaveActivity(saveData, {
@@ -237,8 +295,8 @@ export default function ActivityRail() {
 
                 <SectionHeading label="Related To" />
                 <div style={grid2}>
-                    <FieldGroup label="Contact" wide>
-                        <Typeahead value={contactSearch} onChange={setContactSearch} suggestions={contactNames} onSelect={setContactSearch} placeholder="Type to search contacts…" />
+                    <FieldGroup label="Contacts" wide>
+                        <ContactMultiSelect contacts={contacts} value={selectedContactIds} onChange={setSelectedContactIds} placeholder="Type to search contacts…" />
                     </FieldGroup>
                     <FieldGroup label="Company" wide>
                         <Typeahead value={companySearch} onChange={setCompanySearch} suggestions={accountNames} onSelect={setCompanySearch} placeholder="Type company name…" />

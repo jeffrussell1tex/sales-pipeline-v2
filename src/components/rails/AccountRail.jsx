@@ -265,6 +265,7 @@ export default function AccountRail() {
         return (activities || []).filter(a =>
             (a.accountId && a.accountId === account.id) ||
             (a.contactId && acctContactIds.has(a.contactId)) ||
+            (Array.isArray(a.contactIds) && a.contactIds.some(id => acctContactIds.has(id))) ||
             (a.opportunityId && acctOppIds.has(a.opportunityId))
         ).sort((a, b) => new Date(b.date || '2000') - new Date(a.date || '2000'));
     })();
