@@ -155,6 +155,7 @@ export default function TaskRail() {
     const [assignSearch,  setAssignSearch]  = useState('');
     const [dirty,         setDirty]         = useState(false);
     const [saveError,     setSaveError]     = useState(null);
+    const [newTaskId,     setNewTaskId]     = useState(null);
     const [completionPrompt, setCompletionPrompt] = useState(false); // show notes prompt on complete
     const [completionNotes,  setCompletionNotes]  = useState('');
     const [completionType,   setCompletionType]   = useState('');
@@ -185,6 +186,9 @@ export default function TaskRail() {
         setDirty(false);
         setSaveError(null);
         setTaskModalError?.(null);
+        // Pre-generate the id for a brand-new task so documents can be linked to it in
+        // the create form before save (handleSaveTask honors this id). Regenerated per open.
+        setNewTaskId(isNew ? ('id_' + crypto.randomUUID()) : null);
     }, [taskRailId, taskRailMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Derived lists ─────────────────────────────────────────────────────────
@@ -224,6 +228,7 @@ export default function TaskRail() {
 
         const saveData = {
             ...formData,
+            id:            isNew ? newTaskId : formData.id,
             assignedTo:    assignSearch,
             opportunityId: selOpp     ? selOpp.id     : (formData.opportunityId || ''),
             contacts:      selectedContacts,
@@ -238,7 +243,9 @@ export default function TaskRail() {
             setShowTaskModal: (open) => {
                 if (!open) {
                     if (isNew) {
-                        setTaskRailId(null);
+                        // Land on the just-created task (view mode) so its documents and
+                        // record stay available right after creating it.
+                        setTaskRailId(newTaskId);
                         setTaskRailMode('view');
                         setEditingTask(null);
                     } else {
@@ -636,11 +643,20 @@ export default function TaskRail() {
                     </div>
                 )}
 
-                {!isNew && task && (
-                    <div style={{ marginTop: 14 }}>
-                        <AttachmentsStrip recordType="task" recordId={task.id} recordName={task.name} recordSub={task.dueDate ? `Due ${task.dueDate}` : ''} />
-                    </div>
-                )}
+                {/* Documents — attach files related to this task. An existing task links
+                    immediately; a brand-new task has no id yet, so it can attach once saved. */}
+                <div style={{ marginTop: 14 }}>
+                    <SectionHeading label="Documents" />
+                    {!isNew && task ? (
+                        <AttachmentsStrip recordType="task" recordId={task.id} recordName={task.title || task.name} recordSub={task.dueDate ? `Due ${task.dueDate}` : ''} />
+                    ) : isNew && newTaskId ? (
+                        <AttachmentsStrip recordType="task" recordId={newTaskId} recordName={formData.title || 'New task'} recordSub={formData.dueDate ? `Due ${formData.dueDate}` : ''} />
+                    ) : (
+                        <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', padding: '2px 0 4px' }}>
+                            You can attach related documents once the task is created.
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* ── Footer: Save/Discard (edit mode) ─────────────────────────── */}
