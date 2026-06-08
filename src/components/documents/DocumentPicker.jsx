@@ -31,8 +31,8 @@ export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClo
 
     return (
         <>
-            <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(42,38,34,0.35)' }} />
-            <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(520px, calc(100vw - 32px))', maxHeight: '82vh', background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, boxShadow: '0 24px 64px rgba(42,38,34,0.28)', zIndex: 11001, display: 'flex', flexDirection: 'column', fontFamily: T.sans, overflow: 'hidden' }}>
+            <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 11104, background: 'rgba(42,38,34,0.35)' }} />
+            <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(520px, calc(100vw - 32px))', maxHeight: '82vh', background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, boxShadow: '0 24px 64px rgba(42,38,34,0.28)', zIndex: 11105, display: 'flex', flexDirection: 'column', fontFamily: T.sans, overflow: 'hidden' }}>
                 <div style={{ padding: '16px 18px 12px', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>Link an existing document</div>

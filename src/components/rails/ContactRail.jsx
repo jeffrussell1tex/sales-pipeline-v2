@@ -210,6 +210,7 @@ export default function ContactRail() {
     const contactActivities = (activities || []).filter(a => {
         if (!contact) return false;
         if (a.contactId && a.contactId === contact.id) return true;
+        if (Array.isArray(a.contactIds) && a.contactIds.includes(contact.id)) return true;
         const involvedOppIds = openOpps.map(o => o.id);
         return a.opportunityId && involvedOppIds.includes(a.opportunityId);
     }).sort((a, b) => new Date(b.date || '2000') - new Date(a.date || '2000'));
@@ -331,6 +332,26 @@ export default function ContactRail() {
         }
     };
 
+    // Log a communication (Email/Call): the anchor's href still fires the native
+    // mail/phone handoff; this pre-opens the Activity rail prefilled with what we
+    // know (type + contact + account + sole open opp) so the user only adds notes
+    // and Saves. Nothing persists until they save in the rail (confirm-to-log).
+    const openCommLog = (type) => {
+        if (!contact) return;
+        const acct = contact.company
+            ? (accounts || []).find(a => (a.name || '').toLowerCase() === (contact.company || '').toLowerCase())
+            : null;
+        setActivityInitialContext && setActivityInitialContext({
+            type,
+            contactId: contact.id,
+            contactIds: [contact.id],
+            company: contact.company || '',
+            accountId: acct?.id || '',
+            opportunityId: openOpps.length === 1 ? openOpps[0].id : '',
+        });
+        setShowActivityModal(true);
+    };
+
     // ESC key closes
     useEffect(() => {
         if (!isOpen) return;
@@ -418,13 +439,13 @@ export default function ContactRail() {
             {!isEditing && contact && (
                 <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: T.surface2, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
                     {contact.email && (
-                        <a href={`mailto:${contact.email}`}
+                        <a href={`mailto:${contact.email}`} onClick={() => openCommLog('Email')}
                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.ink2, textDecoration: 'none', cursor: 'pointer' }}>
                             ✉ Email
                         </a>
                     )}
                     {contact.phone && (
-                        <a href={`tel:${contact.phone}`}
+                        <a href={`tel:${contact.phone}`} onClick={() => openCommLog('Call')}
                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.ink2, textDecoration: 'none' }}>
                             ☎ Call
                         </a>

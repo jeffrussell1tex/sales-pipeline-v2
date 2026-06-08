@@ -122,7 +122,9 @@ export function useTasks(deps) {
                 setTaskModalError('Failed to save task. Please check your connection and try again.');
             } finally { setTaskModalSaving(false); }
         } else {
-            const newId = 'id_' + crypto.randomUUID();
+            // Honor a client-provided id (TaskRail pre-generates one so documents can be
+            // attached to a brand-new task before it is saved). Falls back to a fresh id.
+            const newId = taskData.id || ('id_' + crypto.randomUUID());
             const newTask = { ...taskData, id: newId };
             try {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) });

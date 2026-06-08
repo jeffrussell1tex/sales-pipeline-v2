@@ -115,6 +115,20 @@ function resolveAccountName(item, opportunities, accounts) {
     return null;
 }
 
+// For a logged activity, resolve the company to display: account / opp link first,
+// then fall back to the (first) linked contact's company so contact-only activities
+// still surface a company in the feed (matches the rail rollups).
+function resolveActivityAccount(item, opportunities, accounts, contacts) {
+    const base = resolveAccountName(item, opportunities, accounts);
+    if (base) return base;
+    const cid = (Array.isArray(item.contactIds) && item.contactIds[0]) || item.contactId;
+    if (cid) {
+        const c = (contacts || []).find(x => x.id === cid);
+        if (c && c.company) return c.company;
+    }
+    return '';
+}
+
 // ── Type icon map ───────────────────────────────────────────────
 const TYPE_META = {
     'Call':      { color: '#3a5a7a', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.65A2 2 0 012.18 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 8.15a16 16 0 006.94 6.94l1.52-1.52a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg> },
@@ -125,7 +139,17 @@ const TYPE_META = {
     'Note':      { color: '#5a7a6b', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg> },
     'default':   { color: '#8a8378', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 9h6M9 13h4"/></svg> },
 };
-const getTypeMeta = type => TYPE_META[type] || TYPE_META.default;
+function getTypeMeta(type) {
+    if (TYPE_META[type]) return TYPE_META[type];
+    const t = (type || '').toLowerCase();
+    if (t.includes('call'))   return TYPE_META.Call;
+    if (t.includes('email'))  return TYPE_META.Email;
+    if (t.includes('demo'))   return TYPE_META.Demo;
+    if (t.includes('meet'))   return TYPE_META.Meeting;
+    if (t.includes('follow')) return TYPE_META['Follow-up'];
+    if (t.includes('note'))   return TYPE_META.Note;
+    return TYPE_META.default;
+}
 
 // ── Status pill ─────────────────────────────────────────────────
 const STATUS_STYLES = {
@@ -218,7 +242,7 @@ function SnoozePicker({ onSnooze, onClose, anchorRect }) {
 
 // ── QRow — the new clean task row ───────────────────────────────
 // Module-scope component (NOT defined inside TasksTab) — avoids React #310 remount bug.
-function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal }) {
+function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, onOpen }) {
     const [hov, setHov]                   = useState(false);
     const [snoozeOpen, setSnoozeOpen]     = useState(false);
     const [snoozeRect, setSnoozeRect]     = useState(null);
@@ -260,7 +284,7 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
         <div
             onMouseEnter={() => setHov(true)}
             onMouseLeave={() => { setHov(false); setSnoozeOpen(false); }}
-            onClick={() => setViewingTask(task)}
+            onClick={() => (onOpen || setViewingTask)(task)}
             style={{
                 display: 'grid', gridTemplateColumns: '18px 1fr auto',
                 gap: 12, padding: '11px 14px',
@@ -1121,9 +1145,16 @@ export default function TasksTab() {
         const completedTasks = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) === 'Completed');
         completedTasks.forEach(t => items.push({ ...t, source: 'task-completed', when: t.completedAt || t.updatedAt || (t.dueDate ? t.dueDate + 'T12:00:00' : new Date().toISOString()) }));
         const visibleActivities = canSeeAll ? (activities || []) : (activities || []).filter(a => !a.author || a.author === currentUser);
-        visibleActivities.forEach(a => items.push({ ...a, source: 'log', type: a.type || 'Note', when: a.date ? a.date + 'T12:00:00' : (a.createdAt || new Date().toISOString()) }));
+        visibleActivities.forEach(a => items.push({
+            ...a,
+            source: 'log',
+            type:    a.type || 'Note',
+            title:   a.title || a.notes || a.subject || a.type || 'Activity',
+            account: a.account || resolveActivityAccount(a, opportunities, accounts, contacts),
+            when:    a.date ? a.date + 'T12:00:00' : (a.createdAt || new Date().toISOString()),
+        }));
         return items;
-    }, [visibleTasks, activities, canSeeAll, currentUser]);
+    }, [visibleTasks, activities, canSeeAll, currentUser, opportunities, accounts, contacts]);
 
     // ── Header counts (unfiltered) ─────────────────────────────
     const headerCounts = useMemo(() => ({
@@ -1168,7 +1199,20 @@ export default function TasksTab() {
     }), [weekStart, allOpenTasks, calendarEvents]);
 
     // ── Row props ──────────────────────────────────────────────
-    const qRowProps = { opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal };
+    // Open a feed item with consistent behavior: a logged activity opens in the
+    // Activity rail (edit) just like a task opens the task view. Look the activity
+    // up fresh from `activities` so the rail gets the clean record, not the feed copy.
+    const openFeedItem = (item) => {
+        if (item && item.source === 'log') {
+            const real = (activities || []).find(a => a.id === item.id) || item;
+            setActivityInitialContext && setActivityInitialContext(null);
+            setEditingActivity(real);
+            setShowActivityModal(true);
+        } else {
+            setViewingTask(item);
+        }
+    };
+    const qRowProps = { opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, onOpen: openFeedItem };
     const handleAddTask = () => { setTaskRailId('new'); setTaskRailMode('new'); };
 
     // ── View tabs config ───────────────────────────────────────

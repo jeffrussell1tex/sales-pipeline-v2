@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
@@ -163,9 +164,50 @@ function TableHeader({ selectMode, selectedIds, sorted, toggleSelectAll }) {
     );
 }
 
+// ── Row action (kebab) menu ────────────────────────────
+// Portaled to document.body with position:fixed so it can never be clipped by a
+// row/card/table overflow container. Positioned from the trigger's bounding rect
+// (passed in as `rect`), flips up when low on viewport space, and closes on
+// scroll/resize. Outside-click close stays with each view's existing id-based
+// effect (the portaled menu keeps its idBase, so getElementById still finds it).
+function RowActionMenu({ rect, onClose, items, idBase }) {
+    React.useEffect(() => {
+        if (!rect) return;
+        const onMove = () => onClose();
+        window.addEventListener('scroll', onMove, true);
+        window.addEventListener('resize', onMove);
+        return () => { window.removeEventListener('scroll', onMove, true); window.removeEventListener('resize', onMove); };
+    }, [rect, onClose]);
+    if (!rect) return null;
+    const MENU_W = 180;
+    const up = (window.innerHeight - rect.bottom) < 180;
+    const left = Math.max(8, Math.min(rect.right - MENU_W, window.innerWidth - MENU_W - 8));
+    const vstyle = up ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 };
+    return ReactDOM.createPortal(
+        <div id={idBase} onClick={e => e.stopPropagation()}
+            style={{ position: 'fixed', left, ...vstyle, width: MENU_W, background: T.surface,
+                border: `1px solid ${T.borderStrong}`, borderRadius: 4, padding: 4,
+                boxShadow: '0 8px 24px rgba(42,38,34,0.18)', fontFamily: T.sans, zIndex: 12000 }}>
+            {items.map((item, idx) => item === null ? (
+                <div key={idx} style={{ height: 1, background: T.border, margin: '2px 6px' }}/>
+            ) : (
+                <div key={idx} onClick={item.fn}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                        borderRadius: 3, cursor: 'pointer', color: item.danger ? T.danger : T.ink }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <span style={{ fontSize: 12, width: 14, textAlign: 'center' }}>{item.icon}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 500 }}>{item.label}</span>
+                </div>
+            ))}
+        </div>,
+        document.body
+    );
+}
+
 // ── Contact row (flat modes) ───────────────────────────────────
 function ContactRow({ contact, isEven, anchorId, selectMode, selectedIds, oppCount, openRowMenu, setOpenRowMenu, toggleSelect, setViewingContact, handleEditContact, handleDeleteOne }) {
-    const [menuUp, setMenuUp] = React.useState(false);
+    const [menuRect, setMenuRect] = React.useState(null);
     const menuBtnRef = React.useRef(null);
     const [hov, setHov] = useState(false);
     const isSelected = selectedIds.includes(contact.id);
@@ -250,37 +292,21 @@ function ContactRow({ contact, isEven, anchorId, selectMode, selectedIds, oppCou
                 onClick={e => e.stopPropagation()}>
                 <button
                     id={'contact-row-btn-' + contact.id}
-                    ref={menuBtnRef} onClick={e => { e.stopPropagation(); if (openRowMenu !== contact.id) { const r = menuBtnRef.current?.getBoundingClientRect(); setMenuUp(r ? window.innerHeight - r.bottom < 180 : false); } setOpenRowMenu(openRowMenu === contact.id ? null : contact.id); }}
+                    ref={menuBtnRef} onClick={e => { e.stopPropagation(); if (openRowMenu !== contact.id) { setMenuRect(menuBtnRef.current?.getBoundingClientRect() || null); setOpenRowMenu(contact.id); } else { setOpenRowMenu(null); } }}
                     style={{ background: openRowMenu === contact.id ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 3 }}>
                     <Icon name="dots" size={14} color={openRowMenu === contact.id ? T.goldInk : hov ? T.inkMid : T.border} />
                 </button>
-                {openRowMenu === contact.id && (
-                    <div id={'contact-row-menu-' + contact.id} onClick={e => e.stopPropagation()}
-                        style={{ position: 'absolute', right: 0, zIndex: 200, ...(menuUp ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }),
-                            width: 180, background: T.surface, border: `1px solid ${T.borderStrong}`,
-                            borderRadius: 4, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.12)', fontFamily: T.sans }}>
-                        <div style={{ position: 'absolute', top: -6, right: 10, width: 12, height: 12,
-                            background: T.surface, border: `1px solid ${T.borderStrong}`,
-                            borderRight: 'none', borderBottom: 'none', transform: 'rotate(45deg)' }}/>
-                        {[
-                            { icon: '✎', label: 'Edit contact', fn: () => { handleEditContact(contact); setOpenRowMenu(null); } },
-                            { icon: '👁', label: 'View profile',  fn: () => { setViewingContact(contact); setOpenRowMenu(null); } },
-                            null,
-                            { icon: '🗑', label: 'Delete',        fn: () => { handleDeleteOne(contact); setOpenRowMenu(null); }, danger: true },
-                        ].map((item, idx) => item === null ? (
-                            <div key={idx} style={{ height: 1, background: T.border, margin: '2px 6px' }}/>
-                        ) : (
-                            <div key={idx} onClick={item.fn}
-                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                                    borderRadius: 3, cursor: 'pointer', color: item.danger ? T.danger : T.ink }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                <span style={{ fontSize: 12, width: 14, textAlign: 'center' }}>{item.icon}</span>
-                                <span style={{ fontSize: 12.5, fontWeight: 500 }}>{item.label}</span>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                <RowActionMenu
+                    rect={openRowMenu === contact.id ? menuRect : null}
+                    idBase={'contact-row-menu-' + contact.id}
+                    onClose={() => setOpenRowMenu(null)}
+                    items={[
+                        { icon: '✎', label: 'Edit contact', fn: () => { handleEditContact(contact); setOpenRowMenu(null); } },
+                        { icon: '👁', label: 'View profile',  fn: () => { setViewingContact(contact); setOpenRowMenu(null); } },
+                        null,
+                        { icon: '🗑', label: 'Delete',        fn: () => { handleDeleteOne(contact); setOpenRowMenu(null); }, danger: true },
+                    ]}
+                />
             </div>
         </div>
     );
@@ -315,7 +341,7 @@ function CompanyTwoPane({
     const [stickyTop, setStickyTop] = useState(0);
     const rightPanelRef = useRef(null);
     const [openRowMenu, setOpenRowMenu] = useState(null);
-    const [menuUp,      setMenuUp]      = useState(false);
+    const [menuRect,    setMenuRect]    = useState(null);
 
     // Measure the actual pixel distance from the right panel's natural top edge
     // to the top of the viewport on mount. This accounts for the fixed AppHeader
@@ -585,42 +611,26 @@ function CompanyTwoPane({
                                                     onClick={e => {
                                                         e.stopPropagation();
                                                         if (openRowMenu !== c.id) {
-                                                            const r = e.currentTarget.getBoundingClientRect();
-                                                            setMenuUp(r ? window.innerHeight - r.bottom < 180 : false);
+                                                            setMenuRect(e.currentTarget.getBoundingClientRect() || null);
+                                                            setOpenRowMenu(c.id);
+                                                        } else {
+                                                            setOpenRowMenu(null);
                                                         }
-                                                        setOpenRowMenu(openRowMenu === c.id ? null : c.id);
                                                     }}
                                                     style={{ background: openRowMenu === c.id ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 3 }}>
                                                     <Icon name="dots" size={14} color={openRowMenu === c.id ? T.goldInk : T.inkMuted} />
                                                 </button>
-                                                {openRowMenu === c.id && (
-                                                    <div id={'co-contact-menu-' + c.id} onClick={e => e.stopPropagation()}
-                                                        style={{ position: 'absolute', right: 0, zIndex: 300,
-                                                            ...(menuUp ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }),
-                                                            width: 180, background: T.surface, border: `1px solid ${T.borderStrong}`,
-                                                            borderRadius: 4, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.12)', fontFamily: T.sans }}>
-                                                        <div style={{ position: 'absolute', top: -6, right: 10, width: 12, height: 12,
-                                                            background: T.surface, border: `1px solid ${T.borderStrong}`,
-                                                            borderRight: 'none', borderBottom: 'none', transform: 'rotate(45deg)' }}/>
-                                                        {[
-                                                            { icon: '✎', label: 'Edit contact',  fn: () => { handleEditContact(c); setOpenRowMenu(null); } },
-                                                            { icon: '👁', label: 'View profile',   fn: () => { setViewingContact(c); setOpenRowMenu(null); } },
-                                                            null,
-                                                            { icon: '🗑', label: 'Delete',         fn: () => { handleDeleteOne && handleDeleteOne(c); setOpenRowMenu(null); }, danger: true },
-                                                        ].map((item, idx) => item === null ? (
-                                                            <div key={idx} style={{ height: 1, background: T.border, margin: '2px 6px' }}/>
-                                                        ) : (
-                                                            <div key={idx} onClick={item.fn}
-                                                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                                                                    borderRadius: 3, cursor: 'pointer', color: item.danger ? T.danger : T.ink }}
-                                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
-                                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                                <span style={{ fontSize: 12, width: 14, textAlign: 'center' }}>{item.icon}</span>
-                                                                <span style={{ fontSize: 12.5, fontWeight: 500 }}>{item.label}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
+                                                <RowActionMenu
+                                                    rect={openRowMenu === c.id ? menuRect : null}
+                                                    idBase={'co-contact-menu-' + c.id}
+                                                    onClose={() => setOpenRowMenu(null)}
+                                                    items={[
+                                                        { icon: '✎', label: 'Edit contact',  fn: () => { handleEditContact(c); setOpenRowMenu(null); } },
+                                                        { icon: '👁', label: 'View profile',   fn: () => { setViewingContact(c); setOpenRowMenu(null); } },
+                                                        null,
+                                                        { icon: '🗑', label: 'Delete',         fn: () => { handleDeleteOne && handleDeleteOne(c); setOpenRowMenu(null); }, danger: true },
+                                                    ]}
+                                                />
                                             </div>
                                         )}
                                     </div>
