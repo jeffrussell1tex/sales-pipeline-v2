@@ -242,7 +242,7 @@ function SnoozePicker({ onSnooze, onClose, anchorRect }) {
 
 // ── QRow — the new clean task row ───────────────────────────────
 // Module-scope component (NOT defined inside TasksTab) — avoids React #310 remount bug.
-function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal }) {
+function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, onOpen }) {
     const [hov, setHov]                   = useState(false);
     const [snoozeOpen, setSnoozeOpen]     = useState(false);
     const [snoozeRect, setSnoozeRect]     = useState(null);
@@ -284,7 +284,7 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
         <div
             onMouseEnter={() => setHov(true)}
             onMouseLeave={() => { setHov(false); setSnoozeOpen(false); }}
-            onClick={() => setViewingTask(task)}
+            onClick={() => (onOpen || setViewingTask)(task)}
             style={{
                 display: 'grid', gridTemplateColumns: '18px 1fr auto',
                 gap: 12, padding: '11px 14px',
@@ -1199,7 +1199,20 @@ export default function TasksTab() {
     }), [weekStart, allOpenTasks, calendarEvents]);
 
     // ── Row props ──────────────────────────────────────────────
-    const qRowProps = { opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal };
+    // Open a feed item with consistent behavior: a logged activity opens in the
+    // Activity rail (edit) just like a task opens the task view. Look the activity
+    // up fresh from `activities` so the rail gets the clean record, not the feed copy.
+    const openFeedItem = (item) => {
+        if (item && item.source === 'log') {
+            const real = (activities || []).find(a => a.id === item.id) || item;
+            setActivityInitialContext && setActivityInitialContext(null);
+            setEditingActivity(real);
+            setShowActivityModal(true);
+        } else {
+            setViewingTask(item);
+        }
+    };
+    const qRowProps = { opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, onOpen: openFeedItem };
     const handleAddTask = () => { setTaskRailId('new'); setTaskRailMode('new'); };
 
     // ── View tabs config ───────────────────────────────────────
