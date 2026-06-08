@@ -95,8 +95,8 @@ export default function DocumentRail() {
 
     return (
         <>
-            <div onClick={close} style={{ position: 'fixed', inset: 0, zIndex: 10998, background: 'rgba(42,38,34,0.25)' }} />
-            <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 480, background: T.surface, borderLeft: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', zIndex: 10999, boxShadow: '-8px 0 32px rgba(42,38,34,0.12)', fontFamily: T.sans }}>
+            <div onClick={close} style={{ position: 'fixed', inset: 0, zIndex: 11100, background: 'rgba(42,38,34,0.25)' }} />
+            <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 480, background: T.surface, borderLeft: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', zIndex: 11101, boxShadow: '-8px 0 32px rgba(42,38,34,0.12)', fontFamily: T.sans }}>
 
                 {/* Header */}
                 <div style={{ background: T.ink, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
