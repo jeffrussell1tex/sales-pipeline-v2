@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { accounts, settings as settingsTable } from '../../db/schema.js';
+import { accounts, settings as settingsTable, opportunities, contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
@@ -112,13 +112,26 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
+            // Read the stored row first so a rename can be detected and cascaded below.
+            const [prior] = await db.select().from(accounts).where(and(eq(accounts.id, clean.id), eq(accounts.orgId, orgId)));
             const territoryAssignPut = await resolveTerritory(orgId, clean);
             const mergedPut = { ...clean, ...(territoryAssignPut || {}) };
             const { id: _putId, ...updateDataMerged } = mergedPut;
             const [upserted] = await db.insert(accounts).values({ ...mergedPut, orgId })
                 .onConflictDoUpdate({ target: accounts.id, setWhere: eq(accounts.orgId, orgId), set: { ...updateDataMerged, updatedAt: new Date() } })
                 .returning();
-            return { statusCode: 200, headers, body: JSON.stringify({ account: upserted }) };
+            // Cascade rename: opportunities.account and contacts.company are denormalized
+            // display labels keyed by accountId. Keep them in sync so a rename never
+            // leaves stale names anywhere in the UI or reports.
+            let renamed = false;
+            if (prior && upserted && prior.name !== upserted.name) {
+                await db.update(opportunities).set({ account: upserted.name })
+                    .where(and(eq(opportunities.accountId, upserted.id), eq(opportunities.orgId, orgId)));
+                await db.update(contacts).set({ company: upserted.name })
+                    .where(and(eq(contacts.accountId, upserted.id), eq(contacts.orgId, orgId)));
+                renamed = true;
+            }
+            return { statusCode: 200, headers, body: JSON.stringify({ account: upserted, renamed }) };
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {

@@ -109,7 +109,8 @@ export function useAccounts(deps) {
           accountCreatedFromOppForm, pendingOppFormData,
           setShowAccountModal, setLastCreatedAccountName,
           setEditingOpp, setShowModal,
-          setAccountCreatedFromOppForm, setPendingOppFormData }
+          setAccountCreatedFromOppForm, setPendingOppFormData,
+          setOpportunities, setContacts }
     ) => {
         setAccountModalError(null);
         setAccountModalSaving(true);
@@ -151,6 +152,12 @@ export function useAccounts(deps) {
             const saved = data.account || payload;
             if (method === 'PUT') {
                 setAccounts(prev => prev.map(acc => acc.id === saved.id ? saved : acc));
+                // Backend cascades a rename into opportunities.account / contacts.company;
+                // mirror it in local state so the UI updates without a reload.
+                if (data.renamed) {
+                    setOpportunities && setOpportunities(prev => prev.map(o => o.accountId === saved.id ? { ...o, account: saved.name } : o));
+                    setContacts && setContacts(prev => prev.map(c => c.accountId === saved.id ? { ...c, company: saved.name } : c));
+                }
             } else {
                 setAccounts(prev => [...prev, saved]);
                 if (accountCreatedFromOppForm) {

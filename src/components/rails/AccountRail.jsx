@@ -139,7 +139,7 @@ const EMPTY_ACCOUNT = {
 
 export default function AccountRail() {
     const {
-        accounts, contacts, settings, opportunities, activities,
+        accounts, contacts, setContacts, settings, opportunities, setOpportunities, activities,
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
         contactRailId, setContactRailId,
@@ -335,6 +335,8 @@ export default function AccountRail() {
                 : null,
             accountCreatedFromOppForm,
             pendingOppFormData,
+            setOpportunities,
+            setContacts,
             setShowAccountModal: (open) => {
                 if (!open) {
                     if (isNew) {
