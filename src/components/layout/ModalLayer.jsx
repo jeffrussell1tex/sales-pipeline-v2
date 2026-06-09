@@ -59,6 +59,8 @@ export default function ModalLayer() {
         taskDuePopup, setTaskDuePopup,
         taskDueQueue, setTaskDueQueue,
         taskDueSnoozeH, setTaskDueSnoozeH, taskDueSnoozeM, setTaskDueSnoozeM,
+        dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
+        snoozedDueAlerts, setSnoozedDueAlerts,
         showShortcuts, setShowShortcuts,
         pendingOppFormData, setPendingOppFormData,
         followUpPrompt, setFollowUpPrompt,
@@ -811,6 +813,9 @@ export default function ModalLayer() {
             {taskDuePopup && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onClick={() => {
+                        // Closing without acting counts as dismissing the current alert —
+                        // otherwise the checker would re-fire it on the next tick.
+                        if (taskDuePopup) setDismissedDueTodayAlerts(prev => prev.includes(taskDuePopup.id) ? prev : [...prev, taskDuePopup.id]);
                         if (taskDueQueue.length > 0) {
                             setTaskDuePopup(taskDueQueue[0]);
                             setTaskDueQueue(prev => prev.slice(1));
@@ -826,7 +831,7 @@ export default function ModalLayer() {
                         <div style={{ background: 'linear-gradient(135deg, #dc2626, #ef4444)', padding: '1.125rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                             <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.375rem', flexShrink: 0 }}>⏰</div>
                             <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: '800', fontSize: '1rem', color: '#ffffff', letterSpacing: '-0.01em' }}>Task Due Today</div>
+                                <div style={{ fontWeight: '800', fontSize: '1rem', color: '#ffffff', letterSpacing: '-0.01em' }}>{taskDuePopup.dueDate && taskDuePopup.dueDate < [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-') ? 'Task Overdue' : 'Task Due Today'}</div>
                                 <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', fontWeight: '500', marginTop: '1px' }}>
                                     {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                                     {taskDueQueue.length > 0 && <span style={{ marginLeft: '0.5rem', background: 'rgba(255,255,255,0.25)', padding: '0.1rem 0.4rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>+{taskDueQueue.length} more</span>}
@@ -889,8 +894,11 @@ export default function ModalLayer() {
                                         const task = taskDuePopup;
                                         const ms = (taskDueSnoozeH * 60 + taskDueSnoozeM) * 60 * 1000;
                                         if (ms <= 0) return;
+                                        // Record a re-alert-at timestamp; the 60s checker in App re-fires
+                                        // it when the snooze elapses (robust across re-renders, unlike a
+                                        // setTimeout, which also could not re-fire a pre-dismissed task).
+                                        setSnoozedDueAlerts(prev => ({ ...prev, [task.id]: Date.now() + ms }));
                                         if (taskDueQueue.length > 0) { setTaskDuePopup(taskDueQueue[0]); setTaskDueQueue(prev => prev.slice(1)); } else { setTaskDuePopup(null); }
-                                        setTimeout(() => setTaskDuePopup(task), ms);
                                     }}
                                     style={{ padding:'4px 14px', background:'#f59e0b', color:'#fff', border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
                                     Snooze
@@ -902,6 +910,7 @@ export default function ModalLayer() {
                                 <button
                                     onClick={() => {
                                         const task = taskDuePopup;
+                                        setDismissedDueTodayAlerts(prev => prev.includes(task.id) ? prev : [...prev, task.id]);
                                         if (taskDueQueue.length > 0) {
                                             setTaskDuePopup(taskDueQueue[0]);
                                             setTaskDueQueue(prev => prev.slice(1));
@@ -917,6 +926,7 @@ export default function ModalLayer() {
                                 >Open Task</button>
                                 <button
                                     onClick={() => {
+                                        if (taskDuePopup) setDismissedDueTodayAlerts(prev => prev.includes(taskDuePopup.id) ? prev : [...prev, taskDuePopup.id]);
                                         if (taskDueQueue.length > 0) {
                                             setTaskDuePopup(taskDueQueue[0]);
                                             setTaskDueQueue(prev => prev.slice(1));
