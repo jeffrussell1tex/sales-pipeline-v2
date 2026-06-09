@@ -1525,6 +1525,8 @@ dbFetch('/.netlify/functions/users?me=true')
         taskDueQueue, setTaskDueQueue,
         taskDueSnoozeH, setTaskDueSnoozeH,
         taskDueSnoozeM, setTaskDueSnoozeM,
+        dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
+        snoozedDueAlerts, setSnoozedDueAlerts,
         showShortcuts, setShowShortcuts,
         csvImportType, setCsvImportType,
         pendingOppFormData, setPendingOppFormData,
