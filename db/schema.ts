@@ -84,6 +84,7 @@ export const contacts = pgTable('contacts', {
     nickName:          varchar('nick_name', { length: 255 }),
     title:             varchar('title', { length: 255 }),
     company:           varchar('company', { length: 255 }),
+    accountId:         text('account_id'),
     department:        varchar('department', { length: 255 }),
     workLocation:      varchar('work_location', { length: 255 }),
     email:             varchar('email', { length: 255 }),

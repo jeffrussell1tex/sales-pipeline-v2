@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../AppContext';
 import AttachmentsStrip from '../documents/AttachmentsStrip';
+import AccountPicker from './AccountPicker';
 import { dbFetch } from '../../utils/storage';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -166,6 +167,7 @@ export default function ActivityRail() {
         setFormData(src);
 
         const relOpp = src.opportunityId ? (opportunities || []).find(o => o.id === src.opportunityId) : null;
+        const relAccount = src.accountId ? (accounts || []).find(a => a.id === src.accountId) : null;
 
         // Seed selected contacts from the array (source of truth), falling back to the
         // legacy singular contactId so existing activities and Email/Call prefills work.
@@ -175,7 +177,9 @@ export default function ActivityRail() {
         setSelectedContactIds(seedContactIds);
 
         setOppSearch(relOpp ? (relOpp.opportunityName || relOpp.account) : '');
-        setCompanySearch(src.company || (relOpp?.account) || '');
+        // Company persists as accountId (no `company` column), so seed from the linked
+        // account; fall back to the opp's account, then any legacy company string.
+        setCompanySearch(relAccount ? relAccount.name : (src.company || relOpp?.account || ''));
         setSaveError(null);
         setActivityModalError?.(null);
     }, [showActivityModal, editingActivity, activityInitialContext]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -183,7 +187,6 @@ export default function ActivityRail() {
     // ── Derived lists ──────────────────────────────────────────────────────────
     const taskTypes   = settings?.taskTypes || ['Call', 'Meeting', 'Email', 'Demo', 'Follow-up'];
     const oppNames    = (opportunities || []).map(o => o.opportunityName || o.account).filter(Boolean);
-    const accountNames = (accounts  || []).map(a => a.name).filter(Boolean);
 
     const hc = useCallback((field, value) => setFormData(prev => ({ ...prev, [field]: value })), []);
 
@@ -200,11 +203,23 @@ export default function ActivityRail() {
         if (!formData.notes?.trim()) { setSaveError('Notes are required.'); return; }
 
         const selOpp = (opportunities || []).find(o => (o.opportunityName || o.account) === oppSearch);
+        // Company persists as accountId (activities have no `company` column).
+        const companyName = (companySearch || selOpp?.account || '').trim();
+        const selAccount = companyName
+            ? (accounts || []).find(a => (a.name || '').toLowerCase() === companyName.toLowerCase())
+            : null;
+        // A company was typed but isn't a real account: block + notify (no free-text
+        // companies). The Company field offers an inline “Create” to make one.
+        if (companyName && !selAccount) {
+            setSaveError(`"${companyName}" isn't a saved account. Pick one from the list, or use “Create” in the Company field.`);
+            return;
+        }
 
         const saveData = {
             ...formData,
-            company:       companySearch || selOpp?.account || '',
-            opportunityId: selOpp ? selOpp.id : (formData.opportunityId || ''),
+            company:       selAccount ? selAccount.name : '',
+            accountId:     selAccount ? selAccount.id : '',
+            opportunityId: selOpp ? selOpp.id : (oppSearch ? (formData.opportunityId || '') : ''),
             contactIds:    selectedContactIds,
             contactId:     selectedContactIds[0] || '',
         };
@@ -299,7 +314,7 @@ export default function ActivityRail() {
                         <ContactMultiSelect contacts={contacts} value={selectedContactIds} onChange={setSelectedContactIds} placeholder="Type to search contacts…" />
                     </FieldGroup>
                     <FieldGroup label="Company" wide>
-                        <Typeahead value={companySearch} onChange={setCompanySearch} suggestions={accountNames} onSelect={setCompanySearch} placeholder="Type company name…" />
+                        <AccountPicker value={companySearch} onChange={setCompanySearch} onError={setSaveError} placeholder="Type company name…" />
                     </FieldGroup>
                     <FieldGroup label="Opportunity" wide>
                         <Typeahead value={oppSearch} onChange={setOppSearch} suggestions={oppNames} onSelect={v => { setOppSearch(v); const o = (opportunities||[]).find(x => (x.opportunityName||x.account) === v); if (o) setCompanySearch(prev => prev || o.account || ''); }} placeholder="Type opportunity or account name…" dropUp />
