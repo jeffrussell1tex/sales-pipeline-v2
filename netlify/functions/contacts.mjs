@@ -21,6 +21,7 @@ export const handler = async (event) => {
         nickName:          d.nickName          || null,
         title:             d.title             || null,
         company:           d.company           || null,
+        accountId:         d.accountId         || null,
         department:        d.department        || null,
         workLocation:      d.workLocation      || null,
         email:             d.email             || null,

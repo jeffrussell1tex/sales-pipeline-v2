@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../AppContext';
 import AttachmentsStrip from '../documents/AttachmentsStrip';
+import AccountPicker from './AccountPicker';
 import { dbFetch } from '../../utils/storage';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -58,68 +59,6 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >{s}</div>
                     ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-// Company / account picker: search existing accounts and pick one, or create a new
-// account inline when nothing matches (keeps companies as real, linkable records
-// rather than free text). Resolves to an accountId on save; reports create failures
-// via onError so the rail can notify the user.
-function AccountPicker({ accounts, setAccounts, value, onChange, onError, placeholder }) {
-    const [open, setOpen] = useState(false);
-    const [creating, setCreating] = useState(false);
-    const q = (value || '').trim().toLowerCase();
-    const list = accounts || [];
-    const filtered = q ? list.filter(a => (a.name || '').toLowerCase().includes(q)) : list;
-    const exact = q ? list.find(a => (a.name || '').toLowerCase() === q) : null;
-
-    const createAccount = async () => {
-        const name = (value || '').trim();
-        if (!name || creating) return;
-        setCreating(true);
-        onError && onError(null);
-        try {
-            const newAccount = { id: 'id_' + crypto.randomUUID(), name, accountTier: 'account' };
-            const res = await dbFetch('/.netlify/functions/accounts', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newAccount),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-            const saved = data.account || newAccount;
-            setAccounts && setAccounts(prev => [...prev, saved]);
-            onChange(saved.name);
-            setOpen(false);
-        } catch (e) {
-            onError && onError(`Couldn't create account "${name}". ${e.message || 'Please try again.'}`);
-        } finally {
-            setCreating(false);
-        }
-    };
-
-    return (
-        <div style={{ position: 'relative' }}>
-            <TextInput value={value} onChange={v => { onChange(v); setOpen(true); }} placeholder={placeholder} />
-            {open && q.length > 0 && (filtered.length > 0 || !exact) && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.border}`, borderRadius: T.r, marginTop: 2, maxHeight: 200, overflowY: 'auto', zIndex: 300, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                    {filtered.slice(0, 8).map((a) => (
-                        <div key={a.id} onMouseDown={e => e.preventDefault()} onClick={() => { onChange(a.name); setOpen(false); }}
-                            style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}`, color: T.ink }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface3}
-                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            {a.name}
-                        </div>
-                    ))}
-                    {!exact && (
-                        <div onMouseDown={e => e.preventDefault()} onClick={createAccount}
-                            style={{ padding: '8px 10px', fontSize: 13, cursor: creating ? 'default' : 'pointer', color: T.info, fontWeight: 600, background: T.surface2 }}
-                            onMouseEnter={e => { if (!creating) e.currentTarget.style.background = T.surface3; }}
-                            onMouseLeave={e => e.currentTarget.style.background = T.surface2}>
-                            {creating ? 'Creating\u2026' : `\u2795 Create \u201c${(value || '').trim()}\u201d as a new account`}
-                        </div>
-                    )}
                 </div>
             )}
         </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import RecordDocuments from '../documents/RecordDocuments';
+import AccountPicker from './AccountPicker';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -123,7 +124,7 @@ const EMPTY_CONTACT = {
 
 export default function ContactRail() {
     const {
-        contacts, accounts, settings, opportunities, activities,
+        contacts, accounts, setAccounts, settings, opportunities, activities,
         contactRailId, setContactRailId,
         contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId,
@@ -192,7 +193,6 @@ export default function ContactRail() {
         (settings?.users || []).filter(u => u.name && u.userType !== 'Manager' && u.userType !== 'Admin').map(u => u.name)
     )].sort();
 
-    const allAccountNames = (accounts || []).map(a => a.name).sort();
 
     const buyerPersonas = (settings?.buyerPersonas || []).filter(p => p.active !== false);
 
@@ -222,11 +222,12 @@ export default function ContactRail() {
         setDupWarning(null);
     }, []);
 
-    const handleSelectCompany = (name) => {
-        const acc = (accounts || []).find(a => a.name === name);
+    const handleSelectCompany = (acc) => {
+        if (!acc) return;
         setFormData(prev => ({
             ...prev,
-            company:  name,
+            company:   acc.name,
+            accountId: acc.id,
             address:  prev.address  || acc?.address  || '',
             address2: prev.address2 || acc?.address2 || '',
             city:     prev.city     || acc?.city     || '',
@@ -234,7 +235,7 @@ export default function ContactRail() {
             zip:      prev.zip      || acc?.zip      || '',
             country:  prev.country  || acc?.country  || '',
         }));
-        setCompanySearch(name);
+        setCompanySearch(acc.name);
         setDirty(true);
     };
 
@@ -264,7 +265,26 @@ export default function ContactRail() {
 
     const handleSave = async () => {
         setSaveError(null);
-        const saveData = { ...formData, company: companySearch, assignedRep: repSearch, buyerPersona: personaSearch };
+        const companyName = (companySearch || '').trim();
+        const selAccount = companyName
+            ? (accounts || []).find(a => (a.name || '').toLowerCase() === companyName.toLowerCase())
+            : null;
+        const origCompany = (contact?.company || '').trim();
+        const changedCompany = companyName.toLowerCase() !== origCompany.toLowerCase();
+        // No free-text companies: block a newly-entered company that isn't a real account.
+        // Don't block edits to a legacy contact whose old company is untouched (the backfill
+        // migrates those). The Company field offers an inline “Create” to make one.
+        if (companyName && !selAccount && (isNew || changedCompany)) {
+            setSaveError(`"${companyName}" isn't a saved account. Pick one from the list, or use “Create” in the Company field.`);
+            return;
+        }
+        const saveData = {
+            ...formData,
+            company:   companyName ? (selAccount ? selAccount.name : companyName) : '',
+            accountId: companyName ? (selAccount ? selAccount.id : (formData.accountId || '')) : '',
+            assignedRep: repSearch,
+            buyerPersona: personaSearch,
+        };
 
         // Duplicate check for new contacts — email match or same / near name.
         if (isNew && !dupWarning) {
@@ -550,11 +570,13 @@ export default function ContactRail() {
                                     <TextInput value={formData.title} onChange={v => hc('title', v)} placeholder="e.g. Plant Manager" />
                                 </FieldGroup>
                                 <FieldGroup label="Company" wide>
-                                    <Typeahead
+                                    <AccountPicker
+                                        accounts={accounts}
+                                        setAccounts={setAccounts}
                                         value={companySearch}
                                         onChange={v => { setCompanySearch(v); hc('company', v); }}
-                                        suggestions={allAccountNames}
-                                        onSelect={handleSelectCompany}
+                                        onSelectAccount={handleSelectCompany}
+                                        onError={setSaveError}
                                         placeholder="Type to search accounts…"
                                     />
                                 </FieldGroup>

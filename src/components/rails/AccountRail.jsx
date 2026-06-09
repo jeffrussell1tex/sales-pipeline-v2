@@ -244,8 +244,10 @@ export default function AccountRail() {
         (a.parentAccountId || a.parentId) === accountRailId
     );
 
+    // Prefer the real accountId link; fall back to the legacy company-name match for
+    // contacts not yet migrated/backfilled. Keeps the People list correct mid-migration.
     const accountContacts = (contacts || []).filter(c =>
-        c.company === account?.name
+        c.accountId ? c.accountId === account?.id : (c.company === account?.name)
     );
 
     const openOpps = (opportunities || []).filter(o => {
