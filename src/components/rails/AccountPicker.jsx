@@ -6,6 +6,7 @@
 // for the full record). Create failures are reported via onError so the host can notify.
 import React, { useState } from 'react';
 import { dbFetch } from '../../utils/storage';
+import { useApp } from '../../AppContext';
 
 const T = {
     surface: '#fbf8f3', surface2: '#f5efe3', surface3: '#f0ece4',
@@ -13,12 +14,16 @@ const T = {
     r: 3, sans: "'Plus Jakarta Sans', system-ui, sans-serif",
 };
 
-export default function AccountPicker({ accounts, setAccounts, value, onChange, onSelectAccount, onError, placeholder }) {
+export default function AccountPicker({ value, onChange, onSelectAccount, onError, placeholder, filterFn }) {
+    // accounts + setAccounts come from context so this drops into any component under
+    // AppProvider (rails AND prop-driven modals) with no prop-threading, and stays a
+    // single source of truth — a newly created account appears everywhere at once.
+    const { accounts, setAccounts } = useApp();
     const [open, setOpen] = useState(false);
     const [creating, setCreating] = useState(false);
 
     const q = (value || '').trim().toLowerCase();
-    const list = accounts || [];
+    const list = (accounts || []).filter(a => (filterFn ? filterFn(a) : true));
     const filtered = q ? list.filter(a => (a.name || '').toLowerCase().includes(q)) : list;
     const exact = q ? list.find(a => (a.name || '').toLowerCase() === q) : null;
 

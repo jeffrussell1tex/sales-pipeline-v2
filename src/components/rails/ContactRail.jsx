@@ -124,7 +124,7 @@ const EMPTY_CONTACT = {
 
 export default function ContactRail() {
     const {
-        contacts, accounts, setAccounts, settings, opportunities, activities,
+        contacts, accounts, settings, opportunities, activities,
         contactRailId, setContactRailId,
         contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId,
@@ -571,8 +571,6 @@ export default function ContactRail() {
                                 </FieldGroup>
                                 <FieldGroup label="Company" wide>
                                     <AccountPicker
-                                        accounts={accounts}
-                                        setAccounts={setAccounts}
                                         value={companySearch}
                                         onChange={v => { setCompanySearch(v); hc('company', v); }}
                                         onSelectAccount={handleSelectCompany}

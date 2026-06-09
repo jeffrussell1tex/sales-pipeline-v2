@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
 import { dbFetch } from '../../utils/storage';
 import { useApp } from '../../AppContext';
+import AccountPicker from '../rails/AccountPicker';
 import RecordDocuments from '../documents/RecordDocuments';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
@@ -1166,13 +1167,6 @@ export default function OpportunityModal({
         if (!formData.forecastedCloseDate) errors.forecastedCloseDate = 'Close date is required';
         if (formData.arr === '' || formData.arr === null || formData.arr === undefined || parseFloat(formData.arr) < 0)
             errors.arr = 'Revenue is required';
-        if (formData.account && formData.account.trim()) {
-            const isJustCreated = lastCreatedAccountName && lastCreatedAccountName.toLowerCase() === formData.account.trim().toLowerCase();
-            if (!isJustCreated) {
-                const accountExists = (accounts || []).some(a => a.name && a.name.toLowerCase() === formData.account.trim().toLowerCase());
-                if (!accountExists) errors.account = '__not_found__';
-            }
-        }
         if (Object.keys(errors).length > 0) {
             setValidationErrors(errors);
             setTimeout(() => { const el = document.querySelector('.opp-field-error'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
@@ -1516,45 +1510,16 @@ export default function OpportunityModal({
                                         {/* Account */}
                                         <div style={{ position: 'relative' }}>
                                             <label style={fieldLabelStyle}>Account *</label>
-                                            <input type="text" value={accountSearch}
-                                                onChange={e => { setAccountSearch(e.target.value); setShowAccountSuggestions(e.target.value.length > 0); if (validationErrors.account) setValidationErrors(prev => { const n={...prev}; delete n.account; return n; }); if (!e.target.value.trim()) { setFormData(prev => ({ ...prev, account: '' })); } }}
-                                                onFocus={() => setShowAccountSuggestions(accountSearch.length > 0)}
-                                                onBlur={() => setTimeout(() => setShowAccountSuggestions(false), 200)}
+                                            <AccountPicker
+                                                value={accountSearch}
+                                                onChange={(v) => { setAccountSearch(v); if (validationErrors.account) setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); if (!v.trim()) setFormData(prev => ({ ...prev, account: '' })); }}
+                                                onSelectAccount={(acc) => { setAccountSearch(acc.name); setFormData(prev => ({ ...prev, account: acc.name, site: '' })); setSiteSearch(''); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); const sites = getSitesForAccount(acc.name); if (sites.length > 0) setShowSiteSuggestions(true); }}
+                                                onError={(msg) => setValidationErrors(prev => { const n = { ...prev }; if (msg) n.account = msg; else delete n.account; return n; })}
+                                                filterFn={(a) => a.accountTier !== 'site'}
                                                 placeholder="Start typing account name…"
-                                                autoComplete="off"
-                                                style={inputStyle(validationErrors.account)}/>
-                                            {validationErrors.account && validationErrors.account !== '__not_found__' && (
+                                            />
+                                            {validationErrors.account && (
                                                 <div className="opp-field-error" style={{ color: T.danger, fontSize: 11, fontWeight: 600, marginTop: 3, fontFamily: T.sans }}>⚠ {validationErrors.account}</div>
-                                            )}
-                                            {validationErrors.account === '__not_found__' && (
-                                                <div style={{ marginTop: 4, background: 'rgba(184,115,51,0.09)', border: `1px solid rgba(184,115,51,0.3)`, borderRadius: T.r, padding: '7px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                                    <span style={{ color: T.warn, fontSize: 12, fontWeight: 600, fontFamily: T.sans }}>⚠ "{formData.account}" not in accounts list.</span>
-                                                    <button type="button" onClick={() => { setValidationErrors(prev => { const n = {...prev}; delete n.account; return n; }); onAddAccount(formData); }}
-                                                        style={{ background: T.warn, color: '#fff', border: 'none', borderRadius: T.r, padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, fontFamily: T.sans }}>
-                                                        + Create Account
-                                                    </button>
-                                                </div>
-                                            )}
-                                            {showAccountSuggestions && (
-                                                <div style={suggestionDropStyle}>
-                                                    {allAccountOptions.filter(opt => opt.tier !== 'site').filter(opt => !accountSearch || opt.value.toLowerCase().includes(accountSearch.toLowerCase()) || opt.label.toLowerCase().includes(accountSearch.toLowerCase())).map(opt => (
-                                                        <div key={opt.id || opt.value}
-                                                            onMouseDown={e => e.preventDefault()}
-                                                            onClick={() => { setAccountSearch(opt.value); setFormData(prev => ({ ...prev, account: opt.value, site: '' })); setSiteSearch(''); setShowAccountSuggestions(false); setValidationErrors(prev => { const n={...prev}; delete n.account; return n; }); const sites = getSitesForAccount(opt.value); if (sites.length > 0) setShowSiteSuggestions(true); }}
-                                                            style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontFamily: T.sans }}
-                                                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                            <div style={{ fontWeight: 600, color: T.ink }}>{opt.value}</div>
-                                                            {opt.parentName && <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 1 }}>{opt.label}</div>}
-                                                        </div>
-                                                    ))}
-                                                    <div onMouseDown={e => e.preventDefault()} onClick={() => { setShowAccountSuggestions(false); onAddAccount(formData); }}
-                                                        style={{ padding: '8px 10px', cursor: 'pointer', color: T.info, fontWeight: 600, fontSize: 13, fontFamily: T.sans }}
-                                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                        + New Account
-                                                    </div>
-                                                </div>
                                             )}
                                         </div>
                                         {/* Site */}

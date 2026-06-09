@@ -314,7 +314,7 @@ export default function ActivityRail() {
                         <ContactMultiSelect contacts={contacts} value={selectedContactIds} onChange={setSelectedContactIds} placeholder="Type to search contacts…" />
                     </FieldGroup>
                     <FieldGroup label="Company" wide>
-                        <AccountPicker accounts={accounts} setAccounts={setAccounts} value={companySearch} onChange={setCompanySearch} onError={setSaveError} placeholder="Type company name…" />
+                        <AccountPicker value={companySearch} onChange={setCompanySearch} onError={setSaveError} placeholder="Type company name…" />
                     </FieldGroup>
                     <FieldGroup label="Opportunity" wide>
                         <Typeahead value={oppSearch} onChange={setOppSearch} suggestions={oppNames} onSelect={v => { setOppSearch(v); const o = (opportunities||[]).find(x => (x.opportunityName||x.account) === v); if (o) setCompanySearch(prev => prev || o.account || ''); }} placeholder="Type opportunity or account name…" dropUp />
