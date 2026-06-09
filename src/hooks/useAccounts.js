@@ -41,10 +41,10 @@ export function useAccounts(deps) {
         const allNames = [account.name, ...subs.map(s => s.name)];
 
         const closedStages = ['closed won', 'closed lost', 'won', 'lost'];
-        const hasActiveOpportunities = (opportunities || []).some(opp =>
-            allNames.includes(opp.account) &&
-            !closedStages.includes((opp.stage || '').toLowerCase())
-        );
+        const hasActiveOpportunities = (opportunities || []).some(opp => {
+            const linked = opp.accountId ? allIds.includes(opp.accountId) : allNames.includes(opp.account);
+            return linked && !closedStages.includes((opp.stage || '').toLowerCase());
+        });
         if (hasActiveOpportunities) {
             showBlockedDelete(
                 `Cannot Delete "${account.name}"`,

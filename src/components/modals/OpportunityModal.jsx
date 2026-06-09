@@ -1030,6 +1030,7 @@ export default function OpportunityModal({
             ...base,
             opportunityName: base.opportunityName ?? '',
             account:         base.account ?? '',
+            accountId:       base.accountId ?? '',
             site:            base.site ?? '',
             salesRep:        base.salesRep ?? '',
             painPoints:      base.painPoints ?? '',
@@ -1162,7 +1163,14 @@ export default function OpportunityModal({
         e.preventDefault();
         const errors = {};
         if (!formData.opportunityName || !formData.opportunityName.trim()) errors.opportunityName = 'Opportunity name is required';
-        if (!formData.account || !formData.account.trim()) errors.account = 'Account name is required';
+        // Resolve the account from the picker text (source of truth), so a typed exact
+        // name links correctly and a stale prior selection can't save silently.
+        const typedAccount = (accountSearch || '').trim();
+        const resolvedAccount = typedAccount
+            ? (accounts || []).find(a => (a.name || '').toLowerCase() === typedAccount.toLowerCase())
+            : null;
+        if (!typedAccount) errors.account = 'Account name is required';
+        else if (!resolvedAccount) errors.account = 'Pick an account from the list, or use “Create” in the Account field';
         if (!formData.salesRep || !formData.salesRep.trim()) errors.salesRep = 'Sales rep is required';
         if (!formData.forecastedCloseDate) errors.forecastedCloseDate = 'Close date is required';
         if (formData.arr === '' || formData.arr === null || formData.arr === undefined || parseFloat(formData.arr) < 0)
@@ -1173,7 +1181,7 @@ export default function OpportunityModal({
             return;
         }
         setValidationErrors({});
-        onSave({ ...formData, arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
+        onSave({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id, arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
     };
 
     // ── @mention helpers (fully preserved) ───────────────────
@@ -1393,7 +1401,7 @@ export default function OpportunityModal({
                                     setSelectedContacts={setSelectedContacts} setSelectedContactIds={setSelectedContactIds}
                                     handleChange={handleChange}
                                     onUpdate={() => {
-                                        onSave({ ...formData, arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
+                                        onSave({ ...formData, ...(() => { const t=(accountSearch||'').trim(); const r=t ? (accounts||[]).find(a => (a.name||'').toLowerCase()===t.toLowerCase()) : null; return r ? { account: r.name, accountId: r.id } : {}; })(), arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
                                     }}/>
                             )}
                             {detailTab === 'ai-score' && (
@@ -1512,8 +1520,8 @@ export default function OpportunityModal({
                                             <label style={fieldLabelStyle}>Account *</label>
                                             <AccountPicker
                                                 value={accountSearch}
-                                                onChange={(v) => { setAccountSearch(v); if (validationErrors.account) setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); if (!v.trim()) setFormData(prev => ({ ...prev, account: '' })); }}
-                                                onSelectAccount={(acc) => { setAccountSearch(acc.name); setFormData(prev => ({ ...prev, account: acc.name, site: '' })); setSiteSearch(''); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); const sites = getSitesForAccount(acc.name); if (sites.length > 0) setShowSiteSuggestions(true); }}
+                                                onChange={(v) => { setAccountSearch(v); if (validationErrors.account) setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); if (!v.trim()) setFormData(prev => ({ ...prev, account: '', accountId: '' })); }}
+                                                onSelectAccount={(acc) => { setAccountSearch(acc.name); setFormData(prev => ({ ...prev, account: acc.name, accountId: acc.id, site: '' })); setSiteSearch(''); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); const sites = getSitesForAccount(acc.name); if (sites.length > 0) setShowSiteSuggestions(true); }}
                                                 onError={(msg) => setValidationErrors(prev => { const n = { ...prev }; if (msg) n.account = msg; else delete n.account; return n; })}
                                                 filterFn={(a) => a.accountTier !== 'site'}
                                                 placeholder="Start typing account name…"

@@ -253,7 +253,8 @@ export default function AccountRail() {
     const openOpps = (opportunities || []).filter(o => {
         if (!account) return false;
         const closed = ['closed won','closed lost','won','lost'];
-        return o.account === account.name && !closed.includes((o.stage || '').toLowerCase());
+        const linked = o.accountId ? o.accountId === account.id : o.account === account.name;
+        return linked && !closed.includes((o.stage || '').toLowerCase());
     });
 
     // Activities that roll up to this account, via ANY of:
@@ -263,7 +264,7 @@ export default function AccountRail() {
     const accountActivities = (() => {
         if (!account) return [];
         const acctContactIds = new Set(accountContacts.map(c => c.id));
-        const acctOppIds = new Set((opportunities || []).filter(o => o.account === account.name).map(o => o.id));
+        const acctOppIds = new Set((opportunities || []).filter(o => o.accountId ? o.accountId === account.id : o.account === account.name).map(o => o.id));
         return (activities || []).filter(a =>
             (a.accountId && a.accountId === account.id) ||
             (a.contactId && acctContactIds.has(a.contactId)) ||
