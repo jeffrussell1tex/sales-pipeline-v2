@@ -1,0 +1,165 @@
+import crypto from 'crypto';
+import { db } from '../../db/index.js';
+import { activities, contacts } from '../../db/schema.js';
+import { eq, and } from 'drizzle-orm';
+import { verifyAuth } from './auth.mjs';
+import { serverErrorBody } from './_lib.mjs';
+
+// ── BCC email dropbox ────────────────────────────────────────────────────────
+// Each org gets a unique, unguessable BCC address. A rep BCCs it on any email;
+// the provider (Resend Inbound) webhooks the parsed message here, and we log it
+// as an Email activity on the matching contact (and their account).
+//
+// Address format:  log-<orgId>-<sig>@<INBOUND_DOMAIN>
+//   sig = first 16 hex chars of HMAC-SHA256(orgId, BCC_SECRET)
+// Stateless: no token table; the signature both identifies and authenticates
+// the org, so a guessed/forged address fails verification.
+//
+// Endpoints:
+//   GET  (Clerk-authed)  -> { address } for the caller's org, for display in Settings.
+//   POST (webhook)       -> verified via Svix signature (RESEND_INBOUND_SECRET)
+//                           or ?secret=<INBOUND_SHARED_SECRET> for other providers.
+//
+// Required env vars: BCC_SECRET, INBOUND_DOMAIN, and RESEND_INBOUND_SECRET
+// (or INBOUND_SHARED_SECRET).
+
+const NOTES_MAX = 4000;
+
+const orgSig = (orgId) =>
+    crypto.createHmac('sha256', process.env.BCC_SECRET || '')
+        .update(orgId).digest('hex').slice(0, 16);
+
+const orgAddress = (orgId) =>
+    `log-${orgId}-${orgSig(orgId)}@${process.env.INBOUND_DOMAIN || ''}`;
+
+// Parse "log-<orgId>-<sig>@domain" out of any recipient; verify sig; return orgId.
+function orgFromRecipients(addresses) {
+    for (const raw of addresses) {
+        const addr = String(raw || '').toLowerCase();
+        const m = addr.match(/(?:^|<|\s)log-([a-z0-9_]+)-([a-f0-9]{16})@/i);
+        if (!m) continue;
+        const [, orgIdLower, sig] = m;
+        // Clerk org ids are case-sensitive but our match lowercased; recompute against
+        // the literal substring from the original string to preserve case.
+        const orig = String(raw).match(/log-([A-Za-z0-9_]+)-([A-Fa-f0-9]{16})@/);
+        const orgId = orig ? orig[1] : orgIdLower;
+        if (crypto.timingSafeEqual(Buffer.from(orgSig(orgId)), Buffer.from(sig.toLowerCase()))) return orgId;
+    }
+    return null;
+}
+
+// Verify a Resend (Svix) webhook signature: HMAC-SHA256 over "id.timestamp.body"
+// with the base64 portion of the signing secret ("whsec_...").
+function verifySvix(event) {
+    const secret = process.env.RESEND_INBOUND_SECRET;
+    if (!secret) return false;
+    const id = event.headers['svix-id'];
+    const ts = event.headers['svix-timestamp'];
+    const sigHeader = event.headers['svix-signature'];
+    if (!id || !ts || !sigHeader) return false;
+    // Reject stale timestamps (5 min window) to blunt replay.
+    if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+    const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+    const expected = crypto.createHmac('sha256', key)
+        .update(`${id}.${ts}.${event.body}`).digest('base64');
+    return sigHeader.split(' ').some(part => {
+        const candidate = part.includes(',') ? part.split(',')[1] : part;
+        try {
+            return candidate.length === expected.length &&
+                crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(expected));
+        } catch { return false; }
+    });
+}
+
+const emailOnly = (s) => {
+    const m = String(s || '').match(/<([^>]+)>/);
+    return (m ? m[1] : String(s || '')).trim().toLowerCase();
+};
+
+export const handler = async (event) => {
+    const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
+    if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
+
+    try {
+        // ── GET: return this org's dropbox address (Clerk-authed, for Settings UI) ──
+        if (event.httpMethod === 'GET') {
+            const payload = await verifyAuth(event);
+            if (!payload) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+            if (!process.env.BCC_SECRET || !process.env.INBOUND_DOMAIN) {
+                return { statusCode: 200, headers, body: JSON.stringify({ address: null, configured: false }) };
+            }
+            return { statusCode: 200, headers, body: JSON.stringify({ address: orgAddress(payload.o.id), configured: true }) };
+        }
+
+        if (event.httpMethod !== 'POST') {
+            return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+        }
+
+        // ── POST: provider webhook ──
+        const qs = event.queryStringParameters || {};
+        const sharedOk = process.env.INBOUND_SHARED_SECRET && qs.secret === process.env.INBOUND_SHARED_SECRET;
+        if (!sharedOk && !verifySvix(event)) {
+            return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid webhook signature' }) };
+        }
+
+        const body = JSON.parse(event.body || '{}');
+        // Resend inbound shape: { type: 'email.received', data: { from, to, cc, bcc, subject, text, html } }
+        // Accept a flat shape too, for other providers / manual tests.
+        const mail = body.data || body;
+        const from = mail.from?.email || mail.from || '';
+        const toList = [].concat(mail.to || [], mail.cc || [], mail.bcc || [])
+            .map(r => (r && typeof r === 'object') ? (r.email || '') : r);
+        const subject = String(mail.subject || '').slice(0, 500);
+        const text = String(mail.text || mail.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+        const orgId = orgFromRecipients(toList);
+        if (!orgId) {
+            // Unknown/forged dropbox address — acknowledge so the provider doesn't retry.
+            return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: false, reason: 'no valid dropbox recipient' }) };
+        }
+
+        // Match a contact: prefer external recipients (rep BCCs us on mail TO the
+        // contact), then the sender (inbound mail forwarded to the dropbox).
+        const fromEmail = emailOnly(from);
+        const candidates = [
+            ...toList.map(emailOnly).filter(e => e && !e.startsWith('log-')),
+            fromEmail,
+        ].filter(Boolean);
+
+        const orgContacts = await db.select().from(contacts).where(eq(contacts.orgId, orgId));
+        let matched = null;
+        for (const cand of candidates) {
+            matched = orgContacts.find(c =>
+                (c.email || '').toLowerCase() === cand || (c.personalEmail || '').toLowerCase() === cand);
+            if (matched) break;
+        }
+        if (!matched) {
+            return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: false, reason: 'no contact matched participants' }) };
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const activity = {
+            id: 'id_' + crypto.randomUUID(),
+            type: 'Email',
+            date: today,
+            subject: subject || null,
+            notes: ((subject ? subject + ' \u2014 ' : '') + text).slice(0, NOTES_MAX) || 'Email (no body captured)',
+            outcome: null,
+            duration: null,
+            opportunityId: null,
+            contactId: matched.id,
+            contactIds: [matched.id],
+            accountId: matched.accountId || null,
+            leadId: null,
+            author: fromEmail || null,
+            createdAt: new Date(),
+            orgId,
+        };
+        const [inserted] = await db.insert(activities).values(activity).returning();
+
+        return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: true, activityId: (inserted || activity).id }) };
+    } catch (error) {
+        console.error('email-inbound error:', error);
+        return { statusCode: 500, headers, body: serverErrorBody(error) };
+    }
+};

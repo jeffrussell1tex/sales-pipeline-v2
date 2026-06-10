@@ -76,6 +76,7 @@ export function useModalState() {
     const [taskDueSnoozeH, setTaskDueSnoozeH] = useState(0);
     const [taskDueSnoozeM, setTaskDueSnoozeM] = useState(15);
     const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useState([]);
+    const [snoozedDueAlerts, setSnoozedDueAlerts] = useState({}); // { [taskId]: re-alert-at timestamp (ms) }
     const [dismissedReminders, setDismissedReminders] = useState([]);
 
     return {
@@ -132,6 +133,7 @@ export function useModalState() {
         taskDueSnoozeH, setTaskDueSnoozeH,
         taskDueSnoozeM, setTaskDueSnoozeM,
         dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
+        snoozedDueAlerts, setSnoozedDueAlerts,
         dismissedReminders, setDismissedReminders,
     };
 }

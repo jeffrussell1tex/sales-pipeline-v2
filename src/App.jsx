@@ -173,6 +173,7 @@ function App() {
         taskDuePopup, setTaskDuePopup, taskDueQueue, setTaskDueQueue,
         taskDueSnoozeH, setTaskDueSnoozeH, taskDueSnoozeM, setTaskDueSnoozeM,
         dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
+        snoozedDueAlerts, setSnoozedDueAlerts,
         dismissedReminders, setDismissedReminders,
         mergeModal, setMergeModal,
         contactMergeModal, setContactMergeModal,
@@ -1153,23 +1154,31 @@ dbFetch('/.netlify/functions/users?me=true')
         return () => clearInterval(interval);
     }, [tasks, dismissedReminders]);
 
-    // Task due-today popup checker
+    // Task due/overdue popup checker.
+    // Alerts for open tasks due today OR overdue (previously due-today only, so a
+    // task that slipped a day went silent). Tasks are NOT marked dismissed when the
+    // popup shows — dismissal/snooze is recorded in ModalLayer when the user acts.
+    // If anything wipes the popup before the user responds, the next tick re-fires it.
     useEffect(() => {
         const checkDueToday = () => {
+            if (taskDuePopup) return; // one alert at a time — never replace an open popup
             const todayStr = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
-            const dueTodayTasks = tasks.filter(task => {
+            const nowMs = Date.now();
+            const dueTasks = tasks.filter(task => {
                 if (task.completed) return false;
                 const status = task.status || (task.completed ? 'Completed' : 'Open');
                 if (status === 'Completed') return false;
                 if (!task.dueDate) return false;
+                if (task.dueDate > todayStr) return false; // due today or overdue (YYYY-MM-DD compares safely)
                 if (dismissedDueTodayAlerts.includes(task.id)) return false;
-                return task.dueDate === todayStr;
-            });
-            if (dueTodayTasks.length === 0) return;
-            // Queue all due-today tasks and show the first one
-            setTaskDueQueue(dueTodayTasks.slice(1));
-            setTaskDuePopup(dueTodayTasks[0]);
-            setDismissedDueTodayAlerts(prev => [...prev, ...dueTodayTasks.map(t => t.id)]);
+                const snoozedUntil = snoozedDueAlerts[task.id];
+                if (snoozedUntil && nowMs < snoozedUntil) return false;
+                return true;
+            }).sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')); // most overdue first
+            if (dueTasks.length === 0) return;
+            // Queue all due/overdue tasks and show the first one
+            setTaskDueQueue(dueTasks.slice(1));
+            setTaskDuePopup(dueTasks[0]);
             // Play a distinct alert sound (two-tone urgent chime)
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1192,7 +1201,7 @@ dbFetch('/.netlify/functions/users?me=true')
         checkDueToday();
         const interval = setInterval(checkDueToday, 60000);
         return () => clearInterval(interval);
-    }, [tasks, dismissedDueTodayAlerts]);
+    }, [tasks, dismissedDueTodayAlerts, snoozedDueAlerts, taskDuePopup]);
 
     const handleLogout = () => signOut();
 
@@ -1516,6 +1525,8 @@ dbFetch('/.netlify/functions/users?me=true')
         taskDueQueue, setTaskDueQueue,
         taskDueSnoozeH, setTaskDueSnoozeH,
         taskDueSnoozeM, setTaskDueSnoozeM,
+        dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
+        snoozedDueAlerts, setSnoozedDueAlerts,
         showShortcuts, setShowShortcuts,
         csvImportType, setCsvImportType,
         pendingOppFormData, setPendingOppFormData,

@@ -123,6 +123,7 @@ export const opportunities = pgTable('opportunities', {
     pipelineId:           text('pipeline_id').notNull(),
     opportunityName:      varchar('opportunity_name', { length: 500 }),
     account:              varchar('account', { length: 255 }),
+    accountId:            text('account_id'),
     site:                 varchar('site', { length: 255 }),
     salesRep:             varchar('sales_rep', { length: 255 }),
     stage:                varchar('stage', { length: 100 }).notNull(),
