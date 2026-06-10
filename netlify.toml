@@ -24,6 +24,20 @@ schedule = "* * * * *"
 [functions."score-leads-batch"]
 schedule = "0 6 * * *"
 
+# Security headers — served on every response. These improve the domain's
+# standing with corporate proxy / reputation engines (Zscaler, Netskope, etc.)
+# and are good practice regardless. Deliberately NO Content-Security-Policy yet:
+# a blind CSP would risk breaking Clerk scripts and R2 document previews;
+# add one later only with a full origin inventory.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
