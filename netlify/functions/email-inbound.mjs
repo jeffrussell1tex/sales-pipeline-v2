@@ -83,12 +83,14 @@ export const handler = async (event) => {
     try {
         // ── GET: return this org's dropbox address (Clerk-authed, for Settings UI) ──
         if (event.httpMethod === 'GET') {
-            const payload = await verifyAuth(event);
-            if (!payload) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+            // verifyAuth returns { userId, orgId, ... } on success or { error, status }
+            // on failure (see accounts.mjs) — not a payload object.
+            const auth = await verifyAuth(event);
+            if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
             if (!process.env.BCC_SECRET || !process.env.INBOUND_DOMAIN) {
                 return { statusCode: 200, headers, body: JSON.stringify({ address: null, configured: false }) };
             }
-            return { statusCode: 200, headers, body: JSON.stringify({ address: orgAddress(payload.o.id), configured: true }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ address: orgAddress(auth.orgId), configured: true }) };
         }
 
         if (event.httpMethod !== 'POST') {
