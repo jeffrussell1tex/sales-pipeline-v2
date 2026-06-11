@@ -270,9 +270,20 @@ export const handler = async (event) => {
                 const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
                 // Redirect URL — where Clerk sends the invitee after they accept.
-                // Falls back to the dev URL if the env var isn't set.
-                const appUrl = process.env.URL || process.env.DEPLOY_URL || 'https://accelerep.netlify.app';
+                // Netlify sets URL to the site's primary domain in production.
+                const appUrl = process.env.URL || process.env.DEPLOY_URL || 'https://salespipelinetracker.com';
                 const redirectUrl = `${appUrl}/sign-up`;
+
+                // Fetch pending Clerk invitations once for the batch. Clerk rejects a
+                // duplicate invitation outright, so a RE-invite must revoke the old one
+                // first — that is what makes “Resend” actually send a fresh email.
+                let pendingInvitations = [];
+                try {
+                    const list = await clerk.invitations.getInvitationList({ status: 'pending', limit: 500 });
+                    pendingInvitations = list?.data || (Array.isArray(list) ? list : []);
+                } catch (e) {
+                    console.warn('users.mjs: could not list pending invitations:', e.message);
+                }
 
                 const results = [];
                 const errors  = [];
@@ -282,8 +293,17 @@ export const handler = async (event) => {
                     if (!email) { errors.push({ email: '', error: 'Email required' }); continue; }
 
                     try {
-                        // Send invitation via Clerk — this emails the invitee a magic link.
-                        // publicMetadata is available to the frontend after they sign up.
+                        // 1. Revoke any existing pending invitation for this email so the
+                        //    re-create below succeeds and sends a brand-new magic link.
+                        const existingInv = pendingInvitations.find(
+                            (inv) => (inv.emailAddress || inv.email_address || '').toLowerCase() === email
+                        );
+                        if (existingInv) {
+                            try { await clerk.invitations.revokeInvitation(existingInv.id); }
+                            catch (revErr) { console.warn(`users.mjs: revoke failed for ${email}:`, revErr.message); }
+                        }
+
+                        // 2. Create the invitation — Clerk emails the invitee a magic link.
                         await clerk.invitations.createInvitation({
                             emailAddress: email,
                             redirectUrl,
@@ -296,22 +316,41 @@ export const handler = async (event) => {
                             notify: true, // Clerk sends the email
                         });
 
-                        // Create a pending_ row so the invitee appears in the Users list immediately
-                        const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-                        const row = await upsertUser(sanitize({
-                            id:        pendingId,
-                            email,
-                            name:      email.split('@')[0],
-                            userType:  invite.role      || 'User',
-                            team:      invite.team      || null,
-                            territory: invite.territory || null,
-                            active:    false,
-                            status:    'Invited',
-                        }));
-                        results.push(flatten(row));
+                        // 3. DB row. If this email already has a row (a migrated user or a
+                        //    prior pending_ invite), KEEP it — merge status into the existing
+                        //    profile rather than inserting a duplicate (which would violate
+                        //    the unique-email constraint and clobber quotas/profile data).
+                        const [existingRow] = await db
+                            .select()
+                            .from(users)
+                            .where(and(eq(users.email, email), eq(users.orgId, orgId)));
+
+                        if (existingRow) {
+                            const mergedProfile = { ...(existingRow.profile || {}), status: 'Invited' };
+                            const [row] = await db
+                                .update(users)
+                                .set({ profile: mergedProfile, updatedAt: new Date() })
+                                .where(and(eq(users.id, existingRow.id), eq(users.orgId, orgId)))
+                                .returning();
+                            results.push(flatten(row || existingRow));
+                        } else {
+                            const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                            const row = await upsertUser(sanitize({
+                                id:        pendingId,
+                                email,
+                                name:      email.split('@')[0],
+                                userType:  invite.role      || 'User',
+                                team:      invite.team      || null,
+                                territory: invite.territory || null,
+                                active:    false,
+                                status:    'Invited',
+                            }));
+                            results.push(flatten(row));
+                        }
 
                     } catch (err) {
-                        // Clerk throws if email already has a pending invitation or is already a member
+                        // Clerk throws if the email already belongs to a signed-up member
+                        // (no invitation needed) — surface that message per-email.
                         const clerkMsg = err?.errors?.[0]?.message || err.message || 'Invite failed';
                         errors.push({ email, error: clerkMsg });
                     }
@@ -323,7 +362,6 @@ export const handler = async (event) => {
                     body: JSON.stringify({ invited: results, errors }),
                 };
             }
-
             // ── Single user create ────────────────────────────────────────────
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
