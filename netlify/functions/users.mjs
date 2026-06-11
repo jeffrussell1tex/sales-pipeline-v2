@@ -272,17 +272,20 @@ export const handler = async (event) => {
                 // Redirect URL — where Clerk sends the invitee after they accept.
                 // Netlify sets URL to the site's primary domain in production.
                 const appUrl = process.env.URL || process.env.DEPLOY_URL || 'https://salespipelinetracker.com';
-                const redirectUrl = `${appUrl}/sign-up`;
 
-                // Fetch pending Clerk invitations once for the batch. Clerk rejects a
-                // duplicate invitation outright, so a RE-invite must revoke the old one
+                // Fetch this ORG's pending invitations once for the batch. Clerk rejects
+                // a duplicate invitation outright, so a RE-invite must revoke the old one
                 // first — that is what makes “Resend” actually send a fresh email.
+                // NOTE: these are ORGANIZATION invitations (membership in this org on
+                // acceptance), not application invitations — app-level invites create an
+                // account with NO org, which strands invitees on Clerk's
+                // “Setup your organization” screen.
                 let pendingInvitations = [];
                 try {
-                    const list = await clerk.invitations.getInvitationList({ status: 'pending', limit: 500 });
+                    const list = await clerk.organizations.getOrganizationInvitationList({ organizationId: orgId, status: ['pending'], limit: 500 });
                     pendingInvitations = list?.data || (Array.isArray(list) ? list : []);
                 } catch (e) {
-                    console.warn('users.mjs: could not list pending invitations:', e.message);
+                    console.warn('users.mjs: could not list pending org invitations:', e.message);
                 }
 
                 const results = [];
@@ -299,21 +302,27 @@ export const handler = async (event) => {
                             (inv) => (inv.emailAddress || inv.email_address || '').toLowerCase() === email
                         );
                         if (existingInv) {
-                            try { await clerk.invitations.revokeInvitation(existingInv.id); }
+                            try { await clerk.organizations.revokeOrganizationInvitation({ organizationId: orgId, invitationId: existingInv.id, requestingUserId: userId }); }
                             catch (revErr) { console.warn(`users.mjs: revoke failed for ${email}:`, revErr.message); }
                         }
 
-                        // 2. Create the invitation — Clerk emails the invitee a magic link.
-                        await clerk.invitations.createInvitation({
-                            emailAddress: email,
-                            redirectUrl,
+                        // 2. Create an ORGANIZATION invitation — Clerk emails a magic link,
+                        //    and acceptance adds the user to THIS org (existing accounts
+                        //    included), so they land in UKG instead of being asked to
+                        //    create their own organization. App-specific role/team live in
+                        //    the users table; the Clerk org role only needs membership
+                        //    (admins get org:admin so they can manage members).
+                        await clerk.organizations.createOrganizationInvitation({
+                            organizationId: orgId,
+                            inviterUserId:  userId,
+                            emailAddress:   email,
+                            role:           (invite.role === 'Admin') ? 'org:admin' : 'org:member',
+                            redirectUrl:    appUrl,
                             publicMetadata: {
-                                orgId,
                                 role:      invite.role      || 'User',
                                 team:      invite.team      || null,
                                 territory: invite.territory || null,
                             },
-                            notify: true, // Clerk sends the email
                         });
 
                         // 3. DB row. If this email already has a row (a migrated user or a

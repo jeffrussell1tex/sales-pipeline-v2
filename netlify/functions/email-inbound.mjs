@@ -20,8 +20,9 @@ import { serverErrorBody } from './_lib.mjs';
 //   POST (webhook)       -> verified via Svix signature (RESEND_INBOUND_SECRET)
 //                           or ?secret=<INBOUND_SHARED_SECRET> for other providers.
 //
-// Required env vars: BCC_SECRET, INBOUND_DOMAIN, and RESEND_INBOUND_SECRET
-// (or INBOUND_SHARED_SECRET).
+// Required env vars: BCC_SECRET, INBOUND_DOMAIN, RESEND_INBOUND_SECRET
+// (or INBOUND_SHARED_SECRET), and RESEND_API_KEY (to fetch the full message —
+// Resend's webhook carries metadata only: no body, no header recipients).
 
 const NOTES_MAX = 4000;
 
@@ -76,6 +77,41 @@ const emailOnly = (s) => {
     return (m ? m[1] : String(s || '')).trim().toLowerCase();
 };
 
+// Resend's email.received webhook payload contains ONLY metadata plus the SMTP
+// envelope recipient in `to` (i.e. the dropbox address itself) — the real header
+// To/Cc and the body are NOT included and must be fetched back by email_id via
+// the Received emails API (docs: “Webhooks do not include the email body,
+// headers, or attachments”). Falls back to the sent-email endpoint defensively.
+async function fetchReceivedEmail(emailId) {
+    const key = process.env.RESEND_API_KEY;
+    if (!key || !emailId) return null;
+    const get = async (url) => {
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
+        return res.ok ? res.json() : null;
+    };
+    try {
+        return (await get(`https://api.resend.com/emails/receiving/${emailId}`))
+            || (await get(`https://api.resend.com/emails/${emailId}`));
+    } catch (e) {
+        console.warn('email-inbound: fetch of received email failed:', e.message);
+        return null;
+    }
+}
+
+// The retrieved html can arrive as a data URI (html_format: 'data_uri') —
+// decode it before stripping tags.
+function htmlToText(html) {
+    let h = String(html || '');
+    if (h.startsWith('data:')) {
+        const comma = h.indexOf(',');
+        const meta = h.slice(0, comma);
+        const payload = h.slice(comma + 1);
+        try { h = meta.includes('base64') ? Buffer.from(payload, 'base64').toString('utf8') : decodeURIComponent(payload); }
+        catch { h = ''; }
+    }
+    return h.replace(/<[^>]+>/g, ' ');
+}
+
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
     if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
@@ -111,19 +147,31 @@ export const handler = async (event) => {
         const from = mail.from?.email || mail.from || '';
         const toList = [].concat(mail.to || [], mail.cc || [], mail.bcc || [])
             .map(r => (r && typeof r === 'object') ? (r.email || '') : r);
-        const subject = String(mail.subject || '').slice(0, 500);
-        const text = String(mail.text || mail.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-
         const orgId = orgFromRecipients(toList);
         if (!orgId) {
             // Unknown/forged dropbox address — acknowledge so the provider doesn't retry.
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: false, reason: 'no valid dropbox recipient' }) };
         }
 
+        // The webhook's `to` was just the dropbox (envelope); fetch the full parsed
+        // message for the real header To/Cc (contact matching) and the body (notes).
+        const full = await fetchReceivedEmail(mail.email_id);
+
+        const subject = String((full?.subject ?? mail.subject) || '').slice(0, 500);
+        const rawText = full
+            ? (full.text || htmlToText(full.html))
+            : (mail.text || htmlToText(mail.html));
+        const text = String(rawText || '').replace(/\s+/g, ' ').trim();
+
         // Match a contact: prefer external recipients (rep BCCs us on mail TO the
         // contact), then the sender (inbound mail forwarded to the dropbox).
         const fromEmail = emailOnly(from);
+        const headerRecipients = full
+            ? [].concat(full.to || [], full.cc || [], full.bcc || [])
+                .map(r => (r && typeof r === 'object') ? (r.email || '') : r)
+            : [];
         const candidates = [
+            ...headerRecipients.map(emailOnly).filter(e => e && !e.startsWith('log-')),
             ...toList.map(emailOnly).filter(e => e && !e.startsWith('log-')),
             fromEmail,
         ].filter(Boolean);
