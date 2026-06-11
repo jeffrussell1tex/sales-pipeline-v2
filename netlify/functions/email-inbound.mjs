@@ -94,8 +94,11 @@ async function fetchReceivedEmail(emailId) {
         return res.json();
     };
     try {
-        return (await get(`https://api.resend.com/emails/receiving/${emailId}`))
-            || (await get(`https://api.resend.com/emails/${emailId}`));
+        const fromReceiving = await get(`https://api.resend.com/emails/receiving/${emailId}`);
+        if (fromReceiving) return { data: fromReceiving, endpoint: 'receiving' };
+        const fromEmails = await get(`https://api.resend.com/emails/${emailId}`);
+        if (fromEmails) return { data: fromEmails, endpoint: 'emails' };
+        return null;
     } catch (e) {
         console.warn('email-inbound: fetch of received email failed:', e.message);
         return null;
@@ -159,7 +162,8 @@ export const handler = async (event) => {
 
         // The webhook's `to` was just the dropbox (envelope); fetch the full parsed
         // message for the real header To/Cc (contact matching) and the body (notes).
-        const full = await fetchReceivedEmail(mail.email_id);
+        const fetched = await fetchReceivedEmail(mail.email_id);
+        const full = fetched?.data || null;
 
         const subject = String((full?.subject ?? mail.subject) || '').slice(0, 500);
         const rawText = full
@@ -190,10 +194,15 @@ export const handler = async (event) => {
         if (!matched) {
             // Surface what we tried so the webhook delivery log is self-diagnosing:
             // whether the full-email fetch worked, and which addresses we matched on.
-            console.log('email-inbound: no match', JSON.stringify({ fetchedFullEmail: !!full, candidates, orgContactCount: orgContacts.length }));
+            const shape = full ? {
+                endpoint: fetched.endpoint,
+                keys: Object.keys(full),
+                to: full.to ?? null, cc: full.cc ?? null, bcc: full.bcc ?? null,
+            } : null;
+            console.log('email-inbound: no match', JSON.stringify({ fetchedFullEmail: !!full, candidates, orgContactCount: orgContacts.length, shape }));
             return { statusCode: 200, headers, body: JSON.stringify({
                 ok: true, matched: false, reason: 'no contact matched participants',
-                debug: { fetchedFullEmail: !!full, candidates },
+                debug: { fetchedFullEmail: !!full, candidates, shape },
             }) };
         }
 
