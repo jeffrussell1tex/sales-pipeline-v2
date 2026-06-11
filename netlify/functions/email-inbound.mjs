@@ -87,7 +87,11 @@ async function fetchReceivedEmail(emailId) {
     if (!key || !emailId) return null;
     const get = async (url) => {
         const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
-        return res.ok ? res.json() : null;
+        if (!res.ok) {
+            console.log(`email-inbound: GET ${url} -> ${res.status}`);
+            return null;
+        }
+        return res.json();
     };
     try {
         return (await get(`https://api.resend.com/emails/receiving/${emailId}`))
@@ -180,11 +184,17 @@ export const handler = async (event) => {
         let matched = null;
         for (const cand of candidates) {
             matched = orgContacts.find(c =>
-                (c.email || '').toLowerCase() === cand || (c.personalEmail || '').toLowerCase() === cand);
+                (c.email || '').trim().toLowerCase() === cand || (c.personalEmail || '').trim().toLowerCase() === cand);
             if (matched) break;
         }
         if (!matched) {
-            return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: false, reason: 'no contact matched participants' }) };
+            // Surface what we tried so the webhook delivery log is self-diagnosing:
+            // whether the full-email fetch worked, and which addresses we matched on.
+            console.log('email-inbound: no match', JSON.stringify({ fetchedFullEmail: !!full, candidates, orgContactCount: orgContacts.length }));
+            return { statusCode: 200, headers, body: JSON.stringify({
+                ok: true, matched: false, reason: 'no contact matched participants',
+                debug: { fetchedFullEmail: !!full, candidates },
+            }) };
         }
 
         const today = new Date().toISOString().slice(0, 10);
