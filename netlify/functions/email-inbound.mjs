@@ -77,6 +77,58 @@ const emailOnly = (s) => {
     return (m ? m[1] : String(s || '')).trim().toLowerCase();
 };
 
+// Pull every email address out of a raw header value (handles display names,
+// angle brackets, and multiple comma-separated addresses).
+const extractEmails = (s) =>
+    (String(s || '').match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/gi) || [])
+        .map(a => a.toLowerCase());
+
+// Resend's received-email `to`/`cc`/`bcc` carry the SMTP ENVELOPE recipient
+// (our dropbox address) — NOT the message's header To/Cc. The real recipients
+// (the contact a rep BCC'd us on) live in the parsed `headers` map. Pull them
+// from the recipient-bearing headers, normalizing key case and the two header
+// shapes Resend may return (object map, or array of { name, value }).
+function headerAddresses(full) {
+    const h = full && full.headers;
+    if (!h) return [];
+    const map = {};
+    if (Array.isArray(h)) {
+        for (const it of h) {
+            const name = String((it && (it.name || it.key)) || '').toLowerCase();
+            if (name) map[name] = (it && it.value) || '';
+        }
+    } else if (typeof h === 'object') {
+        for (const k of Object.keys(h)) map[k.toLowerCase()] = h[k];
+    }
+    const wanted = ['to', 'cc', 'delivered-to', 'x-original-to', 'x-forwarded-to'];
+    return wanted.flatMap(name => extractEmails(map[name]));
+}
+
+// Last resort: if neither the structured fields nor the headers map surface a
+// usable recipient, download the raw RFC822 message (signed, short-lived URL)
+// and parse To/Cc out of its header block. Header parsing only — bounded work.
+async function rawRecipients(full) {
+    const url = full && full.raw && full.raw.download_url;
+    if (!url) return [];
+    try {
+        const res = await fetch(url);
+        if (!res.ok) { console.log(`email-inbound: raw download -> ${res.status}`); return []; }
+        const raw = await res.text();
+        // Header block ends at the first blank line; unfold folded continuation lines.
+        const headerBlock = raw.split(/\r?\n\r?\n/, 1)[0] || '';
+        const unfolded = headerBlock.replace(/\r?\n[ \t]+/g, ' ');
+        const addrs = [];
+        for (const line of unfolded.split(/\r?\n/)) {
+            const m = line.match(/^(to|cc|delivered-to|x-original-to):(.*)$/i);
+            if (m) addrs.push(...extractEmails(m[2]));
+        }
+        return addrs;
+    } catch (e) {
+        console.warn('email-inbound: raw parse failed:', e.message);
+        return [];
+    }
+}
+
 // Resend's email.received webhook payload contains ONLY metadata plus the SMTP
 // envelope recipient in `to` (i.e. the dropbox address itself) — the real header
 // To/Cc and the body are NOT included and must be fetched back by email_id via
@@ -171,18 +223,34 @@ export const handler = async (event) => {
             : (mail.text || htmlToText(mail.html));
         const text = String(rawText || '').replace(/\s+/g, ' ').trim();
 
-        // Match a contact: prefer external recipients (rep BCCs us on mail TO the
-        // contact), then the sender (inbound mail forwarded to the dropbox).
+        // Match a contact: prefer the real header recipients (a rep BCCs us on mail
+        // addressed TO the contact), then the sender (inbound mail forwarded to the
+        // dropbox). The header To/Cc are NOT in `full.to` — that's the envelope, i.e.
+        // our own dropbox address — so we read `full.headers`, with a raw-MIME fallback.
         const fromEmail = emailOnly(from);
-        const headerRecipients = full
+        const isExternal = (e) => e && !e.startsWith('log-');
+
+        // Structured fields too (defensive: tolerate string OR { email } entry shapes).
+        const structured = full
             ? [].concat(full.to || [], full.cc || [], full.bcc || [])
                 .map(r => (r && typeof r === 'object') ? (r.email || '') : r)
+                .map(emailOnly)
             : [];
-        const candidates = [
-            ...headerRecipients.map(emailOnly).filter(e => e && !e.startsWith('log-')),
-            ...toList.map(emailOnly).filter(e => e && !e.startsWith('log-')),
-            fromEmail,
-        ].filter(Boolean);
+
+        let recipients = [
+            ...headerAddresses(full),
+            ...structured,
+            ...toList.map(emailOnly),
+        ].filter(isExternal);
+
+        // Only download the raw message if the parsed fields yielded nothing to match.
+        let usedRaw = false;
+        if (recipients.length === 0 && full) {
+            recipients = (await rawRecipients(full)).filter(isExternal);
+            usedRaw = true;
+        }
+
+        const candidates = [...new Set([...recipients, fromEmail].filter(Boolean))];
 
         const orgContacts = await db.select().from(contacts).where(eq(contacts.orgId, orgId));
         let matched = null;
@@ -197,7 +265,11 @@ export const handler = async (event) => {
             const shape = full ? {
                 endpoint: fetched.endpoint,
                 keys: Object.keys(full),
+                headerKeys: (full.headers && typeof full.headers === 'object' && !Array.isArray(full.headers))
+                    ? Object.keys(full.headers)
+                    : (Array.isArray(full.headers) ? 'array' : null),
                 to: full.to ?? null, cc: full.cc ?? null, bcc: full.bcc ?? null,
+                rawAvailable: !!(full.raw && full.raw.download_url), usedRaw,
             } : null;
             console.log('email-inbound: no match', JSON.stringify({ fetchedFullEmail: !!full, candidates, orgContactCount: orgContacts.length, shape }));
             return { statusCode: 200, headers, body: JSON.stringify({
