@@ -278,9 +278,21 @@ export const handler = async (event) => {
             }) };
         }
 
+        // Idempotency: Resend retries failed webhook deliveries and events can be
+        // replayed from the dashboard. Derive the activity's primary key
+        // deterministically from (orgId + RFC Message-ID) so a duplicate delivery of
+        // the SAME email collides on the existing PK instead of inserting a second
+        // activity. With a Message-ID we get exact-once logging; without one (rare,
+        // non-conformant senders) we fall back to a random id and accept the small
+        // duplicate risk rather than dropping the activity.
+        const messageId = String((full && full.message_id) || mail.message_id || '').trim();
+        const activityId = messageId
+            ? 'id_' + crypto.createHash('sha256').update(orgId + '|' + messageId).digest('hex').slice(0, 36)
+            : 'id_' + crypto.randomUUID();
+
         const today = new Date().toISOString().slice(0, 10);
         const activity = {
-            id: 'id_' + crypto.randomUUID(),
+            id: activityId,
             type: 'Email',
             date: today,
             subject: subject || null,
@@ -296,9 +308,14 @@ export const handler = async (event) => {
             createdAt: new Date(),
             orgId,
         };
-        const [inserted] = await db.insert(activities).values(activity).returning();
+        const [inserted] = await db.insert(activities).values(activity).onConflictDoNothing().returning();
+        if (!inserted) {
+            // PK collision => we already logged this exact message for this org.
+            // Idempotent no-op; report success with the stable id so replays are safe.
+            return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: true, deduped: true, activityId }) };
+        }
 
-        return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: true, activityId: (inserted || activity).id }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: true, activityId: inserted.id }) };
     } catch (error) {
         console.error('email-inbound error:', error);
         return { statusCode: 500, headers, body: serverErrorBody(error) };
