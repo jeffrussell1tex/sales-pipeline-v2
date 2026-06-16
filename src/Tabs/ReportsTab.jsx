@@ -6072,10 +6072,12 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                 const yest = new Date(now - 86400000).toDateString();
                 const thisWeekStart = new Date(now - (now.getDay() * 86400000));
                 const lastMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
+                const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
                 const bucketName = (dateStr) => {
                     if (!dateStr || dateStr === '1900-01-01') return 'Earlier';
                     const d = new Date(dateStr+'T12:00:00');
+                    if (d >= tomorrowStart) return 'Upcoming';
                     if (d.toDateString() === today) return 'Today';
                     if (d.toDateString() === yest) return 'Yesterday';
                     if (d >= thisWeekStart) return 'This week';
@@ -6083,11 +6085,13 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                     return 'Earlier';
                 };
                 const buckets = {};
-                const BUCKET_ORDER = ['Today','Yesterday','This week','Last month','Earlier'];
+                const BUCKET_ORDER = ['Upcoming','Today','Yesterday','This week','Last month','Earlier'];
                 allEvents.forEach(e => {
                     const b = bucketName(e.rawDate);
                     (buckets[b] ||= []).push(e);
                 });
+                // Upcoming (future-dated) items list soonest-first; everything else stays newest-first.
+                if (buckets['Upcoming']) buckets['Upcoming'].sort((a,b) => new Date(a.rawDate+'T12:00:00') - new Date(b.rawDate+'T12:00:00'));
 
                 // Event tone map
                 const eventTone = {
@@ -6643,7 +6647,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
                                             <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7 }}>Activity log</div>
                                             <span style={{ flex:1, height:1, background:T.border }}/>
-                                            <span style={{ fontSize:11.5, color:T.inkMid }}>{allEvents.length} events · newest first</span>
+                                            <span style={{ fontSize:11.5, color:T.inkMid }}>{(buckets['Upcoming']?.length || 0) > 0 ? `${buckets['Upcoming'].length} upcoming · ${allEvents.length - buckets['Upcoming'].length} logged` : `${allEvents.length} events · newest first`}</span>
                                         </div>
 
                                         {allEvents.length === 0 ? (
@@ -6655,9 +6659,9 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                 {BUCKET_ORDER.filter(b => buckets[b]).map((bucket, bi) => (
                                                     <div key={bucket}>
                                                         <div style={{ padding:'8px 16px 4px', display:'flex', alignItems:'center', gap:10,
-                                                            borderTop: bi > 0 ? `1px solid ${T.border}` : 'none', background:T.surface2 }}>
-                                                            <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7 }}>{bucket}</span>
-                                                            <span style={{ fontSize:10, padding:'1px 7px', borderRadius:8, background:T.surface, color:T.inkMuted, border:`1px solid ${T.border}` }}>{buckets[bucket].length}</span>
+                                                            borderTop: bi > 0 ? `1px solid ${T.border}` : 'none', background: bucket === 'Upcoming' ? 'rgba(200,185,154,0.18)' : T.surface2 }}>
+                                                            <span style={{ fontSize:9.5, fontWeight:700, color: bucket === 'Upcoming' ? T.goldInk : T.inkMuted, textTransform:'uppercase', letterSpacing:0.7 }}>{bucket}</span>
+                                                            <span style={{ fontSize:10, padding:'1px 7px', borderRadius:8, background:T.surface, color: bucket === 'Upcoming' ? T.goldInk : T.inkMuted, border:`1px solid ${bucket === 'Upcoming' ? T.gold : T.border}` }}>{buckets[bucket].length}</span>
                                                             <span style={{ flex:1, height:1, background:T.border, marginLeft:4 }}/>
                                                         </div>
                                                         {buckets[bucket].map((e, i) => {
