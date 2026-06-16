@@ -5442,7 +5442,9 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
 
     // ── KPIs ───────────────────────────────────────────────────
     const buildKpis = (events, oppsForEntity) => {
-        const acts   = events.filter(e => e.type === 'activity');
+        // Tasks count as activity engagement on the account/contact rollup, alongside
+        // logged Calls/Emails/Meetings. Deals stay separate (Open/Won/Lost KPIs).
+        const acts   = events.filter(e => e.type === 'activity' || e.type === 'task');
         const tasksDone = events.filter(e => e.type === 'task' && e.done);
         const won    = oppsForEntity.filter(o => o.stage === 'Closed Won');
         const lost   = oppsForEntity.filter(o => o.stage === 'Closed Lost');
@@ -5559,11 +5561,13 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         const calls    = events.filter(e => (e.actType||'').toLowerCase().includes('call')).length;
         const emails   = events.filter(e => (e.actType||'').toLowerCase().includes('email')).length;
         const meetings = events.filter(e => (e.actType||'').toLowerCase().includes('meeting')).length;
-        const max = Math.max(calls, emails, meetings, 1);
+        const tasks    = events.filter(e => e.type === 'task').length;
+        const max = Math.max(calls, emails, meetings, tasks, 1);
         return [
             { label:'Calls',    count:calls,    pct:Math.round(calls/max*100),    color:'#7a6a48' },
             { label:'Emails',   count:emails,   pct:Math.round(emails/max*100),   color:'#5a7a8a' },
             { label:'Meetings', count:meetings, pct:Math.round(meetings/max*100), color:'#4d6b3d' },
+            { label:'Tasks',    count:tasks,    pct:Math.round(tasks/max*100),    color:'#9c7a4d' },
         ];
     };
 
