@@ -221,7 +221,7 @@ const StageRibbon = ({ allStages, current, onStage }) => {
 //  Deal History — preserved from original, accessible via rail
 //  "See all" link
 // ─────────────────────────────────────────────────────────────
-function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts, activityTypeIcon, onSaveActivity, onDeleteActivity, currentUser, onClose, saving, onUpdate }) {
+function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, settings, contacts, activityTypeIcon, onSaveActivity, onDeleteActivity, currentUser, onClose, saving, onUpdate }) {
     const [showLogActivity, setShowLogActivity] = React.useState(false);
     const [newActivity, setNewActivity] = React.useState({
         type: 'Call',
@@ -283,6 +283,26 @@ function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts
     oppContactNames.forEach(n => { if (!contactEngagement[n]) contactEngagement[n] = { calls: 0, emails: 0, meetings: 0, last: null }; });
 
     const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+
+    // Merge activities + tasks into one history feed (newest first). Tasks linked to
+    // this opp count alongside activities, matching the account/contact rollups.
+    const historyItems = [
+        ...oppActivities.map(a => ({
+            id: a.id, kind: 'activity',
+            icon: activityTypeIcon[a.type] || '📝',
+            label: a.type, date: a.date, notes: a.notes,
+            onDelete: onDeleteActivity ? () => onDeleteActivity(a.id) : null,
+        })),
+        ...oppTasks.map(t => ({
+            id: t.id, kind: 'task',
+            icon: '✓',
+            label: t.completed ? 'Task · done' : 'Task',
+            date: t.dueDate || t.completedAt || t.createdAt || '',
+            notes: t.title || t.description || '',
+            onDelete: null,
+        })),
+    ].sort((a, b) => new Date((b.date || '1900-01-01') + 'T12:00:00') - new Date((a.date || '1900-01-01') + 'T12:00:00'));
+
     const [tooltip, setTooltip] = React.useState(null);
 
     const typeColors = {
@@ -302,7 +322,7 @@ function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts
                 {[
                     { val: dealAge !== null ? `${dealAge}d` : '—', lbl: 'Deal age', color: dealAge > 90 ? T.danger : dealAge > 60 ? T.warn : T.ok },
                     { val: timeInStage !== null ? `${timeInStage}d` : '—', lbl: 'In this stage', color: timeInStage > 30 ? T.danger : timeInStage > 14 ? T.warn : T.ok },
-                    { val: oppActivities.length, lbl: 'Activities', color: T.info },
+                    { val: oppActivities.length + oppTasks.length, lbl: 'Activities', color: T.info },
                     { val: Object.keys(contactEngagement).length, lbl: 'Contacts engaged', color: T.inkMid },
                 ].map(({ val, lbl, color }) => (
                     <div key={lbl} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '10px 12px' }}>
@@ -449,26 +469,26 @@ function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts
                     </div>
                 )}
 
-                {oppActivities.length === 0 && !showLogActivity && (
+                {historyItems.length === 0 && !showLogActivity && (
                     <div style={{ textAlign: 'center', padding: '2rem', color: T.inkMuted, fontSize: '0.8125rem', background: T.surface, borderRadius: T.r, border: `1px dashed ${T.border}`, fontFamily: T.sans }}>
-                        No activities logged yet.
+                        No activities or tasks logged yet.
                     </div>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {oppActivities.map(act => (
-                        <div key={act.id} style={{ display: 'flex', gap: '0.625rem', padding: '0.625rem 0.75rem', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r }}>
+                    {historyItems.map(item => (
+                        <div key={item.kind + '_' + item.id} style={{ display: 'flex', gap: '0.625rem', padding: '0.625rem 0.75rem', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r }}>
                             <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: T.bg, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                <span style={{ fontSize: '0.75rem' }}>{activityTypeIcon[act.type] || '📝'}</span>
+                                <span style={{ fontSize: '0.75rem' }}>{item.icon}</span>
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.5rem' }}>
-                                    <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink, fontFamily: T.sans }}>{act.type}</span>
-                                    <span style={{ fontSize: '0.6875rem', color: T.inkMuted, flexShrink: 0, fontFamily: T.sans }}>{fmtDate(act.date)}</span>
+                                    <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink, fontFamily: T.sans }}>{item.label}</span>
+                                    <span style={{ fontSize: '0.6875rem', color: T.inkMuted, flexShrink: 0, fontFamily: T.sans }}>{fmtDate(item.date)}</span>
                                 </div>
-                                {act.notes && <div style={{ fontSize: '0.75rem', color: T.inkMid, marginTop: '2px', lineHeight: 1.5, fontFamily: T.sans }}>{act.notes}</div>}
+                                {item.notes && <div style={{ fontSize: '0.75rem', color: T.inkMid, marginTop: '2px', lineHeight: 1.5, fontFamily: T.sans }}>{item.notes}</div>}
                             </div>
-                            {onDeleteActivity && (
-                                <button type="button" onClick={() => onDeleteActivity(act.id)}
+                            {item.onDelete && (
+                                <button type="button" onClick={item.onDelete}
                                     style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '1rem', padding: '0.125rem', lineHeight: 1, borderRadius: T.r, flexShrink: 0 }}
                                     onMouseEnter={e => e.currentTarget.style.color = T.danger}
                                     onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>
@@ -996,7 +1016,7 @@ function RightRail({ opportunity, oppActivities, contacts, settings, onOpenActiv
 // ─────────────────────────────────────────────────────────────
 export default function OpportunityModal({
     opportunity, accounts, contacts, settings, pipelines, activePipelineId,
-    currentUser, activities, onSaveActivity, onDeleteActivity,
+    currentUser, activities, tasks, onSaveActivity, onDeleteActivity,
     onSaveComment, onEditComment, onDeleteComment,
     onClose, onSave, onAddAccount, onSaveNewContact, onSaveNewAccount, onAddContact,
     lastCreatedAccountName, onAddRep, lastCreatedRepName,
@@ -1230,6 +1250,7 @@ export default function OpportunityModal({
     const oppActivities = opportunity
         ? (activities || []).filter(a => a.opportunityId === opportunity.id).sort((a, b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'))
         : [];
+    const oppTasks = opportunity ? (tasks || []).filter(t => t.opportunityId === opportunity.id) : [];
 
     const activityTypeIcon = { Call: '📞', Email: '✉️', Meeting: '🤝', Demo: '🖥️', 'Proposal Sent': '📄', 'Follow-up': '🔄', Other: '📝' };
 
@@ -1389,7 +1410,7 @@ export default function OpportunityModal({
                     {detailTab && opportunity && (
                         <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
                             {detailTab === 'history' && (
-                                <DealHistoryTab opportunity={opportunity} oppActivities={oppActivities} stages={stages} settings={settings} contacts={contacts}
+                                <DealHistoryTab opportunity={opportunity} oppActivities={oppActivities} oppTasks={oppTasks} stages={stages} settings={settings} contacts={contacts}
                                     activityTypeIcon={activityTypeIcon} onSaveActivity={onSaveActivity} onDeleteActivity={onDeleteActivity}
                                     currentUser={currentUser} onClose={onClose} saving={saving}
                                     onUpdate={() => { const f = document.getElementById('opp-form'); if (f) f.requestSubmit(); }}/>
