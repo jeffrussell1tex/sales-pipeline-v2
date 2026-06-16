@@ -94,6 +94,7 @@ export default function ModalLayer() {
                     activePipelineId={activePipeline.id}
                     currentUser={currentUser}
                     activities={activities}
+                    tasks={tasks}
                     onSaveActivity={(activityData) => {
                         const newId = 'id_' + crypto.randomUUID();
                         setActivities(prev => [...prev, { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' }]);
