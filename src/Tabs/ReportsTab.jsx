@@ -5307,6 +5307,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             events.push({
                 id: 'act_' + a.id,
                 date: a.date || a.createdAt || '',
+                created: a.createdAt || '',
                 type: 'activity',
                 actType: a.type || 'Activity',
                 label: a.subject || a.description || a.type || 'Activity',
@@ -5324,6 +5325,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             events.push({
                 id: 'task_' + t.id,
                 date: t.completedAt || t.dueDate || t.createdAt || '',
+                created: t.createdAt || '',
                 type: 'task',
                 actType: t.completed ? 'Task Done' : 'Task',
                 label: t.title || t.subject || 'Task',
@@ -5395,6 +5397,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             events.push({
                 id: 'act_' + a.id,
                 date: a.date || a.createdAt || '',
+                created: a.createdAt || '',
                 type: 'activity', actType: a.type || 'Activity',
                 label: a.subject || a.description || a.type || 'Activity',
                 sub: a.notes || a.outcome || (opp ? opp.opportunityName || opp.name : '') || '',
@@ -5412,6 +5415,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             events.push({
                 id: 'task_' + t.id,
                 date: t.completedAt || t.dueDate || t.createdAt || '',
+                created: t.createdAt || '',
                 type: 'task', actType: t.completed ? 'Task Done' : 'Task',
                 label: t.title || t.subject || 'Task',
                 sub: t.notes || '',
@@ -5473,6 +5477,17 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         return events;
     };
 
+    // Parse a date value safely. A bare YYYY-MM-DD is read at LOCAL noon — never
+    // `new Date('YYYY-MM-DD')`, which is parsed as UTC midnight and renders as the
+    // previous evening in zones behind UTC (that both shifted the day bucket and
+    // fabricated the bogus uniform time). Full timestamps parse as-is.
+    const parseLocal = (v) => {
+        if (!v) return null;
+        const s = String(v);
+        const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T12:00:00') : new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+    };
+
     // ── Group events by date bucket ────────────────────────────
     const groupByDate = (events) => {
         const today = new Date(); today.setHours(0,0,0,0);
@@ -5482,7 +5497,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         const groups = {};
         const order = [];
         events.forEach(e => {
-            const d = e.date ? new Date(e.date) : null;
+            const d = parseLocal(e.date);
             let bucket = 'Older';
             if (d) {
                 const day = new Date(d); day.setHours(0,0,0,0);
@@ -5510,7 +5525,14 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const EventRow = ({ event }) => {
         const cfg = typeConfig[event.type] || typeConfig.activity;
         const label = typeLabels[event.actType] || (event.actType||'').toUpperCase().slice(0,12);
-        const timeStr = event.date ? new Date(event.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase() : '';
+        // Clock time comes from the real logged timestamp (createdAt). Only fall back
+        // to `date` if it itself carries a time component — a date-only value has no
+        // real time of day to display.
+        const tsRaw = event.created || (/\dT\d/.test(String(event.date)) ? event.date : '');
+        const tsDate = tsRaw ? new Date(tsRaw) : null;
+        const timeStr = (tsDate && !isNaN(tsDate.getTime()))
+            ? tsDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase()
+            : '';
         return (
             <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
                 <div style={{ width:42, fontSize:11, color:T.inkMuted, fontFamily:T.sans, flexShrink:0, paddingTop:2, textAlign:'right' }}>{timeStr}</div>
