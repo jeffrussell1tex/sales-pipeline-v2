@@ -787,7 +787,7 @@ export default function ContactsTab() {
 
     const handleDeleteSelected = () => {
         if (!selectedIds.length) return;
-        showConfirm(`Delete ${selectedIds.length} contact${selectedIds.length > 1 ? 's' : ''}? This cannot be undone.`, async () => {
+        showConfirm(`Delete ${selectedIds.length} contact${selectedIds.length > 1 ? 's' : ''}? You'll have a few seconds to undo.`, async () => {
             const toDelete = [...selectedIds];
             const snapshot = [...(contacts || [])];
             setContacts(prev => prev.filter(c => !toDelete.includes(c.id)));
