@@ -1,11 +1,11 @@
 import { db } from '../../db/index.js';
 import { opportunities, users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth, canSeeAll, isManager } from './auth.mjs';
+import { verifyAuth, canSeeAll, isManager, requireRole } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, writeAudit } from './_lib.mjs';
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -315,8 +315,15 @@ export const handler = async (event) => {
         if (event.httpMethod === 'DELETE') {
             const clear = event.queryStringParameters?.clear;
             if (clear === 'true') {
-                await db.delete(opportunities).where(eq(opportunities.orgId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
+                // Org-wide wipe — Admin only. Any lesser role gets 403 before any delete runs.
+                const forbidden = requireRole(auth, ['Admin'], headers);
+                if (forbidden) return forbidden;
+                const deleted = await db.delete(opportunities).where(eq(opportunities.orgId, orgId)).returning({ id: opportunities.id });
+                await writeAudit(orgId, {
+                    action: 'opportunity.cleared', entityType: 'opportunity', entityId: 'ALL',
+                    entityName: 'All opportunities', detail: `Cleared ${deleted.length} opportunities via clear=true`, userId,
+                });
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) {

@@ -1,10 +1,10 @@
 import { db } from '../../db/index.js';
 import { leads, users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth, canSeeAll } from './auth.mjs';
+import { verifyAuth, canSeeAll, requireRole } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, writeAudit } from './_lib.mjs';
 import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
@@ -159,8 +159,15 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
-                await db.delete(leads).where(eq(leads.orgId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
+                // Org-wide wipe — Admin only.
+                const forbidden = requireRole(auth, ['Admin'], headers);
+                if (forbidden) return forbidden;
+                const deleted = await db.delete(leads).where(eq(leads.orgId, orgId)).returning({ id: leads.id });
+                await writeAudit(orgId, {
+                    action: 'lead.cleared', entityType: 'lead', entityId: 'ALL',
+                    entityName: 'All leads', detail: `Cleared ${deleted.length} leads via clear=true`, userId,
+                });
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };

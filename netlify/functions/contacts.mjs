@@ -1,8 +1,8 @@
 import { db } from '../../db/index.js';
 import { contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { verifyAuth, requireRole } from './auth.mjs';
+import { serverErrorBody, writeAudit } from './_lib.mjs';
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -76,8 +76,15 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
-                await db.delete(contacts).where(eq(contacts.orgId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
+                // Org-wide wipe — Admin only. Non-admin bulk deletes use per-id DELETEs (see ContactsTab).
+                const forbidden = requireRole(auth, ['Admin'], headers);
+                if (forbidden) return forbidden;
+                const deleted = await db.delete(contacts).where(eq(contacts.orgId, orgId)).returning({ id: contacts.id });
+                await writeAudit(orgId, {
+                    action: 'contact.cleared', entityType: 'contact', entityId: 'ALL',
+                    entityName: 'All contacts', detail: `Cleared ${deleted.length} contacts via clear=true`, userId,
+                });
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };

@@ -1,8 +1,8 @@
 import { db } from '../../db/index.js';
 import { accounts, settings as settingsTable, opportunities, contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { verifyAuth, requireRole } from './auth.mjs';
+import { serverErrorBody, writeAudit } from './_lib.mjs';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
 // Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
@@ -135,9 +135,15 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
-                // Scope clear to this org only
-                await db.delete(accounts).where(eq(accounts.orgId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
+                // Org-wide wipe — Admin only, scoped to this org.
+                const forbidden = requireRole(auth, ['Admin'], headers);
+                if (forbidden) return forbidden;
+                const deleted = await db.delete(accounts).where(eq(accounts.orgId, orgId)).returning({ id: accounts.id });
+                await writeAudit(orgId, {
+                    action: 'account.cleared', entityType: 'account', entityId: 'ALL',
+                    entityName: 'All accounts', detail: `Cleared ${deleted.length} accounts via clear=true`, userId,
+                });
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };

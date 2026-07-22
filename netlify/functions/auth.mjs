@@ -91,3 +91,20 @@ export async function verifyAuth(event) {
 export const isAdmin   = (role) => role === 'Admin';
 export const isManager = (role) => role === 'Manager';
 export const canSeeAll = (role) => role === 'Admin' || role === 'Manager';
+
+// Role gate for individual handler branches. Returns a ready-to-return 403
+// response when the caller's role is not in allowedRoles, or null when allowed.
+// Usage:
+//   const forbidden = requireRole(auth, ['Admin'], headers);
+//   if (forbidden) return forbidden;
+// Note: verifyAuth caches role for up to 30s, so a role change (e.g. an admin
+// being demoted) can take up to 30s to be enforced here.
+export function requireRole(auth, allowedRoles, headers) {
+    if (allowedRoles.includes(auth?.userRole)) return null;
+    console.warn('requireRole: forbidden role', auth?.userRole, 'for user', auth?.userId);
+    return {
+        statusCode: 403,
+        headers,
+        body: JSON.stringify({ error: 'Forbidden: insufficient role' }),
+    };
+}

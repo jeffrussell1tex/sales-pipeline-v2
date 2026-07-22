@@ -793,7 +793,9 @@ export default function ContactsTab() {
             setContacts(prev => prev.filter(c => !toDelete.includes(c.id)));
             setSelectedIds([]);
             setSelectMode(false);
-            const deletingAll = toDelete.length === contacts.length;
+            // clear=true is now server-gated to Admin only — non-admins must use
+            // per-id deletes or the request 403s and contacts reappear on refresh.
+            const deletingAll = toDelete.length === contacts.length && userRole === 'Admin';
             if (deletingAll) {
                 await dbFetch('/.netlify/functions/contacts?clear=true', { method: 'DELETE' }).catch(console.error);
             } else {
