@@ -1,7 +1,8 @@
 // _lib.mjs — shared helpers for Netlify functions.
 import { randomUUID } from 'crypto';
 import { db } from '../../db/index.js';
-import { auditLog } from '../../db/schema.js';
+import { auditLog, users } from '../../db/schema.js';
+import { eq } from 'drizzle-orm';
 
 // Browser origins allowed to call the API. Kept in sync with the Clerk
 // authorizedParties list in auth.mjs. Exported for the CORS follow-up; any
@@ -49,5 +50,29 @@ export async function writeAudit(orgId, { action, entityType, entityId, entityNa
         });
     } catch (e) {
         console.warn('writeAudit error:', e.message);
+    }
+}
+
+// Resolve the caller's display name for name-based ownership checks.
+// Entity ownership fields (salesRep, accountOwner, assignedTo, repName,
+// createdBy) store display names, not Clerk userIds, so object-level write
+// authorization compares against this. Cached briefly (per warm container)
+// since it runs on every rep-role mutation. Returns null on miss/error —
+// callers treat null as "does not own any assigned record" (fail closed).
+const callerNameCache = new Map();
+const CALLER_NAME_TTL_MS = 30_000;
+export async function getCallerName(userId) {
+    if (!userId) return null;
+    const cached = callerNameCache.get(userId);
+    if (cached && Date.now() - cached.ts < CALLER_NAME_TTL_MS) return cached.name;
+    try {
+        const [row] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
+        const name = row?.name || null;
+        callerNameCache.set(userId, { name, ts: Date.now() });
+        if (callerNameCache.size > 500) callerNameCache.delete(callerNameCache.keys().next().value);
+        return name;
+    } catch (e) {
+        console.warn('getCallerName error:', e.message);
+        return null;
     }
 }

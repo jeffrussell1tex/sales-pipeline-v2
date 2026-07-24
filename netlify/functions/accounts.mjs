@@ -1,8 +1,8 @@
 import { db } from '../../db/index.js';
 import { accounts, settings as settingsTable, opportunities, contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth, requireRole } from './auth.mjs';
-import { serverErrorBody, writeAudit } from './_lib.mjs';
+import { verifyAuth, requireRole, canSeeAll, isReadOnly } from './auth.mjs';
+import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
 // Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
@@ -52,6 +52,12 @@ export const handler = async (event) => {
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { userId, orgId, userRole, managedReps } = auth;
+
+    // Server-side role enforcement: ReadOnly can never mutate, regardless of
+    // what the client UI allows. Runs before any handler logic.
+    if (isReadOnly(userRole) && ['POST', 'PUT', 'DELETE'].includes(event.httpMethod)) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: read-only role' }) };
+    }
 
     const sanitize = (d) => ({
         id:                d.id,
@@ -114,6 +120,13 @@ export const handler = async (event) => {
             const { id, ...updateData } = clean;
             // Read the stored row first so a rename can be detected and cascaded below.
             const [prior] = await db.select().from(accounts).where(and(eq(accounts.id, clean.id), eq(accounts.orgId, orgId)));
+            // Object-level authorization: reps may only edit their own or unassigned accounts
+            if (prior && !canSeeAll(userRole)) {
+                const callerName = await getCallerName(userId);
+                if (prior.accountOwner && prior.accountOwner !== callerName) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
+                }
+            }
             const territoryAssignPut = await resolveTerritory(orgId, clean);
             const mergedPut = { ...clean, ...(territoryAssignPut || {}) };
             const { id: _putId, ...updateDataMerged } = mergedPut;
@@ -147,6 +160,14 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
+            // Object-level authorization: reps may only delete their own or unassigned accounts
+            if (!canSeeAll(userRole)) {
+                const [target] = await db.select({ owner: accounts.accountOwner }).from(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId)));
+                const callerName = await getCallerName(userId);
+                if (target?.owner && target.owner !== callerName) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
+                }
+            }
             // Promote children to top-level before deleting parent — prevents orphaned rows
             await db.update(accounts)
                 .set({ parentAccountId: null })

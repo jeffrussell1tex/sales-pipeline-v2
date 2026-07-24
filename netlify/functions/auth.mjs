@@ -91,6 +91,7 @@ export async function verifyAuth(event) {
 export const isAdmin   = (role) => role === 'Admin';
 export const isManager = (role) => role === 'Manager';
 export const canSeeAll = (role) => role === 'Admin' || role === 'Manager';
+export const isReadOnly = (role) => role === 'ReadOnly';
 
 // Role gate for individual handler branches. Returns a ready-to-return 403
 // response when the caller's role is not in allowedRoles, or null when allowed.

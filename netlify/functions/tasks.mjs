@@ -1,9 +1,9 @@
 import { db } from '../../db/index.js';
 import { tasks } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth, requireRole } from './auth.mjs';
+import { verifyAuth, requireRole, canSeeAll, isReadOnly } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
-import { serverErrorBody, writeAudit } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -11,6 +11,12 @@ export const handler = async (event) => {
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { userId, orgId, userRole, managedReps } = auth;
+
+    // Server-side role enforcement: ReadOnly can never mutate, regardless of
+    // what the client UI allows. Runs before any handler logic.
+    if (isReadOnly(userRole) && ['POST', 'PUT', 'DELETE'].includes(event.httpMethod)) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: read-only role' }) };
+    }
 
     const sanitize = (d) => ({
         id:            d.id,
@@ -50,6 +56,13 @@ export const handler = async (event) => {
 
             // Fetch existing so we can detect completion
             const [existing] = await db.select().from(tasks).where(and(eq(tasks.id, data.id), eq(tasks.orgId, orgId)));
+            // Object-level authorization: reps may only edit their own or unassigned tasks
+            if (existing && !canSeeAll(userRole)) {
+                const callerName = await getCallerName(userId);
+                if (existing.assignedTo && existing.assignedTo !== callerName) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
+                }
+            }
             const wasCompleted = existing?.completed === true;
 
             const clean = sanitize(data);
@@ -86,6 +99,14 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
+            // Object-level authorization: reps may only delete their own or unassigned tasks
+            if (!canSeeAll(userRole)) {
+                const [target] = await db.select({ owner: tasks.assignedTo }).from(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, orgId)));
+                const callerName = await getCallerName(userId);
+                if (target?.owner && target.owner !== callerName) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
+                }
+            }
             await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, orgId)));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
