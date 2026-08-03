@@ -145,16 +145,40 @@ export function useTasks(deps) {
         }
     };
 
-    const handleCompleteTask = (taskId, newStatus) => {
+    const handleCompleteTask = async (taskId, newStatus) => {
         const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
-        setTasks(prev => prev.map(t => {
-            if (t.id !== taskId) return t;
-            if (newStatus !== undefined) {
-                return { ...t, status: newStatus, completed: newStatus === 'Completed', completedDate: newStatus === 'Completed' ? today : t.completedDate };
-            }
-            const wasCompleted = t.completed || t.status === 'Completed';
-            return { ...t, completed: !wasCompleted, status: wasCompleted ? 'Open' : 'Completed', completedDate: wasCompleted ? t.completedDate : today };
-        }));
+        // Compute the next task shape from the current row (needed for both the
+        // optimistic update and the DB payload).
+        const current = tasks.find(t => t.id === taskId);
+        if (!current) return;
+        let next;
+        if (newStatus !== undefined) {
+            next = { ...current, status: newStatus, completed: newStatus === 'Completed', completedDate: newStatus === 'Completed' ? today : current.completedDate };
+        } else {
+            const wasCompleted = current.completed || current.status === 'Completed';
+            next = { ...current, completed: !wasCompleted, status: wasCompleted ? 'Open' : 'Completed', completedDate: wasCompleted ? current.completedDate : today };
+        }
+
+        // Optimistic local update for instant UI feedback.
+        setTasks(prev => prev.map(t => t.id === taskId ? next : t));
+
+        // Persist immediately — without this the completion is local-only and
+        // reverts on refresh (violates the no-local-only-state rule). On failure,
+        // roll the row back so local state cannot drift from the DB.
+        try {
+            const res = await dbFetch('/.netlify/functions/tasks', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(next),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to save task');
+            setTasks(prev => prev.map(t => t.id === taskId ? (data.task || next) : t));
+            addAudit('update', 'task', taskId, next.title || taskId, next.status === 'Completed' ? 'Completed' : 'Reopened');
+        } catch (err) {
+            console.error('Failed to persist task completion:', err);
+            setTasks(prev => prev.map(t => t.id === taskId ? current : t));
+        }
     };
 
     const handleAddTaskToCalendar = async (e, task, opportunities) => {
