@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../AppContext';
 import AttachmentsStrip from '../documents/AttachmentsStrip';
+import TimeDropdown from '../ui/TimeDropdown';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -477,8 +478,7 @@ export default function TaskRail() {
                                     style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box' }} />
                             </FieldGroup>
                             <FieldGroup label="Due Time">
-                                <input type="time" value={formData.dueTime || ''} onChange={e => hc('dueTime', e.target.value)}
-                                    style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box' }} />
+                                <TimeDropdown value={formData.dueTime || ''} onChange={v => hc('dueTime', v)} ariaLabel="Due time"/>
                             </FieldGroup>
                             <FieldGroup label="Assigned To" wide>
                                 {/* Committed chip — shown when a valid user is selected */}

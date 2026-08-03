@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import TimePicker from '../ui/TimePicker';
+import TimeDropdown from '../ui/TimeDropdown';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 
@@ -535,7 +535,7 @@ export default function TaskModal({
                                 {/* Due Time */}
                                 <div style={formGroupStyle}>
                                     <label style={labelStyle}>Due Time</label>
-                                    <TimePicker value={formData.dueTime} onChange={val => handleChange('dueTime', val)}/>
+                                    <TimeDropdown value={formData.dueTime || ''} onChange={val => handleChange('dueTime', val)} ariaLabel="Due time"/>
                                 </div>
 
                                 {/* Reminder Date */}
@@ -547,7 +547,7 @@ export default function TaskModal({
                                 {/* Reminder Time */}
                                 <div style={formGroupStyle}>
                                     <label style={labelStyle}>Reminder Time</label>
-                                    <TimePicker value={formData.reminderTime} onChange={val => handleChange('reminderTime', val)}/>
+                                    <TimeDropdown value={formData.reminderTime || ''} onChange={val => handleChange('reminderTime', val)} ariaLabel="Reminder time"/>
                                 </div>
 
                                 {/* Add to Google Calendar */}

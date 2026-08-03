@@ -35,7 +35,6 @@ import AccountModal from './components/modals/AccountModal';
 import TaskModal from './components/modals/TaskModal';
 import UserModal from './components/modals/UserModal';
 import TaskItem from './components/ui/TaskItem';
-import TimePicker from './components/ui/TimePicker';
 import ViewingBar, { SliceDropdown } from './components/ui/ViewingBar';
 import AnalyticsDashboard from './components/ui/AnalyticsDashboard';
 import AppHeader from './components/layout/AppHeader';
