@@ -1,8 +1,8 @@
 import { db } from '../../db/index.js';
 import { activities, leads, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { verifyAuth, requireRole, canSeeAll, isReadOnly } from './auth.mjs';
+import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
 async function rescoreLead(orgId, leadId) {
@@ -32,6 +32,12 @@ export const handler = async (event) => {
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { userId, orgId, userRole, managedReps } = auth;
+
+    // Server-side role enforcement: ReadOnly can never mutate, regardless of
+    // what the client UI allows. Runs before any handler logic.
+    if (isReadOnly(userRole) && ['POST', 'PUT', 'DELETE'].includes(event.httpMethod)) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: read-only role' }) };
+    }
 
     const sanitize = (d) => {
         // contactIds is the source of truth (multi-contact); contactId is kept as the
@@ -74,6 +80,18 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
+            // PUT is strictly an update: unknown ids 404 instead of silently creating.
+            const [target] = await db.select({ owner: activities.repName }).from(activities).where(and(eq(activities.id, data.id), eq(activities.orgId, orgId)));
+            if (!target) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Activity not found' }) };
+            }
+            // Object-level authorization: reps may only edit their own or unassigned activities
+            if (!canSeeAll(userRole)) {
+                const callerName = await getCallerName(userId);
+                if (target.owner && target.owner !== callerName) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
+                }
+            }
             const [upserted] = await db.insert(activities).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: activities.id, setWhere: eq(activities.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
@@ -85,12 +103,26 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
-                await db.delete(activities).where(eq(activities.orgId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
+                // Org-wide wipe — Admin only.
+                const forbidden = requireRole(auth, ['Admin'], headers);
+                if (forbidden) return forbidden;
+                const deleted = await db.delete(activities).where(eq(activities.orgId, orgId)).returning({ id: activities.id });
+                await writeAudit(orgId, {
+                    action: 'activity.cleared', entityType: 'activity', entityId: 'ALL',
+                    entityName: 'All activities', detail: `Cleared ${deleted.length} activities via clear=true`, userId,
+                });
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            const [delActy] = await db.select({ leadId: activities.leadId }).from(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId)));
+            const [delActy] = await db.select({ leadId: activities.leadId, owner: activities.repName }).from(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId)));
+            // Object-level authorization: reps may only delete their own or unassigned activities
+            if (delActy && !canSeeAll(userRole)) {
+                const callerName = await getCallerName(userId);
+                if (delActy.owner && delActy.owner !== callerName) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
+                }
+            }
             await db.delete(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId)));
             if (delActy?.leadId) { try { await rescoreLead(orgId, delActy.leadId); } catch (e) { console.warn('lead rescore (del) failed:', e.message); } }
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };

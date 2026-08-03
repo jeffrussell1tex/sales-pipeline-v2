@@ -1,11 +1,11 @@
 import { db } from '../../db/index.js';
 import { opportunities, users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth, canSeeAll, isManager } from './auth.mjs';
+import { verifyAuth, canSeeAll, isManager, isReadOnly, requireRole } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -128,6 +128,12 @@ export const handler = async (event) => {
     }
     const { userId, orgId, userRole, managedReps } = auth;
 
+    // Server-side role enforcement: ReadOnly can never mutate, regardless of
+    // what the client UI allows. Runs before any handler logic.
+    if (isReadOnly(userRole) && ['POST', 'PUT', 'DELETE'].includes(event.httpMethod)) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: read-only role' }) };
+    }
+
     try {
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
@@ -207,6 +213,18 @@ export const handler = async (event) => {
 
             // Fetch existing record before update so we can detect changes
             const [existing] = await db.select().from(opportunities).where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId)));
+            // PUT is strictly an update: unknown ids 404 instead of silently
+            // creating (upsert-as-create allowed bypassing POST semantics).
+            if (!existing) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Opportunity not found' }) };
+            }
+            // Object-level authorization: reps may only edit their own or unassigned records
+            if (!canSeeAll(userRole)) {
+                const callerName = await getCallerName(userId);
+                if (existing.salesRep && existing.salesRep !== callerName) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
+                }
+            }
             const previousStage    = existing?.stage    || null;
             const previousComments = existing?.comments || [];
 
@@ -315,12 +333,27 @@ export const handler = async (event) => {
         if (event.httpMethod === 'DELETE') {
             const clear = event.queryStringParameters?.clear;
             if (clear === 'true') {
-                await db.delete(opportunities).where(eq(opportunities.orgId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
+                // Org-wide wipe — Admin only. Any lesser role gets 403 before any delete runs.
+                const forbidden = requireRole(auth, ['Admin'], headers);
+                if (forbidden) return forbidden;
+                const deleted = await db.delete(opportunities).where(eq(opportunities.orgId, orgId)).returning({ id: opportunities.id });
+                await writeAudit(orgId, {
+                    action: 'opportunity.cleared', entityType: 'opportunity', entityId: 'ALL',
+                    entityName: 'All opportunities', detail: `Cleared ${deleted.length} opportunities via clear=true`, userId,
+                });
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
+            }
+            // Object-level authorization: reps may only delete their own or unassigned records
+            if (!canSeeAll(userRole)) {
+                const [target] = await db.select({ owner: opportunities.salesRep }).from(opportunities).where(and(eq(opportunities.id, id), eq(opportunities.orgId, orgId)));
+                const callerName = await getCallerName(userId);
+                if (target?.owner && target.owner !== callerName) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
+                }
             }
             await db.delete(opportunities).where(and(eq(opportunities.id, id), eq(opportunities.orgId, orgId)));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };

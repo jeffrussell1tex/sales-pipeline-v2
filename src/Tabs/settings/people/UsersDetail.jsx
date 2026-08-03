@@ -21,30 +21,6 @@ const RolePill = ({ role }) => {
     );
 };
 
-const PT_USERS = [
-    { id:'u1',  initials:'MR', name:'Morgan Reyes',   email:'morgan@accelerep.com',  role:'Admin',         team:'Leadership', manager:'—',            lastActive:'4 minutes ago',  mfa:true,  status:'Active' },
-    { id:'u2',  initials:'PS', name:'Priya Sharma',   email:'priya@accelerep.com',   role:'Admin',         team:'RevOps',     manager:'Morgan Reyes', lastActive:'12 minutes ago', mfa:true,  status:'Active' },
-    { id:'u3',  initials:'JH', name:'Jeff Hammond',   email:'jeff@accelerep.com',    role:'Sales Manager', team:'SMB West',   manager:'Morgan Reyes', lastActive:'1 hour ago',     mfa:true,  status:'Active' },
-    { id:'u4',  initials:'DP', name:'Devon Park',     email:'devon@accelerep.com',   role:'Sales Manager', team:'SMB East',   manager:'Morgan Reyes', lastActive:'3 hours ago',    mfa:true,  status:'Active' },
-    { id:'u5',  initials:'NT', name:'Naomi Tran',     email:'naomi@accelerep.com',   role:'Sales Manager', team:'Mid-Market', manager:'Morgan Reyes', lastActive:'today, 9:14am',  mfa:true,  status:'Active' },
-    { id:'u6',  initials:'BW', name:'Ben Whitaker',   email:'ben@accelerep.com',     role:'Sales Manager', team:'EMEA',       manager:'Morgan Reyes', lastActive:'yesterday',      mfa:true,  status:'Active' },
-    { id:'u7',  initials:'CV', name:'Camila Vega',    email:'camila@accelerep.com',  role:'Sales Rep',     team:'SMB West',   manager:'Jeff Hammond', lastActive:'8 minutes ago',  mfa:true,  status:'Active' },
-    { id:'u8',  initials:'AP', name:'Aiden Park',     email:'aiden@accelerep.com',   role:'Sales Rep',     team:'SMB West',   manager:'Jeff Hammond', lastActive:'today, 11:02am', mfa:true,  status:'Active' },
-    { id:'u9',  initials:'RC', name:'Riley Chen',     email:'riley@accelerep.com',   role:'Sales Rep',     team:'SMB West',   manager:'Jeff Hammond', lastActive:'2 days ago',     mfa:false, status:'Active', staleMfa:true },
-    { id:'u10', initials:'HI', name:'Hassan Idris',   email:'hassan@accelerep.com',  role:'Sales Rep',     team:'SMB East',   manager:'Devon Park',   lastActive:'today, 8:21am',  mfa:true,  status:'Active' },
-    { id:'u11', initials:'SV', name:'Sasha Volkov',   email:'sasha@accelerep.com',   role:'Sales Rep',     team:'SMB East',   manager:'Devon Park',   lastActive:'5 days ago',     mfa:false, status:'Active', staleMfa:true },
-    { id:'u12', initials:'TR', name:'Tomás Rivera',   email:'tomas@accelerep.com',   role:'Sales Rep',     team:'SMB East',   manager:'Devon Park',   lastActive:'yesterday',      mfa:true,  status:'Active' },
-    { id:'u13', initials:'MG', name:'Maya Goldberg',  email:'maya@accelerep.com',    role:'Sales Rep',     team:'Mid-Market', manager:'Naomi Tran',   lastActive:'today, 10:48am', mfa:true,  status:'Active' },
-    { id:'u14', initials:'LW', name:'Lin Wei',        email:'lin@accelerep.com',     role:'Sales Rep',     team:'Mid-Market', manager:'Naomi Tran',   lastActive:'1 hour ago',     mfa:true,  status:'Active' },
-    { id:'u15', initials:'KO', name:'Kwame Osei',     email:'kwame@accelerep.com',   role:'Sales Rep',     team:'Mid-Market', manager:'Naomi Tran',   lastActive:'today, 9:55am',  mfa:true,  status:'Active' },
-    { id:'u16', initials:'FP', name:'Fatima Patel',   email:'fatima@accelerep.com',  role:'Sales Rep',     team:'EMEA',       manager:'Ben Whitaker', lastActive:'1 hour ago',     mfa:true,  status:'Active' },
-    { id:'u17', initials:'LC', name:'Luca Conti',     email:'luca@accelerep.com',    role:'Sales Rep',     team:'EMEA',       manager:'Ben Whitaker', lastActive:'3 hours ago',    mfa:true,  status:'Active' },
-    { id:'u18', initials:'AK', name:'Alia Karim',     email:'alia@accelerep.com',    role:'CS',            team:'Customer Success', manager:'Morgan Reyes', lastActive:'today',   mfa:true,  status:'Active' },
-    { id:'u19', initials:'TM', name:'Theo Mensah',    email:'theo@accelerep.com',    role:'Finance',       team:'Finance',    manager:'Morgan Reyes', lastActive:'2 days ago',     mfa:true,  status:'Active' },
-    { id:'u20', initials:'AB', name:'Anika Bose',     email:'anika@accelerep.com',   role:'Sales Rep',     team:null,         manager:null,           lastActive:null,             mfa:false, status:'Invited', invitedDaysAgo:1 },
-    { id:'u21', initials:'FB', name:'Felix Brandt',   email:'felix@accelerep.com',   role:'Sales Rep',     team:null,         manager:null,           lastActive:null,             mfa:false, status:'Invited', invitedDaysAgo:3 },
-];
-
 const PeopleCrumb = ({ onBack, onUsers, leaf }) => (
     <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:14, fontFamily:T.sans }}>
         <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
@@ -496,8 +472,7 @@ const UsersExportPage = ({ settings, onBack, onUsers }) => {
 };
 
 const UsersPendingPage = ({ settings, onBack, onUsers }) => {
-    // In real app, pending invites are tracked in DB — for now surface from settings.users with status 'invited'
-    // Using design mock data to show the intended UI
+    // Pending invites are surfaced from settings.users with status 'invited'
     const pendingUsers = (settings.users || []).filter(u => u.status === 'invited');
     const [openPendingKebab, setOpenPendingKebab] = useState(null); // invite id
     const [localPending, setLocalPending] = useState(null); // tracks revocations in session
@@ -509,16 +484,7 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
         return () => document.removeEventListener('click', handler);
     }, [openPendingKebab]);
 
-    const mockPending = [
-        { id:'p1', name:'Anika Bose',    email:'anika@accelerep.com',   role:'Sales Rep', team:'SMB West', invitedBy:'Jeff Hammond', sent:'Yesterday',    opened:true,  expires:'in 4d' },
-        { id:'p2', name:'Felix Brandt',  email:'felix@accelerep.com',   role:'Sales Rep', team:'EMEA',     invitedBy:'Ben Whitaker', sent:'3 days ago',   opened:false, expires:'in 4d' },
-        { id:'p3', name:'Yuki Tanabe',   email:'yuki@accelerep.com',    role:'Sales Rep', team:'EMEA',     invitedBy:'Ben Whitaker', sent:'5 days ago',   opened:true,  expires:'in 2d', warn:true },
-        { id:'p4', name:'Marcus Wallace',email:'marcus@accelerep.com',  role:'CS',        team:null,       invitedBy:'Morgan Reyes', sent:'8 days ago',   opened:false, expires:'Expired', expired:true },
-    ];
-
-    const basePending = pendingUsers.length > 0
-        ? pendingUsers.map((u,i) => ({ id:u.id||i, name:u.name, email:u.email||'', role:u.userType||'Sales Rep', team:u.team||'—', invitedBy:'—', sent:'Recently', opened:false, expires:'in 7d' }))
-        : mockPending;
+    const basePending = pendingUsers.map((u,i) => ({ id:u.id||i, name:u.name, email:u.email||'', role:u.userType||'Sales Rep', team:u.team||'—', invitedBy:'—', sent:'Recently', opened:false, expires:'in 7d' }));
 
     const displayPending = localPending !== null ? localPending : basePending;
 
@@ -1234,7 +1200,7 @@ export const UsersDetail = ({ settings, onBack }) => {
     if (peopleView === 'security') return <UsersSecurityPage settings={settings} onBack={onBack} onUsers={onUsers}/>;
     if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers}/>;
 
-    // Merge real settings.users with PT_USERS display format for the table
+    // Map settings.users into the table display format
     const realUsers = (settings.users || []).filter(u => u.name && !u.id?.startsWith('pending_')).map(u => {
         // Derive display status from active flag and stored status field
         let status = 'Active';
@@ -1266,7 +1232,7 @@ export const UsersDetail = ({ settings, onBack }) => {
         status: 'Invited',
         _raw: u,
     }));
-    const displayUsers = [...(realUsers.length > 0 ? realUsers : PT_USERS), ...pendingRows];
+    const displayUsers = [...realUsers, ...pendingRows];
 
     const filterTabs = [
         { key:'All',        label:`All · ${displayUsers.length}` },
@@ -1287,7 +1253,8 @@ export const UsersDetail = ({ settings, onBack }) => {
 
     const isStale = (s) => s && (s.includes('days ago') || s.includes('week'));
 
-    const activeCount  = displayUsers.filter(u=>u.status==='Active').length;
+    const activeCount       = displayUsers.filter(u=>u.status==='Active').length;
+    const deactivatedCount  = displayUsers.filter(u=>u.status==='Deactivated').length;
     const invitedCount = displayUsers.filter(u=>u.status==='Invited');
 
     return (
@@ -1309,9 +1276,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                         <span>Invite, deactivate, and assign roles & permissions</span>
                         <span style={{ color:T.inkMuted }}>•</span>
                         <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
-                        <span>{activeCount} active · {invitedCount.length} pending invite · 1 deactivated</span>
-                        <span style={{ color:T.inkMuted }}>•</span>
-                        <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited yesterday by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                        <span>{activeCount} active · {invitedCount.length} pending invite · {deactivatedCount} deactivated</span>
                     </div>
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
@@ -1357,6 +1322,11 @@ export const UsersDetail = ({ settings, onBack }) => {
                                 <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
                             ))}
                         </div>
+                        {visible.length === 0 && (
+                            <div style={{ padding:'36px 16px', textAlign:'center', fontSize:13, color:T.inkMuted, fontFamily:T.sans }}>
+                                No users yet — use "Invite users" to add your team.
+                            </div>
+                        )}
                         {visible.map((u, i) => (
                             <div key={u.id}
                                 style={{ display:'grid', gridTemplateColumns:'32px 1fr 120px 110px 110px 100px 40px 80px 32px', gap:8, padding:'10px 16px', borderBottom: i<visible.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
