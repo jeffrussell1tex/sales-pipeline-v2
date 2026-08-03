@@ -132,6 +132,7 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
     const triggerRef = useRef(null);
     const menuRef = useRef(null);
     const typeBufRef = useRef('');
+    const justOpenedRef = useRef(false);
     const typeTimerRef = useRef(null);
     const uid = useRef('td_' + Math.random().toString(36).slice(2, 8)).current;
 
@@ -173,6 +174,7 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
         });
         const start = selectedIndex >= 0 ? selectedIndex : options.indexOf('09:00');
         setHighlight(start >= 0 ? start : 0);
+        justOpenedRef.current = true;
         setOpen(true);
     }, [disabled, selectedIndex, options]);
 
@@ -194,10 +196,15 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
-    // Close on outside click, outside scroll, and resize
+    // Close on outside click, outside scroll, and resize.
+    // justOpenedRef guards against the very mousedown that opened the menu
+    // bubbling to this document-level listener and closing it on the same
+    // gesture (the trigger lives inside a draggable rail with its own
+    // document mousedown handlers, so we cannot rely on bubbling order).
     useEffect(() => {
         if (!open) return;
         const onDown = (e) => {
+            if (justOpenedRef.current) { justOpenedRef.current = false; return; }
             if (triggerRef.current?.contains(e.target)) return;
             if (menuRef.current?.contains(e.target)) return;
             closeMenu();
@@ -272,7 +279,7 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
             <button
                 type="button"
                 ref={triggerRef}
-                onClick={() => (open ? closeMenu() : openMenu())}
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); (open ? closeMenu() : openMenu()); }}
                 onKeyDown={onKeyDown}
                 disabled={disabled}
                 aria-haspopup="listbox"
@@ -299,7 +306,7 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
                         role="button"
                         aria-label="Clear time"
                         tabIndex={-1}
-                        onClick={clear}
+                        onMouseDown={clear}
                         style={{ fontSize: 14, lineHeight: 1, color: T.inkMuted, padding: '0 2px', cursor: 'pointer' }}
                     >×</span>
                 )}
@@ -312,7 +319,7 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
                     role="listbox"
                     aria-label={ariaLabel}
                     style={{
-                        position: 'fixed', left: pos.left, width: pos.width, zIndex: 400,
+                        position: 'fixed', left: pos.left, width: pos.width, zIndex: 12000,
                         top: pos.dropUp ? undefined : pos.top,
                         bottom: pos.dropUp ? window.innerHeight - pos.top : undefined,
                         background: T.surface, border: `1px solid ${T.borderStrong}`,
