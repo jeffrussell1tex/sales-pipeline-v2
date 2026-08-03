@@ -188,6 +188,9 @@ const RailLabel = ({ children, color, action, onAction }) => (
     </div>
 );
 
+// Band date for the closed-deal outcome strip
+const fmtBandDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
 // Chevron stage ribbon
 const StageRibbon = ({ allStages, current, onStage }) => {
     const displayStages = allStages.filter(s => !s.startsWith('Closed'));
@@ -1178,6 +1181,33 @@ export default function OpportunityModal({
         }
     };
 
+    // ── Deal outcome (Closed Won / Closed Lost) ──────────────
+    // Closing is an outcome, not a journey step: the ribbon shows only open
+    // stages, and these handlers drive the Won/Lost buttons + Reopen band.
+    // The Closed Lost save path (LostReasonModal) is intercepted downstream
+    // in useOpportunities.handleSave — unchanged.
+    const isClosed = formData.stage === 'Closed Won' || formData.stage === 'Closed Lost';
+    const prevOpenStageRef = useRef(null);
+
+    const setOutcome = (stageName) => {
+        prevOpenStageRef.current = formData.stage && !formData.stage.startsWith('Closed') ? formData.stage : prevOpenStageRef.current;
+        const stageDefault = (settings?.funnelStages || []).find(s => s.name === stageName);
+        // Outcomes force their probability: Won = 100, Lost = 0 (stage default wins if configured)
+        const prob = stageDefault?.weight ?? (stageName === 'Closed Won' ? 100 : 0);
+        setFormData({ ...formData, stage: stageName, probability: prob });
+    };
+
+    const reopenDeal = () => {
+        const openStages = stages.filter(st => !st.startsWith('Closed'));
+        const closingEntry = [...(opportunity?.stageHistory || [])].reverse().find(h => h.stage && h.stage.startsWith('Closed'));
+        const target = prevOpenStageRef.current
+            || (closingEntry?.prevStage && !closingEntry.prevStage.startsWith('Closed') ? closingEntry.prevStage : null)
+            || openStages[openStages.length - 1]
+            || 'Qualification';
+        const stageDefault = (settings?.funnelStages || []).find(s => s.name === target);
+        setFormData({ ...formData, stage: target, probability: stageDefault?.weight ?? formData.probability });
+    };
+
     // ── Submit handler (fully preserved) ─────────────────────
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -1489,11 +1519,57 @@ export default function OpportunityModal({
                                         </div>
                                     )}
 
-                                    {/* ── Stage ribbon ── */}
+                                    {/* ── Stage ribbon + deal outcome ── */}
                                     <div style={{ marginBottom: 20 }}>
                                         <div style={{ ...ey(T.goldInk), marginBottom: 6 }}>Stage</div>
-                                        <StageRibbon allStages={stages} current={formData.stage} onStage={(s) => handleChange('stage', s)}/>
+                                        {!isClosed ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <StageRibbon allStages={stages} current={formData.stage} onStage={(s) => handleChange('stage', s)}/>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                                    <button type="button" onClick={() => setOutcome('Closed Won')}
+                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: T.sans, fontSize: 11, fontWeight: 700, padding: '7px 12px', borderRadius: T.r, cursor: 'pointer', color: T.ok, background: 'rgba(77,107,61,0.10)', border: '1px solid rgba(77,107,61,0.35)' }}>
+                                                        ✓ Won
+                                                    </button>
+                                                    <button type="button" onClick={() => setOutcome('Closed Lost')}
+                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: T.sans, fontSize: 11, fontWeight: 700, padding: '7px 12px', borderRadius: T.r, cursor: 'pointer', color: T.danger, background: 'rgba(156,58,46,0.08)', border: '1px solid rgba(156,58,46,0.32)' }}>
+                                                        ✕ Lost
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (() => {
+                                            const won = formData.stage === 'Closed Won';
+                                            const persistedClosed = opportunity?.stage === formData.stage;
+                                            const todayStr = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
+                                            const bandDate = persistedClosed ? ((!won && opportunity?.lostDate) || opportunity?.stageChangedDate || todayStr) : todayStr;
+                                            const reason = !won && persistedClosed ? (opportunity?.lostReason || '') : '';
+                                            return (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderRadius: T.r, padding: '8px 16px', fontSize: 12, fontWeight: 700, fontFamily: T.sans,
+                                                    background: won ? 'rgba(77,107,61,0.12)' : 'rgba(156,58,46,0.10)',
+                                                    border: `1px solid ${won ? 'rgba(77,107,61,0.35)' : 'rgba(156,58,46,0.32)'}`,
+                                                    color: won ? T.ok : T.danger }}>
+                                                    {formData.stage}
+                                                    <span style={{ fontWeight: 500, fontSize: 11.5, opacity: 0.75 }}>· {fmtBandDate(bandDate)}</span>
+                                                    {reason && <span style={{ fontWeight: 500, fontSize: 11.5, fontFamily: T.serif, fontStyle: 'italic', opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>— {reason}</span>}
+                                                    <button type="button" onClick={reopenDeal}
+                                                        style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: T.inkMid, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, padding: '5px 11px', cursor: 'pointer', fontFamily: T.sans, flexShrink: 0 }}>
+                                                        Reopen
+                                                    </button>
+                                                </div>
+                                            );
+                                        })()}
                                         {(() => {
+                                            if (isClosed) {
+                                                const closingEntry = [...(opportunity?.stageHistory || [])].reverse().find(h => h.stage && h.stage.startsWith('Closed'));
+                                                const from = closingEntry?.prevStage || prevOpenStageRef.current;
+                                                const prob = formData.probability != null ? formData.probability : (formData.stage === 'Closed Won' ? 100 : 0);
+                                                return (
+                                                    <div style={{ fontSize: 11.5, color: T.inkMuted, marginTop: 6, fontFamily: T.serif, fontStyle: 'italic' }}>
+                                                        {from ? `Closed from ${from}` : 'Closed'} · {prob}% probability
+                                                    </div>
+                                                );
+                                            }
                                             const stageDefault = (settings?.funnelStages || []).find(s => s.name === formData.stage);
                                             const timeInStage = opportunity?.stageChangedDate ? Math.floor((Date.now() - new Date(opportunity.stageChangedDate + 'T12:00:00').getTime()) / 86400000) : null;
                                             if (!stageDefault && timeInStage === null) return null;
