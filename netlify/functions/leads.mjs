@@ -108,8 +108,12 @@ export const handler = async (event) => {
 
             // Fetch existing so we can detect first-time conversion and first touch
             const [existing] = await db.select().from(leads).where(and(eq(leads.id, data.id), eq(leads.orgId, orgId)));
+            // PUT is strictly an update: unknown ids 404 instead of silently creating.
+            if (!existing) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Lead not found' }) };
+            }
             // Object-level authorization: reps may only edit their own or unassigned leads
-            if (existing && !canSeeAll(userRole)) {
+            if (!canSeeAll(userRole)) {
                 const callerName = await getCallerName(userId);
                 if (existing.assignedTo && existing.assignedTo !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };

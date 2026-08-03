@@ -213,8 +213,13 @@ export const handler = async (event) => {
 
             // Fetch existing record before update so we can detect changes
             const [existing] = await db.select().from(opportunities).where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId)));
+            // PUT is strictly an update: unknown ids 404 instead of silently
+            // creating (upsert-as-create allowed bypassing POST semantics).
+            if (!existing) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Opportunity not found' }) };
+            }
             // Object-level authorization: reps may only edit their own or unassigned records
-            if (existing && !canSeeAll(userRole)) {
+            if (!canSeeAll(userRole)) {
                 const callerName = await getCallerName(userId);
                 if (existing.salesRep && existing.salesRep !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };

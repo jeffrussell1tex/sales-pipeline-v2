@@ -75,11 +75,15 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
+            // PUT is strictly an update: unknown ids 404 instead of silently creating.
+            const [target] = await db.select({ owner: contacts.createdBy }).from(contacts).where(and(eq(contacts.id, data.id), eq(contacts.orgId, orgId)));
+            if (!target) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Contact not found' }) };
+            }
             // Object-level authorization: reps may only edit their own or unassigned contacts
             if (!canSeeAll(userRole)) {
-                const [target] = await db.select({ owner: contacts.createdBy }).from(contacts).where(and(eq(contacts.id, data.id), eq(contacts.orgId, orgId)));
                 const callerName = await getCallerName(userId);
-                if (target?.owner && target.owner !== callerName) {
+                if (target.owner && target.owner !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }
             }

@@ -56,8 +56,12 @@ export const handler = async (event) => {
 
             // Fetch existing so we can detect completion
             const [existing] = await db.select().from(tasks).where(and(eq(tasks.id, data.id), eq(tasks.orgId, orgId)));
+            // PUT is strictly an update: unknown ids 404 instead of silently creating.
+            if (!existing) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Task not found' }) };
+            }
             // Object-level authorization: reps may only edit their own or unassigned tasks
-            if (existing && !canSeeAll(userRole)) {
+            if (!canSeeAll(userRole)) {
                 const callerName = await getCallerName(userId);
                 if (existing.assignedTo && existing.assignedTo !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };

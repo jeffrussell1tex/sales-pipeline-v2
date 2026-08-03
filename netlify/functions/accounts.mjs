@@ -120,8 +120,12 @@ export const handler = async (event) => {
             const { id, ...updateData } = clean;
             // Read the stored row first so a rename can be detected and cascaded below.
             const [prior] = await db.select().from(accounts).where(and(eq(accounts.id, clean.id), eq(accounts.orgId, orgId)));
+            // PUT is strictly an update: unknown ids 404 instead of silently creating.
+            if (!prior) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'Account not found' }) };
+            }
             // Object-level authorization: reps may only edit their own or unassigned accounts
-            if (prior && !canSeeAll(userRole)) {
+            if (!canSeeAll(userRole)) {
                 const callerName = await getCallerName(userId);
                 if (prior.accountOwner && prior.accountOwner !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
