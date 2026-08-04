@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireRole } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
 import { serverErrorBody } from './_lib.mjs';
 
@@ -413,10 +413,16 @@ export const handler = async (event) => {
 
         // ── DELETE ────────────────────────────────────────────────────────────
         if (event.httpMethod === 'DELETE') {
-            // clear=true — delete all users for this org (used by Clear All Data)
+            // clear=true — delete all users for this org (used by Clear All Data).
+            // Admin only: the method-level ADMIN_ROLES gate above also admits
+            // Managers, but wiping every user is destructive enough to require
+            // full Admin. Writes an audit row + returns the deleted count.
             if (event.queryStringParameters?.clear === 'true') {
-                await db.delete(users).where(eq(users.orgId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
+                const forbidden = requireRole(auth, ['Admin'], headers);
+                if (forbidden) return forbidden;
+                const deleted = await db.delete(users).where(eq(users.orgId, orgId)).returning({ id: users.id });
+                await writeAudit(orgId, 'user.cleared', 'ALL', `All users (${deleted.length})`, userId, null);
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) {
