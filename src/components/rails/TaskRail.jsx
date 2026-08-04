@@ -294,8 +294,10 @@ export default function TaskRail() {
 
     const handleConfirmComplete = async () => {
         if (!task) return;
-        // 1. Mark task complete
-        handleCompleteTask && handleCompleteTask(task.id);
+        // 1. Mark task complete — MUST await: this persists to the DB, and
+        // closeRail() below unmounts the rail and triggers a task reload. Not
+        // awaiting races the PUT against the reload, so the completion is lost.
+        if (handleCompleteTask) await handleCompleteTask(task.id);
         // 2. Auto-create activity record if notes provided
         if (completionNotes.trim()) {
             const today = new Date();
