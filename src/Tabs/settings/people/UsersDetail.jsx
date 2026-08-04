@@ -1191,6 +1191,32 @@ export const UsersDetail = ({ settings, onBack }) => {
 
     const onUsers = () => { setPeopleView(null); setViewingUser(null); };
 
+    // Reconcile the roster against Clerk (Admin tool). Creates rows for members
+    // missing from the DB, conservatively updates existing ones (see users-sync.mjs),
+    // and reports rows not found in Clerk. Refreshes settings.users on success.
+    const [syncing, setSyncing]   = useState(false);
+    const [syncMsg, setSyncMsg]   = useState(null);
+    const runClerkSync = async () => {
+        if (syncing) return;
+        setSyncing(true); setSyncMsg(null);
+        try {
+            const res = await dbFetch('/.netlify/functions/users-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Sync failed');
+            const c = data.counts || {};
+            let msg = `Synced: ${c.created} added, ${c.updated} updated, ${c.unchanged} unchanged`;
+            if (c.dbOnly > 0) msg += ` · ${c.dbOnly} in Accelerep not in Clerk (review)`;
+            setSyncMsg(msg);
+            // Refresh the roster from the DB so new/updated rows appear immediately.
+            const r = await dbFetch('/.netlify/functions/users');
+            if (r.ok) { const ud = await r.json(); if (ud && ud.users) _setSettings(prev => ({ ...prev, users: ud.users })); }
+        } catch (err) {
+            setSyncMsg('Sync failed: ' + (err.message || 'unknown error'));
+        } finally {
+            setSyncing(false);
+        }
+    };
+
     // Sub-page router
     if (peopleView === 'invite')   return <UsersInvitePage   settings={settings} onBack={onBack} onUsers={onUsers}/>;
     if (peopleView === 'import')   return <UsersImportPage   settings={settings} onBack={onBack} onUsers={onUsers}/>;
@@ -1284,9 +1310,19 @@ export const UsersDetail = ({ settings, onBack }) => {
                         onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Import CSV</button>
                     <button onClick={() => setPeopleView('export')} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                         onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Export</button>
+                    <button onClick={runClerkSync} disabled={syncing} title="Rebuild the roster from Clerk org membership"
+                        style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:syncing?'default':'pointer', fontFamily:T.sans, opacity:syncing?0.6:1 }}
+                        onMouseEnter={e=>{ if(!syncing) e.currentTarget.style.background=T.surface2; }} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
+                        {syncing ? 'Syncing…' : '⟳ Sync from Clerk'}
+                    </button>
                     <button onClick={() => setPeopleView('invite')} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Invite users</button>
                 </div>
             </div>
+            {syncMsg && (
+                <div style={{ margin:'0 0 12px', padding:'8px 12px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.inkMid, fontFamily:T.sans }}>
+                    {syncMsg}
+                </div>
+            )}
 
             {/* Body: 1fr + 320px right rail */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:18, alignItems:'start' }}>
