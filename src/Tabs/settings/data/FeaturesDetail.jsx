@@ -89,6 +89,12 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     const [showReset,  setShowReset]  = React.useState(false);
     const [error,      setError]      = React.useState(null);
     const [filterCat,  setFilterCat]  = React.useState('All');
+    // BYOK key input. This is WRITE-ONLY: the server never returns the plaintext
+    // key, so this box is always empty on load and only carries a value the
+    // admin just typed. `keyAction` tracks intent so an untouched box does not
+    // clear a key that is already stored.
+    const [apiKeyInput, setApiKeyInput] = React.useState('');
+    const [keyAction,   setKeyAction]   = React.useState(null); // null | 'set' | 'clear'
 
 
     // ── Initialise from settings prop (same pattern as all other panels) ───────
@@ -101,7 +107,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
         zeroRetention: true,
         piiRedaction: true,
         byok: false,
-        byokProvider: '',
+        byokProvider: 'Anthropic',   // provider LABEL — never the key itself
         dpaSignedAt: '',
         auditLogging: 'All AI requests · 13mo retention',
         blockList: '',
@@ -139,18 +145,33 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     // ── Save all — AI settings + feature flags + tab visibility ─────────────────
     const handleSaveAi = async () => {
         setSaving(true);
+        setError(null);
         try {
+            // Only include anthropicApiKey when the admin set or cleared it.
+            // Omitting the field entirely tells the server to preserve the
+            // stored key; sending null clears it.
+            const payload = {
+                aiSettings,
+                featureFlags: flags,
+                leadsEnabled:   tabViz.leadsEnabled,
+                quotesEnabled:  tabViz.quotesEnabled,
+                dispatchEnabled: tabViz.dispatchEnabled,
+            };
+            if (keyAction === 'set' && apiKeyInput.trim()) payload.anthropicApiKey = apiKeyInput.trim();
+            if (keyAction === 'clear')                     payload.anthropicApiKey = null;
+
             const res = await dbFetch('/.netlify/functions/settings', {
                 method: 'PUT',
-                body: JSON.stringify({
-                    aiSettings,
-                    featureFlags: flags,
-                    leadsEnabled:   tabViz.leadsEnabled,
-                    quotesEnabled:  tabViz.quotesEnabled,
-                    dispatchEnabled: tabViz.dispatchEnabled,
-                }),
+                body: JSON.stringify(payload),
             });
-            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            if (!res.ok) {
+                if (res.status === 403) throw new Error('You need the Admin role to change organization settings.');
+                let msg = 'HTTP ' + res.status;
+                try { const d = await res.json(); if (d?.error) msg = d.error; } catch (_) {}
+                throw new Error(msg);
+            }
+            const result = await res.json().catch(() => ({}));
+
             setSettings(prev => ({
                 ...prev,
                 aiSettings,
@@ -158,7 +179,16 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 leadsEnabled:   tabViz.leadsEnabled,
                 quotesEnabled:  tabViz.quotesEnabled,
                 dispatchEnabled: tabViz.dispatchEnabled,
+                // Reflect the new key state locally. The plaintext is never held
+                // in app state, so the last-4 hint is dropped until the next load.
+                ...(keyAction ? {
+                    anthropicApiKeySet: result.anthropicApiKeySet ?? (keyAction === 'set'),
+                    anthropicApiKeyLast4: keyAction === 'set' ? apiKeyInput.trim().slice(-4) : null,
+                } : {}),
             }));
+            // Drop the plaintext from component state the moment it is persisted.
+            setApiKeyInput('');
+            setKeyAction(null);
             setDirty(false);
         } catch (e) {
             setError('Failed to save: ' + e.message);
@@ -177,7 +207,12 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
 
     // ── Export config ─────────────────────────────────────────
     const handleExportConfig = () => {
-        const payload = JSON.stringify({ featureFlags: flags, aiSettings }, null, 2);
+        // Defensive scrub: this file gets emailed and pasted around, so strip any
+        // key-shaped value rather than trusting the blob to be clean.
+        const safeAi = Object.fromEntries(
+            Object.entries(aiSettings || {}).filter(([, v]) => !(typeof v === 'string' && /^sk-[A-Za-z0-9_-]{16,}$/.test(v.trim())))
+        );
+        const payload = JSON.stringify({ featureFlags: flags, aiSettings: safeAi }, null, 2);
         const blob = new Blob([payload], { type: 'application/json' });
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
@@ -189,6 +224,10 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     const isOn = (flagId) => flags[flagId] !== false;
     const onCount  = FLAG_DEFS.filter(f => isOn(f.id)).length;
     const betaOn   = FLAG_DEFS.filter(f => f.beta && isOn(f.id)).length;
+    // Key state comes from the server as a boolean + masked hint — never the key.
+    const keyIsSet = keyAction === 'clear' ? false : (settings?.anthropicApiKeySet === true || keyAction === 'set');
+    const keyLast4 = settings?.anthropicApiKeyLast4 || null;
+
     const aiRegion = aiSettings.region || 'US · us-east-2';
 
     const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
@@ -364,7 +403,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                         { key:'trainingOptIn',  invert:true,  label:'Training opt-out',        desc:'Your prompts and outputs do not train the model.' },
                         { key:'zeroRetention',  invert:false, label:'Zero data retention',     desc:'AI provider stores no request data after response.' },
                         { key:'piiRedaction',   invert:false, label:'PII redaction',            desc:'Personal email, phone, SSN replaced with placeholders pre-prompt.' },
-                        { key:'byok',           invert:false, label:'BYOK (bring your own key)',desc: aiSettings.byok ? `Active · ${aiSettings.byokProvider||''}` : 'Use your own model API key for AI requests.' },
+                        { key:'byok',           invert:false, label:'BYOK (bring your own key)',desc: aiSettings.byok ? `Active · ${aiSettings.byokProvider || 'Anthropic'}${keyIsSet ? ' · key installed' : ' · no key yet'}` : 'Use your own model API key for AI requests.' },
                     ].map(t => {
                         const rawVal = aiSettings[t.key] ?? (t.key === 'zeroRetention' || t.key === 'piiRedaction' ? true : false);
                         const on = t.invert ? !rawVal : rawVal;
@@ -382,26 +421,55 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                         );
                     })}
                 </div>
-                {/* BYOK key input — shown when BYOK is enabled */}
+                {/* BYOK key — write-only input; the stored key is never sent back */}
                 {aiSettings.byok && (
                     <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:6 }}>
-                        <label style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, fontFamily:T.sans }}>
-                            Your Anthropic API key
-                        </label>
-                        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                            <input
-                                type="password"
-                                value={aiSettings.byokProvider || ''}
-                                onChange={e => { setAiSettings(p => ({...p, byokProvider: e.target.value})); setDirty(true); }}
-                                placeholder="sk-ant-..."
-                                style={{ flex:1, padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}
-                            />
-                            {aiSettings.byokProvider && (
-                                <span style={{ fontSize:11, color:T.ok, fontWeight:600, fontFamily:T.sans, whiteSpace:'nowrap' }}>✓ Key set</span>
+                        <div style={{ display:'grid', gridTemplateColumns:'160px 1fr', gap:12, alignItems:'end' }}>
+                            <FL label="Provider">
+                                <select
+                                    style={selSt}
+                                    value={aiSettings.byokProvider || 'Anthropic'}
+                                    onChange={e => { setAiSettings(p => ({ ...p, byokProvider: e.target.value })); setDirty(true); }}
+                                >
+                                    <option>Anthropic</option>
+                                </select>
+                            </FL>
+                            <FL label={keyIsSet ? 'Replace API key' : 'Your Anthropic API key'}>
+                                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                                    <input
+                                        type="password"
+                                        autoComplete="off"
+                                        value={apiKeyInput}
+                                        onChange={e => { setApiKeyInput(e.target.value); setKeyAction(e.target.value ? 'set' : null); setDirty(true); }}
+                                        placeholder={keyIsSet ? 'Leave blank to keep the current key' : 'sk-ant-...'}
+                                        style={{ flex:1, padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}
+                                    />
+                                    {keyIsSet && keyAction !== 'clear' && (
+                                        <button
+                                            onClick={() => { setApiKeyInput(''); setKeyAction('clear'); setDirty(true); }}
+                                            style={{ padding:'7px 11px', fontSize:11.5, fontWeight:600, background:'transparent', color:T.danger, border:`1px solid ${T.border}`, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, whiteSpace:'nowrap' }}
+                                        >Remove key</button>
+                                    )}
+                                </div>
+                            </FL>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, minHeight:18 }}>
+                            {keyAction === 'clear' ? (
+                                <span style={{ fontSize:11, color:T.danger, fontWeight:600, fontFamily:T.sans }}>
+                                    Key will be removed on save · <span style={{ color:T.info, cursor:'pointer' }} onClick={() => setKeyAction(null)}>undo</span>
+                                </span>
+                            ) : keyAction === 'set' ? (
+                                <span style={{ fontSize:11, color:T.warn, fontWeight:600, fontFamily:T.sans }}>New key will be encrypted and saved</span>
+                            ) : keyIsSet ? (
+                                <span style={{ fontSize:11, color:T.ok, fontWeight:600, fontFamily:T.sans }}>
+                                    ✓ Key installed{keyLast4 ? ` · ••••${keyLast4}` : ''}
+                                </span>
+                            ) : (
+                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>No key installed · AI requests use the platform key</span>
                             )}
                         </div>
                         <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
-                            Your key is encrypted with AES-256-GCM before storage. It is never logged or transmitted in plaintext.
+                            Your key is encrypted with AES-256-GCM before storage. It is never logged, never returned to the browser, and never included in exports — so it cannot be displayed again once saved.
                         </div>
                     </div>
                 )}

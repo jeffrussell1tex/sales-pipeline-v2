@@ -1,6 +1,31 @@
 import { useState, useRef, useEffect } from 'react';
 import { safeStorage, dbFetch, waitForToken } from '../utils/storage';
 
+// ── BYOK key hygiene ──────────────────────────────────────────────────
+// The server no longer returns the org's Anthropic key, but browsers that ran
+// an earlier build still have the plaintext sitting in localStorage — and this
+// hook mirrors settings straight back out on every change, which would re-post
+// it. Strip key material from anything we read from or write to storage/DB.
+// The server scrubs the same fields; this is defence in depth on the client.
+const KEY_SHAPED = /^sk-[A-Za-z0-9_-]{16,}$/;
+const isKeyString = (v) => typeof v === 'string' && KEY_SHAPED.test(v.trim());
+
+const stripKeyMaterial = (obj) => {
+    if (!obj || typeof obj !== 'object') return { value: obj, found: false };
+    let found = false;
+    const out = { ...obj };
+    if ('anthropicApiKey' in out) { delete out.anthropicApiKey; found = true; }
+    if (out.aiSettings && typeof out.aiSettings === 'object') {
+        const ai = { ...out.aiSettings };
+        for (const f of ['byokKey', 'apiKey', 'anthropicApiKey']) {
+            if (f in ai) { delete ai[f]; found = true; }
+        }
+        if (isKeyString(ai.byokProvider)) { ai.byokProvider = 'Anthropic'; found = true; }
+        out.aiSettings = ai;
+    }
+    return { value: out, found };
+};
+
 const DEFAULT_SETTINGS = {
     fiscalYearStart: 1,
     products: [],
@@ -96,7 +121,12 @@ export function useSettings() {
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    return { ...DEFAULT_SETTINGS, ...parsed, users: [] };
+                    const { value: clean, found } = stripKeyMaterial(parsed);
+                    // If this cache predates the fix it still holds the plaintext
+                    // key — rewrite it immediately rather than waiting for the next
+                    // settings change to overwrite it.
+                    if (found) { try { safeStorage.setItem('salesSettings', JSON.stringify(clean)); } catch(e) {} }
+                    return { ...DEFAULT_SETTINGS, ...clean, users: [] };
                 } catch(e) {}
             }
         } catch(e) {}
@@ -183,7 +213,10 @@ export function useSettings() {
     // overwrite the real DB value on every settings load cycle.
     useEffect(() => {
         if (!settingsReady.current) return;
-        const { users: _stripUsers, fiscalYearStart: _stripFiscal, ...settingsToSave } = settings;
+        const { users: _stripUsers, fiscalYearStart: _stripFiscal, ...rest } = settings;
+        // Never mirror key material to disk or echo it back to the server. The
+        // key is written only by the AI settings panel, via an explicit PUT.
+        const { value: settingsToSave } = stripKeyMaterial(rest);
         try {
             // Scope by orgId so switching orgs never reads another org's cached settings
             safeStorage.setItem(getStorageKey(), JSON.stringify(settingsToSave));

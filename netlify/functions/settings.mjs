@@ -1,9 +1,40 @@
 import { db } from '../../db/index.js';
 import { settings } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireRole, isAdmin } from './auth.mjs';
 import { encrypt, decrypt } from './crypto.mjs';
+import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 import { DEFAULT_LEAD_SCORING } from './score-lead.mjs';
+
+// ── BYOK key quarantine ──────────────────────────────────────────────
+// The org's Anthropic key may only ever live in extra.anthropicApiKey, as
+// AES-256-GCM ciphertext. An earlier build of the AI settings panel bound its
+// key input to aiSettings.byokProvider, which stored the key as PLAINTEXT
+// inside the aiSettings blob — and that blob is returned to every org member
+// on GET. These helpers quarantine that: extractLegacyKey() pulls a key-shaped
+// value out for one-time migration into the encrypted field, and
+// scrubAiSettings() removes key material from anything we store or return.
+const KEY_SHAPED = /^sk-[A-Za-z0-9_-]{16,}$/;
+const looksLikeApiKey = (v) => typeof v === 'string' && KEY_SHAPED.test(v.trim());
+const LEGACY_KEY_FIELDS = ['byokProvider', 'byokKey', 'apiKey', 'anthropicApiKey'];
+
+function extractLegacyKey(ai) {
+    if (!ai || typeof ai !== 'object') return null;
+    for (const f of LEGACY_KEY_FIELDS) {
+        if (looksLikeApiKey(ai[f])) return ai[f].trim();
+    }
+    return null;
+}
+
+function scrubAiSettings(ai) {
+    if (!ai || typeof ai !== 'object') return ai || null;
+    const out = { ...ai };
+    // These fields have no legitimate use in the aiSettings blob at all.
+    for (const f of ['byokKey', 'apiKey', 'anthropicApiKey']) delete out[f];
+    // byokProvider is a provider *label*; if it holds a key, replace the value.
+    if (looksLikeApiKey(out.byokProvider)) out.byokProvider = 'Anthropic';
+    return out;
+}
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export const handler = async (event) => {
@@ -11,7 +42,7 @@ export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
-    const { orgId } = auth;
+    const { orgId, userId, userRole } = auth;
 
     try {
         if (event.httpMethod === 'GET') {
@@ -19,10 +50,18 @@ export const handler = async (event) => {
             if (rows.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ settings: null }) };
             const row = rows[0];
 
-            // Decrypt the stored API key — only expose whether one exists, not the value.
-            // The frontend never receives the plaintext key.
+            // BYOK key: the plaintext NEVER leaves the server. Every member gets a
+            // boolean so the UI can render "key configured"; only an Admin gets the
+            // last-4 hint so they can confirm *which* key is installed.
             const storedKey = row.extra?.anthropicApiKey || null;
-            const decryptedKey = storedKey ? decrypt(storedKey) : null;
+            let keyLast4 = null;
+            if (storedKey && isAdmin(userRole)) {
+                // decrypt() returns null (never throws) on a bad key/ciphertext,
+                // so a corrupt value degrades the hint instead of 500-ing the
+                // whole settings load for the entire org.
+                const plain = decrypt(storedKey);
+                keyLast4 = plain ? plain.slice(-4) : null;
+            }
 
             return { statusCode: 200, headers, body: JSON.stringify({ settings: {
                 companyName:      row.companyName     || '',
@@ -102,34 +141,58 @@ export const handler = async (event) => {
                 dispatchTechProfiles: row.extra?.dispatchTechProfiles  || [],
                 dispatchJobTemplates: row.extra?.dispatchJobTemplates  || [],
                 featureFlags:         row.extra?.featureFlags          || {},
-                aiSettings:           row.extra?.aiSettings            || null,
-                // BYOK: send back the plaintext key so the UI can display it,
-                // but NEVER log or expose it in error responses
-                anthropicApiKey:  decryptedKey || null,
+                aiSettings:           scrubAiSettings(row.extra?.aiSettings) || null,
+                // BYOK: presence flag for all members; masked hint for Admins only.
+                // The plaintext key is never included in this response body.
+                anthropicApiKeySet:   !!storedKey,
+                anthropicApiKeyLast4: keyLast4,
             }})};
         }
 
         if (event.httpMethod === 'PUT') {
+            // Settings are org-wide (stages, field visibility, feature flags,
+            // fiscal year, the BYOK key). Per the role model, only Admins may
+            // write them — without this, any member could rewrite shared config
+            // that every other user depends on.
+            const forbidden = requireRole(auth, ['Admin'], headers);
+            if (forbidden) return forbidden;
+
             const data = JSON.parse(event.body);
 
             // Read existing row first so we can merge extra fields safely.
             const existing = await db.select().from(settings).where(eq(settings.orgId, orgId));
             const existingExtra = existing.length > 0 ? (existing[0].extra || {}) : {};
 
-            // Handle BYOK key: encrypt if provided, preserve existing if not sent, clear if explicitly null
+            // One-time migration: if a plaintext key is sitting in the aiSettings
+            // blob (incoming or already stored), lift it into the encrypted field.
+            // scrubAiSettings() below then strips it from what we persist, so the
+            // plaintext self-heals out of the DB on the first admin save.
+            const legacyPlainKey = extractLegacyKey('aiSettings' in data ? data.aiSettings : null)
+                                || extractLegacyKey(existingExtra.aiSettings);
+
+            // Handle BYOK key: encrypt if provided, migrate a legacy plaintext key,
+            // preserve existing if not sent, clear if explicitly null.
             let encryptedApiKey;
-            if ('anthropicApiKey' in data) {
-                if (data.anthropicApiKey) {
-                    try {
-                        encryptedApiKey = encrypt(data.anthropicApiKey);
-                    } catch (err) {
-                        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Encryption not available: ' + err.message }) };
+            let keyAction = null; // 'set' | 'cleared' | 'migrated' | null (unchanged)
+            try {
+                if ('anthropicApiKey' in data) {
+                    if (data.anthropicApiKey) {
+                        encryptedApiKey = encrypt(String(data.anthropicApiKey).trim());
+                        keyAction = 'set';
+                    } else {
+                        encryptedApiKey = null;
+                        keyAction = existingExtra.anthropicApiKey ? 'cleared' : null;
                     }
+                } else if (!existingExtra.anthropicApiKey && legacyPlainKey) {
+                    encryptedApiKey = encrypt(legacyPlainKey);
+                    keyAction = 'migrated';
                 } else {
-                    encryptedApiKey = null;
+                    encryptedApiKey = existingExtra.anthropicApiKey || null;
                 }
-            } else {
-                encryptedApiKey = existingExtra.anthropicApiKey || null;
+            } catch (err) {
+                // Never echo err.message — it can name the missing env var.
+                console.error('[settings] BYOK encrypt failed:', err?.message);
+                return { statusCode: 503, headers, body: JSON.stringify({ error: 'Key encryption is not available. Contact your administrator.' }) };
             }
 
             // Merge: incoming data wins for any key it explicitly provides,
@@ -201,7 +264,7 @@ export const handler = async (event) => {
                 dispatchTechProfiles: 'dispatchTechProfiles' in data ? (data.dispatchTechProfiles || [])   : existingExtra.dispatchTechProfiles  || [],
                 dispatchJobTemplates: 'dispatchJobTemplates' in data ? (data.dispatchJobTemplates || [])   : existingExtra.dispatchJobTemplates  || [],
                 featureFlags:         'featureFlags'         in data ? (data.featureFlags         || {})   : existingExtra.featureFlags         || {},
-                aiSettings:           'aiSettings'           in data ? (data.aiSettings           || null) : existingExtra.aiSettings           || null,
+                aiSettings:           'aiSettings'           in data ? (scrubAiSettings(data.aiSettings) || null) : scrubAiSettings(existingExtra.aiSettings) || null,
                 painPoints:           'painPoints'           in data ? (data.painPoints           || [])   : existingExtra.painPoints           || [],
                 competitors:          'competitors'          in data ? (data.competitors          || [])   : existingExtra.competitors          || [],
                 reasonsWon:           'reasonsWon'           in data ? (data.reasonsWon           || [])   : existingExtra.reasonsWon           || [],
@@ -233,12 +296,31 @@ export const handler = async (event) => {
                 target: settings.id, setWhere: eq(settings.orgId, orgId),
                 set: { orgId, companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, fieldVisibility: dbRow.fieldVisibility, extra: dbRow.extra, updatedAt: dbRow.updatedAt }
             });
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+
+            // Audit the write. Org-wide config changes are exactly the kind of
+            // integrity event the audit log exists for. Key material is never
+            // recorded — only the fact that the key changed.
+            const changedKeys = Object.keys(data).filter(k => k !== 'anthropicApiKey');
+            const callerName = await getCallerName(userId);
+            await writeAudit(orgId, {
+                action: keyAction ? 'settings.apikey.' + keyAction : 'settings.updated',
+                entityType: 'settings',
+                entityId: orgId,
+                entityName: dbRow.companyName || 'Organization settings',
+                detail: keyAction
+                    ? `BYOK key ${keyAction}` + (changedKeys.length ? `; updated: ${changedKeys.slice(0, 20).join(', ')}` : '')
+                    : `Updated: ${changedKeys.slice(0, 20).join(', ') || '(no fields)'}`,
+                userId,
+                userName: callerName,
+            });
+
+            return { statusCode: 200, headers, body: JSON.stringify({ success: true, anthropicApiKeySet: !!encryptedApiKey }) };
         }
 
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
-        console.error('Settings error:', err.message);
-        return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        // serverErrorBody logs the real error + stack server-side with a
+        // correlation id and returns only a generic message to the client.
+        return { statusCode: 500, headers, body: serverErrorBody(err, 'settings') };
     }
 };

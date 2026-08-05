@@ -41,8 +41,13 @@ const PersonalCalendar = ({ settings }) => {
     );
 };
 
-const PersonalNotifications = ({ settings, setSettings }) => {
-    const prefs = settings.notificationPreferences || {};
+// Notification preferences are PER USER, not org-wide. They live on the user
+// row (users.profile.notificationPrefs) and are read/written through the
+// self-service /users?me=true endpoint. They were previously written into the
+// org settings blob, which meant one rep saving preferences pushed them at the
+// whole organization — and the key was never persisted by settings.mjs anyway,
+// so the button silently did nothing.
+const PersonalNotifications = () => {
     const channels = [
         { key:'mentions',  name:'@Mentions in comments',       email:true, push:true, inapp:true },
         { key:'approvals', name:'Quote approval requests',      email:true, push:false, inapp:true },
@@ -51,12 +56,76 @@ const PersonalNotifications = ({ settings, setSettings }) => {
         { key:'tasks',     name:'Task due soon',                email:false, push:true, inapp:true },
         { key:'digest',    name:'Daily digest',                 email:true, push:false, inapp:false },
     ];
-    const [local, setLocal] = useState(() => {
+    const buildPrefs = (saved = {}) => {
         const out = {};
-        channels.forEach(c => { out[c.key] = { email: prefs[c.key]?.email ?? c.email, push: prefs[c.key]?.push ?? c.push, inapp: prefs[c.key]?.inapp ?? c.inapp }; });
+        channels.forEach(c => {
+            out[c.key] = {
+                email: saved[c.key]?.email ?? c.email,
+                push:  saved[c.key]?.push  ?? c.push,
+                inapp: saved[c.key]?.inapp ?? c.inapp,
+            };
+        });
         return out;
-    });
-    const toggle = (key, field) => setLocal(p => ({ ...p, [key]: { ...p[key], [field]: !p[key][field] } }));
+    };
+
+    const [local,     setLocal]     = useState(() => buildPrefs());
+    const [myProfile, setMyProfile] = useState(null);
+    const [loading,   setLoading]   = useState(true);
+    const [saving,    setSaving]    = useState(false);
+    const [status,    setStatus]    = useState(null);   // { kind:'ok'|'err', msg }
+
+    React.useEffect(() => {
+        let cancelled = false;
+        dbFetch('/.netlify/functions/users?me=true')
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => {
+                if (cancelled) return;
+                if (d?.user) {
+                    setMyProfile(d.user);
+                    setLocal(buildPrefs(d.user.notificationPrefs || {}));
+                }
+            })
+            .catch(() => {})
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const toggle = (key, field) => {
+        setStatus(null);
+        setLocal(p => ({ ...p, [key]: { ...p[key], [field]: !p[key][field] } }));
+    };
+
+    // Spread the full flattened profile so the server's sanitize() rebuild does
+    // not wipe unrelated profile fields — same pattern as the timezone save in
+    // AppHeader. Persisted immediately; no local-only state.
+    const handleSave = async () => {
+        if (!myProfile?.id) {
+            setStatus({ kind: 'err', msg: 'Your profile has not loaded yet — refresh and try again.' });
+            return;
+        }
+        setSaving(true);
+        setStatus(null);
+        try {
+            const res = await dbFetch('/.netlify/functions/users?me=true', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...myProfile, notificationPrefs: local }),
+            });
+            if (!res.ok) {
+                let msg = 'HTTP ' + res.status;
+                try { const d = await res.json(); if (d?.error) msg = d.error; } catch (_) {}
+                throw new Error(msg);
+            }
+            const d = await res.json().catch(() => ({}));
+            if (d?.user) setMyProfile(d.user);
+            setStatus({ kind: 'ok', msg: 'Preferences saved' });
+        } catch (e) {
+            setStatus({ kind: 'err', msg: 'Could not save: ' + e.message });
+        } finally {
+            setSaving(false);
+        }
+    };
     return (
         <div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 60px 60px 60px', gap:8, ...eb(T.inkMuted), marginBottom:10 }}>
@@ -74,13 +143,18 @@ const PersonalNotifications = ({ settings, setSettings }) => {
                 Quiet hours: <strong>mute push 7pm – 8am</strong> (your local time).{' '}
                 <span style={{ color:T.info, fontWeight:600, cursor:'pointer' }}>Edit →</span>
             </div>
-            <div style={{ marginTop:14, display:'flex', justifyContent:'flex-end' }}>
-                <button onClick={() => {
-                    const updated = { ...settings, notificationPreferences: local };
-                    setSettings(updated);
-                    dbFetch('/.netlify/functions/settings', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated) }).catch(console.error);
-                }} style={{ padding:'7px 14px', fontSize:12, fontWeight:600, background:T.ink, color:T.surface, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
-                    Save preferences
+            <div style={{ marginTop:14, display:'flex', justifyContent:'flex-end', alignItems:'center', gap:12 }}>
+                {status && (
+                    <span style={{ fontSize:11.5, fontWeight:600, fontFamily:T.sans, color: status.kind === 'ok' ? T.ok : T.danger }}>
+                        {status.msg}
+                    </span>
+                )}
+                <button
+                    onClick={handleSave}
+                    disabled={saving || loading}
+                    style={{ padding:'7px 14px', fontSize:12, fontWeight:600, background:T.ink, color:T.surface, border:'none', borderRadius:T.r, cursor: (saving || loading) ? 'default' : 'pointer', opacity: (saving || loading) ? 0.55 : 1, fontFamily:T.sans }}
+                >
+                    {saving ? 'Saving…' : 'Save preferences'}
                 </button>
             </div>
         </div>
@@ -177,7 +251,7 @@ export const PersonalView = ({ settings, setSettings, currentUser, isAdmin }) =>
                     </div>
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:20 }}>
                         {active.id === 'my-calendar'      && <PersonalCalendar settings={settings}/>}
-                        {active.id === 'my-notifications' && <PersonalNotifications settings={settings} setSettings={setSettings}/>}
+                        {active.id === 'my-notifications' && <PersonalNotifications/>}
                         {active.id === 'my-signature'     && <PersonalSignature currentUser={currentUser}/>}
                         {active.id === 'my-api'           && <PersonalApiTokens/>}
                     </div>
