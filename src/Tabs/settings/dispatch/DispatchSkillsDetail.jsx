@@ -70,6 +70,7 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
                     techs: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.techs||0}</span>,
                     more:  <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setSkillMenu(skillMenu?.id===s.id?null:{id:s.id,idx:i,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>,
                 }))}/>
+                {addingSkill ? (
                     <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 0', flexWrap:'wrap' }}>
                         <input value={newSkill.name} onChange={e=>setNewSkill(p=>({...p,name:e.target.value}))} placeholder="Skill name" autoFocus
                             style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', flex:1, minWidth:120 }}/>
@@ -112,6 +113,7 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
                     exp30:   (c.expiringIn30d||0)>0 ? <span style={{ fontSize:12, fontWeight:700, color:T.warn }}>{c.expiringIn30d} ⚠</span> : <span style={{ fontSize:12, color:T.inkMuted }}>0</span>,
                     more:    <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCertMenu(certMenu?.id===c.id?null:{id:c.id,idx:i,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>,
                 }))}/>
+                {addingCert ? (
                     <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 0' }}>
                         <input value={newCert.name} onChange={e=>setNewCert(p=>({...p,name:e.target.value}))} placeholder="Cert name e.g. EPA 608" autoFocus
                             style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', flex:1 }}/>
