@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { dispatchCustomers, dispatchServiceLocations } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
@@ -75,6 +75,11 @@ export const handler = async (event) => {
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { orgId } = auth;
+
+    // Role gate: ReadOnly may not mutate. Admin / Manager / Sales Rep all have
+    // full write access to Dispatch records by design (field-service module).
+    const forbidden = requireWrite(auth, event, headers);
+    if (forbidden) return forbidden;
 
     const params  = event.queryStringParameters || {};
     // ?resource=locations routes to service locations sub-resource

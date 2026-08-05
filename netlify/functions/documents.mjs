@@ -38,7 +38,7 @@
 import { db } from '../../db/index.js';
 import { documents, documentLinks, documentVersions } from '../../db/schema.js';
 import { eq, and, inArray, desc } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, allowOrigin } from './_lib.mjs';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -136,6 +136,10 @@ export const handler = async (event) => {
   const auth = await verifyAuth(event);
   if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
   const { userId, orgId, userRole } = auth;
+
+  // canSee() below governs read visibility only; mutations were entirely ungated.
+  const forbidden = requireWrite(auth, event, headers);
+  if (forbidden) return forbidden;
 
   const qs = event.queryStringParameters || {};
   const action = qs.action || '';

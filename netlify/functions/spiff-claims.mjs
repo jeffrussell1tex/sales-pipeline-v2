@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { spiffClaims } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
@@ -40,6 +40,11 @@ export const handler = async (event) => {
 
     const isAdmin   = userRole === 'Admin';
     const isManager = userRole === 'Manager';
+
+    // POST (claim submission) had no role check at all — approve/reject and
+    // delete were already gated below.
+    const forbidden = requireWrite(auth, event, headers);
+    if (forbidden) return forbidden;
 
     try {
         // ── GET: fetch all claims for this org ────────────────────────────────

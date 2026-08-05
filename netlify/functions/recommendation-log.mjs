@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { recommendationLog, opportunities, activities, tasks } from '../../db/schema.js';
 import { eq, and, desc, gte } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
@@ -88,6 +88,9 @@ export const handler = async (event) => {
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { orgId } = auth;
+
+    const forbidden = requireWrite(auth, event, headers);
+    if (forbidden) return forbidden;
 
     try {
         // ── GET: fetch logs + summary stats for a rep ─────────────────────────

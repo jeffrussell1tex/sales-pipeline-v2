@@ -100,6 +100,27 @@ export const isReadOnly = (role) => role === 'ReadOnly';
 //   if (forbidden) return forbidden;
 // Note: verifyAuth caches role for up to 30s, so a role change (e.g. an admin
 // being demoted) can take up to 30s to be enforced here.
+// Write gate for mutating branches — the one check every mutating endpoint
+// needs before any role-specific rule (Admin-only clears, ownership checks)
+// applies. ReadOnly is the only role with no write capability at all, so this
+// encodes the "can this role write anything?" half of the capability matrix in
+// one place. Non-mutating methods pass straight through, so it is safe to call
+// once at the top of a handler rather than per branch.
+// Usage:
+//   const forbidden = requireWrite(auth, event, headers);
+//   if (forbidden) return forbidden;
+const MUTATING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+export function requireWrite(auth, event, headers) {
+    if (!MUTATING_METHODS.includes(event?.httpMethod)) return null;
+    if (!isReadOnly(auth?.userRole)) return null;
+    console.warn('requireWrite: read-only role blocked', event?.httpMethod, 'for user', auth?.userId);
+    return {
+        statusCode: 403,
+        headers,
+        body: JSON.stringify({ error: 'Forbidden: read-only role' }),
+    };
+}
+
 export function requireRole(auth, allowedRoles, headers) {
     if (allowedRoles.includes(auth?.userRole)) return null;
     console.warn('requireRole: forbidden role', auth?.userRole, 'for user', auth?.userId);

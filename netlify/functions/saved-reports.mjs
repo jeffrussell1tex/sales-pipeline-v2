@@ -1,7 +1,7 @@
 import { db }            from '../../db/index.js';
 import { savedReports }  from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
-import { verifyAuth }    from './auth.mjs';
+import { verifyAuth, requireWrite, isAdmin } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
@@ -32,7 +32,22 @@ export const handler = async (event) => {
 
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
-    const { userId, orgId } = auth;
+    const { userId, orgId, userRole } = auth;
+
+    const forbidden = requireWrite(auth, event, headers);
+    if (forbidden) return forbidden;
+
+    // A saved report belongs to whoever created it. Only that owner or an Admin
+    // may modify or delete it — org scoping alone let any member delete anyone's
+    // report. Unknown ids fall through to the existing upsert/no-op behaviour.
+    const assertOwner = async (id) => {
+        const [row] = await db.select({ ownerId: savedReports.ownerId })
+            .from(savedReports)
+            .where(and(eq(savedReports.id, id), eq(savedReports.orgId, orgId)));
+        if (!row) return null;                       // not found — existing behaviour
+        if (isAdmin(userRole) || row.ownerId === userId) return null;
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own saved reports' }) };
+    };
 
     try {
         // GET — return all saved reports for this org (own + shared)
@@ -58,6 +73,8 @@ export const handler = async (event) => {
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body || '{}');
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            const notOwner = await assertOwner(data.id);
+            if (notOwner) return notOwner;
             const payload = sanitize({ ...data, orgId, ownerId: userId });
             const [updated] = await db
                 .insert(savedReports)
@@ -71,6 +88,8 @@ export const handler = async (event) => {
         if (event.httpMethod === 'DELETE') {
             const { id } = JSON.parse(event.body || '{}');
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            const notOwner = await assertOwner(id);
+            if (notOwner) return notOwner;
             await db
                 .delete(savedReports)
                 .where(and(eq(savedReports.id, id), eq(savedReports.orgId, orgId)));
