@@ -727,6 +727,7 @@ export const dispatchCustomers = pgTable('dispatch_customers', {
     id:                 text('id').primaryKey(),
     orgId:              text('org_id').notNull(),
     accountId:          text('account_id'),                           // FK → accounts.id (nullable)
+    customerNumber:     varchar('customer_number', { length: 50 }),   // e.g. "CUST-0001" — human-readable, server-assigned, immutable
     name:               varchar('name', { length: 255 }).notNull(),
     contactName:        varchar('contact_name', { length: 255 }),
     contactPhone:       varchar('contact_phone', { length: 50 }),
@@ -816,6 +817,9 @@ export const dispatchJobs = pgTable('dispatch_jobs', {
     actualStart:        timestamp('actual_start'),
     actualEnd:          timestamp('actual_end'),
     durationMinutes:    integer('duration_minutes'),                   // estimated
+    crewSize:           integer('crew_size'),                          // techs required on site
+    minLicense:         varchar('min_license', { length: 50 }),        // 'Apprentice' | 'Journeyman' | 'Master'
+    needSkills:         jsonb('need_skills').default('[]'),            // string[] of required skills
     assignedTechId:     text('assigned_tech_id'),                     // FK → dispatch_technicians.id
     assignedVehicleId:  text('assigned_vehicle_id'),                  // FK → dispatch_vehicles.id
     coTechIds:          jsonb('co_tech_ids').default('[]'),           // additional techs on job

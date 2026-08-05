@@ -29,7 +29,83 @@ const LICENSE_ORDER = { Apprentice: 0, Journeyman: 1, Master: 2, Lead: 3 };
 const fmt12 = (h) => h === 12 ? '12p' : h > 12 ? `${h-12}p` : `${h}a`;
 
 // ── Priority color helper ─────────────────────────────────────────────────────
-const prioColor = (p) => ({ urgent: T.danger, standard: T.warn, low: T.inkMuted }[p] || T.inkMuted);
+// Priority vocabulary reconciliation. The schema documents
+// 'low' | 'normal' | 'high' | 'emergency', while these colour maps were written
+// against an older 'urgent' | 'standard' | 'low' set. Both are accepted so
+// existing rows keep their colours and newly created jobs (which store the
+// schema-valid values) render correctly too.
+const PRIORITY_LABELS = [
+    { label: 'Low',     value: 'low' },
+    { label: 'Medium',  value: 'normal' },
+    { label: 'High',    value: 'high' },
+    { label: 'Urgent',  value: 'emergency' },
+];
+const URGENT_PRIORITIES = ['urgent', 'emergency'];
+const prioColor = (p) => ({ urgent: T.danger, emergency: T.danger, high: T.warn, standard: T.warn, normal: T.inkMid, low: T.inkMuted }[p] || T.inkMuted);
+
+// ── Customer typeahead ───────────────────────────────────────────────
+// Defined at module scope on purpose: a component declared inside DispatchTab
+// would be a new type on every render, remounting the input and losing focus
+// on each keystroke.
+// A job needs a real customerId (FK, notNull). Free text alone cannot produce
+// one, so the field either resolves to an existing customer or offers to create
+// a new one, which the save handler POSTs before the job.
+const CustomerTypeahead = ({ customers, query, selectedId, onQueryChange, onPick, onCreateIntent }) => {
+    const [open, setOpen] = React.useState(false);
+    const q = (query || '').trim().toLowerCase();
+    const matches = q
+        ? (customers || []).filter(c => (c.name || '').toLowerCase().includes(q)).slice(0, 8)
+        : (customers || []).slice(0, 8);
+    const exact = (customers || []).some(c => (c.name || '').trim().toLowerCase() === q);
+    const showCreate = q.length > 0 && !exact;
+
+    const inputSt = { width: '100%', padding: '8px 10px', border: `1px solid ${selectedId ? T.ok : T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' };
+    const rowSt   = { padding: '7px 10px', fontSize: 13, color: T.ink, fontFamily: T.sans, cursor: 'pointer', borderBottom: `1px solid ${T.border}` };
+
+    return (
+        <div style={{ position: 'relative' }}>
+            <input
+                value={query}
+                autoComplete="off"
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                onChange={e => { onQueryChange(e.target.value); setOpen(true); }}
+                placeholder="Search customers, or type a new name"
+                style={inputSt} />
+            {selectedId && (
+                <div style={{ marginTop: 4, fontSize: 11, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>
+                    Existing customer selected
+                </div>
+            )}
+            {!selectedId && query.trim() && (
+                <div style={{ marginTop: 4, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                    New customer — will be created on save
+                </div>
+            )}
+            {open && (matches.length > 0 || showCreate) && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 3,
+                    background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
+                    boxShadow: '0 6px 18px rgba(0,0,0,0.10)', maxHeight: 220, overflowY: 'auto' }}>
+                    {matches.map(c => (
+                        <div key={c.id} style={rowSt}
+                            onMouseDown={e => { e.preventDefault(); onPick(c); setOpen(false); }}>
+                            <span style={{ fontWeight: 500 }}>{c.name}</span>
+                            {c.customerNumber && (
+                                <span style={{ marginLeft: 8, fontSize: 11, color: T.inkMuted }}>{c.customerNumber}</span>
+                            )}
+                        </div>
+                    ))}
+                    {showCreate && (
+                        <div style={{ ...rowSt, borderBottom: 'none', color: T.info, fontWeight: 600 }}
+                            onMouseDown={e => { e.preventDefault(); onCreateIntent(); setOpen(false); }}>
+                            + Create “{query.trim()}”
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
 
 // ── Score badge ───────────────────────────────────────────────────────────────
 const ScoreBadge = ({ score }) => {
@@ -288,7 +364,7 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
     }, [assignedJobs, techs]);
 
     const overHours        = new Set(techs.filter(t => (t.hoursThisWeek || 0) > (t.hoursCap || 40)).map(t => t.id));
-    const urgentUnassigned = unassignedJobs.filter(j => j.priority === 'urgent').length;
+    const urgentUnassigned = unassignedJobs.filter(j => URGENT_PRIORITIES.includes(j.priority)).length;
     const overbookings     = techConflicts.size > 0 ? 1 : 0;
 
     return (
@@ -423,7 +499,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
     const scheduledJobs = jobs.filter(j => j.start && (j.assignedTechIds || []).length > 0);
     const overbooking = techs.some(t => (t.hoursThisWeek || 0) > (t.hoursCap || 40));
 
-    const prioColor2 = (p) => ({ urgent: T.danger, standard: T.warn, low: T.inkMuted }[p] || T.inkMuted);
+    const prioColor2 = (p) => prioColor(p);   // single source of truth; accepts both priority vocabularies
 
     return (
         <div style={{ display: 'flex', height: '100%', overflow: 'hidden', fontFamily: T.sans }}>
@@ -713,7 +789,10 @@ export default function DispatchTab() {
     const [showNewJobForm, setShowNewJobForm] = useState(false);
     const [newJobSaving,   setNewJobSaving]   = useState(false);
     const [newJobError,    setNewJobError]    = useState('');
-    const EMPTY_JOB = { customer: '', address: '', window: '', priority: 'Medium', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman', opportunityId: '', needSkills: [] };
+    // customerId is the FK the server requires; `customer` is only the typed text.
+    const EMPTY_JOB = { customer: '', customerId: '', title: '', address: '', city: '', state: '', zip: '',
+        window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman',
+        opportunityId: '', needSkills: [] };
     const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
 
     // ── DB-backed state ───────────────────────────────────────────────────────
@@ -894,17 +973,74 @@ export default function DispatchTab() {
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Save new job ──────────────────────────────────────────────────────────
+    // Create is up to three writes, in dependency order:
+    //   1. customer  (only when the typeahead did not resolve to an existing one)
+    //   2. service location (only when an address was entered) — the job's
+    //      address lives here; dispatch_jobs has no address column of its own
+    //   3. the job itself, carrying customerId + locationId
+    // Everything the form collects is now sent; previously address, crew size,
+    // min licence and skills existed only in optimistic local state and vanished
+    // on refresh.
     const handleSaveNewJob = async () => {
-        if (!newJobForm.customer.trim()) { setNewJobError('Customer name is required.'); return; }
+        const custName = newJobForm.customer.trim();
+        const title    = newJobForm.title.trim();
+        const address  = newJobForm.address.trim();
+        const city     = newJobForm.city.trim();
+        if (!custName) { setNewJobError('Customer is required.'); return; }
+        if (!title)    { setNewJobError('Job title is required.'); return; }
+        if (address && !city) { setNewJobError('City is required when a job address is entered.'); return; }
+
         setNewJobSaving(true);
         setNewJobError('');
         try {
+            // 1 — resolve the customer FK
+            let customerId  = newJobForm.customerId;
+            let createdCust = null;
+            if (!customerId) {
+                const newCustId = 'dcust_' + crypto.randomUUID();
+                const cres = await dbFetch('/.netlify/functions/dispatch-customers', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: newCustId, name: custName }),
+                });
+                const cdata = await cres.json();
+                if (!cres.ok) throw new Error(cdata?.error || 'Could not create the customer.');
+                createdCust = cdata.customer;
+                customerId  = createdCust?.id || newCustId;
+                setCustomers(prev => [...prev, createdCust].filter(Boolean));
+            }
+
+            // 2 — optional service location
+            let locationId = null;
+            if (address) {
+                const locId = 'dloc_' + crypto.randomUUID();
+                const lres = await dbFetch('/.netlify/functions/dispatch-customers?resource=locations', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: locId, customerId, name: address, address, city,
+                        state: newJobForm.state.trim() || null,
+                        zip:   newJobForm.zip.trim()   || null,
+                        isDefault: !!createdCust,
+                    }),
+                });
+                const ldata = await lres.json();
+                if (!lres.ok) throw new Error(ldata?.error || 'Could not save the job address.');
+                locationId = ldata.location?.id || locId;
+            }
+
+            // 3 — the job
+            const jobId = 'djob_' + crypto.randomUUID();
             const payload = {
-                title:           newJobForm.customer.trim(),
-                jobType:         'service',
-                priority:        newJobForm.priority.toLowerCase(),
+                id:              jobId,
+                customerId,
+                locationId,
+                title,
+                jobType:         'repair',
+                priority:        newJobForm.priority,
                 status:          'unscheduled',
                 durationMinutes: Math.round((parseFloat(newJobForm.durationHrs) || 2) * 60),
+                crewSize:        parseInt(newJobForm.crewSize, 10) || 1,
+                minLicense:      newJobForm.minLicense || null,
+                needSkills:      newJobForm.needSkills || [],
                 scheduledDate:   newJobForm.window || null,
                 opportunityId:   newJobForm.opportunityId || null,
             };
@@ -912,11 +1048,15 @@ export default function DispatchTab() {
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || 'Save failed');
             // Optimistically add to local state
+            const saved = data.job || data;
             const optimistic = {
-                id:              data.id || ('tmp_' + Date.now()),
+                id:              saved.id || jobId,
+                title,
+                customerId,
+                locationId,
                 opportunityId:   newJobForm.opportunityId || null,
-                customer:        newJobForm.customer.trim(),
-                address:         newJobForm.address || '',
+                customer:        custName,
+                address:         address || '',
                 needSkills:      newJobForm.needSkills || [],
                 crewSize:        parseInt(newJobForm.crewSize) || 1,
                 durationHrs:     parseFloat(newJobForm.durationHrs) || 2,
@@ -1166,9 +1306,20 @@ export default function DispatchTab() {
                             {/* Customer */}
                             <div>
                                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Customer *</label>
-                                <input value={newJobForm.customer}
-                                    onChange={e => setNewJobForm(f => ({ ...f, customer: e.target.value }))}
-                                    placeholder="Customer or company name"
+                                <CustomerTypeahead
+                                    customers={customers}
+                                    query={newJobForm.customer}
+                                    selectedId={newJobForm.customerId}
+                                    onQueryChange={v => setNewJobForm(f => ({ ...f, customer: v, customerId: '' }))}
+                                    onPick={c => setNewJobForm(f => ({ ...f, customer: c.name, customerId: c.id }))}
+                                    onCreateIntent={() => setNewJobForm(f => ({ ...f, customerId: '' }))} />
+                            </div>
+                            {/* Title */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Job Title *</label>
+                                <input value={newJobForm.title}
+                                    onChange={e => setNewJobForm(f => ({ ...f, title: e.target.value }))}
+                                    placeholder="e.g. Rooftop unit not cooling"
                                     style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
                             </div>
                             {/* Address */}
@@ -1179,6 +1330,20 @@ export default function DispatchTab() {
                                     placeholder="Street address"
                                     style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
                             </div>
+                            {/* City / State / Zip — city is required by dispatch_service_locations */}
+                            {newJobForm.address.trim() && (
+                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+                                    {[['city', 'City *', 'Houston'], ['state', 'State', 'TX'], ['zip', 'Zip', '77006']].map(([k, lbl, ph]) => (
+                                        <div key={k}>
+                                            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>{lbl}</label>
+                                            <input value={newJobForm[k]}
+                                                onChange={e => setNewJobForm(f => ({ ...f, [k]: e.target.value }))}
+                                                placeholder={ph}
+                                                style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             {/* Row: Priority + Duration */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                                 <div>
@@ -1186,7 +1351,7 @@ export default function DispatchTab() {
                                     <select value={newJobForm.priority}
                                         onChange={e => setNewJobForm(f => ({ ...f, priority: e.target.value }))}
                                         style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
-                                        {['Low', 'Medium', 'High', 'Urgent'].map(p => <option key={p} value={p}>{p}</option>)}
+                                        {PRIORITY_LABELS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                                     </select>
                                 </div>
                                 <div>
@@ -1213,6 +1378,37 @@ export default function DispatchTab() {
                                         onChange={e => setNewJobForm(f => ({ ...f, window: e.target.value }))}
                                         style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
                                 </div>
+                            </div>
+                            {/* Min licence + required skills — now persisted on the job */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Min License</label>
+                                    <select value={newJobForm.minLicense}
+                                        onChange={e => setNewJobForm(f => ({ ...f, minLicense: e.target.value }))}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
+                                        {licLevels.map(l => <option key={l} value={l}>{l}</option>)}
+                                    </select>
+                                </div>
+                                {skills.length > 0 && (
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Required Skills</label>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                            {skills.map(s => {
+                                                const on = (newJobForm.needSkills || []).includes(s.id);
+                                                return (
+                                                    <span key={s.id}
+                                                        onClick={() => setNewJobForm(f => ({ ...f,
+                                                            needSkills: on ? f.needSkills.filter(x => x !== s.id) : [...(f.needSkills || []), s.id] }))}
+                                                        style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                            border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
+                                                            color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
+                                                        {s.name}
+                                                    </span>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                             {/* Opportunity link (optional) */}
                             {(opportunities || []).filter(o => o.stage === 'Closed Won').length > 0 && (

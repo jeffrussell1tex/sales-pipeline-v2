@@ -37,6 +37,9 @@ function normaliseJob(row) {
         actualStart:      row.actualStart       ?? row.actual_start       ?? null,
         actualEnd:        row.actualEnd         ?? row.actual_end         ?? null,
         durationMinutes:  row.durationMinutes   ?? row.duration_minutes   ?? null,
+        crewSize:         row.crewSize          ?? row.crew_size          ?? null,
+        minLicense:       row.minLicense        ?? row.min_license        ?? null,
+        needSkills:       row.needSkills        ?? row.need_skills        ?? [],
         assignedTechId:   row.assignedTechId    ?? row.assigned_tech_id   ?? null,
         assignedVehicleId:row.assignedVehicleId ?? row.assigned_vehicle_id ?? null,
         coTechIds:        row.coTechIds         ?? row.co_tech_ids        ?? [],
@@ -216,6 +219,9 @@ export const handler = async (event) => {
                 actualStart:      null,
                 actualEnd:        null,
                 durationMinutes:  data.durationMinutes  ?? null,
+                crewSize:         data.crewSize         ?? null,
+                minLicense:       data.minLicense       ?? null,
+                needSkills:       JSON.stringify(data.needSkills   ?? []),
                 assignedTechId:   data.assignedTechId   ?? null,
                 assignedVehicleId:data.assignedVehicleId ?? null,
                 coTechIds:        JSON.stringify(data.coTechIds     ?? []),
@@ -270,7 +276,7 @@ export const handler = async (event) => {
                 'jobNumber','customerId','locationId','accountId','opportunityId',
                 'title','description','trade','jobType','status','priority',
                 'scheduledDate','scheduledStart','scheduledEnd','timeSlot',
-                'durationMinutes','assignedTechId','assignedVehicleId',
+                'durationMinutes','crewSize','minLicense','assignedTechId','assignedVehicleId',
                 'laborHours','laborCost','materialCost','totalCost',
                 'invoiceAmount','invoiceStatus','invoicePaidAt','customerPoNumber',
                 'techNotes','completionNotes','customerSignature','photosCount',
@@ -284,6 +290,7 @@ export const handler = async (event) => {
 
             // JSON fields
             if ('coTechIds'    in data) updates.coTechIds    = JSON.stringify(data.coTechIds);
+            if ('needSkills'   in data) updates.needSkills   = JSON.stringify(data.needSkills);
             if ('equipmentIds' in data) updates.equipmentIds = JSON.stringify(data.equipmentIds);
             if ('tags'         in data) updates.tags         = JSON.stringify(data.tags);
             if ('customFields' in data) updates.customFields = JSON.stringify(data.customFields);

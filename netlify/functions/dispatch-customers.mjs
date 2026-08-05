@@ -11,11 +11,28 @@ const headers = {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+// Human-readable per-org customer number, e.g. CUST-0001. Assigned SERVER-SIDE
+// only: two reps creating customers at the same moment would otherwise generate
+// the same number client-side. Immutable once set — the PUT whitelist below
+// deliberately omits customerNumber, and POST (an upsert) reuses any existing
+// value rather than reissuing one.
+async function nextCustomerNumber(orgId) {
+    const rows = await db.select({ n: dispatchCustomers.customerNumber })
+        .from(dispatchCustomers).where(eq(dispatchCustomers.orgId, orgId));
+    let max = 0;
+    for (const r of rows) {
+        const m = /^CUST-(\d+)$/.exec(String(r.n || '').trim());
+        if (m) { const v = parseInt(m[1], 10); if (Number.isFinite(v) && v > max) max = v; }
+    }
+    return 'CUST-' + String(max + 1).padStart(4, '0');
+}
+
 function normaliseCust(row) {
     return {
         id:                 row.id,
         orgId:              row.orgId               ?? row.org_id,
         accountId:          row.accountId           ?? row.account_id           ?? null,
+        customerNumber:     row.customerNumber      ?? row.customer_number      ?? null,
         name:               row.name                ?? '',
         contactName:        row.contactName         ?? row.contact_name         ?? null,
         contactPhone:       row.contactPhone        ?? row.contact_phone        ?? null,
@@ -170,10 +187,17 @@ export const handler = async (event) => {
             if (!data.id || !data.name) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id and name required' }) };
             }
+            // Reuse the number on upsert; never accept one from the client.
+            const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber })
+                .from(dispatchCustomers)
+                .where(and(eq(dispatchCustomers.id, data.id), eq(dispatchCustomers.orgId, orgId)));
+            const customerNumber = priorCust?.customerNumber || await nextCustomerNumber(orgId);
+
             const row = {
                 id:                 data.id,
                 orgId,
                 accountId:          data.accountId          ?? null,
+                customerNumber,
                 name:               data.name,
                 contactName:        data.contactName        ?? null,
                 contactPhone:       data.contactPhone       ?? null,
