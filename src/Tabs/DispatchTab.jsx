@@ -50,17 +50,31 @@ const prioColor = (p) => ({ urgent: T.danger, emergency: T.danger, high: T.warn,
 // A job needs a real customerId (FK, notNull). Free text alone cannot produce
 // one, so the field either resolves to an existing customer or offers to create
 // a new one, which the save handler POSTs before the job.
-const CustomerTypeahead = ({ customers, query, selectedId, onQueryChange, onPick, onCreateIntent }) => {
+const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAccountId, onQueryChange, onPick, onPickAccount, onCreateIntent }) => {
     const [open, setOpen] = React.useState(false);
     const q = (query || '').trim().toLowerCase();
-    const matches = q
-        ? (customers || []).filter(c => (c.name || '').toLowerCase().includes(q)).slice(0, 8)
-        : (customers || []).slice(0, 8);
-    const exact = (customers || []).some(c => (c.name || '').trim().toLowerCase() === q);
+
+    const byName = (list) => (q ? list.filter(x => (x.name || '').toLowerCase().includes(q)) : list);
+
+    // Group 1 — existing dispatch customers (already have a customerNumber).
+    const custMatches = byName(customers || []).slice(0, 6);
+
+    // Group 2 — CRM accounts with no dispatch customer yet. Picking one creates
+    // the dispatch customer on save, linked back via accountId, so the same
+    // company is not duplicated across the CRM and Dispatch.
+    const linkedAccountIds = new Set((customers || []).map(c => c.accountId).filter(Boolean));
+    const linkedNames      = new Set((customers || []).map(c => (c.name || '').trim().toLowerCase()));
+    const acctMatches = byName(accounts || [])
+        .filter(a => !linkedAccountIds.has(a.id) && !linkedNames.has((a.name || '').trim().toLowerCase()))
+        .slice(0, 6);
+
+    const exact = [...(customers || []), ...(accounts || [])]
+        .some(x => (x.name || '').trim().toLowerCase() === q);
     const showCreate = q.length > 0 && !exact;
 
     const inputSt = { width: '100%', padding: '8px 10px', border: `1px solid ${selectedId ? T.ok : T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' };
     const rowSt   = { padding: '7px 10px', fontSize: 13, color: T.ink, fontFamily: T.sans, cursor: 'pointer', borderBottom: `1px solid ${T.border}` };
+    const hdrSt   = { padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: T.inkMuted, background: T.bg, fontFamily: T.sans };
 
     return (
         <div style={{ position: 'relative' }}>
@@ -74,24 +88,46 @@ const CustomerTypeahead = ({ customers, query, selectedId, onQueryChange, onPick
                 style={inputSt} />
             {selectedId && (
                 <div style={{ marginTop: 4, fontSize: 11, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>
-                    Existing customer selected
+                    Existing dispatch customer selected
                 </div>
             )}
-            {!selectedId && query.trim() && (
+            {!selectedId && selectedAccountId && (
+                <div style={{ marginTop: 4, fontSize: 11, color: T.info, fontWeight: 600, fontFamily: T.sans }}>
+                    CRM account — a linked dispatch customer will be created on save
+                </div>
+            )}
+            {!selectedId && !selectedAccountId && query.trim() && (
                 <div style={{ marginTop: 4, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
                     New customer — will be created on save
                 </div>
             )}
-            {open && (matches.length > 0 || showCreate) && (
+            {open && (custMatches.length > 0 || acctMatches.length > 0 || showCreate) && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, marginTop: 3,
                     background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
                     boxShadow: '0 6px 18px rgba(0,0,0,0.10)', maxHeight: 220, overflowY: 'auto' }}>
-                    {matches.map(c => (
+                    {custMatches.length > 0 && (
+                        <div style={hdrSt}>Dispatch customers</div>
+                    )}
+                    {custMatches.map(c => (
                         <div key={c.id} style={rowSt}
                             onMouseDown={e => { e.preventDefault(); onPick(c); setOpen(false); }}>
                             <span style={{ fontWeight: 500 }}>{c.name}</span>
                             {c.customerNumber && (
                                 <span style={{ marginLeft: 8, fontSize: 11, color: T.inkMuted }}>{c.customerNumber}</span>
+                            )}
+                        </div>
+                    ))}
+                    {acctMatches.length > 0 && (
+                        <div style={hdrSt}>CRM accounts — not yet in Dispatch</div>
+                    )}
+                    {acctMatches.map(a => (
+                        <div key={a.id} style={rowSt}
+                            onMouseDown={e => { e.preventDefault(); onPickAccount(a); setOpen(false); }}>
+                            <span style={{ fontWeight: 500 }}>{a.name}</span>
+                            {(a.city || a.state) && (
+                                <span style={{ marginLeft: 8, fontSize: 11, color: T.inkMuted }}>
+                                    {[a.city, a.state].filter(Boolean).join(', ')}
+                                </span>
                             )}
                         </div>
                     ))}
@@ -778,9 +814,248 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
     );
 };
 
+
+// ── Dispatch customers view ───────────────────────────────────────────────────
+// Until now nothing in the app could list, create, or edit dispatch customers —
+// rows existed only in the database. This is the missing admin surface, and the
+// place where the accountId link back to a CRM account is actually managed.
+//
+// Deliberately no delete: a customer with jobs would orphan dispatch_jobs.customerId
+// (an FK with no cascade). Use "Do not service" to retire a customer instead.
+const CUSTOMER_TYPES = ['commercial', 'residential', 'industrial', 'government'];
+const AGREEMENTS     = ['none', 'basic', 'preferred', 'premium'];
+
+const CustFieldRow = ({ label, children }) => (
+    <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid,
+            textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5, fontFamily: T.sans }}>{label}</label>
+        {children}
+    </div>
+);
+
+const custInput = {
+    width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r,
+    fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none',
+};
+
+const CustomersView = ({ customers, accounts, onSaved }) => {
+    const [query,      setQuery]      = React.useState('');
+    const [selectedId, setSelectedId] = React.useState(null);
+    const [draft,      setDraft]      = React.useState(null);
+    const [saving,     setSaving]     = React.useState(false);
+    const [status,     setStatus]     = React.useState(null);
+
+    const q = query.trim().toLowerCase();
+    const list = (customers || [])
+        .filter(c => !q
+            || (c.name || '').toLowerCase().includes(q)
+            || (c.customerNumber || '').toLowerCase().includes(q))
+        .slice()
+        .sort((a, b) => (a.customerNumber || '').localeCompare(b.customerNumber || ''));
+
+    const selected = (customers || []).find(c => c.id === selectedId) || null;
+
+    React.useEffect(() => {
+        setDraft(selected ? { ...selected } : null);
+        setStatus(null);
+    }, [selectedId]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    const linkedAccount = draft && draft.accountId ? (accounts || []).find(a => a.id === draft.accountId) : null;
+
+    const startNew = () => {
+        setSelectedId(null);
+        setStatus(null);
+        setDraft({ id: 'dcust_' + crypto.randomUUID(), _isNew: true, name: '', accountId: '',
+            customerType: 'commercial', contactName: '', contactPhone: '', contactEmail: '',
+            serviceAddress: '', serviceCity: '', serviceState: '', serviceZip: '',
+            serviceAgreement: 'none', doNotService: false, doNotServiceReason: '', notes: '' });
+    };
+
+    const copyFromAccount = () => {
+        if (!linkedAccount) return;
+        setDraft(d => ({ ...d,
+            serviceAddress: linkedAccount.address || d.serviceAddress || '',
+            serviceCity:    linkedAccount.city    || d.serviceCity    || '',
+            serviceState:   linkedAccount.state   || d.serviceState   || '',
+            serviceZip:     linkedAccount.zip     || d.serviceZip     || '',
+        }));
+    };
+
+    const save = async () => {
+        if (!draft || !(draft.name || '').trim()) { setStatus({ kind: 'err', msg: 'Name is required.' }); return; }
+        setSaving(true); setStatus(null);
+        try {
+            const body = { ...draft, name: draft.name.trim(), accountId: draft.accountId || null };
+            delete body._isNew;
+            delete body.customerNumber;   // server-assigned and immutable
+
+            const url = draft._isNew
+                ? '/.netlify/functions/dispatch-customers'
+                : '/.netlify/functions/dispatch-customers?id=' + encodeURIComponent(draft.id);
+            const res = await dbFetch(url, {
+                method: draft._isNew ? 'POST' : 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (res.status === 403) throw new Error('Your role cannot change dispatch customers.');
+                throw new Error(data.error || ('HTTP ' + res.status));
+            }
+            const saved = data.customer;
+            if (saved) { onSaved(saved); setSelectedId(saved.id); }
+            setStatus({ kind: 'ok', msg: draft._isNew ? ('Created ' + ((saved && saved.customerNumber) || '')) : 'Saved' });
+        } catch (e) {
+            setStatus({ kind: 'err', msg: e.message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+            <div style={{ width: 300, borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', background: T.surface }}>
+                <div style={{ padding: 12, borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 8 }}>
+                    <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or CUST-…"
+                        style={{ ...custInput, padding: '7px 9px', fontSize: 12.5 }}/>
+                    <button onClick={startNew}
+                        style={{ padding: '7px 12px', background: T.ink, color: T.surface, border: 'none',
+                            borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                        + New
+                    </button>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                    {list.length === 0 && (
+                        <div style={{ padding: 16, fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans }}>
+                            No dispatch customers{q ? ' match that search' : ' yet'}.
+                        </div>
+                    )}
+                    {list.map(c => (
+                        <div key={c.id} onClick={() => setSelectedId(c.id)}
+                            style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
+                                background: c.id === selectedId ? T.surface2 : 'transparent' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                <span style={{ fontSize: 13, fontWeight: c.id === selectedId ? 700 : 500, color: T.ink, fontFamily: T.sans }}>{c.name}</span>
+                                <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.mono }}>{c.customerNumber || '—'}</span>
+                            </div>
+                            <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{c.customerType || 'commercial'}</span>
+                                {c.accountId
+                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.ok}14`, color: T.ok, fontWeight: 700 }}>linked</span>
+                                    : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>unlinked</span>}
+                                {c.doNotService && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>do not service</span>}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+                {!draft ? (
+                    <div style={{ fontSize: 13, color: T.inkMuted, fontFamily: T.sans }}>
+                        Select a customer, or create one.
+                    </div>
+                ) : (
+                    <div style={{ maxWidth: 620 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 16 }}>
+                            <span style={{ fontSize: 20, fontStyle: 'italic', fontWeight: 300, color: T.ink, fontFamily: T.serif }}>
+                                {draft._isNew ? 'New customer' : draft.name}
+                            </span>
+                            {draft.customerNumber && (
+                                <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.mono }}>{draft.customerNumber}</span>
+                            )}
+                        </div>
+
+                        <CustFieldRow label="Name *">
+                            <input value={draft.name || ''} onChange={e => set('name', e.target.value)} style={custInput}/>
+                        </CustFieldRow>
+
+                        <CustFieldRow label="Linked CRM account">
+                            <select value={draft.accountId || ''} onChange={e => set('accountId', e.target.value)} style={custInput}>
+                                <option value="">— Not linked —</option>
+                                {(accounts || []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                            {linkedAccount && (
+                                <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                    {[linkedAccount.address, linkedAccount.city, linkedAccount.state, linkedAccount.zip].filter(Boolean).join(', ') || 'No address on the account'}
+                                    {' · '}
+                                    <span onClick={copyFromAccount} style={{ color: T.info, cursor: 'pointer', fontWeight: 600 }}>copy address</span>
+                                </div>
+                            )}
+                        </CustFieldRow>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="Customer type">
+                                <select value={draft.customerType || 'commercial'} onChange={e => set('customerType', e.target.value)} style={custInput}>
+                                    {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </CustFieldRow>
+                            <CustFieldRow label="Service agreement">
+                                <select value={draft.serviceAgreement || 'none'} onChange={e => set('serviceAgreement', e.target.value)} style={custInput}>
+                                    {AGREEMENTS.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </CustFieldRow>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                            {[['contactName', 'Contact'], ['contactPhone', 'Phone'], ['contactEmail', 'Email']].map(([k, l]) => (
+                                <CustFieldRow key={k} label={l}>
+                                    <input value={draft[k] || ''} onChange={e => set(k, e.target.value)} style={custInput}/>
+                                </CustFieldRow>
+                            ))}
+                        </div>
+
+                        <CustFieldRow label="Service address">
+                            <input value={draft.serviceAddress || ''} onChange={e => set('serviceAddress', e.target.value)} style={custInput}/>
+                        </CustFieldRow>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+                            {[['serviceCity', 'City'], ['serviceState', 'State'], ['serviceZip', 'Zip']].map(([k, l]) => (
+                                <CustFieldRow key={k} label={l}>
+                                    <input value={draft[k] || ''} onChange={e => set(k, e.target.value)} style={custInput}/>
+                                </CustFieldRow>
+                            ))}
+                        </div>
+
+                        <CustFieldRow label="Notes">
+                            <textarea value={draft.notes || ''} onChange={e => set('notes', e.target.value)} rows={3}
+                                style={{ ...custInput, resize: 'vertical' }}/>
+                        </CustFieldRow>
+
+                        <div style={{ padding: '10px 12px', border: `1px solid ${draft.doNotService ? T.danger : T.border}`,
+                            borderRadius: T.r, marginBottom: 16, background: draft.doNotService ? `${T.danger}0a` : 'transparent' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: T.ink, fontFamily: T.sans }}>
+                                <input type="checkbox" checked={!!draft.doNotService} onChange={e => set('doNotService', e.target.checked)}/>
+                                Do not service
+                            </label>
+                            {draft.doNotService && (
+                                <input value={draft.doNotServiceReason || ''} onChange={e => set('doNotServiceReason', e.target.value)}
+                                    placeholder="Reason" style={{ ...custInput, marginTop: 8 }}/>
+                            )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <button onClick={save} disabled={saving}
+                                style={{ padding: '8px 18px', background: saving ? T.inkMuted : T.ink, color: T.surface,
+                                    border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600,
+                                    cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
+                                {saving ? 'Saving…' : (draft._isNew ? 'Create customer' : 'Save changes')}
+                            </button>
+                            {status && (
+                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: T.sans,
+                                    color: status.kind === 'ok' ? T.ok : T.danger }}>{status.msg}</span>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
 export default function DispatchTab() {
-    const { settings, opportunities } = useApp();
+    const { settings, opportunities, accounts } = useApp();
 
     const [view, setView] = useState('board'); // 'board' | 'queue'
     const [selectedJobId, setSelectedJobId] = useState(null);
@@ -790,7 +1065,7 @@ export default function DispatchTab() {
     const [newJobSaving,   setNewJobSaving]   = useState(false);
     const [newJobError,    setNewJobError]    = useState('');
     // customerId is the FK the server requires; `customer` is only the typed text.
-    const EMPTY_JOB = { customer: '', customerId: '', title: '', address: '', city: '', state: '', zip: '',
+    const EMPTY_JOB = { customer: '', customerId: '', accountId: '', title: '', address: '', city: '', state: '', zip: '',
         window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman',
         opportunityId: '', needSkills: [] };
     const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
@@ -1000,7 +1275,11 @@ export default function DispatchTab() {
                 const newCustId = 'dcust_' + crypto.randomUUID();
                 const cres = await dbFetch('/.netlify/functions/dispatch-customers', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: newCustId, name: custName }),
+                    body: JSON.stringify({
+                        id: newCustId,
+                        name: custName,
+                        accountId: newJobForm.accountId || null,
+                    }),
                 });
                 const cdata = await cres.json();
                 if (!cres.ok) throw new Error(cdata?.error || 'Could not create the customer.');
@@ -1033,6 +1312,7 @@ export default function DispatchTab() {
                 id:              jobId,
                 customerId,
                 locationId,
+                accountId:       newJobForm.accountId || createdCust?.accountId || null,
                 title,
                 jobType:         'repair',
                 priority:        newJobForm.priority,
@@ -1126,7 +1406,7 @@ export default function DispatchTab() {
                 <div style={{ borderLeft: `3px solid ${T.goldInk}`, paddingLeft: 10 }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3 }}>DISPATCH</div>
                     <div style={{ fontSize: 24, fontWeight: 700, color: T.ink, letterSpacing: -0.3, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300 }}>
-                        {view === 'board' ? `Today · ${todayStr}` : 'Jobs to schedule'}
+                        {view === 'board' ? `Today · ${todayStr}` : view === 'queue' ? 'Jobs to schedule' : `${customers.length} dispatch customer${customers.length === 1 ? '' : 's'}`}
                     </div>
                     <div style={{ fontSize: 13, color: T.inkMid, marginTop: 4, display: 'flex', gap: 10, alignItems: 'center' }}>
                         <span>{techs.length} techs available · {jobs.length} jobs</span>
@@ -1142,7 +1422,7 @@ export default function DispatchTab() {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {/* View toggle */}
                     <div style={{ display: 'inline-flex', borderRadius: T.r, border: `1px solid ${T.borderStrong}`, overflow: 'hidden' }}>
-                        {[['board', 'Board'], ['queue', 'Queue']].map(([v, l], i) => (
+                        {[['board', 'Board'], ['queue', 'Queue'], ['customers', 'Customers']].map(([v, l], i) => (
                             <button key={v} onClick={() => setView(v)}
                                 style={{ padding: '6px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
                                     background: view === v ? T.ink : 'transparent',
@@ -1269,6 +1549,13 @@ export default function DispatchTab() {
             <div style={{ flex: 1, overflow: 'hidden' }}>
                 {view === 'board' ? (
                     <BoardView jobs={filteredJobs} techs={filteredTechs} skills={skills} onJobClick={handleJobClick}/>
+                ) : view === 'customers' ? (
+                    <CustomersView customers={customers} accounts={accounts}
+                        onSaved={saved => setCustomers(prev => {
+                            const i = prev.findIndex(c => c.id === saved.id);
+                            if (i === -1) return [...prev, saved];
+                            const next = [...prev]; next[i] = saved; return next;
+                        })}/>
                 ) : (
                     <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} skills={skills}
                         selectedJobId={selectedJobId || jobs[0]?.id}
@@ -1308,11 +1595,25 @@ export default function DispatchTab() {
                                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Customer *</label>
                                 <CustomerTypeahead
                                     customers={customers}
+                                    accounts={accounts}
                                     query={newJobForm.customer}
                                     selectedId={newJobForm.customerId}
-                                    onQueryChange={v => setNewJobForm(f => ({ ...f, customer: v, customerId: '' }))}
-                                    onPick={c => setNewJobForm(f => ({ ...f, customer: c.name, customerId: c.id }))}
-                                    onCreateIntent={() => setNewJobForm(f => ({ ...f, customerId: '' }))} />
+                                    selectedAccountId={newJobForm.accountId}
+                                    onQueryChange={v => setNewJobForm(f => ({ ...f, customer: v, customerId: '', accountId: '' }))}
+                                    onPick={c => setNewJobForm(f => ({ ...f, customer: c.name, customerId: c.id, accountId: c.accountId || '' }))}
+                                    onPickAccount={a => setNewJobForm(f => ({
+                                        ...f,
+                                        customer:  a.name,
+                                        customerId: '',
+                                        accountId:  a.id,
+                                        // Prefill the service address from the CRM account, but only
+                                        // where the form is still empty so typing is never clobbered.
+                                        address: f.address || a.address || '',
+                                        city:    f.city    || a.city    || '',
+                                        state:   f.state   || a.state   || '',
+                                        zip:     f.zip     || a.zip     || '',
+                                    }))}
+                                    onCreateIntent={() => setNewJobForm(f => ({ ...f, customerId: '', accountId: '' }))} />
                             </div>
                             {/* Title */}
                             <div>
