@@ -521,6 +521,10 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
 const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBack }) => {
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
     const [addedTechs, setAddedTechs] = useState({});
+    // Pending override: { tech, blockers }. Assigning a blocked technician is a
+    // deliberate act (licence, expired cert, over-hours, double-booking), so it
+    // takes a confirmation that names the blockers rather than a single click.
+    const [overridePrompt, setOverridePrompt] = useState(null);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -532,7 +536,15 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
         return techs
             .map(t => ({ tech: t, ...scoreTech(t, selectedJob, jobs, skills) }))
             .filter(c => c.score >= 50)
-            .sort((a, b) => b.score - a.score)
+            // Blocked candidates sort below every clean one regardless of score.
+            // Score answers "how good a fit is this?"; blockers answer "may this
+            // person work this job at all?" — a tech who is close by and free can
+            // out-score a qualified one, which put an ineligible tech at the top.
+            .sort((a, b) => {
+                const aBlocked = a.blockers.length > 0, bBlocked = b.blockers.length > 0;
+                if (aBlocked !== bBlocked) return aBlocked ? 1 : -1;
+                return b.score - a.score;
+            })
             .slice(0, 5);
     }, [selectedJob, techs, jobs, skills]);
 
@@ -671,7 +683,12 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                                 </div>
                             ) : candidates.map((c, i) => {
                                 const isAdded = addedTechs[c.tech.id];
-                                const canAdd = c.score >= 70;
+                                // Blockers are authoritative. Previously this was score-only,
+                                // so a blocked tech scoring >= 70 got the normal "+ Add"
+                                // button — the warning rendered but nothing enforced it.
+                                // Applies to missing skills, expired certs, over-hours and
+                                // double-booking too, not just licence.
+                                const canAdd = c.blockers.length === 0 && c.score >= 70;
                                 return (
                                     <div key={c.tech.id} style={{ display: 'flex', alignItems: 'center', gap: 12,
                                         padding: '12px 14px', background: T.surface, borderRadius: T.r,
@@ -714,7 +731,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                                                     + Add
                                                 </button>
                                             ) : (
-                                                <button onClick={() => setAddedTechs(prev => ({ ...prev, [c.tech.id]: true }))}
+                                                <button onClick={() => setOverridePrompt({ tech: c.tech, blockers: c.blockers })}
                                                     style={{ padding: '5px 12px', background: 'transparent', color: T.warn,
                                                         border: `1px solid ${T.warn}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                                     Override
@@ -724,6 +741,43 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                                     </div>
                                 );
                             })}
+
+                            {overridePrompt && (
+                                <div onClick={() => setOverridePrompt(null)}
+                                    style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <div onClick={e => e.stopPropagation()}
+                                        style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
+                                            padding: 20, width: 420, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.22)' }}>
+                                        <div style={{ fontSize: 15, fontWeight: 700, color: T.danger, fontFamily: T.sans, marginBottom: 8 }}>
+                                            Assign anyway?
+                                        </div>
+                                        <div style={{ fontSize: 13, color: T.inkMid, fontFamily: T.sans, lineHeight: 1.55, marginBottom: 12 }}>
+                                            <strong>{overridePrompt.tech.name}</strong> does not meet the requirements for this job:
+                                        </div>
+                                        <ul style={{ margin: '0 0 14px 0', paddingLeft: 18 }}>
+                                            {overridePrompt.blockers.map((b, bi) => (
+                                                <li key={bi} style={{ fontSize: 12.5, color: T.danger, fontFamily: T.sans, marginBottom: 4 }}>{b}</li>
+                                            ))}
+                                        </ul>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                                            <button onClick={() => setOverridePrompt(null)}
+                                                style={{ padding: '7px 14px', background: 'transparent', color: T.inkMid,
+                                                    border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                                Cancel
+                                            </button>
+                                            <button onClick={() => {
+                                                    setAddedTechs(prev => ({ ...prev, [overridePrompt.tech.id]: true }));
+                                                    setOverridePrompt(null);
+                                                }}
+                                                style={{ padding: '7px 14px', background: T.danger, color: '#fbf8f3',
+                                                    border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                                Override and assign
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {candidates.length > 0 && (
                                 <div style={{ fontSize: 12, color: T.inkMuted, marginTop: 8, lineHeight: 1.5 }}>
