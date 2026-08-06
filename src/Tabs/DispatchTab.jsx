@@ -518,13 +518,15 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
 };
 
 // ── CREW BUILDER VIEW ─────────────────────────────────────────────────────────
-const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBack }) => {
+const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBack, onScheduled }) => {
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
     const [addedTechs, setAddedTechs] = useState({});
     // Pending override: { tech, blockers }. Assigning a blocked technician is a
     // deliberate act (licence, expired cert, over-hours, double-booking), so it
     // takes a confirmation that names the blockers rather than a single click.
     const [overridePrompt, setOverridePrompt] = useState(null);
+    const [scheduleTime,   setScheduleTime]   = useState('');   // 'HH:MM'
+    const [scheduleError,  setScheduleError]  = useState('');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -547,6 +549,70 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
             })
             .slice(0, 5);
     }, [selectedJob, techs, jobs, skills]);
+
+    // Persist the crew and record the assignment. The lead is the first tech
+    // added; the rest become coTechIds (the schema is singular + co-techs, and
+    // the read mapping already collapses both back into assignedTechIds).
+    // Any tech added despite blockers is named in the audit detail — that is the
+    // point of gating the override behind a confirmation.
+    const handleSchedule = async () => {
+        const addedIds = Object.entries(addedTechs).filter(([, v]) => v).map(([k]) => k);
+        if (!selectedJob || addedIds.length === 0) return;
+        if (!scheduleTime) { setScheduleError('Set a start time before scheduling.'); return; }
+
+        setScheduleError('');
+        setSaving(true);
+        try {
+            const [leadId, ...coIds] = addedIds;
+            const durMin   = Math.round((selectedJob.durationHrs || 2) * 60);
+            const [hh, mm] = scheduleTime.split(':').map(Number);
+            const endMins  = hh * 60 + mm + durMin;
+            const endStr   = `${String(Math.floor(endMins / 60) % 24).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
+
+            const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(selectedJob.id), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id:             selectedJob.id,
+                    status:         'scheduled',
+                    assignedTechId: leadId,
+                    coTechIds:      coIds,
+                    scheduledStart: scheduleTime,
+                    scheduledEnd:   endStr,
+                    timeSlot:       'exact',
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (res.status === 403) throw new Error('Your role cannot schedule jobs.');
+                throw new Error(data.error || ('HTTP ' + res.status));
+            }
+
+            // Blockers ignored by an explicit override, named for the audit trail.
+            const overridden = candidates
+                .filter(c => addedIds.includes(c.tech.id) && c.blockers.length > 0)
+                .map(c => `${c.tech.name}: ${c.blockers.join('; ')}`);
+            const crewNames = addedIds.map(id => techs.find(t => t.id === id)?.name || id);
+
+            // The parent owns jobs state and the audit logger.
+            onScheduled({
+                jobId:     selectedJob.id,
+                jobName:   selectedJob.title || selectedJob.customer,
+                techIds:   addedIds,
+                crewNames,
+                startHr:   hh + mm / 60,
+                startTime: scheduleTime,
+                overridden,
+            });
+
+            setAddedTechs({});
+            setScheduleTime('');
+        } catch (e) {
+            setScheduleError(e.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const crewSlots = selectedJob?.crewSize || 2;
     const addedCount = Object.values(addedTechs).filter(Boolean).length;
@@ -802,19 +868,28 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                                     ⚠ {addedCount}/{crewSlots} crew — confirm?
                                 </span>
                             )}
-                            <button style={{ padding: '7px 14px', background: T.surface, border: `1px solid ${T.borderStrong}`,
-                                borderRadius: T.r, fontSize: 12.5, fontWeight: 500, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}>
-                                Save draft
-                            </button>
-                            <button style={{ padding: '7px 14px', background: T.surface, border: `1px solid ${T.borderStrong}`,
-                                borderRadius: T.r, fontSize: 12.5, fontWeight: 500, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}>
+                            {scheduleError && (
+                                <span style={{ fontSize: 11.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{scheduleError}</span>
+                            )}
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
+                                Start
+                                <input type="time" step="900" value={scheduleTime}
+                                    onChange={e => { setScheduleTime(e.target.value); setScheduleError(''); }}
+                                    style={{ padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r,
+                                        fontSize: 12.5, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}/>
+                            </label>
+                            {/* SMS is stubbed until the Twilio A2P campaign clears carrier review.
+                                Scheduling persists regardless; notification is a separate step. */}
+                            <button disabled title="SMS notification is not enabled yet"
+                                style={{ padding: '7px 14px', background: T.surface, border: `1px solid ${T.border}`,
+                                    borderRadius: T.r, fontSize: 12.5, fontWeight: 500, color: T.inkMuted, cursor: 'default', fontFamily: T.sans }}>
                                 Notify techs (SMS)
                             </button>
-                            <button disabled={addedCount === 0} onClick={() => setSaving(true)}
-                                style={{ padding: '7px 16px', background: addedCount > 0 ? T.ink : T.borderStrong,
+                            <button disabled={addedCount === 0 || saving} onClick={handleSchedule}
+                                style={{ padding: '7px 16px', background: (addedCount > 0 && !saving) ? T.ink : T.borderStrong,
                                     color: '#fbf8f3', border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
-                                    cursor: addedCount > 0 ? 'pointer' : 'default', fontFamily: T.sans, transition: 'background 120ms' }}>
-                                {saving ? 'Scheduling…' : 'Schedule & notify'}
+                                    cursor: (addedCount > 0 && !saving) ? 'pointer' : 'default', fontFamily: T.sans, transition: 'background 120ms' }}>
+                                {saving ? 'Scheduling…' : 'Schedule crew'}
                             </button>
                         </div>
                     </>
@@ -1426,7 +1501,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
 
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
 export default function DispatchTab() {
-    const { settings, opportunities, accounts } = useApp();
+    const { settings, opportunities, accounts, addAudit } = useApp();
 
     const [view, setView] = useState('board'); // 'board' | 'queue'
     const [selectedJobId, setSelectedJobId] = useState(null);
@@ -1553,8 +1628,8 @@ export default function DispatchTab() {
                         opportunityId:  j.opportunityId,
                         customer:       cust?.name || j.title,
                         address:        cust ? `${cust.billingAddress || ''}, ${cust.billingCity || ''}`.trim().replace(/^,\s*/, '') : '',
-                        needSkills:     [], // skills stored as strings in DB — map via settings.dispatchSkills
-                        crewSize:       [j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean).length || 1,
+                        needSkills:     j.needSkills || [],
+                        crewSize:       j.crewSize || ([j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean).length || 1),
                         durationHrs:    j.durationMinutes ? j.durationMinutes / 60 : 2,
                         priority:       j.priority === 'emergency' ? 'urgent' : j.priority === 'low' ? 'low' : 'standard',
                         window:         j.timeSlot === 'exact' && j.scheduledStart
@@ -1562,7 +1637,9 @@ export default function DispatchTab() {
                             : j.scheduledDate || 'TBD',
                         equipment:      (j.equipmentIds || []).join(', '),
                         value:          parseFloat(j.invoiceAmount || 0),
-                        minLicense:     'Journeyman',
+                        // Was hardcoded 'Journeyman', discarding the stored requirement —
+                        // so every licence blocker compared against a constant.
+                        minLicense:     j.minLicense || null,
                         preferredTechId: j.assignedTechId || null,
                         assignedTechIds: [j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean),
                         start:          startHr,
@@ -1946,7 +2023,23 @@ export default function DispatchTab() {
                     <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} skills={skills}
                         selectedJobId={selectedJobId || jobs[0]?.id}
                         onSelectJob={setSelectedJobId}
-                        onBack={() => setView('board')}/>
+                        onBack={() => setView('board')}
+                        onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, overridden }) => {
+                            setJobs(prev => prev.map(j => j.id === jobId
+                                ? { ...j, assignedTechIds: techIds, start: startHr, status: 'scheduled', window: startTime }
+                                : j));
+                            if (addAudit) {
+                                addAudit(
+                                    overridden.length ? 'dispatch.schedule.override' : 'dispatch.schedule',
+                                    'dispatch_job',
+                                    jobId,
+                                    jobName,
+                                    `Crew: ${crewNames.join(', ')} at ${startTime}` +
+                                    (overridden.length ? ` — OVERRIDE: ${overridden.join(' | ')}` : '')
+                                );
+                            }
+                            setSelectedJobId(null);
+                        }}/>
                 )}
             </div>
 
