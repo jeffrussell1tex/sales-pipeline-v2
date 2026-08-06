@@ -885,9 +885,9 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                                     </span>
                                 )}
                             </div>
-                            {addedCount > 0 && addedCount < crewSlots && (
-                                <span style={{ fontSize: 11.5, color: T.warn, fontWeight: 600 }}>
-                                    ⚠ {addedCount}/{crewSlots} crew — confirm?
+                            {addedCount > 0 && (
+                                <span style={{ fontSize: 11.5, color: T.warn, fontWeight: 600, fontFamily: T.sans }}>
+                                    {addedCount}/{crewSlots} added — not scheduled yet
                                 </span>
                             )}
                             {scheduleError && (
@@ -922,7 +922,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                                 style={{ padding: '7px 16px', background: (addedCount > 0 && !saving) ? T.ink : T.borderStrong,
                                     color: '#fbf8f3', border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
                                     cursor: (addedCount > 0 && !saving) ? 'pointer' : 'default', fontFamily: T.sans, transition: 'background 120ms' }}>
-                                {saving ? 'Scheduling…' : 'Schedule crew'}
+                                {saving ? 'Scheduling…' : addedCount > 0 ? `Schedule crew (${addedCount})` : 'Schedule crew'}
                             </button>
                         </div>
                     </>
@@ -1047,6 +1047,44 @@ const WeekBoardView = ({ jobs, techs, skills, anchor, onJobClick }) => {
                     No technicians yet.
                 </div>
             )}
+
+            {/* Jobs with a date but no crew. Week renders jobs inside technician
+                rows, so without this row an uncrewed job is invisible here while
+                still showing in the month grid — the two views disagreed. */}
+            {(() => {
+                const uncrewed = jobs.filter(j => (j.assignedTechIds || []).length === 0);
+                if (uncrewed.length === 0) return null;
+                return (
+                    <div style={{ display: 'flex', borderBottom: `2px solid ${T.borderStrong}`, minHeight: 68, background: `${T.warn}0a` }}>
+                        <div style={{ width: RAIL_W, flexShrink: 0, borderRight: `1px solid ${T.border}`, padding: '10px 12px' }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.warn, fontFamily: T.sans }}>Needs a crew</div>
+                            <div style={{ fontSize: 10.5, fontFamily: T.mono, color: T.inkMuted }}>
+                                {uncrewed.length} job{uncrewed.length === 1 ? '' : 's'}
+                            </div>
+                        </div>
+                        {days.map(d => {
+                            const ds = ymd(d);
+                            const cellJobs = uncrewed.filter(j => j.scheduledDate === ds);
+                            return (
+                                <div key={ds} style={{ flex: 1, minWidth: 120, borderRight: `1px solid ${T.border}`,
+                                    padding: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {cellJobs.map(j => (
+                                        <div key={j.id} onClick={() => onJobClick(j)}
+                                            style={{ padding: '4px 6px', borderRadius: T.r, cursor: 'pointer',
+                                                background: T.surface, border: `1px dashed ${T.warn}` }}>
+                                            <div style={{ fontSize: 11, fontWeight: 600, color: T.ink, fontFamily: T.sans,
+                                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {j.title || j.customer}
+                                            </div>
+                                            <div style={{ fontSize: 10, color: T.warn, fontFamily: T.sans }}>Build crew →</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
 
             {techs.map(tech => {
                 const techJobs = jobs.filter(j => (j.assignedTechIds || []).includes(tech.id));
