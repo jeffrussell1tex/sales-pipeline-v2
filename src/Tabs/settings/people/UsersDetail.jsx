@@ -1086,94 +1086,26 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
                         )}
                     </SectionCard>
 
-                    {/* Dispatch tech profile — only shown if dispatch is enabled */}
-                    {settings?.dispatchEnabled && (() => {
-                        const dSkills   = settings?.dispatchSkills   || [];
-                        const dCerts    = settings?.dispatchCerts    || [];
-                        const dLicenses = settings?.dispatchLicenses || ['Apprentice','Journeyman','Master','Lead'];
-                        const dVehicles = settings?.dispatchVehicles || [];
-                        const userSkills = user.dispatchSkills || [];
-                        const userCerts  = user.dispatchCerts  || [];
-
-                        const saveDispatchProfile = async (updates) => {
-                            const updatedUsers = (settings.users || []).map(u =>
-                                u.id === user.id || u.name === user.name ? { ...u, ...updates } : u
-                            );
-                            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ users: updatedUsers }) });
-                        };
-
-                        return (
-                            <SectionCard title="Dispatch technician" desc="Whether this person is dispatched to field jobs, and how they are scheduled.">
-                                {/* The toggle leads. Previously this whole card was gated on the
-                                    ORG-wide settings.dispatchEnabled flag, so every user in a
-                                    dispatch-licensed org appeared to have a technician profile —
-                                    including sales reps who will never be dispatched. The
-                                    per-user flag is what DispatchTechDetail actually filters on. */}
-                                <div style={{ display:'flex', alignItems:'center', gap:10, paddingBottom: user.dispatchEnabled ? 14 : 0, borderBottom: user.dispatchEnabled ? `1px solid ${T.border}` : 'none', marginBottom: user.dispatchEnabled ? 14 : 0 }}>
-                                    <div onClick={async () => { await saveDispatchProfile({ dispatchEnabled: !user.dispatchEnabled }); }}
-                                        style={{ width:30, height:18, borderRadius:9, background: user.dispatchEnabled ? T.ok : T.border, position:'relative', flexShrink:0, cursor:'pointer', transition:'background 120ms' }}>
-                                        <span style={{ position:'absolute', top:2, left: user.dispatchEnabled ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>Active technician</div>
-                                        <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>
-                                            {user.dispatchEnabled
-                                                ? 'Included in dispatch crew suggestions.'
-                                                : 'Not a technician — turn on to schedule this person on field jobs.'}
-                                        </div>
-                                    </div>
+                    {/* Dispatch technician — pointer only.
+                        The previous card wrote skills, certs, licence, vehicle, hours cap and
+                        the active-tech toggle via PUT /settings { users: [...] }. That was a
+                        silent no-op twice over: settings.mjs has no `users` key in its whitelist
+                        (users live in their own table), and the handler never called setSettings,
+                        so nothing persisted and nothing re-rendered. dispatch_technicians is the
+                        source of truth — manage technicians under Dispatch → Technicians. */}
+                    {settings?.dispatchEnabled && (
+                        <SectionCard title="Dispatch technician" desc="Field technicians are managed in the Dispatch tab.">
+                            <div style={{ fontSize:12.5, color:T.inkMid, fontFamily:T.sans, lineHeight:1.6 }}>
+                                Skills, certifications, employment type, rates and vehicle assignment live on
+                                the technician record, not on the user account — subcontractors can be scheduled
+                                without an app login at all.
+                                <div style={{ marginTop:8, color:T.inkMuted }}>
+                                    Go to <strong>Dispatch → Technicians</strong> to add this person as a technician
+                                    and link them to this user account.
                                 </div>
-                                {user.dispatchEnabled && (
-                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-                                    <div>
-                                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8 }}>Skills</div>
-                                        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                                            {dSkills.map(s => {
-                                                const active = userSkills.includes(s.id);
-                                                return (
-                                                    <span key={s.id} onClick={async () => {
-                                                        const next = active ? userSkills.filter(id => id !== s.id) : [...userSkills, s.id];
-                                                        await saveDispatchProfile({ dispatchSkills: next });
-                                                    }} style={{
-                                                        fontSize:11, padding:'3px 9px', borderRadius:8, cursor:'pointer',
-                                                        background: active ? `${s.color}20` : T.surface2,
-                                                        border: `1px solid ${active ? s.color : T.border}`,
-                                                        color: active ? s.color : T.inkMuted, fontWeight: active ? 700 : 400,
-                                                        fontFamily:T.sans, transition:'all 100ms',
-                                                    }}>{s.name}</span>
-                                                );
-                                            })}
-                                            {dSkills.length === 0 && <span style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic' }}>No skills configured. Add in Settings → Skills & certifications.</span>}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8 }}>License level</div>
-                                        <select defaultValue={user.dispatchLicense || dLicenses[0]}
-                                            onChange={async e => { await saveDispatchProfile({ dispatchLicense: e.target.value }); }}
-                                            style={{ padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, color:T.ink }}>
-                                            {dLicenses.map(l => <option key={l}>{l}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8 }}>Vehicle</div>
-                                        <select defaultValue={user.vehicle || ''}
-                                            onChange={async e => { await saveDispatchProfile({ vehicle: e.target.value }); }}
-                                            style={{ padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, color:T.ink }}>
-                                            <option value="">— No vehicle —</option>
-                                            {dVehicles.map(v => <option key={v.id} value={v.name}>{v.name} ({v.type})</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8 }}>Hours cap / week</div>
-                                        <input type="number" defaultValue={user.hoursCap || 40} min={1} max={80}
-                                            onBlur={async e => { await saveDispatchProfile({ hoursCap: parseInt(e.target.value) || 40 }); }}
-                                            style={{ padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', width:80 }}/>
-                                    </div>
-                                </div>
-                                )}
-                            </SectionCard>
-                        );
-                    })()}
+                            </div>
+                        </SectionCard>
+                    )}
 
                 </div>
             </div>

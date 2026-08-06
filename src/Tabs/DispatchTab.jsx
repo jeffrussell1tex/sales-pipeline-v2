@@ -1086,7 +1086,7 @@ const CustomersView = ({ customers, accounts, onSaved }) => {
 const EMPLOYMENT_TYPES = ['employee', 'subcontractor'];
 const TECH_STATUSES    = ['active', 'inactive', 'on_leave'];
 
-const TechniciansView = ({ techsRaw, users, vehicles, skills, onSaved }) => {
+const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, onSaved }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
@@ -1252,8 +1252,15 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, onSaved }) => {
                             </CustFieldRow>
                         </div>
 
-                        {(skills || []).length > 0 && (
-                            <CustFieldRow label="Skills">
+                        {/* Skills and certifications are always shown. Hiding them when the
+                            catalogue is empty made it look as though there was nowhere to set
+                            them; the empty state now says where the catalogue is configured. */}
+                        <CustFieldRow label="Skills">
+                            {(skills || []).length === 0 ? (
+                                <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                                    No skills defined yet — add them under Settings → Dispatch → Skills &amp; certifications.
+                                </div>
+                            ) : (
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                                     {(skills || []).map(s => {
                                         const on = (draft.skills || []).includes(s.id);
@@ -1270,8 +1277,33 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, onSaved }) => {
                                         );
                                     })}
                                 </div>
-                            </CustFieldRow>
-                        )}
+                            )}
+                        </CustFieldRow>
+
+                        <CustFieldRow label="Certifications">
+                            {(certs || []).length === 0 ? (
+                                <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                                    No certifications defined yet — add them under Settings → Dispatch → Skills &amp; certifications.
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                    {(certs || []).map(c => {
+                                        const on = (draft.certifications || []).includes(c.id);
+                                        return (
+                                            <span key={c.id}
+                                                onClick={() => set('certifications', on
+                                                    ? (draft.certifications || []).filter(x => x !== c.id)
+                                                    : [...(draft.certifications || []), c.id])}
+                                                style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                    border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
+                                                    color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
+                                                {c.name}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </CustFieldRow>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                             <CustFieldRow label="Labor rate / hr">
@@ -1809,7 +1841,7 @@ export default function DispatchTab() {
                     <BoardView jobs={filteredJobs} techs={filteredTechs} skills={skills} onJobClick={handleJobClick}/>
                 ) : view === 'techs' ? (
                     <TechniciansView techsRaw={techsRaw} users={settings?.users || []}
-                        vehicles={vehicles} skills={skills}
+                        vehicles={vehicles} skills={skills} certs={settings?.dispatchCerts || []}
                         onSaved={saved => {
                             setTechsRaw(prev => {
                                 const i = prev.findIndex(t => t.id === saved.id);
