@@ -1103,7 +1103,27 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
                         };
 
                         return (
-                            <SectionCard title="Dispatch tech profile" desc="Skills, certifications, and scheduling settings for this technician.">
+                            <SectionCard title="Dispatch technician" desc="Whether this person is dispatched to field jobs, and how they are scheduled.">
+                                {/* The toggle leads. Previously this whole card was gated on the
+                                    ORG-wide settings.dispatchEnabled flag, so every user in a
+                                    dispatch-licensed org appeared to have a technician profile —
+                                    including sales reps who will never be dispatched. The
+                                    per-user flag is what DispatchTechDetail actually filters on. */}
+                                <div style={{ display:'flex', alignItems:'center', gap:10, paddingBottom: user.dispatchEnabled ? 14 : 0, borderBottom: user.dispatchEnabled ? `1px solid ${T.border}` : 'none', marginBottom: user.dispatchEnabled ? 14 : 0 }}>
+                                    <div onClick={async () => { await saveDispatchProfile({ dispatchEnabled: !user.dispatchEnabled }); }}
+                                        style={{ width:30, height:18, borderRadius:9, background: user.dispatchEnabled ? T.ok : T.border, position:'relative', flexShrink:0, cursor:'pointer', transition:'background 120ms' }}>
+                                        <span style={{ position:'absolute', top:2, left: user.dispatchEnabled ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>Active technician</div>
+                                        <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>
+                                            {user.dispatchEnabled
+                                                ? 'Included in dispatch crew suggestions.'
+                                                : 'Not a technician — turn on to schedule this person on field jobs.'}
+                                        </div>
+                                    </div>
+                                </div>
+                                {user.dispatchEnabled && (
                                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
                                     <div>
                                         <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8 }}>Skills</div>
@@ -1149,19 +1169,8 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
                                             onBlur={async e => { await saveDispatchProfile({ hoursCap: parseInt(e.target.value) || 40 }); }}
                                             style={{ padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', width:80 }}/>
                                     </div>
-                                    <div style={{ gridColumn:'1 / -1' }}>
-                                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                                            <div onClick={async () => { await saveDispatchProfile({ dispatchEnabled: !user.dispatchEnabled }); }}
-                                                style={{ width:30, height:18, borderRadius:9, background: user.dispatchEnabled ? T.ok : T.border, position:'relative', flexShrink:0, cursor:'pointer', transition:'background 120ms' }}>
-                                                <span style={{ position:'absolute', top:2, left: user.dispatchEnabled ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
-                                            </div>
-                                            <div>
-                                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>Active tech</div>
-                                                <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Include this person in dispatch crew suggestions</div>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
+                                )}
                             </SectionCard>
                         );
                     })()}

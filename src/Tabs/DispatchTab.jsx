@@ -815,6 +815,29 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
 };
 
 
+// Board/CrewBuilder shape for a technician row. Hoisted to module scope so the
+// Technicians editor can re-normalise a single saved row without duplicating it.
+// Note this mapping intentionally drops userId, rates and notes — the board does
+// not need them — which is why the editor works off the raw rows instead.
+const normaliseTech = (t) => ({
+    id:             t.id,
+    name:           `${t.firstName} ${t.lastName}`.trim(),
+    firstName:      t.firstName,
+    lastName:       t.lastName,
+    email:          t.email,
+    phone:          t.phone,
+    license:        t.employmentType === 'subcontractor' ? 'Journeyman' : (t.skills?.[0] ? 'Journeyman' : 'Apprentice'),
+    dispatchSkills: t.skills        || [],
+    dispatchCerts:  t.certifications || [],
+    hoursThisWeek:  0,
+    hoursCap:       40,
+    vehicle:        t.assignedVehicleId || null,
+    baseLocation:   t.homeZip || null,
+    status:         t.status,
+    employmentType: t.employmentType,
+    avatarInitials: t.avatarInitials || `${t.firstName?.[0] || ''}${t.lastName?.[0] || ''}`.toUpperCase(),
+});
+
 // ── Dispatch customers view ───────────────────────────────────────────────────
 // Until now nothing in the app could list, create, or edit dispatch customers —
 // rows existed only in the database. This is the missing admin surface, and the
@@ -1053,6 +1076,242 @@ const CustomersView = ({ customers, accounts, onSaved }) => {
     );
 };
 
+
+// ── Technicians view ──────────────────────────────────────────────────────────
+// dispatch_technicians is the source of truth for who can be dispatched. userId
+// is a nullable FK to users: an employee tech who needs the mobile app gets one,
+// a subcontractor who never logs in does not — so being schedulable never costs
+// a Clerk seat. The old settings.users[].dispatch* fields are a separate, board-
+// invisible store and are being retired in favour of this table.
+const EMPLOYMENT_TYPES = ['employee', 'subcontractor'];
+const TECH_STATUSES    = ['active', 'inactive', 'on_leave'];
+
+const TechniciansView = ({ techsRaw, users, vehicles, skills, onSaved }) => {
+    const [query,      setQuery]      = React.useState('');
+    const [selectedId, setSelectedId] = React.useState(null);
+    const [draft,      setDraft]      = React.useState(null);
+    const [saving,     setSaving]     = React.useState(false);
+    const [status,     setStatus]     = React.useState(null);
+
+    const q = query.trim().toLowerCase();
+    const list = (techsRaw || [])
+        .filter(t => !q || `${t.firstName} ${t.lastName}`.toLowerCase().includes(q))
+        .slice()
+        .sort((a, b) => `${a.lastName}${a.firstName}`.localeCompare(`${b.lastName}${b.firstName}`));
+
+    const selected = (techsRaw || []).find(t => t.id === selectedId) || null;
+
+    React.useEffect(() => {
+        setDraft(selected ? { ...selected } : null);
+        setStatus(null);
+    }, [selectedId]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+
+    const startNew = () => {
+        setSelectedId(null);
+        setStatus(null);
+        setDraft({ id: 'dtech_' + crypto.randomUUID(), _isNew: true, firstName: '', lastName: '',
+            userId: '', email: '', phone: '', employmentType: 'employee', status: 'active',
+            homeZip: '', skills: [], laborRate: '', overtimeRate: '', assignedVehicleId: '', notes: '' });
+    };
+
+    const save = async () => {
+        if (!draft || !(draft.firstName || '').trim() || !(draft.lastName || '').trim()) {
+            setStatus({ kind: 'err', msg: 'First and last name are required.' }); return;
+        }
+        setSaving(true); setStatus(null);
+        try {
+            const body = { ...draft,
+                firstName: draft.firstName.trim(),
+                lastName:  draft.lastName.trim(),
+                userId:    draft.userId || null,
+                assignedVehicleId: draft.assignedVehicleId || null,
+                laborRate:    draft.laborRate    === '' ? null : draft.laborRate,
+                overtimeRate: draft.overtimeRate === '' ? null : draft.overtimeRate,
+            };
+            delete body._isNew;
+            const url = draft._isNew
+                ? '/.netlify/functions/dispatch-technicians'
+                : '/.netlify/functions/dispatch-technicians?id=' + encodeURIComponent(draft.id);
+            const res = await dbFetch(url, {
+                method: draft._isNew ? 'POST' : 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (res.status === 403) throw new Error('Your role cannot change technicians.');
+                throw new Error(data.error || ('HTTP ' + res.status));
+            }
+            const saved = data.technician;
+            if (saved) { onSaved(saved); setSelectedId(saved.id); }
+            setStatus({ kind: 'ok', msg: draft._isNew ? 'Technician created' : 'Saved' });
+        } catch (e) {
+            setStatus({ kind: 'err', msg: e.message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const linkedUser = draft && draft.userId ? (users || []).find(u => u.id === draft.userId) : null;
+
+    return (
+        <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+            <div style={{ width: 300, borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', background: T.surface }}>
+                <div style={{ padding: 12, borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 8 }}>
+                    <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search technicians"
+                        style={{ ...custInput, padding: '7px 9px', fontSize: 12.5 }}/>
+                    <button onClick={startNew}
+                        style={{ padding: '7px 12px', background: T.ink, color: T.surface, border: 'none',
+                            borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                        + New
+                    </button>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                    {list.length === 0 && (
+                        <div style={{ padding: 16, fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans }}>
+                            No technicians{q ? ' match that search' : ' yet'}.
+                        </div>
+                    )}
+                    {list.map(t => (
+                        <div key={t.id} onClick={() => setSelectedId(t.id)}
+                            style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
+                                background: t.id === selectedId ? T.surface2 : 'transparent' }}>
+                            <div style={{ fontSize: 13, fontWeight: t.id === selectedId ? 700 : 500, color: T.ink, fontFamily: T.sans }}>
+                                {t.firstName} {t.lastName}
+                            </div>
+                            <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{t.employmentType}</span>
+                                {t.userId
+                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.ok}14`, color: T.ok, fontWeight: 700 }}>app user</span>
+                                    : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.inkMuted}14`, color: T.inkMuted, fontWeight: 700 }}>no login</span>}
+                                {t.status !== 'active' && (
+                                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>{t.status}</span>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+                {!draft ? (
+                    <div style={{ fontSize: 13, color: T.inkMuted, fontFamily: T.sans }}>
+                        Select a technician, or create one.
+                    </div>
+                ) : (
+                    <div style={{ maxWidth: 620 }}>
+                        <div style={{ fontSize: 20, fontStyle: 'italic', fontWeight: 300, color: T.ink, fontFamily: T.serif, marginBottom: 16 }}>
+                            {draft._isNew ? 'New technician' : `${draft.firstName} ${draft.lastName}`}
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="First name *">
+                                <input value={draft.firstName || ''} onChange={e => set('firstName', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                            <CustFieldRow label="Last name *">
+                                <input value={draft.lastName || ''} onChange={e => set('lastName', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                        </div>
+
+                        <CustFieldRow label="Linked app user">
+                            <select value={draft.userId || ''} onChange={e => set('userId', e.target.value)} style={custInput}>
+                                <option value="">— No login (subcontractor) —</option>
+                                {(users || []).map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+                            </select>
+                            <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                {linkedUser
+                                    ? 'Signs in to the app. Required for mobile access to their own jobs.'
+                                    : 'Schedulable without an app login — no seat is consumed.'}
+                            </div>
+                        </CustFieldRow>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="Email">
+                                <input value={draft.email || ''} onChange={e => set('email', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                            <CustFieldRow label="Phone">
+                                <input value={draft.phone || ''} onChange={e => set('phone', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="Employment">
+                                <select value={draft.employmentType || 'employee'} onChange={e => set('employmentType', e.target.value)} style={custInput}>
+                                    {EMPLOYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </CustFieldRow>
+                            <CustFieldRow label="Status">
+                                <select value={draft.status || 'active'} onChange={e => set('status', e.target.value)} style={custInput}>
+                                    {TECH_STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                                </select>
+                            </CustFieldRow>
+                            <CustFieldRow label="Home zip">
+                                <input value={draft.homeZip || ''} onChange={e => set('homeZip', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                        </div>
+
+                        {(skills || []).length > 0 && (
+                            <CustFieldRow label="Skills">
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                    {(skills || []).map(s => {
+                                        const on = (draft.skills || []).includes(s.id);
+                                        return (
+                                            <span key={s.id}
+                                                onClick={() => set('skills', on
+                                                    ? (draft.skills || []).filter(x => x !== s.id)
+                                                    : [...(draft.skills || []), s.id])}
+                                                style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                    border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
+                                                    color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
+                                                {s.name}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            </CustFieldRow>
+                        )}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="Labor rate / hr">
+                                <input type="number" step="0.01" value={draft.laborRate ?? ''} onChange={e => set('laborRate', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                            <CustFieldRow label="Overtime rate / hr">
+                                <input type="number" step="0.01" value={draft.overtimeRate ?? ''} onChange={e => set('overtimeRate', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                            <CustFieldRow label="Assigned vehicle">
+                                <select value={draft.assignedVehicleId || ''} onChange={e => set('assignedVehicleId', e.target.value)} style={custInput}>
+                                    <option value="">— None —</option>
+                                    {(vehicles || []).map(v => <option key={v.id} value={v.id}>{v.name || v.label || v.id}</option>)}
+                                </select>
+                            </CustFieldRow>
+                        </div>
+
+                        <CustFieldRow label="Notes">
+                            <textarea value={draft.notes || ''} onChange={e => set('notes', e.target.value)} rows={3}
+                                style={{ ...custInput, resize: 'vertical' }}/>
+                        </CustFieldRow>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <button onClick={save} disabled={saving}
+                                style={{ padding: '8px 18px', background: saving ? T.inkMuted : T.ink, color: T.surface,
+                                    border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600,
+                                    cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
+                                {saving ? 'Saving…' : (draft._isNew ? 'Create technician' : 'Save changes')}
+                            </button>
+                            {status && (
+                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: T.sans,
+                                    color: status.kind === 'ok' ? T.ok : T.danger }}>{status.msg}</span>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
 export default function DispatchTab() {
     const { settings, opportunities, accounts } = useApp();
@@ -1074,6 +1333,8 @@ export default function DispatchTab() {
     const [jobs,       setJobs]       = useState([]);
     const [techs,      setTechs]      = useState([]);
     const [vehicles,   setVehicles]   = useState([]);
+    // Raw technician rows (userId, rates, notes) for the Technicians editor.
+    const [techsRaw,   setTechsRaw]   = useState([]);
     const [equipment,  setEquipment]  = useState([]);
     const [customers,  setCustomers]  = useState([]);
     const [loading,    setLoading]    = useState(true);
@@ -1122,6 +1383,19 @@ export default function DispatchTab() {
 
                 if (cancelled) return;
 
+                // Surface non-2xx responses. Previously every response was parsed
+                // blindly, so a 500 or 403 produced `{error}` with no `.customers`
+                // key, fell through `|| []`, and rendered as "no customers yet" —
+                // an endpoint failure was indistinguishable from an empty table.
+                const failed = [
+                    ['technicians', techsRes], ['vehicles', vehiclesRes], ['equipment', equipRes],
+                    ['customers', custsRes],   ['jobs', jobsRes],
+                ].filter(([, r]) => !r.ok);
+                if (failed.length) {
+                    const detail = failed.map(([n, r]) => `${n} (${r.status})`).join(', ');
+                    throw new Error(`Dispatch data failed to load: ${detail}`);
+                }
+
                 const [techsData, vehiclesData, equipData, custsData, jobsData] = await Promise.all([
                     techsRes.json(),
                     vehiclesRes.json(),
@@ -1131,24 +1405,7 @@ export default function DispatchTab() {
                 ]);
 
                 // Normalise technicians — map DB fields to what BoardView/CrewBuilder expect
-                const dbTechs = (techsData.technicians || []).map(t => ({
-                    id:             t.id,
-                    name:           `${t.firstName} ${t.lastName}`.trim(),
-                    firstName:      t.firstName,
-                    lastName:       t.lastName,
-                    email:          t.email,
-                    phone:          t.phone,
-                    license:        t.employmentType === 'subcontractor' ? 'Journeyman' : (t.skills?.[0] ? 'Journeyman' : 'Apprentice'),
-                    dispatchSkills: t.skills        || [],
-                    dispatchCerts:  t.certifications || [],
-                    hoursThisWeek:  0, // calculated from jobs below
-                    hoursCap:       40,
-                    vehicle:        t.assignedVehicleId || null,
-                    baseLocation:   t.homeZip || null,
-                    status:         t.status,
-                    employmentType: t.employmentType,
-                    avatarInitials: t.avatarInitials || `${t.firstName?.[0] || ''}${t.lastName?.[0] || ''}`.toUpperCase(),
-                }));
+                const dbTechs = (techsData.technicians || []).map(normaliseTech);
 
                 // Calculate hours this week from scheduled jobs
                 const weekStart = new Date();
@@ -1233,12 +1490,13 @@ export default function DispatchTab() {
                     }));
 
                 setTechs(dbTechs);
+                setTechsRaw(techsData.technicians || []);
                 setVehicles(vehiclesData.vehicles  || []);
                 setEquipment(equipData.equipment   || []);
                 setCustomers(custsData.customers   || []);
                 setJobs([...normJobs, ...autoJobs]);
             } catch (err) {
-                if (!cancelled) setLoadError('Failed to load dispatch data. Please refresh.');
+                if (!cancelled) setLoadError(err.message || 'Failed to load dispatch data. Please refresh.');
                 console.error('DispatchTab load error:', err);
             } finally {
                 if (!cancelled) setLoading(false);
@@ -1406,7 +1664,7 @@ export default function DispatchTab() {
                 <div style={{ borderLeft: `3px solid ${T.goldInk}`, paddingLeft: 10 }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3 }}>DISPATCH</div>
                     <div style={{ fontSize: 24, fontWeight: 700, color: T.ink, letterSpacing: -0.3, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300 }}>
-                        {view === 'board' ? `Today · ${todayStr}` : view === 'queue' ? 'Jobs to schedule' : `${customers.length} dispatch customer${customers.length === 1 ? '' : 's'}`}
+                        {view === 'board' ? `Today · ${todayStr}` : view === 'queue' ? 'Jobs to schedule' : view === 'techs' ? `${techsRaw.length} technician${techsRaw.length === 1 ? '' : 's'}` : `${customers.length} dispatch customer${customers.length === 1 ? '' : 's'}`}
                     </div>
                     <div style={{ fontSize: 13, color: T.inkMid, marginTop: 4, display: 'flex', gap: 10, alignItems: 'center' }}>
                         <span>{techs.length} techs available · {jobs.length} jobs</span>
@@ -1422,7 +1680,7 @@ export default function DispatchTab() {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     {/* View toggle */}
                     <div style={{ display: 'inline-flex', borderRadius: T.r, border: `1px solid ${T.borderStrong}`, overflow: 'hidden' }}>
-                        {[['board', 'Board'], ['queue', 'Queue'], ['customers', 'Customers']].map(([v, l], i) => (
+                        {[['board', 'Board'], ['queue', 'Queue'], ['customers', 'Customers'], ['techs', 'Technicians']].map(([v, l], i) => (
                             <button key={v} onClick={() => setView(v)}
                                 style={{ padding: '6px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
                                     background: view === v ? T.ink : 'transparent',
@@ -1549,6 +1807,22 @@ export default function DispatchTab() {
             <div style={{ flex: 1, overflow: 'hidden' }}>
                 {view === 'board' ? (
                     <BoardView jobs={filteredJobs} techs={filteredTechs} skills={skills} onJobClick={handleJobClick}/>
+                ) : view === 'techs' ? (
+                    <TechniciansView techsRaw={techsRaw} users={settings?.users || []}
+                        vehicles={vehicles} skills={skills}
+                        onSaved={saved => {
+                            setTechsRaw(prev => {
+                                const i = prev.findIndex(t => t.id === saved.id);
+                                if (i === -1) return [...prev, saved];
+                                const next = [...prev]; next[i] = saved; return next;
+                            });
+                            setTechs(prev => {
+                                const norm = normaliseTech(saved);
+                                const i = prev.findIndex(t => t.id === saved.id);
+                                if (i === -1) return [...prev, norm];
+                                const next = [...prev]; next[i] = { ...prev[i], ...norm }; return next;
+                            });
+                        }}/>
                 ) : view === 'customers' ? (
                     <CustomersView customers={customers} accounts={accounts}
                         onSaved={saved => setCustomers(prev => {
