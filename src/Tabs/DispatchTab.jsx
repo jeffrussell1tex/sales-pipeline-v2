@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch, waitForToken } from '../utils/storage';
+import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -871,13 +872,16 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                             {scheduleError && (
                                 <span style={{ fontSize: 11.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{scheduleError}</span>
                             )}
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
-                                Start
-                                <input type="time" step="900" value={scheduleTime}
-                                    onChange={e => { setScheduleTime(e.target.value); setScheduleError(''); }}
-                                    style={{ padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r,
-                                        fontSize: 12.5, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}/>
-                            </label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
+                                <span>Start</span>
+                                <div style={{ width: 132 }}>
+                                    <TimeDropdown
+                                        value={scheduleTime}
+                                        onChange={v => { setScheduleTime(v || ''); setScheduleError(''); }}
+                                        stepMinutes={30}
+                                        ariaLabel="Crew start time"/>
+                                </div>
+                            </div>
                             {/* SMS is stubbed until the Twilio A2P campaign clears carrier review.
                                 Scheduling persists regardless; notification is a separate step. */}
                             <button disabled title="SMS notification is not enabled yet"
