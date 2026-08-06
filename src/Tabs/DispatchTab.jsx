@@ -26,6 +26,21 @@ const T = {
 };
 
 const DSP_HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+
+// scheduledDate is a 'YYYY-MM-DD' varchar. Compare as strings and build dates
+// from local parts — `new Date('2026-08-12')` parses as UTC and shifts a day in
+// negative-offset timezones, which would put jobs on the wrong board column.
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const fromYmd = (str) => { const [y, m, d] = String(str).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const startOfWeek = (d) => addDays(d, -d.getDay());              // Sunday
+const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Inclusive date-range filter. Jobs with no scheduledDate are never in range —
+// they belong in the unassigned tray, which stays unfiltered by design.
+const jobsInRange = (jobs, fromStr, toStr) =>
+    jobs.filter(j => j.scheduledDate && j.scheduledDate >= fromStr && j.scheduledDate <= toStr);
 const LICENSE_ORDER = { Apprentice: 0, Journeyman: 1, Master: 2, Lead: 3 };
 const fmt12 = (h) => h === 12 ? '12p' : h > 12 ? `${h-12}p` : `${h}a`;
 
@@ -527,6 +542,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
     // takes a confirmation that names the blockers rather than a single click.
     const [overridePrompt, setOverridePrompt] = useState(null);
     const [scheduleTime,   setScheduleTime]   = useState('');   // 'HH:MM'
+    const [scheduleDate,   setScheduleDate]   = useState('');   // 'YYYY-MM-DD'
     const [scheduleError,  setScheduleError]  = useState('');
     const [saving, setSaving] = useState(false);
 
@@ -559,6 +575,8 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
     const handleSchedule = async () => {
         const addedIds = Object.entries(addedTechs).filter(([, v]) => v).map(([k]) => k);
         if (!selectedJob || addedIds.length === 0) return;
+        const dateStr = scheduleDate || selectedJob.scheduledDate || '';
+        if (!dateStr)      { setScheduleError('Set a date before scheduling.'); return; }
         if (!scheduleTime) { setScheduleError('Set a start time before scheduling.'); return; }
 
         setScheduleError('');
@@ -578,6 +596,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                     status:         'scheduled',
                     assignedTechId: leadId,
                     coTechIds:      coIds,
+                    scheduledDate:  dateStr,
                     scheduledStart: scheduleTime,
                     scheduledEnd:   endStr,
                     timeSlot:       'exact',
@@ -603,11 +622,13 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                 crewNames,
                 startHr:   hh + mm / 60,
                 startTime: scheduleTime,
+                startDate: dateStr,
                 overridden,
             });
 
             setAddedTechs({});
             setScheduleTime('');
+            setScheduleDate('');
         } catch (e) {
             setScheduleError(e.message);
         } finally {
@@ -873,6 +894,14 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                                 <span style={{ fontSize: 11.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{scheduleError}</span>
                             )}
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
+                                <span>Date</span>
+                                <input type="date"
+                                    value={scheduleDate || selectedJob.scheduledDate || ''}
+                                    onChange={e => { setScheduleDate(e.target.value); setScheduleError(''); }}
+                                    style={{ padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r,
+                                        fontSize: 12.5, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}/>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
                                 <span>Start</span>
                                 <div style={{ width: 132 }}>
                                     <TimeDropdown
@@ -981,6 +1010,148 @@ const normaliseTech = (t) => ({
     employmentType: t.employmentType,
     avatarInitials: t.avatarInitials || `${t.firstName?.[0] || ''}${t.lastName?.[0] || ''}`.toUpperCase(),
 });
+
+
+// ── Week board: technician rows x 7 day columns ───────────────────────────────
+// Keeps the "who is loaded" read of the day board. An hour axis does not extend
+// to a week (12 columns becomes 84), so the cell is the unit instead of the hour.
+const WeekBoardView = ({ jobs, techs, skills, anchor, onJobClick }) => {
+    const weekStart = startOfWeek(anchor);
+    const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    const todayStr = ymd(new Date());
+    const RAIL_W = 190;
+
+    return (
+        <div style={{ flex: 1, overflow: 'auto' }}>
+            <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 3,
+                background: T.surface, borderBottom: `1px solid ${T.border}` }}>
+                <div style={{ width: RAIL_W, flexShrink: 0, borderRight: `1px solid ${T.border}` }}/>
+                {days.map(d => {
+                    const ds = ymd(d);
+                    return (
+                        <div key={ds} style={{ flex: 1, minWidth: 120, padding: '7px 0', textAlign: 'center',
+                            borderRight: `1px solid ${T.border}`,
+                            background: ds === todayStr ? `${T.gold}22` : 'transparent' }}>
+                            <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, fontFamily: T.sans,
+                                textTransform: 'uppercase', letterSpacing: 0.5 }}>{DOW[d.getDay()]}</div>
+                            <div style={{ fontSize: 13, fontWeight: ds === todayStr ? 700 : 500, color: T.ink, fontFamily: T.sans }}>
+                                {d.getDate()}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {techs.length === 0 && (
+                <div style={{ padding: 24, fontSize: 13, color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic' }}>
+                    No technicians yet.
+                </div>
+            )}
+
+            {techs.map(tech => {
+                const techJobs = jobs.filter(j => (j.assignedTechIds || []).includes(tech.id));
+                const weekHours = techJobs.reduce((sum, j) => sum + (j.durationHrs || 0), 0);
+                const cap = tech.hoursCap || 40;
+                return (
+                    <div key={tech.id} style={{ display: 'flex', borderBottom: `1px solid ${T.border}`, minHeight: 68 }}>
+                        <div style={{ width: RAIL_W, flexShrink: 0, borderRight: `1px solid ${T.border}`,
+                            padding: '10px 12px', background: T.surface }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{tech.name}</div>
+                            <div style={{ fontSize: 10.5, fontFamily: T.mono,
+                                color: weekHours > cap ? T.danger : T.inkMuted }}>
+                                {Math.round(weekHours * 10) / 10}/{cap} hrs
+                            </div>
+                        </div>
+                        {days.map(d => {
+                            const ds = ymd(d);
+                            const cellJobs = techJobs.filter(j => j.scheduledDate === ds);
+                            return (
+                                <div key={ds} style={{ flex: 1, minWidth: 120, borderRight: `1px solid ${T.border}`,
+                                    padding: 5, display: 'flex', flexDirection: 'column', gap: 4,
+                                    background: ds === todayStr ? `${T.gold}12` : 'transparent' }}>
+                                    {cellJobs.map(j => (
+                                        <div key={j.id} onClick={() => onJobClick(j)}
+                                            style={{ padding: '4px 6px', borderRadius: T.r, cursor: 'pointer',
+                                                background: T.surface2, borderLeft: `3px solid ${prioColor(j.priority)}` }}>
+                                            <div style={{ fontSize: 11, fontWeight: 600, color: T.ink, fontFamily: T.sans,
+                                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {j.title || j.customer}
+                                            </div>
+                                            <div style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.mono }}>
+                                                {j.start != null ? fmt12(Math.floor(j.start)) : 'TBD'} · {j.durationHrs || 0}h
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+// ── Month board: calendar grid ────────────────────────────────────────────────
+// Per-tech rows are unreadable at month scale, so this drops that dimension.
+// The question changes from "who is free" to "how heavy is that week".
+const MonthBoardView = ({ jobs, techs, anchor, onJobClick, onPickDay }) => {
+    const first = startOfMonth(anchor);
+    const gridStart = startOfWeek(first);
+    const weeks = 6;
+    const todayStr = ymd(new Date());
+    const monthIdx = anchor.getMonth();
+
+    return (
+        <div style={{ flex: 1, overflow: 'auto', padding: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1, background: T.border }}>
+                {DOW.map(d => (
+                    <div key={d} style={{ background: T.surface, padding: '6px 0', textAlign: 'center',
+                        fontSize: 10.5, fontWeight: 700, color: T.inkMuted, fontFamily: T.sans,
+                        textTransform: 'uppercase', letterSpacing: 0.5 }}>{d}</div>
+                ))}
+                {Array.from({ length: weeks * 7 }, (_, i) => {
+                    const d = addDays(gridStart, i);
+                    const ds = ymd(d);
+                    const dayJobs = jobs.filter(j => j.scheduledDate === ds);
+                    const outside = d.getMonth() !== monthIdx;
+                    const hours = dayJobs.reduce((sum, j) => sum + (j.durationHrs || 0), 0);
+                    return (
+                        <div key={ds} onClick={() => onPickDay && onPickDay(ds)}
+                            style={{ background: T.surface, minHeight: 92, padding: 6, cursor: 'pointer',
+                                opacity: outside ? 0.45 : 1,
+                                outline: ds === todayStr ? `2px solid ${T.gold}` : 'none', outlineOffset: -2 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                                <span style={{ fontSize: 12, fontWeight: ds === todayStr ? 700 : 500, color: T.ink, fontFamily: T.sans }}>
+                                    {d.getDate()}
+                                </span>
+                                {dayJobs.length > 0 && (
+                                    <span style={{ fontSize: 9.5, fontFamily: T.mono, color: T.inkMuted }}>
+                                        {dayJobs.length} · {Math.round(hours * 10) / 10}h
+                                    </span>
+                                )}
+                            </div>
+                            {dayJobs.slice(0, 2).map(j => (
+                                <div key={j.id} onClick={e => { e.stopPropagation(); onJobClick(j); }}
+                                    style={{ padding: '2px 5px', marginBottom: 3, borderRadius: T.r,
+                                        background: T.surface2, borderLeft: `3px solid ${prioColor(j.priority)}`,
+                                        fontSize: 10.5, color: T.ink, fontFamily: T.sans,
+                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {j.title || j.customer}
+                                </div>
+                            ))}
+                            {dayJobs.length > 2 && (
+                                <div style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>
+                                    +{dayJobs.length - 2} more
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
 
 // ── Dispatch customers view ───────────────────────────────────────────────────
 // Until now nothing in the app could list, create, or edit dispatch customers —
@@ -1509,6 +1680,8 @@ export default function DispatchTab() {
 
     const [view, setView] = useState('board'); // 'board' | 'queue'
     const [selectedJobId, setSelectedJobId] = useState(null);
+    const [boardRange,   setBoardRange]   = useState('today');   // 'today' | 'week' | 'month'
+    const [boardAnchor,  setBoardAnchor]  = useState(() => new Date());
 
     // ── New Job form state ────────────────────────────────────────────────────
     const [showNewJobForm, setShowNewJobForm] = useState(false);
@@ -1833,6 +2006,33 @@ export default function DispatchTab() {
     }, [jobs, filterSkill, filterVehicle, filterLicense, filterTeam]);
 
     const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+    const navBtn = { padding: '4px 8px', background: 'transparent', border: `1px solid ${T.border}`,
+        borderRadius: T.r, fontSize: 13, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, lineHeight: 1 };
+
+    // Range window. The board previously showed every job with a start time
+    // regardless of date, so "Today" was a label rather than a filter.
+    const [rangeFrom, rangeTo] = useMemo(() => {
+        if (boardRange === 'today') { const d = ymd(boardAnchor); return [d, d]; }
+        if (boardRange === 'week')  { const s0 = startOfWeek(boardAnchor); return [ymd(s0), ymd(addDays(s0, 6))]; }
+        const s0 = startOfMonth(boardAnchor);
+        return [ymd(s0), ymd(new Date(boardAnchor.getFullYear(), boardAnchor.getMonth() + 1, 0))];
+    }, [boardRange, boardAnchor]);
+
+    const rangeJobs = useMemo(() => jobsInRange(filteredJobs, rangeFrom, rangeTo), [filteredJobs, rangeFrom, rangeTo]);
+
+    // The day board also needs the unassigned tray, which stays unfiltered by
+    // design — an unscheduled job has no date to filter on.
+    const boardJobs = useMemo(
+        () => [...rangeJobs, ...filteredJobs.filter(j => !j.scheduledDate || !j.start || (j.assignedTechIds || []).length === 0)],
+        [rangeJobs, filteredJobs]);
+
+    const boardRangeLabel = useMemo(() => {
+        const opts = { month: 'short', day: 'numeric' };
+        if (boardRange === 'today') return boardAnchor.toLocaleDateString('en-US', { weekday: 'short', ...opts });
+        if (boardRange === 'week')  return `${fromYmd(rangeFrom).toLocaleDateString('en-US', opts)} – ${fromYmd(rangeTo).toLocaleDateString('en-US', opts)}`;
+        return boardAnchor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }, [boardRange, boardAnchor, rangeFrom, rangeTo]);
     const unscheduled = jobs.filter(j => !j.start || (j.assignedTechIds || []).length === 0).length;
     const urgentUnassigned = jobs.filter(j => j.priority === 'urgent' && (!j.start || (j.assignedTechIds || []).length === 0)).length;
 
@@ -1857,7 +2057,7 @@ export default function DispatchTab() {
                 <div style={{ borderLeft: `3px solid ${T.goldInk}`, paddingLeft: 10 }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3 }}>DISPATCH</div>
                     <div style={{ fontSize: 24, fontWeight: 700, color: T.ink, letterSpacing: -0.3, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300 }}>
-                        {view === 'board' ? `Today · ${todayStr}` : view === 'queue' ? 'Jobs to schedule' : view === 'techs' ? `${techsRaw.length} technician${techsRaw.length === 1 ? '' : 's'}` : `${customers.length} dispatch customer${customers.length === 1 ? '' : 's'}`}
+                        {view === 'board' ? boardRangeLabel : view === 'queue' ? 'Jobs to schedule' : view === 'techs' ? `${techsRaw.length} technician${techsRaw.length === 1 ? '' : 's'}` : `${customers.length} dispatch customer${customers.length === 1 ? '' : 's'}`}
                     </div>
                     <div style={{ fontSize: 13, color: T.inkMid, marginTop: 4, display: 'flex', gap: 10, alignItems: 'center' }}>
                         <span>{techs.length} techs available · {jobs.length} jobs</span>
@@ -1999,7 +2199,48 @@ export default function DispatchTab() {
             {/* Main content */}
             <div style={{ flex: 1, overflow: 'hidden' }}>
                 {view === 'board' ? (
-                    <BoardView jobs={filteredJobs} techs={filteredTechs} skills={skills} onJobClick={handleJobClick}/>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                            borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+                            <div style={{ display: 'flex', border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                {[['today', 'Today'], ['week', 'This week'], ['month', 'This month']].map(([r, label], i) => (
+                                    <button key={r} onClick={() => { setBoardRange(r); setBoardAnchor(new Date()); }}
+                                        style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                                            fontFamily: T.sans, border: 'none',
+                                            borderLeft: i ? `1px solid ${T.border}` : 'none',
+                                            background: boardRange === r ? T.ink : 'transparent',
+                                            color: boardRange === r ? T.surface : T.inkMid }}>
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            <button onClick={() => setBoardAnchor(a => addDays(a, boardRange === 'today' ? -1 : boardRange === 'week' ? -7 : -30))}
+                                style={navBtn}>‹</button>
+                            <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans, minWidth: 170 }}>
+                                {boardRangeLabel}
+                            </span>
+                            <button onClick={() => setBoardAnchor(a => addDays(a, boardRange === 'today' ? 1 : boardRange === 'week' ? 7 : 30))}
+                                style={navBtn}>›</button>
+                            {ymd(boardAnchor) !== ymd(new Date()) && (
+                                <button onClick={() => setBoardAnchor(new Date())} style={{ ...navBtn, width: 'auto', padding: '4px 10px' }}>
+                                    Today
+                                </button>
+                            )}
+                            <span style={{ marginLeft: 'auto', fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                                {rangeJobs.length} scheduled in view
+                            </span>
+                        </div>
+                        {boardRange === 'today' ? (
+                            <BoardView jobs={boardJobs} techs={filteredTechs} skills={skills} onJobClick={handleJobClick}/>
+                        ) : boardRange === 'week' ? (
+                            <WeekBoardView jobs={rangeJobs} techs={filteredTechs} skills={skills}
+                                anchor={boardAnchor} onJobClick={handleJobClick}/>
+                        ) : (
+                            <MonthBoardView jobs={rangeJobs} techs={filteredTechs}
+                                anchor={boardAnchor} onJobClick={handleJobClick}
+                                onPickDay={ds => { setBoardAnchor(fromYmd(ds)); setBoardRange('today'); }}/>
+                        )}
+                    </div>
                 ) : view === 'techs' ? (
                     <TechniciansView techsRaw={techsRaw} users={settings?.users || []}
                         vehicles={vehicles} skills={skills} certs={settings?.dispatchCerts || []} licenseLevels={licLevels}
@@ -2028,9 +2269,10 @@ export default function DispatchTab() {
                         selectedJobId={selectedJobId || jobs[0]?.id}
                         onSelectJob={setSelectedJobId}
                         onBack={() => setView('board')}
-                        onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, overridden }) => {
+                        onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden }) => {
                             setJobs(prev => prev.map(j => j.id === jobId
-                                ? { ...j, assignedTechIds: techIds, start: startHr, status: 'scheduled', window: startTime }
+                                ? { ...j, assignedTechIds: techIds, start: startHr, status: 'scheduled',
+                                    window: startTime, scheduledDate: startDate }
                                 : j));
                             if (addAudit) {
                                 addAudit(
@@ -2038,7 +2280,7 @@ export default function DispatchTab() {
                                     'dispatch_job',
                                     jobId,
                                     jobName,
-                                    `Crew: ${crewNames.join(', ')} at ${startTime}` +
+                                    `Crew: ${crewNames.join(', ')} on ${startDate} at ${startTime}` +
                                     (overridden.length ? ` — OVERRIDE: ${overridden.join(' | ')}` : '')
                                 );
                             }
