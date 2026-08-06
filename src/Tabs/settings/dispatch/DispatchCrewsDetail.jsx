@@ -27,6 +27,7 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                         id:             t.id,
                         name:           `${t.firstName || ''} ${t.lastName || ''}`.trim() || t.email || t.id,
                         dispatchSkills: t.skills || [],
+                        dispatchLicense: t.licenseLevel || null,
                         hoursCap:       40,
                     })));
             } catch (e) { /* picker stays empty */ }
@@ -262,7 +263,7 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                                                         {/* License */}
                                                         <div>
                                                             <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 3, background: `${T.info}14`, color: T.info, fontWeight: 600 }}>
-                                                                {u.dispatchLicense || 'Apprentice'}
+                                                                {u.dispatchLicense || '—'}
                                                             </span>
                                                         </div>
                                                         {/* Skills */}
@@ -317,7 +318,7 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                                     <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{u.name}</div>
                                                                     <div style={{ display: 'flex', gap: 5, marginTop: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-                                                                        <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{u.dispatchLicense || 'Apprentice'}</span>
+                                                                        <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{u.dispatchLicense || '—'}</span>
                                                                         {userSkills.map(s => (
                                                                             <span key={s.id} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${s.color}14`, color: s.color, fontWeight: 600, border: `1px solid ${s.color}30` }}>{s.name}</span>
                                                                         ))}

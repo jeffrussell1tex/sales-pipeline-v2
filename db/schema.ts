@@ -637,6 +637,7 @@ export const dispatchTechnicians = pgTable('dispatch_technicians', {
     employmentType:  varchar('employment_type', { length: 30 }).notNull().default('employee'),
     status:          varchar('status', { length: 20 }).notNull().default('active'),
     homeZip:         varchar('home_zip', { length: 20 }),
+    licenseLevel:    varchar('license_level', { length: 50 }),        // this tech's credential; compared against dispatch_jobs.minLicense
     serviceZones:    jsonb('service_zones').default('[]'),            // array of zip codes or zone names
     skills:          jsonb('skills').default('[]'),                   // array of skill strings
     certifications:  jsonb('certifications').default('[]'),           // array of cert objects

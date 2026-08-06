@@ -203,7 +203,7 @@ const scoreTech = (tech, job, allJobs, skills) => {
     const covered = jobSkillIds.filter(s => techSkillIds.has(s));
     if (jobSkillIds.length === 0 || covered.length === jobSkillIds.length) {
         score += 30;
-        if (jobSkillIds.length > 0) why.push(`All skills · ${tech.license || 'Journeyman'}`);
+        if (jobSkillIds.length > 0) why.push(`All skills${tech.license ? ` · ${tech.license}` : ''}`);
     } else {
         const missing = jobSkillIds.filter(s => !techSkillIds.has(s))
             .map(s => skills.find(sk => sk.id === s)?.name || s);
@@ -211,14 +211,21 @@ const scoreTech = (tech, job, allJobs, skills) => {
         score += (covered.length / jobSkillIds.length) * 20;
     }
 
-    // License level (15pts)
-    const techLevel = LICENSE_ORDER[tech.license] ?? 1;
-    const jobLevel = LICENSE_ORDER[job.minLicense] ?? 1;
-    if (techLevel >= jobLevel) {
-        score += 15;
-        why.push(`${tech.license} license`);
-    } else {
-        blockers.push(`License too low · need ${job.minLicense}`);
+    // License level (15pts). An unset licence BLOCKS any job that specifies a
+    // minimum — an incomplete technician record must not dispatch someone to
+    // work they may not be qualified for. The blocker names the real cause so
+    // the dispatcher fixes the record rather than hunting a phantom mismatch.
+    if (job.minLicense && !tech.license) {
+        blockers.push(`License not set · job needs ${job.minLicense}`);
+    } else if (job.minLicense) {
+        const techLevel = LICENSE_ORDER[tech.license] ?? -1;
+        const jobLevel  = LICENSE_ORDER[job.minLicense] ?? 0;
+        if (techLevel >= jobLevel) {
+            score += 15;
+            why.push(`${tech.license} license`);
+        } else {
+            blockers.push(`License too low · need ${job.minLicense}`);
+        }
     }
 
     // Cert currency (15pts)
@@ -476,7 +483,7 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
                                         <div style={{ fontSize: 12, fontWeight: 700, color: T.ink, fontFamily: T.sans,
                                             display: 'flex', alignItems: 'center', gap: 4 }}>
                                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tech.name}</span>
-                                            <span style={{ fontSize: 9, color: T.inkMuted, fontWeight: 600, flexShrink: 0 }}>{tech.license || 'Apprentice'}</span>
+                                            <span style={{ fontSize: 9, color: T.inkMuted, fontWeight: 600, flexShrink: 0 }}>{tech.license || '—'}</span>
                                         </div>
                                         <div style={{ fontSize: 9.5, color: T.inkMuted, marginTop: 1, fontFamily: T.sans,
                                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -678,7 +685,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                                             <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 4 }}>
                                                 {c.tech.name}
                                                 <span style={{ fontSize: 10.5, color: T.inkMuted, fontWeight: 500, marginLeft: 8 }}>
-                                                    {c.tech.license} · {c.tech.vehicle || 'No vehicle'}
+                                                    {c.tech.license || 'No licence'} · {c.tech.vehicle || 'No vehicle'}
                                                 </span>
                                             </div>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -826,7 +833,11 @@ const normaliseTech = (t) => ({
     lastName:       t.lastName,
     email:          t.email,
     phone:          t.phone,
-    license:        t.employmentType === 'subcontractor' ? 'Journeyman' : (t.skills?.[0] ? 'Journeyman' : 'Apprentice'),
+    // The stored credential, never inferred. This used to be fabricated from
+    // employmentType/skills, which silently promoted a tech with one skill to
+    // Journeyman and demoted a real Master with none — while the board matched
+    // job eligibility against that invented value.
+    license:        t.licenseLevel || null,
     dispatchSkills: t.skills        || [],
     dispatchCerts:  t.certifications || [],
     hoursThisWeek:  0,
@@ -1086,7 +1097,7 @@ const CustomersView = ({ customers, accounts, onSaved }) => {
 const EMPLOYMENT_TYPES = ['employee', 'subcontractor'];
 const TECH_STATUSES    = ['active', 'inactive', 'on_leave'];
 
-const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, onSaved }) => {
+const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLevels, onSaved }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
@@ -1189,6 +1200,9 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, onSaved }) 
                                 {t.status !== 'active' && (
                                     <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>{t.status}</span>
                                 )}
+                                {!t.licenseLevel && (
+                                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>no license</span>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -1235,6 +1249,18 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, onSaved }) 
                                 <input value={draft.phone || ''} onChange={e => set('phone', e.target.value)} style={custInput}/>
                             </CustFieldRow>
                         </div>
+
+                        <CustFieldRow label="License level">
+                            <select value={draft.licenseLevel || ''} onChange={e => set('licenseLevel', e.target.value)} style={custInput}>
+                                <option value="">— Not set —</option>
+                                {(licenseLevels || []).map(l => <option key={l} value={l}>{l}</option>)}
+                            </select>
+                            <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                {draft.licenseLevel
+                                    ? 'Matched against each job\u2019s minimum licence requirement.'
+                                    : 'Unset — this technician is blocked from any job that specifies a minimum licence.'}
+                            </div>
+                        </CustFieldRow>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                             <CustFieldRow label="Employment">
@@ -1841,7 +1867,7 @@ export default function DispatchTab() {
                     <BoardView jobs={filteredJobs} techs={filteredTechs} skills={skills} onJobClick={handleJobClick}/>
                 ) : view === 'techs' ? (
                     <TechniciansView techsRaw={techsRaw} users={settings?.users || []}
-                        vehicles={vehicles} skills={skills} certs={settings?.dispatchCerts || []}
+                        vehicles={vehicles} skills={skills} certs={settings?.dispatchCerts || []} licenseLevels={licLevels}
                         onSaved={saved => {
                             setTechsRaw(prev => {
                                 const i = prev.findIndex(t => t.id === saved.id);

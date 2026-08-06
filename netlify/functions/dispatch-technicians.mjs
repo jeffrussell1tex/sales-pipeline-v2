@@ -23,6 +23,7 @@ function normalise(row) {
         employmentType:   row.employmentType   ?? row.employment_type   ?? 'employee',
         status:           row.status           ?? 'active',
         homeZip:          row.homeZip          ?? row.home_zip          ?? null,
+        licenseLevel:     row.licenseLevel     ?? row.license_level     ?? null,
         serviceZones:     row.serviceZones     ?? row.service_zones     ?? [],
         skills:           row.skills           ?? [],
         certifications:   row.certifications   ?? [],
@@ -79,6 +80,7 @@ export const handler = async (event) => {
                 employmentType:   data.employmentType   ?? 'employee',
                 status:           data.status           ?? 'active',
                 homeZip:          data.homeZip          ?? null,
+                licenseLevel:     data.licenseLevel     ?? null,
                 serviceZones:     JSON.stringify(data.serviceZones     ?? []),
                 skills:           JSON.stringify(data.skills           ?? []),
                 certifications:   JSON.stringify(data.certifications   ?? []),
@@ -115,7 +117,7 @@ export const handler = async (event) => {
 
             const fields = [
                 'userId','firstName','lastName','email','phone','employmentType',
-                'status','homeZip','laborRate','overtimeRate','assignedVehicleId',
+                'status','homeZip','licenseLevel','laborRate','overtimeRate','assignedVehicleId',
                 'notes','avatarInitials',
             ];
             fields.forEach(f => { if (f in data) updates[f] = data[f]; });
