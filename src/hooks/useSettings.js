@@ -92,7 +92,6 @@ const DEFAULT_SETTINGS = {
     dispatchVehicles: [],
     dispatchJobs: [],
     dispatchCrews: [],
-    dispatchTechProfiles: [],
     dispatchJobTemplates: [],
     customerTypes: [],
     companyProfile: { address: '', phone: '', notes: '' },

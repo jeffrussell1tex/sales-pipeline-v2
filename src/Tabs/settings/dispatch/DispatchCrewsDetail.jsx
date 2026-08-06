@@ -8,7 +8,31 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
     const saved = settings?.dispatchCrews || [];
     const skills = settings?.dispatchSkills || [];
     const vehicles = settings?.dispatchVehicles || [];
-    const users = (settings?.users || []).filter(u => u.dispatchEnabled);
+    // Crew members come from dispatch_technicians, the source of truth. This
+    // previously read settings.users.filter(u => u.dispatchEnabled) — a flag
+    // nothing sets any more (and which never persisted), so the member picker
+    // was always empty and no one could be added to a crew.
+    const [users, setUsers] = useState([]);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await dbFetch('/.netlify/functions/dispatch-technicians');
+                if (!res.ok) return;                     // leave empty rather than render {error}
+                const data = await res.json();
+                if (cancelled) return;
+                setUsers((data.technicians || [])
+                    .filter(t => t.status !== 'inactive')
+                    .map(t => ({
+                        id:             t.id,
+                        name:           `${t.firstName || ''} ${t.lastName || ''}`.trim() || t.email || t.id,
+                        dispatchSkills: t.skills || [],
+                        hoursCap:       40,
+                    })));
+            } catch (e) { /* picker stays empty */ }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     const [crews, setCrews] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty] = useState(false);
