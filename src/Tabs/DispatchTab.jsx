@@ -42,6 +42,35 @@ const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const jobsInRange = (jobs, fromStr, toStr) =>
     jobs.filter(j => j.scheduledDate && j.scheduledDate >= fromStr && j.scheduledDate <= toStr);
 const LICENSE_ORDER = { Apprentice: 0, Journeyman: 1, Master: 2, Lead: 3 };
+
+// ── Availability ─────────────────────────────────────────────────────────────
+// Two layers: workingHours (recurring weekly pattern on the technician row) and
+// dispatch_schedule_blocks (dated exceptions). Both existed in the schema but
+// nothing consumed them, so the scheduler treated every tech as available
+// 7a-6p, seven days a week.
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DEFAULT_SHIFT = { start: '07:00', end: '17:00' };
+
+const shiftForDate = (tech, dateStr) => {
+    const wh = tech?.workingHours || {};
+    const d = wh[DAY_KEYS[fromYmd(dateStr).getDay()]];
+    if (!d || !d.start || !d.end) return null;         // not scheduled to work
+    return d;
+};
+
+// A block covers a date when the date falls inside its inclusive range.
+const blocksOnDate = (blocks, techId, dateStr) =>
+    (blocks || []).filter(b => b.techId === techId && b.startDate <= dateStr && b.endDate >= dateStr);
+
+const hhToNum = (t) => { const [h, m] = String(t || '').split(':').map(Number); return (h || 0) + (m || 0) / 60; };
+
+// Weekly capacity implied by the shift pattern. Falls back to 40 only when no
+// pattern is set, rather than asserting 40 for everyone as before.
+const capFromPattern = (wh) => {
+    const days = Object.values(wh || {}).filter(d => d && d.start && d.end);
+    if (!days.length) return 40;
+    return Math.round(days.reduce((sum, d) => sum + Math.max(0, hhToNum(d.end) - hhToNum(d.start)), 0) * 10) / 10;
+};
 const fmt12 = (h) => h === 12 ? '12p' : h > 12 ? `${h-12}p` : `${h}a`;
 
 // ── Priority color helper ─────────────────────────────────────────────────────
@@ -219,7 +248,7 @@ const HoursBar = ({ used, cap }) => {
 };
 
 // ── Match scoring engine ──────────────────────────────────────────────────────
-const scoreTech = (tech, job, allJobs, skills) => {
+const scoreTech = (tech, job, allJobs, skills, avail = {}) => {
     if (!tech || !job) return { score: 0, why: [], blockers: [] };
     const why = [], blockers = [];
     let score = 0;
@@ -236,6 +265,24 @@ const scoreTech = (tech, job, allJobs, skills) => {
             .map(s => skills.find(sk => sk.id === s)?.name || s);
         blockers.push(`Missing skill · ${missing.join(', ')}`);
         score += (covered.length / jobSkillIds.length) * 20;
+    }
+
+    // Availability (day level). A technician who is not rostered that day, or is
+    // marked out for the whole day, cannot take the job at all. Partial-day blocks
+    // are handled where a time is actually chosen (the planner's slot search and
+    // handleSchedule), since scoring runs before a start time exists.
+    const availDate = avail.dateStr || job.scheduledDate || null;
+    if (availDate) {
+        const dayName = DOW[fromYmd(availDate).getDay()];
+        if (!shiftForDate(tech, availDate)) {
+            blockers.push(`Not rostered on ${dayName}`);
+        }
+        const dayBlocks = blocksOnDate(avail.blocks, tech.id, availDate);
+        const allDayBlock = dayBlocks.find(b => b.allDay !== false);
+        if (allDayBlock) {
+            const name = (avail.blockTypes || []).find(t => t.id === allDayBlock.blockType)?.name || 'Time off';
+            blockers.push(`Off · ${name}`);
+        }
     }
 
     // License level (15pts). An unset licence BLOCKS any job that specifies a
@@ -554,7 +601,7 @@ const QUEUE_SORTS = {
     Value:    (a, b) => (b.value || 0) - (a.value || 0),
 };
 
-const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBack, onScheduled }) => {
+const CrewBuilderView = ({ jobs, techs, skills, blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled }) => {
     const [queueSort, setQueueSort] = useState('Priority');
     const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
@@ -575,7 +622,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
     const candidates = useMemo(() => {
         if (!selectedJob) return [];
         return techs
-            .map(t => ({ tech: t, ...scoreTech(t, selectedJob, jobs, skills) }))
+            .map(t => ({ tech: t, ...scoreTech(t, selectedJob, jobs, skills, { blocks, blockTypes, dateStr: scheduleDate || selectedJob.scheduledDate }) }))
             .filter(c => c.score >= 50)
             // Blocked candidates sort below every clean one regardless of score.
             // Score answers "how good a fit is this?"; blockers answer "may this
@@ -587,7 +634,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                 return b.score - a.score;
             })
             .slice(0, 5);
-    }, [selectedJob, techs, jobs, skills]);
+    }, [selectedJob, techs, jobs, skills, blocks, blockTypes, scheduleDate]);
 
     // Persist the crew and record the assignment. The lead is the first tech
     // added; the rest become coTechIds (the schema is singular + co-techs, and
@@ -600,6 +647,29 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
         const dateStr = scheduleDate || selectedJob.scheduledDate || '';
         if (!dateStr)      { setScheduleError('Set a date before scheduling.'); return; }
         if (!scheduleTime) { setScheduleError('Set a start time before scheduling.'); return; }
+
+        // Partial-day time off and shift bounds can only be checked once a start
+        // time exists, so this is the last gate before the write.
+        const [vh, vm] = scheduleTime.split(':').map(Number);
+        const startNum = vh + vm / 60;
+        const endNum   = startNum + (selectedJob.durationHrs || 2);
+        for (const id of addedIds) {
+            const t = techs.find(x => x.id === id);
+            if (!t) continue;
+            const shift = shiftForDate(t, dateStr);
+            if (shift && (startNum < hhToNum(shift.start) || endNum > hhToNum(shift.end))) {
+                setScheduleError(`${t.name} works ${shift.start}–${shift.end} that day — the job runs outside their shift.`);
+                return;
+            }
+            const clash = blocksOnDate(blocks, id, dateStr)
+                .filter(b => b.allDay === false && b.startTime && b.endTime)
+                .find(b => startNum < hhToNum(b.endTime) && endNum > hhToNum(b.startTime));
+            if (clash) {
+                const nm = (blockTypes || []).find(x => x.id === clash.blockType)?.name || 'time off';
+                setScheduleError(`${t.name} is out (${nm}) ${clash.startTime}–${clash.endTime} that day.`);
+                return;
+            }
+        }
 
         setScheduleError('');
         setSaving(true);
@@ -1027,7 +1097,7 @@ const normaliseTech = (t) => ({
     dispatchSkills: t.skills        || [],
     dispatchCerts:  t.certifications || [],
     hoursThisWeek:  0,
-    hoursCap:       40,
+    hoursCap:       capFromPattern(t.workingHours),
     vehicle:        t.assignedVehicleId || null,
     baseLocation:   t.homeZip || null,
     status:         t.status,
@@ -2070,7 +2140,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
 // Nothing is written until the proposal is confirmed. A job whose every candidate
 // carries a blocker is left alone and reported as unplaceable, rather than being
 // assigned with a warning nobody reads.
-const planWeek = ({ jobs, techs, skills, fromStr, toStr }) => {
+const planWeek = ({ jobs, techs, skills, blocks, blockTypes, fromStr, toStr }) => {
     const proposals = [];
     const skipped   = [];
 
@@ -2085,16 +2155,28 @@ const planWeek = ({ jobs, techs, skills, fromStr, toStr }) => {
     const candidatesForDay = (job, dateStr) => {
         const dur = job.durationHrs || 2;
         return techs
-            .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills) }))
+            .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills, { blocks, blockTypes, dateStr }) }))
             .filter(c => c.blockers.length === 0)
             .sort((a, b) => b.score - a.score)
             .map(c => {
-                // First slot in the working day where this tech is free.
+                // First slot inside this tech's own shift where they are free.
+                const shift = shiftForDate(c.tech, dateStr);
+                if (!shift) return null;
+                const shiftStart = hhToNum(shift.start);
+                const shiftEnd   = hhToNum(shift.end);
+                // Partial-day time off carves further holes out of the shift.
+                const partials = blocksOnDate(blocks, c.tech.id, dateStr)
+                    .filter(b => b.allDay === false && b.startTime && b.endTime)
+                    .map(b => ({ start: hhToNum(b.startTime), end: hhToNum(b.endTime) }));
+
                 for (const h of DSP_HOURS) {
-                    if (h + dur > DSP_HOURS[DSP_HOURS.length - 1] + 1) break;
+                    if (h < shiftStart || h + dur > shiftEnd) continue;
                     const clash = (busy[c.tech.id] || []).some(b =>
                         b.date === dateStr && h < b.end && (h + dur) > b.start);
-                    if (!clash) return { ...c, startHr: h };
+                    if (clash) continue;
+                    const offClash = partials.some(pb => h < pb.end && (h + dur) > pb.start);
+                    if (offClash) continue;
+                    return { ...c, startHr: h };
                 }
                 return null;
             })
@@ -2125,7 +2207,7 @@ const planWeek = ({ jobs, techs, skills, fromStr, toStr }) => {
 
         if (!placed) {
             const anyCandidate = techs
-                .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills) }))
+                .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills, { blocks, blockTypes, dateStr: job.scheduledDate }) }))
                 .sort((a, b) => a.blockers.length - b.blockers.length)[0];
             skipped.push({
                 job,
@@ -2244,20 +2326,6 @@ const MassSchedulePanel = ({ plan, fromStr, toStr, saving, progress, onCancel, o
 //   2. dispatch_schedule_blocks — dated exceptions (PTO, sick, training…).
 // Both were declared in the schema and never used. Nothing consumes them for
 // scheduling yet; that lands with the scoreTech integration.
-const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const DEFAULT_SHIFT = { start: '07:00', end: '17:00' };
-
-const shiftForDate = (tech, dateStr) => {
-    const wh = tech?.workingHours || {};
-    const key = DAY_KEYS[fromYmd(dateStr).getDay()];
-    const d = wh[key];
-    if (!d || !d.start || !d.end) return null;         // not scheduled to work
-    return d;
-};
-
-// A block covers a date when the date falls inside its inclusive range.
-const blocksOnDate = (blocks, techId, dateStr) =>
-    (blocks || []).filter(b => b.techId === techId && b.startDate <= dateStr && b.endDate >= dateStr);
 
 const schNav = { padding: '4px 8px', background: 'transparent', border: `1px solid ${T.border}`,
     borderRadius: T.r, fontSize: 13, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, lineHeight: 1 };
@@ -2941,7 +3009,9 @@ export default function DispatchTab() {
         const fromStr = ymd(start);
         const toStr   = ymd(addDays(start, 6));
         const { proposals, skipped } = planWeek({
-            jobs: filteredJobs, techs: filteredTechs, skills, fromStr, toStr,
+            jobs: filteredJobs, techs: filteredTechs, skills,
+            blocks, blockTypes: settings?.dispatchBlockTypes || [],
+            fromStr, toStr,
         });
         setMassProg({ done: 0, total: proposals.length, failed: 0 });
         setMassPlan({ proposals, skipped, fromStr, toStr });
@@ -3314,6 +3384,7 @@ export default function DispatchTab() {
                         })}/>
                 ) : (
                     <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} skills={skills}
+                        blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
                         selectedJobId={selectedJobId || jobs[0]?.id}
                         onSelectJob={setSelectedJobId}
                         onBack={() => setView('board')}
