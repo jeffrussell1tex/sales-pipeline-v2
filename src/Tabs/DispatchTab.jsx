@@ -2236,6 +2236,332 @@ const MassSchedulePanel = ({ plan, fromStr, toStr, saving, progress, onCancel, o
     </div>
 );
 
+
+// ── Availability model ────────────────────────────────────────────────────────
+// Two independent layers:
+//   1. workingHours (jsonb on dispatch_technicians) — the recurring weekly shift
+//      pattern. A day that is missing or null means "not working".
+//   2. dispatch_schedule_blocks — dated exceptions (PTO, sick, training…).
+// Both were declared in the schema and never used. Nothing consumes them for
+// scheduling yet; that lands with the scoreTech integration.
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DEFAULT_SHIFT = { start: '07:00', end: '17:00' };
+
+const shiftForDate = (tech, dateStr) => {
+    const wh = tech?.workingHours || {};
+    const key = DAY_KEYS[fromYmd(dateStr).getDay()];
+    const d = wh[key];
+    if (!d || !d.start || !d.end) return null;         // not scheduled to work
+    return d;
+};
+
+// A block covers a date when the date falls inside its inclusive range.
+const blocksOnDate = (blocks, techId, dateStr) =>
+    (blocks || []).filter(b => b.techId === techId && b.startDate <= dateStr && b.endDate >= dateStr);
+
+const schNav = { padding: '4px 8px', background: 'transparent', border: `1px solid ${T.border}`,
+    borderRadius: T.r, fontSize: 13, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, lineHeight: 1 };
+
+const ScheduleView = ({ techsRaw, blocks, blockTypes, anchor, onPrev, onNext, onToday, onSaveBlock, onDeleteBlock, onSaveHours }) => {
+    const weekStart = startOfWeek(anchor);
+    const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    const todayStr = ymd(new Date());
+    const RAIL_W = 200;
+
+    const [editing, setEditing] = React.useState(null);   // { techId, dateStr } | block
+    const [hoursFor, setHoursFor] = React.useState(null); // techId whose pattern is open
+    const [busy, setBusy] = React.useState(false);
+    const [err, setErr] = React.useState('');
+
+    const typeOf = (id) => (blockTypes || []).find(t => t.id === id) || null;
+
+    const blank = (techId, dateStr) => ({
+        id: 'dblk_' + crypto.randomUUID(), techId,
+        blockType: (blockTypes || [])[0]?.id || 'pto',
+        startDate: dateStr, endDate: dateStr, allDay: true,
+        startTime: '', endTime: '', title: '', notes: '', _isNew: true,
+    });
+
+    const submit = async () => {
+        if (!editing) return;
+        if (editing.endDate < editing.startDate) { setErr('End date cannot be before the start date.'); return; }
+        if (!editing.allDay && (!editing.startTime || !editing.endTime)) {
+            setErr('A partial-day block needs both a start and an end time.'); return;
+        }
+        setBusy(true); setErr('');
+        try { await onSaveBlock(editing); setEditing(null); }
+        catch (e) { setErr(e.message); }
+        finally { setBusy(false); }
+    };
+
+    return (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+                <button onClick={onPrev} style={schNav}>‹</button>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans, minWidth: 150 }}>
+                    {fromYmd(ymd(weekStart)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {fromYmd(ymd(addDays(weekStart, 6))).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+                <button onClick={onNext} style={schNav}>›</button>
+                {ymd(anchor) !== todayStr && (
+                    <button onClick={onToday} style={{ ...schNav, width: 'auto', padding: '4px 10px' }}>This week</button>
+                )}
+                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                    Click a cell to mark someone out
+                </span>
+            </div>
+
+            <div style={{ flex: 1, overflow: 'auto' }}>
+                <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 3,
+                    background: T.surface, borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ width: RAIL_W, flexShrink: 0, borderRight: `1px solid ${T.border}` }}/>
+                    {days.map(d => {
+                        const ds = ymd(d);
+                        return (
+                            <div key={ds} style={{ flex: 1, minWidth: 118, padding: '7px 0', textAlign: 'center',
+                                borderRight: `1px solid ${T.border}`,
+                                background: ds === todayStr ? `${T.gold}22` : 'transparent' }}>
+                                <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, fontFamily: T.sans,
+                                    textTransform: 'uppercase', letterSpacing: 0.5 }}>{DOW[d.getDay()]}</div>
+                                <div style={{ fontSize: 13, fontWeight: ds === todayStr ? 700 : 500, color: T.ink, fontFamily: T.sans }}>
+                                    {d.getDate()}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {(techsRaw || []).length === 0 && (
+                    <div style={{ padding: 24, fontSize: 13, color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic' }}>
+                        No technicians yet.
+                    </div>
+                )}
+
+                {(techsRaw || []).map(tech => (
+                    <div key={tech.id} style={{ display: 'flex', borderBottom: `1px solid ${T.border}`, minHeight: 62 }}>
+                        <div style={{ width: RAIL_W, flexShrink: 0, borderRight: `1px solid ${T.border}`,
+                            padding: '10px 12px', background: T.surface }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>
+                                {tech.firstName} {tech.lastName}
+                            </div>
+                            <span onClick={() => setHoursFor(hoursFor === tech.id ? null : tech.id)}
+                                style={{ fontSize: 10.5, color: T.info, fontFamily: T.sans, cursor: 'pointer', fontWeight: 600 }}>
+                                {Object.keys(tech.workingHours || {}).length ? 'Edit shift pattern' : 'Set shift pattern'}
+                            </span>
+                        </div>
+                        {days.map(d => {
+                            const ds = ymd(d);
+                            const shift = shiftForDate(tech, ds);
+                            const dayBlocks = blocksOnDate(blocks, tech.id, ds);
+                            return (
+                                <div key={ds} onClick={() => { setErr(''); setEditing(blank(tech.id, ds)); }}
+                                    style={{ flex: 1, minWidth: 118, borderRight: `1px solid ${T.border}`,
+                                        padding: 5, cursor: 'pointer',
+                                        background: !shift ? `${T.border}55` : ds === todayStr ? `${T.gold}12` : 'transparent' }}>
+                                    {!shift && dayBlocks.length === 0 && (
+                                        <div style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>Off</div>
+                                    )}
+                                    {shift && dayBlocks.length === 0 && (
+                                        <div style={{ fontSize: 10.5, color: T.inkMid, fontFamily: T.mono }}>
+                                            {shift.start}–{shift.end}
+                                        </div>
+                                    )}
+                                    {dayBlocks.map(b => {
+                                        const bt = typeOf(b.blockType);
+                                        const col = bt?.color || T.inkMuted;
+                                        return (
+                                            <div key={b.id}
+                                                onClick={e => { e.stopPropagation(); setErr(''); setEditing({ ...b }); }}
+                                                style={{ padding: '3px 6px', marginBottom: 3, borderRadius: T.r,
+                                                    background: `${col}1e`, borderLeft: `3px solid ${col}` }}>
+                                                <div style={{ fontSize: 10.5, fontWeight: 600, color: col, fontFamily: T.sans,
+                                                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {bt?.name || b.blockType}
+                                                </div>
+                                                {!b.allDay && b.startTime && (
+                                                    <div style={{ fontSize: 9.5, color: T.inkMuted, fontFamily: T.mono }}>
+                                                        {b.startTime}–{b.endTime}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))}
+            </div>
+
+            {hoursFor && (
+                <ShiftPatternDialog
+                    tech={(techsRaw || []).find(t => t.id === hoursFor)}
+                    onCancel={() => setHoursFor(null)}
+                    onSave={async (wh) => { await onSaveHours(hoursFor, wh); setHoursFor(null); }}/>
+            )}
+
+            {editing && (
+                <div onClick={() => !busy && setEditing(null)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div onClick={e => e.stopPropagation()}
+                        style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
+                            padding: 20, width: 420, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.22)' }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, fontFamily: T.sans, marginBottom: 14 }}>
+                            {editing._isNew ? 'Mark unavailable' : 'Edit time off'}
+                        </div>
+
+                        <CustFieldRow label="Reason">
+                            <select value={editing.blockType}
+                                onChange={e => setEditing(p => ({ ...p, blockType: e.target.value }))} style={custInput}>
+                                {(blockTypes || []).length === 0 && <option value="">No types defined</option>}
+                                {(blockTypes || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                        </CustFieldRow>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="From">
+                                <input type="date" value={editing.startDate}
+                                    onChange={e => setEditing(p => ({ ...p, startDate: e.target.value }))} style={custInput}/>
+                            </CustFieldRow>
+                            <CustFieldRow label="To">
+                                <input type="date" value={editing.endDate}
+                                    onChange={e => setEditing(p => ({ ...p, endDate: e.target.value }))} style={custInput}/>
+                            </CustFieldRow>
+                        </div>
+
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
+                            fontSize: 13, color: T.ink, fontFamily: T.sans, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={editing.allDay !== false}
+                                onChange={e => setEditing(p => ({ ...p, allDay: e.target.checked }))}/>
+                            All day
+                        </label>
+
+                        {editing.allDay === false && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                <CustFieldRow label="Start">
+                                    <input type="time" value={editing.startTime || ''}
+                                        onChange={e => setEditing(p => ({ ...p, startTime: e.target.value }))} style={custInput}/>
+                                </CustFieldRow>
+                                <CustFieldRow label="End">
+                                    <input type="time" value={editing.endTime || ''}
+                                        onChange={e => setEditing(p => ({ ...p, endTime: e.target.value }))} style={custInput}/>
+                                </CustFieldRow>
+                            </div>
+                        )}
+
+                        <CustFieldRow label="Notes">
+                            <textarea value={editing.notes || ''} rows={2}
+                                onChange={e => setEditing(p => ({ ...p, notes: e.target.value }))}
+                                style={{ ...custInput, resize: 'vertical' }}/>
+                        </CustFieldRow>
+
+                        {err && (
+                            <div style={{ fontSize: 12, color: T.danger, fontWeight: 600, fontFamily: T.sans, marginBottom: 10 }}>{err}</div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
+                            {!editing._isNew && (
+                                <button onClick={async () => { setBusy(true); try { await onDeleteBlock(editing.id); setEditing(null); } catch (e) { setErr(e.message); } finally { setBusy(false); } }}
+                                    disabled={busy}
+                                    style={{ marginRight: 'auto', padding: '7px 12px', background: 'transparent', color: T.danger,
+                                        border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
+                                        cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
+                                    Delete
+                                </button>
+                            )}
+                            <button onClick={() => setEditing(null)} disabled={busy}
+                                style={{ padding: '7px 14px', background: 'transparent', color: T.inkMid,
+                                    border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
+                                    cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
+                                Cancel
+                            </button>
+                            <button onClick={submit} disabled={busy}
+                                style={{ padding: '7px 16px', background: busy ? T.borderStrong : T.ink, color: '#fbf8f3',
+                                    border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
+                                    cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
+                                {busy ? 'Saving…' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Recurring weekly pattern. Unchecked day = not working, which is what makes a
+// grey "Off" cell on the schedule grid.
+const ShiftPatternDialog = ({ tech, onCancel, onSave }) => {
+    const [wh, setWh] = React.useState(() => ({ ...(tech?.workingHours || {}) }));
+    const [busy, setBusy] = React.useState(false);
+
+    const toggle = (k) => setWh(p => {
+        const next = { ...p };
+        if (next[k]) delete next[k]; else next[k] = { ...DEFAULT_SHIFT };
+        return next;
+    });
+
+    return (
+        <div onClick={() => !busy && onCancel()}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998,
+                display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={e => e.stopPropagation()}
+                style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
+                    padding: 20, width: 420, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.22)' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, fontFamily: T.sans, marginBottom: 4 }}>
+                    Shift pattern
+                </div>
+                <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans, marginBottom: 14 }}>
+                    {tech?.firstName} {tech?.lastName} — repeats every week.
+                </div>
+
+                {DAY_KEYS.map((k, i) => {
+                    const on = !!wh[k];
+                    return (
+                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 7, width: 92, cursor: 'pointer',
+                                fontSize: 12.5, color: T.ink, fontFamily: T.sans }}>
+                                <input type="checkbox" checked={on} onChange={() => toggle(k)}/>
+                                {DOW[i]}
+                            </label>
+                            {on ? (
+                                <>
+                                    <input type="time" value={wh[k].start}
+                                        onChange={e => setWh(p => ({ ...p, [k]: { ...p[k], start: e.target.value } }))}
+                                        style={{ ...custInput, padding: '5px 7px', width: 110 }}/>
+                                    <span style={{ fontSize: 12, color: T.inkMuted }}>to</span>
+                                    <input type="time" value={wh[k].end}
+                                        onChange={e => setWh(p => ({ ...p, [k]: { ...p[k], end: e.target.value } }))}
+                                        style={{ ...custInput, padding: '5px 7px', width: 110 }}/>
+                                </>
+                            ) : (
+                                <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>Not working</span>
+                            )}
+                        </div>
+                    );
+                })}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                    <button onClick={onCancel} disabled={busy}
+                        style={{ padding: '7px 14px', background: 'transparent', color: T.inkMid,
+                            border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
+                            cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
+                        Cancel
+                    </button>
+                    <button onClick={async () => { setBusy(true); try { await onSave(wh); } finally { setBusy(false); } }}
+                        disabled={busy}
+                        style={{ padding: '7px 16px', background: busy ? T.borderStrong : T.ink, color: '#fbf8f3',
+                            border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
+                            cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
+                        {busy ? 'Saving…' : 'Save pattern'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
 export default function DispatchTab() {
     const { settings, opportunities, accounts, addAudit } = useApp();
@@ -2262,6 +2588,8 @@ export default function DispatchTab() {
     // Raw technician rows (userId, rates, notes) for the Technicians editor.
     const [techsRaw,   setTechsRaw]   = useState([]);
     const [jobsRaw,    setJobsRaw]    = useState([]);
+    const [blocks,     setBlocks]     = useState([]);
+    const [schedAnchor, setSchedAnchor] = useState(() => new Date());
     const [massPlan,   setMassPlan]   = useState(null);   // { proposals, skipped, fromStr, toStr }
     const [massSaving, setMassSaving] = useState(false);
     const [massProg,   setMassProg]   = useState({ done: 0, total: 0, failed: 0 });
@@ -2303,12 +2631,13 @@ export default function DispatchTab() {
                 // Wait for Clerk JWT to be available before hitting DB
                 await waitForToken();
 
-                const [techsRes, vehiclesRes, equipRes, custsRes, jobsRes] = await Promise.all([
+                const [techsRes, vehiclesRes, equipRes, custsRes, jobsRes, blocksRes] = await Promise.all([
                     dbFetch('/.netlify/functions/dispatch-technicians'),
                     dbFetch('/.netlify/functions/dispatch-vehicles'),
                     dbFetch('/.netlify/functions/dispatch-equipment'),
                     dbFetch('/.netlify/functions/dispatch-customers'),
                     dbFetch('/.netlify/functions/dispatch-jobs'),
+                    dbFetch('/.netlify/functions/dispatch-schedule-blocks'),
                 ]);
 
                 if (cancelled) return;
@@ -2319,19 +2648,20 @@ export default function DispatchTab() {
                 // an endpoint failure was indistinguishable from an empty table.
                 const failed = [
                     ['technicians', techsRes], ['vehicles', vehiclesRes], ['equipment', equipRes],
-                    ['customers', custsRes],   ['jobs', jobsRes],
+                    ['customers', custsRes],   ['jobs', jobsRes], ['schedule', blocksRes],
                 ].filter(([, r]) => !r.ok);
                 if (failed.length) {
                     const detail = failed.map(([n, r]) => `${n} (${r.status})`).join(', ');
                     throw new Error(`Dispatch data failed to load: ${detail}`);
                 }
 
-                const [techsData, vehiclesData, equipData, custsData, jobsData] = await Promise.all([
+                const [techsData, vehiclesData, equipData, custsData, jobsData, blocksData] = await Promise.all([
                     techsRes.json(),
                     vehiclesRes.json(),
                     equipRes.json(),
                     custsRes.json(),
                     jobsRes.json(),
+                    blocksRes.json(),
                 ]);
 
                 // Normalise technicians — map DB fields to what BoardView/CrewBuilder expect
@@ -2428,6 +2758,7 @@ export default function DispatchTab() {
                 setCustomers(custsData.customers   || []);
                 setJobs([...normJobs, ...autoJobs]);
                 setJobsRaw(dbJobs);
+                setBlocks(blocksData.blocks || []);
             } catch (err) {
                 if (!cancelled) setLoadError(err.message || 'Failed to load dispatch data. Please refresh.');
                 console.error('DispatchTab load error:', err);
@@ -2666,6 +2997,46 @@ export default function DispatchTab() {
         if (!failed) setMassPlan(null);
     };
 
+    // Availability writes. Schedule blocks are dated exceptions; the weekly
+    // pattern lives on the technician row itself.
+    const saveBlock = async (blk) => {
+        const isNew = !!blk._isNew;
+        const body = { ...blk }; delete body._isNew;
+        const res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks'
+            + (isNew ? '' : '?id=' + encodeURIComponent(blk.id)), {
+            method: isNew ? 'POST' : 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (res.status === 403) throw new Error('Your role cannot change availability.');
+            throw new Error(data.error || ('HTTP ' + res.status));
+        }
+        const saved = data.block;
+        setBlocks(prev => {
+            const i = prev.findIndex(b => b.id === saved.id);
+            if (i === -1) return [...prev, saved];
+            const next = [...prev]; next[i] = saved; return next;
+        });
+    };
+
+    const deleteBlock = async (id) => {
+        const res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks?id=' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        setBlocks(prev => prev.filter(b => b.id !== id));
+    };
+
+    const saveWorkingHours = async (techId, workingHours) => {
+        const res = await dbFetch('/.netlify/functions/dispatch-technicians?id=' + encodeURIComponent(techId), {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: techId, workingHours }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        if (data.technician) setTechsRaw(prev => prev.map(t => t.id === techId ? data.technician : t));
+    };
+
     const handleJobClick = (job) => {
         setSelectedJobId(job.id);
         setView('queue');
@@ -2728,6 +3099,7 @@ export default function DispatchTab() {
                     { id: 'jobs',      label: 'Jobs' },
                     { id: 'customers', label: 'Customers' },
                     { id: 'techs',     label: 'Technicians' },
+                    { id: 'schedule',  label: 'Schedule' },
                 ].map(v => {
                     const active = view === v.id;
                     return (
@@ -2908,6 +3280,15 @@ export default function DispatchTab() {
                                     needSkills: saved.needSkills || [] }
                                 : j));
                         }}/>
+                ) : view === 'schedule' ? (
+                    <ScheduleView techsRaw={techsRaw} blocks={blocks}
+                        blockTypes={settings?.dispatchBlockTypes || []}
+                        anchor={schedAnchor}
+                        onPrev={() => setSchedAnchor(a => addDays(a, -7))}
+                        onNext={() => setSchedAnchor(a => addDays(a, 7))}
+                        onToday={() => setSchedAnchor(new Date())}
+                        onSaveBlock={saveBlock} onDeleteBlock={deleteBlock}
+                        onSaveHours={saveWorkingHours}/>
                 ) : view === 'techs' ? (
                     <TechniciansView techsRaw={techsRaw} users={settings?.users || []}
                         vehicles={vehicles} skills={skills} certs={settings?.dispatchCerts || []} licenseLevels={licLevels}

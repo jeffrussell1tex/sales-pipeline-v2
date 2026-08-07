@@ -91,6 +91,7 @@ const DEFAULT_SETTINGS = {
     dispatchLicenses: ['Apprentice','Journeyman','Master','Lead'],
     dispatchTrades: [],
     dispatchJobTypes: [],
+    dispatchBlockTypes: [{ id:'bt_pto', name:'PTO', color:'#4d6b3d' }, { id:'bt_sick', name:'Sick', color:'#9c3a2e' }, { id:'bt_holiday', name:'Holiday', color:'#3a5a7a' }, { id:'bt_training', name:'Training', color:'#b87333' }, { id:'bt_jury', name:'Jury duty', color:'#7a6a48' }, { id:'bt_bereavement', name:'Bereavement', color:'#5a544c' }, { id:'bt_other', name:'Other', color:'#8a8378' }],
     dispatchVehicles: [],
     dispatchJobs: [],
     dispatchCrews: [],
