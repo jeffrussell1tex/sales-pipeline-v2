@@ -1728,7 +1728,12 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
 // site address was wrong), and the UI says so.
 const JOB_STATUSES = ['unscheduled', 'scheduled', 'en_route', 'on_site', 'paused', 'completed', 'cancelled'];
 
-const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, onSaved }) => {
+// Types are scoped to a category. A type with no categoryId is shared and shows
+// under every category, so partially-categorised lists still work.
+const typesForCategory = (allTypes, categoryId) =>
+    (allTypes || []).filter(t => !t.categoryId || t.categoryId === categoryId);
+
+const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories, jobTypes, onSaved }) => {
     const [query,      setQuery]      = React.useState('');
     const [statusFilt, setStatusFilt] = React.useState('all');
     const [selectedId, setSelectedId] = React.useState(null);
@@ -1813,7 +1818,8 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, onSaved })
                     description:     draft.description || null,
                     priority:        draft.priority || 'normal',
                     status:          draft.status || 'unscheduled',
-                    jobType:         draft.jobType || 'repair',
+                    jobType:         draft.jobType || null,
+                    trade:           draft.trade   || null,
                     durationMinutes: Math.round((parseFloat(draft.durationHrs ?? ((draft.durationMinutes || 120) / 60)) || 2) * 60),
                     crewSize:        parseInt(draft.crewSize, 10) || 1,
                     minLicense:      draft.minLicense || null,
@@ -1901,6 +1907,33 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, onSaved })
                                 The customer cannot be changed after creation — create a new job instead.
                             </div>
                         </CustFieldRow>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="Job category">
+                                <select value={draft.trade || ''}
+                                    onChange={e => {
+                                        const cid = e.target.value;
+                                        // Clear a type that does not belong to the new category.
+                                        const stillValid = typesForCategory(jobTypes, cid).some(t => t.id === draft.jobType);
+                                        setDraft(d => ({ ...d, trade: cid, jobType: stillValid ? d.jobType : '' }));
+                                    }}
+                                    style={custInput}>
+                                    <option value="">— None —</option>
+                                    {(categories || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </CustFieldRow>
+                            <CustFieldRow label="Job type">
+                                <select value={draft.jobType || ''} onChange={e => set('jobType', e.target.value)} style={custInput}>
+                                    <option value="">— None —</option>
+                                    {typesForCategory(jobTypes, draft.trade).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                </select>
+                                {(categories || []).length === 0 && (
+                                    <div style={{ marginTop: 4, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                        Define these under Settings → Dispatch → Job categories &amp; types.
+                                    </div>
+                                )}
+                            </CustFieldRow>
+                        </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                             <CustFieldRow label="Priority">
@@ -2023,7 +2056,7 @@ export default function DispatchTab() {
     const [newJobSaving,   setNewJobSaving]   = useState(false);
     const [newJobError,    setNewJobError]    = useState('');
     // customerId is the FK the server requires; `customer` is only the typed text.
-    const EMPTY_JOB = { customer: '', customerId: '', accountId: '', title: '', address: '', city: '', state: '', zip: '',
+    const EMPTY_JOB = { customer: '', customerId: '', accountId: '', title: '', trade: '', jobType: '', address: '', city: '', state: '', zip: '',
         window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman',
         opportunityId: '', needSkills: [] };
     const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
@@ -2275,7 +2308,8 @@ export default function DispatchTab() {
                 locationId,
                 accountId:       newJobForm.accountId || createdCust?.accountId || null,
                 title,
-                jobType:         'repair',
+                trade:           newJobForm.trade   || null,
+                jobType:         newJobForm.jobType || null,
                 priority:        newJobForm.priority,
                 status:          'unscheduled',
                 durationMinutes: Math.round((parseFloat(newJobForm.durationHrs) || 2) * 60),
@@ -2606,6 +2640,8 @@ export default function DispatchTab() {
                 ) : view === 'jobs' ? (
                     <JobsView jobsRaw={jobsRaw} customers={customers} techs={techs} skills={skills}
                         licenseLevels={licLevels}
+                        categories={settings?.dispatchTrades || []}
+                        jobTypes={settings?.dispatchJobTypes || []}
                         onSaved={saved => {
                             setJobsRaw(prev => prev.map(j => j.id === saved.id ? saved : j));
                             // Keep the board in step without a reload.
@@ -2724,6 +2760,31 @@ export default function DispatchTab() {
                                     onChange={e => setNewJobForm(f => ({ ...f, title: e.target.value }))}
                                     placeholder="e.g. Rooftop unit not cooling"
                                     style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none' }} />
+                            </div>
+                            {/* Job category + type */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Job Category</label>
+                                    <select value={newJobForm.trade}
+                                        onChange={e => {
+                                            const cid = e.target.value;
+                                            const stillValid = typesForCategory(settings?.dispatchJobTypes, cid).some(t => t.id === newJobForm.jobType);
+                                            setNewJobForm(f => ({ ...f, trade: cid, jobType: stillValid ? f.jobType : '' }));
+                                        }}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
+                                        <option value="">— None —</option>
+                                        {(settings?.dispatchTrades || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Job Type</label>
+                                    <select value={newJobForm.jobType}
+                                        onChange={e => setNewJobForm(f => ({ ...f, jobType: e.target.value }))}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
+                                        <option value="">— None —</option>
+                                        {typesForCategory(settings?.dispatchJobTypes, newJobForm.trade).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                </div>
                             </div>
                             {/* Address */}
                             <div>

@@ -41,6 +41,7 @@ import { ExportDetail } from './settings/data/ExportDetail.jsx';
 import { BackupDetail } from './settings/data/BackupDetail.jsx';
 import { FeaturesDetail } from './settings/data/FeaturesDetail.jsx';
 import { DispatchSkillsDetail } from './settings/dispatch/DispatchSkillsDetail.jsx';
+import { DispatchJobTypesDetail } from './settings/dispatch/DispatchJobTypesDetail.jsx';
 import { DispatchVehiclesDetail } from './settings/dispatch/DispatchVehiclesDetail.jsx';
 import { DispatchCrewsDetail } from './settings/dispatch/DispatchCrewsDetail.jsx';
 import { DispatchJobTemplatesDetail } from './settings/dispatch/DispatchJobTemplatesDetail.jsx';
@@ -322,6 +323,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         'buyer-personas':       'buyer-personas',
         // Dispatch
         'dsp-skills':           'dsp-skills',
+        'dsp-jobtypes':         'dsp-jobtypes',
         'dsp-vehicles':         'dsp-vehicles',
         'dsp-crews':            'dsp-crews',
         'dsp-templates':        'dsp-templates',
@@ -475,6 +477,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         // Dispatch detail pages
         if (id === 'dsp-skills'    || id === 'dispatch-skills')   return <DispatchSkillsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'dsp-jobtypes')                                return <DispatchJobTypesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'dsp-vehicles'  || id === 'dispatch-vehicles') return <DispatchVehiclesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'dsp-crews')     return <DispatchCrewsDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'dsp-templates') return <DispatchJobTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;

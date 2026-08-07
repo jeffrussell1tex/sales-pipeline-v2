@@ -89,6 +89,8 @@ const DEFAULT_SETTINGS = {
     dispatchSkills: [],
     dispatchCerts: [],
     dispatchLicenses: ['Apprentice','Journeyman','Master','Lead'],
+    dispatchTrades: [],
+    dispatchJobTypes: [],
     dispatchVehicles: [],
     dispatchJobs: [],
     dispatchCrews: [],
