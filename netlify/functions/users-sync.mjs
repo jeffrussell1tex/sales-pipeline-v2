@@ -71,7 +71,12 @@ export const handler = async (event) => {
             if (r.email) dbByEmail.set(r.email.toLowerCase(), r);
         }
 
-        const summary = { created: [], updated: [], unchanged: [], skipped: [] };
+        // Dry run (?check=true): compute exactly the same reconciliation but write
+        // nothing. Lets the Users screen show "N users out of sync" on load, so
+        // drift is visible rather than discovered by chance.
+        const dryRun = (event.queryStringParameters || {}).check === 'true';
+
+        const summary = { created: [], updated: [], unchanged: [], skipped: [], dryRun };
         const clerkEmails = new Set();
 
         for (let i = 0; i < detail.length; i++) {
@@ -96,18 +101,20 @@ export const handler = async (event) => {
 
             if (!existing) {
                 // CREATE — new roster row from Clerk.
-                const [row] = await db.insert(users).values({
-                    id:        clerkUserId,
-                    orgId,
-                    name,
-                    email,
-                    role,
-                    team,
-                    territory,
-                    active:    true,
-                    profile:   { status: 'Active', userType: role },
-                    updatedAt: new Date(),
-                }).onConflictDoNothing().returning();
+                if (!dryRun) {
+                    await db.insert(users).values({
+                        id:        clerkUserId,
+                        orgId,
+                        name,
+                        email,
+                        role,
+                        team,
+                        territory,
+                        active:    true,
+                        profile:   { status: 'Active', userType: role },
+                        updatedAt: new Date(),
+                    }).onConflictDoNothing();
+                }
                 summary.created.push({ email, name, role });
                 continue;
             }
@@ -131,7 +138,9 @@ export const handler = async (event) => {
                 continue;
             }
             patch.updatedAt = new Date();
-            await db.update(users).set(patch).where(and(eq(users.id, existing.id), eq(users.orgId, orgId)));
+            if (!dryRun) {
+                await db.update(users).set(patch).where(and(eq(users.id, existing.id), eq(users.orgId, orgId)));
+            }
             summary.updated.push({ email, changed: Object.keys(patch).filter((k) => k !== 'updatedAt') });
         }
 
@@ -140,8 +149,9 @@ export const handler = async (event) => {
             .filter((r) => r.email && !clerkEmails.has(r.email.toLowerCase()))
             .map((r) => ({ id: r.id, name: r.name, email: r.email }));
 
-        // 5. Audit (best-effort).
-        try {
+        // 5. Audit (best-effort). A dry run changes nothing, so it must not
+        // write an audit row claiming a sync happened.
+        if (!dryRun) try {
             await db.insert(auditLog).values({
                 id:         'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
                 orgId,

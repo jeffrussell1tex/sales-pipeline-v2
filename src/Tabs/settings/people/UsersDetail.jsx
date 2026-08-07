@@ -1167,6 +1167,29 @@ export const UsersDetail = ({ settings, onBack }) => {
     // and reports rows not found in Clerk. Refreshes settings.users on success.
     const [syncing, setSyncing]   = useState(false);
     const [syncMsg, setSyncMsg]   = useState(null);
+    const [drift,   setDrift]     = useState(null);   // { created, updated, dbOnly }
+
+    // Drift check on load. Clerk is authoritative for identity and role; this
+    // table is a mirror, and they diverge quietly (an invite that never
+    // completed, a role changed in the Clerk dashboard, a user removed there).
+    // ?check=true runs the same reconciliation and writes nothing, so the
+    // difference is visible here instead of being discovered by accident.
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await dbFetch('/.netlify/functions/users-sync?check=true', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+                });
+                if (!res.ok) return;                       // non-admins simply see nothing
+                const d = await res.json();
+                if (cancelled) return;
+                const c = d.counts || {};
+                if ((c.created || 0) + (c.updated || 0) + (c.dbOnly || 0) > 0) setDrift(c);
+            } catch (e) { /* drift banner is advisory */ }
+        })();
+        return () => { cancelled = true; };
+    }, []);
     const runClerkSync = async () => {
         if (syncing) return;
         setSyncing(true); setSyncMsg(null);
@@ -1178,6 +1201,7 @@ export const UsersDetail = ({ settings, onBack }) => {
             let msg = `Synced: ${c.created} added, ${c.updated} updated, ${c.unchanged} unchanged`;
             if (c.dbOnly > 0) msg += ` · ${c.dbOnly} in Accelerep not in Clerk (review)`;
             setSyncMsg(msg);
+            setDrift(null);   // reconciled
             // Refresh the roster from the DB so new/updated rows appear immediately.
             const r = await dbFetch('/.netlify/functions/users');
             if (r.ok) { const ud = await r.json(); if (ud && ud.users) _setSettings(prev => ({ ...prev, users: ud.users })); }
@@ -1289,6 +1313,26 @@ export const UsersDetail = ({ settings, onBack }) => {
                     <button onClick={() => setPeopleView('invite')} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Invite users</button>
                 </div>
             </div>
+            {!syncMsg && drift && (
+                <div style={{ margin:'0 0 12px', padding:'9px 12px', background:`${T.warn}12`,
+                    border:`1px solid ${T.warn}55`, borderRadius:T.r, fontSize:12.5, color:T.ink,
+                    fontFamily:T.sans, display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ fontWeight:700, color:T.warn }}>Out of sync with Clerk</span>
+                    <span style={{ color:T.inkMid }}>
+                        {[
+                            drift.created ? `${drift.created} in Clerk not here` : null,
+                            drift.updated ? `${drift.updated} with different details` : null,
+                            drift.dbOnly  ? `${drift.dbOnly} here not in Clerk` : null,
+                        ].filter(Boolean).join(' · ')}
+                    </span>
+                    <button onClick={runClerkSync} disabled={syncing}
+                        style={{ marginLeft:'auto', padding:'5px 12px', background:T.ink, color:'#fbf8f3',
+                            border:'none', borderRadius:T.r, fontSize:12, fontWeight:600,
+                            cursor: syncing ? 'default' : 'pointer', fontFamily:T.sans }}>
+                        {syncing ? 'Syncing…' : 'Reconcile'}
+                    </button>
+                </div>
+            )}
             {syncMsg && (
                 <div style={{ margin:'0 0 12px', padding:'8px 12px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.inkMid, fontFamily:T.sans }}>
                     {syncMsg}

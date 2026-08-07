@@ -45,12 +45,24 @@ export const handler = async (event) => {
 
     // ── Helpers (hoisted above all early-exit handlers so they're available everywhere) ──
 
+    // ROLE IS DELIBERATELY ABSENT from sanitize.
+    //
+    // Clerk publicMetadata.role is the source of truth — auth.mjs reads it on
+    // every request and this table is only a mirror. Taking role from the request
+    // body caused two problems that produced the drift between the Accelerep user
+    // list and Clerk:
+    //   1. `PUT ?me=true` let any user rewrite their own mirror role, and a save
+    //      that simply omitted userType silently downgraded them to 'User'.
+    //   2. An admin editing a user wrote the new role to the mirror only, so the
+    //      roster and actual authorization disagreed with no warning.
+    // Role changes go through user-role.mjs, which writes Clerk first. Callers
+    // that legitimately set role (invite, Clerk sync, user-role) pass it
+    // explicitly via withRole() below.
     const sanitize = (data) => ({
         id:           data.id,
         name:         ((data.firstName || '') + ' ' + (data.lastName || '')).trim() || data.name || 'Unnamed User',
         // email is notNull + unique in schema — use a unique placeholder if not provided
         email:        (data.email && data.email.trim()) ? data.email.trim() : `${data.id}@placeholder.local`,
-        role:         data.userType || data.role || 'User',
         team:         data.team     || null,
         territory:    data.territory || null,
         quota:        (data.quota !== null && data.quota !== undefined && data.quota !== '') ? parseFloat(data.quota) : null,
@@ -96,6 +108,19 @@ export const handler = async (event) => {
     });
 
     // Flatten a DB row back into the shape the frontend expects
+    // Attach a role explicitly. `known` should come from Clerk (sync/invite) or
+    // from the existing row — never from a client request body.
+    const withRole = (clean, known) => (known ? { ...clean, role: known } : clean);
+
+    // Preserve the stored role when updating an existing row, so an update that
+    // does not carry a role cannot blank it (the column is notNull default 'User').
+    const roleOf = async (id) => {
+        if (!id) return null;
+        const [row] = await db.select({ role: users.role }).from(users)
+            .where(and(eq(users.id, id), eq(users.orgId, orgId)));
+        return row?.role || null;
+    };
+
     const flatten = (row) => ({
         id:            row.id,
         name:          row.name,
@@ -183,7 +208,10 @@ export const handler = async (event) => {
             if (data.id !== userId) {
                 return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: cannot update another user\'s profile' }) };
             }
-            const clean = sanitize(data);
+            // Keep whatever role is already stored. A profile save must never
+            // change it — previously omitting userType downgraded the user to
+            // 'User', which is how Admins quietly lost their roster role.
+            const clean = withRole(sanitize(data), await roleOf(data.id) || 'User');
             const { id, ...updateData } = clean;
             let upsertResult;
             try {
@@ -344,7 +372,7 @@ export const handler = async (event) => {
                             results.push(flatten(row || existingRow));
                         } else {
                             const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-                            const row = await upsertUser(sanitize({
+                            const row = await upsertUser(withRole(sanitize({
                                 id:        pendingId,
                                 email,
                                 name:      email.split('@')[0],
@@ -353,7 +381,7 @@ export const handler = async (event) => {
                                 territory: invite.territory || null,
                                 active:    false,
                                 status:    'Invited',
-                            }));
+                            }), invite.role || 'User'));
                             results.push(flatten(row));
                         }
 
@@ -376,7 +404,7 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
             try {
-                const result = await upsertUser(sanitize(data));
+                const result = await upsertUser(withRole(sanitize(data), data.userType || data.role || 'User'));
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
                 }
@@ -397,7 +425,10 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
             try {
-                const result = await upsertUser(sanitize(data));
+                // Role is preserved, never taken from the body: writing it here
+                // would change the roster without changing Clerk, which is what
+                // auth.mjs actually reads. Role changes go through user-role.mjs.
+                const result = await upsertUser(withRole(sanitize(data), await roleOf(data.id) || 'User'));
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };
                 }
