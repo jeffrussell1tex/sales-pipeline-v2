@@ -5,6 +5,18 @@ import { dbFetch } from '../../../utils/storage';
 import { T, eb } from '../shared/tokens.js';
 import { RToggle, RCheck, UserAvatar } from '../shared/ui.jsx';
 
+// Role values must match what auth.mjs checks. 'User' is the stored value for a
+// sales rep; "Sales Rep" is a display label only. Two lists previously disagreed
+// ('Sales Rep' vs 'User') and the mismatch went unnoticed because auth.mjs treats
+// any unrecognised role as a rep — it failed open.
+const ROLE_OPTIONS = [
+    { value: 'Admin',      label: 'Admin' },
+    { value: 'Manager',    label: 'Manager' },
+    { value: 'User',       label: 'Sales Rep' },
+    { value: 'Technician', label: 'Technician' },
+    { value: 'ReadOnly',   label: 'Read only' },
+];
+
 const RolePill = ({ role }) => {
     const map = {
         'Admin':         { bg:'rgba(42,38,34,0.85)',  fg:'#fbf8f3' },
@@ -90,7 +102,6 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     const allTeams  = [...new Set((settings.teams || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
     const allReps   = [...new Set((settings.users || []).map(u => u.name).filter(Boolean))].sort();
     const allTerr   = [...new Set((settings.territories || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
-    const roleOpts  = ['Admin', 'Manager', 'Sales Rep', 'ReadOnly'];
 
     const addRow = () => setRows(prev => [...prev, { id:Date.now(), email:'', role:defaultRole, team:'', manager:'', territory:'', valid:true, error:'' }]);
     const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
@@ -163,7 +174,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                                         <input style={{ ...inp, borderColor: r.error ? T.danger : T.border }} value={r.email} onChange={e=>updateRow(r.id,'email',e.target.value)} placeholder="user@company.com" type="email"/>
                                     </div>
                                     <select style={sel} value={r.role} onChange={e=>updateRow(r.id,'role',e.target.value)}>
-                                        {roleOpts.map(o=><option key={o}>{o}</option>)}
+                                        {ROLE_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                     <select style={sel} value={r.team} onChange={e=>updateRow(r.id,'team',e.target.value)}>
                                         <option value="">— choose —</option>
@@ -186,7 +197,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                             <div>
                                 <div style={{ ...eb(T.inkMuted), marginBottom:5 }}>Default role</div>
                                 <select style={sel} value={defaultRole} onChange={e=>setDefaultRole(e.target.value)}>
-                                    {roleOpts.map(o=><option key={o}>{o}</option>)}
+                                    {ROLE_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                                 </select>
                                 <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:3 }}>Used for rows that don't specify one.</div>
                             </div>
@@ -842,8 +853,8 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
     const allTeams = [...new Set((settings.teams || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
     const allMgrs  = (settings.users || []).filter(u => u.name && u.id !== user.id).map(u => u.name).sort();
     const allTerr  = [...new Set((settings.territories || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
-    const roleOpts = ['Admin','Manager','User','ReadOnly'];
 
+    const [roleNote, setRoleNote] = useState('');
     const handleChange = (field, val) => setForm(prev => ({ ...prev, [field]: val }));
 
     const handleSave = async () => {
@@ -851,6 +862,20 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
         try {
             const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form) });
             if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Save failed'); }
+
+            // A role change must go to CLERK, not just the users mirror: auth.mjs
+            // derives permissions from Clerk publicMetadata on every request, so
+            // writing only the DB row changes nothing the server enforces.
+            const priorRole = user.userType || user.role || 'User';
+            if ((form.userType || 'User') !== priorRole) {
+                const rr = await dbFetch('/.netlify/functions/user-role', {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targetUserId: user.id, role: form.userType || 'User' }),
+                });
+                const rd = await rr.json().catch(() => ({}));
+                if (!rr.ok) throw new Error(rd.error || 'Could not change the role.');
+                setRoleNote('Role updated \u2014 it can take up to 30 seconds to take effect.');
+            }
 
             // Sync team assignment into settings.teams repIds
             let updatedTeams = settings.teams || [];
@@ -984,9 +1009,14 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
                             <div>
                                 <label style={lbl}>Role</label>
                                 <select style={sel} value={form.userType||'User'} onChange={e=>handleChange('userType',e.target.value)}>
-                                    {roleOpts.map(o=><option key={o}>{o}</option>)}
+                                    {ROLE_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                                 </select>
-                                <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:3 }}>Determines base permission set.</div>
+                                <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:3 }}>
+                                    Determines base permission set. Technicians see only their own assigned jobs.
+                                </div>
+                                {roleNote && (
+                                    <div style={{ fontSize:10.5, color:T.ok, fontWeight:600, marginTop:3 }}>{roleNote}</div>
+                                )}
                             </div>
                             <div>
                                 <label style={lbl}>Team</label>

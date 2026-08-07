@@ -90,7 +90,7 @@ export const FlsDetail = ({ onBack }) => {
     const [objFilter, setObjFilter] = React.useState(FLS_OBJECTS_LIST[0]);
     const [search,    setSearch]    = React.useState('');
     const [matrix,    setMatrix]    = React.useState({}); // { [fieldKey]: { [role]: level } }
-    const [roles,     setRoles]     = React.useState(['Admin','Manager','Sales Rep','ReadOnly']);
+    const [roles,     setRoles]     = React.useState(['Admin','Manager','User','Technician','ReadOnly']);
     const [dirty,     setDirty]     = React.useState(false);
     const [loading,   setLoading]   = React.useState(true);
     const [saving,    setSaving]    = React.useState(false);
