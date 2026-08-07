@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { dispatchTechnicians } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { verifyAuth, requireWrite } from './auth.mjs';
+import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
@@ -43,7 +43,7 @@ export const handler = async (event) => {
 
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
-    const { orgId } = auth;
+    const { orgId, userId } = auth;
 
     // Role gate: ReadOnly may not mutate. Admin / Manager / Sales Rep all have
     // full write access to Dispatch records by design (field-service module).
@@ -54,7 +54,11 @@ export const handler = async (event) => {
         // ── GET: list all technicians for org ─────────────────────────────────
         if (event.httpMethod === 'GET') {
             const rows = await db.select().from(dispatchTechnicians)
-                .where(eq(dispatchTechnicians.orgId, orgId));
+                .where(isTechnician(auth.userRole)
+                    // A technician sees only their own record — the roster carries
+                    // colleagues' phone numbers, pay rates and home locations.
+                    ? and(eq(dispatchTechnicians.orgId, orgId), eq(dispatchTechnicians.userId, userId))
+                    : eq(dispatchTechnicians.orgId, orgId));
             return {
                 statusCode: 200,
                 headers,

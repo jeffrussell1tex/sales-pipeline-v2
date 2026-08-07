@@ -3,9 +3,10 @@ import {
     dispatchJobs,
     dispatchJobLineItems,
     dispatchJobStatusHistory,
+    dispatchTechnicians,
 } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
-import { verifyAuth, requireWrite } from './auth.mjs';
+import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
@@ -100,6 +101,34 @@ async function recordStatusChange(orgId, jobId, fromStatus, toStatus, changedBy,
     }).catch(() => {}); // non-fatal
 }
 
+// ── Technician scoping ────────────────────────────────────────────────────────
+// A Technician is a mobile/field user. Jobs FK the TECHNICIAN ROW
+// (dispatch_jobs.assignedTechId -> dispatch_technicians.id), not the user, so the
+// caller's Clerk id must be resolved to their technician row before anything can
+// be scoped. A user with the Technician role but no linked technician row owns
+// nothing and is denied — this fails closed by design.
+async function resolveTechnicianId(orgId, userId) {
+    if (!userId) return null;
+    const [row] = await db.select({ id: dispatchTechnicians.id })
+        .from(dispatchTechnicians)
+        .where(and(eq(dispatchTechnicians.orgId, orgId), eq(dispatchTechnicians.userId, userId)));
+    return row?.id || null;
+}
+
+// A technician is on a job if they are the lead or a co-tech.
+const techOnJob = (job, techId) =>
+    !!techId && (job.assignedTechId === techId ||
+        (Array.isArray(job.coTechIds) ? job.coTechIds : []).includes(techId));
+
+// The ONLY fields a technician may write, on a job assigned to them. Everything
+// else — reassignment, scheduling, customer, pricing — stays with dispatch.
+const TECH_WRITABLE = ['status', 'techNotes', 'completionNotes', 'photosCount', 'customerSignature'];
+
+// Progress transitions a technician may perform. They may move a job forward
+// through their own day and pause it; they may not cancel it or return it to
+// unscheduled, both of which are dispatch decisions.
+const TECH_STATUS_ALLOWED = ['en_route', 'on_site', 'paused', 'completed'];
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
 
@@ -107,10 +136,22 @@ export const handler = async (event) => {
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { orgId, userId } = auth;
 
-    // Role gate: ReadOnly may not mutate. Admin / Manager / Sales Rep all have
-    // full write access to Dispatch records by design (field-service module).
-    const forbidden = requireWrite(auth, event, headers);
+    // Technicians are the one role allowed past requireWrite here, and only so
+    // that the narrow per-field path below can run. Every other endpoint denies
+    // them by default.
+    const tech = isTechnician(auth.userRole);
+    const forbidden = requireWrite(auth, event, headers, { allowTechnician: true });
     if (forbidden) return forbidden;
+
+    const myTechId = tech ? await resolveTechnicianId(orgId, userId) : null;
+    if (tech && !myTechId) {
+        // Role granted but no technician record linked to this user — they own
+        // nothing, so there is nothing legitimate to read or write.
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'No technician record is linked to your account.' }) };
+    }
+    if (tech && (event.httpMethod === 'POST' || event.httpMethod === 'DELETE')) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Technicians cannot create or delete jobs.' }) };
+    }
 
     const params   = event.queryStringParameters || {};
     const resource = params.resource; // 'lineitems' | 'history' | undefined
@@ -183,13 +224,21 @@ export const handler = async (event) => {
                 const [row] = await db.select().from(dispatchJobs)
                     .where(and(eq(dispatchJobs.id, params.id), eq(dispatchJobs.orgId, orgId)));
                 if (!row) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
-                return { statusCode: 200, headers, body: JSON.stringify({ job: normaliseJob(row) }) };
+                const one = normaliseJob(row);
+                // 404 rather than 403: a technician should not be able to probe
+                // which job ids exist in the org.
+                if (tech && !techOnJob(one, myTechId)) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+                }
+                return { statusCode: 200, headers, body: JSON.stringify({ job: one }) };
             }
-            // List all jobs for org
+            // List. Technicians see only their own assignments.
             const rows = await db.select().from(dispatchJobs)
                 .where(eq(dispatchJobs.orgId, orgId))
                 .orderBy(desc(dispatchJobs.createdAt));
-            return { statusCode: 200, headers, body: JSON.stringify({ jobs: rows.map(normaliseJob) }) };
+            const all = rows.map(normaliseJob);
+            const visible = tech ? all.filter(j => techOnJob(j, myTechId)) : all;
+            return { statusCode: 200, headers, body: JSON.stringify({ jobs: visible }) };
         }
 
         if (event.httpMethod === 'POST') {
@@ -271,6 +320,42 @@ export const handler = async (event) => {
 
             const data    = JSON.parse(event.body || '{}');
             const updates = { updatedAt: new Date() };
+
+            // Technician path: own job only, whitelisted fields only, and only
+            // forward-progress status transitions. Anything else is rejected
+            // outright rather than silently dropped, so a mis-scoped mobile
+            // client fails loudly instead of appearing to succeed.
+            if (tech) {
+                const currentJob = normaliseJob(current);
+                if (!techOnJob(currentJob, myTechId)) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+                }
+                const attempted = Object.keys(data).filter(k => k !== 'id');
+                const illegal = attempted.filter(k => !TECH_WRITABLE.includes(k));
+                if (illegal.length) {
+                    return { statusCode: 403, headers, body: JSON.stringify({
+                        error: `Technicians may only update: ${TECH_WRITABLE.join(', ')}. Rejected: ${illegal.join(', ')}`,
+                    }) };
+                }
+                if ('status' in data && !TECH_STATUS_ALLOWED.includes(data.status)) {
+                    return { statusCode: 403, headers, body: JSON.stringify({
+                        error: `Technicians may set status to: ${TECH_STATUS_ALLOWED.join(', ')}`,
+                    }) };
+                }
+                TECH_WRITABLE.forEach(f => { if (f in data) updates[f] = data[f]; });
+
+                await db.update(dispatchJobs).set(updates)
+                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+
+                const [updatedRow] = await db.select().from(dispatchJobs)
+                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+
+                if ('status' in data && data.status !== current.status) {
+                    await recordStatusChange(orgId, id, current.status, data.status, userId, 'Updated in the field');
+                }
+
+                return { statusCode: 200, headers, body: JSON.stringify({ job: normaliseJob(updatedRow) }) };
+            }
 
             const scalarFields = [
                 'jobNumber','customerId','locationId','accountId','opportunityId',

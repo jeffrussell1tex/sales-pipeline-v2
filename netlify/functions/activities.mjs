@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { activities, leads, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth, requireRole, canSeeAll, isReadOnly } from './auth.mjs';
+import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
@@ -35,9 +35,12 @@ export const handler = async (event) => {
 
     // Server-side role enforcement: ReadOnly can never mutate, regardless of
     // what the client UI allows. Runs before any handler logic.
-    if (isReadOnly(userRole) && ['POST', 'PUT', 'DELETE'].includes(event.httpMethod)) {
-        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: read-only role' }) };
-    }
+    // Shared write gate. Denies ReadOnly AND Technician: a technician's only
+    // write capability is the field whitelist in dispatch-jobs.mjs, so they must
+    // not be able to mutate CRM records. Previously this checked isReadOnly
+    // alone, which would have granted a new role full write access by default.
+    const forbidden = requireWrite(auth, event, headers);
+    if (forbidden) return forbidden;
 
     const sanitize = (d) => {
         // contactIds is the source of truth (multi-contact); contactId is kept as the

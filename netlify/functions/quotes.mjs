@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { quotes, opportunities, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and, desc } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
 
 const headers = {
@@ -103,7 +103,10 @@ export const handler = async (event) => {
     const { orgId, userRole } = auth;
     const isAdmin = userRole === 'Admin';
     const isManager = userRole === 'Manager';
-    const isReadOnly = userRole === 'ReadOnly';
+    // Shared write gate rather than a local ReadOnly-only const: that const
+    // shadowed the imported helper and would have let a Technician write quotes.
+    const forbiddenWrite = requireWrite(auth, event, headers);
+    if (forbiddenWrite) return forbiddenWrite;
 
     try {
         // ── GET — list quotes ─────────────────────────────────────────────────
@@ -150,7 +153,6 @@ export const handler = async (event) => {
 
         // ── POST — create quote ───────────────────────────────────────────────
         if (event.httpMethod === 'POST') {
-            if (isReadOnly) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Read-only users cannot create quotes' }) };
             const data = JSON.parse(event.body || '{}');
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             if (!data.opportunityId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'opportunityId is required' }) };
@@ -175,7 +177,6 @@ export const handler = async (event) => {
 
         // ── PUT — update quote ────────────────────────────────────────────────
         if (event.httpMethod === 'PUT') {
-            if (isReadOnly) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Read-only users cannot update quotes' }) };
             const data = JSON.parse(event.body || '{}');
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
 

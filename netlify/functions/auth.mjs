@@ -93,6 +93,12 @@ export const isManager = (role) => role === 'Manager';
 export const canSeeAll = (role) => role === 'Admin' || role === 'Manager';
 export const isReadOnly = (role) => role === 'ReadOnly';
 
+// Field technician. Has app access (mobile) but is NOT a general write role: the
+// only thing a Technician may change is the progress of a job assigned to them,
+// through the field whitelist in dispatch-jobs.mjs. Everything else — all CRM
+// entities, customers, other technicians, scheduling, vehicles — is read-only.
+export const isTechnician = (role) => role === 'Technician';
+
 // Role gate for individual handler branches. Returns a ready-to-return 403
 // response when the caller's role is not in allowedRoles, or null when allowed.
 // Usage:
@@ -102,23 +108,42 @@ export const isReadOnly = (role) => role === 'ReadOnly';
 // being demoted) can take up to 30s to be enforced here.
 // Write gate for mutating branches — the one check every mutating endpoint
 // needs before any role-specific rule (Admin-only clears, ownership checks)
-// applies. ReadOnly is the only role with no write capability at all, so this
-// encodes the "can this role write anything?" half of the capability matrix in
-// one place. Non-mutating methods pass straight through, so it is safe to call
+// applies. Non-mutating methods pass straight through, so it is safe to call
 // once at the top of a handler rather than per branch.
+//
+// TWO roles have no general write capability: ReadOnly and Technician. Technician
+// is denied BY DEFAULT here so that adding the role cannot silently grant write
+// access to the ~28 endpoints that call this. Exactly one caller opts in
+// (dispatch-jobs.mjs), and it then applies its own per-field whitelist and
+// ownership check. Deny-by-default with a single explicit opt-in is the point:
+// a new role must never inherit write access simply by not being ReadOnly.
+//
 // Usage:
 //   const forbidden = requireWrite(auth, event, headers);
 //   if (forbidden) return forbidden;
+// Opt-in (dispatch-jobs only):
+//   const forbidden = requireWrite(auth, event, headers, { allowTechnician: true });
 const MUTATING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
-export function requireWrite(auth, event, headers) {
+export function requireWrite(auth, event, headers, opts = {}) {
     if (!MUTATING_METHODS.includes(event?.httpMethod)) return null;
-    if (!isReadOnly(auth?.userRole)) return null;
-    console.warn('requireWrite: read-only role blocked', event?.httpMethod, 'for user', auth?.userId);
-    return {
-        statusCode: 403,
-        headers,
-        body: JSON.stringify({ error: 'Forbidden: read-only role' }),
-    };
+
+    if (isReadOnly(auth?.userRole)) {
+        console.warn('requireWrite: read-only role blocked', event?.httpMethod, 'for user', auth?.userId);
+        return {
+            statusCode: 403, headers,
+            body: JSON.stringify({ error: 'Forbidden: read-only role' }),
+        };
+    }
+
+    if (isTechnician(auth?.userRole) && !opts.allowTechnician) {
+        console.warn('requireWrite: technician role blocked', event?.httpMethod, 'for user', auth?.userId);
+        return {
+            statusCode: 403, headers,
+            body: JSON.stringify({ error: 'Forbidden: technicians may only update their own assigned jobs' }),
+        };
+    }
+
+    return null;
 }
 
 export function requireRole(auth, allowedRoles, headers) {
