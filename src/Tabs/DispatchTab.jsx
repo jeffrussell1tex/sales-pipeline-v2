@@ -444,7 +444,7 @@ function assignLanes(jobs) {
 }
 
 // ── DISPATCH BOARD VIEW ───────────────────────────────────────────────────────
-const BoardView = ({ jobs, techs, skills, onJobClick }) => {
+const BoardView = ({ jobs, techs, skills, blocks, blockTypes, dateStr, onJobClick }) => {
     const COL_W  = 80;
     const RAIL_W = 220;
     const LANE_H = 56; // must match TimelineBlock
@@ -544,6 +544,15 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
                         const { laneMap, laneCount } = techLanes[tech.id] || { laneMap: new Map(), laneCount: 1 };
                         const rowH = Math.max(MIN_ROW_H, laneCount * LANE_H);
                         const over = overHours.has(tech.id);
+                        // Availability for the day on screen: no shift = not rostered,
+                        // an all-day block = out. Both shade the whole lane so a
+                        // dispatcher never drops a job onto someone who is away.
+                        const dayShift  = dateStr ? shiftForDate(tech, dateStr) : null;
+                        const dayBlocks = dateStr ? blocksOnDate(blocks, tech.id, dateStr) : [];
+                        const allDayOff = dayBlocks.find(b => b.allDay !== false);
+                        const offLabel  = allDayOff
+                            ? ((blockTypes || []).find(t => t.id === allDayOff.blockType)?.name || 'Time off')
+                            : (dateStr && !dayShift ? 'Not rostered' : null);
                         return (
                             <div key={tech.id} style={{ display: 'flex', borderBottom: `1px solid ${T.border}`,
                                 height: rowH, flexShrink: 0, background: T.surface,
@@ -558,6 +567,12 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
                                             display: 'flex', alignItems: 'center', gap: 4 }}>
                                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tech.name}</span>
                                             <span style={{ fontSize: 9, color: T.inkMuted, fontWeight: 600, flexShrink: 0 }}>{tech.license || '—'}</span>
+                                            {offLabel && (
+                                                <span style={{ fontSize: 8.5, fontWeight: 700, padding: '1px 5px', borderRadius: 8,
+                                                    background: `${T.warn}1e`, color: T.warn, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                                    {offLabel}
+                                                </span>
+                                            )}
                                         </div>
                                         <div style={{ fontSize: 9.5, color: T.inkMuted, marginTop: 1, fontFamily: T.sans,
                                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -571,10 +586,19 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
 
                                 {/* Hour cells + job blocks */}
                                 <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
-                                    {DSP_HOURS.map(h => (
-                                        <div key={h} style={{ width: COL_W, flexShrink: 0, height: '100%',
-                                            borderRight: `1px solid ${T.border}`, position: 'relative' }}/>
-                                    ))}
+                                    {DSP_HOURS.map(h => {
+                                        // Hours outside the shift, or covered by time off, are shaded.
+                                        const outside = dateStr && (!dayShift || h < hhToNum(dayShift.start) || h >= hhToNum(dayShift.end));
+                                        const partial = !allDayOff && dayBlocks.some(b =>
+                                            b.allDay === false && b.startTime && b.endTime &&
+                                            h < hhToNum(b.endTime) && (h + 1) > hhToNum(b.startTime));
+                                        return (
+                                            <div key={h} style={{ width: COL_W, flexShrink: 0, height: '100%',
+                                                borderRight: `1px solid ${T.border}`, position: 'relative',
+                                                background: allDayOff || outside ? `${T.borderStrong}44`
+                                                    : partial ? `${T.warn}18` : 'transparent' }}/>
+                                        );
+                                    })}
                                     {techJobs.map(j => (
                                         <TimelineBlock key={j.id} job={j} conflict={techConflicts.has(j.id)}
                                             colWidth={COL_W} onClick={() => onJobClick(j)}
@@ -1109,7 +1133,7 @@ const normaliseTech = (t) => ({
 // ── Week board: technician rows x 7 day columns ───────────────────────────────
 // Keeps the "who is loaded" read of the day board. An hour axis does not extend
 // to a week (12 columns becomes 84), so the cell is the unit instead of the hour.
-const WeekBoardView = ({ jobs, techs, skills, anchor, onJobClick }) => {
+const WeekBoardView = ({ jobs, techs, skills, blocks, blockTypes, anchor, onJobClick }) => {
     const weekStart = startOfWeek(anchor);
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
     const todayStr = ymd(new Date());
@@ -1196,11 +1220,27 @@ const WeekBoardView = ({ jobs, techs, skills, anchor, onJobClick }) => {
                         </div>
                         {days.map(d => {
                             const ds = ymd(d);
-                            const cellJobs = techJobs.filter(j => j.scheduledDate === ds);
+                            const cellJobs   = techJobs.filter(j => j.scheduledDate === ds);
+                            const cellBlocks = blocksOnDate(blocks, tech.id, ds);
+                            const cellOff    = cellBlocks.find(b => b.allDay !== false);
                             return (
                                 <div key={ds} style={{ flex: 1, minWidth: 120, borderRight: `1px solid ${T.border}`,
                                     padding: 5, display: 'flex', flexDirection: 'column', gap: 4,
-                                    background: ds === todayStr ? `${T.gold}12` : 'transparent' }}>
+                                    background: cellOff ? `${T.borderStrong}44`
+                                        : ds === todayStr ? `${T.gold}12` : 'transparent' }}>
+                                    {cellBlocks.map(b => {
+                                        const bt = (blockTypes || []).find(t => t.id === b.blockType);
+                                        const col = bt?.color || T.warn;
+                                        return (
+                                            <div key={b.id} style={{ padding: '2px 6px', borderRadius: T.r,
+                                                background: `${col}1e`, borderLeft: `3px solid ${col}` }}>
+                                                <div style={{ fontSize: 10, fontWeight: 700, color: col, fontFamily: T.sans }}>
+                                                    {bt?.name || 'Time off'}
+                                                    {b.allDay === false && b.startTime ? ` ${b.startTime}–${b.endTime}` : ''}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                     {cellJobs.map(j => (
                                         <div key={j.id} onClick={() => onJobClick(j)}
                                             style={{ padding: '4px 6px', borderRadius: T.r, cursor: 'pointer',
@@ -2327,10 +2367,23 @@ const MassSchedulePanel = ({ plan, fromStr, toStr, saving, progress, onCancel, o
 // Both were declared in the schema and never used. Nothing consumes them for
 // scheduling yet; that lands with the scoreTech integration.
 
+// Jobs this technician is already committed to during a proposed time-off range.
+// An all-day block conflicts with everything that day; a partial block only with
+// jobs whose hours actually overlap it.
+const jobsDuringBlock = (jobs, blk) => (jobs || []).filter(j => {
+    if (!(j.assignedTechIds || []).includes(blk.techId)) return false;
+    if (!j.scheduledDate) return false;
+    if (j.scheduledDate < blk.startDate || j.scheduledDate > blk.endDate) return false;
+    if (blk.allDay !== false) return true;
+    if (j.start == null || !blk.startTime || !blk.endTime) return true;
+    const jStart = j.start, jEnd = j.start + (j.durationHrs || 2);
+    return jStart < hhToNum(blk.endTime) && jEnd > hhToNum(blk.startTime);
+});
+
 const schNav = { padding: '4px 8px', background: 'transparent', border: `1px solid ${T.border}`,
     borderRadius: T.r, fontSize: 13, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, lineHeight: 1 };
 
-const ScheduleView = ({ techsRaw, blocks, blockTypes, anchor, onPrev, onNext, onToday, onSaveBlock, onDeleteBlock, onSaveHours }) => {
+const ScheduleView = ({ techsRaw, jobs, blocks, blockTypes, anchor, onPrev, onNext, onToday, onSaveBlock, onDeleteBlock, onSaveHours }) => {
     const weekStart = startOfWeek(anchor);
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
     const todayStr = ymd(new Date());
@@ -2340,6 +2393,7 @@ const ScheduleView = ({ techsRaw, blocks, blockTypes, anchor, onPrev, onNext, on
     const [hoursFor, setHoursFor] = React.useState(null); // techId whose pattern is open
     const [busy, setBusy] = React.useState(false);
     const [err, setErr] = React.useState('');
+    const [conflict, setConflict] = React.useState(null);   // { block, jobs }
 
     const typeOf = (id) => (blockTypes || []).find(t => t.id === id) || null;
 
@@ -2356,9 +2410,23 @@ const ScheduleView = ({ techsRaw, blocks, blockTypes, anchor, onPrev, onNext, on
         if (!editing.allDay && (!editing.startTime || !editing.endTime)) {
             setErr('A partial-day block needs both a start and an end time.'); return;
         }
+        // Warn before booking someone out over work they are already committed to.
+        // Saving silently would leave jobs assigned to a technician who is away.
+        const clashing = jobsDuringBlock(jobs, editing);
+        if (clashing.length > 0) { setConflict({ block: editing, jobs: clashing }); return; }
+
         setBusy(true); setErr('');
         try { await onSaveBlock(editing); setEditing(null); }
         catch (e) { setErr(e.message); }
+        finally { setBusy(false); }
+    };
+
+    const confirmWithUnassign = async () => {
+        setBusy(true); setErr('');
+        try {
+            await onSaveBlock(conflict.block, conflict.jobs.map(j => j.id));
+            setConflict(null); setEditing(null);
+        } catch (e) { setErr(e.message); }
         finally { setBusy(false); }
     };
 
@@ -2466,6 +2534,58 @@ const ScheduleView = ({ techsRaw, blocks, blockTypes, anchor, onPrev, onNext, on
                     tech={(techsRaw || []).find(t => t.id === hoursFor)}
                     onCancel={() => setHoursFor(null)}
                     onSave={async (wh) => { await onSaveHours(hoursFor, wh); setHoursFor(null); }}/>
+            )}
+
+            {conflict && (
+                <div onClick={() => !busy && setConflict(null)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.5)', zIndex: 99999,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div onClick={e => e.stopPropagation()}
+                        style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
+                            padding: 20, width: 480, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.22)' }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: T.danger, fontFamily: T.sans, marginBottom: 8 }}>
+                            Already scheduled
+                        </div>
+                        <div style={{ fontSize: 13, color: T.inkMid, fontFamily: T.sans, lineHeight: 1.55, marginBottom: 12 }}>
+                            This technician is committed to {conflict.jobs.length} job{conflict.jobs.length === 1 ? '' : 's'} during
+                            that time. Accepting the time off will unassign them and return the work to the queue to be re-crewed.
+                        </div>
+                        <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 14 }}>
+                            {conflict.jobs.map(j => (
+                                <div key={j.id} style={{ display: 'flex', gap: 8, alignItems: 'center',
+                                    padding: '7px 0', borderBottom: `1px solid ${T.border}` }}>
+                                    <span style={{ width: 3, alignSelf: 'stretch', background: prioColor(j.priority), borderRadius: 2 }}/>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans,
+                                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {j.title || j.customer}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                            {j.scheduledDate}{j.start != null ? ` · ${fmt12(Math.floor(j.start))}` : ''} · {j.durationHrs || 2}h
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        {err && (
+                            <div style={{ fontSize: 12, color: T.danger, fontWeight: 600, fontFamily: T.sans, marginBottom: 10 }}>{err}</div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                            <button onClick={() => setConflict(null)} disabled={busy}
+                                style={{ padding: '7px 14px', background: 'transparent', color: T.inkMid,
+                                    border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
+                                    cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
+                                Reject — keep the schedule
+                            </button>
+                            <button onClick={confirmWithUnassign} disabled={busy}
+                                style={{ padding: '7px 16px', background: busy ? T.borderStrong : T.danger, color: '#fbf8f3',
+                                    border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
+                                    cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
+                                {busy ? 'Working…' : 'Accept & re-crew'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {editing && (
@@ -2634,7 +2754,10 @@ const ShiftPatternDialog = ({ tech, onCancel, onSave }) => {
 export default function DispatchTab() {
     const { settings, opportunities, accounts, addAudit } = useApp();
 
-    const [view, setView] = useState('board'); // 'board' | 'queue'
+    // Sub-tab state persists to localStorage so navigating away and back restores
+    // the last view, matching every other tab in the app (style guide §10).
+    const [view, setViewRaw] = useState(() => localStorage.getItem('tab:dispatch:subView') || 'board');
+    const setView = (v) => { setViewRaw(v); localStorage.setItem('tab:dispatch:subView', v); };
     const [selectedJobId, setSelectedJobId] = useState(null);
     const [boardRange,   setBoardRange]   = useState('today');   // 'today' | 'week' | 'month'
     const [boardAnchor,  setBoardAnchor]  = useState(() => new Date());
@@ -3069,7 +3192,10 @@ export default function DispatchTab() {
 
     // Availability writes. Schedule blocks are dated exceptions; the weekly
     // pattern lives on the technician row itself.
-    const saveBlock = async (blk) => {
+    // unassignJobIds: work the technician can no longer do. Saved first so the
+    // block is recorded even if a later unassign fails, then each job is returned
+    // to the queue and the dispatcher is taken there to re-crew it.
+    const saveBlock = async (blk, unassignJobIds = []) => {
         const isNew = !!blk._isNew;
         const body = { ...blk }; delete body._isNew;
         const res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks'
@@ -3089,6 +3215,38 @@ export default function DispatchTab() {
             if (i === -1) return [...prev, saved];
             const next = [...prev]; next[i] = saved; return next;
         });
+
+        if (!unassignJobIds.length) return;
+
+        const freed = [];
+        for (const jobId of unassignJobIds) {
+            try {
+                const r = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(jobId), {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: jobId, status: 'unscheduled',
+                        assignedTechId: null, coTechIds: [],
+                        scheduledStart: null, scheduledEnd: null,
+                    }),
+                });
+                if (r.ok) freed.push(jobId);
+            } catch (e) { /* counted below by omission */ }
+        }
+
+        setJobs(prev => prev.map(j => freed.includes(j.id)
+            ? { ...j, assignedTechIds: [], start: null, status: 'unscheduled', window: 'TBD' }
+            : j));
+
+        const techName = (techsRaw.find(t => t.id === blk.techId) || {});
+        if (addAudit) {
+            addAudit('dispatch.timeoff.unassign', 'dispatch_technician', blk.techId,
+                `${techName.firstName || ''} ${techName.lastName || ''}`.trim() || blk.techId,
+                `Time off ${blk.startDate}–${blk.endDate} — ${freed.length} job(s) returned to the queue` +
+                (freed.length !== unassignJobIds.length ? ` — ${unassignJobIds.length - freed.length} failed` : ''));
+        }
+
+        // Drop the dispatcher into the queue so the freed work is in front of them.
+        if (freed.length) { setSelectedJobId(freed[0]); setView('queue'); }
     };
 
     const deleteBlock = async (id) => {
@@ -3323,9 +3481,12 @@ export default function DispatchTab() {
                             </span>
                         </div>
                         {boardRange === 'today' ? (
-                            <BoardView jobs={boardJobs} techs={filteredTechs} skills={skills} onJobClick={handleJobClick}/>
+                            <BoardView jobs={boardJobs} techs={filteredTechs} skills={skills}
+                                blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
+                                dateStr={ymd(boardAnchor)} onJobClick={handleJobClick}/>
                         ) : boardRange === 'week' ? (
                             <WeekBoardView jobs={rangeJobs} techs={filteredTechs} skills={skills}
+                                blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
                                 anchor={boardAnchor} onJobClick={handleJobClick}/>
                         ) : (
                             <MonthBoardView jobs={rangeJobs} techs={filteredTechs}
@@ -3351,7 +3512,7 @@ export default function DispatchTab() {
                                 : j));
                         }}/>
                 ) : view === 'schedule' ? (
-                    <ScheduleView techsRaw={techsRaw} blocks={blocks}
+                    <ScheduleView techsRaw={techsRaw} jobs={jobs} blocks={blocks}
                         blockTypes={settings?.dispatchBlockTypes || []}
                         anchor={schedAnchor}
                         onPrev={() => setSchedAnchor(a => addDays(a, -7))}
