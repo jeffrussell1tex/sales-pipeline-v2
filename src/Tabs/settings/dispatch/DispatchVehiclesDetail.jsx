@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable } from '../salesProcess/shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -11,6 +12,7 @@ export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSetti
     const [vehicles, setVehicles] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty,    setDirty]    = useState(false);
     const [saving,   setSaving]   = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [showAdd,  setShowAdd]  = useState(false);
     const [newV,     setNewV]     = useState({ name:'', type:'Van', plate:'', notes:'' });
     const savedEquipment = settings?.dispatchEquipment || [];
@@ -23,9 +25,16 @@ export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSetti
     const handleSave = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, dispatchVehicles: vehicles, dispatchEquipment: equipment }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ dispatchVehicles: vehicles, dispatchEquipment: equipment }) }); }
-        catch(e) { console.error('save vehicles', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ dispatchVehicles: vehicles, dispatchEquipment: equipment });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
 
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -38,7 +47,7 @@ export const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSetti
 
     const TYPES = ['Van','Truck','Car','Trailer','Other'];
     return (
-        <CategoryDetailChrome crumb="Vehicles & equipment" category="Dispatch" title="Vehicles & equipment"
+        <CategoryDetailChrome error={saveError} crumb="Vehicles & equipment" category="Dispatch" title="Vehicles & equipment"
             subtitle="Fleet vehicles available to assign to techs."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setVehicles(JSON.parse(JSON.stringify(saved))); setDirty(false); }}

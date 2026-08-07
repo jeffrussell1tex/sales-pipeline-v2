@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { StatusChip } from '../shared/ui.jsx';
 import { SPDrag } from './shared.jsx';
@@ -29,6 +30,7 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
     const [tiers, setTiers]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
     const [saving, setSaving]   = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [showAdd, setShowAdd] = useState(false);
     const [newTier, setNewTier] = useState({ tier:'', hex:'#7a6a48', range:'', sla:'', owner:'', count:0 });
     const [addErr, setAddErr]   = useState('');
@@ -37,9 +39,16 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
     const handleSave   = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, accountSegmentTiers: tiers }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ accountSegmentTiers: tiers }) }); }
-        catch(e) { console.error('save account segments', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ accountSegmentTiers: tiers });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
 
     const handleAddTier = () => {
@@ -95,7 +104,7 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
     const total = categorized || 1;
 
     return (
-        <CategoryDetailChrome
+        <CategoryDetailChrome error={saveError}
             crumb="Account segments" title="Account segments"
             subtitle="Account segment tiers (SMB, Mid-market, Enterprise…)"
             statusDetail={`${tiers.length} tiers`}

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { StatusChip } from '../shared/ui.jsx';
 import { SPTable, SPDrag } from './shared.jsx';
@@ -23,6 +24,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
     const [stages, setStages] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
     const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
 
     const update = (i, field, val) => {
         setStages(prev => prev.map((s, si) => si === i ? { ...s, [field]: val } : s));
@@ -36,9 +38,16 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
     const handleSave   = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, funnelStages: stages }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ funnelStages: stages }) }); }
-        catch(e) { console.error('save funnel stages', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ funnelStages: stages });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -53,7 +62,7 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
     const openStages = stages.filter(s => s.type === 'Open');
 
     return (
-        <CategoryDetailChrome
+        <CategoryDetailChrome error={saveError}
             crumb="Funnel stages" title="Funnel stages"
             subtitle="Stage names and default win probability"
             statusDetail={`${stages.length} stages`}

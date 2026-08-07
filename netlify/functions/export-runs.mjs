@@ -3,7 +3,7 @@ import { exportRuns, exportSchedules,
          accounts, contacts, opportunities,
          tasks, activities, leads }                                   from '../../db/schema.js';
 import { eq, and, desc }                                              from 'drizzle-orm';
-import { verifyAuth }                                                 from './auth.mjs';
+import { verifyAuth, requireWrite }                                   from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
 
 const HEADERS = {
@@ -74,9 +74,11 @@ export const handler = async (event) => {
         // ── POST — trigger an ad-hoc export ───────────────────────────────
         // Body: { id, scope, format, name?, scheduleId? }
         if (event.httpMethod === 'POST') {
-            if (userRole === 'ReadOnly') {
-                return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Export not permitted for ReadOnly users' }) };
-            }
+            // Shared gate rather than a bare ReadOnly check. An ad-hoc export
+            // dumps whole tables, so a Technician — scoped to their own jobs
+            // everywhere else — must not be able to run one.
+            const forbidden = requireWrite(auth, event, HEADERS);
+            if (forbidden) return forbidden;
 
             const data = JSON.parse(event.body);
             if (!data.id)    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'id is required' }) };

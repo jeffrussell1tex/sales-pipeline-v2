@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable } from '../salesProcess/shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -15,6 +16,7 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
     const [licenses, setLicenses] = useState(() => [...savedLicenses]);
     const [dirty,    setDirty]    = useState(false);
     const [saving,   setSaving]   = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [addingSkill, setAddingSkill] = useState(false);
     const [addingCert,  setAddingCert]  = useState(false);
     const [newSkill, setNewSkill] = useState({ name:'', category:'Field', color:'#7a5a3c' });
@@ -30,9 +32,16 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
         setSaving(true);
         const payload = { dispatchSkills: skills, dispatchCerts: certs, dispatchLicenses: licenses };
         setSettings(prev => ({ ...prev, ...payload }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify(payload) }); }
-        catch(e) { console.error('save dispatch skills', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings(payload);
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
 
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -47,7 +56,7 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
     const COLORS = ['#7a5a3c','#3a5a7a','#b87333','#4d6b3d','#9c3a2e','#7a6a48','#2a2622'];
 
     return (
-        <CategoryDetailChrome crumb="Skills & certifications" category="Dispatch" title="Skills & certifications"
+        <CategoryDetailChrome error={saveError} crumb="Skills & certifications" category="Dispatch" title="Skills & certifications"
             subtitle="Skills, certs, and license levels your dispatchers schedule around."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setSkills(JSON.parse(JSON.stringify(savedSkills))); setCerts(JSON.parse(JSON.stringify(savedCerts))); setLicenses([...savedLicenses]); setDirty(false); }}

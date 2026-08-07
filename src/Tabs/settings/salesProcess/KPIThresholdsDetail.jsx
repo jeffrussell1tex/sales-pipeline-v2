@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPSparkline } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -20,6 +21,7 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
     const [rows, setRows]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
     const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [errors, setErrors] = useState({});
     // Kebab menu state
     const [openKPI, setOpenKPI]       = useState(null); // index
@@ -55,9 +57,16 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
         if (hasErrors) return;
         setSaving(true);
         setSettings(prev => ({ ...prev, kpiThresholds: rows }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ kpiThresholds: rows }) }); }
-        catch(e) { console.error('save kpi thresholds', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ kpiThresholds: rows });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -117,7 +126,7 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
     const inpSt = { padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
 
     return (
-        <CategoryDetailChrome
+        <CategoryDetailChrome error={saveError}
             crumb="KPI thresholds" title="KPI thresholds"
             subtitle="Thresholds, colors, and sparkline ranges for dashboards"
             statusDetail={`${rows.filter(r=>!r.hidden).length} KPIs configured`}

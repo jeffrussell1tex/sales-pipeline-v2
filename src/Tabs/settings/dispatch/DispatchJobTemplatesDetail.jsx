@@ -2,8 +2,16 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
+
+// `name` and `ctype` were bound to the SAME field: the "Template name" input and
+// the customer-type select both called updateTemplate('ctype', ...), so a
+// template had no distinct name and the list rendered customer types as names.
+// Existing rows are migrated on read by copying ctype into name — lossless,
+// since ctype is whatever the user last typed into either control.
+const migrateTemplate = (t) => ({ ...t, name: t.name ?? (t.ctype || '') });
 
 export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchJobTemplates || [];
@@ -11,9 +19,10 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     const licenses = settings?.dispatchLicenses || ['Apprentice','Journeyman','Master','Lead'];
     const custTypes = settings?.customerTypes   || [];
 
-    const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(saved)).map(migrateTemplate));
     const [dirty,    setDirty]    = useState(false);
     const [saving,   setSaving]   = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [selectedId, setSelectedId] = useState(saved[0]?.id || null);
     const [showAdd,  setShowAdd]  = useState(false);
     const [tmplMenu, setTmplMenu] = useState(null);
@@ -23,9 +32,16 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     const handleSave = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, dispatchJobTemplates: templates }));
-        try { await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ dispatchJobTemplates: templates }) }); }
-        catch(e) { console.error('save job templates', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ dispatchJobTemplates: templates });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
 
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -76,15 +92,15 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     ] : [];
 
     return (
-        <CategoryDetailChrome crumb="Job templates" category="Dispatch" title="Job templates"
+        <CategoryDetailChrome error={saveError} crumb="Job templates" category="Dispatch" title="Job templates"
             subtitle="When an opportunity moves to Closed Won, Accelerep can auto-create a Job using the template tied to the customer's type. Defaults pre-fill — dispatchers can still edit before scheduling."
             onBack={onBack} dirty={dirty}
-            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
+            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved)).map(migrateTemplate)); setDirty(false); }}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             extraActions={
                 <>
                     <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Test auto-create</button>
-                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
+                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
                 </>
             }>
 
@@ -103,7 +119,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                         borderTop: i>0?`1px solid ${T.border}`:'none',
                                         background: selectedId===t.id ? `${T.goldInk}08` : T.surface,
                                         borderLeft: selectedId===t.id ? `3px solid ${T.goldInk}` : '3px solid transparent' }}>
-                                    <div style={{ fontWeight: selectedId===t.id ? 700 : 400, color: T.ink }}>{t.ctype || '—'}</div>
+                                    <div style={{ fontWeight: selectedId===t.id ? 700 : 400, color: T.ink }}>{t.name || t.ctype || '—'}</div>
                                     <div style={{ color: T.inkMid }}>{t.crew}p</div>
                                     <div style={{ color: T.inkMid }}>{t.hrs}h</div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
@@ -121,11 +137,11 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                     </CSectionCard>
                     {/* Selected template form */}
                     {selected && (
-                        <CSectionCard title={selected.ctype || 'New template'} desc="Edit the template fields below.">
+                        <CSectionCard title={selected.name || 'New template'} desc="Edit the template fields below.">
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                                 <div>
                                     <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Template name</div>
-                                    <input value={selected.ctype||''} onChange={e=>updateTemplate('ctype',e.target.value)} placeholder="e.g. Emergency · same-day"
+                                    <input value={selected.name||''} onChange={e=>updateTemplate('name',e.target.value)} placeholder="e.g. Emergency · same-day"
                                         style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}/>
                                 </div>
                                 <div>
@@ -248,7 +264,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                 return (<>
                     <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setTmplMenu(null)}/>
                     <div style={{position:'fixed',top:tmplMenu.rect.top,right:tmplMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:180,overflow:'hidden'}}>
-                        <button onClick={()=>{const clone={...t,id:'tmpl_'+Date.now(),ctype:t.ctype+' (copy)',used:0};setTemplates(p=>[...p,clone]);setSelectedId(clone.id);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Duplicate</button>
+                        <button onClick={()=>{const clone={...t,id:'tmpl_'+Date.now(),name:(t.name||t.ctype||'')+' (copy)',used:0};setTemplates(p=>[...p,clone]);setSelectedId(clone.id);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Duplicate</button>
                         <button onClick={()=>{setTemplates(p=>p.map(tm=>tm.id===t.id?{...tm,autojob:!tm.autojob}:tm));setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>{t.autojob?'Disable auto-create':'Enable auto-create'}</button>
                         <button onClick={()=>{setTemplates(p=>p.filter(tm=>tm.id!==t.id));if(selectedId===t.id)setSelectedId(templates.find(tm=>tm.id!==t.id)?.id||null);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.danger,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background='rgba(156,58,46,0.06)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>Delete</button>
                     </div>

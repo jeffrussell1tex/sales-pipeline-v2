@@ -101,6 +101,24 @@ async function recordStatusChange(orgId, jobId, fromStatus, toStatus, changedBy,
     }).catch(() => {}); // non-fatal
 }
 
+// Human-readable job number, JOB-2026-0042. Same rules as customerNumber:
+// assigned SERVER-SIDE only (two dispatchers creating jobs at once would collide
+// client-side), immutable once set, and sequential per org per year.
+async function nextJobNumber(orgId) {
+    const year = new Date().getFullYear();
+    const rows = await db.select({ n: dispatchJobs.jobNumber })
+        .from(dispatchJobs).where(eq(dispatchJobs.orgId, orgId));
+    const prefix = `JOB-${year}-`;
+    let max = 0;
+    for (const r of rows) {
+        const v = String(r.n || '');
+        if (!v.startsWith(prefix)) continue;
+        const num = parseInt(v.slice(prefix.length), 10);
+        if (Number.isFinite(num) && num > max) max = num;
+    }
+    return prefix + String(max + 1).padStart(4, '0');
+}
+
 // ── Technician scoping ────────────────────────────────────────────────────────
 // A Technician is a mobile/field user. Jobs FK the TECHNICIAN ROW
 // (dispatch_jobs.assignedTechId -> dispatch_technicians.id), not the user, so the
@@ -247,10 +265,16 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, customerId, title required' }) };
             }
 
+            // POST is an upsert, so reuse any number already issued for this id
+            // rather than reissuing one — job numbers are immutable.
+            const [priorJob] = await db.select({ jobNumber: dispatchJobs.jobNumber })
+                .from(dispatchJobs)
+                .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
+
             const row = {
                 id:               data.id,
                 orgId,
-                jobNumber:        data.jobNumber        ?? null,
+                jobNumber:        priorJob?.jobNumber || await nextJobNumber(orgId),
                 customerId:       data.customerId,
                 locationId:       data.locationId       ?? null,
                 accountId:        data.accountId        ?? null,
@@ -358,7 +382,8 @@ export const handler = async (event) => {
             }
 
             const scalarFields = [
-                'jobNumber','customerId','locationId','accountId','opportunityId',
+                // jobNumber deliberately omitted: server-assigned and immutable.
+                'customerId','locationId','accountId','opportunityId',
                 'title','description','trade','jobType','status','priority',
                 'scheduledDate','scheduledStart','scheduledEnd','timeSlot',
                 'durationMinutes','crewSize','minLicense','assignedTechId','assignedVehicleId',

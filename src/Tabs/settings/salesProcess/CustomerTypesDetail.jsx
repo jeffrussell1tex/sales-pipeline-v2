@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -20,6 +21,7 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
     const [tiers, setTiers]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
     const [saving, setSaving]   = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [showAdd, setShowAdd] = useState(false);
     const [newTier, setNewTier] = useState({ tier:'', hex:'#7a6a48' });
     const [addErr, setAddErr]   = useState('');
@@ -28,9 +30,16 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
     const handleSave   = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, customerTypeTiers: tiers }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ customerTypeTiers: tiers }) }); }
-        catch(e) { console.error('save customer types', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ customerTypeTiers: tiers });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
 
     const handleAddTier = () => {
@@ -69,7 +78,7 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
 
 
     return (
-        <CategoryDetailChrome
+        <CategoryDetailChrome error={saveError}
             crumb="Customer types" title="Customer types"
             subtitle="Account classification tags (SMB, Mid-market, Enterprise…)"
             statusDetail={`${tiers.length} tiers`}

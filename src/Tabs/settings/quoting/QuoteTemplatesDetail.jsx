@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -1042,6 +1043,7 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
     const [editingName,  setEditingName]  = useState('');
     const [dirty,        setDirty]       = useState(false);
     const [saving,       setSaving]      = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [editBoilerplate, setEditBoilerplate] = useState(false);
 
     // Commit inline name edit
@@ -1060,9 +1062,16 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
     const handleSave   = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate }) }); }
-        catch(e) { console.error('save quote templates', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
 
     const handleCreateTemplate = ({ name, mode, sourceTpl, isDefault, visibleTo, blocks, pageSetup, useCase, blankVariant }) => {
@@ -1109,7 +1118,7 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
 
     return (
         <>
-        <CategoryDetailChrome
+        <CategoryDetailChrome error={saveError}
             crumb="Quote templates & branding" category="Quoting" title="Quote templates & branding"
             subtitle="Header, footer, terms boilerplate, and PDF styling for sent quotes"
             statusDetail={`${templates.length} templates · brand locked`}

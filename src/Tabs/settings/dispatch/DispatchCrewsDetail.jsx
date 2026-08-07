@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
 export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
@@ -38,6 +39,7 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
     const [crews, setCrews] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [selectedId, setSelectedId] = useState(saved[0]?.id || null);
     const [showAddMember, setShowAddMember] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
@@ -48,9 +50,16 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
     const handleSave = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, dispatchCrews: crews }));
-        try { await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ dispatchCrews: crews }) }); }
-        catch(e) { console.error('save crews', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ dispatchCrews: crews });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
 
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -88,7 +97,7 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
     };
 
     return (
-        <CategoryDetailChrome crumb="Crews" category="Dispatch" title="Crews"
+        <CategoryDetailChrome error={saveError} crumb="Crews" category="Dispatch" title="Crews"
             subtitle="Named groups of techs who work together in the field. Distinct from CRM Sales teams (which structure reps for reporting)."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setCrews(JSON.parse(JSON.stringify(saved))); setDirty(false); }}

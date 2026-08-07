@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -30,6 +31,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     const [industries, setIndustries] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
     const [saving, setSaving]   = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [expanded, setExpanded] = useState({});
     const [addingSubTo, setAddingSubTo] = useState(null);
     const [newSub, setNewSub]   = useState('');
@@ -42,9 +44,16 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     const handleSave   = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, industries }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ industries }) }); }
-        catch(e) { console.error('save industries', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ industries });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
 
     // Industry kebab state
@@ -146,7 +155,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     const totalSubs = industries.reduce((a,i) => a+i.subs.length, 0);
 
     return (
-        <CategoryDetailChrome
+        <CategoryDetailChrome error={saveError}
             crumb="Industries" title="Industries"
             subtitle="Primary and sub-industry taxonomy"
             statusDetail={`${industries.length} industries · ${totalSubs} sub-types`}

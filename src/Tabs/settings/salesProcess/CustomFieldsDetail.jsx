@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable, SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -43,6 +44,7 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
     const [fields, setFields]       = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]         = useState(false);
     const [saving, setSaving]       = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [search, setSearch]       = useState('');
     const [showAdd, setShowAdd]     = useState(false);
     const [newLabel, setNewLabel]   = useState('');
@@ -54,9 +56,16 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
     const handleSave   = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, customFieldsByObject: fields }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ customFieldsByObject: fields }) }); }
-        catch(e) { console.error('save custom fields', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ customFieldsByObject: fields });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -115,7 +124,7 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
     const cancelEdit = () => setEditingFieldIdx(null);
 
     return (
-        <CategoryDetailChrome
+        <CategoryDetailChrome error={saveError}
             crumb="Custom fields" title="Custom fields"
             subtitle="Extend Accounts, Contacts, Leads, and Opportunities"
             statusDetail={`${totalFields} custom fields`}

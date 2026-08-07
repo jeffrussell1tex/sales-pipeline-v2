@@ -4,7 +4,7 @@ import { T } from './tokens.js';
 import { StatusChip } from './ui.jsx';
 
 export const CategoryDetailChrome = ({ crumb, category = 'Sales process', title, subtitle, statusDetail, updatedBy, updatedAt,
-    onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, rightActions, extraActions, children }) => (
+    onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, rightActions, extraActions, error, children }) => (
     <div style={{ fontFamily: T.sans }}>
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
@@ -42,6 +42,16 @@ export const CategoryDetailChrome = ({ crumb, category = 'Sales process', title,
                 )}
             </div>
         </div>
+        {/* Save failures are surfaced here rather than swallowed into the console.
+            A panel that clears its dirty flag on a failed PUT tells the user the
+            change was saved when it was not. */}
+        {error && (
+            <div style={{ padding:'9px 12px', marginBottom:12, borderRadius:T.r,
+                background:`${T.danger}12`, border:`1px solid ${T.danger}55`,
+                color:T.danger, fontSize:12.5, fontWeight:600, fontFamily:T.sans }}>
+                {error}
+            </div>
+        )}
         {children}
     </div>
 );

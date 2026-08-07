@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
 import { SPDrag } from './shared.jsx';
@@ -52,6 +53,7 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
     const [dirty, setDirty]     = useState(false);
     const fileInputRef = useRef(null);
     const [saving, setSaving]   = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [search, setSearch]   = useState('');
     const [addingCat, setAddingCat] = useState(false);
     const [newCat, setNewCat]   = useState('');
@@ -62,9 +64,16 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
     const handleSave   = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, painPoints: groups }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ painPoints: groups }) }); }
-        catch(e) { console.error('save pain points', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ painPoints: groups });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -125,7 +134,7 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
     })).filter(g => !search || g.items.length > 0);
 
     return (
-        <CategoryDetailChrome
+        <CategoryDetailChrome error={saveError}
             crumb="Pain points library" title="Pain points library"
             subtitle="Reusable customer pain point templates"
             statusDetail={`${totalItems} pain points`}

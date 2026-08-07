@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
+import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPDrag } from '../salesProcess/shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -47,6 +48,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
     const [triggers, setTriggers] = useState(() => JSON.parse(JSON.stringify(saved.triggers)));
     const [dirty,    setDirty]    = useState(false);
     const [saving,   setSaving]   = useState(false);
+    const [saveError, setSaveError] = useState('');
 
     // Try a deal simulator
     const [trialDiscount, setTrialDiscount] = useState(18);
@@ -65,9 +67,16 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
     const handleSave   = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, approvalTiers: tiers, approvalTriggers: triggers }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ approvalTiers: tiers, approvalTriggers: triggers }) }); }
-        catch(e) { console.error('save approval tiers', e); }
-        setSaving(false); setDirty(false);
+        try {
+            await putSettings({ approvalTiers: tiers, approvalTriggers: triggers });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            // Keep the panel dirty: the change was NOT saved, and clearing the
+            // flag here is what made a 403 look like success.
+            setSaveError(e.message);
+        }
+        setSaving(false);
     };
 
     const toggleTrigger = (i) => { setTriggers(prev => prev.map((t,ti) => ti===i ? { ...t, on:!t.on } : t)); setDirty(true); };
@@ -155,7 +164,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
     };
 
     return (
-        <CategoryDetailChrome
+        <CategoryDetailChrome error={saveError}
             crumb="Approval tiers" category="Quoting" title="Approval tiers"
             subtitle="Discount thresholds that trigger manager or VP approval"
             statusDetail={`${tiers.length} tiers · advanced rules off`}
