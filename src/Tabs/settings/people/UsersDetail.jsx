@@ -918,14 +918,33 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
         } finally { setSaving(false); }
     };
 
+    // This was labelled "Deactivate" but permanently deleted the row, and it never
+    // checked res.ok — a failed request still removed the user from the screen,
+    // so they reappeared on refresh. Deactivate is now reversible; Delete is
+    // separate and says what it does.
     const handleDeactivate = () => {
-        showConfirm(`Deactivate ${user.name}? They will immediately lose access to Accelerep.`, async () => {
+        showConfirm(`Deactivate ${user.name}? They keep their record but lose access to Accelerep.`, async () => {
             try {
-                // users.mjs DELETE reads id from query string, not body
-                await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(user.id)}`, { method:'DELETE' });
+                const res = await dbFetch('/.netlify/functions/users', {
+                    method:'PUT', headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({ ...form, id: user.id, active: false }),
+                });
+                if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
+                setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, active:false } : u) }));
+                onUsers();
+            } catch(err) { setError('Could not deactivate: ' + err.message); }
+        });
+    };
+
+    const handleDeleteUser = () => {
+        showConfirm(`Permanently delete ${user.name}? This cannot be undone. Their record is removed from Accelerep; the Clerk account is unaffected.`, async () => {
+            try {
+                // users.mjs DELETE reads id from the query string, not the body.
+                const res = await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(user.id)}`, { method:'DELETE' });
+                if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(u => u.id !== user.id) }));
                 onUsers();
-            } catch(err) { setError('Failed to deactivate user.'); }
+            } catch(err) { setError('Could not delete: ' + err.message); }
         });
     };
 
@@ -969,7 +988,10 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
                     <PeopleSecBtn onClick={() => {}}>Reset password</PeopleSecBtn>
                     <button onClick={handleDeactivate} style={{ padding:'7px 14px', background:'transparent', color:T.danger, border:`1px solid rgba(156,58,46,0.3)`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                         onMouseEnter={e=>{e.currentTarget.style.background='rgba(156,58,46,0.06)'}} onMouseLeave={e=>{e.currentTarget.style.background='transparent'}}>
-                        Deactivate
+                        {form.active === false ? 'Deactivated' : 'Deactivate'}
+                    </button>
+                    <button onClick={handleDeleteUser} style={{ padding:'7px 14px', background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        Delete user
                     </button>
                     {dirty && <PeoplePriBtn onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save changes'}</PeoplePriBtn>}
                 </div>
@@ -1168,6 +1190,7 @@ export const UsersDetail = ({ settings, onBack }) => {
     const [syncing, setSyncing]   = useState(false);
     const [syncMsg, setSyncMsg]   = useState(null);
     const [drift,   setDrift]     = useState(null);   // { created, updated, dbOnly }
+    const [userActionError, setUserActionError] = useState('');
 
     // Drift check on load. Clerk is authoritative for identity and role; this
     // table is a mirror, and they diverge quietly (an invite that never
@@ -1313,6 +1336,13 @@ export const UsersDetail = ({ settings, onBack }) => {
                     <button onClick={() => setPeopleView('invite')} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Invite users</button>
                 </div>
             </div>
+            {userActionError && (
+                <div style={{ margin:'0 0 12px', padding:'9px 12px', background:`${T.danger}12`,
+                    border:`1px solid ${T.danger}55`, borderRadius:T.r, fontSize:12.5,
+                    color:T.danger, fontWeight:600, fontFamily:T.sans }}>
+                    {userActionError}
+                </div>
+            )}
             {!syncMsg && drift && (
                 <div style={{ margin:'0 0 12px', padding:'9px 12px', background:`${T.warn}12`,
                     border:`1px solid ${T.warn}55`, borderRadius:T.r, fontSize:12.5, color:T.ink,
@@ -1431,13 +1461,31 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                 { label:'Reset password', action: () => { setOpenUserKebab(null); /* Clerk handles via email */ } },
                                                 u.status === 'Active' && { label:'Enforce MFA', action: () => { setOpenUserKebab(null); } },
                                                 u.status === 'Invited' && { label:'Resend invite', action: () => { setOpenUserKebab(null); } },
-                                                { label:'Deactivate', danger: true, action: () => {
+                                                // Deactivate = reversible; keeps the row and its history.
+                                                u.active !== false && { label:'Deactivate', action: () => {
                                                     setOpenUserKebab(null);
-                                                    showConfirm(`Deactivate ${u.name}? They will immediately lose access to Accelerep.`, async () => {
+                                                    showConfirm(`Deactivate ${u.name}? They keep their record but lose access to Accelerep.`, async () => {
                                                         try {
-                                                            await dbFetch('/.netlify/functions/users', { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id: u.id }) });
+                                                            const res = await dbFetch('/.netlify/functions/users', {
+                                                                method:'PUT', headers:{'Content-Type':'application/json'},
+                                                                body:JSON.stringify({ ...u, id: u.id, active: false }),
+                                                            });
+                                                            if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
+                                                            _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, active:false } : su) }));
+                                                        } catch(err) { setUserActionError(`Could not deactivate ${u.name}: ${err.message}`); }
+                                                    });
+                                                }},
+                                                // Delete = permanent. This previously sent the id in the BODY while
+                                                // the server reads it from the query string, so it 400'd, the client
+                                                // never checked res.ok, and the row reappeared on refresh.
+                                                { label:'Delete user', danger: true, action: () => {
+                                                    setOpenUserKebab(null);
+                                                    showConfirm(`Permanently delete ${u.name}? This cannot be undone. Their record is removed from Accelerep; the Clerk account is unaffected.`, async () => {
+                                                        try {
+                                                            const res = await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(u.id)}`, { method:'DELETE' });
+                                                            if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
                                                             _setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(su => su.id !== u.id) }));
-                                                        } catch(err) { console.error('Deactivate failed:', err); }
+                                                        } catch(err) { setUserActionError(`Could not delete ${u.name}: ${err.message}`); }
                                                     });
                                                 }},
                                             ].filter(Boolean).map((item, mi) => (
