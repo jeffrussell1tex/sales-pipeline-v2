@@ -71,6 +71,7 @@ export default function AppHeader({
     const isAdmin    = userRole === 'Admin';
     const isManager  = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
+    const isTechnician = userRole === 'Technician';
 
     // ⌘K / Ctrl-K opens search palette from anywhere
     useEffect(() => {
@@ -94,7 +95,18 @@ export default function AppHeader({
     const panelLabel = { fontSize: '0.75rem', fontWeight: 600, color: T.inkMid, display: 'block', marginBottom: 4, fontFamily: T.sans };
 
     // ── Tab definitions (conditional visibility) ─────────────
-    const tabs = [
+    // A Technician is a field user: the server refuses every CRM endpoint for
+    // them, so showing those tabs would only surface errors. Dispatch is the one
+    // surface they need, scoped to their own jobs.
+    // activeTab defaults to 'home', which a Technician has no tab for — without
+    // this they land on a blank page behind a nav that offers only My Jobs.
+    React.useEffect(() => {
+        if (isTechnician && activeTab !== 'dispatch') setActiveTab('dispatch');
+    }, [isTechnician, activeTab, setActiveTab]);
+
+    const tabs = isTechnician ? [
+        { id: 'dispatch', label: 'My Jobs' },
+    ] : [
         { id: 'home',         label: 'Home'         },
         { id: 'pipeline',     label: 'Pipeline'     },
         { id: 'accounts',     label: 'Accounts'     },

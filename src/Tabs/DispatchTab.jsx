@@ -2750,9 +2750,191 @@ const ShiftPatternDialog = ({ tech, onCancel, onSave }) => {
     );
 };
 
+
+// ── Technician field view ─────────────────────────────────────────────────────
+// What a Technician sees instead of the dispatcher UI. Deliberately narrow: the
+// server only permits status transitions plus techNotes / completionNotes /
+// photosCount / customerSignature on their own jobs, so anything else here would
+// render a control the API refuses.
+//
+// This is also the shape the mobile app should mirror — my jobs, my schedule.
+const TECH_NEXT = {
+    scheduled: [{ to: 'en_route',  label: 'Start travel' }],
+    en_route:  [{ to: 'on_site',   label: 'Arrived on site' }],
+    on_site:   [{ to: 'paused',    label: 'Pause' }, { to: 'completed', label: 'Complete job' }],
+    paused:    [{ to: 'on_site',   label: 'Resume' }],
+};
+
+const TechJobCard = ({ job, customerName, blocks, onUpdate, busyId }) => {
+    const [notes, setNotes] = React.useState(job.techNotes || '');
+    const [completion, setCompletion] = React.useState(job.completionNotes || '');
+    const [open, setOpen] = React.useState(false);
+    const [err, setErr] = React.useState('');
+
+    const busy = busyId === job.id;
+    const nexts = TECH_NEXT[job.status] || [];
+    const done = job.status === 'completed';
+
+    const run = async (patch) => {
+        setErr('');
+        try { await onUpdate(job.id, patch); }
+        catch (e) { setErr(e.message); }
+    };
+
+    return (
+        <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, marginBottom: 10,
+            background: T.surface, borderLeft: `4px solid ${prioColor(job.priority)}`, opacity: done ? 0.72 : 1 }}>
+            <div onClick={() => setOpen(o => !o)} style={{ padding: '12px 14px', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: T.ink, fontFamily: T.sans, flex: 1 }}>
+                        {job.title}
+                    </span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 999,
+                        background: done ? `${T.ok}1e` : `${T.info}1e`, color: done ? T.ok : T.info }}>
+                        {labelise(job.status)}
+                    </span>
+                </div>
+                <div style={{ fontSize: 12.5, color: T.inkMid, fontFamily: T.sans, marginTop: 3 }}>
+                    {customerName}
+                </div>
+                <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.mono, marginTop: 2 }}>
+                    {job.scheduledDate}{job.scheduledStart ? ` \u00b7 ${job.scheduledStart}` : ''}
+                    {job.durationMinutes ? ` \u00b7 ${Math.round(job.durationMinutes / 6) / 10}h` : ''}
+                </div>
+            </div>
+
+            {open && (
+                <div style={{ padding: '0 14px 14px' }}>
+                    {job.description && (
+                        <div style={{ fontSize: 12.5, color: T.inkMid, fontFamily: T.sans, marginBottom: 10, lineHeight: 1.5 }}>
+                            {job.description}
+                        </div>
+                    )}
+
+                    <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: T.inkMid,
+                        textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4, fontFamily: T.sans }}>
+                        Notes from the field
+                    </label>
+                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+                        placeholder="What you found, what you did…"
+                        style={{ ...custInput, resize: 'vertical', marginBottom: 8 }}/>
+                    <button onClick={() => run({ techNotes: notes })} disabled={busy}
+                        style={{ padding: '6px 12px', background: 'transparent', color: T.inkMid,
+                            border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600,
+                            cursor: busy ? 'default' : 'pointer', fontFamily: T.sans, marginBottom: 12 }}>
+                        Save notes
+                    </button>
+
+                    {(job.status === 'on_site' || done) && (
+                        <>
+                            <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: T.inkMid,
+                                textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4, fontFamily: T.sans }}>
+                                Completion notes
+                            </label>
+                            <textarea value={completion} onChange={e => setCompletion(e.target.value)} rows={2}
+                                style={{ ...custInput, resize: 'vertical', marginBottom: 12 }}/>
+                        </>
+                    )}
+
+                    {err && (
+                        <div style={{ fontSize: 12, color: T.danger, fontWeight: 600, fontFamily: T.sans, marginBottom: 8 }}>{err}</div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {nexts.map(n => (
+                            <button key={n.to} disabled={busy}
+                                onClick={() => run(n.to === 'completed'
+                                    ? { status: 'completed', completionNotes: completion, techNotes: notes }
+                                    : { status: n.to })}
+                                style={{ padding: '8px 16px',
+                                    background: n.to === 'completed' ? T.ok : T.ink, color: '#fbf8f3',
+                                    border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600,
+                                    cursor: busy ? 'default' : 'pointer', fontFamily: T.sans }}>
+                                {busy ? 'Saving\u2026' : n.label}
+                            </button>
+                        ))}
+                        {done && (
+                            <span style={{ fontSize: 12, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>
+                                Completed — contact dispatch if this needs reopening.
+                            </span>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const TechnicianView = ({ jobs, customers, blocks, blockTypes, myTech, onUpdate, busyId }) => {
+    const todayStr = ymd(new Date());
+    const custName = (id) => (customers || []).find(c => c.id === id)?.name || 'Customer';
+
+    const sorted = (jobs || []).slice().sort((a, b) =>
+        (a.scheduledDate || '9999').localeCompare(b.scheduledDate || '9999')
+        || String(a.scheduledStart || '').localeCompare(String(b.scheduledStart || '')));
+
+    const today    = sorted.filter(j => j.scheduledDate === todayStr && j.status !== 'completed');
+    const upcoming = sorted.filter(j => (j.scheduledDate || '') > todayStr && j.status !== 'completed');
+    const earlier  = sorted.filter(j => j.status !== 'completed'
+        && j.scheduledDate && j.scheduledDate < todayStr);
+    const finished = sorted.filter(j => j.status === 'completed').slice(-5).reverse();
+
+    const myBlocks = (blocks || []).filter(b => b.endDate >= todayStr).slice(0, 3);
+
+    const Section = ({ title, list, empty }) => (
+        <div style={{ marginBottom: 22 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase',
+                letterSpacing: 0.6, marginBottom: 8, fontFamily: T.sans }}>{title}</div>
+            {list.length === 0
+                ? <div style={{ fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic' }}>{empty}</div>
+                : list.map(j => (
+                    <TechJobCard key={j.id} job={j} customerName={custName(j.customerId)}
+                        blocks={blocks} onUpdate={onUpdate} busyId={busyId}/>
+                ))}
+        </div>
+    );
+
+    return (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 2px', maxWidth: 640 }}>
+            {myTech && (
+                <div style={{ marginBottom: 18, fontSize: 12.5, color: T.inkMid, fontFamily: T.sans }}>
+                    {myTech.firstName} {myTech.lastName}
+                    {myTech.licenseLevel ? ` \u00b7 ${myTech.licenseLevel}` : ''}
+                </div>
+            )}
+
+            {earlier.length > 0 && (
+                <Section title="Overdue" list={earlier} empty=""/>
+            )}
+            <Section title="Today" list={today} empty="Nothing scheduled for today."/>
+            <Section title="Coming up" list={upcoming} empty="Nothing scheduled yet."/>
+
+            {myBlocks.length > 0 && (
+                <div style={{ marginBottom: 22 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase',
+                        letterSpacing: 0.6, marginBottom: 8, fontFamily: T.sans }}>Your time off</div>
+                    {myBlocks.map(b => {
+                        const bt = (blockTypes || []).find(t => t.id === b.blockType);
+                        return (
+                            <div key={b.id} style={{ fontSize: 12.5, color: T.inkMid, fontFamily: T.sans, marginBottom: 4 }}>
+                                {bt?.name || 'Time off'} · {b.startDate}{b.endDate !== b.startDate ? ` \u2013 ${b.endDate}` : ''}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {finished.length > 0 && (
+                <Section title="Recently completed" list={finished} empty=""/>
+            )}
+        </div>
+    );
+};
+
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
 export default function DispatchTab() {
-    const { settings, opportunities, accounts, addAudit } = useApp();
+    const { settings, opportunities, accounts, addAudit, userRole } = useApp();
+    const isTech = userRole === 'Technician';
 
     // Sub-tab state persists to localStorage so navigating away and back restores
     // the last view, matching every other tab in the app (style guide §10).
@@ -2779,6 +2961,7 @@ export default function DispatchTab() {
     // Raw technician rows (userId, rates, notes) for the Technicians editor.
     const [techsRaw,   setTechsRaw]   = useState([]);
     const [jobsRaw,    setJobsRaw]    = useState([]);
+    const [techBusyId, setTechBusyId] = useState(null);
     const [blocks,     setBlocks]     = useState([]);
     const [schedAnchor, setSchedAnchor] = useState(() => new Date());
     const [massPlan,   setMassPlan]   = useState(null);   // { proposals, skipped, fromStr, toStr }
@@ -3265,6 +3448,23 @@ export default function DispatchTab() {
         if (data.technician) setTechsRaw(prev => prev.map(t => t.id === techId ? data.technician : t));
     };
 
+    // Field update. The server enforces the whitelist; this only sends fields it
+    // accepts, so a rejection here means a genuine mismatch worth surfacing.
+    const updateMyJob = async (jobId, patch) => {
+        setTechBusyId(jobId);
+        try {
+            const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(jobId), {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: jobId, ...patch }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+            if (data.job) setJobsRaw(prev => prev.map(j => j.id === jobId ? data.job : j));
+        } finally {
+            setTechBusyId(null);
+        }
+    };
+
     const handleJobClick = (job) => {
         setSelectedJobId(job.id);
         setView('queue');
@@ -3276,6 +3476,31 @@ export default function DispatchTab() {
 
     if (loadError) {
         return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.danger, fontFamily: T.sans, fontSize: 13 }}>{loadError}</div>;
+    }
+
+    // Technicians bypass the dispatcher chrome entirely. The server already
+    // scopes /dispatch-jobs to their own assignments and /dispatch-technicians to
+    // their own record, so jobsRaw and techsRaw here are already just theirs.
+    if (isTech) {
+        return (
+            <div className="tab-page" style={{ background: T.bg, minHeight: '100%' }}>
+                <div style={{ padding: '4px 0 14px' }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, letterSpacing: 1,
+                        textTransform: 'uppercase', fontFamily: T.sans }}>Dispatch</div>
+                    <div style={{ fontSize: 24, fontStyle: 'italic', fontWeight: 300, color: T.ink, fontFamily: T.serif }}>
+                        My jobs
+                    </div>
+                </div>
+                <TechnicianView
+                    jobs={jobsRaw}
+                    customers={customers}
+                    blocks={blocks}
+                    blockTypes={settings?.dispatchBlockTypes || []}
+                    myTech={techsRaw[0] || null}
+                    onUpdate={updateMyJob}
+                    busyId={techBusyId}/>
+            </div>
+        );
     }
 
     return (
