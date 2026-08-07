@@ -2063,6 +2063,179 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
     );
 };
 
+// ── Mass-schedule planner ─────────────────────────────────────────────────────
+// Reuses scoreTech, so bulk assignment ranks candidates and detects blockers with
+// exactly the same logic as the crew builder — no second implementation to drift.
+//
+// Nothing is written until the proposal is confirmed. A job whose every candidate
+// carries a blocker is left alone and reported as unplaceable, rather than being
+// assigned with a warning nobody reads.
+const planWeek = ({ jobs, techs, skills, fromStr, toStr }) => {
+    const proposals = [];
+    const skipped   = [];
+
+    // Running per-tech load so the planner does not stack every job on the best tech.
+    const busy = {};   // techId -> [{ date, start, end }]
+    techs.forEach(t => {
+        busy[t.id] = jobs
+            .filter(j => (j.assignedTechIds || []).includes(t.id) && j.start != null)
+            .map(j => ({ date: j.scheduledDate, start: j.start, end: j.start + (j.durationHrs || 2) }));
+    });
+
+    const candidatesForDay = (job, dateStr) => {
+        const dur = job.durationHrs || 2;
+        return techs
+            .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills) }))
+            .filter(c => c.blockers.length === 0)
+            .sort((a, b) => b.score - a.score)
+            .map(c => {
+                // First slot in the working day where this tech is free.
+                for (const h of DSP_HOURS) {
+                    if (h + dur > DSP_HOURS[DSP_HOURS.length - 1] + 1) break;
+                    const clash = (busy[c.tech.id] || []).some(b =>
+                        b.date === dateStr && h < b.end && (h + dur) > b.start);
+                    if (!clash) return { ...c, startHr: h };
+                }
+                return null;
+            })
+            .filter(Boolean);
+    };
+
+    // Unscheduled jobs only; urgent first so the best techs go to the worst jobs.
+    const queue = jobs
+        .filter(j => !j.start || (j.assignedTechIds || []).length === 0)
+        .slice()
+        .sort((a, b) => (PRIORITY_RANK[normalisePriority(b.priority)] ?? 1) - (PRIORITY_RANK[normalisePriority(a.priority)] ?? 1));
+
+    for (const job of queue) {
+        // Respect an existing date; otherwise try each day in the window.
+        const days = job.scheduledDate
+            ? [job.scheduledDate]
+            : (() => {
+                const out = []; let d = fromYmd(fromStr);
+                while (ymd(d) <= toStr) { out.push(ymd(d)); d = addDays(d, 1); }
+                return out;
+            })();
+
+        let placed = null;
+        for (const dateStr of days) {
+            const best = candidatesForDay(job, dateStr)[0];
+            if (best) { placed = { dateStr, ...best }; break; }
+        }
+
+        if (!placed) {
+            const anyCandidate = techs
+                .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills) }))
+                .sort((a, b) => a.blockers.length - b.blockers.length)[0];
+            skipped.push({
+                job,
+                reason: anyCandidate?.blockers?.length
+                    ? anyCandidate.blockers[0]
+                    : 'No technician free in this window',
+            });
+            continue;
+        }
+
+        const dur = job.durationHrs || 2;
+        busy[placed.tech.id] = [...(busy[placed.tech.id] || []),
+            { date: placed.dateStr, start: placed.startHr, end: placed.startHr + dur }];
+        proposals.push({ job, tech: placed.tech, dateStr: placed.dateStr, startHr: placed.startHr, score: placed.score });
+    }
+
+    return { proposals, skipped };
+};
+
+const hhmm = (hr) => `${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.round((hr % 1) * 60)).padStart(2, '0')}`;
+
+const MassSchedulePanel = ({ plan, fromStr, toStr, saving, progress, onCancel, onConfirm }) => (
+    <div onClick={onCancel}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.45)', zIndex: 99998,
+            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div onClick={e => e.stopPropagation()}
+            style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
+                width: 640, maxWidth: '94vw', maxHeight: '84vh', display: 'flex', flexDirection: 'column',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.22)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>
+                    Proposed schedule
+                </div>
+                <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans, marginTop: 3 }}>
+                    {fromStr} to {toStr} · {plan.proposals.length} to assign
+                    {plan.skipped.length > 0 && ` · ${plan.skipped.length} unplaceable`}
+                </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+                {plan.proposals.length === 0 && plan.skipped.length === 0 && (
+                    <div style={{ fontSize: 13, color: T.inkMuted, fontFamily: T.sans, padding: '10px 0' }}>
+                        Nothing to schedule — every job in this window already has a crew.
+                    </div>
+                )}
+
+                {plan.proposals.map(pr => (
+                    <div key={pr.job.id} style={{ display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '8px 0', borderBottom: `1px solid ${T.border}` }}>
+                        <span style={{ width: 3, alignSelf: 'stretch', background: prioColor(pr.job.priority), borderRadius: 2 }}/>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans,
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {pr.job.title || pr.job.customer}
+                            </div>
+                            <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                {pr.dateStr} · {fmt12(pr.startHr)} · {pr.job.durationHrs || 2}h
+                            </div>
+                        </div>
+                        <div style={{ fontSize: 12.5, color: T.ink, fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                            {pr.tech.name}
+                        </div>
+                        <span style={{ fontSize: 10.5, fontFamily: T.mono, color: T.inkMuted, width: 26, textAlign: 'right' }}>
+                            {pr.score}
+                        </span>
+                    </div>
+                ))}
+
+                {plan.skipped.length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: T.warn, textTransform: 'uppercase',
+                            letterSpacing: 0.6, marginBottom: 6, fontFamily: T.sans }}>
+                            Cannot be placed — left unscheduled
+                        </div>
+                        {plan.skipped.map(sk => (
+                            <div key={sk.job.id} style={{ padding: '6px 0', borderBottom: `1px solid ${T.border}` }}>
+                                <div style={{ fontSize: 12.5, color: T.ink, fontFamily: T.sans }}>
+                                    {sk.job.title || sk.job.customer}
+                                </div>
+                                <div style={{ fontSize: 11, color: T.warn, fontFamily: T.sans }}>{sk.reason}</div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div style={{ padding: '12px 20px', borderTop: `1px solid ${T.border}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+                {saving && (
+                    <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.mono, marginRight: 'auto' }}>
+                        {progress.done}/{progress.total} scheduled{progress.failed ? ` · ${progress.failed} failed` : ''}
+                    </span>
+                )}
+                <button onClick={onCancel} disabled={saving}
+                    style={{ padding: '7px 14px', background: 'transparent', color: T.inkMid,
+                        border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
+                        cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
+                    Cancel
+                </button>
+                <button onClick={onConfirm} disabled={saving || plan.proposals.length === 0}
+                    style={{ padding: '7px 16px', background: (saving || plan.proposals.length === 0) ? T.borderStrong : T.ink,
+                        color: '#fbf8f3', border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600,
+                        cursor: (saving || plan.proposals.length === 0) ? 'default' : 'pointer', fontFamily: T.sans }}>
+                    {saving ? 'Scheduling…' : `Schedule ${plan.proposals.length} job${plan.proposals.length === 1 ? '' : 's'}`}
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
 export default function DispatchTab() {
     const { settings, opportunities, accounts, addAudit } = useApp();
@@ -2089,6 +2262,9 @@ export default function DispatchTab() {
     // Raw technician rows (userId, rates, notes) for the Technicians editor.
     const [techsRaw,   setTechsRaw]   = useState([]);
     const [jobsRaw,    setJobsRaw]    = useState([]);
+    const [massPlan,   setMassPlan]   = useState(null);   // { proposals, skipped, fromStr, toStr }
+    const [massSaving, setMassSaving] = useState(false);
+    const [massProg,   setMassProg]   = useState({ done: 0, total: 0, failed: 0 });
     const [equipment,  setEquipment]  = useState([]);
     const [customers,  setCustomers]  = useState([]);
     const [loading,    setLoading]    = useState(true);
@@ -2428,6 +2604,68 @@ export default function DispatchTab() {
     const unscheduled = jobs.filter(j => !j.start || (j.assignedTechIds || []).length === 0).length;
     const urgentUnassigned = jobs.filter(j => URGENT_PRIORITIES.includes(j.priority) && (!j.start || (j.assignedTechIds || []).length === 0)).length;
 
+    // Build a proposal for the coming week. Nothing is written here.
+    const openMassSchedule = () => {
+        const start = addDays(new Date(), 1);
+        const fromStr = ymd(start);
+        const toStr   = ymd(addDays(start, 6));
+        const { proposals, skipped } = planWeek({
+            jobs: filteredJobs, techs: filteredTechs, skills, fromStr, toStr,
+        });
+        setMassProg({ done: 0, total: proposals.length, failed: 0 });
+        setMassPlan({ proposals, skipped, fromStr, toStr });
+    };
+
+    // Commit the approved proposal, one PUT per job so a single failure does not
+    // abandon the rest. Failures are counted and the panel stays open.
+    const confirmMassSchedule = async () => {
+        if (!massPlan) return;
+        setMassSaving(true);
+        let done = 0, failed = 0;
+        const applied = [];
+        for (const pr of massPlan.proposals) {
+            try {
+                const dur    = pr.job.durationHrs || 2;
+                const startS = hhmm(pr.startHr);
+                const endS   = hhmm(pr.startHr + dur);
+                const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(pr.job.id), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: pr.job.id, status: 'scheduled',
+                        assignedTechId: pr.tech.id, coTechIds: [],
+                        scheduledDate: pr.dateStr, scheduledStart: startS, scheduledEnd: endS,
+                        timeSlot: 'exact',
+                    }),
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                applied.push(pr);
+                done += 1;
+            } catch (e) {
+                failed += 1;
+            }
+            setMassProg({ done, total: massPlan.proposals.length, failed });
+        }
+
+        setJobs(prev => prev.map(j => {
+            const pr = applied.find(a => a.job.id === j.id);
+            return pr ? { ...j, assignedTechIds: [pr.tech.id], start: pr.startHr,
+                status: 'scheduled', scheduledDate: pr.dateStr, window: hhmm(pr.startHr) } : j;
+        }));
+
+        if (addAudit && applied.length) {
+            addAudit('dispatch.schedule.bulk', 'dispatch_job', 'bulk',
+                `${applied.length} jobs`,
+                `Mass-scheduled ${applied.length} job${applied.length === 1 ? '' : 's'} ` +
+                `${massPlan.fromStr}–${massPlan.toStr}` +
+                (failed ? ` — ${failed} failed` : '') +
+                (massPlan.skipped.length ? ` — ${massPlan.skipped.length} unplaceable` : ''));
+        }
+
+        setMassSaving(false);
+        if (!failed) setMassPlan(null);
+    };
+
     const handleJobClick = (job) => {
         setSelectedJobId(job.id);
         setView('queue');
@@ -2463,8 +2701,9 @@ export default function DispatchTab() {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <button style={{ padding: '6px 14px', background: T.surface, border: `1px solid ${T.borderStrong}`,
-                        borderRadius: T.r, fontSize: 12.5, fontWeight: 500, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                    <button onClick={openMassSchedule}
+                        style={{ padding: '6px 14px', background: T.surface, border: `1px solid ${T.borderStrong}`,
+                            borderRadius: T.r, fontSize: 12.5, fontWeight: 500, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                         Mass-schedule next week
                     </button>
                     <button onClick={() => { setNewJobForm(EMPTY_JOB); setNewJobError(''); setShowNewJobForm(true); }} style={{ padding: '6px 14px', background: T.ink, color: '#fbf8f3', border: 'none',
@@ -2473,6 +2712,13 @@ export default function DispatchTab() {
                     </button>
                 </div>
             </div>
+
+            {massPlan && (
+                <MassSchedulePanel plan={massPlan} fromStr={massPlan.fromStr} toStr={massPlan.toStr}
+                    saving={massSaving} progress={massProg}
+                    onCancel={() => { if (!massSaving) setMassPlan(null); }}
+                    onConfirm={confirmMassSchedule}/>
+            )}
 
             {/* Sub-tabs — same underline treatment as Quotes, Reports and Sales Manager */}
             <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 12, flexShrink: 0 }}>
