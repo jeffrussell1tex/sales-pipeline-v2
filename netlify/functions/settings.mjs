@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { settings } from '../../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAdmin } from './auth.mjs';
 import { encrypt, decrypt } from './crypto.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
@@ -46,7 +46,8 @@ export const handler = async (event) => {
 
     try {
         if (event.httpMethod === 'GET') {
-            const rows = await db.select().from(settings).where(eq(settings.orgId, orgId));
+            const rows = await db.select().from(settings).where(eq(settings.orgId, orgId))
+                .orderBy(desc(settings.updatedAt));
             if (rows.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ settings: null }) };
             const row = rows[0];
 
@@ -162,7 +163,8 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
 
             // Read existing row first so we can merge extra fields safely.
-            const existing = await db.select().from(settings).where(eq(settings.orgId, orgId));
+            const existing = await db.select().from(settings).where(eq(settings.orgId, orgId))
+                .orderBy(desc(settings.updatedAt));
             const existingExtra = existing.length > 0 ? (existing[0].extra || {}) : {};
 
             // One-time migration: if a plaintext key is sitting in the aiSettings
