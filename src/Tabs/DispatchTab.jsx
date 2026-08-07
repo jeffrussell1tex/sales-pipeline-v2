@@ -3547,12 +3547,12 @@ export default function DispatchTab() {
             {/* Sub-tabs — same underline treatment as Quotes, Reports and Sales Manager */}
             <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 12, flexShrink: 0 }}>
                 {[
-                    { id: 'board',     label: 'Board' },
+                    { id: 'board',     label: 'Job Board' },
                     { id: 'queue',     label: 'Queue' },
                     { id: 'jobs',      label: 'Jobs' },
                     { id: 'customers', label: 'Customers' },
                     { id: 'techs',     label: 'Technicians' },
-                    { id: 'schedule',  label: 'Schedule' },
+                    { id: 'schedule',  label: 'Work Schedules' },
                 ].map(v => {
                     const active = view === v.id;
                     return (
