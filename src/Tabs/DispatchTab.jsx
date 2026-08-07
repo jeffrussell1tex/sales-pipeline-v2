@@ -58,6 +58,7 @@ const PRIORITIES = [
 // Legacy -> canonical. Applied at the read boundary only; nothing downstream
 // should ever see 'urgent' or 'standard' again.
 const PRIORITY_ALIASES = { urgent: 'emergency', standard: 'normal', medium: 'normal' };
+const PRIORITY_RANK = { low: 0, normal: 1, high: 2, emergency: 3 };
 const normalisePriority = (p) => PRIORITY_ALIASES[p] || p || 'normal';
 const URGENT_PRIORITIES = ['emergency'];
 const prioColor = (p) => ({ emergency: T.danger, high: T.warn, normal: T.inkMid, low: T.inkMuted }[normalisePriority(p)] || T.inkMuted);
@@ -537,7 +538,18 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
 };
 
 // ── CREW BUILDER VIEW ─────────────────────────────────────────────────────────
+// Queue sort. These three were rendered as spans with a hardcoded `i === 0`
+// highlight and no onClick — decorative, never wired.
+const QUEUE_SORTS = {
+    Priority: (a, b) => (PRIORITY_RANK[normalisePriority(b.priority)] ?? 1) - (PRIORITY_RANK[normalisePriority(a.priority)] ?? 1),
+    // Undated jobs sort last rather than leading the list.
+    Date:     (a, b) => (a.scheduledDate || '9999-12-31').localeCompare(b.scheduledDate || '9999-12-31'),
+    Value:    (a, b) => (b.value || 0) - (a.value || 0),
+};
+
 const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBack, onScheduled }) => {
+    const [queueSort, setQueueSort] = useState('Priority');
+    const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
     const [addedTechs, setAddedTechs] = useState({});
     // Pending override: { tech, blockers }. Assigning a blocked technician is a
@@ -657,15 +669,17 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                         Jobs to schedule
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
-                        {['Priority', 'Date', 'Value'].map((l, i) => (
-                            <span key={l} style={{ fontSize: 11, padding: '3px 8px', borderRadius: T.r,
-                                background: i === 0 ? T.ink : T.surface, color: i === 0 ? '#fbf8f3' : T.inkMid,
-                                fontWeight: 600, cursor: 'pointer' }}>{l}</span>
+                        {['Priority', 'Date', 'Value'].map(l => (
+                            <span key={l} onClick={() => setQueueSort(l)}
+                                style={{ fontSize: 11, padding: '3px 8px', borderRadius: T.r,
+                                    background: queueSort === l ? T.ink : T.surface,
+                                    color: queueSort === l ? '#fbf8f3' : T.inkMid,
+                                    fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}>{l}</span>
                         ))}
                     </div>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
-                    {jobs.map(j => {
+                    {sortedQueue.map(j => {
                         const pc = prioColor2(j.priority);
                         const isSel = j.id === selectedJob?.id;
                         const isScheduled = j.start && (j.assignedTechIds || []).length > 0;
@@ -2442,19 +2456,6 @@ export default function DispatchTab() {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {/* View toggle */}
-                    <div style={{ display: 'inline-flex', borderRadius: T.r, border: `1px solid ${T.borderStrong}`, overflow: 'hidden' }}>
-                        {[['board', 'Board'], ['queue', 'Queue'], ['customers', 'Customers'], ['techs', 'Technicians']].map(([v, l], i) => (
-                            <button key={v} onClick={() => setView(v)}
-                                style={{ padding: '6px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-                                    background: view === v ? T.ink : 'transparent',
-                                    color: view === v ? '#fbf8f3' : T.inkMid,
-                                    border: 'none', borderLeft: i > 0 ? `1px solid ${T.borderStrong}` : 'none',
-                                    fontFamily: T.sans }}>
-                                {l}
-                            </button>
-                        ))}
-                    </div>
                     <button style={{ padding: '6px 14px', background: T.surface, border: `1px solid ${T.borderStrong}`,
                         borderRadius: T.r, fontSize: 12.5, fontWeight: 500, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                         Mass-schedule next week
