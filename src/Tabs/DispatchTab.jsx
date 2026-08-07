@@ -59,6 +59,13 @@ const PRIORITIES = [
 // should ever see 'urgent' or 'standard' again.
 const PRIORITY_ALIASES = { urgent: 'emergency', standard: 'normal', medium: 'normal' };
 const PRIORITY_RANK = { low: 0, normal: 1, high: 2, emergency: 3 };
+
+// Display-only. Stored values remain lowercase snake_case; this only prettifies
+// the label ('en_route' -> 'En route').
+const labelise = (v) => {
+    const t = String(v || '').replace(/_/g, ' ');
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+};
 const normalisePriority = (p) => PRIORITY_ALIASES[p] || p || 'normal';
 const URGENT_PRIORITIES = ['emergency'];
 const prioColor = (p) => ({ emergency: T.danger, high: T.warn, normal: T.inkMid, low: T.inkMuted }[normalisePriority(p)] || T.inkMuted);
@@ -1333,7 +1340,7 @@ const CustomersView = ({ customers, accounts, onSaved }) => {
                                 <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.mono }}>{c.customerNumber || '—'}</span>
                             </div>
                             <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{c.customerType || 'commercial'}</span>
+                                <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{labelise(c.customerType || 'commercial')}</span>
                                 {c.accountId
                                     ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.ok}14`, color: T.ok, fontWeight: 700 }}>linked</span>
                                     : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>unlinked</span>}
@@ -1381,12 +1388,12 @@ const CustomersView = ({ customers, accounts, onSaved }) => {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <CustFieldRow label="Customer type">
                                 <select value={draft.customerType || 'commercial'} onChange={e => set('customerType', e.target.value)} style={custInput}>
-                                    {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                    {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
                                 </select>
                             </CustFieldRow>
                             <CustFieldRow label="Service agreement">
                                 <select value={draft.serviceAgreement || 'none'} onChange={e => set('serviceAgreement', e.target.value)} style={custInput}>
-                                    {AGREEMENTS.map(t => <option key={t} value={t}>{t}</option>)}
+                                    {AGREEMENTS.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
                                 </select>
                             </CustFieldRow>
                         </div>
@@ -1552,12 +1559,12 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                                 {t.firstName} {t.lastName}
                             </div>
                             <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{t.employmentType}</span>
+                                <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{labelise(t.employmentType)}</span>
                                 {t.userId
                                     ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.ok}14`, color: T.ok, fontWeight: 700 }}>app user</span>
                                     : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.inkMuted}14`, color: T.inkMuted, fontWeight: 700 }}>no login</span>}
                                 {t.status !== 'active' && (
-                                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>{t.status}</span>
+                                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>{labelise(t.status)}</span>
                                 )}
                                 {!t.licenseLevel && (
                                     <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>no license</span>
@@ -1624,12 +1631,12 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                             <CustFieldRow label="Employment">
                                 <select value={draft.employmentType || 'employee'} onChange={e => set('employmentType', e.target.value)} style={custInput}>
-                                    {EMPLOYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                    {EMPLOYMENT_TYPES.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
                                 </select>
                             </CustFieldRow>
                             <CustFieldRow label="Status">
                                 <select value={draft.status || 'active'} onChange={e => set('status', e.target.value)} style={custInput}>
-                                    {TECH_STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                                    {TECH_STATUSES.map(s => <option key={s} value={s}>{labelise(s)}</option>)}
                                 </select>
                             </CustFieldRow>
                             <CustFieldRow label="Home zip">
@@ -1865,7 +1872,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                     <select value={statusFilt} onChange={e => setStatusFilt(e.target.value)}
                         style={{ ...custInput, padding: '6px 9px', fontSize: 12 }}>
                         <option value="all">All statuses</option>
-                        {JOB_STATUSES.map(s2 => <option key={s2} value={s2}>{s2.replace('_', ' ')}</option>)}
+                        {JOB_STATUSES.map(s2 => <option key={s2} value={s2}>{labelise(s2)}</option>)}
                     </select>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -1886,9 +1893,9 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                             <div style={{ marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8,
                                     background: `${prioColor(j.priority)}18`, color: prioColor(j.priority), fontWeight: 700 }}>
-                                    {normalisePriority(j.priority)}
+                                    {labelise(normalisePriority(j.priority))}
                                 </span>
-                                <span style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>{(j.status || '').replace('_', ' ')}</span>
+                                <span style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>{labelise(j.status)}</span>
                             </div>
                         </div>
                     ))}
@@ -1957,7 +1964,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                             </CustFieldRow>
                             <CustFieldRow label="Status">
                                 <select value={draft.status || 'unscheduled'} onChange={e => set('status', e.target.value)} style={custInput}>
-                                    {JOB_STATUSES.map(s2 => <option key={s2} value={s2}>{s2.replace('_', ' ')}</option>)}
+                                    {JOB_STATUSES.map(s2 => <option key={s2} value={s2}>{labelise(s2)}</option>)}
                                 </select>
                             </CustFieldRow>
                             <CustFieldRow label="Scheduled date">
