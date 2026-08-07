@@ -45,19 +45,22 @@ const LICENSE_ORDER = { Apprentice: 0, Journeyman: 1, Master: 2, Lead: 3 };
 const fmt12 = (h) => h === 12 ? '12p' : h > 12 ? `${h-12}p` : `${h}a`;
 
 // ── Priority color helper ─────────────────────────────────────────────────────
-// Priority vocabulary reconciliation. The schema documents
-// 'low' | 'normal' | 'high' | 'emergency', while these colour maps were written
-// against an older 'urgent' | 'standard' | 'low' set. Both are accepted so
-// existing rows keep their colours and newly created jobs (which store the
-// schema-valid values) render correctly too.
-const PRIORITY_LABELS = [
-    { label: 'Low',     value: 'low' },
-    { label: 'Medium',  value: 'normal' },
-    { label: 'High',    value: 'high' },
-    { label: 'Urgent',  value: 'emergency' },
+// Priority vocabulary — ONE set, matching the schema: low | normal | high | emergency.
+// Three incompatible vocabularies previously coexisted (schema, these colour maps,
+// and the create form), so every new consumer picked one at random. Stored values
+// are normalised; legacy rows are translated on read by PRIORITY_ALIASES.
+const PRIORITIES = [
+    { label: 'Low',       value: 'low' },
+    { label: 'Normal',    value: 'normal' },
+    { label: 'High',      value: 'high' },
+    { label: 'Emergency', value: 'emergency' },
 ];
-const URGENT_PRIORITIES = ['urgent', 'emergency'];
-const prioColor = (p) => ({ urgent: T.danger, emergency: T.danger, high: T.warn, standard: T.warn, normal: T.inkMid, low: T.inkMuted }[p] || T.inkMuted);
+// Legacy -> canonical. Applied at the read boundary only; nothing downstream
+// should ever see 'urgent' or 'standard' again.
+const PRIORITY_ALIASES = { urgent: 'emergency', standard: 'normal', medium: 'normal' };
+const normalisePriority = (p) => PRIORITY_ALIASES[p] || p || 'normal';
+const URGENT_PRIORITIES = ['emergency'];
+const prioColor = (p) => ({ emergency: T.danger, high: T.warn, normal: T.inkMid, low: T.inkMuted }[normalisePriority(p)] || T.inkMuted);
 
 // ── Customer typeahead ───────────────────────────────────────────────
 // Defined at module scope on purpose: a component declared inside DispatchTab
@@ -642,7 +645,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
     const scheduledJobs = jobs.filter(j => j.start && (j.assignedTechIds || []).length > 0);
     const overbooking = techs.some(t => (t.hoursThisWeek || 0) > (t.hoursCap || 40));
 
-    const prioColor2 = (p) => prioColor(p);   // single source of truth; accepts both priority vocabularies
+    const prioColor2 = prioColor;   // kept as an alias for existing call sites
 
     return (
         <div style={{ display: 'flex', height: '100%', overflow: 'hidden', fontFamily: T.sans }}>
@@ -1846,7 +1849,7 @@ export default function DispatchTab() {
                         needSkills:     j.needSkills || [],
                         crewSize:       j.crewSize || ([j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean).length || 1),
                         durationHrs:    j.durationMinutes ? j.durationMinutes / 60 : 2,
-                        priority:       j.priority === 'emergency' ? 'urgent' : j.priority === 'low' ? 'low' : 'standard',
+                        priority:       normalisePriority(j.priority),
                         window:         j.timeSlot === 'exact' && j.scheduledStart
                             ? j.scheduledStart
                             : j.scheduledDate || 'TBD',
@@ -1881,7 +1884,7 @@ export default function DispatchTab() {
                         needSkills:     [],
                         crewSize:       1,
                         durationHrs:    4,
-                        priority:       'standard',
+                        priority:       'normal',
                         window:         'TBD',
                         equipment:      '',
                         value:          parseFloat(o.arr || o.revenue || 0) || 0,
@@ -2072,7 +2075,7 @@ export default function DispatchTab() {
         return boardAnchor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     }, [boardRange, boardAnchor, rangeFrom, rangeTo]);
     const unscheduled = jobs.filter(j => !j.start || (j.assignedTechIds || []).length === 0).length;
-    const urgentUnassigned = jobs.filter(j => j.priority === 'urgent' && (!j.start || (j.assignedTechIds || []).length === 0)).length;
+    const urgentUnassigned = jobs.filter(j => URGENT_PRIORITIES.includes(j.priority) && (!j.start || (j.assignedTechIds || []).length === 0)).length;
 
     const handleJobClick = (job) => {
         setSelectedJobId(job.id);
@@ -2190,10 +2193,10 @@ export default function DispatchTab() {
                         )}
                         <span style={{ flex: 1 }}/>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid }}>
-                            {[['urgent', T.danger], ['standard', T.warn], ['low', T.inkMuted]].map(([l, c]) => (
+                            {[['Emergency', T.danger], ['High', T.warn], ['Normal', T.inkMid], ['Low', T.inkMuted]].map(([l, c]) => (
                                 <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <span style={{ width: 10, height: 10, background: c, borderRadius: 2 }}/>
-                                    {l.charAt(0).toUpperCase() + l.slice(1)}
+                                    {l}
                                 </span>
                             ))}
                         </div>
@@ -2415,7 +2418,7 @@ export default function DispatchTab() {
                                     <select value={newJobForm.priority}
                                         onChange={e => setNewJobForm(f => ({ ...f, priority: e.target.value }))}
                                         style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
-                                        {PRIORITY_LABELS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                                        {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                                     </select>
                                 </div>
                                 <div>

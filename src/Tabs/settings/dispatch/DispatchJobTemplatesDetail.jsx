@@ -49,7 +49,12 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
         updateTemplate('skills', next);
     };
 
-    const prioColor = (p) => ({ urgent: T.danger, standard: T.warn, low: T.inkMuted }[p] || T.inkMuted);
+    // Canonical vocabulary: low | normal | high | emergency (matches the schema).
+    // Legacy 'urgent'/'standard' values are translated on read so existing
+    // templates keep their colour until the next save rewrites them.
+    const PRIORITY_ALIASES = { urgent: 'emergency', standard: 'normal', medium: 'normal' };
+    const normPrio  = (p) => PRIORITY_ALIASES[p] || p || 'normal';
+    const prioColor = (p) => ({ emergency: T.danger, high: T.warn, normal: T.inkMid, low: T.inkMuted }[normPrio(p)] || T.inkMuted);
 
     // Sanity checks for selected template
     const sanityChecks = selected ? [
@@ -79,7 +84,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             extraActions={
                 <>
                     <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Test auto-create</button>
-                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',autojob:true,priority:'standard',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
+                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
                 </>
             }>
 
@@ -105,7 +110,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                         {(t.skills||[]).map(id => { const s=skills.find(sk=>sk.id===id); return s?<span key={id} style={{ fontSize:9.5, padding:'1px 5px', borderRadius:8, background:`${s.color}14`, color:s.color, fontWeight:600 }}>{s.name}</span>:null; })}
                                     </div>
                                     <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:`${T.info}14`, color:T.info, fontWeight:600 }}>{t.minLicense}</span></div>
-                                    <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:`${prioColor(t.priority)}14`, color:prioColor(t.priority), fontWeight:600 }}>{t.priority}</span></div>
+                                    <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:`${prioColor(t.priority)}14`, color:prioColor(t.priority), fontWeight:600 }}>{normPrio(t.priority)}</span></div>
                                     <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:t.autojob?`${T.ok}14`:`${T.inkMuted}14`, color:t.autojob?T.ok:T.inkMuted, fontWeight:600 }}>{t.autojob?'On':'Off'}</span></div>
                                     <div style={{ color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{t.used||0}</div>
                                     <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setTmplMenu(tmplMenu?.id===t.id?null:{id:t.id,t,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>
@@ -151,9 +156,12 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                 </div>
                                 <div>
                                     <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default priority</div>
-                                    <select value={selected.priority||'standard'} onChange={e=>updateTemplate('priority',e.target.value)}
+                                    <select value={normPrio(selected.priority)} onChange={e=>updateTemplate('priority',e.target.value)}
                                         style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}>
-                                        <option>urgent</option><option>standard</option><option>low</option>
+                                        <option value="low">Low</option>
+                                        <option value="normal">Normal</option>
+                                        <option value="high">High</option>
+                                        <option value="emergency">Emergency</option>
                                     </select>
                                 </div>
                                 <div style={{ gridColumn:'1 / -1' }}>
@@ -209,7 +217,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                 </div>
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Crew × hours: <strong>{selected.crew||1} × {selected.hrs||2}h</strong></div>
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Min license: <strong>{selected.minLicense}</strong></div>
-                                <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Priority: <strong style={{ color:prioColor(selected.priority) }}>{selected.priority}</strong></div>
+                                <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Priority: <strong style={{ color:prioColor(selected.priority) }}>{normPrio(selected.priority)}</strong></div>
                                 {selected.equip && <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Equipment: <strong>{selected.equip}</strong></div>}
                             </div>
                         ) : (
