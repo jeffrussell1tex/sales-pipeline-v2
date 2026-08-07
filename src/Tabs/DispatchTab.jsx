@@ -1715,6 +1715,300 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
     );
 };
 
+
+// ── Jobs view ─────────────────────────────────────────────────────────────────
+// Every job, editable. Until now a job could be created and crewed but never
+// corrected — priority, title, duration, crew size, licence, skills and the
+// service address were all frozen after create, even though the PUT endpoint
+// supported all of them.
+//
+// Address lives on dispatch_service_locations (the job only holds locationId),
+// so saving an address is create-or-update on that row. Editing an address that
+// other jobs share updates it for all of them — that is usually the intent (the
+// site address was wrong), and the UI says so.
+const JOB_STATUSES = ['unscheduled', 'scheduled', 'en_route', 'on_site', 'paused', 'completed', 'cancelled'];
+
+const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, onSaved }) => {
+    const [query,      setQuery]      = React.useState('');
+    const [statusFilt, setStatusFilt] = React.useState('all');
+    const [selectedId, setSelectedId] = React.useState(null);
+    const [draft,      setDraft]      = React.useState(null);
+    const [loc,        setLoc]        = React.useState(null);   // { id, address, city, state, zip }
+    const [saving,     setSaving]     = React.useState(false);
+    const [status,     setStatus]     = React.useState(null);
+
+    const q = query.trim().toLowerCase();
+    const list = (jobsRaw || [])
+        .filter(j => statusFilt === 'all' || j.status === statusFilt)
+        .filter(j => !q
+            || (j.title || '').toLowerCase().includes(q)
+            || (j.jobNumber || '').toLowerCase().includes(q))
+        .slice()
+        .sort((a, b) => (b.scheduledDate || '').localeCompare(a.scheduledDate || ''));
+
+    const selected = (jobsRaw || []).find(j => j.id === selectedId) || null;
+
+    React.useEffect(() => {
+        setDraft(selected ? { ...selected } : null);
+        setStatus(null);
+        setLoc(null);
+        if (!selected) return;
+        let cancelled = false;
+        (async () => {
+            if (!selected.customerId) return;
+            try {
+                const res = await dbFetch('/.netlify/functions/dispatch-customers?resource=locations&customerId=' + encodeURIComponent(selected.customerId));
+                if (!res.ok) return;
+                const data = await res.json();
+                if (cancelled) return;
+                const match = (data.locations || []).find(l => l.id === selected.locationId) || null;
+                setLoc(match ? { ...match } : { id: null, address: '', city: '', state: '', zip: '' });
+            } catch (e) { /* address panel stays hidden */ }
+        })();
+        return () => { cancelled = true; };
+    }, [selectedId]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+    const set    = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    const setLocF = (k, v) => setLoc(l => ({ ...(l || {}), [k]: v }));
+
+    const customerName = (id) => (customers || []).find(c => c.id === id)?.name || '—';
+
+    const save = async () => {
+        if (!draft) return;
+        if (!(draft.title || '').trim()) { setStatus({ kind: 'err', msg: 'Title is required.' }); return; }
+        if (loc && (loc.address || '').trim() && !(loc.city || '').trim()) {
+            setStatus({ kind: 'err', msg: 'City is required when an address is set.' }); return;
+        }
+        setSaving(true); setStatus(null);
+        try {
+            let locationId = draft.locationId || null;
+
+            // 1 — address, when one has been entered or changed
+            if (loc && (loc.address || '').trim()) {
+                const locId = loc.id || ('dloc_' + crypto.randomUUID());
+                const lres = await dbFetch('/.netlify/functions/dispatch-customers?resource=locations'
+                    + (loc.id ? '&id=' + encodeURIComponent(loc.id) : ''), {
+                    method: loc.id ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: locId, customerId: draft.customerId,
+                        name: loc.address.trim(), address: loc.address.trim(),
+                        city: (loc.city || '').trim(),
+                        state: (loc.state || '').trim() || null,
+                        zip: (loc.zip || '').trim() || null,
+                    }),
+                });
+                const ldata = await lres.json().catch(() => ({}));
+                if (!lres.ok) throw new Error(ldata.error || 'Could not save the address.');
+                locationId = ldata.location?.id || locId;
+            }
+
+            // 2 — the job
+            const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(draft.id), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id:              draft.id,
+                    title:           draft.title.trim(),
+                    description:     draft.description || null,
+                    priority:        draft.priority || 'normal',
+                    status:          draft.status || 'unscheduled',
+                    jobType:         draft.jobType || 'repair',
+                    durationMinutes: Math.round((parseFloat(draft.durationHrs ?? ((draft.durationMinutes || 120) / 60)) || 2) * 60),
+                    crewSize:        parseInt(draft.crewSize, 10) || 1,
+                    minLicense:      draft.minLicense || null,
+                    needSkills:      draft.needSkills || [],
+                    scheduledDate:   draft.scheduledDate || null,
+                    locationId,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (res.status === 403) throw new Error('Your role cannot edit jobs.');
+                throw new Error(data.error || ('HTTP ' + res.status));
+            }
+            if (data.job) { onSaved(data.job); setSelectedId(data.job.id); }
+            setStatus({ kind: 'ok', msg: 'Saved' });
+        } catch (e) {
+            setStatus({ kind: 'err', msg: e.message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+            <div style={{ width: 320, borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', background: T.surface }}>
+                <div style={{ padding: 12, borderBottom: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search title or job number"
+                        style={{ ...custInput, padding: '7px 9px', fontSize: 12.5 }}/>
+                    <select value={statusFilt} onChange={e => setStatusFilt(e.target.value)}
+                        style={{ ...custInput, padding: '6px 9px', fontSize: 12 }}>
+                        <option value="all">All statuses</option>
+                        {JOB_STATUSES.map(s2 => <option key={s2} value={s2}>{s2.replace('_', ' ')}</option>)}
+                    </select>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                    {list.length === 0 && (
+                        <div style={{ padding: 16, fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans }}>No jobs match.</div>
+                    )}
+                    {list.map(j => (
+                        <div key={j.id} onClick={() => setSelectedId(j.id)}
+                            style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
+                                borderLeft: `3px solid ${prioColor(j.priority)}`,
+                                background: j.id === selectedId ? T.surface2 : 'transparent' }}>
+                            <div style={{ fontSize: 13, fontWeight: j.id === selectedId ? 700 : 500, color: T.ink, fontFamily: T.sans }}>
+                                {j.title}
+                            </div>
+                            <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 2 }}>
+                                {customerName(j.customerId)} · {j.scheduledDate || 'unscheduled'}
+                            </div>
+                            <div style={{ marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8,
+                                    background: `${prioColor(j.priority)}18`, color: prioColor(j.priority), fontWeight: 700 }}>
+                                    {normalisePriority(j.priority)}
+                                </span>
+                                <span style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>{(j.status || '').replace('_', ' ')}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+                {!draft ? (
+                    <div style={{ fontSize: 13, color: T.inkMuted, fontFamily: T.sans }}>Select a job to edit.</div>
+                ) : (
+                    <div style={{ maxWidth: 640 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 16 }}>
+                            <span style={{ fontSize: 20, fontStyle: 'italic', fontWeight: 300, color: T.ink, fontFamily: T.serif }}>
+                                {draft.title}
+                            </span>
+                            {draft.jobNumber && (
+                                <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.mono }}>{draft.jobNumber}</span>
+                            )}
+                        </div>
+
+                        <CustFieldRow label="Title *">
+                            <input value={draft.title || ''} onChange={e => set('title', e.target.value)} style={custInput}/>
+                        </CustFieldRow>
+
+                        <CustFieldRow label="Customer">
+                            <div style={{ ...custInput, background: T.surface2, color: T.inkMid }}>
+                                {customerName(draft.customerId)}
+                            </div>
+                            <div style={{ marginTop: 4, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                The customer cannot be changed after creation — create a new job instead.
+                            </div>
+                        </CustFieldRow>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="Priority">
+                                <select value={normalisePriority(draft.priority)} onChange={e => set('priority', e.target.value)} style={custInput}>
+                                    {PRIORITIES.map(pp => <option key={pp.value} value={pp.value}>{pp.label}</option>)}
+                                </select>
+                            </CustFieldRow>
+                            <CustFieldRow label="Status">
+                                <select value={draft.status || 'unscheduled'} onChange={e => set('status', e.target.value)} style={custInput}>
+                                    {JOB_STATUSES.map(s2 => <option key={s2} value={s2}>{s2.replace('_', ' ')}</option>)}
+                                </select>
+                            </CustFieldRow>
+                            <CustFieldRow label="Scheduled date">
+                                <input type="date" value={draft.scheduledDate || ''} onChange={e => set('scheduledDate', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="Duration (hrs)">
+                                <input type="number" step="0.5" min="0.5"
+                                    value={draft.durationHrs ?? ((draft.durationMinutes || 120) / 60)}
+                                    onChange={e => set('durationHrs', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                            <CustFieldRow label="Crew size">
+                                <input type="number" min="1" value={draft.crewSize ?? 1}
+                                    onChange={e => set('crewSize', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                            <CustFieldRow label="Min license">
+                                <select value={draft.minLicense || ''} onChange={e => set('minLicense', e.target.value)} style={custInput}>
+                                    <option value="">— None —</option>
+                                    {(licenseLevels || []).map(l => <option key={l} value={l}>{l}</option>)}
+                                </select>
+                            </CustFieldRow>
+                        </div>
+
+                        <CustFieldRow label="Required skills">
+                            {(skills || []).length === 0 ? (
+                                <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                                    No skills defined yet — add them under Settings → Dispatch.
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                    {(skills || []).map(sk => {
+                                        const on = (draft.needSkills || []).includes(sk.id);
+                                        return (
+                                            <span key={sk.id}
+                                                onClick={() => set('needSkills', on
+                                                    ? (draft.needSkills || []).filter(x => x !== sk.id)
+                                                    : [...(draft.needSkills || []), sk.id])}
+                                                style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                    border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
+                                                    color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
+                                                {sk.name}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </CustFieldRow>
+
+                        <CustFieldRow label="Description">
+                            <textarea value={draft.description || ''} onChange={e => set('description', e.target.value)} rows={3}
+                                style={{ ...custInput, resize: 'vertical' }}/>
+                        </CustFieldRow>
+
+                        {loc && (
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, padding: 12, marginBottom: 14 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase',
+                                    letterSpacing: 0.6, marginBottom: 8, fontFamily: T.sans }}>Service address</div>
+                                <CustFieldRow label="Street">
+                                    <input value={loc.address || ''} onChange={e => setLocF('address', e.target.value)} style={custInput}/>
+                                </CustFieldRow>
+                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+                                    <CustFieldRow label="City *">
+                                        <input value={loc.city || ''} onChange={e => setLocF('city', e.target.value)} style={custInput}/>
+                                    </CustFieldRow>
+                                    <CustFieldRow label="State">
+                                        <input value={loc.state || ''} onChange={e => setLocF('state', e.target.value)} style={custInput}/>
+                                    </CustFieldRow>
+                                    <CustFieldRow label="Zip">
+                                        <input value={loc.zip || ''} onChange={e => setLocF('zip', e.target.value)} style={custInput}/>
+                                    </CustFieldRow>
+                                </div>
+                                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                    This is the customer's service location. Other jobs at the same location will see the change too.
+                                </div>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <button onClick={save} disabled={saving}
+                                style={{ padding: '8px 18px', background: saving ? T.inkMuted : T.ink, color: T.surface,
+                                    border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600,
+                                    cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
+                                {saving ? 'Saving…' : 'Save changes'}
+                            </button>
+                            {status && (
+                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: T.sans,
+                                    color: status.kind === 'ok' ? T.ok : T.danger }}>{status.msg}</span>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
 export default function DispatchTab() {
     const { settings, opportunities, accounts, addAudit } = useApp();
@@ -1740,6 +2034,7 @@ export default function DispatchTab() {
     const [vehicles,   setVehicles]   = useState([]);
     // Raw technician rows (userId, rates, notes) for the Technicians editor.
     const [techsRaw,   setTechsRaw]   = useState([]);
+    const [jobsRaw,    setJobsRaw]    = useState([]);
     const [equipment,  setEquipment]  = useState([]);
     const [customers,  setCustomers]  = useState([]);
     const [loading,    setLoading]    = useState(true);
@@ -1902,6 +2197,7 @@ export default function DispatchTab() {
                 setEquipment(equipData.equipment   || []);
                 setCustomers(custsData.customers   || []);
                 setJobs([...normJobs, ...autoJobs]);
+                setJobsRaw(dbJobs);
             } catch (err) {
                 if (!cancelled) setLoadError(err.message || 'Failed to load dispatch data. Please refresh.');
                 console.error('DispatchTab load error:', err);
@@ -2136,6 +2432,31 @@ export default function DispatchTab() {
                 </div>
             </div>
 
+            {/* Sub-tabs — same underline treatment as Quotes, Reports and Sales Manager */}
+            <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 12, flexShrink: 0 }}>
+                {[
+                    { id: 'board',     label: 'Board' },
+                    { id: 'queue',     label: 'Queue' },
+                    { id: 'jobs',      label: 'Jobs' },
+                    { id: 'customers', label: 'Customers' },
+                    { id: 'techs',     label: 'Technicians' },
+                ].map(v => {
+                    const active = view === v.id;
+                    return (
+                        <button key={v.id} onClick={() => setView(v.id)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 16px',
+                                border: 'none', borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
+                                background: 'transparent', color: active ? T.ink : T.inkMuted,
+                                fontSize: 12, fontWeight: active ? 600 : 400, cursor: 'pointer', fontFamily: T.sans,
+                                transition: 'color 120ms, border-color 120ms', whiteSpace: 'nowrap', marginBottom: -1 }}
+                            onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
+                            onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
+                            {v.label}
+                        </button>
+                    );
+                })}
+            </div>
+
             {/* Filter bar (board only) */}
             {view === 'board' && (() => {
                 const filterPillStyle = (active) => ({
@@ -2282,6 +2603,21 @@ export default function DispatchTab() {
                                 onPickDay={ds => { setBoardAnchor(fromYmd(ds)); setBoardRange('today'); }}/>
                         )}
                     </div>
+                ) : view === 'jobs' ? (
+                    <JobsView jobsRaw={jobsRaw} customers={customers} techs={techs} skills={skills}
+                        licenseLevels={licLevels}
+                        onSaved={saved => {
+                            setJobsRaw(prev => prev.map(j => j.id === saved.id ? saved : j));
+                            // Keep the board in step without a reload.
+                            setJobs(prev => prev.map(j => j.id === saved.id
+                                ? { ...j, title: saved.title, priority: normalisePriority(saved.priority),
+                                    status: saved.status, scheduledDate: saved.scheduledDate,
+                                    durationHrs: (saved.durationMinutes || 120) / 60,
+                                    crewSize: saved.crewSize || j.crewSize,
+                                    minLicense: saved.minLicense || null,
+                                    needSkills: saved.needSkills || [] }
+                                : j));
+                        }}/>
                 ) : view === 'techs' ? (
                     <TechniciansView techsRaw={techsRaw} users={settings?.users || []}
                         vehicles={vehicles} skills={skills} certs={settings?.dispatchCerts || []} licenseLevels={licLevels}
