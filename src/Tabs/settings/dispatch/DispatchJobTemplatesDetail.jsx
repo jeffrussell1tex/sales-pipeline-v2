@@ -15,25 +15,47 @@ const migrateTemplate = (t) => ({ ...t, name: t.name ?? (t.ctype || '') });
 
 // `equip` was free text ("Recovery cart, spares") with a helper line claiming
 // each item had to exist in Vehicles & equipment — nothing enforced that. It is
-// now a list of ids into settings.dispatchEquipment, so a template requirement
-// can actually be resolved, counted against the quantity owned, and used as a
-// scheduling constraint.
+// now a list of equipment CATEGORIES from the dispatch_equipment table, so a
+// requirement can be resolved, counted against the units actually available, and
+// used as a scheduling constraint.
 //
 // Fragments that match nothing are NOT dropped: they are kept and reported, so a
 // real requirement typed as "recovery cart (large)" is visible rather than
 // silently lost on the first save.
-const migrateEquipment = (t, catalog) => {
-    if (Array.isArray(t.equipIds)) return t;
-    const raw = String(t.equip || '').split(',').map(s => s.trim()).filter(Boolean);
-    if (!raw.length) return { ...t, equipIds: [], equipUnmatched: [] };
-    const byName = new Map((catalog || []).map(e => [String(e.name || '').trim().toLowerCase(), e.id]));
-    const ids = [], unmatched = [];
-    raw.forEach(frag => {
-        const hit = byName.get(frag.toLowerCase());
-        if (hit) { if (!ids.includes(hit)) ids.push(hit); }
-        else unmatched.push(frag);
+// Requirements name a CATEGORY of equipment, never an individual unit — a job
+// needs "a pressure tester", not asset #A-1042. Availability is then the count of
+// units in that category, which is also what lets one unit sit in calibration
+// while the other stays bookable.
+//
+// Two legacy shapes migrate in:
+//   • `equip`     — free text, comma separated, from before any validation
+//   • `equipIds`  — ids into settings.dispatchEquipment, the retired blob
+// Both resolve by NAME against the live category list, because the blob's item
+// name is exactly what became the category on import. Fragments that match
+// nothing are kept and reported rather than dropped.
+const migrateEquipment = (t, categories, legacyBlob) => {
+    if (Array.isArray(t.equipCategories)) return t;
+
+    const known = new Map((categories || []).map(c => [c.trim().toLowerCase(), c]));
+    const wanted = [];
+
+    if (Array.isArray(t.equipIds) && t.equipIds.length) {
+        // Blob ids carry no meaning against the tables; recover their names first.
+        (t.equipIds || []).forEach(id => {
+            const hit = (legacyBlob || []).find(e => e.id === id);
+            if (hit && hit.name) wanted.push(String(hit.name).trim());
+        });
+    } else {
+        String(t.equip || '').split(',').map(x => x.trim()).filter(Boolean).forEach(x => wanted.push(x));
+    }
+
+    const cats = [], unmatched = [];
+    wanted.forEach(nm => {
+        const hit = known.get(nm.toLowerCase());
+        if (hit) { if (!cats.includes(hit)) cats.push(hit); }
+        else if (!unmatched.includes(nm)) unmatched.push(nm);
     });
-    return { ...t, equipIds: ids, equipUnmatched: unmatched };
+    return { ...t, equipCategories: cats, equipUnmatched: unmatched };
 };
 
 // Numeric template fields are held as raw text while the user types, and only
@@ -56,12 +78,42 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     const skills   = settings?.dispatchSkills   || [];
     const licenses = settings?.dispatchLicenses || ['Apprentice','Journeyman','Master','Lead'];
     const custTypes = settings?.customerTypes   || [];
-    // The settings equipment catalogue — kinds the org owns, with quantities.
-    // Distinct from the dispatch_equipment table, which tracks individual assets
-    // (serial numbers, calibration, checkout).
-    const equipCatalog = settings?.dispatchEquipment || [];
+    // Equipment categories come from the dispatch_equipment table — one row per
+    // physical unit, grouped by category. The settings blob is retained only to
+    // translate legacy template ids into names during migration.
+    const legacyEquipBlob = settings?.dispatchEquipment || [];
+    const [equipUnits, setEquipUnits] = useState([]);
+    const [equipLoaded, setEquipLoaded] = useState(false);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await dbFetch('/.netlify/functions/dispatch-equipment');
+                if (!res.ok) { if (!cancelled) setEquipLoaded(true); return; }
+                const data = await res.json();
+                if (cancelled) return;
+                setEquipUnits(data.equipment || []);
+            } catch (e) { /* picker stays empty */ }
+            if (!cancelled) setEquipLoaded(true);
+        })();
+        return () => { cancelled = true; };
+    }, []);
+    const equipCategories = React.useMemo(
+        () => [...new Set(equipUnits.map(e => (e.category || '').trim()).filter(Boolean))].sort(),
+        [equipUnits]);
+    const unitsIn = (cat) => equipUnits.filter(e => (e.category || '').trim() === cat);
 
-    const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(t => migrateEquipment(t, settings?.dispatchEquipment || [])));
+    const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(saved)).map(migrateTemplate));
+    // Equipment migration needs the category list, which arrives asynchronously.
+    // Running it against an empty list would file every requirement as unmatched
+    // and then persist that on the next save.
+    const [equipMigrated, setEquipMigrated] = useState(false);
+    useEffect(() => {
+        if (!equipLoaded || equipMigrated) return;
+        setTemplates(prev => prev.map(t => migrateEquipment(t, equipCategories, legacyEquipBlob)));
+        setEquipMigrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [equipLoaded, equipMigrated, equipCategories]);
     const [dirty,    setDirty]    = useState(false);
     const [saving,   setSaving]   = useState(false);
     const [saveError, setSaveError] = useState('');
@@ -115,10 +167,10 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
         updateTemplate('skills', next);
     };
 
-    const toggleEquip = (equipId) => {
+    const toggleEquip = (cat) => {
         if (!selected) return;
-        const cur = selected.equipIds || [];
-        updateTemplate('equipIds', cur.includes(equipId) ? cur.filter(x => x !== equipId) : [...cur, equipId]);
+        const cur = selected.equipCategories || [];
+        updateTemplate('equipCategories', cur.includes(cat) ? cur.filter(x => x !== cat) : [...cur, cat]);
     };
 
     // Canonical vocabulary: low | normal | high | emergency (matches the schema).
@@ -146,11 +198,11 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             detail: selected.ctype || 'No customer type',
         },
         {
-            ok: (selected.equipIds||[]).every(id => equipCatalog.find(e=>e.id===id)) && (selected.equipUnmatched||[]).length === 0,
+            ok: (selected.equipCategories||[]).every(c => equipCategories.includes(c)) && (selected.equipUnmatched||[]).length === 0,
             label: 'All required equipment exists',
-            detail: (selected.equipIds||[]).length === 0 && (selected.equipUnmatched||[]).length === 0
+            detail: (selected.equipCategories||[]).length === 0 && (selected.equipUnmatched||[]).length === 0
                 ? 'No equipment required'
-                : `${(selected.equipIds||[]).filter(id=>equipCatalog.find(e=>e.id===id)).length} of ${(selected.equipIds||[]).length} resolved`
+                : (selected.equipCategories||[]).map(c => `${c} (${unitsIn(c).length} unit${unitsIn(c).length===1?'':'s'})`).join(', ')
                   + ((selected.equipUnmatched||[]).length ? ` · ${(selected.equipUnmatched||[]).length} unmatched` : ''),
         },
     ] : [];
@@ -159,12 +211,12 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
         <CategoryDetailChrome error={saveError} crumb="Job templates" category="Dispatch" title="Job templates"
             subtitle="When an opportunity moves to Closed Won, Accelerep can auto-create a Job using the template tied to the customer's type. Defaults pre-fill — dispatchers can still edit before scheduling."
             onBack={onBack} dirty={dirty}
-            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(t => migrateEquipment(t, equipCatalog))); setDirty(false); }}
+            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(t => migrateEquipment(t, equipCategories, legacyEquipBlob))); setDirty(false); }}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             extraActions={
                 <>
                     <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Test auto-create</button>
-                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',equipIds:[],equipUnmatched:[],autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
+                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equipCategories:[],equipUnmatched:[],autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
                 </>
             }>
 
@@ -267,23 +319,26 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                 </div>
                                 <div style={{ gridColumn:'1 / -1' }}>
                                     <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8, fontFamily:T.sans }}>Default equipment</div>
-                                    {equipCatalog.length === 0 ? (
+                                    {!equipLoaded ? (
+                                        <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>Loading equipment&hellip;</div>
+                                    ) : equipCategories.length === 0 ? (
                                         <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>
                                             No equipment configured. Add items in Settings &rarr; Dispatch &rarr; Vehicles &amp; equipment.
                                         </div>
                                     ) : (
                                         <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                                            {equipCatalog.map(eq => {
-                                                const active = (selected.equipIds||[]).includes(eq.id);
-                                                const qty = parseInt(eq.qty,10) > 0 ? parseInt(eq.qty,10) : 1;
+                                            {equipCategories.map(cat => {
+                                                const active = (selected.equipCategories||[]).includes(cat);
+                                                const units  = unitsIn(cat);
+                                                const free   = units.filter(u => (u.status||'available') === 'available').length;
                                                 return (
-                                                    <span key={eq.id} onClick={()=>toggleEquip(eq.id)}
-                                                        title={`${qty} owned · ${eq.share?'shared':'per-van'}`}
+                                                    <span key={cat} onClick={()=>toggleEquip(cat)}
+                                                        title={`${free} of ${units.length} unit(s) currently available`}
                                                         style={{ fontSize:11, padding:'3px 9px', borderRadius:8, cursor:'pointer',
                                                             background:active?`${T.info}20`:T.surface2, border:`1px solid ${active?T.info:T.border}`,
                                                             color:active?T.info:T.inkMuted, fontWeight:active?700:400, fontFamily:T.sans, transition:'all 100ms' }}>
-                                                        {eq.name}
-                                                        <span style={{ marginLeft:5, opacity:0.7, fontFamily:'ui-monospace,Menlo,monospace' }}>x{qty}</span>
+                                                        {cat}
+                                                        <span style={{ marginLeft:5, opacity:0.7, fontFamily:'ui-monospace,Menlo,monospace' }}>{free}/{units.length}</span>
                                                     </span>
                                                 );
                                             })}
@@ -297,8 +352,9 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                         </div>
                                     )}
                                     <div style={{ fontSize:11, color:T.inkMuted, marginTop:6, fontFamily:T.sans }}>
-                                        Quantities are how many the org owns. Scheduling blocks a job when every unit of a
-                                        required item is already committed to an overlapping job that day.
+                                        Counts are available units over total units. A job requires a category, not a
+                                        specific unit; scheduling blocks when every available unit is already committed to
+                                        an overlapping job that day.
                                     </div>
                                 </div>
                             </div>
@@ -335,9 +391,9 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Crew × hours: <strong>{selected.crew||1} × {selected.hrs||2}h</strong></div>
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Min license: <strong>{selected.minLicense}</strong></div>
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Priority: <strong style={{ color:prioColor(selected.priority) }}>{normPrio(selected.priority)}</strong></div>
-                                {(selected.equipIds||[]).length > 0 && (
+                                {(selected.equipCategories||[]).length > 0 && (
                                     <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Equipment: <strong>
-                                        {(selected.equipIds||[]).map(id => equipCatalog.find(e=>e.id===id)?.name || 'unknown item').join(', ')}
+                                        {(selected.equipCategories||[]).join(', ')}
                                     </strong></div>
                                 )}
                             </div>

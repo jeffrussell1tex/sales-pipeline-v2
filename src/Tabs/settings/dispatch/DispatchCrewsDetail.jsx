@@ -8,7 +8,24 @@ import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchCrews || [];
     const skills = settings?.dispatchSkills || [];
-    const vehicles = settings?.dispatchVehicles || [];
+    // Vehicles come from dispatch_vehicles, the source of truth. This previously
+    // read settings.dispatchVehicles — a blob that neither the dispatch board
+    // filter nor the technician record reads, so a crew's default vehicle could
+    // name a van that existed nowhere else in the system.
+    const [vehicles, setVehicles] = useState([]);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await dbFetch('/.netlify/functions/dispatch-vehicles');
+                if (!res.ok) return;                     // leave empty rather than render {error}
+                const data = await res.json();
+                if (cancelled) return;
+                setVehicles(data.vehicles || []);
+            } catch (e) { /* picker stays empty */ }
+        })();
+        return () => { cancelled = true; };
+    }, []);
     // Crew members come from dispatch_technicians, the source of truth. This
     // previously read settings.users.filter(u => u.dispatchEnabled) — a flag
     // nothing sets any more (and which never persisted), so the member picker
@@ -203,6 +220,9 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                                     <select value={selectedCrew.defaultVehicle || ''} onChange={e => updateCrew('defaultVehicle', e.target.value)}
                                         style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, outline: 'none', background: T.surface, boxSizing: 'border-box' }}>
                                         <option value="">— None —</option>
+                                        {selectedCrew.defaultVehicle && !vehicles.some(v => v.id === selectedCrew.defaultVehicle) && (
+                                            <option value={selectedCrew.defaultVehicle}>Unknown vehicle ({selectedCrew.defaultVehicle})</option>
+                                        )}
                                         {vehicles.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
                                     </select>
                                 </div>
