@@ -118,7 +118,7 @@ const prioColor = (p) => ({ emergency: T.danger, high: T.warn, normal: T.inkMid,
 // skipped rather than written. A minLicense the org has since renamed would
 // otherwise fall through to the first <option> and silently downgrade the job's
 // requirement from Master to Apprentice.
-const applyJobTemplate = (form, tmpl, { skills = [], licLevels = [] } = {}) => {
+const applyJobTemplate = (form, tmpl, { skills = [], licLevels = [], equipCatalog = [] } = {}) => {
     const applied = [];
     const skipped = [];
     const next = { ...form };
@@ -155,10 +155,72 @@ const applyJobTemplate = (form, tmpl, { skills = [], licLevels = [] } = {}) => {
     }
     if (lost > 0) skipped.push(`${lost} required skill${lost === 1 ? '' : 's'} no longer defined`);
 
+    const knownEq = new Set((equipCatalog || []).map(e => e.id));
+    const keepEq  = (tmpl.equipIds || []).filter(id => knownEq.has(id));
+    const lostEq  = (tmpl.equipIds || []).length - keepEq.length;
+    if (keepEq.length) {
+        next.equipIds = keepEq;
+        applied.push(`${keepEq.length} item${keepEq.length === 1 ? '' : 's'}`);
+    }
+    if (lostEq > 0) skipped.push(`${lostEq} required item${lostEq === 1 ? '' : 's'} no longer in your equipment list`);
+    if ((tmpl.equipUnmatched || []).length) skipped.push(`unmatched template equipment: ${tmpl.equipUnmatched.join(', ')}`);
+
     return { next, applied, skipped };
 };
 
 const templateLabel = (t) => t.name || t.ctype || 'Untitled template';
+
+// ── Equipment availability ───────────────────────────────────────────────────
+// A job's equipIds are KINDS of equipment required, drawn from
+// settings.dispatchEquipment ({ id, name, qty, share, notes }). They are not
+// individual assets: asset-level checkout lives on the dispatch_equipment table
+// and points the other way, via checkedOutJobId.
+//
+// They persist in dispatch_jobs.equipment_ids, which no client has ever written
+// (every POST sent []), so no migration was needed to give the column this
+// meaning.
+//
+// Concurrency uses the same hour-overlap test as technician double-booking, so
+// there is only one notion of "at the same time" in this file. A job with no
+// start time cannot be overlap-tested, so it is treated as holding the item for
+// the whole day rather than assumed not to clash.
+const jobsOverlap = (a, b) => {
+    if (a.start == null || b.start == null) return true;
+    const as = a.start, ae = as + (a.durationHrs || 2);
+    const bs = b.start, be = bs + (b.durationHrs || 2);
+    return as < be && ae > bs;
+};
+
+const equipmentConflicts = (job, allJobs, catalog = [], dateStr, probeOverride = null) => {
+    const need = job?.equipIds || [];
+    if (!need.length || !dateStr) return [];
+    const probe = probeOverride || { start: job.start, durationHrs: job.durationHrs };
+
+    const rivals = (allJobs || []).filter(j =>
+        j.id !== job.id &&
+        j.scheduledDate === dateStr &&
+        j.status !== 'cancelled' && j.status !== 'completed' &&
+        (j.equipIds || []).length > 0 &&
+        jobsOverlap(probe, j));
+
+    const out = [];
+    need.forEach(id => {
+        const item = (catalog || []).find(e => e.id === id);
+        if (!item) { out.push({ id, name: null, missing: true, owned: 0, committed: 0 }); return; }
+        const q = parseInt(item.qty, 10);
+        const owned = q > 0 ? q : 1;
+        const committed = rivals.filter(j => (j.equipIds || []).includes(id)).length;
+        if (committed >= owned) out.push({ id, name: item.name, missing: false, owned, committed });
+    });
+    return out;
+};
+
+const describeConflict = (c) => c.missing
+    ? 'an item this job requires is no longer in Vehicles & equipment'
+    : `${c.name} — all ${c.owned} committed to overlapping jobs that day`;
+
+const equipNames = (ids, catalog = []) =>
+    (ids || []).map(id => (catalog || []).find(e => e.id === id)?.name || 'unknown item');
 
 // ── Customer typeahead ───────────────────────────────────────────────
 // Defined at module scope on purpose: a component declared inside DispatchTab
@@ -686,7 +748,7 @@ const QUEUE_SORTS = {
     Value:    (a, b) => (b.value || 0) - (a.value || 0),
 };
 
-const CrewBuilderView = ({ jobs, techs, allTechs, skills, blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled }) => {
+const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipCatalog = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled }) => {
     const [queueSort, setQueueSort] = useState('Priority');
     const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
@@ -746,6 +808,20 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, blocks, blockTypes, se
         return { tone: 'muted', text: `${pt.name} is preferred by this customer; another technician scores higher on this job.` };
     }, [selectedJob, roster, techs, candidates, jobs, skills, blocks, blockTypes, scheduleDate]);
 
+    // Live equipment read for the job on screen, so the shortage is visible while
+    // the dispatcher is still choosing a date rather than only on the failed save.
+    const equipNote = useMemo(() => {
+        if (!selectedJob) return null;
+        const dateStr = scheduleDate || selectedJob.scheduledDate || '';
+        if (!dateStr) return null;
+        const probe = scheduleTime
+            ? { start: hhToNum(scheduleTime), durationHrs: selectedJob.durationHrs }
+            : null;
+        const conf = equipmentConflicts(selectedJob, jobs, equipCatalog, dateStr, probe);
+        if (!conf.length) return null;
+        return conf.map(describeConflict).join('; ');
+    }, [selectedJob, jobs, equipCatalog, scheduleDate, scheduleTime]);
+
     // Persist the crew and record the assignment. The lead is the first tech
     // added; the rest become coTechIds (the schema is singular + co-techs, and
     // the read mapping already collapses both back into assignedTechIds).
@@ -779,6 +855,16 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, blocks, blockTypes, se
                 setScheduleError(`${t.name} is out (${nm}) ${clash.startTime}–${clash.endTime} that day.`);
                 return;
             }
+        }
+
+        // Equipment is a job-level constraint, not a per-technician one — every
+        // candidate would carry the identical blocker — so it gates here, where
+        // the start time that defines the overlap window is finally known.
+        const eqConf = equipmentConflicts(selectedJob, jobs, equipCatalog, dateStr,
+            { start: startNum, durationHrs: selectedJob.durationHrs });
+        if (eqConf.length) {
+            setScheduleError(`Equipment unavailable — ${eqConf.map(describeConflict).join('; ')}.`);
+            return;
         }
 
         setScheduleError('');
@@ -949,9 +1035,9 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, blocks, blockTypes, se
                                     const s = skills.find(sk => sk.id === id);
                                     return s ? <SkillPill key={id} skill={s}/> : null;
                                 })}
-                                {selectedJob.equipment && <>
+                                {(selectedJob.equipIds || []).length > 0 && <>
                                     <span style={{ fontSize: 10.5, fontWeight: 600, color: T.inkMid, marginLeft: 12, marginRight: 4 }}>Equip:</span>
-                                    <span style={{ fontSize: 11, color: T.inkMid }}>{selectedJob.equipment}</span>
+                                    <span style={{ fontSize: 11, color: T.inkMid }}>{equipNames(selectedJob.equipIds, equipCatalog).join(', ')}</span>
                                 </>}
                             </div>
                         </div>
@@ -968,6 +1054,14 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, blocks, blockTypes, se
                                     Manual pick
                                 </button>
                             </div>
+
+                            {equipNote && (
+                                <div style={{ padding: '7px 11px', marginBottom: 12, borderRadius: T.r,
+                                    fontSize: 11.5, fontFamily: T.sans, lineHeight: 1.45,
+                                    background: `${T.danger}12`, borderLeft: `3px solid ${T.danger}`, color: T.ink }}>
+                                    <strong>Equipment unavailable</strong> — {equipNote}. Scheduling is blocked until a unit frees up or the requirement is removed.
+                                </div>
+                            )}
 
                             {preferredNote && (
                                 <div style={{ padding: '7px 11px', marginBottom: 12, borderRadius: T.r,
@@ -3084,7 +3178,7 @@ export default function DispatchTab() {
     // customerId is the FK the server requires; `customer` is only the typed text.
     const EMPTY_JOB = { customer: '', customerId: '', accountId: '', title: '', trade: '', jobType: '', address: '', city: '', state: '', zip: '',
         window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman',
-        opportunityId: '', needSkills: [] };
+        opportunityId: '', needSkills: [], equipIds: [] };
     const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
     // { id, name, applied[], skipped[], equip, prevForm }. prevForm is the form
     // as it stood before the template was applied, so Undo — and switching to a
@@ -3111,6 +3205,10 @@ export default function DispatchTab() {
 
     // ── Config from settings.extra (not record-level data) ───────────────────
     const skills    = settings?.dispatchSkills   || [];
+    // Settings catalogue of equipment KINDS. Not to be confused with the
+    // `equipment` state below, which holds dispatch_equipment table rows
+    // (individual assets with serial numbers and checkout state).
+    const equipCatalog = settings?.dispatchEquipment || [];
     const crews     = settings?.dispatchCrews    || [];
     const licLevels = settings?.dispatchLicenses || ['Apprentice', 'Journeyman', 'Master', 'Lead'];
 
@@ -3219,7 +3317,10 @@ export default function DispatchTab() {
                         window:         j.timeSlot === 'exact' && j.scheduledStart
                             ? j.scheduledStart
                             : j.scheduledDate || 'TBD',
-                        equipment:      (j.equipmentIds || []).join(', '),
+                        // Ids only. Names are resolved at render time against the live
+                        // catalogue: this effect has [] deps, so a name resolved here
+                        // would be frozen against whatever settings held at mount.
+                        equipIds:       j.equipmentIds || [],
                         value:          parseFloat(j.invoiceAmount || 0),
                         // Was hardcoded 'Journeyman', discarding the stored requirement —
                         // so every licence blocker compared against a constant.
@@ -3362,6 +3463,7 @@ export default function DispatchTab() {
                 needSkills:      newJobForm.needSkills || [],
                 scheduledDate:   newJobForm.window || null,
                 opportunityId:   newJobForm.opportunityId || null,
+                equipmentIds:    newJobForm.equipIds || [],
             };
             const res  = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
@@ -3381,7 +3483,7 @@ export default function DispatchTab() {
                 durationHrs:     parseFloat(newJobForm.durationHrs) || 2,
                 priority:        newJobForm.priority,
                 window:          newJobForm.window || 'TBD',
-                equipment:       '',
+                equipIds:        newJobForm.equipIds || [],
                 value:           0,
                 minLicense:      newJobForm.minLicense,
                 preferredTechId: null,
@@ -3912,7 +4014,7 @@ export default function DispatchTab() {
                             const next = [...prev]; next[i] = saved; return next;
                         })}/>
                 ) : (
-                    <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} allTechs={techs} skills={skills}
+                    <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} allTechs={techs} skills={skills} equipCatalog={equipCatalog}
                         blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
                         selectedJobId={selectedJobId || jobs[0]?.id}
                         onSelectJob={setSelectedJobId}
@@ -3975,9 +4077,9 @@ export default function DispatchTab() {
                                             const base = appliedTemplate ? appliedTemplate.prevForm : newJobForm;
                                             const t = list.find(x => x.id === e.target.value);
                                             if (!t) { setNewJobForm(base); setAppliedTemplate(null); return; }
-                                            const { next, applied, skipped } = applyJobTemplate(base, t, { skills, licLevels });
+                                            const { next, applied, skipped } = applyJobTemplate(base, t, { skills, licLevels, equipCatalog });
                                             setNewJobForm(next);
-                                            setAppliedTemplate({ id: t.id, name: templateLabel(t), applied, skipped, equip: t.equip || '', prevForm: base });
+                                            setAppliedTemplate({ id: t.id, name: templateLabel(t), applied, skipped, equip: equipNames(next.equipIds, equipCatalog).join(', '), prevForm: base });
                                         }}
                                         style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
                                         <option value="">— None —</option>
@@ -4155,6 +4257,29 @@ export default function DispatchTab() {
                                     </div>
                                 )}
                             </div>
+                            {/* Required equipment */}
+                            {equipCatalog.length > 0 && (
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Required Equipment</label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                        {equipCatalog.map(eq => {
+                                            const on = (newJobForm.equipIds || []).includes(eq.id);
+                                            const q  = parseInt(eq.qty, 10) > 0 ? parseInt(eq.qty, 10) : 1;
+                                            return (
+                                                <span key={eq.id}
+                                                    onClick={() => setNewJobForm(f => ({ ...f,
+                                                        equipIds: on ? (f.equipIds || []).filter(x => x !== eq.id) : [...(f.equipIds || []), eq.id] }))}
+                                                    style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                        border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
+                                                        color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
+                                                    {eq.name}
+                                                    <span style={{ marginLeft: 5, opacity: 0.65, fontFamily: T.mono }}>x{q}</span>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                             {/* Opportunity link (optional) */}
                             {(opportunities || []).filter(o => o.stage === 'Closed Won').length > 0 && (
                                 <div>

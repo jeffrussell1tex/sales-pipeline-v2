@@ -13,13 +13,55 @@ import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 // since ctype is whatever the user last typed into either control.
 const migrateTemplate = (t) => ({ ...t, name: t.name ?? (t.ctype || '') });
 
+// `equip` was free text ("Recovery cart, spares") with a helper line claiming
+// each item had to exist in Vehicles & equipment — nothing enforced that. It is
+// now a list of ids into settings.dispatchEquipment, so a template requirement
+// can actually be resolved, counted against the quantity owned, and used as a
+// scheduling constraint.
+//
+// Fragments that match nothing are NOT dropped: they are kept and reported, so a
+// real requirement typed as "recovery cart (large)" is visible rather than
+// silently lost on the first save.
+const migrateEquipment = (t, catalog) => {
+    if (Array.isArray(t.equipIds)) return t;
+    const raw = String(t.equip || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!raw.length) return { ...t, equipIds: [], equipUnmatched: [] };
+    const byName = new Map((catalog || []).map(e => [String(e.name || '').trim().toLowerCase(), e.id]));
+    const ids = [], unmatched = [];
+    raw.forEach(frag => {
+        const hit = byName.get(frag.toLowerCase());
+        if (hit) { if (!ids.includes(hit)) ids.push(hit); }
+        else unmatched.push(frag);
+    });
+    return { ...t, equipIds: ids, equipUnmatched: unmatched };
+};
+
+// Numeric template fields are held as raw text while the user types, and only
+// coerced on blur. Coercing inside onChange is what made these fields
+// uneditable: backspacing to '' gave parseInt('') → NaN → `|| 1`, which rewrote
+// the input back to 1 before the next keystroke could land. The duration field
+// was worse — its value was the derived string `hrs + ' hours'`, so every
+// keystroke was parsed and immediately reformatted, pinning the caret.
+const commitNumber = (raw, { min, max, fallback, integer = false }) => {
+    const n = integer ? parseInt(raw, 10) : parseFloat(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(Math.max(n, min), max);
+};
+
+const CREW_BOUNDS = { min: 1,   max: 10, fallback: 1, integer: true };
+const HRS_BOUNDS  = { min: 0.5, max: 24, fallback: 2 };
+
 export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchJobTemplates || [];
     const skills   = settings?.dispatchSkills   || [];
     const licenses = settings?.dispatchLicenses || ['Apprentice','Journeyman','Master','Lead'];
     const custTypes = settings?.customerTypes   || [];
+    // The settings equipment catalogue — kinds the org owns, with quantities.
+    // Distinct from the dispatch_equipment table, which tracks individual assets
+    // (serial numbers, calibration, checkout).
+    const equipCatalog = settings?.dispatchEquipment || [];
 
-    const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(saved)).map(migrateTemplate));
+    const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(t => migrateEquipment(t, settings?.dispatchEquipment || [])));
     const [dirty,    setDirty]    = useState(false);
     const [saving,   setSaving]   = useState(false);
     const [saveError, setSaveError] = useState('');
@@ -31,9 +73,17 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
 
     const handleSave = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, dispatchJobTemplates: templates }));
+        // A field still mid-edit ('' or '3.') must not reach the blob — the New
+        // Job template picker and the preview panel both read these as numbers.
+        const clean = templates.map(t => ({
+            ...t,
+            crew: commitNumber(t.crew, CREW_BOUNDS),
+            hrs:  commitNumber(t.hrs,  HRS_BOUNDS),
+        }));
+        setTemplates(clean);
+        setSettings(prev => ({ ...prev, dispatchJobTemplates: clean }));
         try {
-            await putSettings({ dispatchJobTemplates: templates });
+            await putSettings({ dispatchJobTemplates: clean });
             setSaveError('');
             setDirty(false);
         } catch (e) {
@@ -65,6 +115,12 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
         updateTemplate('skills', next);
     };
 
+    const toggleEquip = (equipId) => {
+        if (!selected) return;
+        const cur = selected.equipIds || [];
+        updateTemplate('equipIds', cur.includes(equipId) ? cur.filter(x => x !== equipId) : [...cur, equipId]);
+    };
+
     // Canonical vocabulary: low | normal | high | emergency (matches the schema).
     // Legacy 'urgent'/'standard' values are translated on read so existing
     // templates keep their colour until the next save rewrites them.
@@ -89,18 +145,26 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             label: 'Customer type linked',
             detail: selected.ctype || 'No customer type',
         },
+        {
+            ok: (selected.equipIds||[]).every(id => equipCatalog.find(e=>e.id===id)) && (selected.equipUnmatched||[]).length === 0,
+            label: 'All required equipment exists',
+            detail: (selected.equipIds||[]).length === 0 && (selected.equipUnmatched||[]).length === 0
+                ? 'No equipment required'
+                : `${(selected.equipIds||[]).filter(id=>equipCatalog.find(e=>e.id===id)).length} of ${(selected.equipIds||[]).length} resolved`
+                  + ((selected.equipUnmatched||[]).length ? ` · ${(selected.equipUnmatched||[]).length} unmatched` : ''),
+        },
     ] : [];
 
     return (
         <CategoryDetailChrome error={saveError} crumb="Job templates" category="Dispatch" title="Job templates"
             subtitle="When an opportunity moves to Closed Won, Accelerep can auto-create a Job using the template tied to the customer's type. Defaults pre-fill — dispatchers can still edit before scheduling."
             onBack={onBack} dirty={dirty}
-            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved)).map(migrateTemplate)); setDirty(false); }}
+            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(t => migrateEquipment(t, equipCatalog))); setDirty(false); }}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             extraActions={
                 <>
                     <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Test auto-create</button>
-                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
+                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',equipIds:[],equipUnmatched:[],autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
                 </>
             }>
 
@@ -154,13 +218,20 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                 </div>
                                 <div>
                                     <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default crew size</div>
-                                    <input type="number" min={1} max={10} value={selected.crew||1} onChange={e=>updateTemplate('crew',parseInt(e.target.value)||1)}
+                                    <input type="number" min={1} max={10} step={1}
+                                        value={selected.crew ?? ''}
+                                        onChange={e=>updateTemplate('crew',e.target.value)}
+                                        onBlur={e=>{ const v=commitNumber(e.target.value,CREW_BOUNDS); if(v!==selected.crew) updateTemplate('crew',v); }}
+                                        placeholder="1"
                                         style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}/>
                                 </div>
                                 <div>
-                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default duration</div>
-                                    <input value={selected.hrs ? selected.hrs + ' hours' : ''} onChange={e=>updateTemplate('hrs',parseFloat(e.target.value)||2)}
-                                        placeholder="e.g. 4 hours"
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default duration (hours)</div>
+                                    <input type="number" min={0.5} max={24} step={0.5}
+                                        value={selected.hrs ?? ''}
+                                        onChange={e=>updateTemplate('hrs',e.target.value)}
+                                        onBlur={e=>{ const v=commitNumber(e.target.value,HRS_BOUNDS); if(v!==selected.hrs) updateTemplate('hrs',v); }}
+                                        placeholder="e.g. 4"
                                         style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}/>
                                 </div>
                                 <div>
@@ -195,10 +266,40 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                     {skills.length===0 && <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No skills configured. Add in Settings → Dispatch → Skills.</div>}
                                 </div>
                                 <div style={{ gridColumn:'1 / -1' }}>
-                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default equipment</div>
-                                    <input value={selected.equip||''} onChange={e=>updateTemplate('equip',e.target.value)} placeholder="e.g. Recovery cart, spares"
-                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}/>
-                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>Comma-separated. Each item must exist in Vehicles & equipment.</div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8, fontFamily:T.sans }}>Default equipment</div>
+                                    {equipCatalog.length === 0 ? (
+                                        <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>
+                                            No equipment configured. Add items in Settings &rarr; Dispatch &rarr; Vehicles &amp; equipment.
+                                        </div>
+                                    ) : (
+                                        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                                            {equipCatalog.map(eq => {
+                                                const active = (selected.equipIds||[]).includes(eq.id);
+                                                const qty = parseInt(eq.qty,10) > 0 ? parseInt(eq.qty,10) : 1;
+                                                return (
+                                                    <span key={eq.id} onClick={()=>toggleEquip(eq.id)}
+                                                        title={`${qty} owned · ${eq.share?'shared':'per-van'}`}
+                                                        style={{ fontSize:11, padding:'3px 9px', borderRadius:8, cursor:'pointer',
+                                                            background:active?`${T.info}20`:T.surface2, border:`1px solid ${active?T.info:T.border}`,
+                                                            color:active?T.info:T.inkMuted, fontWeight:active?700:400, fontFamily:T.sans, transition:'all 100ms' }}>
+                                                        {eq.name}
+                                                        <span style={{ marginLeft:5, opacity:0.7, fontFamily:'ui-monospace,Menlo,monospace' }}>x{qty}</span>
+                                                    </span>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    {(selected.equipUnmatched||[]).length > 0 && (
+                                        <div style={{ marginTop:8, padding:'6px 10px', borderRadius:T.r, background:`${T.warn}14`, borderLeft:`3px solid ${T.warn}`, fontSize:11.5, fontFamily:T.sans, color:T.ink }}>
+                                            Not matched to your equipment list: <strong>{(selected.equipUnmatched||[]).join(', ')}</strong>.
+                                            Add {(selected.equipUnmatched||[]).length === 1 ? 'it' : 'them'} under Vehicles &amp; equipment and select above, or
+                                            <span onClick={()=>updateTemplate('equipUnmatched',[])} style={{ color:T.info, fontWeight:600, cursor:'pointer' }}> dismiss</span>.
+                                        </div>
+                                    )}
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:6, fontFamily:T.sans }}>
+                                        Quantities are how many the org owns. Scheduling blocks a job when every unit of a
+                                        required item is already committed to an overlapping job that day.
+                                    </div>
                                 </div>
                             </div>
 
@@ -234,7 +335,11 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Crew × hours: <strong>{selected.crew||1} × {selected.hrs||2}h</strong></div>
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Min license: <strong>{selected.minLicense}</strong></div>
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Priority: <strong style={{ color:prioColor(selected.priority) }}>{normPrio(selected.priority)}</strong></div>
-                                {selected.equip && <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Equipment: <strong>{selected.equip}</strong></div>}
+                                {(selected.equipIds||[]).length > 0 && (
+                                    <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Equipment: <strong>
+                                        {(selected.equipIds||[]).map(id => equipCatalog.find(e=>e.id===id)?.name || 'unknown item').join(', ')}
+                                    </strong></div>
+                                )}
                             </div>
                         ) : (
                             <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>Select a template to preview.</div>
