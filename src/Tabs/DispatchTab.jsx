@@ -625,7 +625,7 @@ const QUEUE_SORTS = {
     Value:    (a, b) => (b.value || 0) - (a.value || 0),
 };
 
-const CrewBuilderView = ({ jobs, techs, skills, blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled }) => {
+const CrewBuilderView = ({ jobs, techs, allTechs, skills, blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled }) => {
     const [queueSort, setQueueSort] = useState('Priority');
     const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
@@ -659,6 +659,31 @@ const CrewBuilderView = ({ jobs, techs, skills, blocks, blockTypes, selectedJobI
             })
             .slice(0, 5);
     }, [selectedJob, techs, jobs, skills, blocks, blockTypes, scheduleDate]);
+
+    // Full roster, independent of the board filters, so the preference note can
+    // tell "filtered out of this view" apart from "not on the roster".
+    const roster = (allTechs && allTechs.length) ? allTechs : techs;
+
+    // Why the customer's preferred technician is not the top suggestion. The
+    // preference is worth 7 points and never blocks, so without this the tech
+    // the customer asked for is quietly out-ranked with no explanation.
+    const preferredNote = useMemo(() => {
+        if (!selectedJob || !selectedJob.preferredTechId) return null;
+        const pt = roster.find(t => t.id === selectedJob.preferredTechId);
+        if (!pt) return { tone: 'warn', text: 'The preferred technician on this customer is no longer on the roster.' };
+
+        const topId = candidates[0]?.tech.id;
+        if (topId === pt.id) return null;
+
+        const inPool = techs.some(t => t.id === pt.id);
+        if (!inPool) return { tone: 'muted', text: `${pt.name} is preferred by this customer but is hidden by the current board filter.` };
+
+        const s = scoreTech(pt, selectedJob, jobs, skills,
+            { blocks, blockTypes, dateStr: scheduleDate || selectedJob.scheduledDate });
+        if (s.blockers.length) return { tone: 'warn', text: `${pt.name} is preferred by this customer but is blocked — ${s.blockers.join('; ')}.` };
+        if (!candidates.some(c => c.tech.id === pt.id)) return { tone: 'muted', text: `${pt.name} is preferred by this customer but did not reach the shortlist (match ${s.score}).` };
+        return { tone: 'muted', text: `${pt.name} is preferred by this customer; another technician scores higher on this job.` };
+    }, [selectedJob, roster, techs, candidates, jobs, skills, blocks, blockTypes, scheduleDate]);
 
     // Persist the crew and record the assignment. The lead is the first tech
     // added; the rest become coTechIds (the schema is singular + co-techs, and
@@ -849,7 +874,7 @@ const CrewBuilderView = ({ jobs, techs, skills, blocks, blockTypes, selectedJobI
                                     { l: 'Crew size',   v: `${selectedJob.crewSize} techs` },
                                     { l: 'Duration',    v: `${selectedJob.durationHrs}h` },
                                     { l: 'Min license', v: selectedJob.minLicense },
-                                    { l: 'Preferred',   v: selectedJob.preferredTechId ? techs.find(t => t.id === selectedJob.preferredTechId)?.name?.split(' ')[0] || '—' : '—' },
+                                    { l: 'Preferred',   v: selectedJob.preferredTechId ? roster.find(t => t.id === selectedJob.preferredTechId)?.name?.split(' ')[0] || 'Unknown' : '—' },
                                 ].map(s => (
                                     <div key={s.l}>
                                         <div style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 3 }}>{s.l}</div>
@@ -882,6 +907,16 @@ const CrewBuilderView = ({ jobs, techs, skills, blocks, blockTypes, selectedJobI
                                     Manual pick
                                 </button>
                             </div>
+
+                            {preferredNote && (
+                                <div style={{ padding: '7px 11px', marginBottom: 12, borderRadius: T.r,
+                                    fontSize: 11.5, fontFamily: T.sans, lineHeight: 1.45,
+                                    background: preferredNote.tone === 'warn' ? `${T.warn}14` : T.surface2,
+                                    borderLeft: `3px solid ${preferredNote.tone === 'warn' ? T.warn : T.borderStrong}`,
+                                    color: preferredNote.tone === 'warn' ? T.ink : T.inkMid }}>
+                                    {preferredNote.text}
+                                </div>
+                            )}
 
                             {candidates.length === 0 ? (
                                 <div style={{ textAlign: 'center', padding: '2rem', color: T.inkMuted, fontSize: 13, fontStyle: 'italic' }}>
@@ -999,7 +1034,7 @@ const CrewBuilderView = ({ jobs, techs, skills, blocks, blockTypes, selectedJobI
                                 {selectedJob.start ? `${fmt12(selectedJob.start)} – ${fmt12(selectedJob.start + selectedJob.durationHrs)}` : 'No time set'}
                                 {selectedJob.preferredTechId && (
                                     <span style={{ marginLeft: 8, fontSize: 11, color: T.inkMuted }}>
-                                        Preferred: {techs.find(t => t.id === selectedJob.preferredTechId)?.name}
+                                        Preferred: {roster.find(t => t.id === selectedJob.preferredTechId)?.name || 'unknown technician'}
                                     </span>
                                 )}
                             </div>
@@ -1348,7 +1383,7 @@ const custInput = {
     fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none',
 };
 
-const CustomersView = ({ customers, accounts, onSaved }) => {
+const CustomersView = ({ customers, accounts, techs, onSaved }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
@@ -1373,13 +1408,22 @@ const CustomersView = ({ customers, accounts, onSaved }) => {
     const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
     const linkedAccount = draft && draft.accountId ? (accounts || []).find(a => a.id === draft.accountId) : null;
 
+    // Preferred technician. Inactive and on-leave techs stay selectable — the
+    // preference outlives a leave of absence — but are labelled, and an id that
+    // resolves to nobody is surfaced rather than silently dropped on next save.
+    const prefTech    = draft && draft.preferredTechId ? (techs || []).find(t => t.id === draft.preferredTechId) : null;
+    const prefMissing = !!(draft && draft.preferredTechId) && !prefTech;
+    const prefOptions = (techs || [])
+        .filter(t => t.status === 'active' || t.id === (draft && draft.preferredTechId))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
     const startNew = () => {
         setSelectedId(null);
         setStatus(null);
         setDraft({ id: 'dcust_' + crypto.randomUUID(), _isNew: true, name: '', accountId: '',
             customerType: 'commercial', contactName: '', contactPhone: '', contactEmail: '',
             serviceAddress: '', serviceCity: '', serviceState: '', serviceZip: '',
-            serviceAgreement: 'none', doNotService: false, doNotServiceReason: '', notes: '' });
+            serviceAgreement: 'none', preferredTechId: '', doNotService: false, doNotServiceReason: '', notes: '' });
     };
 
     const copyFromAccount = () => {
@@ -1396,7 +1440,10 @@ const CustomersView = ({ customers, accounts, onSaved }) => {
         if (!draft || !(draft.name || '').trim()) { setStatus({ kind: 'err', msg: 'Name is required.' }); return; }
         setSaving(true); setStatus(null);
         try {
-            const body = { ...draft, name: draft.name.trim(), accountId: draft.accountId || null };
+            // Empty string is not "no preference" to the server: POST stores
+            // `data.preferredTechId ?? null`, so '' would be written verbatim.
+            const body = { ...draft, name: draft.name.trim(), accountId: draft.accountId || null,
+                preferredTechId: draft.preferredTechId || null };
             delete body._isNew;
             delete body.customerNumber;   // server-assigned and immutable
 
@@ -1507,6 +1554,31 @@ const CustomersView = ({ customers, accounts, onSaved }) => {
                                 </select>
                             </CustFieldRow>
                         </div>
+
+                        <CustFieldRow label="Preferred technician">
+                            <select value={draft.preferredTechId || ''} onChange={e => set('preferredTechId', e.target.value || null)} style={custInput}>
+                                <option value="">— No preference —</option>
+                                {/* A stale id must not fall through to the first option: an
+                                    unmatched select value renders as "No preference" and the
+                                    next save would clear a real preference without saying so. */}
+                                {prefMissing && <option value={draft.preferredTechId}>Unknown technician ({draft.preferredTechId})</option>}
+                                {prefOptions.map(t => (
+                                    <option key={t.id} value={t.id}>
+                                        {t.name}{t.status !== 'active' ? ` (${labelise(t.status || 'inactive')})` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                            {prefMissing && (
+                                <div style={{ marginTop: 5, fontSize: 11, fontFamily: T.sans, color: T.danger }}>
+                                    This technician is no longer on the roster. Pick another, or set no preference and save to clear it.
+                                </div>
+                            )}
+                            {prefTech && prefTech.status !== 'active' && (
+                                <div style={{ marginTop: 5, fontSize: 11, fontFamily: T.sans, color: T.warn }}>
+                                    {prefTech.name} is {labelise(prefTech.status)}. The crew builder will still favour them when they return.
+                                </div>
+                            )}
+                        </CustFieldRow>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                             {[['contactName', 'Contact'], ['contactPhone', 'Phone'], ['contactEmail', 'Email']].map(([k, l]) => (
@@ -3087,7 +3159,12 @@ export default function DispatchTab() {
                         // Was hardcoded 'Journeyman', discarding the stored requirement —
                         // so every licence blocker compared against a constant.
                         minLicense:     j.minLicense || null,
-                        preferredTechId: j.assignedTechId || null,
+                        // Comes from the customer record, not the current assignment.
+                        // Was `j.assignedTechId || null`, which made the crew-builder
+                        // preference rule circular: null on every unassigned job — the
+                        // only case the builder runs on — and on an assigned job it
+                        // handed the bonus to the tech who was already on it.
+                        preferredTechId: cust?.preferredTechId || null,
                         assignedTechIds: [j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean),
                         start:          startHr,
                         status:         j.status,
@@ -3762,14 +3839,14 @@ export default function DispatchTab() {
                             });
                         }}/>
                 ) : view === 'customers' ? (
-                    <CustomersView customers={customers} accounts={accounts}
+                    <CustomersView customers={customers} accounts={accounts} techs={techs}
                         onSaved={saved => setCustomers(prev => {
                             const i = prev.findIndex(c => c.id === saved.id);
                             if (i === -1) return [...prev, saved];
                             const next = [...prev]; next[i] = saved; return next;
                         })}/>
                 ) : (
-                    <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} skills={skills}
+                    <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} allTechs={techs} skills={skills}
                         blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
                         selectedJobId={selectedJobId || jobs[0]?.id}
                         onSelectJob={setSelectedJobId}
