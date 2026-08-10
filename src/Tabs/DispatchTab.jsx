@@ -1579,20 +1579,135 @@ const custInput = {
     fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none',
 };
 
-const CustomersView = ({ customers, accounts, techs, onSaved }) => {
+// ── Dispatch customer segmentation ───────────────────────────────────────────
+// Service history is derived from jobs rather than stored on the customer: a
+// denormalised "jobCount" would need maintaining on every job write and would be
+// wrong the moment one was deleted. Nothing here needs a schema change.
+const ACTIVITY_BUCKETS = [
+    { id: 'never',  label: 'Never served' },
+    { id: 'once',   label: 'Served once' },
+    { id: 'repeat', label: 'Repeat (2+)' },
+    { id: 'active', label: 'Work upcoming' },
+];
+
+const EXPIRY_BUCKETS = [
+    { id: 'expired', label: 'Agreement expired' },
+    { id: 'soon',    label: 'Expiring in 60 days' },
+    { id: 'none',    label: 'No agreement' },
+];
+
+const custStats = (customer, jobs, todayStr) => {
+    const mine = (jobs || []).filter(j => j.customerId === customer.id && j.status !== 'cancelled');
+    const done = mine.filter(j => j.status === 'completed');
+    const dated = done.map(j => j.scheduledDate).filter(Boolean).sort();
+    const upcoming = mine.filter(j => j.scheduledDate && j.scheduledDate >= todayStr && j.status !== 'completed');
+    return {
+        total:      mine.length,
+        completed:  done.length,
+        lastServed: dated.length ? dated[dated.length - 1] : null,
+        upcoming:   upcoming.length,
+        nextDate:   upcoming.map(j => j.scheduledDate).sort()[0] || null,
+    };
+};
+
+const activityBucket = (st) => {
+    if (st.upcoming > 0)    return 'active';
+    if (st.completed === 0) return 'never';
+    if (st.completed === 1) return 'once';
+    return 'repeat';
+};
+
+// Agreement expiry is a plain 'YYYY-MM-DD' string, so string comparison is a
+// valid ordering and avoids constructing a Date per customer per render.
+const expiryBucket = (c, todayStr, soonStr) => {
+    const agreement = c.serviceAgreement && c.serviceAgreement !== 'none';
+    if (!agreement) return 'none';
+    if (!c.agreementExpiry) return null;              // covered, no end date recorded
+    if (c.agreementExpiry < todayStr) return 'expired';
+    if (c.agreementExpiry <= soonStr) return 'soon';
+    return null;
+};
+
+const daysBetween = (fromStr, toStr) => Math.round(
+    (fromYmd(toStr).getTime() - fromYmd(fromStr).getTime()) / 86400000);
+
+const FilterChip = ({ label, count, active, onClick, tone }) => (
+    <span onClick={onClick}
+        style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 999, cursor: 'pointer',
+            fontFamily: T.sans, fontWeight: active ? 700 : 500, whiteSpace: 'nowrap',
+            border: `1px solid ${active ? (tone || T.ink) : T.border}`,
+            background: active ? (tone || T.ink) : 'transparent',
+            color: active ? T.surface : (tone || T.inkMid) }}>
+        {label}{count != null && <span style={{ marginLeft: 4, opacity: 0.75, fontFamily: T.mono }}>{count}</span>}
+    </span>
+);
+
+const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
     const [saving,     setSaving]     = React.useState(false);
     const [status,     setStatus]     = React.useState(null);
 
+    const [fAgreement, setFAgreement] = React.useState(null);
+    const [fType,      setFType]      = React.useState(null);
+    const [fActivity,  setFActivity]  = React.useState(null);
+    const [fExpiry,    setFExpiry]    = React.useState(null);
+    const [groupBy,    setGroupBy]    = React.useState('none');   // 'none' | 'agreement' | 'type' | 'activity'
+
+    const todayStr = React.useMemo(() => ymd(new Date()), []);
+    const soonStr  = React.useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 60); return ymd(d); }, []);
+
+    // One pass over jobs per customer, memoised on both inputs — recomputing this
+    // inside the row render would be O(customers x jobs) on every keystroke.
+    const stats = React.useMemo(() => {
+        const m = {};
+        (customers || []).forEach(c => { m[c.id] = custStats(c, jobs, todayStr); });
+        return m;
+    }, [customers, jobs, todayStr]);
+
     const q = query.trim().toLowerCase();
-    const list = (customers || [])
-        .filter(c => !q
-            || (c.name || '').toLowerCase().includes(q)
-            || (c.customerNumber || '').toLowerCase().includes(q))
-        .slice()
+    const matches = (c) => {
+        if (q && !((c.name || '').toLowerCase().includes(q) || (c.customerNumber || '').toLowerCase().includes(q))) return false;
+        if (fAgreement && (c.serviceAgreement || 'none') !== fAgreement) return false;
+        if (fType      && (c.customerType || 'commercial') !== fType) return false;
+        if (fActivity  && activityBucket(stats[c.id] || { upcoming: 0, completed: 0 }) !== fActivity) return false;
+        if (fExpiry    && expiryBucket(c, todayStr, soonStr) !== fExpiry) return false;
+        return true;
+    };
+
+    const list = (customers || []).filter(matches).slice()
         .sort((a, b) => (a.customerNumber || '').localeCompare(b.customerNumber || ''));
+
+    // Counts are computed against every OTHER active filter, so a chip's number
+    // tells you what you would actually get by clicking it rather than a total
+    // that shrinks to nothing the moment you combine two filters.
+    const countBy = (predicate) => (customers || []).filter(c => {
+        if (q && !((c.name || '').toLowerCase().includes(q) || (c.customerNumber || '').toLowerCase().includes(q))) return false;
+        return predicate(c);
+    }).length;
+
+    const groupKey = (c) => {
+        if (groupBy === 'agreement') return labelise(c.serviceAgreement || 'none');
+        if (groupBy === 'type')      return labelise(c.customerType || 'commercial');
+        if (groupBy === 'activity')  return (ACTIVITY_BUCKETS.find(b => b.id === activityBucket(stats[c.id] || { upcoming: 0, completed: 0 })) || {}).label || '—';
+        return null;
+    };
+
+    const grouped = React.useMemo(() => {
+        if (groupBy === 'none') return [{ key: null, rows: list }];
+        const buckets = new Map();
+        list.forEach(c => {
+            const k = groupKey(c);
+            if (!buckets.has(k)) buckets.set(k, []);
+            buckets.get(k).push(c);
+        });
+        return [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([key, rows]) => ({ key, rows }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [list, groupBy, stats]);
+
+    const anyFilter = !!(fAgreement || fType || fActivity || fExpiry);
+    const clearFilters = () => { setFAgreement(null); setFType(null); setFActivity(null); setFExpiry(null); };
 
     const selected = (customers || []).find(c => c.id === selectedId) || null;
 
@@ -1678,27 +1793,116 @@ const CustomersView = ({ customers, accounts, techs, onSaved }) => {
                         + New
                     </button>
                 </div>
+
+                {/* Segments */}
+                <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, background: T.bg }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
+                        <span style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans }}>Segment</span>
+                        <span style={{ flex: 1 }}/>
+                        {anyFilter && (
+                            <span onClick={clearFilters} style={{ fontSize: 10.5, color: T.info, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Clear</span>
+                        )}
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                        {AGREEMENTS.map(a => (
+                            <FilterChip key={a} label={labelise(a)} active={fAgreement === a}
+                                count={countBy(c => (c.serviceAgreement || 'none') === a)}
+                                onClick={() => setFAgreement(fAgreement === a ? null : a)}/>
+                        ))}
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                        {CUSTOMER_TYPES.map(t => (
+                            <FilterChip key={t} label={labelise(t)} active={fType === t}
+                                count={countBy(c => (c.customerType || 'commercial') === t)}
+                                onClick={() => setFType(fType === t ? null : t)}/>
+                        ))}
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                        {ACTIVITY_BUCKETS.map(b => (
+                            <FilterChip key={b.id} label={b.label} active={fActivity === b.id}
+                                count={countBy(c => activityBucket(stats[c.id] || { upcoming: 0, completed: 0 }) === b.id)}
+                                onClick={() => setFActivity(fActivity === b.id ? null : b.id)}/>
+                        ))}
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                        {EXPIRY_BUCKETS.filter(b => b.id !== 'none').map(b => {
+                            const n = countBy(c => expiryBucket(c, todayStr, soonStr) === b.id);
+                            if (n === 0 && fExpiry !== b.id) return null;
+                            return (
+                                <FilterChip key={b.id} label={b.label} active={fExpiry === b.id} count={n}
+                                    tone={b.id === 'expired' ? T.danger : T.warn}
+                                    onClick={() => setFExpiry(fExpiry === b.id ? null : b.id)}/>
+                            );
+                        })}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans }}>Group</span>
+                        <select value={groupBy} onChange={e => setGroupBy(e.target.value)}
+                            style={{ ...custInput, padding: '4px 6px', fontSize: 11.5, flex: 1 }}>
+                            <option value="none">Flat list</option>
+                            <option value="agreement">Service plan</option>
+                            <option value="type">Customer type</option>
+                            <option value="activity">Service history</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style={{ padding: '6px 12px', fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, borderBottom: `1px solid ${T.border}` }}>
+                    {list.length} of {(customers || []).length} customer{(customers || []).length === 1 ? '' : 's'}
+                </div>
+
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                     {list.length === 0 && (
                         <div style={{ padding: 16, fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans }}>
                             No dispatch customers{q ? ' match that search' : ' yet'}.
                         </div>
                     )}
-                    {list.map(c => (
-                        <div key={c.id} onClick={() => setSelectedId(c.id)}
-                            style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
-                                background: c.id === selectedId ? T.surface2 : 'transparent' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                                <span style={{ fontSize: 13, fontWeight: c.id === selectedId ? 700 : 500, color: T.ink, fontFamily: T.sans }}>{c.name}</span>
-                                <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.mono }}>{c.customerNumber || '—'}</span>
-                            </div>
-                            <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{labelise(c.customerType || 'commercial')}</span>
-                                {c.accountId
-                                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.ok}14`, color: T.ok, fontWeight: 700 }}>linked</span>
-                                    : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>unlinked</span>}
-                                {c.doNotService && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>do not service</span>}
-                            </div>
+                    {grouped.map(g => (
+                        <div key={g.key || '_all'}>
+                            {g.key && (
+                                <div style={{ position: 'sticky', top: 0, zIndex: 1, padding: '5px 12px',
+                                    background: T.surface2, borderBottom: `1px solid ${T.border}`,
+                                    fontSize: 10, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase',
+                                    letterSpacing: 0.6, fontFamily: T.sans, display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>{g.key}</span>
+                                    <span style={{ fontFamily: T.mono, color: T.inkMuted }}>{g.rows.length}</span>
+                                </div>
+                            )}
+                            {g.rows.map(c => {
+                                const st  = stats[c.id] || { total: 0, completed: 0, lastServed: null, upcoming: 0, nextDate: null };
+                                const exp = expiryBucket(c, todayStr, soonStr);
+                                const plan = (c.serviceAgreement && c.serviceAgreement !== 'none') ? c.serviceAgreement : null;
+                                return (
+                                    <div key={c.id} onClick={() => setSelectedId(c.id)}
+                                        style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
+                                            background: c.id === selectedId ? T.surface2 : 'transparent' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                            <span style={{ fontSize: 13, fontWeight: c.id === selectedId ? 700 : 500, color: T.ink, fontFamily: T.sans }}>{c.name}</span>
+                                            <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.mono }}>{c.customerNumber || '—'}</span>
+                                        </div>
+                                        <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{labelise(c.customerType || 'commercial')}</span>
+                                            {plan && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.info}14`, color: T.info, fontWeight: 700 }}>{labelise(plan)}</span>}
+                                            {c.accountId
+                                                ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.ok}14`, color: T.ok, fontWeight: 700 }}>linked</span>
+                                                : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>unlinked</span>}
+                                            {c.doNotService && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>do not service</span>}
+                                            {exp === 'expired' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>expired</span>}
+                                            {exp === 'soon'    && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>renews soon</span>}
+                                        </div>
+                                        <div style={{ marginTop: 3, fontSize: 10, color: T.inkMuted, fontFamily: T.mono }}>
+                                            {st.completed === 0 ? 'Never served' : `${st.completed} job${st.completed === 1 ? '' : 's'}`}
+                                            {st.lastServed && ` · last ${st.lastServed}`}
+                                            {st.upcoming > 0 && ` · next ${st.nextDate}`}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     ))}
                 </div>
@@ -1720,6 +1924,37 @@ const CustomersView = ({ customers, accounts, techs, onSaved }) => {
                             )}
                         </div>
 
+                        {/* Service summary — derived from jobs, never stored. */}
+                        {!draft._isNew && (() => {
+                            const st  = stats[draft.id] || { total: 0, completed: 0, lastServed: null, upcoming: 0, nextDate: null };
+                            const exp = expiryBucket(draft, todayStr, soonStr);
+                            const gap = st.lastServed ? daysBetween(st.lastServed, todayStr) : null;
+                            return (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10,
+                                    padding: '10px 12px', marginBottom: 16, background: T.surface2,
+                                    border: `1px solid ${T.border}`, borderRadius: T.r }}>
+                                    {[
+                                        { l: 'Jobs completed', v: String(st.completed) },
+                                        { l: 'Last served',    v: st.lastServed ? `${st.lastServed}${gap != null ? ` (${gap}d)` : ''}` : 'Never' },
+                                        { l: 'Upcoming',       v: st.upcoming > 0 ? `${st.upcoming} · ${st.nextDate}` : 'None' },
+                                        { l: 'Plan',           v: (draft.serviceAgreement && draft.serviceAgreement !== 'none') ? labelise(draft.serviceAgreement) : 'None' },
+                                    ].map(x => (
+                                        <div key={x.l}>
+                                            <div style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3, fontFamily: T.sans }}>{x.l}</div>
+                                            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{x.v}</div>
+                                        </div>
+                                    ))}
+                                    {exp && (
+                                        <div style={{ gridColumn: '1 / -1', fontSize: 11.5, fontFamily: T.sans,
+                                            color: exp === 'expired' ? T.danger : T.warn, fontWeight: 600 }}>
+                                            {exp === 'expired'
+                                                ? `Agreement expired ${draft.agreementExpiry}.`
+                                                : `Agreement renews ${draft.agreementExpiry} — ${daysBetween(todayStr, draft.agreementExpiry)} days.`}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
                         <CustFieldRow label="Name *">
                             <input value={draft.name || ''} onChange={e => set('name', e.target.value)} style={custInput}/>
                         </CustFieldRow>
@@ -1748,6 +1983,18 @@ const CustomersView = ({ customers, accounts, techs, onSaved }) => {
                                 <select value={draft.serviceAgreement || 'none'} onChange={e => set('serviceAgreement', e.target.value)} style={custInput}>
                                     {AGREEMENTS.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
                                 </select>
+                            </CustFieldRow>
+                        </div>
+
+                        {/* agreementExpiry has existed on the record since the table was
+                            created with no control to set it, so every renewal warning
+                            was unreachable. */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <CustFieldRow label="Agreement expires">
+                                <input type="date" value={draft.agreementExpiry || ''}
+                                    onChange={e => set('agreementExpiry', e.target.value || null)}
+                                    disabled={!draft.serviceAgreement || draft.serviceAgreement === 'none'}
+                                    style={{ ...custInput, opacity: (!draft.serviceAgreement || draft.serviceAgreement === 'none') ? 0.5 : 1 }}/>
                             </CustFieldRow>
                         </div>
 
@@ -4058,7 +4305,7 @@ export default function DispatchTab() {
                             });
                         }}/>
                 ) : view === 'customers' ? (
-                    <CustomersView customers={customers} accounts={accounts} techs={techs}
+                    <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs}
                         onSaved={saved => setCustomers(prev => {
                             const i = prev.findIndex(c => c.id === saved.id);
                             if (i === -1) return [...prev, saved];
