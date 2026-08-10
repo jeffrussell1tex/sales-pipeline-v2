@@ -11,6 +11,8 @@ import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 // template had no distinct name and the list rendered customer types as names.
 // Existing rows are migrated on read by copying ctype into name — lossless,
 // since ctype is whatever the user last typed into either control.
+const labelise = (v) => String(v || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
 const migrateTemplate = (t) => ({ ...t, name: t.name ?? (t.ctype || '') });
 
 // `equip` was free text ("Recovery cart, spares") with a helper line claiming
@@ -98,6 +100,25 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
         })();
         return () => { cancelled = true; };
     }, []);
+    // Requirable vehicle classes, from dispatch_vehicles. A class nobody owns
+    // would only ever produce a job no technician can be crewed onto.
+    const [fleet, setFleet] = useState([]);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await dbFetch('/.netlify/functions/dispatch-vehicles');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!cancelled) setFleet(data.vehicles || []);
+            } catch (e) { /* picker stays empty */ }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+    const vehicleTypes = React.useMemo(
+        () => [...new Set(fleet.map(v => (v.type || '').trim().toLowerCase()).filter(Boolean))].sort(),
+        [fleet]);
+
     const equipCategories = React.useMemo(
         () => [...new Set(equipUnits.map(e => (e.category || '').trim()).filter(Boolean))].sort(),
         [equipUnits]);
@@ -198,6 +219,13 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             detail: selected.ctype || 'No customer type',
         },
         {
+            ok: !selected.vehicleType || vehicleTypes.includes(String(selected.vehicleType).toLowerCase()),
+            label: 'Required vehicle in fleet',
+            detail: !selected.vehicleType
+                ? 'Any vehicle'
+                : `${labelise(selected.vehicleType)} — ${fleet.filter(v => (v.type||'').toLowerCase() === String(selected.vehicleType).toLowerCase()).length} in fleet`,
+        },
+        {
             ok: (selected.equipCategories||[]).every(c => equipCategories.includes(c)) && (selected.equipUnmatched||[]).length === 0,
             label: 'All required equipment exists',
             detail: (selected.equipCategories||[]).length === 0 && (selected.equipUnmatched||[]).length === 0
@@ -216,7 +244,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             extraActions={
                 <>
                     <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Test auto-create</button>
-                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equipCategories:[],equipUnmatched:[],autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
+                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',vehicleType:'',equipCategories:[],equipUnmatched:[],autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
                 </>
             }>
 
@@ -235,7 +263,8 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                         borderTop: i>0?`1px solid ${T.border}`:'none',
                                         background: selectedId===t.id ? `${T.goldInk}08` : T.surface,
                                         borderLeft: selectedId===t.id ? `3px solid ${T.goldInk}` : '3px solid transparent' }}>
-                                    <div style={{ fontWeight: selectedId===t.id ? 700 : 400, color: T.ink }}>{t.name || t.ctype || '—'}</div>
+                                    <div style={{ fontWeight: selectedId===t.id ? 700 : 400, color: selectedId===t.id ? T.ink : T.info, textDecoration: selectedId===t.id ? 'none' : 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}
+                                        title="Open this template for editing">{t.name || t.ctype || '—'}</div>
                                     <div style={{ color: T.inkMid }}>{t.crew}p</div>
                                     <div style={{ color: T.inkMid }}>{t.hrs}h</div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
@@ -291,6 +320,22 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                     <select value={selected.minLicense||licenses[0]} onChange={e=>updateTemplate('minLicense',e.target.value)}
                                         style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}>
                                         {licenses.map(l=><option key={l}>{l}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Required vehicle</div>
+                                    <select value={selected.vehicleType||''} onChange={e=>updateTemplate('vehicleType',e.target.value)}
+                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}>
+                                        <option value="">— Any vehicle —</option>
+                                        {/* A class that has left the fleet must not fall through to
+                                            "Any": that silently drops the requirement on next save. */}
+                                        {selected.vehicleType && !vehicleTypes.includes(String(selected.vehicleType).toLowerCase()) && (
+                                            <option value={selected.vehicleType}>Not in fleet ({selected.vehicleType})</option>
+                                        )}
+                                        {vehicleTypes.map(vt => {
+                                            const n = fleet.filter(v => (v.type||'').toLowerCase() === vt).length;
+                                            return <option key={vt} value={vt}>{labelise(vt)} ({n} in fleet)</option>;
+                                        })}
                                     </select>
                                 </div>
                                 <div>
@@ -391,6 +436,9 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Crew × hours: <strong>{selected.crew||1} × {selected.hrs||2}h</strong></div>
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Min license: <strong>{selected.minLicense}</strong></div>
                                 <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Priority: <strong style={{ color:prioColor(selected.priority) }}>{normPrio(selected.priority)}</strong></div>
+                                {selected.vehicleType && (
+                                    <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Vehicle: <strong>{labelise(selected.vehicleType)}</strong></div>
+                                )}
                                 {(selected.equipCategories||[]).length > 0 && (
                                     <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Equipment: <strong>
                                         {(selected.equipCategories||[]).join(', ')}
@@ -425,7 +473,8 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                 return (<>
                     <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setTmplMenu(null)}/>
                     <div style={{position:'fixed',top:tmplMenu.rect.top,right:tmplMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:180,overflow:'hidden'}}>
-                        <button onClick={()=>{const clone={...t,id:'tmpl_'+Date.now(),name:(t.name||t.ctype||'')+' (copy)',used:0};setTemplates(p=>[...p,clone]);setSelectedId(clone.id);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Duplicate</button>
+                        <button onClick={()=>{setSelectedId(t.id);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans,fontWeight:600}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Edit</button>
+                        <button onClick={()=>{const clone={...t,id:'tmpl_'+Date.now(),name:(t.name||t.ctype||'')+' (copy)',used:0};setTemplates(p=>[...p,clone]);setSelectedId(clone.id);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Duplicate</button>
                         <button onClick={()=>{setTemplates(p=>p.map(tm=>tm.id===t.id?{...tm,autojob:!tm.autojob}:tm));setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>{t.autojob?'Disable auto-create':'Enable auto-create'}</button>
                         <button onClick={()=>{setTemplates(p=>p.filter(tm=>tm.id!==t.id));if(selectedId===t.id)setSelectedId(templates.find(tm=>tm.id!==t.id)?.id||null);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.danger,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background='rgba(156,58,46,0.06)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>Delete</button>
                     </div>

@@ -118,7 +118,7 @@ const prioColor = (p) => ({ emergency: T.danger, high: T.warn, normal: T.inkMid,
 // skipped rather than written. A minLicense the org has since renamed would
 // otherwise fall through to the first <option> and silently downgrade the job's
 // requirement from Master to Apprentice.
-const applyJobTemplate = (form, tmpl, { skills = [], licLevels = [], equipCategories = [] } = {}) => {
+const applyJobTemplate = (form, tmpl, { skills = [], licLevels = [], equipCategories = [], vehicleTypes = [] } = {}) => {
     const applied = [];
     const skipped = [];
     const next = { ...form };
@@ -163,6 +163,15 @@ const applyJobTemplate = (form, tmpl, { skills = [], licLevels = [], equipCatego
         applied.push(`${keepEq.length} item${keepEq.length === 1 ? '' : 's'}`);
     }
     if (lostEq > 0) skipped.push(`${lostEq} required equipment categor${lostEq === 1 ? 'y is' : 'ies are'} no longer stocked`);
+
+    if (tmpl.vehicleType) {
+        if ((vehicleTypes || []).includes(String(tmpl.vehicleType).toLowerCase())) {
+            next.requiredVehicleType = String(tmpl.vehicleType).toLowerCase();
+            applied.push(`${tmpl.vehicleType} required`);
+        } else {
+            skipped.push(`vehicle class "${tmpl.vehicleType}" is not in your fleet`);
+        }
+    }
     if ((tmpl.equipUnmatched || []).length) skipped.push(`unmatched template equipment: ${tmpl.equipUnmatched.join(', ')}`);
 
     return { next, applied, skipped };
@@ -483,8 +492,29 @@ const scoreTech = (tech, job, allJobs, skills, avail = {}) => {
         why.push('Preferred by customer');
     }
 
-    // Vehicle (3pts)
-    if (tech.vehicle) {
+    // Vehicle class (3pts).
+    //
+    // Unlike equipment, a vehicle requirement is NOT a job-level shortage — a
+    // vehicle attaches to a technician (dispatch_vehicles.assignedTechId), so
+    // "needs a bucket truck" filters WHO can serve the job. That makes it a
+    // per-technician blocker, which is why it lives here and equipment does not.
+    //
+    // The bare `if (tech.vehicle) score += 3` this replaces rewarded having any
+    // vehicle at all, which never distinguished a bucket truck from a hatchback.
+    const myVehicle = (avail.vehicles || []).find(v => v.id === tech.vehicle) || null;
+    if (job.requiredVehicleType) {
+        const want = String(job.requiredVehicleType).toLowerCase();
+        if (!myVehicle) {
+            blockers.push(`No vehicle assigned · job needs a ${labelise(job.requiredVehicleType)}`);
+        } else if (String(myVehicle.type || '').toLowerCase() !== want) {
+            blockers.push(`${myVehicle.name} is a ${labelise(myVehicle.type || 'vehicle')} · job needs a ${labelise(job.requiredVehicleType)}`);
+        } else if ((myVehicle.status || 'available') !== 'available') {
+            blockers.push(`${myVehicle.name} is ${labelise(myVehicle.status)}`);
+        } else {
+            score += 3;
+            why.push(`${labelise(myVehicle.type)} · ${myVehicle.name}`);
+        }
+    } else if (tech.vehicle) {
         score += 3;
     }
 
@@ -758,7 +788,7 @@ const QUEUE_SORTS = {
     Value:    (a, b) => (b.value || 0) - (a.value || 0),
 };
 
-const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled }) => {
+const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled }) => {
     const [queueSort, setQueueSort] = useState('Priority');
     const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
@@ -779,7 +809,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], block
     const candidates = useMemo(() => {
         if (!selectedJob) return [];
         return techs
-            .map(t => ({ tech: t, ...scoreTech(t, selectedJob, jobs, skills, { blocks, blockTypes, dateStr: scheduleDate || selectedJob.scheduledDate }) }))
+            .map(t => ({ tech: t, ...scoreTech(t, selectedJob, jobs, skills, { blocks, blockTypes, vehicles, dateStr: scheduleDate || selectedJob.scheduledDate }) }))
             .filter(c => c.score >= 50)
             // Blocked candidates sort below every clean one regardless of score.
             // Score answers "how good a fit is this?"; blockers answer "may this
@@ -812,7 +842,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], block
         if (!inPool) return { tone: 'muted', text: `${pt.name} is preferred by this customer but is hidden by the current board filter.` };
 
         const s = scoreTech(pt, selectedJob, jobs, skills,
-            { blocks, blockTypes, dateStr: scheduleDate || selectedJob.scheduledDate });
+            { blocks, blockTypes, vehicles, dateStr: scheduleDate || selectedJob.scheduledDate });
         if (s.blockers.length) return { tone: 'warn', text: `${pt.name} is preferred by this customer but is blocked — ${s.blockers.join('; ')}.` };
         if (!candidates.some(c => c.tech.id === pt.id)) return { tone: 'muted', text: `${pt.name} is preferred by this customer but did not reach the shortlist (match ${s.score}).` };
         return { tone: 'muted', text: `${pt.name} is preferred by this customer; another technician scores higher on this job.` };
@@ -1025,12 +1055,13 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], block
                                 </span>
                             </div>
                             <div style={{ fontSize: 12, color: T.inkMid, marginBottom: 10 }}>{selectedJob.address}</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 10 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 10 }}>
                                 {[
                                     { l: 'Window',      v: selectedJob.window },
                                     { l: 'Crew size',   v: `${selectedJob.crewSize} techs` },
                                     { l: 'Duration',    v: `${selectedJob.durationHrs}h` },
                                     { l: 'Min license', v: selectedJob.minLicense },
+                                    { l: 'Vehicle',     v: selectedJob.requiredVehicleType ? labelise(selectedJob.requiredVehicleType) : 'Any' },
                                     { l: 'Preferred',   v: selectedJob.preferredTechId ? roster.find(t => t.id === selectedJob.preferredTechId)?.name?.split(' ')[0] || 'Unknown' : '—' },
                                 ].map(s => (
                                     <div key={s.l}>
@@ -2417,7 +2448,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
 // Nothing is written until the proposal is confirmed. A job whose every candidate
 // carries a blocker is left alone and reported as unplaceable, rather than being
 // assigned with a warning nobody reads.
-const planWeek = ({ jobs, techs, skills, blocks, blockTypes, fromStr, toStr }) => {
+const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], fromStr, toStr }) => {
     const proposals = [];
     const skipped   = [];
 
@@ -2432,7 +2463,7 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, fromStr, toStr }) =
     const candidatesForDay = (job, dateStr) => {
         const dur = job.durationHrs || 2;
         return techs
-            .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills, { blocks, blockTypes, dateStr }) }))
+            .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills, { blocks, blockTypes, vehicles, dateStr }) }))
             .filter(c => c.blockers.length === 0)
             .sort((a, b) => b.score - a.score)
             .map(c => {
@@ -2484,7 +2515,7 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, fromStr, toStr }) =
 
         if (!placed) {
             const anyCandidate = techs
-                .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills, { blocks, blockTypes, dateStr: job.scheduledDate }) }))
+                .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills, { blocks, blockTypes, vehicles, dateStr: job.scheduledDate }) }))
                 .sort((a, b) => a.blockers.length - b.blockers.length)[0];
             skipped.push({
                 job,
@@ -3188,7 +3219,7 @@ export default function DispatchTab() {
     // customerId is the FK the server requires; `customer` is only the typed text.
     const EMPTY_JOB = { customer: '', customerId: '', accountId: '', title: '', trade: '', jobType: '', address: '', city: '', state: '', zip: '',
         window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman',
-        opportunityId: '', needSkills: [], equipCategories: [] };
+        opportunityId: '', needSkills: [], equipCategories: [], requiredVehicleType: '' };
     const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
     // { id, name, applied[], skipped[], equip, prevForm }. prevForm is the form
     // as it stood before the template was applied, so Undo — and switching to a
@@ -3223,6 +3254,11 @@ export default function DispatchTab() {
     const equipCategories = useMemo(
         () => [...new Set(equipment.map(e => (e.category || '').trim()).filter(Boolean))].sort(),
         [equipment]);
+    // Requirable vehicle classes are the ones actually in the fleet. Offering a
+    // class nobody owns would only ever produce a job no technician can serve.
+    const vehicleTypes = useMemo(
+        () => [...new Set(vehicles.map(v => (v.type || '').trim().toLowerCase()).filter(Boolean))].sort(),
+        [vehicles]);
 
     // ── Filter state ──────────────────────────────────────────────────────────
     const [filterSkill,   setFilterSkill]   = useState(null);
@@ -3333,6 +3369,7 @@ export default function DispatchTab() {
                         // ids. Asset-level checkout is tracked the other way round, on
                         // dispatch_equipment.checkedOutJobId.
                         equipCategories: j.equipmentIds || [],
+                        requiredVehicleType: j.requiredVehicleType || null,
                         value:          parseFloat(j.invoiceAmount || 0),
                         // Was hardcoded 'Journeyman', discarding the stored requirement —
                         // so every licence blocker compared against a constant.
@@ -3476,6 +3513,7 @@ export default function DispatchTab() {
                 scheduledDate:   newJobForm.window || null,
                 opportunityId:   newJobForm.opportunityId || null,
                 equipmentIds:    newJobForm.equipCategories || [],
+                requiredVehicleType: newJobForm.requiredVehicleType || null,
             };
             const res  = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
@@ -3496,6 +3534,7 @@ export default function DispatchTab() {
                 priority:        newJobForm.priority,
                 window:          newJobForm.window || 'TBD',
                 equipCategories: newJobForm.equipCategories || [],
+                requiredVehicleType: newJobForm.requiredVehicleType || null,
                 value:           0,
                 minLicense:      newJobForm.minLicense,
                 preferredTechId: null,
@@ -3572,7 +3611,7 @@ export default function DispatchTab() {
         const fromStr = ymd(start);
         const toStr   = ymd(addDays(start, 6));
         const { proposals, skipped } = planWeek({
-            jobs: filteredJobs, techs: filteredTechs, skills,
+            jobs: filteredJobs, techs: filteredTechs, skills, vehicles,
             blocks, blockTypes: settings?.dispatchBlockTypes || [],
             fromStr, toStr,
         });
@@ -4026,7 +4065,7 @@ export default function DispatchTab() {
                             const next = [...prev]; next[i] = saved; return next;
                         })}/>
                 ) : (
-                    <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} allTechs={techs} skills={skills} equipUnits={equipment}
+                    <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} allTechs={techs} skills={skills} equipUnits={equipment} vehicles={vehicles}
                         blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
                         selectedJobId={selectedJobId || jobs[0]?.id}
                         onSelectJob={setSelectedJobId}
@@ -4089,7 +4128,7 @@ export default function DispatchTab() {
                                             const base = appliedTemplate ? appliedTemplate.prevForm : newJobForm;
                                             const t = list.find(x => x.id === e.target.value);
                                             if (!t) { setNewJobForm(base); setAppliedTemplate(null); return; }
-                                            const { next, applied, skipped } = applyJobTemplate(base, t, { skills, licLevels, equipCategories });
+                                            const { next, applied, skipped } = applyJobTemplate(base, t, { skills, licLevels, equipCategories, vehicleTypes });
                                             setNewJobForm(next);
                                             setAppliedTemplate({ id: t.id, name: templateLabel(t), applied, skipped, equip: (next.equipCategories || []).join(', '), prevForm: base });
                                         }}
@@ -4269,6 +4308,24 @@ export default function DispatchTab() {
                                     </div>
                                 )}
                             </div>
+                            {/* Required vehicle class */}
+                            {vehicleTypes.length > 0 && (
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Required Vehicle</label>
+                                    <select value={newJobForm.requiredVehicleType || ''}
+                                        onChange={e => setNewJobForm(f => ({ ...f, requiredVehicleType: e.target.value }))}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
+                                        <option value="">— Any vehicle —</option>
+                                        {vehicleTypes.map(vt => {
+                                            const n = vehicles.filter(v => (v.type || '').toLowerCase() === vt).length;
+                                            return <option key={vt} value={vt}>{labelise(vt)} ({n} in fleet)</option>;
+                                        })}
+                                    </select>
+                                    <div style={{ marginTop: 4, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                        Only technicians assigned a vehicle of this class can be crewed onto the job.
+                                    </div>
+                                </div>
+                            )}
                             {/* Required equipment */}
                             {equipCategories.length > 0 && (
                                 <div>

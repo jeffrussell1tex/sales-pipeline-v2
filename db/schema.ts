@@ -820,6 +820,7 @@ export const dispatchJobs = pgTable('dispatch_jobs', {
     durationMinutes:    integer('duration_minutes'),                   // estimated
     crewSize:           integer('crew_size'),                          // techs required on site
     minLicense:         varchar('min_license', { length: 50 }),        // 'Apprentice' | 'Journeyman' | 'Master'
+    requiredVehicleType: varchar('required_vehicle_type', { length: 50 }), // matches dispatch_vehicles.type; a CLASS, not a specific vehicle
     needSkills:         jsonb('need_skills').default('[]'),            // string[] of required skills
     assignedTechId:     text('assigned_tech_id'),                     // FK → dispatch_technicians.id
     assignedVehicleId:  text('assigned_vehicle_id'),                  // FK → dispatch_vehicles.id
