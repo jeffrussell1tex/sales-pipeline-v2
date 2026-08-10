@@ -99,6 +99,67 @@ const normalisePriority = (p) => PRIORITY_ALIASES[p] || p || 'normal';
 const URGENT_PRIORITIES = ['emergency'];
 const prioColor = (p) => ({ emergency: T.danger, high: T.warn, normal: T.inkMid, low: T.inkMuted }[normalisePriority(p)] || T.inkMuted);
 
+// ── Job templates ────────────────────────────────────────────────────────────
+// settings.dispatchJobTemplates records are { id, name, ctype, crew, hrs,
+// skills[], minLicense, equip, autojob, priority, used }.
+//
+// Three fields are deliberately NOT written to the form:
+//   • equip   — free text ("Recovery cart, spares"); the only job-side
+//               counterpart is equipmentIds, an array of equipment FK ids.
+//               It is shown to the dispatcher instead of being written.
+//   • ctype   — populated from settings.customerTypes, which is the CRM account
+//               vocabulary, not dispatch_customers.customerType (a fixed enum of
+//               commercial/residential/industrial/government). The two never
+//               match, so matching a template to a customer by type is not
+//               possible until that vocabulary is reconciled.
+//   • autojob — no auto-create-on-Closed-Won exists anywhere in the codebase.
+//
+// Values that no longer exist in the org's current vocabulary are reported as
+// skipped rather than written. A minLicense the org has since renamed would
+// otherwise fall through to the first <option> and silently downgrade the job's
+// requirement from Master to Apprentice.
+const applyJobTemplate = (form, tmpl, { skills = [], licLevels = [] } = {}) => {
+    const applied = [];
+    const skipped = [];
+    const next = { ...form };
+
+    const crew = parseInt(tmpl.crew, 10);
+    if (crew > 0) { next.crewSize = crew; applied.push(`crew ${crew}`); }
+
+    const hrs = parseFloat(tmpl.hrs);
+    if (hrs > 0) { next.durationHrs = hrs; applied.push(`${hrs}h`); }
+
+    const prio = normalisePriority(tmpl.priority);
+    if (PRIORITIES.some(p => p.value === prio)) {
+        next.priority = prio;
+        applied.push(prio);
+    } else if (tmpl.priority) {
+        skipped.push(`priority "${tmpl.priority}" is not a current priority`);
+    }
+
+    if (tmpl.minLicense) {
+        if (licLevels.includes(tmpl.minLicense)) {
+            next.minLicense = tmpl.minLicense;
+            applied.push(tmpl.minLicense);
+        } else {
+            skipped.push(`min licence "${tmpl.minLicense}" is no longer in your licence list`);
+        }
+    }
+
+    const known = new Set((skills || []).map(s => s.id));
+    const keep  = (tmpl.skills || []).filter(id => known.has(id));
+    const lost  = (tmpl.skills || []).length - keep.length;
+    if (keep.length) {
+        next.needSkills = keep;
+        applied.push(`${keep.length} skill${keep.length === 1 ? '' : 's'}`);
+    }
+    if (lost > 0) skipped.push(`${lost} required skill${lost === 1 ? '' : 's'} no longer defined`);
+
+    return { next, applied, skipped };
+};
+
+const templateLabel = (t) => t.name || t.ctype || 'Untitled template';
+
 // ── Customer typeahead ───────────────────────────────────────────────
 // Defined at module scope on purpose: a component declared inside DispatchTab
 // would be a new type on every render, remounting the input and losing focus
@@ -3025,6 +3086,10 @@ export default function DispatchTab() {
         window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman',
         opportunityId: '', needSkills: [] };
     const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
+    // { id, name, applied[], skipped[], equip, prevForm }. prevForm is the form
+    // as it stood before the template was applied, so Undo — and switching to a
+    // second template — restore rather than compound.
+    const [appliedTemplate, setAppliedTemplate] = useState(null);
 
     // ── DB-backed state ───────────────────────────────────────────────────────
     const [jobs,       setJobs]       = useState([]);
@@ -3328,6 +3393,7 @@ export default function DispatchTab() {
             setJobs(prev => [optimistic, ...prev]);
             setSelectedJobId(optimistic.id);
             setNewJobForm(EMPTY_JOB);
+            setAppliedTemplate(null);
             setShowNewJobForm(false);
         } catch (err) {
             setNewJobError(err.message || 'Failed to save job.');
@@ -3607,7 +3673,7 @@ export default function DispatchTab() {
                             borderRadius: T.r, fontSize: 12.5, fontWeight: 500, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                         Mass-schedule next week
                     </button>
-                    <button onClick={() => { setNewJobForm(EMPTY_JOB); setNewJobError(''); setShowNewJobForm(true); }} style={{ padding: '6px 14px', background: T.ink, color: '#fbf8f3', border: 'none',
+                    <button onClick={() => { setNewJobForm(EMPTY_JOB); setAppliedTemplate(null); setNewJobError(''); setShowNewJobForm(true); }} style={{ padding: '6px 14px', background: T.ink, color: '#fbf8f3', border: 'none',
                         borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                         + New job
                     </button>
@@ -3897,6 +3963,52 @@ export default function DispatchTab() {
                         </div>
                         {/* Body */}
                         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            {/* Start from template */}
+                            {(settings?.dispatchJobTemplates || []).length > 0 && (
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Start from template</label>
+                                    <select value={appliedTemplate ? appliedTemplate.id : ''}
+                                        onChange={e => {
+                                            const list = settings?.dispatchJobTemplates || [];
+                                            // Switching templates re-applies from the pre-template
+                                            // form, never from the already-templated one.
+                                            const base = appliedTemplate ? appliedTemplate.prevForm : newJobForm;
+                                            const t = list.find(x => x.id === e.target.value);
+                                            if (!t) { setNewJobForm(base); setAppliedTemplate(null); return; }
+                                            const { next, applied, skipped } = applyJobTemplate(base, t, { skills, licLevels });
+                                            setNewJobForm(next);
+                                            setAppliedTemplate({ id: t.id, name: templateLabel(t), applied, skipped, equip: t.equip || '', prevForm: base });
+                                        }}
+                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}>
+                                        <option value="">— None —</option>
+                                        {(settings?.dispatchJobTemplates || []).map(t => (
+                                            <option key={t.id} value={t.id}>{templateLabel(t)}</option>
+                                        ))}
+                                    </select>
+                                    {appliedTemplate && (
+                                        <div style={{ marginTop: 6, padding: '7px 10px', borderRadius: T.r,
+                                            background: T.surface2, borderLeft: `3px solid ${T.goldInk}`,
+                                            fontSize: 11.5, lineHeight: 1.5, color: T.inkMid }}>
+                                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                                                <span style={{ flex: 1 }}>
+                                                    Applied <strong style={{ color: T.ink }}>{appliedTemplate.name}</strong>
+                                                    {appliedTemplate.applied.length > 0 && ` — ${appliedTemplate.applied.join(', ')}`}
+                                                </span>
+                                                <span onClick={() => { setNewJobForm(appliedTemplate.prevForm); setAppliedTemplate(null); }}
+                                                    style={{ color: T.info, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>Undo</span>
+                                            </div>
+                                            {appliedTemplate.equip && (
+                                                <div style={{ marginTop: 3, color: T.inkMid }}>
+                                                    Bring: {appliedTemplate.equip}
+                                                </div>
+                                            )}
+                                            {appliedTemplate.skipped.map((s, i) => (
+                                                <div key={i} style={{ marginTop: 3, color: T.warn }}>Not applied — {s}</div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             {/* Customer */}
                             <div>
                                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Customer *</label>
