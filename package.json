@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "check:tdz": "node scripts/check-tdz.mjs",
     "test": "node --test",
     "test:int": "node --env-file-if-exists=.env --import tsx --test --experimental-test-module-mocks tests/integration/accounts.itest.mjs tests/integration/leads.itest.mjs"
   },
