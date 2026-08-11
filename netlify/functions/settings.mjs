@@ -133,6 +133,12 @@ export const handler = async (event) => {
                 quotesEnabled:        row.extra?.quotesEnabled         ?? true,
                 dispatchEnabled:      row.extra?.dispatchEnabled       ?? false,
                 dispatchSkills:       row.extra?.dispatchSkills        || [],
+                // Dispatch premises segment for a service customer. Distinct from
+                // `customerTypes` above, which is the CRM account-tier vocabulary.
+                // Empty here means "never configured" — the client seeds the four
+                // legacy values so existing dispatch_customers.customer_type rows
+                // ('commercial' etc.) keep resolving.
+                dispatchPropertyTypes: row.extra?.dispatchPropertyTypes || [],
                 dispatchCerts:        row.extra?.dispatchCerts         || [],
                 dispatchLicenses:     row.extra?.dispatchLicenses      || ['Apprentice','Journeyman','Master','Lead'],
                 dispatchTrades:       row.extra?.dispatchTrades         || [],
@@ -259,6 +265,7 @@ export const handler = async (event) => {
                 quotesEnabled:        'quotesEnabled'        in data ? !!data.quotesEnabled                : existingExtra.quotesEnabled        ?? true,
                 dispatchEnabled:      'dispatchEnabled'      in data ? !!data.dispatchEnabled               : existingExtra.dispatchEnabled       ?? false,
                 dispatchSkills:       'dispatchSkills'       in data ? (data.dispatchSkills       || [])   : existingExtra.dispatchSkills        || [],
+                dispatchPropertyTypes: 'dispatchPropertyTypes' in data ? (data.dispatchPropertyTypes || []) : existingExtra.dispatchPropertyTypes || [],
                 dispatchCerts:        'dispatchCerts'        in data ? (data.dispatchCerts        || [])   : existingExtra.dispatchCerts         || [],
                 dispatchLicenses:     'dispatchLicenses'     in data ? (data.dispatchLicenses     || null) : existingExtra.dispatchLicenses      || null,
                 dispatchTrades:       'dispatchTrades'       in data ? (data.dispatchTrades       || [])   : existingExtra.dispatchTrades        || [],

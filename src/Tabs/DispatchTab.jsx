@@ -1565,7 +1565,29 @@ const MonthBoardView = ({ jobs, techs, anchor, onJobClick, onPickDay }) => {
 //
 // Deliberately no delete: a customer with jobs would orphan dispatch_jobs.customerId
 // (an FK with no cascade). Use "Do not service" to retire a customer instead.
-const CUSTOMER_TYPES = ['commercial', 'residential', 'industrial', 'government'];
+// Property types are org-configurable (Settings → Dispatch → Property types).
+// These four are the seed, and their IDS are load-bearing: every existing
+// dispatch_customers.customer_type row holds one of them.
+const DEFAULT_PROPERTY_TYPES = [
+    { id: 'commercial',  label: 'Commercial',  icon: 'building' },
+    { id: 'residential', label: 'Residential', icon: 'home' },
+    { id: 'industrial',  label: 'Industrial',  icon: 'factory' },
+    { id: 'government',  label: 'Government',  icon: 'gov' },
+];
+
+// Configured list, plus any value still written on a customer record but no
+// longer configured — an unlisted type stays visible and filterable rather than
+// silently vanishing from the rail and taking its customers with it.
+const propertyTypesFor = (settings, customers) => {
+    const configured = (settings?.dispatchPropertyTypes || []).length
+        ? settings.dispatchPropertyTypes
+        : DEFAULT_PROPERTY_TYPES;
+    const known = new Set(configured.map(t => t.id));
+    const orphans = [...new Set((customers || []).map(c => c.customerType || 'commercial'))]
+        .filter(id => !known.has(id))
+        .map(id => ({ id, label: labelise(id), icon: 'building', unlisted: true }));
+    return [...configured, ...orphans];
+};
 const CustFieldRow = ({ label, children }) => (
     <div style={{ marginBottom: 12 }}>
         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid,
@@ -1901,8 +1923,6 @@ const DIcon = ({ name, size = 14, color = 'currentColor', sw = 1.5 }) => {
     }
 };
 
-const PROPERTY_ICON = { commercial: 'building', residential: 'home', industrial: 'factory', government: 'gov' };
-
 const eyebrow = (color, size) => ({ fontSize: size || 9.5, fontWeight: 600, color: color || T.inkMuted,
     letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans });
 
@@ -1916,11 +1936,14 @@ const PlanBadge = ({ pres, small }) => (
     </span>
 );
 
-const PropertyTag = ({ type }) => (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: T.inkMid, fontFamily: T.sans }}>
-        <DIcon name={PROPERTY_ICON[type] || 'building'} size={11} color={T.inkMuted}/>{labelise(type || 'commercial')}
+const PropertyTag = ({ type, types }) => {
+    const ptype = (types || []).find(x => x.id === (type || 'commercial'));
+    return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: ptype?.unlisted ? T.warn : T.inkMid, fontFamily: T.sans }}>
+        <DIcon name={ptype?.icon || 'building'} size={11} color={ptype?.unlisted ? T.warn : T.inkMuted}/>{ptype?.label || labelise(type || 'commercial')}
     </span>
-);
+    );
+};
 
 const FacetGroup = ({ label, note, first, children }) => (
     <div style={{ marginBottom: 18, borderTop: first ? 'none' : `1px solid ${T.border}`, paddingTop: first ? 0 : 16 }}>
@@ -1993,7 +2016,7 @@ const shortDate = (iso) => iso ? fromYmd(iso).toLocaleDateString('en-US', { mont
 // redesign replaces the LAYOUT, not the ability to edit a customer. It is hoisted
 // to module scope so it is one component type across renders rather than a new
 // one per keystroke.
-const CustomerEditForm = ({ draft, set, accounts, techs, plans, planOnDraft,
+const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, planOnDraft,
     prefTech, prefMissing, prefOptions, saving, status, onSave, onCancel }) => (
     <div style={{ maxWidth: 620 }}>
             <CustFieldRow label="Name *">
@@ -2017,7 +2040,12 @@ const CustomerEditForm = ({ draft, set, accounts, techs, plans, planOnDraft,
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <CustFieldRow label="Customer type">
                     <select value={draft.customerType || 'commercial'} onChange={e => set('customerType', e.target.value)} style={custInput}>
-                        {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
+                        {/* A type removed from settings must not fall through to the
+                            first option — that silently reassigns the customer. */}
+                        {draft.customerType && !(propertyTypes || []).some(t => t.id === draft.customerType) && (
+                            <option value={draft.customerType}>Unlisted type ({draft.customerType})</option>
+                        )}
+                        {(propertyTypes || []).filter(t => !t.unlisted).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                     </select>
                 </CustFieldRow>
                 <CustFieldRow label="Service plan">
@@ -2176,7 +2204,7 @@ const CustomerEditForm = ({ draft, set, accounts, techs, plans, planOnDraft,
     </div>
 );
 
-const CustomersView = ({ customers, accounts, techs, jobs, plans, servicePlans, onSaved, onScheduleJob, onGoToDue }) => {
+const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes, onSaved, onScheduleJob, onGoToDue }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
@@ -2305,7 +2333,8 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, servicePlans, 
     const startNew = () => {
         setSelectedId(null);
         setDraft({ _isNew: true, id: 'cust_' + crypto.randomUUID(), name: '', accountId: '',
-            contactName: '', contactPhone: '', contactEmail: '', customerType: 'commercial',
+            contactName: '', contactPhone: '', contactEmail: '',
+            customerType: (propertyTypes || [])[0]?.id || 'commercial',
             serviceAddress: '', serviceCity: '', serviceState: '', serviceZip: '',
             serviceAgreement: 'none', servicePlanId: '', planStartDate: '', preferredTechId: '',
             doNotService: false, doNotServiceReason: '', notes: '' });
@@ -2418,11 +2447,12 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, servicePlans, 
                     </FacetGroup>
 
                     <FacetGroup label="Property type">
-                        {CUSTOMER_TYPES.map(t => {
-                            const n = countExcluding('type', c => (c.customerType || 'commercial') === t);
-                            if (n === 0 && !showEmpty && !fTypes.has(t)) return null;
-                            return <CheckFacet key={t} label={labelise(t)} count={n} dim={n === 0}
-                                checked={fTypes.has(t)} onClick={() => toggle(setFTypes)(t)}/>;
+                        {(propertyTypes || []).map(t => {
+                            const n = countExcluding('type', c => (c.customerType || 'commercial') === t.id);
+                            if (n === 0 && !showEmpty && !fTypes.has(t.id)) return null;
+                            return <CheckFacet key={t.id} label={t.unlisted ? `${t.label} (unlisted)` : t.label}
+                                count={n} dim={n === 0}
+                                checked={fTypes.has(t.id)} onClick={() => toggle(setFTypes)(t.id)}/>;
                         })}
                     </FacetGroup>
 
@@ -2498,7 +2528,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, servicePlans, 
                                     <span style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.mono }}>{c.customerNumber || '—'}</span>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
-                                    <PlanBadge pres={p} small/><PropertyTag type={c.customerType}/>
+                                    <PlanBadge pres={p} small/><PropertyTag type={c.customerType} types={propertyTypes}/>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 11,
                                     color: T.inkMuted, fontFamily: T.sans, flexWrap: 'wrap' }}>
@@ -2518,6 +2548,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, servicePlans, 
                 <div style={{ minHeight: 0, overflow: 'auto', padding: '18px 24px 24px' }}>
                     {editing && draft ? (
                         <CustomerEditForm draft={draft} set={set} accounts={accounts} techs={techs} plans={plans}
+                            propertyTypes={propertyTypes}
                             planOnDraft={planOnDraft} prefTech={prefTech} prefMissing={prefMissing} prefOptions={prefOptions}
                             saving={saving} status={status} onSave={save}
                             onCancel={() => { setEditing(false); setDraft(null); setStatus(null); }}/>
@@ -2544,7 +2575,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, servicePlans, 
                                         color: T.inkMid, fontFamily: T.sans, flexWrap: 'wrap' }}>
                                         <span style={{ fontFamily: T.mono, fontSize: 11 }}>{selected.customerNumber || '—'}</span>
                                         <span>·</span>
-                                        <PropertyTag type={selected.customerType}/>
+                                        <PropertyTag type={selected.customerType} types={propertyTypes}/>
                                         {(selected.serviceAddress || selected.serviceCity) && <>
                                             <span>·</span>
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -4095,6 +4126,9 @@ export default function DispatchTab() {
         () => [...new Set(vehicles.map(v => (v.type || '').trim().toLowerCase()).filter(Boolean))].sort(),
         [vehicles]);
 
+    // Org-configured premises segments, plus any unlisted value still on a record.
+    const propertyTypes = useMemo(() => propertyTypesFor(settings, customers), [settings, customers]);
+
     // ── Service plan recurrence ───────────────────────────────────────────────
     // MUST stay below the state and derived values it closes over. `visitQueue`
     // is a useMemo, so it evaluates during render: declared any earlier it reads
@@ -4962,7 +4996,7 @@ export default function DispatchTab() {
                         onOpenJob={id => { setSelectedJobId(id); setView('queue'); }}
                         onOpenCustomer={() => setView('customers')}/>
                 ) : view === 'customers' ? (
-                    <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans}
+                    <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans} propertyTypes={propertyTypes}
                         onSaved={saved => setCustomers(prev => {
                             const i = prev.findIndex(c => c.id === saved.id);
                             if (i === -1) return [...prev, saved];
