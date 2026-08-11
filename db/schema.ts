@@ -723,7 +723,10 @@ export const dispatchEquipment = pgTable('dispatch_equipment', {
 // direct dispatch customers not yet in the CRM pipeline).
 //
 // customerType: 'residential' | 'commercial' | 'industrial' | 'municipal'
-// serviceAgreement: 'none' | 'basic' | 'premium' | 'enterprise'
+// serviceAgreement: LEGACY free varchar, superseded by servicePlanId. The UI wrote
+//   'none' | 'basic' | 'preferred' | 'premium' (which never matched the value set
+//   this comment used to claim). Retained as the record of pre-plan coverage;
+//   nothing decides on it any more.
 export const dispatchCustomers = pgTable('dispatch_customers', {
     id:                 text('id').primaryKey(),
     orgId:              text('org_id').notNull(),
@@ -744,6 +747,8 @@ export const dispatchCustomers = pgTable('dispatch_customers', {
     serviceZip:         varchar('service_zip', { length: 20 }),
     serviceAgreement:   varchar('service_agreement', { length: 30 }).default('none'),
     agreementExpiry:    varchar('agreement_expiry', { length: 20 }),
+    servicePlanId:      text('service_plan_id'),                      // FK → dispatch_service_plans.id
+    planStartDate:      varchar('plan_start_date', { length: 20 }),   // anchor for recurrence; agreementExpiry is the end
     preferredTechId:    text('preferred_tech_id'),                    // FK → dispatch_technicians.id
     doNotService:       boolean('do_not_service').default(false),
     doNotServiceReason: text('do_not_service_reason'),
@@ -757,6 +762,45 @@ export const dispatchCustomers = pgTable('dispatch_customers', {
     updatedAt:          timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('dispatch_customers_org_id_idx').on(t.orgId),
+]);
+
+// ── DISPATCH SERVICE PLANS ────────────────────────────────────────────────────
+// Maintenance / service agreements as records rather than a varchar label on the
+// customer. A plan answers WHAT is covered, HOW OFTEN, and ON WHAT COMMERCIAL
+// TERMS. It deliberately does NOT carry crew size, duration, skills or licence —
+// that is a job template's job, referenced here by visitTemplateId, so staffing
+// rules live in exactly one place.
+//
+// Scope decision: a plan is held by the CUSTOMER, not by a service location.
+// dispatch_service_locations exists and location-scoped coverage is a real case
+// (a property manager with different terms per site), so if that is ever needed
+// the migration is a nullable location_id on the join, not a reshape of this table.
+//
+// cadence: 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'custom'
+//   intervalDays is authoritative when cadence is 'custom'; for the named
+//   cadences it is derived on write so recurrence scheduling has one field to read.
+// billingPeriod: 'monthly' | 'quarterly' | 'annual' | 'per_visit'
+export const dispatchServicePlans = pgTable('dispatch_service_plans', {
+    id:               text('id').primaryKey(),
+    orgId:            text('org_id').notNull(),
+    name:             varchar('name', { length: 255 }).notNull(),     // e.g. "Gold PM — Quarterly"
+    description:      text('description'),
+    cadence:          varchar('cadence', { length: 20 }).notNull().default('annual'),
+    intervalDays:     integer('interval_days'),                       // derived from cadence unless custom
+    visitsPerYear:    integer('visits_per_year'),
+    visitTemplateId:  varchar('visit_template_id', { length: 50 }),   // → settings.dispatchJobTemplates[].id
+    coveredJobTypes:  jsonb('covered_job_types').default('[]'),       // string[] of dispatchJobTypes ids
+    includedHours:    decimal('included_hours', { precision: 6, scale: 2 }),
+    responseHours:    integer('response_hours'),                      // SLA: hours to respond
+    discountPercent:  decimal('discount_percent', { precision: 5, scale: 2 }),  // on work outside the plan
+    price:            decimal('price', { precision: 10, scale: 2 }),
+    billingPeriod:    varchar('billing_period', { length: 20 }).default('annual'),
+    active:           boolean('active').notNull().default(true),
+    notes:            text('notes'),
+    createdAt:        timestamp('created_at').notNull().defaultNow(),
+    updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+    index('dispatch_service_plans_org_id_idx').on(t.orgId),
 ]);
 
 // ── DISPATCH SERVICE LOCATIONS ────────────────────────────────────────────────

@@ -1564,7 +1564,11 @@ const MonthBoardView = ({ jobs, techs, anchor, onJobClick, onPickDay }) => {
 // Deliberately no delete: a customer with jobs would orphan dispatch_jobs.customerId
 // (an FK with no cascade). Use "Do not service" to retire a customer instead.
 const CUSTOMER_TYPES = ['commercial', 'residential', 'industrial', 'government'];
-const AGREEMENTS     = ['none', 'basic', 'preferred', 'premium'];
+// AGREEMENTS was the hardcoded coverage vocabulary. Coverage is now a
+// dispatch_service_plans row (see coverageOf), so this list no longer decides
+// anything — it is kept only to label pre-plan `serviceAgreement` values that
+// still exist on customer records.
+const LEGACY_AGREEMENTS = ['none', 'basic', 'preferred', 'premium'];
 
 const CustFieldRow = ({ label, children }) => (
     <div style={{ marginBottom: 12 }}>
@@ -1596,6 +1600,24 @@ const EXPIRY_BUCKETS = [
     { id: 'none',    label: 'No agreement' },
 ];
 
+// Coverage has two eras. `servicePlanId` points at a dispatch_service_plans row;
+// `serviceAgreement` is the pre-plan varchar label, kept because it is the only
+// record of what a customer was on before plans existed. A customer on neither is
+// uncovered; a customer on the legacy string alone is covered but unmapped, and
+// that state is shown rather than quietly treated as "no plan".
+const coverageOf = (c, plans) => {
+    if (c.servicePlanId) {
+        const plan = (plans || []).find(p => p.id === c.servicePlanId);
+        return plan
+            ? { kind: 'plan', id: plan.id, label: plan.name, plan }
+            : { kind: 'missing', id: c.servicePlanId, label: 'Unknown plan', plan: null };
+    }
+    if (c.serviceAgreement && c.serviceAgreement !== 'none') {
+        return { kind: 'legacy', id: 'legacy:' + c.serviceAgreement, label: labelise(c.serviceAgreement), plan: null };
+    }
+    return { kind: 'none', id: 'none', label: 'No plan', plan: null };
+};
+
 const custStats = (customer, jobs, todayStr) => {
     const mine = (jobs || []).filter(j => j.customerId === customer.id && j.status !== 'cancelled');
     const done = mine.filter(j => j.status === 'completed');
@@ -1620,8 +1642,8 @@ const activityBucket = (st) => {
 // Agreement expiry is a plain 'YYYY-MM-DD' string, so string comparison is a
 // valid ordering and avoids constructing a Date per customer per render.
 const expiryBucket = (c, todayStr, soonStr) => {
-    const agreement = c.serviceAgreement && c.serviceAgreement !== 'none';
-    if (!agreement) return 'none';
+    const covered = !!c.servicePlanId || (c.serviceAgreement && c.serviceAgreement !== 'none');
+    if (!covered) return 'none';
     if (!c.agreementExpiry) return null;              // covered, no end date recorded
     if (c.agreementExpiry < todayStr) return 'expired';
     if (c.agreementExpiry <= soonStr) return 'soon';
@@ -1642,14 +1664,14 @@ const FilterChip = ({ label, count, active, onClick, tone }) => (
     </span>
 );
 
-const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
+const CustomersView = ({ customers, accounts, techs, jobs, plans, onSaved }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
     const [saving,     setSaving]     = React.useState(false);
     const [status,     setStatus]     = React.useState(null);
 
-    const [fAgreement, setFAgreement] = React.useState(null);
+    const [fCoverage,  setFCoverage]  = React.useState(null);
     const [fType,      setFType]      = React.useState(null);
     const [fActivity,  setFActivity]  = React.useState(null);
     const [fExpiry,    setFExpiry]    = React.useState(null);
@@ -1669,7 +1691,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
     const q = query.trim().toLowerCase();
     const matches = (c) => {
         if (q && !((c.name || '').toLowerCase().includes(q) || (c.customerNumber || '').toLowerCase().includes(q))) return false;
-        if (fAgreement && (c.serviceAgreement || 'none') !== fAgreement) return false;
+        if (fCoverage && coverageOf(c, plans).id !== fCoverage) return false;
         if (fType      && (c.customerType || 'commercial') !== fType) return false;
         if (fActivity  && activityBucket(stats[c.id] || { upcoming: 0, completed: 0 }) !== fActivity) return false;
         if (fExpiry    && expiryBucket(c, todayStr, soonStr) !== fExpiry) return false;
@@ -1688,7 +1710,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
     }).length;
 
     const groupKey = (c) => {
-        if (groupBy === 'agreement') return labelise(c.serviceAgreement || 'none');
+        if (groupBy === 'agreement') return coverageOf(c, plans).label;
         if (groupBy === 'type')      return labelise(c.customerType || 'commercial');
         if (groupBy === 'activity')  return (ACTIVITY_BUCKETS.find(b => b.id === activityBucket(stats[c.id] || { upcoming: 0, completed: 0 })) || {}).label || '—';
         return null;
@@ -1706,8 +1728,24 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [list, groupBy, stats]);
 
-    const anyFilter = !!(fAgreement || fType || fActivity || fExpiry);
-    const clearFilters = () => { setFAgreement(null); setFType(null); setFActivity(null); setFExpiry(null); };
+    const anyFilter = !!(fCoverage || fType || fActivity || fExpiry);
+    const clearFilters = () => { setFCoverage(null); setFType(null); setFActivity(null); setFExpiry(null); };
+
+    // Every coverage state present in the data — active plans, plus any legacy
+    // label or dangling plan id still in use. Built from the customers rather than
+    // from the plan list so an unmapped legacy tier cannot become unfilterable.
+    const coverageOptions = React.useMemo(() => {
+        const seen = new Map();
+        (customers || []).forEach(c => {
+            const cov = coverageOf(c, plans);
+            if (!seen.has(cov.id)) seen.set(cov.id, cov);
+        });
+        (plans || []).filter(p => p.active !== false).forEach(p => {
+            if (!seen.has(p.id)) seen.set(p.id, { kind: 'plan', id: p.id, label: p.name, plan: p });
+        });
+        const order = { plan: 0, legacy: 1, missing: 2, none: 3 };
+        return [...seen.values()].sort((a, b) => (order[a.kind] - order[b.kind]) || a.label.localeCompare(b.label));
+    }, [customers, plans]);
 
     const selected = (customers || []).find(c => c.id === selectedId) || null;
 
@@ -1722,6 +1760,8 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
     // Preferred technician. Inactive and on-leave techs stay selectable — the
     // preference outlives a leave of absence — but are labelled, and an id that
     // resolves to nobody is surfaced rather than silently dropped on next save.
+    const planOnDraft = draft && draft.servicePlanId ? (plans || []).find(p => p.id === draft.servicePlanId) : null;
+
     const prefTech    = draft && draft.preferredTechId ? (techs || []).find(t => t.id === draft.preferredTechId) : null;
     const prefMissing = !!(draft && draft.preferredTechId) && !prefTech;
     const prefOptions = (techs || [])
@@ -1734,7 +1774,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
         setDraft({ id: 'dcust_' + crypto.randomUUID(), _isNew: true, name: '', accountId: '',
             customerType: 'commercial', contactName: '', contactPhone: '', contactEmail: '',
             serviceAddress: '', serviceCity: '', serviceState: '', serviceZip: '',
-            serviceAgreement: 'none', preferredTechId: '', doNotService: false, doNotServiceReason: '', notes: '' });
+            serviceAgreement: 'none', servicePlanId: '', planStartDate: '', preferredTechId: '', doNotService: false, doNotServiceReason: '', notes: '' });
     };
 
     const copyFromAccount = () => {
@@ -1754,7 +1794,9 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
             // Empty string is not "no preference" to the server: POST stores
             // `data.preferredTechId ?? null`, so '' would be written verbatim.
             const body = { ...draft, name: draft.name.trim(), accountId: draft.accountId || null,
-                preferredTechId: draft.preferredTechId || null };
+                preferredTechId: draft.preferredTechId || null,
+                servicePlanId:   draft.servicePlanId   || null,
+                planStartDate:   draft.planStartDate   || null };
             delete body._isNew;
             delete body.customerNumber;   // server-assigned and immutable
 
@@ -1805,10 +1847,11 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
                     </div>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-                        {AGREEMENTS.map(a => (
-                            <FilterChip key={a} label={labelise(a)} active={fAgreement === a}
-                                count={countBy(c => (c.serviceAgreement || 'none') === a)}
-                                onClick={() => setFAgreement(fAgreement === a ? null : a)}/>
+                        {coverageOptions.map(cov => (
+                            <FilterChip key={cov.id} label={cov.label} active={fCoverage === cov.id}
+                                tone={cov.kind === 'missing' ? T.danger : cov.kind === 'legacy' ? T.warn : undefined}
+                                count={countBy(c => coverageOf(c, plans).id === cov.id)}
+                                onClick={() => setFCoverage(fCoverage === cov.id ? null : cov.id)}/>
                         ))}
                     </div>
 
@@ -1876,7 +1919,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
                             {g.rows.map(c => {
                                 const st  = stats[c.id] || { total: 0, completed: 0, lastServed: null, upcoming: 0, nextDate: null };
                                 const exp = expiryBucket(c, todayStr, soonStr);
-                                const plan = (c.serviceAgreement && c.serviceAgreement !== 'none') ? c.serviceAgreement : null;
+                                const cov = coverageOf(c, plans);
                                 return (
                                     <div key={c.id} onClick={() => setSelectedId(c.id)}
                                         style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
@@ -1887,7 +1930,9 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
                                         </div>
                                         <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                                             <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{labelise(c.customerType || 'commercial')}</span>
-                                            {plan && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.info}14`, color: T.info, fontWeight: 700 }}>{labelise(plan)}</span>}
+                                            {cov.kind === 'plan' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.info}14`, color: T.info, fontWeight: 700 }}>{cov.label}</span>}
+                                            {cov.kind === 'legacy' && <span title="Legacy agreement label — not yet mapped to a service plan" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>{cov.label} · unmapped</span>}
+                                            {cov.kind === 'missing' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>plan deleted</span>}
                                             {c.accountId
                                                 ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.ok}14`, color: T.ok, fontWeight: 700 }}>linked</span>
                                                 : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>unlinked</span>}
@@ -1937,7 +1982,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
                                         { l: 'Jobs completed', v: String(st.completed) },
                                         { l: 'Last served',    v: st.lastServed ? `${st.lastServed}${gap != null ? ` (${gap}d)` : ''}` : 'Never' },
                                         { l: 'Upcoming',       v: st.upcoming > 0 ? `${st.upcoming} · ${st.nextDate}` : 'None' },
-                                        { l: 'Plan',           v: (draft.serviceAgreement && draft.serviceAgreement !== 'none') ? labelise(draft.serviceAgreement) : 'None' },
+                                        { l: 'Plan',           v: coverageOf(draft, plans).label },
                                     ].map(x => (
                                         <div key={x.l}>
                                             <div style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3, fontFamily: T.sans }}>{x.l}</div>
@@ -1979,22 +2024,66 @@ const CustomersView = ({ customers, accounts, techs, jobs, onSaved }) => {
                                     {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
                                 </select>
                             </CustFieldRow>
-                            <CustFieldRow label="Service agreement">
-                                <select value={draft.serviceAgreement || 'none'} onChange={e => set('serviceAgreement', e.target.value)} style={custInput}>
-                                    {AGREEMENTS.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
+                            <CustFieldRow label="Service plan">
+                                <select value={draft.servicePlanId || ''} onChange={e => set('servicePlanId', e.target.value || null)} style={custInput}>
+                                    <option value="">— No plan —</option>
+                                    {/* A deleted plan must not fall through to "No plan":
+                                        that clears real coverage on the next save. */}
+                                    {draft.servicePlanId && !(plans || []).some(p => p.id === draft.servicePlanId) && (
+                                        <option value={draft.servicePlanId}>Deleted plan ({draft.servicePlanId})</option>
+                                    )}
+                                    {(plans || [])
+                                        .filter(p => p.active !== false || p.id === draft.servicePlanId)
+                                        .map(p => (
+                                            <option key={p.id} value={p.id}>
+                                                {p.name}{p.active === false ? ' (inactive)' : ''}
+                                            </option>
+                                        ))}
                                 </select>
+                                {planOnDraft && (
+                                    <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                        {[
+                                            planOnDraft.visitsPerYear ? `${planOnDraft.visitsPerYear} visit${planOnDraft.visitsPerYear === 1 ? '' : 's'}/yr` : null,
+                                            planOnDraft.includedHours ? `${planOnDraft.includedHours} hrs included` : null,
+                                            planOnDraft.responseHours ? `${planOnDraft.responseHours}h response` : null,
+                                        ].filter(Boolean).join(' · ') || 'No terms recorded on this plan.'}
+                                    </div>
+                                )}
                             </CustFieldRow>
                         </div>
 
-                        {/* agreementExpiry has existed on the record since the table was
-                            created with no control to set it, so every renewal warning
-                            was unreachable. */}
+                        {/* Legacy coverage. `serviceAgreement` predates plans and is the
+                            only record of what this customer was on beforehand, so it is
+                            shown rather than silently overwritten when a plan is chosen. */}
+                        {draft.serviceAgreement && draft.serviceAgreement !== 'none' && (
+                            <div style={{ padding: '7px 10px', marginBottom: 12, borderRadius: T.r,
+                                background: draft.servicePlanId ? T.surface2 : `${T.warn}12`,
+                                borderLeft: `3px solid ${draft.servicePlanId ? T.borderStrong : T.warn}`,
+                                fontSize: 11.5, fontFamily: T.sans, color: T.inkMid }}>
+                                Legacy agreement label: <strong style={{ color: T.ink }}>{labelise(draft.serviceAgreement)}</strong>
+                                {draft.servicePlanId
+                                    ? ' — superseded by the plan above, kept for reference.'
+                                    : ' — not yet mapped to a service plan. Pick one above, or leave it if this customer is genuinely uncovered.'}
+                                {' '}
+                                <span onClick={() => set('serviceAgreement', 'none')}
+                                    style={{ color: T.info, fontWeight: 600, cursor: 'pointer' }}>Clear label</span>
+                            </div>
+                        )}
+
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <CustFieldRow label="Agreement expires">
+                            <CustFieldRow label="Plan starts">
+                                <input type="date" value={draft.planStartDate || ''}
+                                    onChange={e => set('planStartDate', e.target.value || null)}
+                                    disabled={!draft.servicePlanId}
+                                    style={{ ...custInput, opacity: draft.servicePlanId ? 1 : 0.5 }}/>
+                            </CustFieldRow>
+                            {/* agreementExpiry existed on the record from the start with no
+                                control to set it, so every renewal warning was unreachable. */}
+                            <CustFieldRow label="Coverage ends">
                                 <input type="date" value={draft.agreementExpiry || ''}
                                     onChange={e => set('agreementExpiry', e.target.value || null)}
-                                    disabled={!draft.serviceAgreement || draft.serviceAgreement === 'none'}
-                                    style={{ ...custInput, opacity: (!draft.serviceAgreement || draft.serviceAgreement === 'none') ? 0.5 : 1 }}/>
+                                    disabled={coverageOf(draft, plans).kind === 'none'}
+                                    style={{ ...custInput, opacity: coverageOf(draft, plans).kind === 'none' ? 0.5 : 1 }}/>
                             </CustFieldRow>
                         </div>
 
@@ -3487,6 +3576,7 @@ export default function DispatchTab() {
     const [massSaving, setMassSaving] = useState(false);
     const [massProg,   setMassProg]   = useState({ done: 0, total: 0, failed: 0 });
     const [equipment,  setEquipment]  = useState([]);   // dispatch_equipment rows — one per physical unit
+    const [servicePlans, setServicePlans] = useState([]);
     const [customers,  setCustomers]  = useState([]);
     const [loading,    setLoading]    = useState(true);
     const [loadError,  setLoadError]  = useState('');
@@ -3535,13 +3625,14 @@ export default function DispatchTab() {
                 // Wait for Clerk JWT to be available before hitting DB
                 await waitForToken();
 
-                const [techsRes, vehiclesRes, equipRes, custsRes, jobsRes, blocksRes] = await Promise.all([
+                const [techsRes, vehiclesRes, equipRes, custsRes, jobsRes, blocksRes, plansRes] = await Promise.all([
                     dbFetch('/.netlify/functions/dispatch-technicians'),
                     dbFetch('/.netlify/functions/dispatch-vehicles'),
                     dbFetch('/.netlify/functions/dispatch-equipment'),
                     dbFetch('/.netlify/functions/dispatch-customers'),
                     dbFetch('/.netlify/functions/dispatch-jobs'),
                     dbFetch('/.netlify/functions/dispatch-schedule-blocks'),
+                    dbFetch('/.netlify/functions/dispatch-service-plans'),
                 ]);
 
                 if (cancelled) return;
@@ -3553,19 +3644,21 @@ export default function DispatchTab() {
                 const failed = [
                     ['technicians', techsRes], ['vehicles', vehiclesRes], ['equipment', equipRes],
                     ['customers', custsRes],   ['jobs', jobsRes], ['schedule', blocksRes],
+                    ['service plans', plansRes],
                 ].filter(([, r]) => !r.ok);
                 if (failed.length) {
                     const detail = failed.map(([n, r]) => `${n} (${r.status})`).join(', ');
                     throw new Error(`Dispatch data failed to load: ${detail}`);
                 }
 
-                const [techsData, vehiclesData, equipData, custsData, jobsData, blocksData] = await Promise.all([
+                const [techsData, vehiclesData, equipData, custsData, jobsData, blocksData, plansData] = await Promise.all([
                     techsRes.json(),
                     vehiclesRes.json(),
                     equipRes.json(),
                     custsRes.json(),
                     jobsRes.json(),
                     blocksRes.json(),
+                    plansRes.json(),
                 ]);
 
                 // Normalise technicians — map DB fields to what BoardView/CrewBuilder expect
@@ -3668,6 +3761,7 @@ export default function DispatchTab() {
                 setTechsRaw(techsData.technicians || []);
                 setVehicles(vehiclesData.vehicles  || []);
                 setEquipment(equipData.equipment   || []);
+                setServicePlans(plansData.plans    || []);
                 setCustomers(custsData.customers   || []);
                 setJobs([...normJobs, ...autoJobs]);
                 setJobsRaw(dbJobs);
@@ -4305,7 +4399,7 @@ export default function DispatchTab() {
                             });
                         }}/>
                 ) : view === 'customers' ? (
-                    <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs}
+                    <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans}
                         onSaved={saved => setCustomers(prev => {
                             const i = prev.findIndex(c => c.id === saved.id);
                             if (i === -1) return [...prev, saved];
