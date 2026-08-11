@@ -3758,6 +3758,47 @@ export default function DispatchTab() {
     // second template — restore rather than compound.
     const [appliedTemplate, setAppliedTemplate] = useState(null);
 
+    // ── DB-backed state ───────────────────────────────────────────────────────
+    const [jobs,       setJobs]       = useState([]);
+    const [techs,      setTechs]      = useState([]);
+    const [vehicles,   setVehicles]   = useState([]);
+    // Raw technician rows (userId, rates, notes) for the Technicians editor.
+    const [techsRaw,   setTechsRaw]   = useState([]);
+    const [jobsRaw,    setJobsRaw]    = useState([]);
+    const [techBusyId, setTechBusyId] = useState(null);
+    const [blocks,     setBlocks]     = useState([]);
+    const [schedAnchor, setSchedAnchor] = useState(() => new Date());
+    const [massPlan,   setMassPlan]   = useState(null);   // { proposals, skipped, fromStr, toStr }
+    const [massSaving, setMassSaving] = useState(false);
+    const [massProg,   setMassProg]   = useState({ done: 0, total: 0, failed: 0 });
+    const [equipment,  setEquipment]  = useState([]);   // dispatch_equipment rows — one per physical unit
+    const [servicePlans, setServicePlans] = useState([]);
+    const [customers,  setCustomers]  = useState([]);
+    const [loading,    setLoading]    = useState(true);
+    const [loadError,  setLoadError]  = useState('');
+
+    // ── Config from settings.extra (not record-level data) ───────────────────
+    const skills    = settings?.dispatchSkills   || [];
+
+    const crews     = settings?.dispatchCrews    || [];
+    const licLevels = settings?.dispatchLicenses || ['Apprentice', 'Journeyman', 'Master', 'Lead'];
+    // Requirement vocabulary, derived from the equipment table rather than stored
+    // separately — a category exists exactly when a unit carries it.
+    const equipCategories = useMemo(
+        () => [...new Set(equipment.map(e => (e.category || '').trim()).filter(Boolean))].sort(),
+        [equipment]);
+    // Requirable vehicle classes are the ones actually in the fleet. Offering a
+    // class nobody owns would only ever produce a job no technician can serve.
+    const vehicleTypes = useMemo(
+        () => [...new Set(vehicles.map(v => (v.type || '').trim().toLowerCase()).filter(Boolean))].sort(),
+        [vehicles]);
+
+    // ── Service plan recurrence ───────────────────────────────────────────────
+    // MUST stay below the state and derived values it closes over. `visitQueue`
+    // is a useMemo, so it evaluates during render: declared any earlier it reads
+    // `servicePlans` / `customers` / `jobs` in their temporal dead zone. Vite's
+    // dev bundle tolerates that; the minified production build throws
+    // "Cannot access 'X' before initialization" and the whole tab fails to mount.
     // ISO date. Deliberately not the `todayStr` further down this component, which
     // is a human-readable label ("Mon, Aug 10") used in the board header — string
     // comparison against a plan due date needs YYYY-MM-DD.
@@ -3800,41 +3841,6 @@ export default function DispatchTab() {
         setNewJobError(tmpl ? '' : 'This plan has no visit template, so crew, duration and skills are unset.');
         setShowNewJobForm(true);
     };
-
-    // ── DB-backed state ───────────────────────────────────────────────────────
-    const [jobs,       setJobs]       = useState([]);
-    const [techs,      setTechs]      = useState([]);
-    const [vehicles,   setVehicles]   = useState([]);
-    // Raw technician rows (userId, rates, notes) for the Technicians editor.
-    const [techsRaw,   setTechsRaw]   = useState([]);
-    const [jobsRaw,    setJobsRaw]    = useState([]);
-    const [techBusyId, setTechBusyId] = useState(null);
-    const [blocks,     setBlocks]     = useState([]);
-    const [schedAnchor, setSchedAnchor] = useState(() => new Date());
-    const [massPlan,   setMassPlan]   = useState(null);   // { proposals, skipped, fromStr, toStr }
-    const [massSaving, setMassSaving] = useState(false);
-    const [massProg,   setMassProg]   = useState({ done: 0, total: 0, failed: 0 });
-    const [equipment,  setEquipment]  = useState([]);   // dispatch_equipment rows — one per physical unit
-    const [servicePlans, setServicePlans] = useState([]);
-    const [customers,  setCustomers]  = useState([]);
-    const [loading,    setLoading]    = useState(true);
-    const [loadError,  setLoadError]  = useState('');
-
-    // ── Config from settings.extra (not record-level data) ───────────────────
-    const skills    = settings?.dispatchSkills   || [];
-
-    const crews     = settings?.dispatchCrews    || [];
-    const licLevels = settings?.dispatchLicenses || ['Apprentice', 'Journeyman', 'Master', 'Lead'];
-    // Requirement vocabulary, derived from the equipment table rather than stored
-    // separately — a category exists exactly when a unit carries it.
-    const equipCategories = useMemo(
-        () => [...new Set(equipment.map(e => (e.category || '').trim()).filter(Boolean))].sort(),
-        [equipment]);
-    // Requirable vehicle classes are the ones actually in the fleet. Offering a
-    // class nobody owns would only ever produce a job no technician can serve.
-    const vehicleTypes = useMemo(
-        () => [...new Set(vehicles.map(v => (v.type || '').trim().toLowerCase()).filter(Boolean))].sort(),
-        [vehicles]);
 
     // ── Filter state ──────────────────────────────────────────────────────────
     const [filterSkill,   setFilterSkill]   = useState(null);
