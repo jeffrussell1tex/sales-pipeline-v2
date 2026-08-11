@@ -62,6 +62,8 @@ const shiftForDate = (tech, dateStr) => {
 const blocksOnDate = (blocks, techId, dateStr) =>
     (blocks || []).filter(b => b.techId === techId && b.startDate <= dateStr && b.endDate >= dateStr);
 
+const addDaysStr = (str, n) => { const d = fromYmd(str); d.setDate(d.getDate() + n); return ymd(d); };
+
 const hhToNum = (t) => { const [h, m] = String(t || '').split(':').map(Number); return (h || 0) + (m || 0) / 60; };
 
 // Weekly capacity implied by the shift pattern. Falls back to 40 only when no
@@ -1583,6 +1585,190 @@ const custInput = {
     fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none',
 };
 
+// ── Service plan recurrence ──────────────────────────────────────────────────
+// Visits are COMPUTED, not generated. Nothing is written until a dispatcher acts
+// on a due visit, so a plan running for years costs one pass over that customer's
+// plan jobs rather than a table full of speculative future rows.
+//
+// `leadDays` on the plan is the only thing that decides when work becomes
+// visible: an occurrence surfaces in the Service Due queue once it is within that
+// many days of falling due.
+const MAX_OCCURRENCES = 400;   // guard against a pathological interval, not a real limit
+
+const planVisitState = (customer, plan, jobs, todayStr) => {
+    if (!plan)                 return { state: 'none' };
+    if (plan.active === false) return { state: 'inactive' };
+    if (customer.doNotService) return { state: 'blocked', reason: 'Customer is marked do-not-service' };
+
+    const interval = parseInt(plan.intervalDays, 10);
+    if (!Number.isFinite(interval) || interval <= 0)
+        return { state: 'unconfigured', reason: 'This plan has no visit interval' };
+    if (!customer.planStartDate)
+        return { state: 'unconfigured', reason: 'No plan start date on this customer' };
+
+    const mine = (jobs || []).filter(j =>
+        j.customerId === customer.id && j.servicePlanId === plan.id && j.status !== 'cancelled');
+
+    // Only a COMPLETED job retires an occurrence. A scheduled one means the visit
+    // is in hand but still outstanding — retiring it would advance the pointer and
+    // hide the very visit that is about to happen.
+    const doneOn = new Set(mine.filter(j => j.status === 'completed').map(j => j.planDueDate).filter(Boolean));
+    const openOn = new Map();
+    mine.filter(j => j.status !== 'completed' && j.planDueDate).forEach(j => {
+        if (!openOn.has(j.planDueDate)) openOn.set(j.planDueDate, j);
+    });
+
+    const coverageEnd = customer.agreementExpiry || null;
+    let due;
+    let missed = 0;
+
+    if (plan.anchorMode === 'rolling') {
+        // Interval runs from when the unit was actually serviced, so a late visit
+        // pushes everything after it. Only ever one outstanding occurrence.
+        const completed = mine.filter(j => j.status === 'completed' && j.scheduledDate)
+            .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+        const last = completed[completed.length - 1];
+        due = last ? addDaysStr(last.scheduledDate, interval) : customer.planStartDate;
+    } else {
+        // Fixed contract grid: occurrences sit on planStart + n x interval whatever
+        // actually happened, so four visits a contract year stay four. Missed ones
+        // accumulate and are counted rather than silently skipped.
+        let cur = customer.planStartDate;
+        const outstanding = [];
+        for (let i = 0; i < MAX_OCCURRENCES; i++) {
+            if (!doneOn.has(cur)) {
+                outstanding.push(cur);
+                if (cur > todayStr) break;
+            }
+            if (coverageEnd && cur > coverageEnd) break;
+            cur = addDaysStr(cur, interval);
+        }
+        if (!outstanding.length) return { state: 'upToDate' };
+        due    = outstanding[0];
+        missed = Math.max(0, outstanding.filter(d => d < todayStr).length - 1);
+    }
+
+    if (coverageEnd && due > coverageEnd) return { state: 'ended', due, coverageEnd };
+
+    const open = openOn.get(due);
+    if (open) return { state: 'scheduled', due, job: open, missed };
+
+    const lead = Number.isFinite(parseInt(plan.leadDays, 10)) ? parseInt(plan.leadDays, 10) : 14;
+    const daysUntil = daysBetween(todayStr, due);
+    if (daysUntil < 0)     return { state: 'overdue',  due, daysUntil, missed };
+    if (daysUntil <= lead) return { state: 'due',      due, daysUntil, missed };
+    return { state: 'upcoming', due, daysUntil, missed };
+};
+
+// Only these reach the queue. 'upcoming' is deliberately excluded — that is the
+// whole point of leadDays; surfacing everything would make the queue a customer
+// list rather than a work list.
+const ACTIONABLE_VISIT_STATES = ['overdue', 'due'];
+
+const buildVisitQueue = (customers, plans, jobs, todayStr) =>
+    (customers || [])
+        .map(c => {
+            const plan = (plans || []).find(p => p.id === c.servicePlanId);
+            if (!plan) return null;
+            const st = planVisitState(c, plan, jobs, todayStr);
+            return { customer: c, plan, ...st };
+        })
+        .filter(r => r && (ACTIONABLE_VISIT_STATES.includes(r.state) || r.state === 'scheduled'))
+        .sort((a, b) => (a.due || '').localeCompare(b.due || ''));
+
+// ── Service Due ──────────────────────────────────────────────────────────────
+// Plan visits inside their lead window, plus any already scheduled so the queue
+// reads as the full picture rather than only the outstanding half. Every row is
+// computed; nothing here exists in the database until "Create visit" is used.
+const VISIT_TONE = {
+    overdue:   { bg: 'danger', label: 'Overdue' },
+    due:       { bg: 'warn',   label: 'Due' },
+    scheduled: { bg: 'ok',     label: 'Scheduled' },
+};
+
+const ServiceDueView = ({ rows, today, onStart, onOpenJob, onOpenCustomer }) => {
+    const tone = (k) => ({ danger: T.danger, warn: T.warn, ok: T.ok }[k] || T.inkMuted);
+    const outstanding = rows.filter(r => r.state === 'overdue' || r.state === 'due');
+    const booked      = rows.filter(r => r.state === 'scheduled');
+
+    return (
+        <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Service due</span>
+                <span style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                    {outstanding.length} to book{booked.length ? ` · ${booked.length} already scheduled` : ''}
+                </span>
+            </div>
+            <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans, marginBottom: 14 }}>
+                A visit appears here once it is within its plan&rsquo;s lead window. Change how early that happens
+                under Settings &rarr; Dispatch &rarr; Service plans.
+            </div>
+
+            {rows.length === 0 && (
+                <div style={{ padding: '18px 2px', fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>
+                    Nothing due. Customers on a plan will appear as their next visit comes into range.
+                </div>
+            )}
+
+            {rows.map(r => {
+                const t = VISIT_TONE[r.state] || VISIT_TONE.due;
+                const when = r.state === 'overdue'
+                    ? `${Math.abs(r.daysUntil)} day${Math.abs(r.daysUntil) === 1 ? '' : 's'} overdue`
+                    : r.state === 'due'
+                        ? (r.daysUntil === 0 ? 'due today' : `in ${r.daysUntil} day${r.daysUntil === 1 ? '' : 's'}`)
+                        : 'booked';
+                return (
+                    <div key={`${r.customer.id}:${r.due}`}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px',
+                            border: `1px solid ${T.border}`, borderLeft: `3px solid ${tone(t.bg)}`,
+                            borderRadius: T.r, marginBottom: 8, background: T.surface }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span onClick={onOpenCustomer}
+                                    style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans, cursor: 'pointer' }}>
+                                    {r.customer.name}
+                                </span>
+                                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, fontWeight: 700,
+                                    background: `${tone(t.bg)}14`, color: tone(t.bg), fontFamily: T.sans }}>{t.label}</span>
+                                {r.missed > 0 && (
+                                    <span title="Earlier occurrences on this plan were never completed"
+                                        style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, fontWeight: 700,
+                                            background: `${T.danger}14`, color: T.danger, fontFamily: T.sans }}>
+                                        {r.missed} earlier visit{r.missed === 1 ? '' : 's'} missed
+                                    </span>
+                                )}
+                            </div>
+                            <div style={{ marginTop: 3, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                {r.plan.name}
+                                <span style={{ fontFamily: T.mono, marginLeft: 8 }}>due {r.due}</span>
+                                <span style={{ marginLeft: 8 }}>· {when}</span>
+                                {r.customer.customerNumber && (
+                                    <span style={{ fontFamily: T.mono, marginLeft: 8, opacity: 0.7 }}>{r.customer.customerNumber}</span>
+                                )}
+                            </div>
+                        </div>
+                        {r.state === 'scheduled' ? (
+                            <button onClick={() => onOpenJob(r.job.id)}
+                                style={{ padding: '6px 12px', background: T.surface, border: `1px solid ${T.borderStrong}`,
+                                    borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.inkMid,
+                                    cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                                Open job
+                            </button>
+                        ) : (
+                            <button onClick={() => onStart(r)}
+                                style={{ padding: '6px 12px', background: T.ink, color: '#fbf8f3', border: 'none',
+                                    borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                                    fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                                Create visit
+                            </button>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 // ── Dispatch customer segmentation ───────────────────────────────────────────
 // Service history is derived from jobs rather than stored on the customer: a
 // denormalised "jobCount" would need maintaining on every job write and would be
@@ -2075,7 +2261,16 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, onSaved }) => 
                                 <input type="date" value={draft.planStartDate || ''}
                                     onChange={e => set('planStartDate', e.target.value || null)}
                                     disabled={!draft.servicePlanId}
-                                    style={{ ...custInput, opacity: draft.servicePlanId ? 1 : 0.5 }}/>
+                                    style={{ ...custInput, opacity: draft.servicePlanId ? 1 : 0.5,
+                                        border: (draft.servicePlanId && !draft.planStartDate) ? `1px solid ${T.warn}` : undefined }}/>
+                                {/* This date is the anchor every visit is counted from. Without
+                                    it the customer is simply absent from Service Due — silently,
+                                    which is exactly the failure mode worth shouting about. */}
+                                {draft.servicePlanId && !draft.planStartDate && (
+                                    <div style={{ marginTop: 5, fontSize: 11, color: T.warn, fontFamily: T.sans }}>
+                                        Required — visits are counted from this date. Without it no visit will ever come due.
+                                    </div>
+                                )}
                             </CustFieldRow>
                             {/* agreementExpiry existed on the record from the start with no
                                 control to set it, so every renewal warning was unreachable. */}
@@ -3555,12 +3750,56 @@ export default function DispatchTab() {
     // customerId is the FK the server requires; `customer` is only the typed text.
     const EMPTY_JOB = { customer: '', customerId: '', accountId: '', title: '', trade: '', jobType: '', address: '', city: '', state: '', zip: '',
         window: '', priority: 'normal', crewSize: 1, durationHrs: 2, minLicense: 'Journeyman',
-        opportunityId: '', needSkills: [], equipCategories: [], requiredVehicleType: '' };
+        opportunityId: '', needSkills: [], equipCategories: [], requiredVehicleType: '',
+        servicePlanId: '', planDueDate: '' };
     const [newJobForm, setNewJobForm] = useState(EMPTY_JOB);
     // { id, name, applied[], skipped[], equip, prevForm }. prevForm is the form
     // as it stood before the template was applied, so Undo — and switching to a
     // second template — restore rather than compound.
     const [appliedTemplate, setAppliedTemplate] = useState(null);
+
+    // ISO date. Deliberately not the `todayStr` further down this component, which
+    // is a human-readable label ("Mon, Aug 10") used in the board header — string
+    // comparison against a plan due date needs YYYY-MM-DD.
+    const todayYmd = useMemo(() => ymd(new Date()), []);
+
+    // Recomputed from jobs, so completing a visit moves the queue on immediately
+    // without anything having to be written back to the customer or the plan.
+    const visitQueue = useMemo(
+        () => buildVisitQueue(customers, servicePlans, jobs, todayYmd),
+        [customers, servicePlans, jobs, todayYmd]);
+    const visitsActionable = visitQueue.filter(r => r.state === 'overdue' || r.state === 'due').length;
+
+    // Opens New Job pre-filled for a plan occurrence. The visit is materialised
+    // only here — planDueDate records WHICH occurrence it satisfies, which is what
+    // stops a visit run three weeks late from looking like the next one.
+    const startPlanVisit = (row) => {
+        const cust = row.customer;
+        const tmpl = (settings?.dispatchJobTemplates || []).find(t => t.id === row.plan.visitTemplateId);
+        let form = {
+            ...EMPTY_JOB,
+            customer:      cust.name || '',
+            customerId:    cust.id,
+            accountId:     cust.accountId || '',
+            title:         `${row.plan.name} visit`,
+            address:       cust.address || '', city: cust.city || '',
+            state:         cust.state   || '', zip:  cust.zip  || '',
+            servicePlanId: row.plan.id,
+            planDueDate:   row.due,
+            window:        row.due,
+        };
+        let note = null;
+        if (tmpl) {
+            const { next, applied, skipped } = applyJobTemplate(form, tmpl, { skills, licLevels, equipCategories, vehicleTypes });
+            form = next;
+            note = { id: tmpl.id, name: templateLabel(tmpl), applied, skipped,
+                equip: (next.equipCategories || []).join(', '), prevForm: form };
+        }
+        setNewJobForm(form);
+        setAppliedTemplate(note);
+        setNewJobError(tmpl ? '' : 'This plan has no visit template, so crew, duration and skills are unset.');
+        setShowNewJobForm(true);
+    };
 
     // ── DB-backed state ───────────────────────────────────────────────────────
     const [jobs,       setJobs]       = useState([]);
@@ -3710,6 +3949,8 @@ export default function DispatchTab() {
                         // dispatch_equipment.checkedOutJobId.
                         equipCategories: j.equipmentIds || [],
                         requiredVehicleType: j.requiredVehicleType || null,
+                        servicePlanId:  j.servicePlanId || null,
+                        planDueDate:    j.planDueDate   || null,
                         value:          parseFloat(j.invoiceAmount || 0),
                         // Was hardcoded 'Journeyman', discarding the stored requirement —
                         // so every licence blocker compared against a constant.
@@ -3855,6 +4096,8 @@ export default function DispatchTab() {
                 opportunityId:   newJobForm.opportunityId || null,
                 equipmentIds:    newJobForm.equipCategories || [],
                 requiredVehicleType: newJobForm.requiredVehicleType || null,
+                servicePlanId:   newJobForm.servicePlanId || null,
+                planDueDate:     newJobForm.planDueDate   || null,
             };
             const res  = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
@@ -3876,6 +4119,8 @@ export default function DispatchTab() {
                 window:          newJobForm.window || 'TBD',
                 equipCategories: newJobForm.equipCategories || [],
                 requiredVehicleType: newJobForm.requiredVehicleType || null,
+                servicePlanId:   newJobForm.servicePlanId || null,
+                planDueDate:     newJobForm.planDueDate   || null,
                 value:           0,
                 minLicense:      newJobForm.minLicense,
                 preferredTechId: null,
@@ -4187,6 +4432,7 @@ export default function DispatchTab() {
                     { id: 'board',     label: 'Job Board' },
                     { id: 'queue',     label: 'Queue' },
                     { id: 'jobs',      label: 'Jobs' },
+                    { id: 'due',       label: 'Service Due', count: visitsActionable },
                     { id: 'customers', label: 'Customers' },
                     { id: 'techs',     label: 'Technicians' },
                     { id: 'schedule',  label: 'Work Schedules' },
@@ -4202,6 +4448,10 @@ export default function DispatchTab() {
                             onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
                             onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
                             {v.label}
+                            {v.count > 0 && (
+                                <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
+                                    background: T.danger, color: T.surface, fontFamily: T.mono }}>{v.count}</span>
+                            )}
                         </button>
                     );
                 })}
@@ -4398,6 +4648,11 @@ export default function DispatchTab() {
                                 const next = [...prev]; next[i] = { ...prev[i], ...norm }; return next;
                             });
                         }}/>
+                ) : view === 'due' ? (
+                    <ServiceDueView rows={visitQueue} today={todayYmd}
+                        onStart={startPlanVisit}
+                        onOpenJob={id => { setSelectedJobId(id); setView('queue'); }}
+                        onOpenCustomer={() => setView('customers')}/>
                 ) : view === 'customers' ? (
                     <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans}
                         onSaved={saved => setCustomers(prev => {

@@ -780,6 +780,21 @@ export const dispatchCustomers = pgTable('dispatch_customers', {
 //   intervalDays is authoritative when cadence is 'custom'; for the named
 //   cadences it is derived on write so recurrence scheduling has one field to read.
 // billingPeriod: 'monthly' | 'quarterly' | 'annual' | 'per_visit'
+//
+// leadDays: how far ahead of the due date a visit appears in the Service Due
+//   queue. Visits are NOT generated in advance — nothing is written until a
+//   dispatcher acts on one — so this is the only thing that decides when work
+//   becomes visible. A quarterly plan with leadDays 14 shows up a fortnight out.
+//
+// anchorMode: what the interval counts from.
+//   'fixed'   — occurrences fall on planStartDate + n x intervalDays regardless of
+//               when visits actually happened. Contract compliance: four visits a
+//               contract year stay four even if one ran late.
+//   'rolling' — the next visit is intervalDays after the LAST COMPLETED one. Use
+//               for equipment intervals, where what matters is elapsed time since
+//               the machine was actually serviced.
+//   The difference only shows once a visit runs late, and it compounds, so it is
+//   a per-plan setting rather than a global rule.
 export const dispatchServicePlans = pgTable('dispatch_service_plans', {
     id:               text('id').primaryKey(),
     orgId:            text('org_id').notNull(),
@@ -789,6 +804,8 @@ export const dispatchServicePlans = pgTable('dispatch_service_plans', {
     intervalDays:     integer('interval_days'),                       // derived from cadence unless custom
     visitsPerYear:    integer('visits_per_year'),
     visitTemplateId:  varchar('visit_template_id', { length: 50 }),   // → settings.dispatchJobTemplates[].id
+    leadDays:         integer('lead_days').notNull().default(14),     // surface a due visit this many days early
+    anchorMode:       varchar('anchor_mode', { length: 20 }).notNull().default('fixed'),
     coveredJobTypes:  jsonb('covered_job_types').default('[]'),       // string[] of dispatchJobTypes ids
     includedHours:    decimal('included_hours', { precision: 6, scale: 2 }),
     responseHours:    integer('response_hours'),                      // SLA: hours to respond
@@ -884,6 +901,8 @@ export const dispatchJobs = pgTable('dispatch_jobs', {
     photosCount:        integer('photos_count').default(0),
     requiresFollowUp:   boolean('requires_follow_up').default(false),
     followUpJobId:      text('follow_up_job_id'),                     // FK → dispatch_jobs.id
+    servicePlanId:      text('service_plan_id'),                      // set when this job is a plan visit
+    planDueDate:        varchar('plan_due_date', { length: 20 }),     // WHICH occurrence it satisfies, not when it runs
     parentJobId:        text('parent_job_id'),                        // for callback/warranty callbacks
     tags:               jsonb('tags').default('[]'),
     customFields:       jsonb('custom_fields').default('{}'),

@@ -63,6 +63,8 @@ function normalise(row) {
         intervalDays:    row.intervalDays    ?? row.interval_days     ?? null,
         visitsPerYear:   row.visitsPerYear   ?? row.visits_per_year   ?? null,
         visitTemplateId: row.visitTemplateId ?? row.visit_template_id ?? null,
+        leadDays:        row.leadDays        ?? row.lead_days         ?? 14,
+        anchorMode:      row.anchorMode      ?? row.anchor_mode       ?? 'fixed',
         coveredJobTypes: row.coveredJobTypes ?? row.covered_job_types ?? [],
         includedHours:   row.includedHours   ?? row.included_hours    ?? null,
         responseHours:   row.responseHours   ?? row.response_hours    ?? null,
@@ -112,6 +114,8 @@ export const handler = async (event) => {
                 intervalDays:    deriveInterval(cadence, data.intervalDays),
                 visitsPerYear:   deriveVisits(cadence, deriveInterval(cadence, data.intervalDays)),
                 visitTemplateId: data.visitTemplateId ?? null,
+                leadDays:        Number.isFinite(parseInt(data.leadDays, 10)) ? parseInt(data.leadDays, 10) : 14,
+                anchorMode:      data.anchorMode === 'rolling' ? 'rolling' : 'fixed',
                 coveredJobTypes: JSON.stringify(data.coveredJobTypes ?? []),
                 includedHours:   data.includedHours   ?? null,
                 responseHours:   data.responseHours   ?? null,
@@ -147,6 +151,7 @@ export const handler = async (event) => {
             [
                 'name', 'description', 'cadence', 'visitTemplateId', 'includedHours',
                 'responseHours', 'discountPercent', 'price', 'billingPeriod', 'active', 'notes',
+                'leadDays', 'anchorMode',
             ].forEach(f => { if (f in data) updates[f] = data[f]; });
 
             if ('coveredJobTypes' in data) updates.coveredJobTypes = JSON.stringify(data.coveredJobTypes);

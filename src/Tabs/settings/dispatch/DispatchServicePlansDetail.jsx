@@ -113,6 +113,25 @@ const PlanForm = ({ draft, set, templates, jobTypes, holders, busy, error, onSav
                 )}
             </Field>
 
+            <Field label="Surface for scheduling" hint="How far ahead of the due date a visit appears in Dispatch → Service Due.">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input type="number" min={0} max={365} value={draft.leadDays ?? 14}
+                        onChange={e => set('leadDays', e.target.value)}
+                        onBlur={e => set('leadDays', commitNumber(e.target.value, { min: 0, max: 365, fallback: 14, integer: true }))}
+                        style={{ ...inputSt, width: 90 }}/>
+                    <span style={{ fontSize: 12.5, color: T.inkMid, fontFamily: T.sans }}>days before it is due</span>
+                </div>
+            </Field>
+            <Field label="Interval counts from"
+                hint={draft.anchorMode === 'rolling'
+                    ? 'Elapsed time since the unit was actually serviced. A late visit pushes everything after it.'
+                    : 'The contract grid. Four visits a year stay four even if one runs late — missed visits are counted, not skipped.'}>
+                <select value={draft.anchorMode || 'fixed'} onChange={e => set('anchorMode', e.target.value)} style={inputSt}>
+                    <option value="fixed">Plan start date — fixed schedule</option>
+                    <option value="rolling">Last completed visit — rolling</option>
+                </select>
+            </Field>
+
             <Field label="Visit job template" span
                 hint="How a scheduled visit gets staffed — crew size, duration, skills, licence, equipment. Defined under Job templates.">
                 <select value={draft.visitTemplateId || ''} onChange={e => set('visitTemplateId', e.target.value || null)} style={inputSt}>
@@ -355,6 +374,7 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                     { key: 'name',    label: 'Plan',      w: '1.6fr' },
                     { key: 'cadence', label: 'Cadence',   w: '120px' },
                     { key: 'visits',  label: 'Visits/yr', w: '90px' },
+                    { key: 'lead',    label: 'Surfaces',  w: '100px' },
                     { key: 'tmpl',    label: 'Visit template', w: '1.2fr' },
                     { key: 'price',   label: 'Price',     w: '110px' },
                     { key: 'holders', label: 'Customers', w: '100px' },
@@ -365,6 +385,9 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                                  onClick={() => { setDraft({ ...p }); setError(''); }}>{p.name}</span>,
                     cadence: <span style={{ fontSize: 12, color: T.inkMid }}>{cadenceLabel(p.cadence)}</span>,
                     visits:  <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{p.visitsPerYear ?? '—'}</span>,
+                    lead:    <span style={{ fontSize: 12, color: T.inkMid }} title={p.anchorMode === 'rolling' ? 'Rolling from last completed visit' : 'Fixed contract grid'}>
+                                 {(p.leadDays ?? 14)}d early{p.anchorMode === 'rolling' ? ' · rolling' : ''}
+                             </span>,
                     tmpl:    <span style={{ fontSize: 12, color: T.inkMid }}>
                                  {p.visitTemplateId
                                      ? (templates.find(t => t.id === p.visitTemplateId)?.name || 'Deleted template')
@@ -396,7 +419,7 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                             onCancel={() => { setDraft(null); setError(''); }}/>
                     </div>
                 ) : (
-                    <button onClick={() => { setDraft({ id: 'plan_' + crypto.randomUUID(), _isNew: true, name: '', cadence: 'annual', active: true, coveredJobTypes: [] }); setError(''); }}
+                    <button onClick={() => { setDraft({ id: 'plan_' + crypto.randomUUID(), _isNew: true, name: '', cadence: 'annual', active: true, coveredJobTypes: [], leadDays: 14, anchorMode: 'fixed' }); setError(''); }}
                         style={{ ...btnGhost, marginTop: 12, color: T.ink }}>+ New plan</button>
                 )}
             </CSectionCard>
