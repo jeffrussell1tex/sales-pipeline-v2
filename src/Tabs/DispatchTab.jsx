@@ -1566,12 +1566,6 @@ const MonthBoardView = ({ jobs, techs, anchor, onJobClick, onPickDay }) => {
 // Deliberately no delete: a customer with jobs would orphan dispatch_jobs.customerId
 // (an FK with no cascade). Use "Do not service" to retire a customer instead.
 const CUSTOMER_TYPES = ['commercial', 'residential', 'industrial', 'government'];
-// AGREEMENTS was the hardcoded coverage vocabulary. Coverage is now a
-// dispatch_service_plans row (see coverageOf), so this list no longer decides
-// anything — it is kept only to label pre-plan `serviceAgreement` values that
-// still exist on customer records.
-const LEGACY_AGREEMENTS = ['none', 'basic', 'preferred', 'premium'];
-
 const CustFieldRow = ({ label, children }) => (
     <div style={{ marginBottom: 12 }}>
         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid,
@@ -1773,19 +1767,6 @@ const ServiceDueView = ({ rows, today, onStart, onOpenJob, onOpenCustomer }) => 
 // Service history is derived from jobs rather than stored on the customer: a
 // denormalised "jobCount" would need maintaining on every job write and would be
 // wrong the moment one was deleted. Nothing here needs a schema change.
-const ACTIVITY_BUCKETS = [
-    { id: 'never',  label: 'Never served' },
-    { id: 'once',   label: 'Served once' },
-    { id: 'repeat', label: 'Repeat (2+)' },
-    { id: 'active', label: 'Work upcoming' },
-];
-
-const EXPIRY_BUCKETS = [
-    { id: 'expired', label: 'Agreement expired' },
-    { id: 'soon',    label: 'Expiring in 60 days' },
-    { id: 'none',    label: 'No agreement' },
-];
-
 // Coverage has two eras. `servicePlanId` points at a dispatch_service_plans row;
 // `serviceAgreement` is the pre-plan varchar label, kept because it is the only
 // record of what a customer was on before plans existed. A customer on neither is
@@ -1825,538 +1806,859 @@ const activityBucket = (st) => {
     return 'repeat';
 };
 
-// Agreement expiry is a plain 'YYYY-MM-DD' string, so string comparison is a
-// valid ordering and avoids constructing a Date per customer per render.
-const expiryBucket = (c, todayStr, soonStr) => {
-    const covered = !!c.servicePlanId || (c.serviceAgreement && c.serviceAgreement !== 'none');
-    if (!covered) return 'none';
-    if (!c.agreementExpiry) return null;              // covered, no end date recorded
-    if (c.agreementExpiry < todayStr) return 'expired';
-    if (c.agreementExpiry <= soonStr) return 'soon';
-    return null;
-};
-
 const daysBetween = (fromStr, toStr) => Math.round(
     (fromYmd(toStr).getTime() - fromYmd(fromStr).getTime()) / 86400000);
 
-const FilterChip = ({ label, count, active, onClick, tone }) => (
-    <span onClick={onClick}
-        style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 999, cursor: 'pointer',
-            fontFamily: T.sans, fontWeight: active ? 700 : 500, whiteSpace: 'nowrap',
-            border: `1px solid ${active ? (tone || T.ink) : T.border}`,
-            background: active ? (tone || T.ink) : 'transparent',
-            color: active ? T.surface : (tone || T.inkMid) }}>
-        {label}{count != null && <span style={{ marginLeft: 4, opacity: 0.75, fontFamily: T.mono }}>{count}</span>}
+// ── Dispatch → Customers ─────────────────────────────────────────────────────
+// Three-column master–detail: an organised facet rail, the list, and a real
+// service-customer record. Replaces a wall of unlabelled chips and a detail pane
+// that was empty until something was selected.
+//
+// Contract tier in the reference design was a fixed four-value enum. Here it is
+// a dispatch_service_plans row, so the "tiers" are whatever plans the org has
+// defined. Rank, colour and fill are therefore DERIVED (by annual value, then
+// name) rather than stored — see planPresentation.
+
+const PLAN_SWATCHES = ['#7a6a48', '#3a5a7a', '#5a544c', '#4d6b3d', '#b87333', '#7a5a3c'];
+const NO_PLAN_COLOR = '#8a8378';
+
+const hexFill = (hex, alpha) => {
+    const h = hex.replace('#', '');
+    const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+};
+
+// Annualised so plans on different billing periods can sit in one column and be
+// summed. `per_visit` multiplies by the derived visit count, which is why that
+// field is kept consistent with intervalDays server-side.
+const annualPlanValue = (plan) => {
+    const p = parseFloat(plan?.price);
+    if (!Number.isFinite(p)) return 0;
+    switch (plan.billingPeriod) {
+        case 'monthly':   return p * 12;
+        case 'quarterly': return p * 4;
+        case 'per_visit': return p * (parseInt(plan.visitsPerYear, 10) || 1);
+        default:          return p;
+    }
+};
+
+const planSlaText = (plan) => {
+    const h = parseInt(plan?.responseHours, 10);
+    if (!Number.isFinite(h)) return 'No response target set';
+    if (h % 24 === 0) return `${h / 24}-day response`;
+    return `${h}-hour response`;
+};
+
+const planPmText = (plan) => {
+    if (!plan) return 'Time & materials';
+    const cad = { monthly: 'Monthly', quarterly: 'Quarterly', semiannual: 'Twice-yearly', annual: 'Annual', custom: 'Scheduled' }[plan.cadence] || 'Scheduled';
+    const hrs = parseFloat(plan.includedHours);
+    return `${cad} PM` + (Number.isFinite(hrs) && hrs > 0 ? ` · ${hrs} hrs included` : '');
+};
+
+// Ordered, coloured presentation of every coverage state actually reachable:
+// active plans, plans still held by a customer even if retired, and "No plan".
+// Built from the customers as well as the plan list so a retired plan someone is
+// still on cannot become unfilterable.
+const planPresentation = (plans, customers) => {
+    const inUse = new Set((customers || []).map(c => c.servicePlanId).filter(Boolean));
+    const rows = (plans || [])
+        .filter(p => p.active !== false || inUse.has(p.id))
+        .map(p => ({ id: p.id, label: p.name, plan: p, value: annualPlanValue(p) }))
+        .sort((a, b) => (b.value - a.value) || a.label.localeCompare(b.label));
+    rows.forEach((r, i) => {
+        r.color = PLAN_SWATCHES[i % PLAN_SWATCHES.length];
+        r.fill  = hexFill(r.color, 0.14);
+    });
+    rows.push({ id: 'none', label: 'No plan', plan: null, value: 0,
+        color: NO_PLAN_COLOR, fill: hexFill(NO_PLAN_COLOR, 0.10) });
+    return rows;
+};
+
+const presentationFor = (customer, presentation) =>
+    presentation.find(p => p.id === (customer.servicePlanId || 'none'))
+    || presentation[presentation.length - 1];
+
+// Only the glyphs this screen needs. Kept at module scope so they are one shape
+// each — the reference handoff is explicit that a name must render one picture.
+const DIcon = ({ name, size = 14, color = 'currentColor', sw = 1.5 }) => {
+    const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color,
+        strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round' };
+    switch (name) {
+        case 'shield':   return <svg {...p}><path d="M12 3l7 3v6c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/></svg>;
+        case 'pin':      return <svg {...p}><path d="M12 21s7-5.5 7-11a7 7 0 10-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>;
+        case 'link':     return <svg {...p}><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7L12 19"/></svg>;
+        case 'calendar': return <svg {...p}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>;
+        case 'wrench':   return <svg {...p}><path d="M15 3a5 5 0 00-4.3 7.6L4 17.3V20h2.7l6.7-6.7A5 5 0 1015 3z"/></svg>;
+        case 'check':    return <svg {...p}><path d="M20 6L9 17l-5-5"/></svg>;
+        case 'alert':    return <svg {...p}><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17.5v.01"/></svg>;
+        case 'renew':    return <svg {...p}><path d="M3 12a9 9 0 1015.5-6.3M21 4v5h-5"/></svg>;
+        case 'building': return <svg {...p}><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg>;
+        case 'home':     return <svg {...p}><path d="M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1z"/></svg>;
+        case 'factory':  return <svg {...p}><path d="M3 21V10l5 3V10l5 3V8l6 3v10z"/><path d="M7 17h1M12 17h1M17 17h1"/></svg>;
+        case 'gov':      return <svg {...p}><path d="M3 21h18M4 21V10M20 21V10M12 3l9 5H3z"/><path d="M8 21v-7M12 21v-7M16 21v-7"/></svg>;
+        default:         return null;
+    }
+};
+
+const PROPERTY_ICON = { commercial: 'building', residential: 'home', industrial: 'factory', government: 'gov' };
+
+const eyebrow = (color, size) => ({ fontSize: size || 9.5, fontWeight: 600, color: color || T.inkMuted,
+    letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans });
+
+const PlanBadge = ({ pres, small }) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+        padding: small ? '2px 7px' : '3px 9px', fontSize: small ? 10 : 10.5, fontWeight: 700,
+        letterSpacing: 0.4, textTransform: 'uppercase', color: pres.color, background: pres.fill,
+        borderRadius: 2, fontFamily: T.sans }}>
+        {pres.id !== 'none' && <DIcon name="shield" size={small ? 9 : 10} color={pres.color}/>}
+        {pres.label}
     </span>
 );
 
-const CustomersView = ({ customers, accounts, techs, jobs, plans, onSaved }) => {
+const PropertyTag = ({ type }) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: T.inkMid, fontFamily: T.sans }}>
+        <DIcon name={PROPERTY_ICON[type] || 'building'} size={11} color={T.inkMuted}/>{labelise(type || 'commercial')}
+    </span>
+);
+
+const FacetGroup = ({ label, note, first, children }) => (
+    <div style={{ marginBottom: 18, borderTop: first ? 'none' : `1px solid ${T.border}`, paddingTop: first ? 0 : 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 8 }}>
+            <div style={eyebrow(T.ink)}>{label}</div>
+            {note && <div style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>{note}</div>}
+        </div>
+        {children}
+    </div>
+);
+
+const TierFacet = ({ pres, count, value, active, onClick }) => (
+    <div onClick={onClick}
+        style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: T.r,
+            cursor: 'pointer', marginBottom: 3, fontFamily: T.sans,
+            background: active ? pres.fill : 'transparent',
+            boxShadow: active ? `inset 2px 0 0 ${pres.color}` : 'none' }}>
+        <span style={{ width: 8, height: 8, borderRadius: 2, background: pres.color, flexShrink: 0 }}/>
+        <span style={{ flex: 1, fontSize: 12.5, fontWeight: active ? 700 : 600,
+            color: active ? pres.color : T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pres.label}</span>
+        {pres.id !== 'none' && value > 0 && (
+            <span style={{ fontSize: 10.5, color: T.inkMuted, fontVariantNumeric: 'tabular-nums' }}>{money(value)}</span>
+        )}
+        <span style={{ fontSize: 11, fontWeight: 700, color: active ? pres.color : T.inkMid,
+            minWidth: 18, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+    </div>
+);
+
+const CheckFacet = ({ label, count, checked, dim, onClick }) => (
+    <div onClick={dim ? undefined : onClick}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 9px', borderRadius: T.r,
+            cursor: dim ? 'default' : 'pointer', opacity: dim ? 0.42 : 1, fontFamily: T.sans }}>
+        <span style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+            background: checked ? T.ink : T.surface,
+            border: `1.5px solid ${checked ? T.ink : T.borderStrong}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {checked && <DIcon name="check" size={10} color={T.surface}/>}
+        </span>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: checked ? 600 : 500, color: T.ink }}>{label}</span>
+        <span style={{ fontSize: 10.5, color: T.inkMuted, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+    </div>
+);
+
+const MiniStat = ({ label, value, tone }) => (
+    <div style={{ flex: 1, minWidth: 0, padding: '9px 11px', background: T.surface,
+        border: `1px solid ${T.border}`, borderRadius: T.r }}>
+        <div style={eyebrow(null, 9)}>{label}</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: tone || T.ink, marginTop: 3,
+            fontFamily: T.sans, fontVariantNumeric: 'tabular-nums',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
+    </div>
+);
+
+const WorkRow = ({ icon, label, meta }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+        background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, marginBottom: 6 }}>
+        <DIcon name={icon} size={14} color={T.inkMid}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+            <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 1, fontFamily: T.sans }}>{meta}</div>
+        </div>
+    </div>
+);
+
+const money = (n) => n >= 1000 ? '$' + Math.round(n / 1000) + 'K' : '$' + Math.round(n);
+const shortDate = (iso) => iso ? fromYmd(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null;
+
+// The edit form, unchanged in content from the previous single-column view — the
+// redesign replaces the LAYOUT, not the ability to edit a customer. It is hoisted
+// to module scope so it is one component type across renders rather than a new
+// one per keystroke.
+const CustomerEditForm = ({ draft, set, accounts, techs, plans, planOnDraft,
+    prefTech, prefMissing, prefOptions, saving, status, onSave, onCancel }) => (
+    <div style={{ maxWidth: 620 }}>
+            <CustFieldRow label="Name *">
+                <input value={draft.name || ''} onChange={e => set('name', e.target.value)} style={custInput}/>
+            </CustFieldRow>
+
+            <CustFieldRow label="Linked CRM account">
+                <select value={draft.accountId || ''} onChange={e => set('accountId', e.target.value)} style={custInput}>
+                    <option value="">— Not linked —</option>
+                    {(accounts || []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                {linkedAccount && (
+                    <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                        {[linkedAccount.address, linkedAccount.city, linkedAccount.state, linkedAccount.zip].filter(Boolean).join(', ') || 'No address on the account'}
+                        {' · '}
+                        <span onClick={copyFromAccount} style={{ color: T.info, cursor: 'pointer', fontWeight: 600 }}>copy address</span>
+                    </div>
+                )}
+            </CustFieldRow>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <CustFieldRow label="Customer type">
+                    <select value={draft.customerType || 'commercial'} onChange={e => set('customerType', e.target.value)} style={custInput}>
+                        {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
+                    </select>
+                </CustFieldRow>
+                <CustFieldRow label="Service plan">
+                    <select value={draft.servicePlanId || ''} onChange={e => set('servicePlanId', e.target.value || null)} style={custInput}>
+                        <option value="">— No plan —</option>
+                        {/* A deleted plan must not fall through to "No plan":
+                            that clears real coverage on the next save. */}
+                        {draft.servicePlanId && !(plans || []).some(p => p.id === draft.servicePlanId) && (
+                            <option value={draft.servicePlanId}>Deleted plan ({draft.servicePlanId})</option>
+                        )}
+                        {(plans || [])
+                            .filter(p => p.active !== false || p.id === draft.servicePlanId)
+                            .map(p => (
+                                <option key={p.id} value={p.id}>
+                                    {p.name}{p.active === false ? ' (inactive)' : ''}
+                                </option>
+                            ))}
+                    </select>
+                    {planOnDraft && (
+                        <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                            {[
+                                planOnDraft.visitsPerYear ? `${planOnDraft.visitsPerYear} visit${planOnDraft.visitsPerYear === 1 ? '' : 's'}/yr` : null,
+                                planOnDraft.includedHours ? `${planOnDraft.includedHours} hrs included` : null,
+                                planOnDraft.responseHours ? `${planOnDraft.responseHours}h response` : null,
+                            ].filter(Boolean).join(' · ') || 'No terms recorded on this plan.'}
+                        </div>
+                    )}
+                </CustFieldRow>
+            </div>
+
+            {/* Legacy coverage. `serviceAgreement` predates plans and is the
+                only record of what this customer was on beforehand, so it is
+                shown rather than silently overwritten when a plan is chosen. */}
+            {draft.serviceAgreement && draft.serviceAgreement !== 'none' && (
+                <div style={{ padding: '7px 10px', marginBottom: 12, borderRadius: T.r,
+                    background: draft.servicePlanId ? T.surface2 : `${T.warn}12`,
+                    borderLeft: `3px solid ${draft.servicePlanId ? T.borderStrong : T.warn}`,
+                    fontSize: 11.5, fontFamily: T.sans, color: T.inkMid }}>
+                    Legacy agreement label: <strong style={{ color: T.ink }}>{labelise(draft.serviceAgreement)}</strong>
+                    {draft.servicePlanId
+                        ? ' — superseded by the plan above, kept for reference.'
+                        : ' — not yet mapped to a service plan. Pick one above, or leave it if this customer is genuinely uncovered.'}
+                    {' '}
+                    <span onClick={() => set('serviceAgreement', 'none')}
+                        style={{ color: T.info, fontWeight: 600, cursor: 'pointer' }}>Clear label</span>
+                </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <CustFieldRow label="Plan starts">
+                    <input type="date" value={draft.planStartDate || ''}
+                        onChange={e => set('planStartDate', e.target.value || null)}
+                        disabled={!draft.servicePlanId}
+                        style={{ ...custInput, opacity: draft.servicePlanId ? 1 : 0.5,
+                            border: (draft.servicePlanId && !draft.planStartDate) ? `1px solid ${T.warn}` : undefined }}/>
+                    {/* This date is the anchor every visit is counted from. Without
+                        it the customer is simply absent from Service Due — silently,
+                        which is exactly the failure mode worth shouting about. */}
+                    {draft.servicePlanId && !draft.planStartDate && (
+                        <div style={{ marginTop: 5, fontSize: 11, color: T.warn, fontFamily: T.sans }}>
+                            Required — visits are counted from this date. Without it no visit will ever come due.
+                        </div>
+                    )}
+                </CustFieldRow>
+                {/* agreementExpiry existed on the record from the start with no
+                    control to set it, so every renewal warning was unreachable. */}
+                <CustFieldRow label="Coverage ends">
+                    <input type="date" value={draft.agreementExpiry || ''}
+                        onChange={e => set('agreementExpiry', e.target.value || null)}
+                        disabled={coverageOf(draft, plans).kind === 'none'}
+                        style={{ ...custInput, opacity: coverageOf(draft, plans).kind === 'none' ? 0.5 : 1 }}/>
+                </CustFieldRow>
+            </div>
+
+            <CustFieldRow label="Preferred technician">
+                <select value={draft.preferredTechId || ''} onChange={e => set('preferredTechId', e.target.value || null)} style={custInput}>
+                    <option value="">— No preference —</option>
+                    {/* A stale id must not fall through to the first option: an
+                        unmatched select value renders as "No preference" and the
+                        next save would clear a real preference without saying so. */}
+                    {prefMissing && <option value={draft.preferredTechId}>Unknown technician ({draft.preferredTechId})</option>}
+                    {prefOptions.map(t => (
+                        <option key={t.id} value={t.id}>
+                            {t.name}{t.status !== 'active' ? ` (${labelise(t.status || 'inactive')})` : ''}
+                        </option>
+                    ))}
+                </select>
+                {prefMissing && (
+                    <div style={{ marginTop: 5, fontSize: 11, fontFamily: T.sans, color: T.danger }}>
+                        This technician is no longer on the roster. Pick another, or set no preference and save to clear it.
+                    </div>
+                )}
+                {prefTech && prefTech.status !== 'active' && (
+                    <div style={{ marginTop: 5, fontSize: 11, fontFamily: T.sans, color: T.warn }}>
+                        {prefTech.name} is {labelise(prefTech.status)}. The crew builder will still favour them when they return.
+                    </div>
+                )}
+            </CustFieldRow>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                {[['contactName', 'Contact'], ['contactPhone', 'Phone'], ['contactEmail', 'Email']].map(([k, l]) => (
+                    <CustFieldRow key={k} label={l}>
+                        <input value={draft[k] || ''} onChange={e => set(k, e.target.value)} style={custInput}/>
+                    </CustFieldRow>
+                ))}
+            </div>
+
+            <CustFieldRow label="Service address">
+                <input value={draft.serviceAddress || ''} onChange={e => set('serviceAddress', e.target.value)} style={custInput}/>
+            </CustFieldRow>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+                {[['serviceCity', 'City'], ['serviceState', 'State'], ['serviceZip', 'Zip']].map(([k, l]) => (
+                    <CustFieldRow key={k} label={l}>
+                        <input value={draft[k] || ''} onChange={e => set(k, e.target.value)} style={custInput}/>
+                    </CustFieldRow>
+                ))}
+            </div>
+
+            <CustFieldRow label="Notes">
+                <textarea value={draft.notes || ''} onChange={e => set('notes', e.target.value)} rows={3}
+                    style={{ ...custInput, resize: 'vertical' }}/>
+            </CustFieldRow>
+
+            <div style={{ padding: '10px 12px', border: `1px solid ${draft.doNotService ? T.danger : T.border}`,
+                borderRadius: T.r, marginBottom: 16, background: draft.doNotService ? `${T.danger}0a` : 'transparent' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: T.ink, fontFamily: T.sans }}>
+                    <input type="checkbox" checked={!!draft.doNotService} onChange={e => set('doNotService', e.target.checked)}/>
+                    Do not service
+                </label>
+                {draft.doNotService && (
+                    <input value={draft.doNotServiceReason || ''} onChange={e => set('doNotServiceReason', e.target.value)}
+                        placeholder="Reason" style={{ ...custInput, marginTop: 8 }}/>
+                )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={save} disabled={saving}
+                    style={{ padding: '8px 18px', background: saving ? T.inkMuted : T.ink, color: T.surface,
+                        border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600,
+                        cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
+                    {saving ? 'Saving…' : (draft._isNew ? 'Create customer' : 'Save changes')}
+                </button>
+                {status && (
+                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: T.sans,
+                        color: status.kind === 'ok' ? T.ok : T.danger }}>{status.msg}</span>
+                )}
+            </div>
+        <div style={{ marginTop: 4 }}>
+            <button onClick={onCancel}
+                style={{ padding: '8px 14px', background: T.surface, border: `1px solid ${T.borderStrong}`,
+                    borderRadius: T.r, fontSize: 13, fontWeight: 600, color: T.inkMid,
+                    cursor: 'pointer', fontFamily: T.sans }}>
+                {draft._isNew ? 'Discard' : 'Done editing'}
+            </button>
+        </div>
+    </div>
+);
+
+const CustomersView = ({ customers, accounts, techs, jobs, plans, servicePlans, onSaved, onScheduleJob, onGoToDue }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
+    const [editing,    setEditing]    = React.useState(false);
     const [saving,     setSaving]     = React.useState(false);
     const [status,     setStatus]     = React.useState(null);
+    const [showEmpty,  setShowEmpty]  = React.useState(false);
 
-    const [fCoverage,  setFCoverage]  = React.useState(null);
-    const [fType,      setFType]      = React.useState(null);
-    const [fActivity,  setFActivity]  = React.useState(null);
-    const [fExpiry,    setFExpiry]    = React.useState(null);
-    const [groupBy,    setGroupBy]    = React.useState('none');   // 'none' | 'agreement' | 'type' | 'activity'
+    // Multi-select within a group (OR), AND across groups — the reference
+    // behaviour. Sets rather than a single value, which the old chips used.
+    const [fPlans,     setFPlans]     = React.useState(() => new Set());
+    const [fTypes,     setFTypes]     = React.useState(() => new Set());
+    const [fHistory,   setFHistory]   = React.useState(() => new Set());
+    const [fAttention, setFAttention] = React.useState(() => new Set());
 
     const todayStr = React.useMemo(() => ymd(new Date()), []);
-    const soonStr  = React.useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 60); return ymd(d); }, []);
+    const soonStr  = React.useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 30); return ymd(d); }, []);
 
-    // One pass over jobs per customer, memoised on both inputs — recomputing this
-    // inside the row render would be O(customers x jobs) on every keystroke.
     const stats = React.useMemo(() => {
         const m = {};
         (customers || []).forEach(c => { m[c.id] = custStats(c, jobs, todayStr); });
         return m;
     }, [customers, jobs, todayStr]);
 
+    // Overdue PM count per customer, straight from the recurrence model — the
+    // same numbers the Service Due queue shows, so the two can never disagree.
+    const overdueBy = React.useMemo(() => {
+        const m = {};
+        (customers || []).forEach(c => {
+            const plan = (plans || []).find(p => p.id === c.servicePlanId);
+            if (!plan) { m[c.id] = 0; return; }
+            const st = planVisitState(c, plan, jobs, todayStr);
+            m[c.id] = st.state === 'overdue' ? 1 + (st.missed || 0) : (st.missed || 0);
+        });
+        return m;
+    }, [customers, plans, jobs, todayStr]);
+
+    const presentation = React.useMemo(() => planPresentation(plans, customers), [plans, customers]);
+    const presOf = (c) => presentationFor(c, presentation);
+
+    const renewalDays = (c) => {
+        const covered = !!c.servicePlanId || (c.serviceAgreement && c.serviceAgreement !== 'none');
+        if (!covered || !c.agreementExpiry) return null;
+        return daysBetween(todayStr, c.agreementExpiry);
+    };
+
     const q = query.trim().toLowerCase();
+    const textMatch = (c) => !q
+        || (c.name || '').toLowerCase().includes(q)
+        || (c.customerNumber || '').toLowerCase().includes(q);
+
+    const attentionHit = (c, key) => {
+        if (key === 'renewal')   { const d = renewalDays(c); return d != null && d <= 30; }
+        if (key === 'overdue')   return (overdueBy[c.id] || 0) > 0;
+        if (key === 'unsched')   return !(stats[c.id] || {}).nextDate;
+        return false;
+    };
+
     const matches = (c) => {
-        if (q && !((c.name || '').toLowerCase().includes(q) || (c.customerNumber || '').toLowerCase().includes(q))) return false;
-        if (fCoverage && coverageOf(c, plans).id !== fCoverage) return false;
-        if (fType      && (c.customerType || 'commercial') !== fType) return false;
-        if (fActivity  && activityBucket(stats[c.id] || { upcoming: 0, completed: 0 }) !== fActivity) return false;
-        if (fExpiry    && expiryBucket(c, todayStr, soonStr) !== fExpiry) return false;
+        if (!textMatch(c)) return false;
+        if (fPlans.size     && !fPlans.has(c.servicePlanId || 'none')) return false;
+        if (fTypes.size     && !fTypes.has(c.customerType || 'commercial')) return false;
+        if (fHistory.size   && !fHistory.has(activityBucket(stats[c.id] || { upcoming: 0, completed: 0 }))) return false;
+        if (fAttention.size && ![...fAttention].some(k => attentionHit(c, k))) return false;
         return true;
     };
 
-    const list = (customers || []).filter(matches).slice()
-        .sort((a, b) => (a.customerNumber || '').localeCompare(b.customerNumber || ''));
+    // Sorted by renewal urgency: the thing the "Needs attention" group exists for
+    // should also be the default reading order. Customers with no renewal date
+    // fall to the bottom rather than sorting as zero.
+    const list = (customers || []).filter(matches).slice().sort((a, b) => {
+        const ra = renewalDays(a), rb = renewalDays(b);
+        if (ra == null && rb == null) return (a.name || '').localeCompare(b.name || '');
+        if (ra == null) return 1;
+        if (rb == null) return -1;
+        return ra - rb;
+    });
 
-    // Counts are computed against every OTHER active filter, so a chip's number
-    // tells you what you would actually get by clicking it rather than a total
-    // that shrinks to nothing the moment you combine two filters.
-    const countBy = (predicate) => (customers || []).filter(c => {
-        if (q && !((c.name || '').toLowerCase().includes(q) || (c.customerNumber || '').toLowerCase().includes(q))) return false;
+    // Counts ignore their OWN group so a facet's number answers "what would I get
+    // if I clicked this", not "what is left after everything already applied".
+    const countExcluding = (group, predicate) => (customers || []).filter(c => {
+        if (!textMatch(c)) return false;
+        if (group !== 'plan'      && fPlans.size     && !fPlans.has(c.servicePlanId || 'none')) return false;
+        if (group !== 'type'      && fTypes.size     && !fTypes.has(c.customerType || 'commercial')) return false;
+        if (group !== 'history'   && fHistory.size   && !fHistory.has(activityBucket(stats[c.id] || { upcoming: 0, completed: 0 }))) return false;
+        if (group !== 'attention' && fAttention.size && ![...fAttention].some(k => attentionHit(c, k))) return false;
         return predicate(c);
     }).length;
 
-    const groupKey = (c) => {
-        if (groupBy === 'agreement') return coverageOf(c, plans).label;
-        if (groupBy === 'type')      return labelise(c.customerType || 'commercial');
-        if (groupBy === 'activity')  return (ACTIVITY_BUCKETS.find(b => b.id === activityBucket(stats[c.id] || { upcoming: 0, completed: 0 })) || {}).label || '—';
-        return null;
-    };
+    const toggle = (setter) => (key) => setter(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
+    });
 
-    const grouped = React.useMemo(() => {
-        if (groupBy === 'none') return [{ key: null, rows: list }];
-        const buckets = new Map();
-        list.forEach(c => {
-            const k = groupKey(c);
-            if (!buckets.has(k)) buckets.set(k, []);
-            buckets.get(k).push(c);
-        });
-        return [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([key, rows]) => ({ key, rows }));
+    const anyFilter = fPlans.size || fTypes.size || fHistory.size || fAttention.size;
+    const clearAll = () => { setFPlans(new Set()); setFTypes(new Set()); setFHistory(new Set()); setFAttention(new Set()); };
+
+    // Header ledger.
+    const underContract = (customers || []).filter(c => c.servicePlanId);
+    const contractARR = underContract.reduce((s, c) => {
+        const p = (plans || []).find(x => x.id === c.servicePlanId);
+        return s + (p ? annualPlanValue(p) : 0);
+    }, 0);
+
+    // The record pane must never sit empty the way the old one did.
+    React.useEffect(() => {
+        if (selectedId && list.some(c => c.id === selectedId)) return;
+        if (list.length) setSelectedId(list[0].id);
+        else setSelectedId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [list, groupBy, stats]);
-
-    const anyFilter = !!(fCoverage || fType || fActivity || fExpiry);
-    const clearFilters = () => { setFCoverage(null); setFType(null); setFActivity(null); setFExpiry(null); };
-
-    // Every coverage state present in the data — active plans, plus any legacy
-    // label or dangling plan id still in use. Built from the customers rather than
-    // from the plan list so an unmapped legacy tier cannot become unfilterable.
-    const coverageOptions = React.useMemo(() => {
-        const seen = new Map();
-        (customers || []).forEach(c => {
-            const cov = coverageOf(c, plans);
-            if (!seen.has(cov.id)) seen.set(cov.id, cov);
-        });
-        (plans || []).filter(p => p.active !== false).forEach(p => {
-            if (!seen.has(p.id)) seen.set(p.id, { kind: 'plan', id: p.id, label: p.name, plan: p });
-        });
-        const order = { plan: 0, legacy: 1, missing: 2, none: 3 };
-        return [...seen.values()].sort((a, b) => (order[a.kind] - order[b.kind]) || a.label.localeCompare(b.label));
-    }, [customers, plans]);
+    }, [list.map(c => c.id).join(','), selectedId]);
 
     const selected = (customers || []).find(c => c.id === selectedId) || null;
 
     React.useEffect(() => {
-        setDraft(selected ? { ...selected } : null);
+        if (!editing) return;
+        const c = (customers || []).find(x => x.id === selectedId);
+        setDraft(c ? { ...c } : null);
         setStatus(null);
-    }, [selectedId]);   // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editing, selectedId]);
 
     const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
-    const linkedAccount = draft && draft.accountId ? (accounts || []).find(a => a.id === draft.accountId) : null;
 
-    // Preferred technician. Inactive and on-leave techs stay selectable — the
-    // preference outlives a leave of absence — but are labelled, and an id that
-    // resolves to nobody is surfaced rather than silently dropped on next save.
+    const startNew = () => {
+        setSelectedId(null);
+        setDraft({ _isNew: true, id: 'cust_' + crypto.randomUUID(), name: '', accountId: '',
+            contactName: '', contactPhone: '', contactEmail: '', customerType: 'commercial',
+            serviceAddress: '', serviceCity: '', serviceState: '', serviceZip: '',
+            serviceAgreement: 'none', servicePlanId: '', planStartDate: '', preferredTechId: '',
+            doNotService: false, doNotServiceReason: '', notes: '' });
+        setEditing(true);
+        setStatus(null);
+    };
+
     const planOnDraft = draft && draft.servicePlanId ? (plans || []).find(p => p.id === draft.servicePlanId) : null;
-
     const prefTech    = draft && draft.preferredTechId ? (techs || []).find(t => t.id === draft.preferredTechId) : null;
     const prefMissing = !!(draft && draft.preferredTechId) && !prefTech;
     const prefOptions = (techs || [])
         .filter(t => t.status === 'active' || t.id === (draft && draft.preferredTechId))
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-    const startNew = () => {
-        setSelectedId(null);
-        setStatus(null);
-        setDraft({ id: 'dcust_' + crypto.randomUUID(), _isNew: true, name: '', accountId: '',
-            customerType: 'commercial', contactName: '', contactPhone: '', contactEmail: '',
-            serviceAddress: '', serviceCity: '', serviceState: '', serviceZip: '',
-            serviceAgreement: 'none', servicePlanId: '', planStartDate: '', preferredTechId: '', doNotService: false, doNotServiceReason: '', notes: '' });
-    };
-
-    const copyFromAccount = () => {
-        if (!linkedAccount) return;
-        setDraft(d => ({ ...d,
-            serviceAddress: linkedAccount.address || d.serviceAddress || '',
-            serviceCity:    linkedAccount.city    || d.serviceCity    || '',
-            serviceState:   linkedAccount.state   || d.serviceState   || '',
-            serviceZip:     linkedAccount.zip     || d.serviceZip     || '',
-        }));
-    };
-
     const save = async () => {
         if (!draft || !(draft.name || '').trim()) { setStatus({ kind: 'err', msg: 'Name is required.' }); return; }
         setSaving(true); setStatus(null);
         try {
-            // Empty string is not "no preference" to the server: POST stores
-            // `data.preferredTechId ?? null`, so '' would be written verbatim.
             const body = { ...draft, name: draft.name.trim(), accountId: draft.accountId || null,
                 preferredTechId: draft.preferredTechId || null,
                 servicePlanId:   draft.servicePlanId   || null,
                 planStartDate:   draft.planStartDate   || null };
-            delete body._isNew;
-            delete body.customerNumber;   // server-assigned and immutable
-
-            const url = draft._isNew
-                ? '/.netlify/functions/dispatch-customers'
-                : '/.netlify/functions/dispatch-customers?id=' + encodeURIComponent(draft.id);
-            const res = await dbFetch(url, {
-                method: draft._isNew ? 'POST' : 'PUT',
+            const isNew = body._isNew; delete body._isNew;
+            const res = await dbFetch('/.netlify/functions/dispatch-customers'
+                + (isNew ? '' : '?id=' + encodeURIComponent(draft.id)), {
+                method: isNew ? 'POST' : 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                if (res.status === 403) throw new Error('Your role cannot change dispatch customers.');
-                throw new Error(data.error || ('HTTP ' + res.status));
-            }
-            const saved = data.customer;
-            if (saved) { onSaved(saved); setSelectedId(saved.id); }
-            setStatus({ kind: 'ok', msg: draft._isNew ? ('Created ' + ((saved && saved.customerNumber) || '')) : 'Saved' });
-        } catch (e) {
-            setStatus({ kind: 'err', msg: e.message });
-        } finally {
-            setSaving(false);
+            if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change customers.' : (data.error || 'HTTP ' + res.status));
+            const saved = data.customer || body;
+            onSaved(saved);
+            setSelectedId(saved.id);
+            setEditing(false);
+            setStatus({ kind: 'ok', msg: 'Saved.' });
+        } catch (err) {
+            setStatus({ kind: 'err', msg: err.message });
         }
+        setSaving(false);
     };
 
+    const st  = selected ? (stats[selected.id] || {}) : {};
+    const pres = selected ? presOf(selected) : null;
+    const selPlan = selected ? (plans || []).find(p => p.id === selected.servicePlanId) : null;
+    const rDays = selected ? renewalDays(selected) : null;
+    const linkedAccount = selected && selected.accountId ? (accounts || []).find(a => a.id === selected.accountId) : null;
+
+    const custJobs = selected ? (jobs || []).filter(j => j.customerId === selected.id) : [];
+    const upcoming = custJobs
+        .filter(j => j.scheduledDate && j.scheduledDate >= todayStr && j.status !== 'completed' && j.status !== 'cancelled')
+        .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate)).slice(0, 4);
+    const recent = custJobs
+        .filter(j => j.status === 'completed' && j.scheduledDate)
+        .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate)).slice(0, 4);
+    const techName = (id) => (techs || []).find(t => t.id === id)?.name || 'Unassigned';
+
+    const HIST = [
+        { k: 'repeat', label: 'Repeat (2+)' },
+        { k: 'once',   label: 'Served once' },
+        { k: 'never',  label: 'Never served' },
+    ];
+
     return (
-        <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
-            <div style={{ width: 300, borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', background: T.surface }}>
-                <div style={{ padding: 12, borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 8 }}>
-                    <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or CUST-…"
-                        style={{ ...custInput, padding: '7px 9px', fontSize: 12.5 }}/>
-                    <button onClick={startNew}
-                        style={{ padding: '7px 12px', background: T.ink, color: T.surface, border: 'none',
-                            borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
-                        + New
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Ledger line + actions */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, padding: '0 0 12px', flexShrink: 0 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 20, fontFamily: T.serif, fontStyle: 'italic', color: T.ink, lineHeight: 1.15 }}>
+                        Service customers
+                    </div>
+                    <div style={{ fontSize: 12, color: T.inkMid, marginTop: 4, fontFamily: T.sans }}>
+                        {(customers || []).length} customer{(customers || []).length === 1 ? '' : 's'}
+                        {' · '}{underContract.length} under contract
+                        {contractARR > 0 && ` · ${money(contractARR)} contract value`}
+                    </div>
+                </div>
+                <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or CUST-…"
+                    style={{ ...custInput, width: 190, padding: '7px 9px', fontSize: 12.5 }}/>
+                {onGoToDue && (
+                    <button onClick={onGoToDue}
+                        style={{ padding: '8px 14px', fontSize: 12.5, fontWeight: 600, color: T.ink, whiteSpace: 'nowrap',
+                            background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r,
+                            cursor: 'pointer', fontFamily: T.sans }}>
+                        Mass-schedule PM visits
                     </button>
-                </div>
-
-                {/* Segments */}
-                <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, background: T.bg }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
-                        <span style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans }}>Segment</span>
-                        <span style={{ flex: 1 }}/>
-                        {anyFilter && (
-                            <span onClick={clearFilters} style={{ fontSize: 10.5, color: T.info, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Clear</span>
-                        )}
-                    </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-                        {coverageOptions.map(cov => (
-                            <FilterChip key={cov.id} label={cov.label} active={fCoverage === cov.id}
-                                tone={cov.kind === 'missing' ? T.danger : cov.kind === 'legacy' ? T.warn : undefined}
-                                count={countBy(c => coverageOf(c, plans).id === cov.id)}
-                                onClick={() => setFCoverage(fCoverage === cov.id ? null : cov.id)}/>
-                        ))}
-                    </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-                        {CUSTOMER_TYPES.map(t => (
-                            <FilterChip key={t} label={labelise(t)} active={fType === t}
-                                count={countBy(c => (c.customerType || 'commercial') === t)}
-                                onClick={() => setFType(fType === t ? null : t)}/>
-                        ))}
-                    </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-                        {ACTIVITY_BUCKETS.map(b => (
-                            <FilterChip key={b.id} label={b.label} active={fActivity === b.id}
-                                count={countBy(c => activityBucket(stats[c.id] || { upcoming: 0, completed: 0 }) === b.id)}
-                                onClick={() => setFActivity(fActivity === b.id ? null : b.id)}/>
-                        ))}
-                    </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                        {EXPIRY_BUCKETS.filter(b => b.id !== 'none').map(b => {
-                            const n = countBy(c => expiryBucket(c, todayStr, soonStr) === b.id);
-                            if (n === 0 && fExpiry !== b.id) return null;
-                            return (
-                                <FilterChip key={b.id} label={b.label} active={fExpiry === b.id} count={n}
-                                    tone={b.id === 'expired' ? T.danger : T.warn}
-                                    onClick={() => setFExpiry(fExpiry === b.id ? null : b.id)}/>
-                            );
-                        })}
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans }}>Group</span>
-                        <select value={groupBy} onChange={e => setGroupBy(e.target.value)}
-                            style={{ ...custInput, padding: '4px 6px', fontSize: 11.5, flex: 1 }}>
-                            <option value="none">Flat list</option>
-                            <option value="agreement">Service plan</option>
-                            <option value="type">Customer type</option>
-                            <option value="activity">Service history</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div style={{ padding: '6px 12px', fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, borderBottom: `1px solid ${T.border}` }}>
-                    {list.length} of {(customers || []).length} customer{(customers || []).length === 1 ? '' : 's'}
-                </div>
-
-                <div style={{ flex: 1, overflowY: 'auto' }}>
-                    {list.length === 0 && (
-                        <div style={{ padding: 16, fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans }}>
-                            No dispatch customers{q ? ' match that search' : ' yet'}.
-                        </div>
-                    )}
-                    {grouped.map(g => (
-                        <div key={g.key || '_all'}>
-                            {g.key && (
-                                <div style={{ position: 'sticky', top: 0, zIndex: 1, padding: '5px 12px',
-                                    background: T.surface2, borderBottom: `1px solid ${T.border}`,
-                                    fontSize: 10, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase',
-                                    letterSpacing: 0.6, fontFamily: T.sans, display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>{g.key}</span>
-                                    <span style={{ fontFamily: T.mono, color: T.inkMuted }}>{g.rows.length}</span>
-                                </div>
-                            )}
-                            {g.rows.map(c => {
-                                const st  = stats[c.id] || { total: 0, completed: 0, lastServed: null, upcoming: 0, nextDate: null };
-                                const exp = expiryBucket(c, todayStr, soonStr);
-                                const cov = coverageOf(c, plans);
-                                return (
-                                    <div key={c.id} onClick={() => setSelectedId(c.id)}
-                                        style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
-                                            background: c.id === selectedId ? T.surface2 : 'transparent' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                                            <span style={{ fontSize: 13, fontWeight: c.id === selectedId ? 700 : 500, color: T.ink, fontFamily: T.sans }}>{c.name}</span>
-                                            <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.mono }}>{c.customerNumber || '—'}</span>
-                                        </div>
-                                        <div style={{ marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                                            <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{labelise(c.customerType || 'commercial')}</span>
-                                            {cov.kind === 'plan' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.info}14`, color: T.info, fontWeight: 700 }}>{cov.label}</span>}
-                                            {cov.kind === 'legacy' && <span title="Legacy agreement label — not yet mapped to a service plan" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>{cov.label} · unmapped</span>}
-                                            {cov.kind === 'missing' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>plan deleted</span>}
-                                            {c.accountId
-                                                ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.ok}14`, color: T.ok, fontWeight: 700 }}>linked</span>
-                                                : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>unlinked</span>}
-                                            {c.doNotService && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>do not service</span>}
-                                            {exp === 'expired' && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.danger}14`, color: T.danger, fontWeight: 700 }}>expired</span>}
-                                            {exp === 'soon'    && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${T.warn}14`, color: T.warn, fontWeight: 700 }}>renews soon</span>}
-                                        </div>
-                                        <div style={{ marginTop: 3, fontSize: 10, color: T.inkMuted, fontFamily: T.mono }}>
-                                            {st.completed === 0 ? 'Never served' : `${st.completed} job${st.completed === 1 ? '' : 's'}`}
-                                            {st.lastServed && ` · last ${st.lastServed}`}
-                                            {st.upcoming > 0 && ` · next ${st.nextDate}`}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ))}
-                </div>
+                )}
+                <button onClick={startNew}
+                    style={{ padding: '8px 15px', fontSize: 12.5, fontWeight: 700, color: T.surface, whiteSpace: 'nowrap',
+                        background: T.ink, border: 'none', borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                    + New customer
+                </button>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
-                {!draft ? (
-                    <div style={{ fontSize: 13, color: T.inkMuted, fontFamily: T.sans }}>
-                        Select a customer, or create one.
+            <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '236px 336px 1fr',
+                border: `1px solid ${T.border}`, borderRadius: T.r, background: T.bg, overflow: 'hidden' }}>
+
+                {/* ── LEFT: organised facets ─────────────────────────────── */}
+                <div style={{ borderRight: `1px solid ${T.border}`, minHeight: 0, overflow: 'auto', padding: '16px 14px' }}>
+                    <FacetGroup label="Service contract" note="primary" first>
+                        {presentation.map(p => {
+                            const n = countExcluding('plan', c => (c.servicePlanId || 'none') === p.id);
+                            if (n === 0 && !showEmpty && !fPlans.has(p.id)) return null;
+                            const value = (customers || [])
+                                .filter(c => (c.servicePlanId || 'none') === p.id)
+                                .reduce((s) => s + (p.plan ? annualPlanValue(p.plan) : 0), 0);
+                            return <TierFacet key={p.id} pres={p} count={n} value={value}
+                                active={fPlans.has(p.id)} onClick={() => toggle(setFPlans)(p.id)}/>;
+                        })}
+                    </FacetGroup>
+
+                    <FacetGroup label="Property type">
+                        {CUSTOMER_TYPES.map(t => {
+                            const n = countExcluding('type', c => (c.customerType || 'commercial') === t);
+                            if (n === 0 && !showEmpty && !fTypes.has(t)) return null;
+                            return <CheckFacet key={t} label={labelise(t)} count={n} dim={n === 0}
+                                checked={fTypes.has(t)} onClick={() => toggle(setFTypes)(t)}/>;
+                        })}
+                    </FacetGroup>
+
+                    <FacetGroup label="Service history">
+                        {HIST.map(h => {
+                            const n = countExcluding('history', c => activityBucket(stats[c.id] || { upcoming: 0, completed: 0 }) === h.k);
+                            if (n === 0 && !showEmpty && !fHistory.has(h.k)) return null;
+                            return <CheckFacet key={h.k} label={h.label} count={n} dim={n === 0}
+                                checked={fHistory.has(h.k)} onClick={() => toggle(setFHistory)(h.k)}/>;
+                        })}
+                    </FacetGroup>
+
+                    <FacetGroup label="Needs attention">
+                        {[
+                            { k: 'renewal', label: 'Renewal ≤ 30 days' },
+                            { k: 'overdue', label: 'Overdue PM visits' },
+                            { k: 'unsched', label: 'No visit scheduled' },
+                        ].map(a => {
+                            const n = countExcluding('attention', c => attentionHit(c, a.k));
+                            if (n === 0 && !showEmpty && !fAttention.has(a.k)) return null;
+                            return <CheckFacet key={a.k} label={a.label} count={n} dim={n === 0}
+                                checked={fAttention.has(a.k)} onClick={() => toggle(setFAttention)(a.k)}/>;
+                        })}
+                    </FacetGroup>
+
+                    <button onClick={() => setShowEmpty(v => !v)}
+                        style={{ width: '100%', marginTop: 4, padding: '6px 0', fontSize: 11, fontWeight: 600,
+                            color: T.goldInk, background: 'transparent', border: `1px dashed ${T.borderStrong}`,
+                            borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                        {showEmpty ? 'Hide empty options' : 'Show empty options'}
+                    </button>
+                    {anyFilter > 0 && (
+                        <button onClick={clearAll}
+                            style={{ width: '100%', marginTop: 6, padding: '6px 0', fontSize: 11, fontWeight: 600,
+                                color: T.inkMid, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: T.sans }}>
+                            Clear all filters
+                        </button>
+                    )}
+                </div>
+
+                {/* ── MIDDLE: the list ───────────────────────────────────── */}
+                <div style={{ borderRight: `1px solid ${T.border}`, minHeight: 0, overflow: 'auto', background: T.surface }}>
+                    <div style={{ padding: '11px 14px', borderBottom: `1px solid ${T.border}`, display: 'flex',
+                        alignItems: 'baseline', gap: 8, position: 'sticky', top: 0, background: T.surface, zIndex: 1 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>
+                            {fPlans.size === 1
+                                ? (presentation.find(p => fPlans.has(p.id)) || {}).label
+                                : anyFilter ? 'Filtered' : 'All customers'}
+                        </span>
+                        <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                            {list.length} of {(customers || []).length} · sorted by renewal
+                        </span>
                     </div>
-                ) : (
-                    <div style={{ maxWidth: 620 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 16 }}>
-                            <span style={{ fontSize: 20, fontStyle: 'italic', fontWeight: 300, color: T.ink, fontFamily: T.serif }}>
-                                {draft._isNew ? 'New customer' : draft.name}
-                            </span>
-                            {draft.customerNumber && (
-                                <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.mono }}>{draft.customerNumber}</span>
-                            )}
+                    {list.length === 0 && (
+                        <div style={{ padding: '16px 14px', fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>
+                            No customers match these filters.
                         </div>
-
-                        {/* Service summary — derived from jobs, never stored. */}
-                        {!draft._isNew && (() => {
-                            const st  = stats[draft.id] || { total: 0, completed: 0, lastServed: null, upcoming: 0, nextDate: null };
-                            const exp = expiryBucket(draft, todayStr, soonStr);
-                            const gap = st.lastServed ? daysBetween(st.lastServed, todayStr) : null;
-                            return (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10,
-                                    padding: '10px 12px', marginBottom: 16, background: T.surface2,
-                                    border: `1px solid ${T.border}`, borderRadius: T.r }}>
-                                    {[
-                                        { l: 'Jobs completed', v: String(st.completed) },
-                                        { l: 'Last served',    v: st.lastServed ? `${st.lastServed}${gap != null ? ` (${gap}d)` : ''}` : 'Never' },
-                                        { l: 'Upcoming',       v: st.upcoming > 0 ? `${st.upcoming} · ${st.nextDate}` : 'None' },
-                                        { l: 'Plan',           v: coverageOf(draft, plans).label },
-                                    ].map(x => (
-                                        <div key={x.l}>
-                                            <div style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3, fontFamily: T.sans }}>{x.l}</div>
-                                            <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{x.v}</div>
-                                        </div>
-                                    ))}
-                                    {exp && (
-                                        <div style={{ gridColumn: '1 / -1', fontSize: 11.5, fontFamily: T.sans,
-                                            color: exp === 'expired' ? T.danger : T.warn, fontWeight: 600 }}>
-                                            {exp === 'expired'
-                                                ? `Agreement expired ${draft.agreementExpiry}.`
-                                                : `Agreement renews ${draft.agreementExpiry} — ${daysBetween(todayStr, draft.agreementExpiry)} days.`}
-                                        </div>
-                                    )}
+                    )}
+                    {list.map(c => {
+                        const p  = presOf(c);
+                        const cs = stats[c.id] || {};
+                        const on = c.id === selectedId;
+                        const od = overdueBy[c.id] || 0;
+                        const rd = renewalDays(c);
+                        return (
+                            <div key={c.id} onClick={() => { setSelectedId(c.id); setEditing(false); }}
+                                style={{ padding: '11px 14px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
+                                    background: on ? 'rgba(200,185,154,0.16)' : 'transparent',
+                                    boxShadow: on ? `inset 3px 0 0 ${p.color}` : 'none' }}>
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans,
+                                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                                    <span style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.mono }}>{c.customerNumber || '—'}</span>
                                 </div>
-                            );
-                        })()}
-                        <CustFieldRow label="Name *">
-                            <input value={draft.name || ''} onChange={e => set('name', e.target.value)} style={custInput}/>
-                        </CustFieldRow>
-
-                        <CustFieldRow label="Linked CRM account">
-                            <select value={draft.accountId || ''} onChange={e => set('accountId', e.target.value)} style={custInput}>
-                                <option value="">— Not linked —</option>
-                                {(accounts || []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                            </select>
-                            {linkedAccount && (
-                                <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
-                                    {[linkedAccount.address, linkedAccount.city, linkedAccount.state, linkedAccount.zip].filter(Boolean).join(', ') || 'No address on the account'}
-                                    {' · '}
-                                    <span onClick={copyFromAccount} style={{ color: T.info, cursor: 'pointer', fontWeight: 600 }}>copy address</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
+                                    <PlanBadge pres={p} small/><PropertyTag type={c.customerType}/>
                                 </div>
-                            )}
-                        </CustFieldRow>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <CustFieldRow label="Customer type">
-                                <select value={draft.customerType || 'commercial'} onChange={e => set('customerType', e.target.value)} style={custInput}>
-                                    {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
-                                </select>
-                            </CustFieldRow>
-                            <CustFieldRow label="Service plan">
-                                <select value={draft.servicePlanId || ''} onChange={e => set('servicePlanId', e.target.value || null)} style={custInput}>
-                                    <option value="">— No plan —</option>
-                                    {/* A deleted plan must not fall through to "No plan":
-                                        that clears real coverage on the next save. */}
-                                    {draft.servicePlanId && !(plans || []).some(p => p.id === draft.servicePlanId) && (
-                                        <option value={draft.servicePlanId}>Deleted plan ({draft.servicePlanId})</option>
-                                    )}
-                                    {(plans || [])
-                                        .filter(p => p.active !== false || p.id === draft.servicePlanId)
-                                        .map(p => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.name}{p.active === false ? ' (inactive)' : ''}
-                                            </option>
-                                        ))}
-                                </select>
-                                {planOnDraft && (
-                                    <div style={{ marginTop: 5, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
-                                        {[
-                                            planOnDraft.visitsPerYear ? `${planOnDraft.visitsPerYear} visit${planOnDraft.visitsPerYear === 1 ? '' : 's'}/yr` : null,
-                                            planOnDraft.includedHours ? `${planOnDraft.includedHours} hrs included` : null,
-                                            planOnDraft.responseHours ? `${planOnDraft.responseHours}h response` : null,
-                                        ].filter(Boolean).join(' · ') || 'No terms recorded on this plan.'}
-                                    </div>
-                                )}
-                            </CustFieldRow>
-                        </div>
-
-                        {/* Legacy coverage. `serviceAgreement` predates plans and is the
-                            only record of what this customer was on beforehand, so it is
-                            shown rather than silently overwritten when a plan is chosen. */}
-                        {draft.serviceAgreement && draft.serviceAgreement !== 'none' && (
-                            <div style={{ padding: '7px 10px', marginBottom: 12, borderRadius: T.r,
-                                background: draft.servicePlanId ? T.surface2 : `${T.warn}12`,
-                                borderLeft: `3px solid ${draft.servicePlanId ? T.borderStrong : T.warn}`,
-                                fontSize: 11.5, fontFamily: T.sans, color: T.inkMid }}>
-                                Legacy agreement label: <strong style={{ color: T.ink }}>{labelise(draft.serviceAgreement)}</strong>
-                                {draft.servicePlanId
-                                    ? ' — superseded by the plan above, kept for reference.'
-                                    : ' — not yet mapped to a service plan. Pick one above, or leave it if this customer is genuinely uncovered.'}
-                                {' '}
-                                <span onClick={() => set('serviceAgreement', 'none')}
-                                    style={{ color: T.info, fontWeight: 600, cursor: 'pointer' }}>Clear label</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, fontSize: 11,
+                                    color: T.inkMuted, fontFamily: T.sans, flexWrap: 'wrap' }}>
+                                    <span>{cs.completed ? `${cs.completed} visit${cs.completed === 1 ? '' : 's'}` : 'Never served'}</span>
+                                    <span>·</span>
+                                    <span>{cs.nextDate ? `Next ${shortDate(cs.nextDate)}` : 'Unscheduled'}</span>
+                                    {od > 0 && <><span>·</span><span style={{ color: T.warn, fontWeight: 700 }}>{od} overdue</span></>}
+                                    {rd != null && rd <= 30 && <><span>·</span><span style={{ color: T.danger, fontWeight: 700 }}>{rd}d</span></>}
+                                    {c.doNotService && <><span>·</span><span style={{ color: T.danger, fontWeight: 700 }}>do not service</span></>}
+                                </div>
                             </div>
-                        )}
+                        );
+                    })}
+                </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <CustFieldRow label="Plan starts">
-                                <input type="date" value={draft.planStartDate || ''}
-                                    onChange={e => set('planStartDate', e.target.value || null)}
-                                    disabled={!draft.servicePlanId}
-                                    style={{ ...custInput, opacity: draft.servicePlanId ? 1 : 0.5,
-                                        border: (draft.servicePlanId && !draft.planStartDate) ? `1px solid ${T.warn}` : undefined }}/>
-                                {/* This date is the anchor every visit is counted from. Without
-                                    it the customer is simply absent from Service Due — silently,
-                                    which is exactly the failure mode worth shouting about. */}
-                                {draft.servicePlanId && !draft.planStartDate && (
-                                    <div style={{ marginTop: 5, fontSize: 11, color: T.warn, fontFamily: T.sans }}>
-                                        Required — visits are counted from this date. Without it no visit will ever come due.
+                {/* ── RIGHT: the service-customer record ─────────────────── */}
+                <div style={{ minHeight: 0, overflow: 'auto', padding: '18px 24px 24px' }}>
+                    {editing && draft ? (
+                        <CustomerEditForm draft={draft} set={set} accounts={accounts} techs={techs} plans={plans}
+                            planOnDraft={planOnDraft} prefTech={prefTech} prefMissing={prefMissing} prefOptions={prefOptions}
+                            saving={saving} status={status} onSave={save}
+                            onCancel={() => { setEditing(false); setDraft(null); setStatus(null); }}/>
+                    ) : !selected ? (
+                        <div style={{ fontSize: 13, color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic' }}>
+                            No customers yet. Use <strong style={{ color: T.ink }}>+ New customer</strong> to add the first one.
+                        </div>
+                    ) : (
+                        <>
+                            {/* Identity */}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+                                        <div style={{ fontSize: 22, fontFamily: T.serif, fontStyle: 'italic', color: T.ink, lineHeight: 1.15 }}>
+                                            {selected.name}
+                                        </div>
+                                        <PlanBadge pres={pres}/>
+                                        {selected.doNotService && (
+                                            <span style={{ fontSize: 10.5, fontWeight: 700, color: T.danger, fontFamily: T.sans,
+                                                background: `${T.danger}1a`, padding: '2px 8px', borderRadius: 999 }}>Do not service</span>
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, fontSize: 12,
+                                        color: T.inkMid, fontFamily: T.sans, flexWrap: 'wrap' }}>
+                                        <span style={{ fontFamily: T.mono, fontSize: 11 }}>{selected.customerNumber || '—'}</span>
+                                        <span>·</span>
+                                        <PropertyTag type={selected.customerType}/>
+                                        {(selected.serviceAddress || selected.serviceCity) && <>
+                                            <span>·</span>
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                <DIcon name="pin" size={11} color={T.inkMuted}/>
+                                                {[selected.serviceAddress, selected.serviceCity, selected.serviceState].filter(Boolean).join(', ')}
+                                            </span>
+                                        </>}
+                                    </div>
+                                    {linkedAccount && (
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 11.5,
+                                            fontWeight: 600, color: T.goldInk, background: T.surface, padding: '4px 9px',
+                                            border: `1px solid ${T.border}`, borderRadius: 999, fontFamily: T.sans }}>
+                                            <DIcon name="link" size={11} color={T.goldInk}/>Linked to account · {linkedAccount.name}
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                                    <button onClick={() => setEditing(true)}
+                                        style={{ padding: '7px 13px', fontSize: 12, fontWeight: 600, color: T.inkMid,
+                                            background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r,
+                                            cursor: 'pointer', fontFamily: T.sans }}>Edit details</button>
+                                    {onScheduleJob && (
+                                        <button onClick={() => onScheduleJob(selected)}
+                                            style={{ padding: '7px 13px', fontSize: 12, fontWeight: 700, color: T.surface,
+                                                background: T.ink, border: 'none', borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                                            Schedule job
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Contract card */}
+                            <div style={{ marginTop: 18, padding: '14px 16px', background: pres.fill,
+                                borderLeft: `3px solid ${pres.color}`, borderRadius: T.r }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <DIcon name="shield" size={15} color={pres.color}/>
+                                    <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase',
+                                        color: pres.color, fontFamily: T.sans }}>
+                                        {selPlan ? `${pres.label} contract` : 'No service contract'}
+                                    </span>
+                                    <div style={{ flex: 1 }}/>
+                                    {rDays != null && rDays <= 30 && (
+                                        <span style={{ fontSize: 10.5, fontWeight: 700, color: T.danger, fontFamily: T.sans,
+                                            background: `${T.danger}1a`, padding: '2px 8px', borderRadius: 999 }}>
+                                            {rDays < 0 ? `Expired ${Math.abs(rDays)} days ago` : `Renews in ${rDays} days`}
+                                        </span>
+                                    )}
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginTop: 12 }}>
+                                    <div>
+                                        <div style={eyebrow(null, 9)}>Response SLA</div>
+                                        <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, marginTop: 2, fontFamily: T.sans }}>
+                                            {selPlan ? planSlaText(selPlan) : 'Best effort'}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style={eyebrow(null, 9)}>Preventive maintenance</div>
+                                        <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, marginTop: 2, fontFamily: T.sans }}>
+                                            {planPmText(selPlan)}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style={eyebrow(null, 9)}>Annual value</div>
+                                        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, marginTop: 2,
+                                            fontFamily: T.sans, fontVariantNumeric: 'tabular-nums' }}>
+                                            {selPlan && annualPlanValue(selPlan) > 0
+                                                ? '$' + Math.round(annualPlanValue(selPlan)).toLocaleString()
+                                                : '—'}
+                                        </div>
+                                    </div>
+                                </div>
+                                {selected.servicePlanId && !selected.planStartDate && (
+                                    <div style={{ marginTop: 10, fontSize: 11.5, fontWeight: 600, color: T.warn, fontFamily: T.sans }}>
+                                        No plan start date — visits are counted from it, so none will ever come due.
                                     </div>
                                 )}
-                            </CustFieldRow>
-                            {/* agreementExpiry existed on the record from the start with no
-                                control to set it, so every renewal warning was unreachable. */}
-                            <CustFieldRow label="Coverage ends">
-                                <input type="date" value={draft.agreementExpiry || ''}
-                                    onChange={e => set('agreementExpiry', e.target.value || null)}
-                                    disabled={coverageOf(draft, plans).kind === 'none'}
-                                    style={{ ...custInput, opacity: coverageOf(draft, plans).kind === 'none' ? 0.5 : 1 }}/>
-                            </CustFieldRow>
-                        </div>
+                            </div>
 
-                        <CustFieldRow label="Preferred technician">
-                            <select value={draft.preferredTechId || ''} onChange={e => set('preferredTechId', e.target.value || null)} style={custInput}>
-                                <option value="">— No preference —</option>
-                                {/* A stale id must not fall through to the first option: an
-                                    unmatched select value renders as "No preference" and the
-                                    next save would clear a real preference without saying so. */}
-                                {prefMissing && <option value={draft.preferredTechId}>Unknown technician ({draft.preferredTechId})</option>}
-                                {prefOptions.map(t => (
-                                    <option key={t.id} value={t.id}>
-                                        {t.name}{t.status !== 'active' ? ` (${labelise(t.status || 'inactive')})` : ''}
-                                    </option>
-                                ))}
-                            </select>
-                            {prefMissing && (
-                                <div style={{ marginTop: 5, fontSize: 11, fontFamily: T.sans, color: T.danger }}>
-                                    This technician is no longer on the roster. Pick another, or set no preference and save to clear it.
+                            {/* Service stats */}
+                            <div style={{ display: 'flex', gap: 9, marginTop: 16 }}>
+                                <MiniStat label="Visits to date" value={st.completed ?? 0}/>
+                                <MiniStat label="Open jobs"     value={st.upcoming ?? 0}/>
+                                <MiniStat label="Last service"
+                                    value={st.lastServed ? `${daysBetween(st.lastServed, todayStr)}d ago` : 'Never'}/>
+                                <MiniStat label="Overdue PM" value={overdueBy[selected.id] || 0}
+                                    tone={(overdueBy[selected.id] || 0) > 0 ? T.warn : undefined}/>
+                            </div>
+
+                            {/* Upcoming + recent */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 20 }}>
+                                <div>
+                                    <div style={{ ...eyebrow(T.ink), marginBottom: 9 }}>Upcoming work</div>
+                                    {upcoming.length === 0 && (
+                                        <div style={{ fontSize: 11.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>Nothing scheduled.</div>
+                                    )}
+                                    {upcoming.map(j => (
+                                        <WorkRow key={j.id} icon="calendar" label={j.title || 'Job'}
+                                            meta={`${shortDate(j.scheduledDate)} · ${techName(j.assignedTechId)}`}/>
+                                    ))}
                                 </div>
-                            )}
-                            {prefTech && prefTech.status !== 'active' && (
-                                <div style={{ marginTop: 5, fontSize: 11, fontFamily: T.sans, color: T.warn }}>
-                                    {prefTech.name} is {labelise(prefTech.status)}. The crew builder will still favour them when they return.
+                                <div>
+                                    <div style={{ ...eyebrow(T.ink), marginBottom: 9 }}>Recent service</div>
+                                    {recent.length === 0 && (
+                                        <div style={{ fontSize: 11.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No completed visits yet.</div>
+                                    )}
+                                    {recent.map(j => (
+                                        <WorkRow key={j.id} icon="wrench" label={j.title || 'Job'}
+                                            meta={`${shortDate(j.scheduledDate)} · ${techName(j.assignedTechId)}`}/>
+                                    ))}
                                 </div>
-                            )}
-                        </CustFieldRow>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                            {[['contactName', 'Contact'], ['contactPhone', 'Phone'], ['contactEmail', 'Email']].map(([k, l]) => (
-                                <CustFieldRow key={k} label={l}>
-                                    <input value={draft[k] || ''} onChange={e => set(k, e.target.value)} style={custInput}/>
-                                </CustFieldRow>
-                            ))}
-                        </div>
-
-                        <CustFieldRow label="Service address">
-                            <input value={draft.serviceAddress || ''} onChange={e => set('serviceAddress', e.target.value)} style={custInput}/>
-                        </CustFieldRow>
-                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
-                            {[['serviceCity', 'City'], ['serviceState', 'State'], ['serviceZip', 'Zip']].map(([k, l]) => (
-                                <CustFieldRow key={k} label={l}>
-                                    <input value={draft[k] || ''} onChange={e => set(k, e.target.value)} style={custInput}/>
-                                </CustFieldRow>
-                            ))}
-                        </div>
-
-                        <CustFieldRow label="Notes">
-                            <textarea value={draft.notes || ''} onChange={e => set('notes', e.target.value)} rows={3}
-                                style={{ ...custInput, resize: 'vertical' }}/>
-                        </CustFieldRow>
-
-                        <div style={{ padding: '10px 12px', border: `1px solid ${draft.doNotService ? T.danger : T.border}`,
-                            borderRadius: T.r, marginBottom: 16, background: draft.doNotService ? `${T.danger}0a` : 'transparent' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: T.ink, fontFamily: T.sans }}>
-                                <input type="checkbox" checked={!!draft.doNotService} onChange={e => set('doNotService', e.target.checked)}/>
-                                Do not service
-                            </label>
-                            {draft.doNotService && (
-                                <input value={draft.doNotServiceReason || ''} onChange={e => set('doNotServiceReason', e.target.value)}
-                                    placeholder="Reason" style={{ ...custInput, marginTop: 8 }}/>
-                            )}
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <button onClick={save} disabled={saving}
-                                style={{ padding: '8px 18px', background: saving ? T.inkMuted : T.ink, color: T.surface,
-                                    border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600,
-                                    cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
-                                {saving ? 'Saving…' : (draft._isNew ? 'Create customer' : 'Save changes')}
-                            </button>
-                            {status && (
-                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: T.sans,
-                                    color: status.kind === 'ok' ? T.ok : T.danger }}>{status.msg}</span>
-                            )}
-                        </div>
-                    </div>
-                )}
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -4665,7 +4967,21 @@ export default function DispatchTab() {
                             const i = prev.findIndex(c => c.id === saved.id);
                             if (i === -1) return [...prev, saved];
                             const next = [...prev]; next[i] = saved; return next;
-                        })}/>
+                        })}
+                        onGoToDue={() => setView('due')}
+                        onScheduleJob={cust => {
+                            // Same prefill path as a plan visit, minus the plan link:
+                            // the customer is fixed, everything else is the dispatcher's.
+                            setNewJobForm({ ...EMPTY_JOB,
+                                customer:   cust.name || '',
+                                customerId: cust.id,
+                                accountId:  cust.accountId || '',
+                                address:    cust.serviceAddress || '', city: cust.serviceCity  || '',
+                                state:      cust.serviceState   || '', zip:  cust.serviceZip   || '' });
+                            setAppliedTemplate(null);
+                            setNewJobError('');
+                            setShowNewJobForm(true);
+                        }}/>
                 ) : (
                     <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} allTechs={techs} skills={skills} equipUnits={equipment} vehicles={vehicles}
                         blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
