@@ -7,7 +7,7 @@ import {
 } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -274,10 +274,12 @@ export const handler = async (event) => {
                 .from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
 
-            const row = {
+            // jobNumber is issued inside the retry below, so a collision re-reads
+            // the maximum instead of retrying with the same losing number.
+            const buildRow = (jobNumber) => ({
                 id:               data.id,
                 orgId,
-                jobNumber:        priorJob?.jobNumber || await nextJobNumber(orgId),
+                jobNumber,
                 customerId:       data.customerId,
                 locationId:       data.locationId       ?? null,
                 accountId:        data.accountId        ?? null,
@@ -326,10 +328,15 @@ export const handler = async (event) => {
                 dispatchedBy:     data.dispatchedBy      ?? null,
                 createdAt:        new Date(),
                 updatedAt:        new Date(),
-            };
+            });
 
-            await db.insert(dispatchJobs).values(row)
-                .onConflictDoUpdate({ target: dispatchJobs.id, setWhere: eq(dispatchJobs.orgId, orgId), set: { ...row, createdAt: undefined } });
+            const row = await withNumberRetry(async () => {
+                const jobNumber = priorJob?.jobNumber || await nextJobNumber(orgId);
+                const r = buildRow(jobNumber);
+                await db.insert(dispatchJobs).values(r)
+                    .onConflictDoUpdate({ target: dispatchJobs.id, setWhere: eq(dispatchJobs.orgId, orgId), set: { ...r, createdAt: undefined } });
+                return r;
+            }, { label: 'job number' });
 
             await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');
 

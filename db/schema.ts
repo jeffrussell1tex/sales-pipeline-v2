@@ -451,6 +451,11 @@ export const quotes = pgTable('quotes', {
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('quotes_org_id_idx').on(t.orgId),
+    // Uniqueness is per (org, number, VERSION) — v1/v2/v3 of a quote deliberately
+    // share one quote_number, so a two-column unique index would make versioning
+    // impossible. This still stops two reps being issued the same number for the
+    // same version, which is the actual collision the generator can produce.
+    uniqueIndex('quotes_org_number_version_uq').on(t.orgId, t.quoteNumber, t.version),
 ]);
 
 // ── BACKUPS ───────────────────────────────────────────────────────────────────
@@ -762,6 +767,11 @@ export const dispatchCustomers = pgTable('dispatch_customers', {
     updatedAt:          timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('dispatch_customers_org_id_idx').on(t.orgId),
+    // customer_number is nullable; Postgres treats NULLs as distinct in a unique
+    // index, so pre-numbering rows are unaffected. This closes the read-max-then-
+    // add-one race in nextCustomerNumber: two concurrent creates now surface as a
+    // 23505 the endpoint retries, rather than two customers sharing CUST-0007.
+    uniqueIndex('dispatch_customers_org_number_uq').on(t.orgId, t.customerNumber),
 ]);
 
 // ── DISPATCH SERVICE PLANS ────────────────────────────────────────────────────
@@ -912,6 +922,7 @@ export const dispatchJobs = pgTable('dispatch_jobs', {
     updatedAt:          timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('dispatch_jobs_org_id_idx').on(t.orgId),
+    uniqueIndex('dispatch_jobs_org_number_uq').on(t.orgId, t.jobNumber),
 ]);
 
 // ── DISPATCH JOB LINE ITEMS ───────────────────────────────────────────────────

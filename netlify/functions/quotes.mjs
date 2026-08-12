@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { quotes, opportunities, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -211,18 +211,23 @@ export const handler = async (event) => {
             const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];
             const totals = calcTotals(lineItems, data.dealDiscount || 0);
 
-            const payload = {
+            const basePayload = {
                 ...sanitize(data),
                 orgId,
                 lineItems,
                 ...totals,
                 version: Number(data.version) || 1,
-                quoteNumber: await resolveQuoteNumber(orgId, data),
                 dealDiscount: String(data.dealDiscount || 0),
                 status: 'Draft',
             };
 
-            const [inserted] = await db.insert(quotes).values(payload).returning();
+            // Resolved inside the retry so a collision re-reads the maximum. Note a
+            // NEW VERSION reuses its predecessor's number by design, and the unique
+            // index is on (org, number, version) — so versioning cannot trip it.
+            const [inserted] = await withNumberRetry(async () => {
+                const quoteNumber = await resolveQuoteNumber(orgId, data);
+                return db.insert(quotes).values({ ...basePayload, quoteNumber }).returning();
+            }, { label: 'quote number' });
             return { statusCode: 201, headers, body: JSON.stringify({ quote: inserted }) };
         }
 
@@ -286,13 +291,17 @@ export const handler = async (event) => {
             // empty.
             const [existing] = await db.select({ n: quotes.quoteNumber })
                 .from(quotes).where(and(eq(quotes.id, data.id), eq(quotes.orgId, orgId))).limit(1);
-            const quoteNumber = existing?.n || await resolveQuoteNumber(orgId, data);
 
-            const [updated] = await db
-                .insert(quotes).values({ ...payload, quoteNumber, createdAt: new Date() })
-                // `set` deliberately excludes quoteNumber: assigned once, never changed.
-                .onConflictDoUpdate({ target: quotes.id, setWhere: eq(quotes.orgId, orgId), set: payload })
-                .returning();
+            const [updated] = await withNumberRetry(async () => {
+                // An existing row keeps its number, so the retry only ever re-issues
+                // for the upsert-creates-a-row case.
+                const quoteNumber = existing?.n || await resolveQuoteNumber(orgId, data);
+                return db
+                    .insert(quotes).values({ ...payload, quoteNumber, createdAt: new Date() })
+                    // `set` excludes quoteNumber: assigned once, never changed.
+                    .onConflictDoUpdate({ target: quotes.id, setWhere: eq(quotes.orgId, orgId), set: payload })
+                    .returning();
+            }, { label: 'quote number' });
             return { statusCode: 200, headers, body: JSON.stringify({ quote: updated }) };
         }
 

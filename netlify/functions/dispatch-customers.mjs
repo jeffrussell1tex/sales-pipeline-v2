@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { dispatchCustomers, dispatchServiceLocations } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -193,9 +193,11 @@ export const handler = async (event) => {
             const [priorCust] = await db.select({ customerNumber: dispatchCustomers.customerNumber })
                 .from(dispatchCustomers)
                 .where(and(eq(dispatchCustomers.id, data.id), eq(dispatchCustomers.orgId, orgId)));
-            const customerNumber = priorCust?.customerNumber || await nextCustomerNumber(orgId);
 
-            const row = {
+            // The number is issued INSIDE the retry, not before it: on a collision
+            // the whole read-max-then-insert has to run again, otherwise every
+            // attempt would retry with the same losing number.
+            const buildRow = (customerNumber) => ({
                 id:                 data.id,
                 orgId,
                 accountId:          data.accountId          ?? null,
@@ -228,9 +230,15 @@ export const handler = async (event) => {
                 tags:               JSON.stringify(data.tags ?? []),
                 createdAt:          new Date(),
                 updatedAt:          new Date(),
-            };
-            await db.insert(dispatchCustomers).values(row)
-                .onConflictDoUpdate({ target: dispatchCustomers.id, setWhere: eq(dispatchCustomers.orgId, orgId), set: { ...row, createdAt: undefined } });
+            });
+
+            await withNumberRetry(async () => {
+                const customerNumber = priorCust?.customerNumber || await nextCustomerNumber(orgId);
+                const row = buildRow(customerNumber);
+                await db.insert(dispatchCustomers).values(row)
+                    .onConflictDoUpdate({ target: dispatchCustomers.id, setWhere: eq(dispatchCustomers.orgId, orgId), set: { ...row, createdAt: undefined } });
+            }, { label: 'customer number' });
+
             const [inserted] = await db.select().from(dispatchCustomers)
                 .where(and(eq(dispatchCustomers.id, data.id), eq(dispatchCustomers.orgId, orgId)));
             return { statusCode: 201, headers, body: JSON.stringify({ customer: normaliseCust(inserted) }) };
