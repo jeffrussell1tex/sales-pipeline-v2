@@ -2440,12 +2440,17 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
     // "+ New customer" opened an existing record.
     const creating = !!(draft && draft._isNew);
     React.useEffect(() => {
-        if (creating) return;
+        // Never re-point while the form is open. `list` is the FILTERED list, so
+        // clicking a facet that excludes the customer being edited would otherwise
+        // drop them from it, re-point selectedId at someone else, and the effect
+        // below would load THAT customer over the in-progress edit — silently
+        // discarding unsaved changes and swapping the form under the user.
+        if (creating || editing) return;
         if (selectedId && list.some(c => c.id === selectedId)) return;
         if (list.length) setSelectedId(list[0].id);
         else setSelectedId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [list.map(c => c.id).join(','), selectedId, creating]);
+    }, [list.map(c => c.id).join(','), selectedId, creating, editing]);
 
     const selected = (customers || []).find(c => c.id === selectedId) || null;
 
