@@ -3535,7 +3535,19 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
 // Nothing is written until the proposal is confirmed. A job whose every candidate
 // carries a blocker is left alone and reported as unplaceable, rather than being
 // assigned with a warning nobody reads.
-const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], fromStr, toStr }) => {
+// Mass-scheduling. Three things this used to ignore, all of which produced
+// proposals that the single-job scheduler would have refused:
+//
+//   1. crewSize — one technician was assigned regardless, so a job needing three
+//      was silently under-crewed. Partial crews are now SKIPPED with a reason
+//      rather than proposed: a job that looks scheduled but is two techs short is
+//      worse than one that is visibly still in the queue.
+//   2. equipCategories — availability was never checked, so two jobs in the same
+//      run could both claim the last pressure tester.
+//   3. Placements made EARLIER IN THIS RUN were invisible to equipment checks.
+//      Technician load already had a running `busy` ledger; equipment needed the
+//      same, or the first two proposals would each look fine in isolation.
+const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], equipUnits = [], fromStr, toStr }) => {
     const proposals = [];
     const skipped   = [];
 
@@ -3547,6 +3559,22 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], from
             .map(j => ({ date: j.scheduledDate, start: j.start, end: j.start + (j.durationHrs || 2) }));
     });
 
+    // Running equipment ledger — existing commitments plus everything placed so far
+    // in this run. Shaped like a job so it can be fed straight to equipmentConflicts.
+    const placedSoFar = [];
+
+    const equipFree = (job, dateStr, startHr) => {
+        if (!(job.equipCategories || []).length) return [];
+        return equipmentConflicts(
+            job,
+            [...jobs, ...placedSoFar],
+            equipUnits,
+            dateStr,
+            { start: startHr, durationHrs: job.durationHrs || 2 });
+    };
+
+    // Every technician who could work this job on this day, each with the first
+    // slot inside their own shift where they are free. Sorted best-first.
     const candidatesForDay = (job, dateStr) => {
         const dur = job.durationHrs || 2;
         return techs
@@ -3554,7 +3582,6 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], from
             .filter(c => c.blockers.length === 0)
             .sort((a, b) => b.score - a.score)
             .map(c => {
-                // First slot inside this tech's own shift where they are free.
                 const shift = shiftForDate(c.tech, dateStr);
                 if (!shift) return null;
                 const shiftStart = hhToNum(shift.start);
@@ -3564,18 +3591,37 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], from
                     .filter(b => b.allDay === false && b.startTime && b.endTime)
                     .map(b => ({ start: hhToNum(b.startTime), end: hhToNum(b.endTime) }));
 
+                const slots = [];
                 for (const h of DSP_HOURS) {
                     if (h < shiftStart || h + dur > shiftEnd) continue;
                     const clash = (busy[c.tech.id] || []).some(b =>
                         b.date === dateStr && h < b.end && (h + dur) > b.start);
                     if (clash) continue;
-                    const offClash = partials.some(pb => h < pb.end && (h + dur) > pb.start);
-                    if (offClash) continue;
-                    return { ...c, startHr: h };
+                    if (partials.some(pb => h < pb.end && (h + dur) > pb.start)) continue;
+                    slots.push(h);
                 }
-                return null;
+                return slots.length ? { ...c, slots } : null;
             })
             .filter(Boolean);
+    };
+
+    // A crew must work the SAME hour, so the slot is chosen first and the crew
+    // assembled from whoever is free then — not the other way round, which would
+    // pick the best techs and then find they never overlap.
+    const crewForDay = (job, dateStr, need) => {
+        const cands = candidatesForDay(job, dateStr);
+        if (cands.length < need) return { crew: null, shortfall: cands.length };
+
+        for (const h of DSP_HOURS) {
+            const free = cands.filter(c => c.slots.includes(h));
+            if (free.length < need) continue;
+            const eq = equipFree(job, dateStr, h);
+            if (eq.length) continue;                 // equipment busy at this hour
+            return { crew: free.slice(0, need), startHr: h };
+        }
+        // Distinguish "not enough people" from "people, but never at the same time
+        // or the kit was busy" — they need different fixes.
+        return { crew: null, shortfall: cands.length, noCommonSlot: true };
     };
 
     // Unscheduled jobs only; urgent first so the best techs go to the worst jobs.
@@ -3585,6 +3631,8 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], from
         .sort((a, b) => (PRIORITY_RANK[normalisePriority(b.priority)] ?? 1) - (PRIORITY_RANK[normalisePriority(a.priority)] ?? 1));
 
     for (const job of queue) {
+        const need = Math.max(1, parseInt(job.crewSize, 10) || 1);
+
         // Respect an existing date; otherwise try each day in the window.
         const days = job.scheduledDate
             ? [job.scheduledDate]
@@ -3595,28 +3643,58 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], from
             })();
 
         let placed = null;
+        let lastMiss = null;
         for (const dateStr of days) {
-            const best = candidatesForDay(job, dateStr)[0];
-            if (best) { placed = { dateStr, ...best }; break; }
+            const r = crewForDay(job, dateStr, need);
+            if (r.crew) { placed = { dateStr, crew: r.crew, startHr: r.startHr }; break; }
+            lastMiss = r;
         }
 
         if (!placed) {
             const anyCandidate = techs
                 .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills, { blocks, blockTypes, vehicles, dateStr: job.scheduledDate }) }))
                 .sort((a, b) => a.blockers.length - b.blockers.length)[0];
-            skipped.push({
-                job,
-                reason: anyCandidate?.blockers?.length
-                    ? anyCandidate.blockers[0]
-                    : 'No technician free in this window',
-            });
+
+            let reason;
+            if (need > 1 && lastMiss && lastMiss.shortfall < need && !lastMiss.noCommonSlot) {
+                reason = `Needs ${need} technicians; only ${lastMiss.shortfall} available`;
+            } else if (need > 1 && lastMiss && lastMiss.noCommonSlot) {
+                reason = `Needs ${need} technicians free at the same time — no common slot`;
+            } else if (anyCandidate?.blockers?.length) {
+                reason = anyCandidate.blockers[0];
+            } else if ((job.equipCategories || []).length) {
+                // Only claim equipment when technicians were genuinely available.
+                reason = 'No slot where the required equipment is free';
+            } else {
+                reason = 'No technician free in this window';
+            }
+            skipped.push({ job, reason });
             continue;
         }
 
         const dur = job.durationHrs || 2;
-        busy[placed.tech.id] = [...(busy[placed.tech.id] || []),
-            { date: placed.dateStr, start: placed.startHr, end: placed.startHr + dur }];
-        proposals.push({ job, tech: placed.tech, dateStr: placed.dateStr, startHr: placed.startHr, score: placed.score });
+        placed.crew.forEach(c => {
+            busy[c.tech.id] = [...(busy[c.tech.id] || []),
+                { date: placed.dateStr, start: placed.startHr, end: placed.startHr + dur }];
+        });
+        // Booked equipment becomes visible to every later job in this same run.
+        placedSoFar.push({
+            id: 'plan_' + job.id,
+            equipCategories: job.equipCategories || [],
+            scheduledDate: placed.dateStr,
+            start: placed.startHr,
+            durationHrs: dur,
+            status: 'scheduled',
+        });
+
+        proposals.push({
+            job,
+            tech: placed.crew[0].tech,                       // lead
+            crew: placed.crew.map(c => c.tech),
+            dateStr: placed.dateStr,
+            startHr: placed.startHr,
+            score: placed.crew[0].score,
+        });
     }
 
     return { proposals, skipped };
@@ -3663,7 +3741,9 @@ const MassSchedulePanel = ({ plan, fromStr, toStr, saving, progress, onCancel, o
                             </div>
                         </div>
                         <div style={{ fontSize: 12.5, color: T.ink, fontFamily: T.sans, whiteSpace: 'nowrap' }}>
-                            {pr.tech.name}
+                            {(pr.crew || [pr.tech]).length > 1
+                                ? `${pr.tech.name} +${(pr.crew || []).length - 1}`
+                                : pr.tech.name}
                         </div>
                         <span style={{ fontSize: 10.5, fontFamily: T.mono, color: T.inkMuted, width: 26, textAlign: 'right' }}>
                             {pr.score}
@@ -4796,6 +4876,7 @@ export default function DispatchTab() {
             // Placeholders are excluded: planWeek would propose a slot for a job
             // that does not exist, and every write would 404.
             jobs: filteredJobs.filter(j => !j.isBridge), techs: filteredTechs, skills, vehicles,
+            equipUnits: equipment,
             blocks, blockTypes: settings?.dispatchBlockTypes || [],
             fromStr, toStr,
         });
@@ -4820,7 +4901,11 @@ export default function DispatchTab() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         id: pr.job.id, status: 'scheduled',
-                        assignedTechId: pr.tech.id, coTechIds: [],
+                        // The whole crew is persisted, not just the lead. This used
+                        // to send `coTechIds: []`, so a three-tech proposal was
+                        // written as a one-tech job.
+                        assignedTechId: pr.tech.id,
+                        coTechIds: (pr.crew || []).slice(1).map(t => t.id),
                         scheduledDate: pr.dateStr, scheduledStart: startS, scheduledEnd: endS,
                         timeSlot: 'exact',
                     }),
@@ -4836,7 +4921,9 @@ export default function DispatchTab() {
 
         setJobs(prev => prev.map(j => {
             const pr = applied.find(a => a.job.id === j.id);
-            return pr ? { ...j, assignedTechIds: [pr.tech.id], start: pr.startHr,
+            // Whole crew, not just the lead — otherwise the board shows a
+            // one-tech job until the next reload contradicts it.
+            return pr ? { ...j, assignedTechIds: (pr.crew || [pr.tech]).map(t => t.id), start: pr.startHr,
                 status: 'scheduled', scheduledDate: pr.dateStr, window: hhmm(pr.startHr) } : j;
         }));
 
