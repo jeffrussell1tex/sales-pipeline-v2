@@ -1,6 +1,7 @@
 // settings/company/FiscalYearDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CField, CSelect, CSectionCard, DetailPageChrome } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
@@ -46,6 +47,7 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
     const savedStart = (parseInt(settings?.fiscalYearStart) || 10) - 1; // DB is 1-indexed, UI is 0-indexed
     const [startMonth, setStartMonth] = useState(savedStart);
     const [dirty, setDirty]   = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
 
     const handleCancel = () => { setStartMonth(savedStart); setDirty(false); };
@@ -54,10 +56,19 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
         const dbValue = startMonth + 1; // convert 0-indexed UI to 1-indexed DB (matches AppContext)
         setSettings(prev => ({ ...prev, fiscalYearStart: dbValue }));
         try {
-            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ fiscalYearStart: dbValue }) });
-        } catch(e) { console.error('save fiscal year', e); }
+            // Was a bare dbFetch with no res.ok check, then setDirty(false)
+            // OUTSIDE the try — so a 403 cleared the flag and reported success.
+            // putSettings throws on non-2xx; the rethrow lets the navigation
+            // guard know the save did not land.
+            await putSettings({ fiscalYearStart: dbValue });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            setSaveError(e.message);
+            setSaving(false);
+            throw e;
+        }
         setSaving(false);
-        setDirty(false);
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -86,6 +97,7 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
 
     return (
         <DetailPageChrome
+            error={saveError}
             crumb="Fiscal year" title="Fiscal year"
             subtitle="Quarter starts and fiscal year alignment"
             statusDetail={`Q1 starts ${MONTHS_SHORT[startMonth]} 1`}

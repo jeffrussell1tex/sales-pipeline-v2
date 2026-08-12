@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../../AppContext';
 import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T, eb } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -71,6 +72,7 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
 
     const [personas, setPersonas] = React.useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty,   setDirty]    = React.useState(false);
+    const [saveError, setSaveError] = React.useState('');
     const [saving,  setSaving]   = React.useState(false);
 
     // ── Kebab menu state ──
@@ -107,13 +109,17 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
         setSaving(true);
         setSettings(prev => ({ ...prev, buyerPersonas: personas }));
         try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ buyerPersonas: personas }),
-            });
-        } catch (e) { console.error('save buyer personas', e); }
+            // Was a bare dbFetch with no res.ok check, then setDirty(false) OUTSIDE
+            // the try — a failed save reported success.
+            await putSettings({ buyerPersonas: personas });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            setSaveError(e.message);
+            setSaving(false);
+            throw e;
+        }
         setSaving(false);
-        setDirty(false);
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -183,6 +189,7 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
 
     return (
         <CategoryDetailChrome
+            error={saveError}
             crumb="Buyer personas" title="Buyer personas"
             subtitle="Contact persona tags used in the contact form"
             statusDetail={`${personas.filter(p => p.active !== false).length} active personas`}

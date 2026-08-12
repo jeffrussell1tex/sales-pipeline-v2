@@ -1,6 +1,7 @@
 // settings/company/CompanyProfileDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CField, CInput, CTextarea, CSelect, CSectionCard, DetailPageChrome } from '../shared/form.jsx';
 
@@ -20,6 +21,7 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
     };
     const [form, setForm]   = useState({ ...saved });
     const [dirty, setDirty] = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
 
     const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setDirty(true); };
@@ -40,7 +42,9 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
             quoteHeader:         form.quoteHeader,
         }));
         try {
-            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({
+            // Was a bare dbFetch with no res.ok check, then setDirty(false) OUTSIDE
+            // the try — a 403 cleared the flag and looked like a successful save.
+            await putSettings({
                 companyDisplayName:  form.displayName,
                 companyLegalName:    form.legalName,
                 companyBrandColor:   form.brandColor,
@@ -52,10 +56,15 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
                 companyPhone:        form.phone,
                 companySupportEmail: form.supportEmail,
                 quoteHeader:         form.quoteHeader,
-            })});
-        } catch(e) { console.error('save company profile', e); }
+            });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            setSaveError(e.message);
+            setSaving(false);
+            throw e;
+        }
         setSaving(false);
-        setDirty(false);
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -70,6 +79,7 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
 
     return (
         <DetailPageChrome
+            error={saveError}
             crumb="Company profile" title="Company profile"
             subtitle="Logo, address, phone, and default quote header"
             statusDetail="Complete" updatedBy={settings?.updatedBy || 'Admin'} updatedAt="2 months ago"

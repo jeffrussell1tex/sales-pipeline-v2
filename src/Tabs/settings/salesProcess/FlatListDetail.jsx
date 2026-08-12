@@ -1,6 +1,7 @@
 // settings/salesProcess/FlatListDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -9,6 +10,7 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
     const saved   = settings?.[settingsKey] || [];
     const [items, setItems]   = useState(() => [...saved]);
     const [dirty, setDirty]   = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [saving, setSaving] = useState(false);
     const [newItem, setNewItem] = useState('');
     const inputRef = useRef(null);
@@ -17,11 +19,18 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
         setSaving(true);
         setSettings(prev => ({ ...prev, [settingsKey]: items }));
         try {
-            const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ [settingsKey]: items }) });
-            const json = await res.json();
-            if (!json.success) console.error('save ' + settingsKey + ' failed:', json);
-        } catch(e) { console.error('save ' + settingsKey, e); }
-        setSaving(false); setDirty(false);
+            // A failure was only console.error'd and the dirty flag cleared anyway.
+            // This file is generic, so that one bug applied to every settings key
+            // rendered through it.
+            await putSettings({ [settingsKey]: items });
+            setSaveError('');
+            setDirty(false);
+        } catch (e) {
+            setSaveError(e.message);
+            setSaving(false);
+            throw e;
+        }
+        setSaving(false);
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -56,6 +65,7 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
 
     return (
         <CategoryDetailChrome
+            error={saveError}
             crumb={title} title={title} subtitle={description}
             statusDetail={`${items.length} ${items.length === 1 ? title.toLowerCase().replace(/s$/, '') : title.toLowerCase()}`}
             updatedBy="Admin" updatedAt="now"

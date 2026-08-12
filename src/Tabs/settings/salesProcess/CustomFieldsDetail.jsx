@@ -64,6 +64,14 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
             // Keep the panel dirty: the change was NOT saved, and clearing the
             // flag here is what made a 403 look like success.
             setSaveError(e.message);
+            // Clear the spinner BEFORE rethrowing — the `setSaving(false)` after
+            // this try/catch is skipped by the throw, and the panel would sit on
+            // "Saving…" for the rest of the session.
+            setSaving(false);
+            // Rethrow so the navigation guard knows the save failed. The panel
+            // already keeps itself dirty and shows the error; without this the
+            // guard's `await save()` resolves and it navigates away.
+            throw e;
         }
         setSaving(false);
     };

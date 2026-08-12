@@ -291,24 +291,9 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
             return;                  // guard stays open — see below
         }
 
-        // Panel `handleSave` implementations CATCH their own errors and set a local
-        // saveError instead of rethrowing, so the await above resolves even when
-        // the write failed. Navigating on that would discard the very changes this
-        // dialog exists to protect.
-        //
-        // The reliable signal is the panel's own bookkeeping: `settingsSaveRef` is
-        // set to null by an effect once `dirty` clears, which only happens on a
-        // successful save. Wait for that effect to flush, then check.
-        //
-        // TODO: the proper fix is for panel saves to rethrow (coding guide §18a10);
-        // this check can be deleted once they do.
-        await new Promise(r => setTimeout(r, 60));
-        if (settingsSaveRef && settingsSaveRef.current) {
-            setGuardSaving(false);   // still dirty => the save did not land
-            setGuardFailed(true);
-            return;
-        }
-
+        // Every panel save now rethrows on failure (coding guide §18a10), so the
+        // catch above is the whole story — the timing-based check that used to sit
+        // here, polling settingsSaveRef after a delay, is gone.
         const go = leaveGuard?.go;
         setSettingsDirty(false);
         setLeaveGuard(null);

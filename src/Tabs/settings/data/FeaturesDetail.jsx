@@ -192,6 +192,8 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
             setDirty(false);
         } catch (e) {
             setError('Failed to save: ' + e.message);
+            // Rethrow for the navigation guard. `finally` still clears the spinner.
+            throw e;
         } finally {
             setSaving(false);
         }

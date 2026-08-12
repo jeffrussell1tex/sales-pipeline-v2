@@ -53,6 +53,9 @@ export const DispatchBlockTypesDetail = ({ settings, setSettings, onBack, setSet
         } catch (e) {
             // Surfaced, never swallowed — a failed PUT must not look like a save.
             setError('Could not save: ' + e.message);
+            // Rethrow for the navigation guard. `finally` still clears the
+            // spinner, so no extra cleanup is needed here.
+            throw e;
         } finally {
             setSaving(false);
         }

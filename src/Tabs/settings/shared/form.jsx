@@ -48,7 +48,7 @@ export const CSectionCard = ({ title, description, children, headAction }) => (
 );
 
 // Shared chrome wrapper for all three detail pages
-export const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, updatedAt, onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, rightActions, children }) => (
+export const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, updatedAt, onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, rightActions, error, children }) => (
     <div style={{ fontFamily:T.sans }}>
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
@@ -81,6 +81,24 @@ export const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updated
                 </>)}
             </div>
         </div>
+
+        {/* Same contract as CategoryDetailChrome: a panel that clears its dirty flag
+
+            on a failed PUT tells the user the change was saved when it was not. */}
+
+        {error && (
+
+            <div style={{ padding:'9px 12px', marginBottom:12, borderRadius:T.r,
+
+                background:`${T.danger}12`, border:`1px solid ${T.danger}55`,
+
+                color:T.danger, fontSize:12.5, fontWeight:600, fontFamily:T.sans }}>
+
+                {error}
+
+            </div>
+
+        )}
 
         {children}
     </div>
