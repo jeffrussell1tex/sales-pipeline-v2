@@ -9,6 +9,7 @@ export default function SettingsTab() {
         settings, setSettings,
         currentUser, userRole,
         setActiveTab, setAccountsDeepFilter,
+        settingsDirty = false,
         setSettingsDirty = () => {}, settingsSaveRef = { current: null },
     } = useApp();
 
@@ -34,7 +35,7 @@ export default function SettingsTab() {
 
             {/* Body — role-gated */}
             {canAdmin ? (
-                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>
+                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} settingsDirty={settingsDirty} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>
             ) : (
                 <PersonalView settings={settings} setSettings={setSettings} currentUser={currentUser} isAdmin={false}/>
             )}
