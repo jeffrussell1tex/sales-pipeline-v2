@@ -1656,18 +1656,41 @@ const custInput = {
 // customerTypes. Whether that is the right axis — CRM relationship tier vs.
 // dispatch premises segment — is still an open decision; see the state doc. Until
 // it is settled, an unmatched opportunity gets no template rather than a guess.
-const matchTemplateForOpp = (opp, account, templates) => {
+// A template declares two optional filters — `ctypes` (CRM account types) and
+// `propertyTypes` (dispatch premises segments). An empty filter means "any".
+//
+// A template APPLIES when every filter it specifies matches. Where several apply,
+// the MOST SPECIFIC wins: a template naming both axes beats one naming a single
+// axis, which beats a catch-all. That is what lets an org keep a general "Install"
+// template alongside a "Residential install" override without them fighting.
+//
+// Ties are not resolved by guessing. If two templates are equally specific, none
+// is chosen — the same rule as before, because a wrong template silently supplies
+// wrong crew, hours and licence, which is worse than supplying none.
+const matchTemplateForOpp = (opp, account, templates, customer) => {
     const list = (templates || []).filter(t => t && t.id);
     if (!list.length) return null;
-    const tiers = (account?.customerTypes || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
-    if (tiers.length) {
-        const hit = list.find(t => t.ctype && tiers.includes(String(t.ctype).trim().toLowerCase()));
-        if (hit) return hit;
-    }
-    // A single template is unambiguous, so use it rather than leaving every field
-    // blank. More than one with no match is a genuine choice, and guessing at it
-    // is what produced the fabricated defaults in the first place.
-    return list.length === 1 ? list[0] : null;
+
+    const norm  = (x) => String(x || '').trim().toLowerCase();
+    const tiers = (account?.customerTypes || []).map(norm).filter(Boolean);
+    const prem  = norm(customer?.customerType);
+
+    const scored = list.map(t => {
+        const wantTiers = (t.ctypes || []).map(norm).filter(Boolean);
+        const wantPrem  = (t.propertyTypes || []).map(norm).filter(Boolean);
+
+        // A filter the record cannot answer is a MISS, not a pass. An opportunity
+        // whose account has no type set does not match a tier-restricted template.
+        if (wantTiers.length && !wantTiers.some(x => tiers.includes(x))) return null;
+        if (wantPrem.length  && !(prem && wantPrem.includes(prem)))      return null;
+
+        return { t, specificity: (wantTiers.length ? 1 : 0) + (wantPrem.length ? 1 : 0) };
+    }).filter(Boolean);
+
+    if (!scored.length) return null;
+    const best = Math.max(...scored.map(x => x.specificity));
+    const top  = scored.filter(x => x.specificity === best);
+    return top.length === 1 ? top[0].t : null;
 };
 
 const buildWonBridgeJobs = ({ opportunities, jobs, customers, accounts, templates }) => {
@@ -1681,7 +1704,7 @@ const buildWonBridgeJobs = ({ opportunities, jobs, customers, accounts, template
             const cust = (customers || []).find(c =>
                 (account && c.accountId === account.id) ||
                 (o.account && (c.name || '').trim().toLowerCase() === String(o.account).trim().toLowerCase())) || null;
-            const tmpl = matchTemplateForOpp(o, account, templates);
+            const tmpl = matchTemplateForOpp(o, account, templates, cust);
 
             const crew = parseInt(tmpl?.crew, 10);
             const hrs  = parseFloat(tmpl?.hrs);

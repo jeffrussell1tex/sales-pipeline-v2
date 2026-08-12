@@ -15,6 +15,28 @@ const labelise = (v) => String(v || '').replace(/_/g, ' ').replace(/\b\w/g, c =>
 
 const migrateTemplate = (t) => ({ ...t, name: t.name ?? (t.ctype || '') });
 
+// A template used to tie to exactly ONE value from settings.customerTypes — the
+// CRM account vocabulary. Two problems with that:
+//
+//   1. One value. "New HVAC install" applies to a prospect AND a customer AND a
+//      partner; forcing a single choice meant the tie selected nothing useful.
+//   2. Wrong axis, or at least not the only one. A new install needs the same
+//      crew, hours, licence and equipment whether the account is a prospect or a
+//      partner. What genuinely varies it is the PREMISES — a residential install
+//      is not a commercial one.
+//
+// So there are now two independent, optional filters. Empty means "any", and a
+// template applies when every filter it DOES specify matches. That covers the
+// single-axis cases and the both-axes case without forcing a choice between them.
+const migrateAxes = (t) => {
+    if (Array.isArray(t.ctypes) && Array.isArray(t.propertyTypes)) return t;
+    return {
+        ...t,
+        ctypes:        Array.isArray(t.ctypes) ? t.ctypes : (t.ctype ? [t.ctype] : []),
+        propertyTypes: Array.isArray(t.propertyTypes) ? t.propertyTypes : [],
+    };
+};
+
 // `equip` was free text ("Recovery cart, spares") with a helper line claiming
 // each item had to exist in Vehicles & equipment — nothing enforced that. It is
 // now a list of equipment CATEGORIES from the dispatch_equipment table, so a
@@ -80,6 +102,11 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
     const skills   = settings?.dispatchSkills   || [];
     const licenses = settings?.dispatchLicenses || ['Apprentice','Journeyman','Master','Lead'];
     const custTypes = settings?.customerTypes   || [];
+    // Premises segments — the same org-configured list Dispatch → Customers uses.
+    const propTypes = (settings?.dispatchPropertyTypes || []).length
+        ? settings.dispatchPropertyTypes
+        : [{ id:'commercial', label:'Commercial' }, { id:'residential', label:'Residential' },
+           { id:'industrial', label:'Industrial' }, { id:'government', label:'Government' }];
     // Equipment categories come from the dispatch_equipment table — one row per
     // physical unit, grouped by category. The settings blob is retained only to
     // translate legacy template ids into names during migration.
@@ -124,7 +151,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
         [equipUnits]);
     const unitsIn = (cat) => equipUnits.filter(e => (e.category || '').trim() === cat);
 
-    const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(saved)).map(migrateTemplate));
+    const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(migrateAxes));
     // Equipment migration needs the category list, which arrives asynchronously.
     // Running it against an empty list would file every requirement as unmatched
     // and then persist that on the next save.
@@ -188,6 +215,12 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
         updateTemplate('skills', next);
     };
 
+    const toggleAxis = (key, val) => {
+        if (!selected) return;
+        const cur = selected[key] || [];
+        updateTemplate(key, cur.includes(val) ? cur.filter(x => x !== val) : [...cur, val]);
+    };
+
     const toggleEquip = (cat) => {
         if (!selected) return;
         const cur = selected.equipCategories || [];
@@ -214,9 +247,23 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             detail: `"${selected.minLicense}" is rank ${licenses.indexOf(selected.minLicense)+1} of ${licenses.length}`,
         },
         {
-            ok: true,
-            label: 'Customer type linked',
-            detail: selected.ctype || 'No customer type',
+            // A template with no filters at all is legitimate — it is the catch-all.
+            // But if several templates are catch-alls, matching becomes arbitrary,
+            // so that is worth flagging rather than presenting as fine.
+            ok: (selected.ctypes||[]).length > 0 || (selected.propertyTypes||[]).length > 0
+                || templates.filter(t => !(t.ctypes||[]).length && !(t.propertyTypes||[]).length).length === 1,
+            label: 'Applies-when is unambiguous',
+            detail: (() => {
+                const a = (selected.ctypes||[]).length, p = (selected.propertyTypes||[]).length;
+                if (!a && !p) {
+                    const catchAlls = templates.filter(t => !(t.ctypes||[]).length && !(t.propertyTypes||[]).length).length;
+                    return catchAlls > 1
+                        ? `Applies to everything — but ${catchAlls} templates do, so which one is used is arbitrary`
+                        : 'Applies to any customer (catch-all)';
+                }
+                return [a ? `${a} account type${a===1?'':'s'}` : 'any account type',
+                        p ? `${p} property type${p===1?'':'s'}` : 'any property type'].join(' · ');
+            })(),
         },
         {
             ok: !selected.vehicleType || vehicleTypes.includes(String(selected.vehicleType).toLowerCase()),
@@ -239,12 +286,12 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
         <CategoryDetailChrome error={saveError} crumb="Job templates" category="Dispatch" title="Job templates"
             subtitle="When an opportunity moves to Closed Won, Accelerep can auto-create a Job using the template tied to the customer's type. Defaults pre-fill — dispatchers can still edit before scheduling."
             onBack={onBack} dirty={dirty}
-            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(t => migrateEquipment(t, equipCategories, legacyEquipBlob))); setDirty(false); }}
+            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved)).map(migrateTemplate).map(migrateAxes).map(t => migrateEquipment(t, equipCategories, legacyEquipBlob))); setDirty(false); }}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             extraActions={
                 <>
                     <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Test auto-create</button>
-                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',vehicleType:'',equipCategories:[],equipUnmatched:[],autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
+                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctypes:[],propertyTypes:[],crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',vehicleType:'',equipCategories:[],equipUnmatched:[],autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
                 </>
             }>
 
@@ -264,7 +311,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                         background: selectedId===t.id ? `${T.goldInk}08` : T.surface,
                                         borderLeft: selectedId===t.id ? `3px solid ${T.goldInk}` : '3px solid transparent' }}>
                                     <div style={{ fontWeight: selectedId===t.id ? 700 : 400, color: selectedId===t.id ? T.ink : T.info, textDecoration: selectedId===t.id ? 'none' : 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}
-                                        title="Open this template for editing">{t.name || t.ctype || '—'}</div>
+                                        title="Open this template for editing">{t.name || (t.ctypes||[])[0] || '—'}</div>
                                     <div style={{ color: T.inkMid }}>{t.crew}p</div>
                                     <div style={{ color: T.inkMid }}>{t.hrs}h</div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
@@ -289,13 +336,48 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                                     <input value={selected.name||''} onChange={e=>updateTemplate('name',e.target.value)} placeholder="e.g. Emergency · same-day"
                                         style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}/>
                                 </div>
-                                <div>
-                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Tied to customer type</div>
-                                    <select value={selected.ctype||''} onChange={e=>updateTemplate('ctype',e.target.value)}
-                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}>
-                                        <option value="">— Select customer type —</option>
-                                        {custTypes.map((ct,i)=><option key={i} value={typeof ct==='string'?ct:ct.name}>{typeof ct==='string'?ct:ct.name}</option>)}
-                                    </select>
+                                <div style={{ gridColumn:'1 / -1' }}>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Applies when</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginBottom:8, fontFamily:T.sans }}>
+                                        Leave a row empty to mean &ldquo;any&rdquo;. The template applies when every filter you
+                                        set matches; where several match, the most specific one wins.
+                                    </div>
+
+                                    <div style={{ fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>
+                                        Account type {(selected.ctypes||[]).length === 0 && <span style={{ color:T.inkMuted, fontWeight:400 }}>— any</span>}
+                                    </div>
+                                    <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
+                                        {custTypes.map((ct,i)=>{
+                                            const val = typeof ct==='string'?ct:ct.name;
+                                            const on  = (selected.ctypes||[]).includes(val);
+                                            return (
+                                                <span key={i} onClick={()=>toggleAxis('ctypes', val)}
+                                                    style={{ fontSize:11, padding:'3px 9px', borderRadius:8, cursor:'pointer',
+                                                        background:on?`${T.info}20`:T.surface2, border:`1px solid ${on?T.info:T.border}`,
+                                                        color:on?T.info:T.inkMuted, fontWeight:on?700:400, fontFamily:T.sans }}>{val}</span>
+                                            );
+                                        })}
+                                        {custTypes.length === 0 && (
+                                            <span style={{ fontSize:11.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>
+                                                No account types configured.
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div style={{ fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>
+                                        Property type {(selected.propertyTypes||[]).length === 0 && <span style={{ color:T.inkMuted, fontWeight:400 }}>— any</span>}
+                                    </div>
+                                    <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                                        {propTypes.map(pt=>{
+                                            const on = (selected.propertyTypes||[]).includes(pt.id);
+                                            return (
+                                                <span key={pt.id} onClick={()=>toggleAxis('propertyTypes', pt.id)}
+                                                    style={{ fontSize:11, padding:'3px 9px', borderRadius:8, cursor:'pointer',
+                                                        background:on?`${T.info}20`:T.surface2, border:`1px solid ${on?T.info:T.border}`,
+                                                        color:on?T.info:T.inkMuted, fontWeight:on?700:400, fontFamily:T.sans }}>{pt.label}</span>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                                 <div>
                                     <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default crew size</div>
@@ -428,7 +510,9 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                         <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:10, fontFamily:T.sans }}>Preview · what gets created</div>
                         {selected ? (
                             <div style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'10px 12px' }}>
-                                <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>New Customer · {selected.ctype || 'Unknown type'}</div>
+                                <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>New Customer · {(selected.propertyTypes||[])[0]
+                                        ? (propTypes.find(p => p.id === selected.propertyTypes[0])?.label || selected.propertyTypes[0])
+                                        : (selected.ctypes||[])[0] || 'Any customer'}</div>
                                 <div style={{ fontSize:11, color:T.inkMuted, marginBottom:8, fontFamily:T.sans }}>123 Main St · ASAP · same day</div>
                                 <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:8 }}>
                                     {(selected.skills||[]).map(id=>{ const s=skills.find(sk=>sk.id===id); return s?<span key={id} style={{ fontSize:10, padding:'1px 6px', borderRadius:8, background:`${s.color}14`, color:s.color, fontWeight:600, border:`1px solid ${s.color}30` }}>{s.name}</span>:null; })}
@@ -474,7 +558,7 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
                     <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setTmplMenu(null)}/>
                     <div style={{position:'fixed',top:tmplMenu.rect.top,right:tmplMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:180,overflow:'hidden'}}>
                         <button onClick={()=>{setSelectedId(t.id);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans,fontWeight:600}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Edit</button>
-                        <button onClick={()=>{const clone={...t,id:'tmpl_'+Date.now(),name:(t.name||t.ctype||'')+' (copy)',used:0};setTemplates(p=>[...p,clone]);setSelectedId(clone.id);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Duplicate</button>
+                        <button onClick={()=>{const clone={...t,id:'tmpl_'+Date.now(),name:(t.name||(t.ctypes||[])[0]||'')+' (copy)',used:0};setTemplates(p=>[...p,clone]);setSelectedId(clone.id);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Duplicate</button>
                         <button onClick={()=>{setTemplates(p=>p.map(tm=>tm.id===t.id?{...tm,autojob:!tm.autojob}:tm));setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>{t.autojob?'Disable auto-create':'Enable auto-create'}</button>
                         <button onClick={()=>{setTemplates(p=>p.filter(tm=>tm.id!==t.id));if(selectedId===t.id)setSelectedId(templates.find(tm=>tm.id!==t.id)?.id||null);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.danger,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background='rgba(156,58,46,0.06)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>Delete</button>
                     </div>
