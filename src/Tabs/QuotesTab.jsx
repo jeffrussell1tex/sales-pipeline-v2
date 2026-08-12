@@ -1615,7 +1615,15 @@ export default function QuotesTab() {
                                 </div>
                             </div>
 
-                            {/* Version switcher + Build/Preview toggle */}
+                            {/* Version switcher + Build/Preview toggle.
+                                Hidden entirely when the deal has no quotes: every control in
+                                this row acts on a quote, so with none they render at full
+                                contrast and silently do nothing when clicked — the Build and
+                                Customer preview modes below are both gated on
+                                `configuratorQuotes.length > 0`, and "+ New version" would be
+                                versioning nothing. That left "Create one →" competing with
+                                three dead controls for attention. */}
+                            {configuratorQuotes.length > 0 && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
                                 <div style={{ ...eyebrow(T.inkMid), fontSize: 11 }}>Compare versions</div>
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1642,6 +1650,7 @@ export default function QuotesTab() {
                                     ))}
                                 </div>
                             </div>
+                            )}
 
                             {configuratorQuotes.length === 0 && (
                                 <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
