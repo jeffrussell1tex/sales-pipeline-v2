@@ -277,8 +277,20 @@ export const handler = async (event) => {
                 updatedAt: new Date(),
             };
 
+            // quote_number is NOT NULL and `sanitize` no longer lets it through, so
+            // the INSERT half of this upsert must supply it explicitly. Postgres
+            // validates NOT NULL while building the tuple — BEFORE ON CONFLICT can
+            // divert to the update — so omitting it fails the whole statement even
+            // when the row already exists. That broke every quote save, including
+            // line-item edits, which is how a quote could look saved and come back
+            // empty.
+            const [existing] = await db.select({ n: quotes.quoteNumber })
+                .from(quotes).where(and(eq(quotes.id, data.id), eq(quotes.orgId, orgId))).limit(1);
+            const quoteNumber = existing?.n || await resolveQuoteNumber(orgId, data);
+
             const [updated] = await db
-                .insert(quotes).values({ ...payload, createdAt: new Date() })
+                .insert(quotes).values({ ...payload, quoteNumber, createdAt: new Date() })
+                // `set` deliberately excludes quoteNumber: assigned once, never changed.
                 .onConflictDoUpdate({ target: quotes.id, setWhere: eq(quotes.orgId, orgId), set: payload })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ quote: updated }) };

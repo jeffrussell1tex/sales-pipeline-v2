@@ -245,6 +245,14 @@ const QuotePDFPreview = ({ quote, opp, products }) => {
                         </tr>
                     </thead>
                     <tbody>
+                        {lines.length === 0 && (
+                            <tr>
+                                <td colSpan={5} style={{ padding: '22px 8px', textAlign: 'center', fontSize: 12.5,
+                                    fontStyle: 'italic', color: T.inkMuted }}>
+                                    No products on this quote yet — add them in the builder before sending.
+                                </td>
+                            </tr>
+                        )}
                         {lines.map((li, i) => (
                             <tr key={i} style={{ borderBottom: `1px solid ${T.border}` }}>
                                 <td style={{ padding: '8px', fontSize: 12.5, color: '#2a2622', fontWeight: 500 }}>{li.productName}</td>
@@ -400,6 +408,14 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
 
             {/* Line items with diff */}
             <div style={{ padding: 4 }}>
+                {/* Without this, a quote with no products renders an empty void that
+                    looks identical to one whose items failed to load. */}
+                {lines.length === 0 && !(otherQuote?.lineItems || []).length && (
+                    <div style={{ padding: '18px 12px', textAlign: 'center', fontSize: 11.5, fontStyle: 'italic',
+                        color: T.inkMuted, fontFamily: T.sans }}>
+                        No products on this quote yet.
+                    </div>
+                )}
                 {lines.map((li, i) => {
                     const otherLi   = (otherQuote?.lineItems || []).find(oli => oli.productId === li.productId);
                     const isNew     = otherQuote && !otherIds.has(li.productId);
@@ -1349,7 +1365,18 @@ export default function QuotesTab() {
     const handleSubmitApproval  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Pending Approval' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
     const handleSendToCustomer  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Sent to Customer' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
     const handleSaveDraft       = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
-    const handleSaveLineItems   = async (payload) => { setSaving(true); try { await handleSaveQuote(payload, payload); } catch (err) { throw err; } finally { setSaving(false); } };
+    // handleSaveQuote RETURNS NULL on a failed save rather than throwing, so the
+    // editor's catch never fired: it closed on a rejected write and the quote came
+    // back empty with no error anywhere. Convert the null into a throw so the
+    // editor stays open and shows why.
+    const handleSaveLineItems   = async (payload) => {
+        setSaving(true);
+        try {
+            const saved = await handleSaveQuote(payload, payload);
+            if (!saved) throw new Error('Could not save the quote — nothing was written. Please try again.');
+            return saved;
+        } finally { setSaving(false); }
+    };
     const handleApprove         = async (q) => { await handleSaveQuote({ ...q, status: 'Approved' }, q); };
     const handleReject          = async (q) => { await handleSaveQuote({ ...q, status: 'Rejected / Lost' }, q); };
     const handleSaveProductLocal  = async (data) => { await handleSaveProduct(data, data.id ? (products || []).find(p => p.id === data.id) || null : null); };
