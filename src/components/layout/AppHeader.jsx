@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { OrganizationSwitcher, useOrganizationList } from '@clerk/clerk-react';
+import { OrganizationSwitcher, useOrganizationList, useAuth } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 
@@ -66,6 +66,7 @@ export default function AppHeader({
         exportToCSV, exportingCSV,
         setCsvImportType, setShowCsvImportModal,
         quickLogOpen, setQuickLogOpen,
+        calendarConnected, calendarEvents, calendarLoading, calendarError, fetchCalendarEvents,
     } = useApp();
 
     const isAdmin    = userRole === 'Admin';
@@ -177,6 +178,18 @@ export default function AppHeader({
 
     const togglePref = (alertType, field, value) => {
         saveProfile({ notificationPrefs: { ...prefs, [alertType]: { ...(prefs[alertType] || DEFAULT_PREFS[alertType]), [field]: value } } });
+    };
+
+    // Same OAuth entry point HomeTab uses — one flow, not a second implementation
+    // that can drift. It is a full-page redirect, so nothing to await here.
+    const { userId: clerkUserId, orgId: clerkOrgId } = useAuth();
+    const connectCalendar = () => {
+        const qs = new URLSearchParams({
+            provider: 'google', scope: 'user',
+            userId: clerkUserId || '', orgId: clerkOrgId || '',
+            userRole: userRole || 'User',
+        });
+        window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
     };
 
     const panelTabBtn = (tab, label) => (
@@ -431,6 +444,7 @@ export default function AppHeader({
                             <div style={{ display: 'flex', gap: 0, padding: '0.5rem 1rem 0', borderBottom: `1px solid ${T.border}`, background: T.surface }}>
                                 {panelTabBtn('profile','👤 Profile')}
                                 {panelTabBtn('notifications','🔔 Notifications')}
+                                {panelTabBtn('calendar','📅 Calendar')}
                             </div>
 
                             <div style={{ padding: '1.25rem 1.5rem', maxHeight: 560, overflowY: 'auto', background: T.surface }}>
@@ -545,7 +559,82 @@ export default function AppHeader({
                                     </div>
                                 )}
 
+                                {/* Calendar Tab
+                                    Until now the ONLY calendar control in the app was the
+                                    "Connect your calendar" prompt on Home, which is gated on
+                                    `!calendarConnected` — so the moment a user connected, every
+                                    trace of the calendar vanished. With no events in the current
+                                    week there was nothing on Home either, and no way to confirm
+                                    the connection, reconnect after revoking access in Google, or
+                                    even tell whether sync was on.
 
+                                    Deliberately status + reconnect only. The retired
+                                    Settings → Calendar sync panel showed four sync-option
+                                    toggles that were local state, saved nowhere and read by
+                                    nothing; controls that do not do anything are worse than
+                                    absent ones. */}
+                                {profilePanelTab === 'calendar' && (
+                                    <div>
+                                        <p style={{ fontSize: '0.8125rem', color: T.inkMid, margin: '0 0 1rem', lineHeight: 1.5, fontFamily: T.sans }}>
+                                            Connect Google Calendar to see your meetings on Home and log them against deals.
+                                        </p>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.875rem',
+                                            background: T.bg, borderRadius: T.r, border: `1px solid ${T.border}`, marginBottom: '0.875rem' }}>
+                                            <div style={{ width: 36, height: 36, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#4285f4' }}>G</div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: T.ink, fontFamily: T.sans }}>Google Calendar</div>
+                                                <div style={{ fontSize: '0.75rem', marginTop: 2, fontFamily: T.sans,
+                                                    color: calendarLoading ? T.inkMid : calendarConnected ? T.ok : T.inkMuted }}>
+                                                    {calendarLoading ? 'Checking…' : calendarConnected ? 'Connected · syncing' : 'Not connected'}
+                                                </div>
+                                            </div>
+                                            <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999, fontFamily: T.sans,
+                                                background: calendarConnected ? `${T.ok}1a` : `${T.inkMuted}1a`,
+                                                color: calendarConnected ? T.ok : T.inkMuted }}>
+                                                {calendarConnected ? 'ON' : 'OFF'}
+                                            </span>
+                                        </div>
+
+                                        {calendarConnected && (
+                                            <div style={{ fontSize: '0.75rem', color: T.inkMid, marginBottom: '0.875rem', fontFamily: T.sans }}>
+                                                {(calendarEvents || []).length > 0
+                                                    ? `${calendarEvents.length} event${calendarEvents.length === 1 ? '' : 's'} in the next 7 days.`
+                                                    : 'No events in the next 7 days — nothing will appear on Home until there are.'}
+                                            </div>
+                                        )}
+
+                                        {calendarError && (
+                                            <div style={{ fontSize: '0.75rem', color: T.danger, marginBottom: '0.875rem', fontWeight: 600, fontFamily: T.sans }}>
+                                                {calendarError}
+                                            </div>
+                                        )}
+
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <button onClick={connectCalendar}
+                                                style={{ flex: 1, padding: '0.5rem 0.875rem', background: calendarConnected ? 'transparent' : T.ink,
+                                                    color: calendarConnected ? T.inkMid : '#fbf8f3',
+                                                    border: calendarConnected ? `1px solid ${T.border}` : 'none',
+                                                    borderRadius: T.r, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                                {calendarConnected ? 'Reconnect' : 'Connect Google Calendar'}
+                                            </button>
+                                            {calendarConnected && (
+                                                <button onClick={() => fetchCalendarEvents && fetchCalendarEvents()} disabled={calendarLoading}
+                                                    style={{ padding: '0.5rem 0.875rem', background: 'transparent', color: T.inkMid,
+                                                        border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: '0.8125rem',
+                                                        fontWeight: 600, cursor: calendarLoading ? 'default' : 'pointer',
+                                                        opacity: calendarLoading ? 0.6 : 1, fontFamily: T.sans }}>
+                                                    {calendarLoading ? 'Refreshing…' : 'Refresh'}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div style={{ fontSize: '0.6875rem', color: T.inkMuted, marginTop: '0.75rem', lineHeight: 1.5, fontFamily: T.sans }}>
+                                            To revoke access entirely, remove Accelerep from your Google account permissions.
+                                        </div>
+                                    </div>
+                                )}
 
                             </div>
                             {profileSaving && <div style={{ padding: '0.5rem 1.5rem', background: T.bg, borderTop: `1px solid ${T.border}`, fontSize: 12, color: T.inkMid, fontWeight: 600, fontFamily: T.sans }}>✓ Saving preferences…</div>}

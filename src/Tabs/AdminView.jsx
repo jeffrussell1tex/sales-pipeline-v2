@@ -49,7 +49,6 @@ import { DispatchJobTemplatesDetail } from './settings/dispatch/DispatchJobTempl
 import { DispatchServicePlansDetail } from './settings/dispatch/DispatchServicePlansDetail.jsx';
 import { DispatchPropertyTypesDetail } from './settings/dispatch/DispatchPropertyTypesDetail.jsx';
 import { SETTINGS_ITEMS, WORKSPACE_TABS_BASE } from './settings/catalogue.js';
-import { PersonalView } from './PersonalView.jsx';
 
 const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
     const [hov, setHov] = useState(false);
@@ -173,10 +172,6 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
     if (item.id === 'export') statusDetail = null;
 
     // ── Personal cards — no real per-user data available ─────────────────────
-    if (item.id === 'my-calendar')      statusDetail = null;
-    if (item.id === 'my-notifications') statusDetail = null;
-    if (item.id === 'my-signature')     statusDetail = null;
-    if (item.id === 'my-api')           statusDetail = null;
 
     // ── Company calendar ─────────────────────────────────────────────────────
     if (item.id === 'company-calendar' && settings?.holidays) {
@@ -259,7 +254,6 @@ const LeaveGuardModal = ({ saving, canSave, failed, onStay, onSave, onDiscard })
 );
 
 export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, settingsDirty, setSettingsDirty, settingsSaveRef }) => {
-    const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
     const [activeItem, setActiveItem] = useState(null); // detail panel state
@@ -624,8 +618,8 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
     }
 
     const WORKSPACE_TABS = [...WORKSPACE_TABS_BASE.slice(0, 5), ...(settings?.dispatchEnabled ? ['Dispatch'] : []), ...WORKSPACE_TABS_BASE.slice(5)];
-    const tabs = scope === 'workspace' ? WORKSPACE_TABS : ['All', 'Profile & Account'];
-    const scopeItems = SETTINGS_ITEMS.filter(i => i.scope === scope);
+    const tabs = WORKSPACE_TABS;
+    const scopeItems = SETTINGS_ITEMS.filter(i => i.scope === 'workspace');
     const filteredByTab = (tab === 'All' ? scopeItems : scopeItems.filter(i => i.category === tab))
         .filter(i => i.category !== 'Dispatch' || settings?.dispatchEnabled);
     const items = search.trim()
@@ -673,15 +667,13 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         <div>
             {/* Scope switch + search row */}
             <div style={{ display:'flex', alignItems:'center', gap:14, padding:'4px 0 14px', flexWrap:'wrap' }}>
-                <div style={{ display:'inline-flex', padding:3, background:T.surface, border:`1px solid ${T.border}`, borderRadius:20 }}>
-                    {['workspace','personal'].map(s => (
-                        <div key={s} onClick={() => { setScope(s); setTab('All'); }} style={{ padding:'5px 14px', fontSize:12.5, fontWeight:600, borderRadius:20, cursor:'pointer', color: scope===s ? '#fbf8f3' : T.inkMid, background: scope===s ? T.ink : 'transparent', transition:'background 120ms', fontFamily:T.sans }}>
-                            {s === 'workspace' ? 'Workspace' : 'Personal'}
-                        </div>
-                    ))}
-                </div>
+                {/* The Workspace/Personal scope toggle is gone. Personal preferences
+                    live behind the avatar menu for every user; the panels this toggle
+                    revealed were mockups — a Connect button with no onClick, sync
+                    toggles held in local state and read by nothing, and an email
+                    signature with a fabricated job title and invented open rates. */}
                 <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>
-                    {scope === 'workspace' ? 'Admin settings · affects all users' : 'Only you'}
+                    Admin settings · affects all users
                 </span>
                 <div style={{ flex:1 }}/>
                 {/* Search */}
@@ -694,7 +686,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
             </div>
 
             {/* Health + attention + recent strip — workspace only, no search */}
-            {scope === 'workspace' && !search.trim() && (
+            {!search.trim() && (
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1.1fr', gap:14, marginBottom:18 }}>
                     {/* Health ring */}
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:16, display:'flex', alignItems:'center', gap:14 }}>
@@ -877,13 +869,8 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
                 </div>
             )}
 
-            {/* Personal view if scope = personal */}
-            {scope === 'personal' && (
-                <PersonalView settings={settings} setSettings={setSettings} currentUser={currentUser} isAdmin={true}/>
-            )}
-
             {/* Workspace: category tabs + card grid */}
-            {scope === 'workspace' && (
+            {(
                 <>
                     <div style={{ borderBottom:`1px solid ${T.border}`, display:'flex', gap:26, overflowX:'auto', marginBottom:18 }}>
                         {tabs.map(t => (
