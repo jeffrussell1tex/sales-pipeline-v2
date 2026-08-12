@@ -2134,7 +2134,11 @@ const shortDate = (iso) => iso ? fromYmd(iso).toLocaleDateString('en-US', { mont
 // redesign replaces the LAYOUT, not the ability to edit a customer. It is hoisted
 // to module scope so it is one component type across renders rather than a new
 // one per keystroke.
-const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, planOnDraft,
+// linkedAccount and copyFromAccount are PROPS, not closure reads. This form used
+// to be declared inside CustomersView and picked them up from the parent scope;
+// hoisting it to module scope (correct — it was remounting on every keystroke)
+// left those two references dangling, and `copyFromAccount` never existed at all.
+const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, planOnDraft, linkedAccount, copyFromAccount,
     prefTech, prefMissing, prefOptions, saving, status, onSave, onCancel }) => (
     <div style={{ maxWidth: 620 }}>
             <CustFieldRow label="Name *">
@@ -2300,7 +2304,7 @@ const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, p
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <button onClick={save} disabled={saving}
+                <button onClick={onSave} disabled={saving}
                     style={{ padding: '8px 18px', background: saving ? T.inkMuted : T.ink, color: T.surface,
                         border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600,
                         cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
@@ -2501,6 +2505,24 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
     const rDays = selected ? renewalDays(selected) : null;
     const linkedAccount = selected && selected.accountId ? (accounts || []).find(a => a.id === selected.accountId) : null;
 
+    // Resolved against the DRAFT, not the selected row: while editing, the account
+    // being pointed at is whichever one the picker currently shows.
+    const draftAccount = draft && draft.accountId ? (accounts || []).find(a => a.id === draft.accountId) : null;
+
+    // Copies the CRM account's address onto the service address. Never overwrites
+    // silently — a service address that is already filled in is usually a site
+    // address that deliberately differs from the billing account.
+    const copyFromAccount = () => {
+        if (!draftAccount) return;
+        setDraft(d => ({
+            ...d,
+            serviceAddress: d.serviceAddress || draftAccount.address || '',
+            serviceCity:    d.serviceCity    || draftAccount.city    || '',
+            serviceState:   d.serviceState   || draftAccount.state   || '',
+            serviceZip:     d.serviceZip     || draftAccount.zip     || '',
+        }));
+    };
+
     const custJobs = selected ? (jobs || []).filter(j => j.customerId === selected.id) : [];
     const upcoming = custJobs
         .filter(j => j.scheduledDate && j.scheduledDate >= todayStr && j.status !== 'completed' && j.status !== 'cancelled')
@@ -2667,6 +2689,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
                     {editing && draft ? (
                         <CustomerEditForm draft={draft} set={set} accounts={accounts} techs={techs} plans={plans}
                             propertyTypes={propertyTypes}
+                            linkedAccount={draftAccount} copyFromAccount={copyFromAccount}
                             planOnDraft={planOnDraft} prefTech={prefTech} prefMissing={prefMissing} prefOptions={prefOptions}
                             saving={saving} status={status} onSave={save}
                             onCancel={() => { setEditing(false); setDraft(null); setStatus(null); }}/>

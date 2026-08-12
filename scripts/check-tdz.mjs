@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 //
-// check-tdz.mjs — find temporal-dead-zone reads that only fail in production.
+// check-tdz.mjs — find identifier bugs that only fail in production:
+//   (a) temporal-dead-zone reads   — declared, but read too early
+//   (b) undefined references       — never declared in any enclosing scope
 //
 //   node scripts/check-tdz.mjs src/Tabs/DispatchTab.jsx
 //   node scripts/check-tdz.mjs src/Tabs/*.jsx
@@ -172,6 +174,130 @@ const findFunctionBodies = (node, out = []) => {
     return out;
 };
 
+// ── (b) Undefined references ─────────────────────────────────────────────────
+// A component hoisted out of its parent keeps reading the parent's closure. The
+// file still parses, the build still succeeds, and the component throws
+// "X is not defined" the moment it renders. That is how `linkedAccount` and
+// `copyFromAccount` reached production inside CustomerEditForm.
+//
+// This is a deliberately CONSERVATIVE check: it only inspects top-level arrow
+// components (Capitalised, module scope) and only flags identifiers that appear
+// nowhere as a param, local binding, import, or known global. Anything uncertain
+// is skipped rather than reported — a checker that cries wolf gets ignored.
+const GLOBALS = new Set([
+    'window','document','console','Math','JSON','Object','Array','String','Number','Boolean',
+    'Date','Promise','Set','Map','WeakMap','RegExp','Error','parseInt','parseFloat','isNaN',
+    'setTimeout','clearTimeout','setInterval','clearInterval','fetch','localStorage','crypto',
+    'React','undefined','null','true','false','NaN','Infinity','encodeURIComponent',
+    'decodeURIComponent','Intl','navigator','location','alert','confirm','structuredClone',
+    'Blob','File','FileReader','FormData','URL','URLSearchParams','AbortController',
+    'Image','Audio','Event','CustomEvent','IntersectionObserver','ResizeObserver',
+    'requestAnimationFrame','cancelAnimationFrame','queueMicrotask','TextEncoder','TextDecoder',
+    'Symbol','BigInt','Proxy','Reflect','WeakSet','Int8Array','Uint8Array','Float32Array',
+    'performance','history','screen','process','globalThis','atob','btoa',
+]);
+
+const declaredNames = (node, out = new Set()) => {
+    if (!node) return out;
+    if (node.type === 'Identifier') out.add(node.name);
+    else if (node.type === 'ArrayPattern') node.elements.forEach(e => declaredNames(e, out));
+    else if (node.type === 'ObjectPattern') node.properties.forEach(p => declaredNames(p.value || p.argument, out));
+    else if (node.type === 'AssignmentPattern') declaredNames(node.left, out);
+    else if (node.type === 'RestElement') declaredNames(node.argument, out);
+    return out;
+};
+
+const collectScopeBindings = (node, into) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(n => collectScopeBindings(n, into)); return; }
+    if (node.type === 'VariableDeclaration')
+        node.declarations.forEach(d => declaredNames(d.id).forEach(n => into.add(n)));
+    if (node.type === 'FunctionDeclaration' && node.id) into.add(node.id.name);
+    if (node.type === 'ClassDeclaration' && node.id) into.add(node.id.name);
+    // `catch (err)` binds err for the handler block.
+    if (node.type === 'CatchClause' && node.param) declaredNames(node.param).forEach(n => into.add(n));
+    // Any nested function introduces its own params and body bindings.
+    if (['ArrowFunctionExpression','FunctionExpression','FunctionDeclaration'].includes(node.type)) {
+        (node.params || []).forEach(p => declaredNames(p).forEach(n => into.add(n)));
+        if (Array.isArray(node.body?.body)) node.body.body.forEach(st => collectScopeBindings(st, into));
+        // catch clauses, for-loop heads
+    }
+    for (const k of Object.keys(node)) {
+        if (['loc','start','end'].includes(k)) continue;
+        collectScopeBindings(node[k], into);
+    }
+};
+
+const usedIdentifiers = (node, out = new Map()) => {
+    if (!node || typeof node !== 'object') return out;
+    if (Array.isArray(node)) { node.forEach(n => usedIdentifiers(n, out)); return out; }
+    switch (node.type) {
+        case 'Identifier':
+            if (!out.has(node.name)) out.set(node.name, node.loc?.start.line);
+            return out;
+        case 'MemberExpression':
+        case 'OptionalMemberExpression':
+            usedIdentifiers(node.object, out);
+            if (node.computed) usedIdentifiers(node.property, out);
+            return out;
+        case 'JSXMemberExpression':
+            usedIdentifiers(node.object, out); return out;
+        case 'ObjectProperty':
+        case 'ObjectMethod':
+            if (node.computed) usedIdentifiers(node.key, out);
+            usedIdentifiers(node.value, out); return out;
+        case 'JSXAttribute':
+            usedIdentifiers(node.value, out); return out;
+        default: break;
+    }
+    for (const k of Object.keys(node)) {
+        if (['loc','start','end'].includes(k)) continue;
+        usedIdentifiers(node[k], out);
+    }
+    return out;
+};
+
+const checkUndefined = (ast, file, findings) => {
+    const moduleScope = new Set();
+    for (const st of ast.program.body) {
+        if (st.type === 'VariableDeclaration')
+            st.declarations.forEach(d => declaredNames(d.id).forEach(n => moduleScope.add(n)));
+        if (st.type === 'FunctionDeclaration' && st.id) moduleScope.add(st.id.name);
+        if (st.type === 'ImportDeclaration')
+            st.specifiers.forEach(sp => sp.local && moduleScope.add(sp.local.name));
+        if (st.type === 'ExportNamedDeclaration' && st.declaration) {
+            const d = st.declaration;
+            if (d.type === 'VariableDeclaration')
+                d.declarations.forEach(x => declaredNames(x.id).forEach(n => moduleScope.add(n)));
+            if (d.type === 'FunctionDeclaration' && d.id) moduleScope.add(d.id.name);
+        }
+    }
+
+    const components = [];
+    const visit = (st) => {
+        const d = st.type === 'ExportNamedDeclaration' ? st.declaration : st;
+        if (d?.type !== 'VariableDeclaration') return;
+        d.declarations.forEach(dec => {
+            if (dec.id.type !== 'Identifier') return;
+            if (!/^[A-Z]/.test(dec.id.name)) return;
+            if (dec.init?.type !== 'ArrowFunctionExpression') return;
+            components.push({ name: dec.id.name, node: dec.init, line: st.loc.start.line });
+        });
+    };
+    ast.program.body.forEach(visit);
+
+    for (const c of components) {
+        const local = new Set();
+        (c.node.params || []).forEach(p => declaredNames(p).forEach(n => local.add(n)));
+        collectScopeBindings(c.node.body, local);
+        for (const [name, line] of usedIdentifiers(c.node.body)) {
+            if (local.has(name) || moduleScope.has(name) || GLOBALS.has(name)) continue;
+            if (/^[A-Z_]+$/.test(name)) continue;          // shouty constants are usually imported
+            findings.push({ file, line: line || c.line, target: c.name, ref: name, at: null, label: 'not defined in any enclosing scope' });
+        }
+    }
+};
+
 const checkFile = (file) => {
     const findings = [];
     let ast;
@@ -183,6 +309,7 @@ const checkFile = (file) => {
     }
     scanBody(ast.program.body, file, findings, 'module scope');
     for (const fn of findFunctionBodies(ast.program.body)) scanBody(fn.body.body, file, findings, 'function scope');
+    checkUndefined(ast, file, findings);
     return findings;
 };
 
@@ -201,7 +328,11 @@ for (const file of targets) {
     for (const f of checkFile(file)) {
         total++;
         if (f.parseError) continue;
-        console.log(`TDZ  ${f.file}:${f.line}  "${f.target}" reads "${f.ref}" declared at line ${f.at}  (${f.label})`);
+        if (f.at === null) {
+            console.log(`UNDEF  ${f.file}:${f.line}  <${f.target}> reads "${f.ref}" — ${f.label}`);
+        } else {
+            console.log(`TDZ    ${f.file}:${f.line}  "${f.target}" reads "${f.ref}" declared at line ${f.at}  (${f.label})`);
+        }
     }
 }
 

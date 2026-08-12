@@ -41,6 +41,13 @@ const fmtRunAge = (iso) => {
     return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
 };
 
+// Module scope: ActionEditor reads these, and it was hoisted out of the parent
+// component without them — every `style={inp}` in it threw "inp is not defined"
+// the moment an automation action rendered. Shared here so both components use
+// one definition rather than two that can drift.
+const inp = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, width:'100%', boxSizing:'border-box' };
+const sel = { ...inp, appearance:'none', cursor:'pointer' };
+
 const ActionEditor = ({ action, idx, actions, setAction, delAction }) => (
         <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, padding:'14px 16px', marginBottom:10 }}>
             <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:10 }}>
@@ -99,9 +106,6 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
     const [actions,    setActs]  = React.useState([{ type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
     const [saving,  setSaving]  = React.useState(false);
     const [error,   setError]   = React.useState('');
-
-    const inp = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, width:'100%', boxSizing:'border-box' };
-    const sel = { ...inp, appearance:'none', cursor:'pointer' };
 
     const addCond = () => setConds(p => [...p, { field:'stage', operator:'eq', value:'' }]);
     const delCond = (i) => setConds(p => p.filter((_,j) => j!==i));
