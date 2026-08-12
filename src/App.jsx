@@ -698,7 +698,7 @@ dbFetch('/.netlify/functions/users?me=true')
         productModalError, setProductModalError,
         productModalSaving, setProductModalSaving,
         handleSaveProduct, handleDeleteProduct,
-        getQuotesForOpp, getNextQuoteNumber,
+        getQuotesForOpp,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useQuotes();
 
@@ -1455,7 +1455,7 @@ dbFetch('/.netlify/functions/users?me=true')
         quoteModalSaving,
         productModalError, setProductModalError,
         productModalSaving,
-        getQuotesForOpp, getNextQuoteNumber,
+        getQuotesForOpp,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
         // SPIFF
         spiffClaims, setSpiffClaims,

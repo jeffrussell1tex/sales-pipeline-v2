@@ -11,9 +11,16 @@ const headers = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
-// Fields that may be written by clients
+// Fields that may be written by clients.
+//
+// `quoteNumber` is deliberately ABSENT. It used to be here, and was generated in
+// the browser (useQuotes.js) from whatever quotes that user happened to have
+// loaded — so two reps quoting at once produced the same number, and a filtered
+// quote list produced one that collided with an existing quote. It is now
+// server-assigned and immutable, matching dispatch_customers.customerNumber and
+// dispatch_jobs.jobNumber.
 const ALLOWED_FIELDS = [
-    'id', 'opportunityId', 'quoteNumber', 'version', 'name', 'status',
+    'id', 'opportunityId', 'version', 'name', 'status',
     'validUntil', 'paymentTerms', 'billingContact', 'lineItems',
     'subtotal', 'dealDiscount', 'totalValue', 'recurringValue', 'oneTimeValue',
     'notes', 'approvalNote', 'approvalTier', 'approvalReason', 'createdBy',
@@ -23,6 +30,49 @@ function sanitize(data) {
     return Object.fromEntries(
         Object.entries(data).filter(([k]) => ALLOWED_FIELDS.includes(k))
     );
+}
+
+// Human-readable quote number, Q-2026-001. Sequential per org per year.
+//
+// Concurrency: this is still read-max-then-add-one across two statements, so a
+// unique index on (org_id, quote_number) plus a retry is the proper fix — the
+// same outstanding item that applies to customerNumber and jobNumber. Moving
+// generation to the server closes the much wider window that existed while the
+// number was derived from one browser's partial list.
+async function nextQuoteNumber(orgId) {
+    const year   = new Date().getFullYear();
+    const prefix = `Q-${year}-`;
+    const rows   = await db.select({ n: quotes.quoteNumber })
+        .from(quotes).where(eq(quotes.orgId, orgId));
+    let max = 0;
+    for (const r of rows) {
+        const v = String(r.n || '');
+        if (!v.startsWith(prefix)) continue;
+        const num = parseInt(v.slice(prefix.length), 10);
+        if (Number.isFinite(num) && num > max) max = num;
+    }
+    return prefix + String(max + 1).padStart(3, '0');
+}
+
+// A new VERSION of an existing quote keeps that quote's number — v2 of Q-2026-004
+// is still Q-2026-004. The client sends the number it is versioning, but it is
+// treated as a REFERENCE to be verified, never as a value to store: the row must
+// already exist in this org on the same opportunity. Anything else gets a fresh
+// server-issued number.
+async function resolveQuoteNumber(orgId, data) {
+    const claimed = String(data.quoteNumber || '').trim();
+    const version = Number(data.version) || 1;
+    if (version > 1 && claimed && data.opportunityId) {
+        const [sibling] = await db.select({ n: quotes.quoteNumber })
+            .from(quotes)
+            .where(and(
+                eq(quotes.orgId, orgId),
+                eq(quotes.opportunityId, data.opportunityId),
+                eq(quotes.quoteNumber, claimed)))
+            .limit(1);
+        if (sibling?.n) return sibling.n;
+    }
+    return nextQuoteNumber(orgId);
 }
 
 // Recalculate totals server-side from line items to prevent client tampering
@@ -156,7 +206,7 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body || '{}');
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             if (!data.opportunityId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'opportunityId is required' }) };
-            if (!data.quoteNumber) return { statusCode: 400, headers, body: JSON.stringify({ error: 'quoteNumber is required' }) };
+            // quoteNumber is no longer required from the client — it is issued here.
 
             const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];
             const totals = calcTotals(lineItems, data.dealDiscount || 0);
@@ -167,6 +217,7 @@ export const handler = async (event) => {
                 lineItems,
                 ...totals,
                 version: Number(data.version) || 1,
+                quoteNumber: await resolveQuoteNumber(orgId, data),
                 dealDiscount: String(data.dealDiscount || 0),
                 status: 'Draft',
             };

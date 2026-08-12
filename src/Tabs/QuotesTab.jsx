@@ -1202,7 +1202,7 @@ export default function QuotesTab() {
     const {
         quotes, setQuotes, products, opportunities, settings, currentUser, userRole,
         handleSaveQuote, handleDeleteQuote, handleSaveProduct, handleDeleteProduct,
-        loadQuotes, getNextQuoteNumber, showConfirm,
+        loadQuotes, showConfirm,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useApp();
 
@@ -1304,7 +1304,8 @@ export default function QuotesTab() {
             const opp     = (opportunities || []).find(o => o.id === oppId);
             const payload = {
                 id: genQuoteId(),
-                quoteNumber: getNextQuoteNumber(),
+                // No quoteNumber: the server issues it and returns it on the
+                // response, which handleSaveQuote writes into state.
                 version: 1,
                 name: (opp?.opportunityName || opp?.account || 'Quote') + ' v1',
                 opportunityId: oppId,

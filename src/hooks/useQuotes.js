@@ -182,17 +182,11 @@ export function useQuotes() {
             });
     }, [quotes]);
 
-    // ── Helper: generate next quote number for this org ───────────────────────
-    const getNextQuoteNumber = useCallback(() => {
-        const year = new Date().getFullYear();
-        const prefix = `Q-${year}-`;
-        const existing = quotes
-            .filter(q => q.quoteNumber && q.quoteNumber.startsWith(prefix))
-            .map(q => parseInt(q.quoteNumber.replace(prefix, ''), 10))
-            .filter(n => !isNaN(n));
-        const next = existing.length > 0 ? Math.max(...existing) + 1 : 1;
-        return prefix + String(next).padStart(3, '0');
-    }, [quotes]);
+    // Quote numbers are issued SERVER-SIDE (quotes.mjs → nextQuoteNumber) and come
+    // back on the POST response. The former client-side generator was removed: it
+    // derived the next number from whatever quotes this browser had loaded, so two
+    // reps quoting at once got the same number and a filtered list produced one
+    // that collided with an existing quote.
 
     return {
         // State
@@ -212,7 +206,7 @@ export function useQuotes() {
         handleDeleteProduct,
         // Helpers
         getQuotesForOpp,
-        getNextQuoteNumber,
+
         // Deep link
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     };
