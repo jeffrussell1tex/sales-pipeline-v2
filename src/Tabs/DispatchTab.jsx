@@ -790,7 +790,7 @@ const QUEUE_SORTS = {
     Value:    (a, b) => (b.value || 0) - (a.value || 0),
 };
 
-const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled }) => {
+const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled, onCreateBridgeJob }) => {
     const [queueSort, setQueueSort] = useState('Priority');
     const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
@@ -902,6 +902,14 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
         // Equipment is a job-level constraint, not a per-technician one — every
         // candidate would carry the identical blocker — so it gates here, where
         // the start time that defines the overlap window is finally known.
+        // A bridge row has no dispatch_jobs record, so the PUT below would 404.
+        // Previously it reached the endpoint and failed with a bare HTTP error;
+        // now it says what to do instead.
+        if (selectedJob.isBridge) {
+            setScheduleError('This is a won opportunity, not a job yet. Use "Create job" on it first.');
+            return;
+        }
+
         const eqConf = equipmentConflicts(selectedJob, jobs, equipUnits, dateStr,
             { start: startNum, durationHrs: selectedJob.durationHrs });
         if (eqConf.length) {
@@ -1097,6 +1105,28 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                     Manual pick
                                 </button>
                             </div>
+
+                            {selectedJob.isBridge && (
+                                <div style={{ padding: '11px 13px', marginBottom: 12, borderRadius: T.r,
+                                    background: `${T.goldInk}12`, borderLeft: `3px solid ${T.goldInk}`,
+                                    display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontFamily: T.sans, lineHeight: 1.45, color: T.ink }}>
+                                        <strong>Won opportunity — not a job yet.</strong>{' '}
+                                        {selectedJob.templateName
+                                            ? `Defaults shown come from the "${selectedJob.templateName}" template.`
+                                            : 'No template matched, so crew, duration and licence are unset.'}
+                                        {' '}Create the job to schedule it.
+                                    </div>
+                                    {onCreateBridgeJob && (
+                                        <button onClick={() => onCreateBridgeJob(selectedJob)}
+                                            style={{ padding: '6px 12px', background: T.ink, color: '#fbf8f3', border: 'none',
+                                                borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                                                fontFamily: T.sans, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                            Create job
+                                        </button>
+                                    )}
+                                </div>
+                            )}
 
                             {equipNote && (
                                 <div style={{ padding: '7px 11px', marginBottom: 12, borderRadius: T.r,
@@ -1599,6 +1629,94 @@ const CustFieldRow = ({ label, children }) => (
 const custInput = {
     width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r,
     fontSize: 13, color: T.ink, fontFamily: T.sans, background: T.bg, boxSizing: 'border-box', outline: 'none',
+};
+
+// ── Closed Won → Dispatch bridge ─────────────────────────────────────────────
+// A won opportunity appears in dispatch as a SYNTHETIC row (`auto_` prefix). It
+// is computed, never written: nothing exists in dispatch_jobs until a dispatcher
+// creates the job. Two consequences worth stating, because they are why this
+// approach was chosen:
+//
+//   • A CRM-only org (settings.dispatchEnabled false) needs no special handling.
+//     The Dispatch tab does not render, so the derivation never runs and no rows
+//     are created. Toggling the flag on or off cannot strand data.
+//   • Deleting or re-opening the opportunity simply removes the row next render.
+//
+// If auto-create is ever moved server-side — a webhook or scheduled function that
+// WRITES a job on stage change — it must check settings.dispatchEnabled first.
+// That is the one place the flag becomes load-bearing rather than cosmetic.
+
+// Previously these rows carried hardcoded crewSize 1, durationHrs 4 and
+// minLicense 'Journeyman' — fabricated numbers that looked like decisions. The
+// values now come from a job template, and anything a template does not supply is
+// left null so the UI can say "not set" instead of inventing a figure.
+//
+// Template matching uses `ctype`, which is populated from settings.customerTypes
+// (the CRM account vocabulary) and is compared against the account's own
+// customerTypes. Whether that is the right axis — CRM relationship tier vs.
+// dispatch premises segment — is still an open decision; see the state doc. Until
+// it is settled, an unmatched opportunity gets no template rather than a guess.
+const matchTemplateForOpp = (opp, account, templates) => {
+    const list = (templates || []).filter(t => t && t.id);
+    if (!list.length) return null;
+    const tiers = (account?.customerTypes || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
+    if (tiers.length) {
+        const hit = list.find(t => t.ctype && tiers.includes(String(t.ctype).trim().toLowerCase()));
+        if (hit) return hit;
+    }
+    // A single template is unambiguous, so use it rather than leaving every field
+    // blank. More than one with no match is a genuine choice, and guessing at it
+    // is what produced the fabricated defaults in the first place.
+    return list.length === 1 ? list[0] : null;
+};
+
+const buildWonBridgeJobs = ({ opportunities, jobs, customers, accounts, templates }) => {
+    const claimed = new Set((jobs || []).map(j => j.opportunityId).filter(Boolean));
+    return (opportunities || [])
+        .filter(o => o.stage === 'Closed Won' && !claimed.has(o.id))
+        .map(o => {
+            const account = (accounts || []).find(a => a.id === o.accountId || a.name === o.account) || null;
+            // A dispatch customer may already exist for this account, in which case
+            // its address and preferences are real data rather than blanks.
+            const cust = (customers || []).find(c =>
+                (account && c.accountId === account.id) ||
+                (o.account && (c.name || '').trim().toLowerCase() === String(o.account).trim().toLowerCase())) || null;
+            const tmpl = matchTemplateForOpp(o, account, templates);
+
+            const crew = parseInt(tmpl?.crew, 10);
+            const hrs  = parseFloat(tmpl?.hrs);
+
+            return {
+                id:              'auto_' + o.id,
+                opportunityId:   o.id,
+                isBridge:        true,          // synthetic — not a dispatch_jobs row
+                templateId:      tmpl?.id || null,
+                templateName:    tmpl ? (tmpl.name || tmpl.ctype || 'Untitled template') : null,
+                customerId:      cust?.id || null,
+                accountId:       account?.id || null,
+                customer:        cust?.name || o.account || o.opportunityName || 'Unknown',
+                title:           o.opportunityName || 'Won opportunity',
+                address:         cust?.serviceAddress || '',
+                city:            cust?.serviceCity    || '',
+                state:           cust?.serviceState   || '',
+                zip:             cust?.serviceZip     || '',
+                needSkills:      (tmpl?.skills || []).slice(),
+                equipCategories: (tmpl?.equipCategories || []).slice(),
+                requiredVehicleType: tmpl?.vehicleType || null,
+                crewSize:        crew > 0 ? crew : null,
+                durationHrs:     hrs  > 0 ? hrs  : null,
+                minLicense:      tmpl?.minLicense || null,
+                priority:        tmpl ? normalisePriority(tmpl.priority) : 'normal',
+                window:          'Not scheduled',
+                value:           parseFloat(o.arr || o.revenue || 0) || 0,
+                preferredTechId: cust?.preferredTechId || null,
+                assignedTechIds: [],
+                scheduledDate:   null,
+                start:           null,
+                status:          'unscheduled',
+                _raw:            null,
+            };
+        });
 };
 
 // ── Service plan recurrence ──────────────────────────────────────────────────
@@ -4129,6 +4247,18 @@ export default function DispatchTab() {
     // Org-configured premises segments, plus any unlisted value still on a record.
     const propertyTypes = useMemo(() => propertyTypesFor(settings, customers), [settings, customers]);
 
+    // Synthetic rows for won opportunities with no dispatch job yet. Recomputed
+    // whenever templates, customers or jobs change, so creating the real job makes
+    // the placeholder disappear on the same render.
+    const bridgeJobs = useMemo(() => buildWonBridgeJobs({
+        opportunities, jobs, customers, accounts,
+        templates: settings?.dispatchJobTemplates || [],
+    }), [opportunities, jobs, customers, accounts, settings]);
+
+    // Real jobs plus placeholders. `jobs` stays the real-rows-only list so service
+    // history, plan recurrence and anything that writes cannot see a synthetic id.
+    const jobsWithBridge = useMemo(() => [...jobs, ...bridgeJobs], [jobs, bridgeJobs]);
+
     // ── Service plan recurrence ───────────────────────────────────────────────
     // MUST stay below the state and derived values it closes over. `visitQueue`
     // is a useMemo, so it evaluates during render: declared any earlier it reads
@@ -4150,6 +4280,36 @@ export default function DispatchTab() {
     // Opens New Job pre-filled for a plan occurrence. The visit is materialised
     // only here — planDueDate records WHICH occurrence it satisfies, which is what
     // stops a visit run three weeks late from looking like the next one.
+    // Turn a Closed Won placeholder into a real job. The opportunity link is
+    // carried through, so once saved the placeholder stops being generated —
+    // buildWonBridgeJobs skips any opportunity already claimed by a job.
+    const startBridgeJob = (row) => {
+        let form = {
+            ...EMPTY_JOB,
+            customer:       row.customer || '',
+            customerId:     row.customerId || '',
+            accountId:      row.accountId  || '',
+            opportunityId:  row.opportunityId,
+            title:          row.title || '',
+            address: row.address || '', city: row.city || '',
+            state:   row.state   || '', zip:  row.zip  || '',
+        };
+        let note = null;
+        const tmpl = (settings?.dispatchJobTemplates || []).find(t => t.id === row.templateId);
+        if (tmpl) {
+            const { next, applied, skipped } = applyJobTemplate(form, tmpl, { skills, licLevels, equipCategories, vehicleTypes });
+            form = next;
+            note = { id: tmpl.id, name: templateLabel(tmpl), applied, skipped,
+                equip: (next.equipCategories || []).join(', '), prevForm: form };
+        }
+        setNewJobForm(form);
+        setAppliedTemplate(note);
+        setNewJobError(tmpl
+            ? ''
+            : 'No job template matched this opportunity, so crew, duration and licence are unset. Pick a template above or set them by hand.');
+        setShowNewJobForm(true);
+    };
+
     const startPlanVisit = (row) => {
         const cust = row.customer;
         const tmpl = (settings?.dispatchJobTemplates || []).find(t => t.id === row.plan.visitTemplateId);
@@ -4316,29 +4476,10 @@ export default function DispatchTab() {
                     };
                 });
 
-                // Also surface Closed Won opps not yet in dispatch
-                const existingOppIds = new Set(normJobs.map(j => j.opportunityId).filter(Boolean));
-                const autoJobs = (opportunities || [])
-                    .filter(o => o.stage === 'Closed Won' && !existingOppIds.has(o.id))
-                    .map(o => ({
-                        id:             'auto_' + o.id,
-                        opportunityId:  o.id,
-                        customer:       o.account || o.opportunityName || 'Unknown',
-                        address:        '',
-                        needSkills:     [],
-                        crewSize:       1,
-                        durationHrs:    4,
-                        priority:       'normal',
-                        window:         'TBD',
-                        equipment:      '',
-                        value:          parseFloat(o.arr || o.revenue || 0) || 0,
-                        minLicense:     'Journeyman',
-                        preferredTechId:null,
-                        assignedTechIds:[],
-                        start:          null,
-                        status:         'unscheduled',
-                        _raw:           null,
-                    }));
+                // Closed Won opportunities are surfaced as synthetic rows, but that
+                // derivation lives in a useMemo below — it reads job templates and
+                // customers, and this effect has [] deps, so anything resolved here
+                // would be frozen against whatever settings held at mount.
 
                 setTechs(dbTechs);
                 setTechsRaw(techsData.technicians || []);
@@ -4346,7 +4487,7 @@ export default function DispatchTab() {
                 setEquipment(equipData.equipment   || []);
                 setServicePlans(plansData.plans    || []);
                 setCustomers(custsData.customers   || []);
-                setJobs([...normJobs, ...autoJobs]);
+                setJobs(normJobs);
                 setJobsRaw(dbJobs);
                 setBlocks(blocksData.blocks || []);
             } catch (err) {
@@ -4495,12 +4636,12 @@ export default function DispatchTab() {
     }, [techs, filterSkill, filterVehicle, filterLicense, filterTeam, crews]);
 
     const filteredJobs = useMemo(() => {
-        if (!filterSkill && !filterVehicle && !filterLicense && !filterTeam) return jobs;
-        return jobs.filter(j => {
+        if (!filterSkill && !filterVehicle && !filterLicense && !filterTeam) return jobsWithBridge;
+        return jobsWithBridge.filter(j => {
             if (filterSkill && !(j.needSkills || []).includes(filterSkill)) return false;
             return true;
         });
-    }, [jobs, filterSkill, filterVehicle, filterLicense, filterTeam]);
+    }, [jobsWithBridge, filterSkill, filterVehicle, filterLicense, filterTeam]);
 
     const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
@@ -4539,7 +4680,9 @@ export default function DispatchTab() {
         const fromStr = ymd(start);
         const toStr   = ymd(addDays(start, 6));
         const { proposals, skipped } = planWeek({
-            jobs: filteredJobs, techs: filteredTechs, skills, vehicles,
+            // Placeholders are excluded: planWeek would propose a slot for a job
+            // that does not exist, and every write would 404.
+            jobs: filteredJobs.filter(j => !j.isBridge), techs: filteredTechs, skills, vehicles,
             blocks, blockTypes: settings?.dispatchBlockTypes || [],
             fromStr, toStr,
         });
@@ -4966,7 +5109,7 @@ export default function DispatchTab() {
                                 : j));
                         }}/>
                 ) : view === 'schedule' ? (
-                    <ScheduleView techsRaw={techsRaw} jobs={jobs} blocks={blocks}
+                    <ScheduleView techsRaw={techsRaw} jobs={jobsWithBridge} blocks={blocks}
                         blockTypes={settings?.dispatchBlockTypes || []}
                         anchor={schedAnchor}
                         onPrev={() => setSchedAnchor(a => addDays(a, -7))}
@@ -5019,7 +5162,8 @@ export default function DispatchTab() {
                 ) : (
                     <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} allTechs={techs} skills={skills} equipUnits={equipment} vehicles={vehicles}
                         blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
-                        selectedJobId={selectedJobId || jobs[0]?.id}
+                        onCreateBridgeJob={startBridgeJob}
+                        selectedJobId={selectedJobId || jobsWithBridge[0]?.id}
                         onSelectJob={setSelectedJobId}
                         onBack={() => setView('board')}
                         onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden }) => {
