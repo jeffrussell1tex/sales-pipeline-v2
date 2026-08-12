@@ -1903,6 +1903,30 @@ const ServiceDueView = ({ rows, today, onStart, onOpenJob, onOpenCustomer }) => 
     );
 };
 
+// Have the visible fields of a draft diverged from the record it was loaded from?
+// Compared field-by-field rather than by JSON string: the draft carries UI-only
+// keys (_isNew) and the record carries server keys (updatedAt) that would make a
+// whole-object comparison report a difference on every open form.
+const draftIsDirty = (draft, original) => {
+    if (!draft) return false;
+    if (draft._isNew) {
+        // A new draft counts as dirty once anything has actually been typed.
+        return Object.entries(draft).some(([k, v]) =>
+            !k.startsWith('_') && k !== 'id' && v !== '' && v !== null && v !== false &&
+            !(Array.isArray(v) && v.length === 0) &&
+            !(k === 'customerType' || k === 'employmentType' || k === 'status' || k === 'serviceAgreement'));
+    }
+    if (!original) return false;
+    return Object.keys(draft).some(k => {
+        if (k.startsWith('_')) return false;
+        const a = draft[k], b = original[k];
+        if (Array.isArray(a) || Array.isArray(b)) return JSON.stringify(a || []) !== JSON.stringify(b || []);
+        return (a ?? '') !== (b ?? '');
+    });
+};
+
+const UNSAVED_MSG = 'You have unsaved changes. Discard them?';
+
 // ── Dispatch customer segmentation ───────────────────────────────────────────
 // Service history is derived from jobs rather than stored on the customer: a
 // denormalised "jobCount" would need maintaining on every job write and would be
@@ -2326,7 +2350,7 @@ const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, p
     </div>
 );
 
-const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes, onSaved, onScheduleJob, onGoToDue }) => {
+const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes, onSaved, onScheduleJob, onGoToDue, confirmDiscard }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
@@ -2440,17 +2464,12 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
     // "+ New customer" opened an existing record.
     const creating = !!(draft && draft._isNew);
     React.useEffect(() => {
-        // Never re-point while the form is open. `list` is the FILTERED list, so
-        // clicking a facet that excludes the customer being edited would otherwise
-        // drop them from it, re-point selectedId at someone else, and the effect
-        // below would load THAT customer over the in-progress edit — silently
-        // discarding unsaved changes and swapping the form under the user.
-        if (creating || editing) return;
+        if (creating) return;
         if (selectedId && list.some(c => c.id === selectedId)) return;
         if (list.length) setSelectedId(list[0].id);
         else setSelectedId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [list.map(c => c.id).join(','), selectedId, creating, editing]);
+    }, [list.map(c => c.id).join(','), selectedId, creating]);
 
     const selected = (customers || []).find(c => c.id === selectedId) || null;
 
@@ -2467,7 +2486,17 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
 
     const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
 
-    const startNew = () => {
+    // Everything that abandons an in-progress form goes through here, so there is
+    // one place deciding whether to warn — not a confirm bolted onto each call
+    // site, which is how one of them ends up missing it.
+    const guarded = (action) => {
+        if (draftIsDirty(draft, (customers || []).find(c => c.id === draft?.id))) {
+            if (confirmDiscard) { confirmDiscard(UNSAVED_MSG, action); return; }
+        }
+        action();
+    };
+
+    const startNew = () => guarded(() => {
         setSelectedId(null);
         setDraft({ _isNew: true, id: 'cust_' + crypto.randomUUID(), name: '', accountId: '',
             contactName: '', contactPhone: '', contactEmail: '',
@@ -2477,7 +2506,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
             doNotService: false, doNotServiceReason: '', notes: '' });
         setEditing(true);
         setStatus(null);
-    };
+    });
 
     const planOnDraft = draft && draft.servicePlanId ? (plans || []).find(p => p.id === draft.servicePlanId) : null;
     const prefTech    = draft && draft.preferredTechId ? (techs || []).find(t => t.id === draft.preferredTechId) : null;
@@ -2676,7 +2705,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
                         const od = overdueBy[c.id] || 0;
                         const rd = renewalDays(c);
                         return (
-                            <div key={c.id} onClick={() => { setDraft(null); setSelectedId(c.id); setEditing(false); }}
+                            <div key={c.id} onClick={() => guarded(() => { setDraft(null); setSelectedId(c.id); setEditing(false); })}
                                 style={{ padding: '11px 14px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
                                     background: on ? 'rgba(200,185,154,0.16)' : 'transparent',
                                     boxShadow: on ? `inset 3px 0 0 ${p.color}` : 'none' }}>
@@ -2710,7 +2739,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
                             linkedAccount={draftAccount} copyFromAccount={copyFromAccount}
                             planOnDraft={planOnDraft} prefTech={prefTech} prefMissing={prefMissing} prefOptions={prefOptions}
                             saving={saving} status={status} onSave={save}
-                            onCancel={() => { setEditing(false); setDraft(null); setStatus(null); }}/>
+                            onCancel={() => guarded(() => { setEditing(false); setDraft(null); setStatus(null); })}/>
                     ) : !selected ? (
                         <div style={{ fontSize: 13, color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic' }}>
                             No customers yet. Use <strong style={{ color: T.ink }}>+ New customer</strong> to add the first one.
@@ -2864,7 +2893,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
 const EMPLOYMENT_TYPES = ['employee', 'subcontractor'];
 const TECH_STATUSES    = ['active', 'inactive', 'on_leave'];
 
-const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLevels, onSaved }) => {
+const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLevels, onSaved, confirmDiscard }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
@@ -2880,19 +2909,31 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
     const selected = (techsRaw || []).find(t => t.id === selectedId) || null;
 
     React.useEffect(() => {
+        // `startNew` clears selectedId and then sets a blank draft. Without this
+        // guard the effect fired on that same change, found no matching row, and
+        // set the draft back to null — so with a technician selected, "+ New"
+        // produced NO FORM AT ALL. Only reload from a row when not creating.
+        if (draft && draft._isNew) return;
         setDraft(selected ? { ...selected } : null);
         setStatus(null);
     }, [selectedId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
 
-    const startNew = () => {
+    const guarded = (action) => {
+        if (draftIsDirty(draft, (techsRaw || []).find(t => t.id === draft?.id))) {
+            if (confirmDiscard) { confirmDiscard(UNSAVED_MSG, action); return; }
+        }
+        action();
+    };
+
+    const startNew = () => guarded(() => {
         setSelectedId(null);
         setStatus(null);
         setDraft({ id: 'dtech_' + crypto.randomUUID(), _isNew: true, firstName: '', lastName: '',
             userId: '', email: '', phone: '', employmentType: 'employee', status: 'active',
             homeZip: '', skills: [], laborRate: '', overtimeRate: '', assignedVehicleId: '', notes: '' });
-    };
+    });
 
     const save = async () => {
         if (!draft || !(draft.firstName || '').trim() || !(draft.lastName || '').trim()) {
@@ -2953,7 +2994,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                         </div>
                     )}
                     {list.map(t => (
-                        <div key={t.id} onClick={() => setSelectedId(t.id)}
+                        <div key={t.id} onClick={() => guarded(() => setSelectedId(t.id))}
                             style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
                                 background: t.id === selectedId ? T.surface2 : 'transparent' }}>
                             <div style={{ fontSize: 13, fontWeight: t.id === selectedId ? 700 : 500, color: T.ink, fontFamily: T.sans }}>
@@ -4224,7 +4265,15 @@ const TechnicianView = ({ jobs, customers, blocks, blockTypes, myTech, onUpdate,
 
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
 export default function DispatchTab() {
-    const { settings, opportunities, accounts, addAudit, userRole } = useApp();
+    const { settings, opportunities, accounts, addAudit, userRole, showConfirm } = useApp();
+
+    // Reuses the app-wide confirm modal rather than introducing a second dialog
+    // style. Falls through to the action if the modal is unavailable — a missing
+    // confirm must not silently swallow the click.
+    const confirmDiscard = useCallback((msg, action) => {
+        if (showConfirm) showConfirm(msg, action, true);
+        else action();
+    }, [showConfirm]);
     const isTech = userRole === 'Technician';
 
     // Sub-tab state persists to localStorage so navigating away and back restores
@@ -5161,6 +5210,7 @@ export default function DispatchTab() {
                 ) : view === 'techs' ? (
                     <TechniciansView techsRaw={techsRaw} users={settings?.users || []}
                         vehicles={vehicles} skills={skills} certs={settings?.dispatchCerts || []} licenseLevels={licLevels}
+                        confirmDiscard={confirmDiscard}
                         onSaved={saved => {
                             setTechsRaw(prev => {
                                 const i = prev.findIndex(t => t.id === saved.id);
@@ -5180,7 +5230,7 @@ export default function DispatchTab() {
                         onOpenJob={id => { setSelectedJobId(id); setView('queue'); }}
                         onOpenCustomer={() => setView('customers')}/>
                 ) : view === 'customers' ? (
-                    <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans} propertyTypes={propertyTypes}
+                    <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans} propertyTypes={propertyTypes} confirmDiscard={confirmDiscard}
                         onSaved={saved => setCustomers(prev => {
                             const i = prev.findIndex(c => c.id === saved.id);
                             if (i === -1) return [...prev, saved];
