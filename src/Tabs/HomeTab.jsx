@@ -83,7 +83,7 @@ export default function HomeTab() {
         calculateDealHealth, getKpiColor,
         visibleOpportunities, visibleTasks, activePipeline, allPipelines, stages,
         handleCompleteTask,
-        calendarEvents, calendarConnected,
+        calendarEvents, calendarConnected, calendarLoading,
         setActiveTab, isMobile,
         setEditingOpp, setShowModal,
         setEditingTask, setShowTaskModal,
@@ -141,6 +141,23 @@ export default function HomeTab() {
             .filter(ev => calSrc === 'all' || (ev.source || 'user') === calSrc)
             .sort((a,b) => (a.start?.dateTime||'').localeCompare(b.start?.dateTime||''))
         : [];
+
+    // Everything the calendar returned that has not happened yet. `todayCalEvents`
+    // only covers today, so on a quiet day it is empty and the calendar becomes
+    // invisible — which is exactly what made a freshly connected calendar look
+    // broken.
+    const upcomingCalEvents = calendarConnected && calendarEvents
+        ? calendarEvents
+            .filter(ev => {
+                const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];
+                return d && d >= todayStr;
+            })
+            .sort((a, b) => (a.start?.dateTime || a.start?.date || '').localeCompare(b.start?.dateTime || b.start?.date || ''))
+        : [];
+    const nextCalEvent = upcomingCalEvents.find(ev => {
+        const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];
+        return d > todayStr;
+    });
 
     // ── "On Your Plate" — unified ordered list ────────────────
     // Order: overdue tasks → today calendar events → today tasks
@@ -565,10 +582,36 @@ export default function HomeTab() {
                         </div>
                     )}
 
-                    {!calendarConnected && (
+                    {/* Calendar status. Meetings are folded into ON YOUR PLATE rather
+                        than shown as a calendar, so on a day with no meetings there was
+                        previously nothing here at all — a freshly connected calendar
+                        looked identical to no calendar. This strip is the one place that
+                        always says which it is. */}
+                    {!calendarConnected ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, border: `1px dashed ${T.borderStrong}`, borderRadius: T.rMd, padding: '10px 12px', marginTop: '0.25rem' }}>
                             <div style={{ flex: 1, fontSize: '0.8125rem', color: T.inkMid, fontFamily: T.sans }}>Connect your calendar to see your meetings on Home.</div>
                             <button onClick={connectMyCalendar} style={{ padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Connect calendar</button>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '10px 12px', marginTop: '0.25rem' }}>
+                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.ok, flexShrink: 0 }}/>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '0.8125rem', color: T.ink, fontWeight: 600, fontFamily: T.sans }}>
+                                    {todayCalEvents.length > 0
+                                        ? `${todayCalEvents.length} meeting${todayCalEvents.length === 1 ? '' : 's'} today`
+                                        : 'Calendar connected — no meetings today'}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: T.inkMuted, marginTop: 2, fontFamily: T.sans }}>
+                                    {nextCalEvent
+                                        ? `Next: ${nextCalEvent.summary || 'Untitled'} · ${new Date((nextCalEvent.start?.dateTime || (nextCalEvent.start?.date + 'T12:00:00'))).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
+                                        : upcomingCalEvents.length === 0
+                                            ? 'Nothing scheduled in the next 7 days.'
+                                            : 'Nothing further scheduled this week.'}
+                                </div>
+                            </div>
+                            {calendarLoading && (
+                                <span style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>Refreshing…</span>
+                            )}
                         </div>
                     )}
 

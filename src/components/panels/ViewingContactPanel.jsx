@@ -32,6 +32,7 @@ export default function ViewingContactPanel({
         viewingTask, setViewingTask,
         meetingPrepOpen, setMeetingPrepOpen, setMeetingPrepEvent, setMeetingPrepOppId,
         contactShowAllDeals, setContactShowAllDeals,
+        setContacts,
     } = useApp();
 
     const isReadOnly = userRole === 'ReadOnly';

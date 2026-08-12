@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useApp } from '../../AppContext';
 
 export default function PipelinesSettingsPanel({ settings, setSettings, opportunities, activePipelineId, setActivePipelineId, onBack, onSave, onCancel }) {
+    // `showConfirm` was read from the parent's scope. This component receives it
+    // as neither prop nor context, so deleting a pipeline that had opportunities
+    // threw instead of asking.
+    const { showConfirm } = useApp();
     const pipelines = (settings.pipelines && settings.pipelines.length > 0)
         ? settings.pipelines
         : [{ id: 'default', name: 'New Business', color: '#2563eb' }];

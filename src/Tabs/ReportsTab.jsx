@@ -4771,6 +4771,9 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     );
 }
 function RecommendationReport({ currentUser, canSeeAll, settings }) {
+    // `isMobile` was read from the parent's scope, which this component does not
+    // have — it threw on render at the grid below.
+    const { isMobile } = useApp();
     const [data, setData] = React.useState(null);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
@@ -5173,6 +5176,8 @@ function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
 }
 
 function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
+    // Same: read from the parent's closure, absent here.
+    const { setViewingAccount } = useApp();
 
     const T = {
         bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',

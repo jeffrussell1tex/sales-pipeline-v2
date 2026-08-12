@@ -195,6 +195,8 @@ const GLOBALS = new Set([
     'requestAnimationFrame','cancelAnimationFrame','queueMicrotask','TextEncoder','TextDecoder',
     'Symbol','BigInt','Proxy','Reflect','WeakSet','Int8Array','Uint8Array','Float32Array',
     'performance','history','screen','process','globalThis','atob','btoa',
+    'prompt','postMessage','open','close','matchMedia','getComputedStyle','scrollTo',
+    'requestIdleCallback','MutationObserver','WebSocket','Notification','Worker',
 ]);
 
 const declaredNames = (node, out = new Set()) => {
@@ -275,7 +277,20 @@ const checkUndefined = (ast, file, findings) => {
 
     const components = [];
     const visit = (st) => {
-        const d = st.type === 'ExportNamedDeclaration' ? st.declaration : st;
+        const d = (st.type === 'ExportNamedDeclaration' || st.type === 'ExportDefaultDeclaration') ? st.declaration : st;
+        // Function DECLARATIONS are components too. Only checking `const X = () => …`
+        // meant whole files were silently skipped — HomeTab is
+        // `export default function HomeTab()`, so a missing binding in it was
+        // invisible to this scan.
+        if (d?.type === 'FunctionDeclaration' && d.id && /^[A-Z]/.test(d.id.name)) {
+            components.push({ name: d.id.name, node: d, line: st.loc.start.line });
+            return;
+        }
+        if (st.type === 'ExportDefaultDeclaration' && st.declaration?.type === 'FunctionDeclaration') {
+            const fd = st.declaration;
+            components.push({ name: fd.id?.name || 'default', node: fd, line: st.loc.start.line });
+            return;
+        }
         if (d?.type !== 'VariableDeclaration') return;
         d.declarations.forEach(dec => {
             if (dec.id.type !== 'Identifier') return;
