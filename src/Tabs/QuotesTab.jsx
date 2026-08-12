@@ -1340,24 +1340,46 @@ export default function QuotesTab() {
         if (!activeQuote || !canEdit) return;
         setSaving(true);
         try {
+            // No cap on versions. A real negotiation can run well past three rounds,
+            // and the previous hard limit of 3 was arbitrary, client-only (nothing
+            // server-side enforced it), and blocked the rep with no way around it.
             const maxV = Math.max(...configuratorQuotes.map(q => q.version || 1));
-            if (maxV >= 3) { setError('Maximum 3 versions per quote.'); setSaving(false); return; }
+
+            // Clone the HIGHEST version, not whichever one is on screen. The new
+            // version is numbered maxV + 1, so its predecessor is maxV — cloning the
+            // viewed quote meant that sitting on v1 with a v2 already present
+            // produced a "v3" carrying v1's contents, silently discarding v2's work.
+            const source = configuratorQuotes.reduce(
+                (best, q) => ((q.version || 1) > (best.version || 1) ? q : best), configuratorQuotes[0]);
+
             const payload = {
                 id: genQuoteId(),
-                quoteNumber: activeQuote.quoteNumber,
+                quoteNumber: source.quoteNumber,
                 version: maxV + 1,
-                name: (activeQuote.name || '').replace(/\s+v\d+$/, '') + ' v' + (maxV + 1),
-                opportunityId: activeQuote.opportunityId,
-                validUntil: activeQuote.validUntil,
-                paymentTerms: activeQuote.paymentTerms,
-                lineItems: [...(activeQuote.lineItems || [])],
-                notes: activeQuote.notes,
-                billingContact: activeQuote.billingContact || '',
+                name: (source.name || '').replace(/\s+v\d+$/, '') + ' v' + (maxV + 1),
+                opportunityId: source.opportunityId,
+                validUntil: source.validUntil,
+                paymentTerms: source.paymentTerms,
+                // Deep-copy the line items: a shallow spread shares the same item
+                // objects with the source version, so editing a quantity on the new
+                // version would mutate the old one in local state until reload.
+                lineItems: (source.lineItems || []).map(li => ({ ...li })),
+                // dealDiscount was omitted entirely, so a deal-level discount reset
+                // to 0% on every new version and the rep had to re-enter it.
+                dealDiscount: source.dealDiscount || 0,
+                notes: source.notes,
+                billingContact: source.billingContact || '',
                 status: 'Draft',
                 createdBy: currentUser,
             };
-            await handleSaveQuote(payload, null);
-            setConfiguratorQId(payload.id);
+            const saved = await handleSaveQuote(payload, null);
+            if (!saved) { setError('Could not create the new version — nothing was written.'); return; }
+            // Carrying nothing forward is almost never what the rep wanted, so say so
+            // rather than leaving them to discover an empty builder.
+            if ((source.lineItems || []).length && !(saved.lineItems || []).length) {
+                setError(`v${maxV} had ${source.lineItems.length} product(s) but none carried over. Check the console and re-add them.`);
+            }
+            setConfiguratorQId(saved.id || payload.id);
         } catch (err) { setError(err.message || 'Failed to create version.'); }
         finally { setSaving(false); }
     };
@@ -1660,7 +1682,7 @@ export default function QuotesTab() {
                                             v{q.version || 1}<span style={{ fontSize: 10, opacity: 0.7 }}>· {q.status}</span>
                                         </button>
                                     ))}
-                                    {canEdit && configuratorQuotes.length < 3 && (
+                                    {canEdit && (
                                         <button onClick={handleNewVersion} disabled={saving}
                                             style={{ padding: '6px 12px', background: 'transparent', color: T.inkMid, border: `1px dashed ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                             + New version
