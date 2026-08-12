@@ -2432,18 +2432,28 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
         return s + (p ? annualPlanValue(p) : 0);
     }, 0);
 
-    // The record pane must never sit empty the way the old one did.
+    // The record pane must never sit empty the way the old one did — EXCEPT while
+    // a new customer is being created. `startNew` clears selectedId to mean "no row
+    // is selected", which this effect read as "nothing selected, select the first
+    // one", immediately re-pointing at an existing customer; the editing effect
+    // below then overwrote the blank draft with that customer's data. Pressing
+    // "+ New customer" opened an existing record.
+    const creating = !!(draft && draft._isNew);
     React.useEffect(() => {
+        if (creating) return;
         if (selectedId && list.some(c => c.id === selectedId)) return;
         if (list.length) setSelectedId(list[0].id);
         else setSelectedId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [list.map(c => c.id).join(','), selectedId]);
+    }, [list.map(c => c.id).join(','), selectedId, creating]);
 
     const selected = (customers || []).find(c => c.id === selectedId) || null;
 
     React.useEffect(() => {
         if (!editing) return;
+        // A new customer has no row to load from, and loading `null` over it would
+        // blank the form the moment the user started typing.
+        if (draft && draft._isNew) return;
         const c = (customers || []).find(x => x.id === selectedId);
         setDraft(c ? { ...c } : null);
         setStatus(null);
@@ -2490,6 +2500,9 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
             if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change customers.' : (data.error || 'HTTP ' + res.status));
             const saved = data.customer || body;
             onSaved(saved);
+            // Clear the draft so `creating` goes false again — otherwise the
+            // auto-select guard above stays disabled for the rest of the session.
+            setDraft(null);
             setSelectedId(saved.id);
             setEditing(false);
             setStatus({ kind: 'ok', msg: 'Saved.' });
@@ -2658,7 +2671,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
                         const od = overdueBy[c.id] || 0;
                         const rd = renewalDays(c);
                         return (
-                            <div key={c.id} onClick={() => { setSelectedId(c.id); setEditing(false); }}
+                            <div key={c.id} onClick={() => { setDraft(null); setSelectedId(c.id); setEditing(false); }}
                                 style={{ padding: '11px 14px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer',
                                     background: on ? 'rgba(200,185,154,0.16)' : 'transparent',
                                     boxShadow: on ? `inset 3px 0 0 ${p.color}` : 'none' }}>
