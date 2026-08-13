@@ -291,7 +291,7 @@ function ForecastTab({ card, repStats, teamAttain, teamBest, teamClosed, teamCom
 // ════════════════════════════════════════════════════════
 // ADMINISTRATION TAB (unchanged logic, V1 tokens)
 // ════════════════════════════════════════════════════════
-function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, opportunities, quarters, quotaMode, setActiveTab, setAllQuotaMode, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, updateRepField, visibleReps }) {
+function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, opportunities, quarters, quotaMode, saveState, setActiveTab, setAllQuotaMode, setSaveState, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, updateRepField, visibleReps }) {
     const unassignedReps = isAdmin ? visibleReps.filter(u => !u.territory?.trim()) : [];
     const visibleTerritories = [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort();
     const terrFilter = settings.__qbTerrFilter || 'all';
@@ -308,9 +308,31 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, o
     // Managers, so gate the mutating controls rather than let them edit
     // something that can only ever come back 403.
     const canEditIncentives = isAdmin;
-    const [saveState, setSaveState] = useState({ status: 'idle', msg: '' });
 
     // dbFetch returns a Response and does NOT throw on 4xx/5xx.
+    // Claim status writes used .catch(console.error) then updated state
+    // unconditionally. dbFetch resolves for ANY response (guide 18b1), so a 403
+    // never reached the catch and the row flipped to Approved regardless.
+    const updateClaimStatus = async (claim, status) => {
+        const u = { ...claim, status, approvedAt: new Date().toISOString(), approvedBy: currentUser };
+        try {
+            const res = await dbFetch('/.netlify/functions/spiff-claims', {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(u),
+            });
+            if (!res.ok) {
+                setSaveState({ status: 'error', msg: res.status === 403
+                    ? 'Not saved \u2014 only Admins can approve or reject claims.'
+                    : `Not saved \u2014 the server returned ${res.status}. The claim is unchanged.` });
+                return;
+            }
+            setSpiffClaims(prev => prev.map(c => c.id === claim.id ? u : c));
+            setSaveState({ status: 'saved', msg: '' });
+        } catch (err) {
+            console.error('[SalesManagerTab] claim ' + status, err);
+            setSaveState({ status: 'error', msg: 'Not saved \u2014 network error. The claim is unchanged.' });
+        }
+    };
+
     const saveExtra = async (patch, label) => {
         setSaveState({ status: 'saving', msg: '' });
         try {
@@ -628,9 +650,9 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, o
                             </span>
                             {claim.status==='pending' && (
                                 <div style={{ display:'flex', gap:4 }}>
-                                    <button onClick={async()=>{ const u={...claim,status:'approved',approvedAt:new Date().toISOString(),approvedBy:currentUser}; await dbFetch('/.netlify/functions/spiff-claims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error); setSpiffClaims(prev=>prev.map(c=>c.id===claim.id?u:c)); }}
+                                    <button onClick={()=>updateClaimStatus(claim,'approved')}
                                         style={{ padding:'2px 8px', background:T.ok, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✓ Approve</button>
-                                    <button onClick={async()=>{ const u={...claim,status:'rejected',approvedAt:new Date().toISOString(),approvedBy:currentUser}; await dbFetch('/.netlify/functions/spiff-claims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error); setSpiffClaims(prev=>prev.map(c=>c.id===claim.id?u:c)); }}
+                                    <button onClick={()=>updateClaimStatus(claim,'rejected')}
                                         style={{ padding:'2px 8px', background:T.danger, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✕ Reject</button>
                                 </div>
                             )}
@@ -681,20 +703,56 @@ export default function SalesManagerTab() {
     const quarters    = ['Q1','Q2','Q3','Q4'];
     const quotaMode   = allUsers.find(u => u.quotaType)?.quotaType || 'annual';
     const getRepTotal = u => quotaMode === 'annual' ? (u.annualQuota||0) : (u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0);
+    // Lifted out of AdminTab: updateRepField and setAllQuotaMode live here but the
+    // status banner renders in AdminTab, so the state has to sit above both.
+    // Declared above saveUser, which closes over it.
+    const [saveState, setSaveState] = useState({ status: 'idle', msg: '' });
+
+    // These PUTs used to live INSIDE the setSettings updater. A state reducer must
+    // be pure: React invokes it twice under StrictMode, so every quota edit fired
+    // two writes. Moved out, and the response is now checked.
+    const saveUser = async (user, label) => {
+        try {
+            const res = await dbFetch('/.netlify/functions/users', {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(user),
+            });
+            if (!res.ok) {
+                setSaveState({ status: 'error', msg: res.status === 403
+                    ? `Not saved \u2014 only Admins can change ${label}.`
+                    : `Not saved \u2014 the server returned ${res.status}. Your ${label} changes are not stored.` });
+                return false;
+            }
+            return true;
+        } catch (err) {
+            console.error('[SalesManagerTab] save ' + label, err);
+            setSaveState({ status: 'error', msg: `Not saved \u2014 network error while saving ${label}.` });
+            return false;
+        }
+    };
+
     const updateRepField = (userId, field, value) => {
+        let updatedUser = null;
         setSettings(prev => {
             const updatedUsers = (prev.users||[]).map(u => u.id === userId ? {...u,[field]:value} : u);
-            const updatedUser  = updatedUsers.find(u => u.id === userId);
-            if (updatedUser) dbFetch('/.netlify/functions/users',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(updatedUser)}).catch(console.error);
+            updatedUser = updatedUsers.find(u => u.id === userId);
             return {...prev, users:updatedUsers};
         });
+        if (updatedUser) saveUser(updatedUser, 'quota');
     };
     const setAllQuotaMode = mode => {
+        let toSave = [];
         setSettings(prev => {
             const updatedUsers = (prev.users||[]).map(u => u.userType !== 'ReadOnly' ? {...u, quotaType:mode} : u);
-            updatedUsers.filter(u=>u.userType!=='ReadOnly').forEach(u => dbFetch('/.netlify/functions/users',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error));
+            toSave = updatedUsers.filter(u => u.userType !== 'ReadOnly');
             return {...prev, users:updatedUsers};
         });
+        // Sequential, not a forEach of un-awaited promises: this can be every rep in
+        // the org, and one report of the first failure beats N unhandled rejections.
+        (async () => {
+            for (const u of toSave) {
+                if (!await saveUser(u, 'quota mode')) return;   // saveUser has already surfaced it
+            }
+        })();
     };
 
     // Team totals
@@ -1167,6 +1225,7 @@ export default function SalesManagerTab() {
                 opportunities={opportunities} currentUser={currentUser} isAdmin={isAdmin}
                 visibleReps={visibleReps} quarters={quarters} quotaMode={quotaMode}
                 getRepTotal={getRepTotal} updateRepField={updateRepField}
+                saveState={saveState} setSaveState={setSaveState}
                 setAllQuotaMode={setAllQuotaMode} setActiveTab={setActiveTab}
                 showConfirm={showConfirm} spiffClaims={spiffClaims} setSpiffClaims={setSpiffClaims} />}
         </div>

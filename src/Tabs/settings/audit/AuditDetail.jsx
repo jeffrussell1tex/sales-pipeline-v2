@@ -1,6 +1,7 @@
 // settings/audit/AuditDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { SecCrumb, SecTitle, SecBtn, DropdownPanel, DropdownOption, PolicySelect } from '../security/shared.jsx';
 
@@ -534,7 +535,7 @@ const SSelect = ({ value, options, onChange, width=130 }) => (
     </select>
 );
 
-const ConfigureStreamingPopover = ({ streams, onClose, onAddDest, onTogglePause, onRemoveDest, onSaveGlobals, btnRef }) => {
+const ConfigureStreamingPopover = ({ streams, streamError, onClose, onAddDest, onTogglePause, onRemoveDest, onSaveGlobals, btnRef }) => {
     const ref = React.useRef(null);
     const posRef = React.useRef(false);
     const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });
@@ -624,6 +625,17 @@ const ConfigureStreamingPopover = ({ streams, onClose, onAddDest, onTogglePause,
                         Toggle a row to pause its stream. Events buffer for 24h while paused.
                     </div>
                 </div>
+
+                {/* A failed save must be visible here, not only in the console. The
+                    optimistic state is reverted alongside this, so what is on screen
+                    always matches what is stored. */}
+                {streamError && (
+                    <div style={{ padding:'9px 16px', background:'rgba(156,58,46,0.08)',
+                        borderBottom:`1px solid ${T.border}`, color:T.danger,
+                        fontSize:11.5, lineHeight:1.5 }}>
+                        {streamError}
+                    </div>
+                )}
 
                 {/* Destination rows */}
                 <div>
@@ -797,6 +809,11 @@ export const AuditDetail = ({ onBack }) => {
     // Streaming destinations — live from settings (never use mock as default)
     const [streams, setStreams] = React.useState([]);
     const [streamsLoading, setStreamsLoading] = React.useState(true);
+    // Every write below was fire-and-forget into a catch that only logged, and
+    // the keys were not in the settings whitelist either, so nothing persisted
+    // and nothing said so. This surfaces the failure and reverts the optimistic
+    // state, so the panel never shows a change the database does not have.
+    const [streamError, setStreamError] = React.useState('');
 
     // Button refs for anchoring
     const rowMenuRefs    = React.useRef({});
@@ -879,48 +896,48 @@ export const AuditDetail = ({ onBack }) => {
         setActiveRow(null); setActiveMode(null);
     };
 
-    const handleTogglePause = async (dest) => {
-        const next = streams.map(s => s.dest === dest.dest ? {...s, paused: !s.paused} : s);
+    // Optimistic update, then revert on failure. `putSettings` throws a readable
+    // Error on any non-2xx — dbFetch itself never throws on 4xx/5xx (guide 18b1),
+    // which is why the previous bare try/catch could not see a 403.
+    const saveStreams = async (next, label) => {
+        const prev = streams;
         setStreams(next);
+        setStreamError('');
         try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ streamingDestinations: next }),
-            });
-        } catch (e) { console.error('togglePause error:', e.message); }
+            await putSettings({ streamingDestinations: next });
+            return true;
+        } catch (e) {
+            setStreams(prev);                       // never show what was not stored
+            setStreamError(`${label} not saved — ${e.message}`);
+            return false;
+        }
     };
+
+    const handleTogglePause = (dest) =>
+        saveStreams(
+            streams.map(s => s.dest === dest.dest ? { ...s, paused: !s.paused } : s),
+            dest.paused ? 'Resume' : 'Pause',
+        );
 
     const handleRemoveDest = async (dest) => {
-        const next = streams.filter(d => d.dest !== dest.dest);
-        setStreams(next);
         setActiveDestRow(null);
-        try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ streamingDestinations: next }),
-            });
-        } catch (e) { console.error('removeDest error:', e.message); }
-    };
-
-    const handleSaveGlobals = async (globals) => {
-        try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ streamingGlobals: globals }),
-            });
-        } catch (e) { console.error('saveGlobals error:', e.message); }
+        await saveStreams(streams.filter(d => d.dest !== dest.dest), 'Destination removal');
     };
 
     const handleSaveDest = async (newDest) => {
-        const next = [...streams, newDest];
-        setStreams(next);
         setShowAddDest(false);
+        await saveStreams([...streams, newDest], 'Destination');
+    };
+
+    const handleSaveGlobals = async (globals) => {
+        setStreamError('');
         try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ streamingDestinations: next }),
-            });
-        } catch (e) { console.error('saveDest error:', e.message); }
+            await putSettings({ streamingGlobals: globals });
+            return true;
+        } catch (e) {
+            setStreamError(`Streaming settings not saved — ${e.message}`);
+            return false;
+        }
     };
 
     const auditCatStyle = (cat) => {
@@ -936,6 +953,7 @@ export const AuditDetail = ({ onBack }) => {
             {showStreaming && (
                 <ConfigureStreamingPopover
                     streams={streams}
+                    streamError={streamError}
                     btnRef={streamingBtnRef}
                     onClose={() => setShowStreaming(false)}
                     onAddDest={() => { setShowStreaming(false); setShowAddDest(true); }}
