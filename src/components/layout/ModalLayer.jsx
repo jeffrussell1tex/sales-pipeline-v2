@@ -20,6 +20,45 @@ import MergeReviewModal from '../modals/MergeReviewModal';
 import ContactMergeReviewModal from '../modals/ContactMergeReviewModal';
 // ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
+// Bulk overwrite for the CSV importer.
+//
+// The previous path (saveAll) sent ONE PUT PER RECORD at CONCURRENCY 3. Re-importing
+// a 1,504-row contacts file meant ~500 sequential round-trips — 75s to 2.5min with
+// the tab largely unresponsive. The array branch of PUT takes 400 rows per request,
+// turning that into 4. See bulkUpsert in netlify/functions/_lib.mjs.
+//
+// Module scope, not inside the component: both onImportContacts and onImportAccounts
+// need it, and a helper redefined on every render is a closure hazard for no benefit.
+const BULK_CHUNK = 400;   // must match BULK_CHUNK in _lib.mjs
+
+const saveBulk = async (url, items, progressOffset = 0, progressTotal = items.length) => {
+    let updated = 0, notFound = 0, forbidden = 0, done = 0;
+    for (let i = 0; i < items.length; i += BULK_CHUNK) {
+        const chunk = items.slice(i, i + BULK_CHUNK);
+        const r = await dbFetch(url, { method: 'PUT', body: JSON.stringify(chunk) });
+        // dbFetch returns a Response and NEVER throws on 4xx/5xx — check res.ok.
+        if (!r.ok) {
+            let msg = `Bulk update failed (${r.status}).`;
+            try {
+                const b = await r.json();
+                // serverErrorBody returns a requestId; surface it so the Netlify
+                // function log for this exact failure can be found.
+                if (b.error) msg = b.requestId ? `${b.error} (ref ${b.requestId})` : b.error;
+            } catch { /* non-JSON error body */ }
+            throw new Error(msg);
+        }
+        const res = await r.json();
+        updated   += res.updated || 0;
+        notFound  += (res.notFound  || []).length;
+        forbidden += (res.forbidden || []).length;
+        done += chunk.length;
+        if (typeof window.__importProgressCb === 'function') {
+            window.__importProgressCb(progressOffset + done, progressTotal);
+        }
+    }
+    return { updated, notFound, forbidden };
+};
+
 export default function ModalLayer() {
     // Claim submit state lives here: the SPIFF modal below is an IIFE,
     // not a component, so it cannot own hooks.
@@ -438,9 +477,11 @@ export default function ModalLayer() {
                                 const ow = overwritesWithIds.find(o => o.id === existing.id);
                                 return ow ? { ...existing, ...ow } : existing;
                             }));
-                            const overwritesFailed = await saveAll('/.netlify/functions/contacts', 'PUT', overwritesWithIds, contactsWithIds.length, totalProgress);
-                            if (overwritesFailed > 0) {
-                                throw new Error(`${overwritesFailed} of ${overwrites.length} overwrites failed to save. Try re-importing the failed records.`);
+                            const ow = await saveBulk('/.netlify/functions/contacts', overwritesWithIds, contactsWithIds.length, totalProgress);
+                            const missed = overwritesWithIds.length - ow.updated;
+                            if (missed > 0) {
+                                const why = ow.forbidden ? ` ${ow.forbidden} were owned by another rep.` : '';
+                                throw new Error(`${missed} of ${overwritesWithIds.length} overwrites failed to save.${why} Try re-importing the failed records.`);
                             }
                         }
                     }}
@@ -496,14 +537,11 @@ export default function ModalLayer() {
                                 const ow = overwritesWithIds.find(o => o.id === existing.id);
                                 return ow ? { ...existing, ...ow } : existing;
                             }));
-                            const r2 = await dbFetch('/.netlify/functions/accounts', {
-                                method: 'PUT',
-                                body: JSON.stringify(overwritesWithIds),
-                            });
-                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(totalProgress, totalProgress);
-                            if (!r2.ok) {
-                                const res2 = await r2.json();
-                                throw new Error(res2.error || 'Overwrite failed. Please try again.');
+                            const owA = await saveBulk('/.netlify/functions/accounts', overwritesWithIds, allWithIds.length, totalProgress);
+                            const missedA = overwritesWithIds.length - owA.updated;
+                            if (missedA > 0) {
+                                const whyA = owA.forbidden ? ` ${owA.forbidden} were owned by another rep.` : '';
+                                throw new Error(`${missedA} of ${overwritesWithIds.length} overwrites failed to save.${whyA}`);
                             }
                         }
                     }}

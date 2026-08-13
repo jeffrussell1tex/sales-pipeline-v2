@@ -19,6 +19,11 @@ const secBtn = { padding:'8px 16px', background:T.surface, color:T.ink, border:`
 
 const norm = (s) => (s || '').toString().trim().toLowerCase();
 
+// Conflict rows rendered at once. Each carries a <select>, so an unpaged
+// same-file re-import rendered 1,504 of them and froze the tab on every
+// state change.
+const CONFLICTS_PER_PAGE = 100;
+
 /**
  * Given the incoming mapped records and the existing DB records already in
  * React state, return an array of conflict objects:
@@ -103,6 +108,11 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
 
     // conflicts: array of { incomingIndex, incoming, existing, matchReason, action }
     const [conflicts, setConflicts] = useState([]);
+    // The conflicts table used to render every row. A same-file re-import
+    // produces one conflict per record — 1,504 rows, each with its own
+    // <select> — so any state change re-rendered 1,504 selects and the tab
+    // froze for seconds. Paged at 100.
+    const [conflictPage, setConflictPage] = useState(0);
 
     // ---------------------------------------------------------------------------
     // Field definitions
@@ -268,6 +278,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         );
         if (found.length > 0) {
             setConflicts(found);
+            setConflictPage(0);
             setStep('conflicts');
         } else {
             // No duplicates — go straight to import
@@ -365,6 +376,16 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // Called from the preview step when there are no duplicates detected
     // (fast path — also used by handleCheckDuplicates when 0 conflicts found)
     const previewData = (step === 'preview' || step === 'conflicts') ? getMappedData() : [];
+
+    // Declared below previewData and conflicts because both are read here at
+    // render time — see coding guide 18b0.
+    const pagedConflicts = conflicts.slice(conflictPage * CONFLICTS_PER_PAGE, (conflictPage + 1) * CONFLICTS_PER_PAGE);
+    const conflictPages  = Math.ceil(conflicts.length / CONFLICTS_PER_PAGE);
+    // The bulk toggle reflects reality: 'mixed' once any row is set individually.
+    const bulkMode = conflicts.length === 0 ? 'skip'
+        : conflicts.every(c => c.action === 'skip') ? 'skip'
+        : conflicts.every(c => c.action === 'overwrite') ? 'overwrite'
+        : 'mixed';
 
     // ---------------------------------------------------------------------------
     // Styles
@@ -692,28 +713,47 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                             </div>
                         </div>
 
-                        {/* Bulk action row */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        {/* Bulk action row. Every conflict is created with action:'skip',
+                            so the old "Skip all" button set skip -> skip and appeared dead.
+                            It is now a segmented toggle: the active mode is visible, so
+                            clicking the already-active side reads as confirmation. */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: 12, flexWrap: 'wrap' }}>
                             <p style={{ fontSize: '14px', color: T.inkMid, margin: 0 }}>
                                 Choose how to handle each duplicate:
                             </p>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <button
-                                    type="button"
-                                    style={{ ...secBtn, fontSize: '12px', padding: '4px 12px' }}
-                                    onClick={() => setAllConflictActions('skip')}
-                                >
-                                    Skip all
-                                </button>
-                                <button
-                                    type="button"
-                                    style={{ ...secBtn, fontSize: '12px', padding: '4px 12px' }}
-                                    onClick={() => setAllConflictActions('overwrite')}
-                                >
-                                    Overwrite all
-                                </button>
+                            <div style={{ display: 'flex', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                {[['skip', 'Skip all'], ['overwrite', 'Overwrite all']].map(([mode, label]) => {
+                                    const active = bulkMode === mode;
+                                    return (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            onClick={() => setAllConflictActions(mode)}
+                                            style={{
+                                                fontSize: '12px', padding: '5px 14px', border: 'none', cursor: 'pointer',
+                                                fontWeight: 600, fontFamily: T.sans,
+                                                background: active ? T.ink : T.surface,
+                                                color: active ? T.surface : T.inkMid,
+                                            }}
+                                        >
+                                            {label}{active ? ' \u2713' : ''}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
+
+                        {/* A same-file re-import flags every record and defaults them all
+                            to Skip, so the import button reads "Import 0" and doing
+                            nothing is the default outcome. Say so rather than letting it
+                            look broken. */}
+                        {previewData.length > 0 && conflicts.length === previewData.length && bulkMode === 'skip' && (
+                            <div style={{ fontSize: '13px', color: T.warn, background: 'rgba(184,115,51,0.10)', border: '1px solid rgba(184,115,51,0.20)', borderRadius: T.r, padding: '10px 14px', marginBottom: '12px' }}>
+                                Every record in this file already exists. With all duplicates set to
+                                Skip, nothing will be imported. Choose <strong>Overwrite all</strong> to
+                                refresh the existing {entityLabel} with the values from this file.
+                            </div>
+                        )}
 
                         {/* Conflicts table */}
                         <div style={{ border: `1px solid ${T.border}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}>
@@ -727,12 +767,12 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {conflicts.map((c, idx) => {
+                                    {pagedConflicts.map((c, idx) => {
                                         const inLabel = recordLabel(c.incoming, importType);
                                         const exLabel = recordLabel(c.existing, importType);
                                         return (
                                             <tr key={c.incomingIndex}>
-                                                <td style={{ ...tdStyle, color: T.inkMuted, textAlign: 'center' }}>{idx + 1}</td>
+                                                <td style={{ ...tdStyle, color: T.inkMuted, textAlign: 'center' }}>{conflictPage * CONFLICTS_PER_PAGE + idx + 1}</td>
                                                 <td style={tdStyle}>
                                                     <div style={{ fontWeight: '600', color: T.ink }}>{inLabel.primary}</div>
                                                     {inLabel.secondary && <div style={{ fontSize: '12px', color: T.inkMid }}>{inLabel.secondary}</div>}
@@ -757,6 +797,20 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 </tbody>
                             </table>
                         </div>
+
+                        {conflictPages > 1 && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: '12px' }}>
+                                <button type="button" disabled={conflictPage === 0}
+                                    onClick={() => setConflictPage(p => Math.max(0, p - 1))}
+                                    style={{ ...secBtn, fontSize: '12px', padding: '4px 12px', opacity: conflictPage === 0 ? 0.4 : 1, cursor: conflictPage === 0 ? 'default' : 'pointer' }}>← Prev</button>
+                                <span style={{ fontSize: '12px', color: T.inkMid, fontFamily: 'ui-monospace,Menlo,monospace' }}>
+                                    {conflictPage * CONFLICTS_PER_PAGE + 1}–{Math.min((conflictPage + 1) * CONFLICTS_PER_PAGE, conflicts.length)} of {conflicts.length}
+                                </span>
+                                <button type="button" disabled={conflictPage >= conflictPages - 1}
+                                    onClick={() => setConflictPage(p => Math.min(conflictPages - 1, p + 1))}
+                                    style={{ ...secBtn, fontSize: '12px', padding: '4px 12px', opacity: conflictPage >= conflictPages - 1 ? 0.4 : 1, cursor: conflictPage >= conflictPages - 1 ? 'default' : 'pointer' }}>Next →</button>
+                            </div>
+                        )}
 
                         <div style={{ fontSize: '13px', color: T.inkMid, marginBottom: '16px' }}>
                             <strong>Skip</strong> leaves the existing record unchanged.&nbsp;

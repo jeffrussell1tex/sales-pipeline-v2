@@ -2,7 +2,7 @@
 import { randomUUID } from 'crypto';
 import { db } from '../../db/index.js';
 import { auditLog, users } from '../../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 
 // Browser origins allowed to call the API. Kept in sync with the Clerk
 // authorizedParties list in auth.mjs. Exported for the CORS follow-up; any
@@ -109,4 +109,81 @@ export async function withNumberRetry(attempt, { tries = 5, label = 'record numb
     const e = new Error(`Could not assign a unique ${label} after ${tries} attempts. Please try again.`);
     e.cause = lastErr;
     throw e;
+}
+
+// ── Bulk upsert ───────────────────────────────────────────────────────────────
+// Shared by the array branch of PUT on contacts.mjs and accounts.mjs, used by
+// the CSV importer's "overwrite" path.
+//
+// WHY THIS EXISTS
+// The importer previously issued ONE PUT PER RECORD — `saveAll` in ModalLayer,
+// CONCURRENCY 3, BATCH_SIZE 50, 100ms between batches. Re-importing a 1,504-row
+// contacts file meant ~500 sequential round-trips: 75 seconds to 2.5 minutes of
+// a frozen tab. Meanwhile the POST path did the opposite and crammed every row
+// into ONE statement, which breaks above the Postgres 65,535 bind-parameter
+// ceiling (accounts: 35 columns -> 1,872 rows). Neither extreme is right.
+//
+// A server-side loop of single-row upserts was rejected: ~30ms per Neon HTTP
+// statement x 200 rows overruns Netlify's 10s function timeout. This emits one
+// multi-row INSERT ... ON CONFLICT DO UPDATE per chunk, using `excluded.<col>`
+// so each row updates with ITS OWN values — a plain `set: {...row}` would apply
+// the first row's values to every row in the chunk.
+//
+// SAFETY
+//  - ids are filtered against rows that already exist IN THIS ORG, so the insert
+//    half can never create a record: PUT stays strictly an update, matching the
+//    single-record path's 404-on-unknown-id contract.
+//  - `setWhere` pins org_id, so an id belonging to another tenant is not updated
+//    even if it were guessed.
+//  - ownership is resolved once for the whole batch rather than per row.
+//  - CHUNK x columns must stay under 65,535. 400 x ~37 = ~14,800, which leaves
+//    room for the schema to roughly quadruple before this needs revisiting.
+const BULK_CHUNK = 400;
+const BULK_IMMUTABLE = new Set(['id', 'orgId', 'createdAt']);
+
+export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerName = null }) {
+    if (!Array.isArray(rows) || rows.length === 0) return { updated: 0, notFound: [], forbidden: [] };
+
+    const ids = rows.map(r => r.id).filter(Boolean);
+    if (ids.length !== rows.length) {
+        const err = new Error('every row in a bulk update requires an id');
+        err.statusCode = 400;
+        throw err;
+    }
+
+    // One query establishes existence AND ownership for the whole batch.
+    const projection = ownerColumn ? { id: table.id, owner: ownerColumn } : { id: table.id };
+    const existing = await db.select(projection).from(table)
+        .where(and(eq(table.orgId, orgId), inArray(table.id, ids)));
+    const byId = new Map(existing.map(r => [r.id, r]));
+
+    const notFound = [];
+    const forbidden = [];
+    const eligible = [];
+    for (const row of rows) {
+        const prior = byId.get(row.id);
+        if (!prior) { notFound.push(row.id); continue; }
+        // callerName null means the caller may edit everything (canSeeAll role).
+        if (callerName !== null && prior.owner && prior.owner !== callerName) {
+            forbidden.push(row.id); continue;
+        }
+        eligible.push(row);
+    }
+    if (eligible.length === 0) return { updated: 0, notFound, forbidden };
+
+    // Update only columns actually supplied, minus server-owned ones.
+    const cols = [...new Set(eligible.flatMap(Object.keys))]
+        .filter(k => !BULK_IMMUTABLE.has(k) && table[k]?.name);
+    const set = Object.fromEntries(cols.map(k => [k, sql`excluded.${sql.identifier(table[k].name)}`]));
+    set.updatedAt = sql`now()`;
+
+    let updated = 0;
+    for (let i = 0; i < eligible.length; i += BULK_CHUNK) {
+        const chunk = eligible.slice(i, i + BULK_CHUNK).map(r => ({ ...r, orgId }));
+        const done = await db.insert(table).values(chunk)
+            .onConflictDoUpdate({ target: table.id, setWhere: eq(table.orgId, orgId), set })
+            .returning({ id: table.id });
+        updated += done.length;
+    }
+    return { updated, notFound, forbidden };
 }

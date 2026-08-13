@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { accounts, settings as settingsTable, opportunities, contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
-import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, bulkUpsert } from './_lib.mjs';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
 // Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
@@ -118,6 +118,24 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
+            // Bulk update — body is an array. Used by the CSV importer's
+            // "overwrite" path, which previously issued one PUT per record.
+            // See bulkUpsert in _lib.mjs for the chunking and safety notes.
+            if (Array.isArray(data)) {
+                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ updated: 0, notFound: [], forbidden: [] }) };
+                if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
+                // Reps may only overwrite their own or unassigned records. Resolved
+                // once here rather than per row; null means "may edit everything".
+                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId);
+                const result = await bulkUpsert({
+                    table: accounts,
+                    rows: data.map(d => sanitize(d)),
+                    orgId,
+                    ownerColumn: accounts.accountOwner,
+                    callerName,
+                });
+                return { statusCode: 200, headers, body: JSON.stringify(result) };
+            }
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
