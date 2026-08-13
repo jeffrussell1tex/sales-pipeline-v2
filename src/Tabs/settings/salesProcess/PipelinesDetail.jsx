@@ -1,6 +1,6 @@
 // settings/salesProcess/PipelinesDetail.jsx
 import React, { useState } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
@@ -44,6 +44,31 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
     const [newDefault, setNewDefault]   = useState(false);
     const [newErr, setNewErr]           = useState('');
     const [saving, setSaving]           = useState(false);
+    // Every save here was `await dbFetch(...)` inside a catch that only logged.
+    // dbFetch resolves for ANY response (guide 18b1), so the catch fires on a
+    // network failure only — and PUT /settings has been Admin-only since SVR-2,
+    // so a non-admin's 403 landed in the success path. The panel updated on
+    // screen, nothing reached the database, and it reverted on reload.
+    //
+    // CategoryDetailChrome already renders an `error` prop; this panel simply
+    // never passed one.
+    const [saveError, setSaveError] = useState('');
+
+    // Optimistic update, then revert on failure so what is on screen always
+    // matches what is stored. putSettings throws a readable Error on non-2xx.
+    const persist = async (patch, label) => {
+        let snapshot;
+        setSettings(prev => { snapshot = prev; return { ...prev, ...patch }; });
+        setSaveError('');
+        try {
+            await putSettings(patch);
+            return true;
+        } catch (e) {
+            setSettings(snapshot);
+            setSaveError(`${label} not saved — ${e.message}`);
+            return false;
+        }
+    };
     const [editingTeam, setEditingTeam] = useState(null);
     const [showAddStage, setShowAddStage] = useState(false);
     const [newStageName, setNewStageName] = useState('');
@@ -91,10 +116,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
             ? [...pipelines.map(p => ({ ...p, isDefault: false })), newPipeline]
             : [...pipelines, newPipeline];
         setSaving(true);
-        setSettings(prev => ({ ...prev, pipelines: updated }));
-        try {
-            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updated }) });
-        } catch(e) { console.error('save pipelines', e); }
+        await persist({ pipelines: updated }, 'Pipeline');
         setSaving(false);
         setSelectedId(newPipeline.id);
         setNewName(''); setNewDefault(false); setNewErr(''); setShowNewForm(false);
@@ -105,11 +127,8 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         const updated = assignmentRules.map(r =>
             r.team === teamName ? { ...r, defaultPipeline: newPipelineName } : r
         );
-        setSettings(prev => ({ ...prev, assignmentRules: updated }));
         setEditingTeam(null);
-        try {
-            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ assignmentRules: updated }) });
-        } catch(e) { console.error('save assignment rules', e); }
+        await persist({ assignmentRules: updated }, 'Assignment rule');
     };
 
     // ── Add stage to selected pipeline ───────────────────────
@@ -130,10 +149,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         const updatedPipelines = pipelines.map(p =>
             p.id === selectedId ? { ...p, stages: updatedStages } : p
         );
-        setSettings(prev => ({ ...prev, pipelines: updatedPipelines }));
-        try {
-            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updatedPipelines }) });
-        } catch(e) { console.error('save stage', e); }
+        await persist({ pipelines: updatedPipelines }, 'Stage');
         setNewStageName(''); setNewStageType('Open'); setStageErr(''); setShowAddStage(false);
     };
 
@@ -143,9 +159,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         const reordered = [...pipelines];
         const [moved] = reordered.splice(fromIdx, 1);
         reordered.splice(toIdx, 0, moved);
-        setSettings(prev => ({ ...prev, pipelines: reordered }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: reordered }) }); }
-        catch(e) { console.error('reorder pipelines', e); }
+        await persist({ pipelines: reordered }, 'Pipeline order');
     };
 
     // ── Delete pipeline ──────────────────────────────────────
@@ -168,11 +182,14 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
 
     const handleConfirmDeletePipeline = async () => {
         const updated = pipelines.filter(p => p.id !== confirmDeletePipeline);
-        setSettings(prev => ({ ...prev, pipelines: updated }));
-        if (selectedId === confirmDeletePipeline) setSelectedId(updated[0]?.id || null);
+        const wasSelected = selectedId === confirmDeletePipeline;
         setConfirmDeletePipeline(null);
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updated }) }); }
-        catch(e) { console.error('delete pipeline', e); }
+        if (wasSelected) setSelectedId(updated[0]?.id || null);
+        // Restore the selection too if the delete did not land, or the panel shows
+        // a different pipeline than the one still in the database.
+        if (!await persist({ pipelines: updated }, 'Pipeline deletion') && wasSelected) {
+            setSelectedId(confirmDeletePipeline);
+        }
     };
 
     // ── Export JSON ───────────────────────────────────────────
@@ -204,9 +221,7 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         const updatedPipelines = pipelines.map(p =>
             p.id === selectedId ? { ...p, stages } : p
         );
-        setSettings(prev => ({ ...prev, pipelines: updatedPipelines }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updatedPipelines }) }); }
-        catch(e) { console.error('reorder stages', e); }
+        await persist({ pipelines: updatedPipelines }, 'Stage order');
     };
 
     // ── Stage rename ──────────────────────────────────────────
@@ -216,10 +231,8 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         const updatedPipelines = pipelines.map(p =>
             p.id === selectedId ? { ...p, stages } : p
         );
-        setSettings(prev => ({ ...prev, pipelines: updatedPipelines }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updatedPipelines }) }); }
-        catch(e) { console.error('rename stage', e); }
         setRenamingStage(null); setRenameVal(''); setOpenKebab(null);
+        await persist({ pipelines: updatedPipelines }, 'Stage rename');
     };
 
     // ── Stage delete ──────────────────────────────────────────
@@ -228,16 +241,15 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         const updatedPipelines = pipelines.map(p =>
             p.id === selectedId ? { ...p, stages } : p
         );
-        setSettings(prev => ({ ...prev, pipelines: updatedPipelines }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updatedPipelines }) }); }
-        catch(e) { console.error('delete stage', e); }
         setConfirmDelete(null); setOpenKebab(null);
+        await persist({ pipelines: updatedPipelines }, 'Stage deletion');
     };
 
     const selStyle = { padding:'4px 8px', fontSize:12, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, cursor:'pointer', outline:'none' };
 
     return (
         <CategoryDetailChrome
+            error={saveError}
             crumb="Pipelines" title="Pipelines"
             subtitle="Manage multiple pipelines and their stages"
             statusDetail={`${pipelines.length} pipelines · ${pipelines.reduce((a,p) => a + (p.stages?.length||0), 0)} stages`}
@@ -365,10 +377,8 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                                 {!p.isDefault && (
                                                     <button onClick={async () => {
                                                         const updated = pipelines.map(pp => ({ ...pp, isDefault: pp.id === p.id }));
-                                                        setSettings(prev => ({ ...prev, pipelines: updated }));
                                                         setOpenPipelineKebab(null);
-                                                        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updated }) }); }
-                                                        catch(e) { console.error('set default', e); }
+                                                        await persist({ pipelines: updated }, 'Default pipeline');
                                                     }}
                                                         style={{ display:'block', width:'100%', padding:'10px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
                                                         onMouseEnter={e => e.currentTarget.style.background = T.surface2}
