@@ -17,6 +17,28 @@ jobs:
       - name: Unit tests + org-scoping guard
         run: node --test
 
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      # These three ran only on Jeff's machine, by hand. Anything pushed without
+      # running them reached Netlify ungated.
+      - name: TDZ scan (reads before declaration)
+        run: npm run check:tdz
+      - name: Inline-component scan (remount on keystroke)
+        run: npm run check:inline
+      # The dummy key is REQUIRED. Without it `vite build` exits 0 and emits a
+      # 212 kB bundle containing no application — see scripts/check-bundle.mjs.
+      # `npm run build` runs the bundle guard, so this job fails on a hollow build.
+      - name: Build + bundle guard
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
+        run: npm run build
+
   integration:
     runs-on: ubuntu-latest
     steps:
