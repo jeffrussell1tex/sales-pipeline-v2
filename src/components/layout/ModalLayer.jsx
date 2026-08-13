@@ -967,29 +967,32 @@ export default function ModalLayer() {
                 return (
                 <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:10100, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
                     onClick={closeClaimModal}>
-                    <div style={{ background:'#fff', borderRadius: isMobile ? '16px 16px 0 0' : '14px', padding:'1.5rem', width:'100%', maxWidth: isMobile ? '100%' : '480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
+                    <div style={{ background:'#fff', border:'1px solid #e5e2db', borderRadius: isMobile ? '12px 12px 0 0' : '12px', padding:'1.25rem 1.5rem', width:'100%', maxWidth: isMobile ? '100%' : '480px', boxShadow:'0 12px 40px rgba(0,0,0,0.15)', fontFamily:"'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
                         onClick={e => e.stopPropagation()}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1rem' }}>
                             <div>
-                                <div style={{ fontWeight:'800', fontSize:'1rem', color:'#1e293b' }}>⚡ Claim SPIFF</div>
-                                <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:'2px' }}>{opp.opportunityName || opp.account} · ${dealArr.toLocaleString()} ARR</div>
+                                <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                                    <div style={{ width:'3px', height:'16px', borderRadius:'1px', background:'#c8b99a' }} />
+                                    <div style={{ fontWeight:'700', fontSize:'1rem', color:'#1c1917' }}>Claim SPIFF</div>
+                                </div>
+                                <div style={{ fontSize:'0.75rem', color:'#78716c', marginTop:'3px' }}>{opp.opportunityName || opp.account} · ${dealArr.toLocaleString()} ARR</div>
                             </div>
-                            <button onClick={closeClaimModal} style={{ background:'none', border:'none', fontSize:'1.25rem', color:'#94a3b8', cursor:'pointer', lineHeight:1 }}>×</button>
+                            <button onClick={closeClaimModal} style={{ background:'none', border:'none', fontSize:'1.25rem', color:'#a8a29e', cursor:'pointer', lineHeight:1, fontFamily:'inherit' }}>×</button>
                         </div>
 
                         {existingClaims.length > 0 && (
                             <div style={{ marginBottom:'1rem' }}>
-                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.375rem' }}>Already Claimed</div>
+                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#a8a29e', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Already claimed</div>
                                 {existingClaims.map(c => {
                                     const sp = activeSpiffsList.find(s => s.id === c.spiffId) || {};
                                     return (
-                                        <div key={c.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', background:'#f8fafc', borderRadius:'6px', marginBottom:'4px', fontSize:'0.8125rem' }}>
-                                            <span style={{ fontWeight:'600', color:'#1e293b' }}>{sp.name || 'SPIFF'}</span>
+                                        <div key={c.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', background:'#f0ece4', border:'1px solid #ddd8cf', borderRadius:'6px', marginBottom:'4px', fontSize:'0.8125rem' }}>
+                                            <span style={{ fontWeight:'600', color:'#1c1917' }}>{sp.name || 'SPIFF'}</span>
                                             <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                                                <span style={{ fontWeight:'700', color:'#059669' }}>${Math.round(c.amount).toLocaleString()}</span>
-                                                <span style={{ fontSize:'0.625rem', padding:'2px 6px', borderRadius:'999px', fontWeight:'700',
-                                                    background: c.status==='approved'?'#d1fae5':c.status==='rejected'?'#fee2e2':c.status==='paid'?'#dbeafe':'#fef3c7',
-                                                    color: c.status==='approved'?'#065f46':c.status==='rejected'?'#dc2626':c.status==='paid'?'#1e40af':'#92400e' }}>
+                                                <span style={{ fontWeight:'700', color:'#7a6a48' }}>${Math.round(c.amount).toLocaleString()}</span>
+                                                <span style={{ fontSize:'0.625rem', padding:'2px 7px', borderRadius:'999px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.04em',
+                                                    background: c.status==='approved'?'#16a34a18':c.status==='rejected'?'#dc262618':c.status==='paid'?'#2563eb18':'#d9770618',
+                                                    color: c.status==='approved'?'#16a34a':c.status==='rejected'?'#dc2626':c.status==='paid'?'#2563eb':'#d97706' }}>
                                                     {c.status.toUpperCase()}
                                                 </span>
                                             </div>
@@ -1000,31 +1003,31 @@ export default function ModalLayer() {
                         )}
 
                         {spiffClaimError && (
-                            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'0.625rem 0.875rem', marginBottom:'0.875rem', fontSize:'0.8125rem', color:'#b91c1c', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                            <div style={{ background:'#dc262614', border:'1px solid #dc262640', borderRadius:'8px', padding:'0.625rem 0.875rem', marginBottom:'0.875rem', fontSize:'0.8125rem', color:'#dc2626', display:'flex', alignItems:'center', gap:'0.5rem' }}>
                                 <span>⚠</span><span style={{ flex:1 }}>{spiffClaimError}</span>
-                                <button onClick={() => setSpiffClaimError(null)} style={{ background:'none', border:'none', color:'#b91c1c', cursor:'pointer', fontSize:'1rem', lineHeight:1 }}>×</button>
+                                <button onClick={() => setSpiffClaimError(null)} style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:'1rem', lineHeight:1, fontFamily:'inherit' }}>×</button>
                             </div>
                         )}
 
                         {claimableSpiffs.length === 0 ? (
-                            <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem', background:'#f8fafc', borderRadius:'8px' }}>
+                            <div style={{ textAlign:'center', padding:'2rem', color:'#78716c', fontSize:'0.875rem', background:'#f0ece4', border:'1px solid #ddd8cf', borderRadius:'8px' }}>
                                 All active SPIFFs have already been claimed for this deal.
                             </div>
                         ) : (
                             <div>
-                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.5rem' }}>Select SPIFFs to Claim</div>
+                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#a8a29e', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Select SPIFFs to claim</div>
                                 <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem', maxHeight:'300px', overflowY:'auto' }}>
                                     {claimableSpiffs.map(spiff => {
                                         const estAmt = calcClaimAmt(spiff);
                                         return (
-                                            <div key={spiff.id} style={{ border:'1px solid #e2e8f0', borderRadius:'8px', padding:'0.75rem', background:'#fff' }}>
+                                            <div key={spiff.id} style={{ border:'1px solid #ddd8cf', borderRadius:'8px', padding:'0.75rem', background:'#fff' }}>
                                                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.375rem' }}>
-                                                    <div style={{ fontWeight:'600', fontSize:'0.875rem', color:'#1e293b' }}>{spiff.name || 'Unnamed SPIFF'}</div>
-                                                    <div style={{ fontWeight:'700', color:'#7c3aed', fontSize:'0.875rem' }}>
+                                                    <div style={{ fontWeight:'600', fontSize:'0.875rem', color:'#1c1917' }}>{spiff.name || 'Unnamed SPIFF'}</div>
+                                                    <div style={{ fontWeight:'700', color:'#7a6a48', fontSize:'0.875rem' }}>
                                                         {spiff.type === 'multiplier' ? `${spiff.amount}× multiplier` : `$${Math.round(estAmt).toLocaleString()}`}
                                                     </div>
                                                 </div>
-                                                <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginBottom:'0.625rem' }}>
+                                                <div style={{ fontSize:'0.75rem', color:'#78716c', marginBottom:'0.625rem' }}>
                                                     {spiff.type==='flat'?`$${parseFloat(spiff.amount||0).toLocaleString()} flat bonus`:spiff.type==='pct'?`${spiff.amount}% of deal ARR`:`Commission multiplier ${spiff.amount}×`}
                                                     {spiff.condition && <span> · {spiff.condition}</span>}
                                                 </div>
@@ -1073,7 +1076,7 @@ export default function ModalLayer() {
                                                     }
                                                 }}
                                                 disabled={spiffClaimBusy === spiff.id}
-                                                style={{ width:'100%', padding:'0.375rem', background: spiffClaimBusy === spiff.id ? '#a78bfa' : '#7c3aed', color:'#fff', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor: spiffClaimBusy === spiff.id ? 'wait' : 'pointer', fontFamily:'inherit' }}>
+                                                style={{ width:'100%', padding:'0.4rem 0.875rem', background: spiffClaimBusy === spiff.id ? '#44403c' : '#1c1917', color:'#f5f1eb', border:'none', borderRadius:'8px', fontSize:'0.75rem', fontWeight:'500', cursor: spiffClaimBusy === spiff.id ? 'wait' : 'pointer', fontFamily:'inherit' }}>
                                                     {spiffClaimBusy === spiff.id ? 'Submitting…' : 'Submit Claim'}
                                                 </button>
                                             </div>
