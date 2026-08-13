@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, dbWrite } from '../utils/storage';
 
 export function useContacts(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel, showBlockedDelete, opportunities } = deps;
@@ -91,11 +91,19 @@ export function useContacts(deps) {
                     setContacts(snapshot);
                     setUndoToast(null);
                     // Re-insert the deleted contact back to the DB
-                    dbFetch('/.netlify/functions/contacts', {
+                    // Undo restores the row in the UI immediately, then re-POSTs it.
+                    // This used .catch() alone, which never fires on a 403/500 — so a
+                    // rejected restore left the contact visible but deleted in the
+                    // database, and the divergence only surfaced on the next reload.
+                    dbWrite('/.netlify/functions/contacts', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(contact),
-                    }).catch(err => console.error('Failed to restore contact to DB:', err));
+                    }).then(r => {
+                        if (r.ok) return;
+                        setContacts(prev => prev.filter(c.id !== contact.id));   // undo did not take
+                        setUndoToast({ error: `Could not restore the contact — ${r.error}` });
+                    });
                 }
             );
         });

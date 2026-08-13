@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, dbWrite } from '../utils/storage';
 
 export function useActivities(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
@@ -51,11 +51,19 @@ export function useActivities(deps) {
                 () => {
                     setActivities(snapshot);
                     setUndoToast(null);
-                    dbFetch('/.netlify/functions/activities', {
+                    // Undo restores the row in the UI immediately, then re-POSTs it.
+                    // This used .catch() alone, which never fires on a 403/500 — so a
+                    // rejected restore left the activity visible but deleted in the
+                    // database, and the divergence only surfaced on the next reload.
+                    dbWrite('/.netlify/functions/activities', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(activity),
-                    }).catch(err => console.error('Failed to restore activity to DB:', err));
+                    }).then(r => {
+                        if (r.ok) return;
+                        setActivities(prev => prev.filter(a.id !== activity.id));   // undo did not take
+                        setUndoToast({ error: `Could not restore the activity — ${r.error}` });
+                    });
                 }
             );
         });

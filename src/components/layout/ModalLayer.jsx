@@ -317,14 +317,24 @@ export default function ModalLayer() {
                     background: '#1e293b', color: '#fff', borderRadius: '10px', padding: '0.75rem 1.25rem',
                     display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
                     minWidth: isMobile ? 'calc(100vw - 2rem)' : '320px', maxWidth: isMobile ? 'calc(100vw - 2rem)' : '480px' }}>
+                    {/* Two shapes. The delete shape is { label, restore, timerId }.
+                        The error shape is { error } and carries no restore — it is how
+                        a FAILED undo reports itself, since the row has already been put
+                        back on screen and then taken away again. Rendering .label for
+                        an error toast would print "undefined deleted" and give an Undo
+                        button that throws on click. */}
                     <span style={{ fontSize: '0.875rem', flex: 1 }}>
-                        🗑 <strong>{undoToast.label}</strong> deleted
+                        {undoToast.error
+                            ? <>⚠ {undoToast.error}</>
+                            : <>🗑 <strong>{undoToast.label}</strong> deleted</>}
                     </span>
-                    <button onClick={() => { clearTimeout(undoToast.timerId); undoToast.restore(); }}
-                        style={{ padding: '0.3rem 0.875rem', background: '#3b82f6', color: '#fff', border: 'none',
-                            borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                        ↩ Undo
-                    </button>
+                    {!undoToast.error && (
+                        <button onClick={() => { clearTimeout(undoToast.timerId); undoToast.restore(); }}
+                            style={{ padding: '0.3rem 0.875rem', background: '#3b82f6', color: '#fff', border: 'none',
+                                borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                            ↩ Undo
+                        </button>
+                    )}
                     <button onClick={() => { clearTimeout(undoToast.timerId); setUndoToast(null); }}
                         style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1rem', padding: '0 0.25rem', lineHeight: 1 }}>✕</button>
                 </div>

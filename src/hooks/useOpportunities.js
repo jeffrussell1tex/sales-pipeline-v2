@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, dbWrite } from '../utils/storage';
 
 // Fire-and-forget SMS for deal assignments and stage changes.
 // Calls mention-sms.mjs which resolves assignee prefs server-side.
@@ -171,7 +171,7 @@ export function useOpportunities(deps) {
         }
     };
 
-    const completeLostSave = (formData, editingOppRef, lostReason, lostCategory, activePipeline, currentUser, setLostReasonModal) => {
+    const completeLostSave = async (formData, editingOppRef, lostReason, lostCategory, activePipeline, currentUser, setLostReasonModal) => {
         const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
         const prevOppRef = editingOppRef ? opportunities.find(o => o.id === editingOppRef.id) : null;
         const enriched = {
@@ -180,18 +180,34 @@ export function useOpportunities(deps) {
             comments: prevOppRef?.comments || formData.comments || [],
             stageHistory: formData.stageHistory || prevOppRef?.stageHistory || [],
         };
+        // The write is awaited and checked before anything else happens. Previously
+        // both branches fired .catch(console.error) — which only sees a network
+        // failure, never a 403/500 — and then called addAudit() unconditionally.
+        // A rejected save therefore left the pipeline showing Closed Lost, the
+        // AUDIT LOG ASSERTING it was lost, and the row in the database still open.
+        // Closed Lost feeds revenue reporting, so a silent divergence there is the
+        // worst of the six sites found in the hooks.
         if (editingOppRef) {
             const updatedOpp = { ...enriched, id: editingOppRef.id };
+            const snapshot = opportunities;
             setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? updatedOpp : opp));
-            dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOpp) })
-                .catch(err => console.error('Failed to save lost opportunity:', err));
+            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOpp) });
+            if (!r.ok) {
+                setOpportunities(snapshot);                       // never show what was not stored
+                setOppModalError(`Not saved as Closed Lost — ${r.error}`);
+                return;                                            // keep the modal open, no audit
+            }
             addAudit('update', 'opportunity', editingOppRef.id, enriched.opportunityName || enriched.account || editingOppRef.id, `Closed Lost: ${lostCategory || lostReason || ''}`);
         } else {
             const newId = 'id_' + crypto.randomUUID();
             const newOpp = { ...enriched, id: newId, pipelineId: activePipeline.id };
             setOpportunities(prev => [...prev, newOpp]);
-            dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
-                .catch(err => console.error('Failed to save lost opportunity:', err));
+            const r = await dbWrite('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) });
+            if (!r.ok) {
+                setOpportunities(prev => prev.filter(o => o.id !== newId));
+                setOppModalError(`Not saved as Closed Lost — ${r.error}`);
+                return;
+            }
             addAudit('create', 'opportunity', newId, enriched.opportunityName || enriched.account || newId, `Closed Lost: ${lostCategory || lostReason || ''}`);
         }
         setLostReasonModal(null);
