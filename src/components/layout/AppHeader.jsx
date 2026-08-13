@@ -192,6 +192,49 @@ export default function AppHeader({
         window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
     };
 
+    // The connection RECORD (which account, since when, and its id) as opposed to
+    // the derived `calendarConnected` boolean. Fetched only when the tab is opened
+    // — this panel is on every screen, so loading it eagerly would cost a request
+    // per page load for a tab most users never touch.
+    const [calConn, setCalConn] = useState(null);
+    const [calConnLoaded, setCalConnLoaded] = useState(false);
+    const [disconnecting, setDisconnecting] = useState(false);
+    const [calActionError, setCalActionError] = useState('');
+
+    const loadCalConnection = React.useCallback(async () => {
+        try {
+            const res = await dbFetch('/.netlify/functions/calendar-connections');
+            if (!res.ok) { setCalConnLoaded(true); return; }
+            const data = await res.json();
+            setCalConn((data.userConnections || [])[0] || null);
+        } catch (e) { /* status falls back to the derived boolean */ }
+        setCalConnLoaded(true);
+    }, []);
+
+    useEffect(() => {
+        if (showProfilePanel && profilePanelTab === 'calendar' && !calConnLoaded) loadCalConnection();
+    }, [showProfilePanel, profilePanelTab, calConnLoaded, loadCalConnection]);
+
+    const disconnectCalendar = async () => {
+        if (!calConn) return;
+        setDisconnecting(true);
+        setCalActionError('');
+        try {
+            const res = await dbFetch(
+                `/.netlify/functions/calendar-connections?id=${encodeURIComponent(calConn.id)}&scope=user`,
+                { method: 'DELETE' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            setCalConn(null);
+            // Re-fetch rather than assuming: this clears calendarConnected and the
+            // event list app-wide, so Home and the status strip update together.
+            if (fetchCalendarEvents) await fetchCalendarEvents();
+        } catch (e) {
+            setCalActionError(e.message);
+        }
+        setDisconnecting(false);
+    };
+
     const panelTabBtn = (tab, label) => (
         <button onClick={() => setProfilePanelTab(tab)} style={{
             padding: '0.5rem 1rem', border: 'none',
@@ -586,9 +629,19 @@ export default function AppHeader({
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: T.ink, fontFamily: T.sans }}>Google Calendar</div>
                                                 <div style={{ fontSize: '0.75rem', marginTop: 2, fontFamily: T.sans,
+                                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                                     color: calendarLoading ? T.inkMid : calendarConnected ? T.ok : T.inkMuted }}>
-                                                    {calendarLoading ? 'Checking…' : calendarConnected ? 'Connected · syncing' : 'Not connected'}
+                                                    {calendarLoading
+                                                        ? 'Checking…'
+                                                        : calendarConnected
+                                                            ? (calConn?.calendarEmail || 'Connected · syncing')
+                                                            : 'Not connected'}
                                                 </div>
+                                                {calendarConnected && calConn?.connectedAt && (
+                                                    <div style={{ fontSize: '0.6875rem', color: T.inkMuted, marginTop: 1, fontFamily: T.sans }}>
+                                                        Connected {new Date(calConn.connectedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    </div>
+                                                )}
                                             </div>
                                             <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999, fontFamily: T.sans,
                                                 background: calendarConnected ? `${T.ok}1a` : `${T.inkMuted}1a`,
@@ -605,9 +658,9 @@ export default function AppHeader({
                                             </div>
                                         )}
 
-                                        {calendarError && (
+                                        {(calendarError || calActionError) && (
                                             <div style={{ fontSize: '0.75rem', color: T.danger, marginBottom: '0.875rem', fontWeight: 600, fontFamily: T.sans }}>
-                                                {calendarError}
+                                                {calActionError || calendarError}
                                             </div>
                                         )}
 
@@ -630,8 +683,25 @@ export default function AppHeader({
                                             )}
                                         </div>
 
+                                        {calendarConnected && (
+                                            <button onClick={disconnectCalendar}
+                                                disabled={disconnecting || !calConn}
+                                                title={!calConn ? (calConnLoaded ? 'No stored connection found to disconnect' : 'Loading connection…') : undefined}
+                                                style={{ width: '100%', marginTop: '0.5rem', padding: '0.5rem 0.875rem',
+                                                    background: 'transparent', color: T.danger, border: `1px solid ${T.border}`,
+                                                    borderRadius: T.r, fontSize: '0.8125rem', fontWeight: 600, fontFamily: T.sans,
+                                                    cursor: (disconnecting || !calConn) ? 'default' : 'pointer',
+                                                    opacity: (disconnecting || !calConn) ? 0.5 : 1 }}>
+                                                {disconnecting ? 'Disconnecting…' : 'Disconnect calendar'}
+                                            </button>
+                                        )}
+
                                         <div style={{ fontSize: '0.6875rem', color: T.inkMuted, marginTop: '0.75rem', lineHeight: 1.5, fontFamily: T.sans }}>
-                                            To revoke access entirely, remove Accelerep from your Google account permissions.
+                                            {/* Deleting the stored connection stops Accelerep reading the
+                                                calendar, but does not revoke the grant on Google's side —
+                                                saying otherwise would overstate what this button does. */}
+                                            Disconnecting removes the stored connection and stops syncing. To revoke Accelerep&rsquo;s
+                                            access on Google&rsquo;s side as well, remove it from your Google account permissions.
                                         </div>
                                     </div>
                                 )}
