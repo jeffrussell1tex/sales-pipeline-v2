@@ -303,8 +303,76 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, o
     const terrColorMap = {}; visibleTerritories.forEach((t,i) => { terrColorMap[t] = terrColors[i%terrColors.length]; });
     const smCard2 = { ...card };
 
+    // Incentive config lives in settings.extra and is Admin-only server-side
+    // (settings PUT is requireRole(['Admin'])). This tab also renders for
+    // Managers, so gate the mutating controls rather than let them edit
+    // something that can only ever come back 403.
+    const canEditIncentives = isAdmin;
+    const [saveState, setSaveState] = useState({ status: 'idle', msg: '' });
+
+    // dbFetch returns a Response and does NOT throw on 4xx/5xx.
+    const saveExtra = async (patch, label) => {
+        setSaveState({ status: 'saving', msg: '' });
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT', body: JSON.stringify(patch),
+            });
+            if (!res.ok) {
+                setSaveState({ status: 'error', msg: res.status === 403
+                    ? `Not saved — only Admins can change ${label}.`
+                    : `Not saved — the server returned ${res.status}. Your ${label} changes are not stored.` });
+                return false;
+            }
+            setSaveState({ status: 'saved', msg: '' });
+            return true;
+        } catch (err) {
+            console.error('[SalesManagerTab] save ' + label, err);
+            setSaveState({ status: 'error', msg: `Not saved — network error while saving ${label}.` });
+            return false;
+        }
+    };
+
+    const tierList  = (settings.quotaData || {}).commissionTiers || [];
+    const spiffList = settings.spiffs || [];
+
+    // Local-only update (typing); persist separately on blur.
+    const applyTiers  = next => setSettings(prev => ({ ...prev, quotaData: { ...prev.quotaData, commissionTiers: next } }));
+    const saveTiers   = next => saveExtra({ quotaData: { ...(settings.quotaData || {}), commissionTiers: next } }, 'commission tiers');
+    const commitTiers = next => { applyTiers(next);  return saveTiers(next); };
+
+    const applySpiffs  = next => setSettings(prev => ({ ...prev, spiffs: next }));
+    const saveSpiffs   = next => saveExtra({ spiffs: next }, 'SPIFFs');
+    const commitSpiffs = next => { applySpiffs(next); return saveSpiffs(next); };
+
     return (
         <>
+        {/* Save status — a failed write must never look like a success */}
+        {saveState.status !== 'idle' && (
+            <div style={{
+                padding:'8px 14px', marginBottom:12, borderRadius:T.r, fontFamily:T.sans,
+                fontSize:11.5, fontWeight:600, display:'flex', alignItems:'center', gap:8,
+                background: saveState.status === 'error' ? 'rgba(156,58,46,0.10)' : T.surface2,
+                border: `1px solid ${saveState.status === 'error' ? T.danger : T.border}`,
+                color: saveState.status === 'error' ? T.danger : T.inkMid,
+            }}>
+                <span>{saveState.status === 'saving' ? '…' : saveState.status === 'saved' ? '✓' : '⚠'}</span>
+                <span>{saveState.status === 'saving' ? 'Saving…'
+                     : saveState.status === 'saved' ? 'Changes saved'
+                     : saveState.msg}</span>
+                {saveState.status === 'error' && (
+                    <button onClick={() => setSaveState({ status:'idle', msg:'' })}
+                        style={{ marginLeft:'auto', background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14 }}>×</button>
+                )}
+            </div>
+        )}
+
+        {!canEditIncentives && (
+            <div style={{ padding:'8px 14px', marginBottom:12, borderRadius:T.r, background:T.surface2,
+                border:`1px solid ${T.border}`, fontFamily:T.sans, fontSize:11.5, color:T.inkMid }}>
+                Commission tiers and SPIFFs are read-only — only Admins can change them.
+            </div>
+        )}
+
         {/* Unassigned warning */}
         {unassignedReps.length > 0 && (
             <div style={{ background:'rgba(184,115,51,0.1)', border:`1.5px solid ${T.warn}`, borderRadius:T.r+1, padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:12, fontFamily:T.sans }}>
@@ -443,24 +511,26 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, o
                     </div>
                 </div>
                 <div style={{ padding:'16px 20px' }}>
-                    {((settings.quotaData||{}).commissionTiers||[]).map((tier,idx) => (
+                    {tierList.map((tier,idx) => (
                         <div key={idx} style={{ display:'flex', gap:8, marginBottom:8, alignItems:'center', padding:'8px 10px', background:T.surface2, borderRadius:T.r, border:`1px solid ${T.border}` }}>
                             {['minPercent','maxPercent','rate'].map((field,fi) => (
                                 <input key={fi} type="number" value={field==='maxPercent'&&tier.maxPercent>=999?'':tier[field]} placeholder={field==='maxPercent'?'∞':field==='rate'?'%':'%'}
-                                    onChange={e => { const t=[...(settings.quotaData||{}).commissionTiers||[]]; t[idx]={...t[idx],[field]:parseFloat(e.target.value)||(field==='maxPercent'?999:0)}; setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:t}})); }}
+                                    disabled={!canEditIncentives}
+                                    onChange={e => { const t=[...tierList]; t[idx]={...t[idx],[field]:parseFloat(e.target.value)||(field==='maxPercent'?999:0)}; applyTiers(t); }}
                                     style={{ width:55, padding:'3px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, textAlign:'center', fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
-                                    onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
+                                    onFocus={e=>e.target.style.borderColor=T.info}
+                                    onBlur={e=>{ e.target.style.borderColor=T.border; if (canEditIncentives) saveTiers(tierList); }} />
                             ))}
                             <span style={{ fontSize:10, color:T.inkMuted, fontWeight:600 }}>% rate</span>
-                            {((settings.quotaData||{}).commissionTiers||[]).length>1 && (
-                                <button onClick={()=>setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:(prev.quotaData||{}).commissionTiers.filter((_,i)=>i!==idx)}}))} style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, padding:'0', marginLeft:'auto' }}>×</button>
+                            {canEditIncentives && tierList.length>1 && (
+                                <button onClick={()=>commitTiers(tierList.filter((_,i)=>i!==idx))} style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, padding:'0', marginLeft:'auto' }}>×</button>
                             )}
                         </div>
                     ))}
-                    <button onClick={()=>setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:[...((prev.quotaData||{}).commissionTiers||[]),{minPercent:0,maxPercent:999,rate:0}]}}))}
+                    {canEditIncentives && <button onClick={()=>commitTiers([...tierList,{minPercent:0,maxPercent:999,rate:0}])}
                         style={{ marginTop:4, background:T.surface2, border:`1.5px dashed ${T.border}`, borderRadius:T.r, padding:'6px 12px', cursor:'pointer', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:T.sans, width:'100%' }}>
                         + Add Tier
-                    </button>
+                    </button>}
                 </div>
             </div>
 
@@ -471,33 +541,39 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, o
                         <div style={eyebrow}>SPIFF Board</div>
                         <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>One-time incentive bonuses</div>
                     </div>
-                    <button onClick={()=>setSettings(prev=>({...prev,spiffs:[...(prev.spiffs||[]),{id:'spiff_'+Date.now(),name:'',amount:'',type:'flat',condition:'',active:true}]}))}
-                        style={{ padding:'4px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>+ Add SPIFF</button>
+                    {canEditIncentives && <button onClick={()=>commitSpiffs([...spiffList,{id:'spiff_'+Date.now(),name:'',amount:'',type:'flat',condition:'',active:true}])}
+                        style={{ padding:'4px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>+ Add SPIFF</button>}
                 </div>
                 <div style={{ padding:'12px 16px' }}>
-                    {(settings.spiffs||[]).length === 0
+                    {spiffList.length === 0
                         ? <div style={{ textAlign:'center', padding:'1.5rem', color:T.inkMuted, fontSize:11, fontFamily:T.sans }}>No SPIFFs defined yet.</div>
-                        : (settings.spiffs||[]).map((spiff,si) => (
+                        : spiffList.map((spiff,si) => (
                             <div key={spiff.id} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'8px 10px', marginBottom:8 }}>
                                 <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                                     <input type="text" value={spiff.name} placeholder="SPIFF name"
-                                        onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,name:e.target.value}:s)}))}
+                                        disabled={!canEditIncentives}
+                                        onChange={e=>applySpiffs(spiffList.map((s,i)=>i===si?{...s,name:e.target.value}:s))}
                                         style={{ flex:2, minWidth:140, padding:'4px 8px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
-                                        onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
-                                    <select value={spiff.type} onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,type:e.target.value}:s)}))}
+                                        onFocus={e=>e.target.style.borderColor=T.info}
+                                        onBlur={e=>{ e.target.style.borderColor=T.border; if (canEditIncentives) saveSpiffs(spiffList); }} />
+                                    <select value={spiff.type} disabled={!canEditIncentives}
+                                        onChange={e=>commitSpiffs(spiffList.map((s,i)=>i===si?{...s,type:e.target.value}:s))}
                                         style={{ padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, cursor:'pointer', outline:'none', color:T.ink }}>
                                         <option value="flat">Flat $</option><option value="pct">% Revenue</option><option value="multiplier">Multiplier</option>
                                     </select>
                                     <input type="number" value={spiff.amount} placeholder="0"
-                                        onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,amount:e.target.value}:s)}))}
+                                        disabled={!canEditIncentives}
+                                        onChange={e=>applySpiffs(spiffList.map((s,i)=>i===si?{...s,amount:e.target.value}:s))}
                                         style={{ width:70, padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, textAlign:'right', outline:'none', color:T.ink }}
-                                        onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
+                                        onFocus={e=>e.target.style.borderColor=T.info}
+                                        onBlur={e=>{ e.target.style.borderColor=T.border; if (canEditIncentives) saveSpiffs(spiffList); }} />
                                     <label style={{ display:'flex', alignItems:'center', gap:3, cursor:'pointer' }}>
-                                        <input type="checkbox" checked={!!spiff.active} onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,active:e.target.checked}:s)}))} />
+                                        <input type="checkbox" checked={!!spiff.active} disabled={!canEditIncentives}
+                                            onChange={e=>commitSpiffs(spiffList.map((s,i)=>i===si?{...s,active:e.target.checked}:s))} />
                                         <span style={{ fontSize:10, color:T.inkMid, fontFamily:T.sans }}>Active</span>
                                     </label>
-                                    <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).filter((_,i)=>i!==si)})))}
-                                        style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>
+                                    {canEditIncentives && <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>commitSpiffs(spiffList.filter((_,i)=>i!==si)))}
+                                        style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>}
                                 </div>
                             </div>
                         ))

@@ -80,6 +80,7 @@ export const handler = async (event) => {
                 // Extended fields — stored in the extra jsonb blob column
                 quotaData:        row.extra?.quotaData       || null,
                 commissionTiers:  row.extra?.commissionTiers || null,
+                spiffs:           row.extra?.spiffs          || [],
                 pipelines:        row.extra?.pipelines       || null,
                 teams:            row.extra?.teams           || null,
                 territories:      row.extra?.territories     || null,
@@ -210,6 +211,7 @@ export const handler = async (event) => {
             const extra = {
                 quotaData:        'quotaData'        in data ? (data.quotaData        || null) : existingExtra.quotaData        || null,
                 commissionTiers:  'commissionTiers'  in data ? (data.commissionTiers  || null) : existingExtra.commissionTiers  || null,
+                spiffs:           'spiffs'           in data ? (data.spiffs           || [])   : existingExtra.spiffs           || [],
                 pipelines:        'pipelines'        in data ? (data.pipelines        || null) : existingExtra.pipelines        || null,
                 teams:            'teams'            in data ? (data.teams            || null) : existingExtra.teams            || null,
                 territories:      'territories'      in data ? (data.territories      || null) : existingExtra.territories      || null,
