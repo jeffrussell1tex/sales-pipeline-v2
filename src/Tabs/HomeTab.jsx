@@ -73,12 +73,89 @@ function QuotaBar({ closedArr, commitArr, quota, label }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+//  SpiffPanel — active incentives + this rep's own claims
+// ─────────────────────────────────────────────────────────────
+const spiffRate = (s) => {
+    const amt = parseFloat(s.amount) || 0;
+    if (s.type === 'pct')        return `${amt}% of deal ARR`;
+    if (s.type === 'multiplier') return `${amt}× commission`;
+    return `$${amt.toLocaleString()} flat`;
+};
+
+const CLAIM_STATUS = {
+    pending:  { label: 'Pending',  color: T.warn   },
+    approved: { label: 'Approved', color: T.ok     },
+    rejected: { label: 'Rejected', color: T.danger },
+    paid:     { label: 'Paid',     color: T.info   },
+};
+
+function SpiffPanel({ spiffs, claims }) {
+    const active = (spiffs || []).filter(s => s.active);
+    const mine   = [...(claims || [])].sort(
+        (a, b) => new Date(b.claimedAt || 0) - new Date(a.claimedAt || 0)
+    );
+    // Nothing to say — don't take up a slot on the page.
+    if (!active.length && !mine.length) return null;
+
+    return (
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '1rem 1.25rem' }}>
+            <div style={{ ...eyebrow(T.goldInk), marginBottom: '0.75rem' }}>SPIFFs</div>
+
+            {active.length === 0 ? (
+                <div style={{ fontSize: '0.75rem', color: T.inkMuted, fontFamily: T.sans }}>
+                    No active SPIFFs right now.
+                </div>
+            ) : active.map(s => (
+                <div key={s.id} style={{ marginBottom: '0.625rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink, fontFamily: T.sans }}>
+                            {s.name || 'Unnamed SPIFF'}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: T.goldInk, fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                            {spiffRate(s)}
+                        </span>
+                    </div>
+                    {s.condition && (
+                        <div style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans, marginTop: '2px' }}>
+                            {s.condition}
+                        </div>
+                    )}
+                </div>
+            ))}
+
+            {mine.length > 0 && (
+                <div style={{ marginTop: '0.875rem', paddingTop: '0.75rem', borderTop: `1px solid ${T.border}` }}>
+                    <div style={{ ...eyebrow(), marginBottom: '0.5rem' }}>My claims</div>
+                    {mine.map(c => {
+                        const st = CLAIM_STATUS[c.status] || { label: c.status || 'Unknown', color: T.inkMuted };
+                        return (
+                            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
+                                <span style={{ flex: 1, minWidth: 0, fontSize: '0.75rem', color: T.inkMid, fontFamily: T.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {c.spiffName || 'SPIFF'}
+                                    <span style={{ color: T.inkMuted }}> · {c.opportunityName || c.account || ''}</span>
+                                </span>
+                                <span style={{ fontSize: '0.75rem', fontWeight: '700', color: T.ink, fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                                    {c.spiffType === 'multiplier' ? `${c.multiplier || 1}×` : `$${Math.round(c.amount || 0).toLocaleString()}`}
+                                </span>
+                                <span style={{ fontSize: '0.5625rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em', padding: '2px 6px', borderRadius: '999px', background: st.color + '22', color: st.color, fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                                    {st.label}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────
 //  HomeTab
 // ─────────────────────────────────────────────────────────────
 export default function HomeTab() {
     const {
         opportunities, accounts, contacts, tasks, activities, settings,
-        currentUser, userRole, canSeeAll,
+        currentUser, userRole, canSeeAll, spiffClaims,
         getStageColor, getQuarter, getQuarterLabel,
         calculateDealHealth, getKpiColor,
         visibleOpportunities, visibleTasks, activePipeline, allPipelines, stages,
@@ -637,6 +714,14 @@ export default function HomeTab() {
                             quota={quarterlyQuota}
                             label={`${qLabel} Quota`}
                         />
+
+                        {/* SPIFFS — reps and managers only */}
+                        {['User', 'Manager', 'Admin'].includes(userRole) && (
+                            <SpiffPanel
+                                spiffs={settings.spiffs}
+                                claims={(spiffClaims || []).filter(c => c.repName === currentUser)}
+                            />
+                        )}
 
                         {/* QUICK LOG */}
                         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '1rem 1.25rem' }}>
