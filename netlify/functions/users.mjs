@@ -139,6 +139,38 @@ export const handler = async (event) => {
         ...(row.profile || {}),
     });
 
+    // ── Partial-update merge (hard requirement) ──────────────────────────────
+    // `sanitize()` REBUILDS the whole row — every top-level column and the entire
+    // `profile` jsonb — from the request body, and `upsertUser` writes it with
+    // `set: { ...updateData }`. There is no column-level merge anywhere below it.
+    //
+    // So a PUT carrying a partial payload does not update those fields, it
+    // REPLACES THE ROW and nulls everything absent. Five call sites were doing
+    // exactly that: TeamsDetail (78, 351, 402) and TerritoriesDetail (64, 213)
+    // cascade a team/territory change by sending only
+    //     { id, team, territory, vertical, teamId }
+    // which sanitizes to name "Unnamed User", email "<id>@placeholder.local",
+    // quota null, and 31 of 35 profile fields null — wiping the user's real name,
+    // email, phone, email signature, notification prefs and all quota figures.
+    // Every one of those calls sat in a `catch(e) {}` or a bare console.error, so
+    // it had never reported anything. Same mechanism as the `mobile`-wiped-on-save
+    // bug in §0A, with a far wider blast radius.
+    //
+    // Fixing the callers alone would not be enough: any future partial PUT would
+    // do the same. The merge belongs here, once, where every caller inherits it.
+    //
+    // `flatten()` returns a stored row in the same flat shape `sanitize()` accepts,
+    // so overlaying the incoming body on the flattened row gives exact
+    // field-present semantics: a key sent is applied (including an explicit '' or
+    // null, which is how TeamsDetail:351 clears a team), a key omitted keeps its
+    // stored value. Unknown id -> nothing to merge, and the upsert still inserts.
+    const mergeForUpdate = async (data) => {
+        const [existing] = await db.select().from(users)
+            .where(and(eq(users.id, data.id), eq(users.orgId, orgId)));
+        if (!existing) return data;
+        return { ...flatten(existing), ...data };
+    };
+
     // ── GET ?me=true — any authenticated user can fetch their own record ──────
     // Lookup order:
     //   1. Direct id match (id col = real Clerk userId)
@@ -215,7 +247,7 @@ export const handler = async (event) => {
             // Keep whatever role is already stored. A profile save must never
             // change it — previously omitting userType downgraded the user to
             // 'User', which is how Admins quietly lost their roster role.
-            const clean = withRole(sanitize(data), await roleOf(data.id) || 'User');
+            const clean = withRole(sanitize(await mergeForUpdate(data)), await roleOf(data.id) || 'User');
             const { id, ...updateData } = clean;
             let upsertResult;
             try {
@@ -432,7 +464,8 @@ export const handler = async (event) => {
                 // Role is preserved, never taken from the body: writing it here
                 // would change the roster without changing Clerk, which is what
                 // auth.mjs actually reads. Role changes go through user-role.mjs.
-                const result = await upsertUser(withRole(sanitize(data), await roleOf(data.id) || 'User'));
+                const merged = await mergeForUpdate(data);
+                const result = await upsertUser(withRole(sanitize(merged), await roleOf(data.id) || 'User'));
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };
                 }

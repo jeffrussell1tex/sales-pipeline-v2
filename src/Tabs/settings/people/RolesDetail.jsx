@@ -1,7 +1,7 @@
 // settings/people/RolesDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
-import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 
 const ScopeBadge = ({ scope }) => {
@@ -320,6 +320,12 @@ export const RolesDetail = ({ settings, onBack }) => {
     const [activeRole, setActiveRole] = useState('r3'); // default: Sales Rep
     const [openRoleKebab, setOpenRoleKebab] = useState(null);
     const { showConfirm, setSettings } = useApp();
+    // Every save below was fire-and-forget into .catch(console.error). dbFetch
+    // resolves for ANY response (guide 18b1), so that catch fires on a network
+    // failure only — and PUT /settings is Admin-only since SVR-2, meaning a
+    // non-admin's 403 landed in the success path. Permission toggles appeared to
+    // apply, nothing reached the database, and it reverted on reload.
+    const [saveError, setSaveError] = useState('');
 
     // Local perms state — starts from PT_PERMS, updated on Apply
     const [localPerms, setLocalPerms] = useState(() => JSON.parse(JSON.stringify(settings?.rolePermissions || PT_PERMS)));
@@ -359,20 +365,38 @@ export const RolesDetail = ({ settings, onBack }) => {
                 [objectId]: { ...(localPerms[activeRole]?.[objectId] || {}), [action]: value },
             },
         };
-        setLocalPerms(next);
-        if (setSettings) setSettings(s => ({ ...s, rolePermissions: next }));
-        dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ rolePermissions: next }) }).catch(e => console.error('save roles', e));
+        savePerms(next);
     };
 
-    // Roles list — standard persistence (setSettings + dbFetch PUT settings.roles)
-    const saveRoles = (next) => {
-        if (setSettings) setSettings(s => ({ ...s, roles: next }));
-        dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ roles: next }) }).catch(e => console.error('save roles list', e));
+    // Optimistic write, reverted on failure so the screen never shows a
+    // permission the database does not have. putSettings throws on non-2xx.
+    const persist = async (patch, label, revert) => {
+        setSaveError('');
+        try {
+            await putSettings(patch);
+            return true;
+        } catch (e) {
+            revert();
+            setSaveError(`${label} not saved — ${e.message}`);
+            return false;
+        }
     };
-    const savePerms = (nextPerms) => {
+
+    // Roles list — standard persistence (setSettings + PUT settings.roles)
+    const saveRoles = async (next) => {
+        const prev = roles;
+        if (setSettings) setSettings(s => ({ ...s, roles: next }));
+        await persist({ roles: next }, 'Role list',
+            () => { if (setSettings) setSettings(s => ({ ...s, roles: prev })); });
+    };
+    const savePerms = async (nextPerms) => {
+        const prevPerms = localPerms;
         setLocalPerms(nextPerms);
         if (setSettings) setSettings(s => ({ ...s, rolePermissions: nextPerms }));
-        dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ rolePermissions: nextPerms }) }).catch(e => console.error('save role perms', e));
+        await persist({ rolePermissions: nextPerms }, 'Permissions', () => {
+            setLocalPerms(prevPerms);
+            if (setSettings) setSettings(s => ({ ...s, rolePermissions: prevPerms }));
+        });
     };
     const addRole = () => {
         const id = 'role_' + crypto.randomUUID();
@@ -417,6 +441,14 @@ export const RolesDetail = ({ settings, onBack }) => {
                 <span>/</span>
                 <span style={{ color:T.ink, fontWeight:600 }}>Roles & permissions</span>
             </div>
+
+            {saveError && (
+                <div style={{ padding:'10px 14px', marginBottom:12, background:'rgba(156,58,46,0.08)',
+                    border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger,
+                    fontSize:12.5, fontFamily:T.sans }}>
+                    {saveError}
+                </div>
+            )}
 
             {/* Title band */}
             <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>

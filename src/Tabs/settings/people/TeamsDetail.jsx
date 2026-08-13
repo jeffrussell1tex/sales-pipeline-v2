@@ -1,7 +1,7 @@
 // settings/people/TeamsDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, dbWrite } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
 
@@ -73,12 +73,20 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
                 const orig = allUsers[i];
                 return orig && (u.team !== orig.team || u.teamId !== orig.teamId);
             });
+            // A partial PUT to /users used to REPLACE the row (mergeForUpdate in
+            // users.mjs now merges). The cascade is still reported: a member whose
+            // row did not update is left pointing at the wrong team.
+            const failed = [];
             for (const u of changedUsers) {
-                try {
-                    await dbFetch(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team: u.team, territory: u.territory, vertical: u.vertical, teamId: u.teamId }) });
-                } catch(e) { console.error('Failed to persist user team', u.name, e); }
+                const r = await dbWrite(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team: u.team, territory: u.territory, vertical: u.vertical, teamId: u.teamId }) });
+                if (!r.ok) failed.push(`${u.name || u.id}: ${r.error}`);
             }
 
+            if (failed.length) {
+                setErr(`Team saved, but ${failed.length} member record(s) did not update: ${failed.join('; ')}`);
+                setSettings(prev => ({ ...prev, teams: updatedTeams }));
+                return;                                  // stay open so the message is read
+            }
             setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
             onSave(updatedTeams);
             onClose();
@@ -316,6 +324,10 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
     const [editingTeam,  setEditingTeam]  = useState(null); // null | 'new' | team obj
     const [viewMode,     setViewMode]     = useState('table');
     const [assigningUser,setAssigningUser]= useState(null); // user obj being assigned to a team
+    // The assign popover had no error surface at all: its settings PUT was checked
+    // with `if (res.ok)` and simply did nothing on failure, and the /users cascade
+    // was a bare await. Both are now reported here.
+    const [assignErr,    setAssignErr]    = useState('');
 
     React.useEffect(() => {
         if (openKebab === null) return;
@@ -348,7 +360,8 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                     setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
                     // Clear team on affected users in DB
                     for (const u of allUsers.filter(u => u.teamId === team.id)) {
-                        try { await dbFetch(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team:'', teamId:'', territory:'', vertical:'' }) }); } catch(e) {}
+                        const r = await dbWrite(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team:'', teamId:'', territory:'', vertical:'' }) });
+                        if (!r.ok) console.error('user team clear failed', u.id, r.error);
                     }
                 }
             } catch(e) { console.error('Delete team failed', e); }
@@ -384,6 +397,12 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                         <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:12 }}>
                             Assigning <b>{assigningUser.name}</b> to a team will update their team and territory.
                         </div>
+                        {assignErr && (
+                            <div style={{ padding:'8px 12px', marginBottom:10, background:'rgba(156,58,46,0.08)',
+                                border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12 }}>
+                                {assignErr}
+                            </div>
+                        )}
                         {teams.length === 0 ? (
                             <div style={{ fontSize:13, color:T.inkMuted }}>No teams exist yet. Create a team first.</div>
                         ) : (
@@ -396,13 +415,12 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                                         const updatedUsers = allUsers.map(u => u.id === assigningUser.id
                                             ? { ...u, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }
                                             : u);
-                                        try {
-                                            const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
-                                            if (res.ok) {
-                                                await dbFetch('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: assigningUser.id, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }) });
-                                                setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
-                                            }
-                                        } catch(e) { console.error('Assign failed', e); }
+                                        setAssignErr('');
+                                        const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
+                                        if (!rt.ok) { setAssignErr(`Not assigned — ${rt.error}`); return; }
+                                        const ru = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: assigningUser.id, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }) });
+                                        if (!ru.ok) { setAssignErr(`Team updated, but ${assigningUser.name || 'the user'} was not — ${ru.error}`); return; }
+                                        setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
                                         setAssigningUser(null);
                                     }} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, cursor:'pointer', fontFamily:T.sans, textAlign:'left' }}
                                         onMouseEnter={e=>e.currentTarget.style.background='rgba(58,90,122,0.08)'}

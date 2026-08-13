@@ -1,7 +1,7 @@
 // settings/people/TerritoriesDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, dbWrite } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
 
@@ -60,10 +60,17 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onClose }) => 
 
             // Persist changed users
             const changedUsers = updatedUsers.filter((u, i) => allUsers[i] && u.territory !== allUsers[i].territory);
+            const failed = [];
             for (const u of changedUsers) {
-                try { await dbFetch('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: u.territory }) }); } catch(e) {}
+                const r = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: u.territory }) });
+                if (!r.ok) failed.push(`${u.name || u.id}: ${r.error}`);
             }
 
+            if (failed.length) {
+                setErr(`Territory saved, but ${failed.length} user record(s) did not update: ${failed.join('; ')}`);
+                setSettings(prev => ({ ...prev, territories: updatedTerritories }));
+                return;
+            }
             setSettings(prev => ({ ...prev, territories: updatedTerritories, users: updatedUsers }));
             onClose();
         } catch(e) {
@@ -210,7 +217,8 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
                 const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ territories: updatedTerritories }) });
                 if (res.ok) {
                     for (const u of allUsers.filter(u => u.territory === tr.name)) {
-                        try { await dbFetch('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: '' }) }); } catch(e) {}
+                        const rc = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: '' }) });
+                        if (!rc.ok) console.error('territory clear failed', u.id, rc.error);
                     }
                     setSettings(prev => ({ ...prev, territories: updatedTerritories, users: updatedUsers }));
                 }
