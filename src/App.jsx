@@ -214,6 +214,7 @@ function App() {
     const _getQuarterLabelRef = useRef(null);
     const _showBlockedDeleteRef = useRef(null);
     const _opportunitiesRef = useRef([]);
+    const _onDealWonRef = useRef(null);
     const _deps = {
         get addAudit()            { return _addAuditRef.current; },
         get showConfirm()         { return _showConfirmRef.current; },
@@ -223,6 +224,7 @@ function App() {
         get getQuarterLabel()     { return _getQuarterLabelRef.current; },
         get showBlockedDelete()   { return _showBlockedDeleteRef.current; },
         get opportunities()       { return _opportunitiesRef.current; },
+        get onDealWon()           { return _onDealWonRef.current; },
     };
 
     const {
@@ -276,6 +278,23 @@ function App() {
     const [leads, setLeads] = React.useState([]);
     const [spiffClaims, setSpiffClaims] = React.useState([]);
 
+    // Offer the SPIFF claim modal for a Closed Won deal, but only when there
+    // is actually something claimable — opening it to say "all claimed" is a
+    // dead end. Deliberately not gated on the stage having just changed, so a
+    // deal closed before SPIFFs existed can still be claimed by re-saving it.
+    const promptSpiffClaim = (opp) => {
+        if (!opp || opp.stage !== 'Closed Won') return false;
+        const active = (settings.spiffs || []).filter(s => s.active);
+        if (!active.length) return false;
+        const claimed = new Set(
+            spiffClaims.filter(c => c.opportunityId === opp.id).map(c => c.spiffId)
+        );
+        if (!active.some(s => !claimed.has(s.id))) return false;
+        setSpiffClaimContext({ opp });
+        setShowSpiffClaimModal(true);
+        return true;
+    };
+
     // ── Core utility functions ──
     const showConfirm = (message, onConfirm, danger = true) => {
         setConfirmModal({ message, onConfirm, danger });
@@ -323,6 +342,7 @@ function App() {
     _setUndoRef.current     = setUndoToast;
     _showBlockedDeleteRef.current = showBlockedDelete;
     _opportunitiesRef.current = opportunities;
+    _onDealWonRef.current = promptSpiffClaim;
 
     // Quota & Commission
 
@@ -1464,6 +1484,7 @@ dbFetch('/.netlify/functions/users?me=true')
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
         // SPIFF
         spiffClaims, setSpiffClaims,
+        promptSpiffClaim,
         // Derived/filtered lists
         visibleOpportunities,
         visibleAccounts,

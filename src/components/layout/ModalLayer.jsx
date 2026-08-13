@@ -21,6 +21,10 @@ import ContactMergeReviewModal from '../modals/ContactMergeReviewModal';
 // ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
 export default function ModalLayer() {
+    // Claim submit state lives here: the SPIFF modal below is an IIFE,
+    // not a component, so it cannot own hooks.
+    const [spiffClaimError, setSpiffClaimError] = React.useState(null);
+    const [spiffClaimBusy, setSpiffClaimBusy] = React.useState(null);
     const {
         showModal, setShowModal, editingOpp, setEditingOpp,
         oppModalError, setOppModalError, oppModalSaving, setOppModalSaving,
@@ -948,6 +952,7 @@ export default function ModalLayer() {
             {/* ════ SPIFF CLAIM MODAL ════ */}
             {showSpiffClaimModal && spiffClaimContext && (() => {
                 const { opp } = spiffClaimContext;
+                const closeClaimModal = () => { setSpiffClaimError(null); setSpiffClaimBusy(null); setShowSpiffClaimModal(false); };
                 const activeSpiffsList = (settings.spiffs||[]).filter(s => s.active);
                 const existingClaims = spiffClaims.filter(c => c.opportunityId === opp.id);
                 const claimedSpiffIds = new Set(existingClaims.map(c => c.spiffId));
@@ -961,7 +966,7 @@ export default function ModalLayer() {
                 };
                 return (
                 <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:10100, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
-                    onClick={() => setShowSpiffClaimModal(false)}>
+                    onClick={closeClaimModal}>
                     <div style={{ background:'#fff', borderRadius: isMobile ? '16px 16px 0 0' : '14px', padding:'1.5rem', width:'100%', maxWidth: isMobile ? '100%' : '480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
                         onClick={e => e.stopPropagation()}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1rem' }}>
@@ -969,7 +974,7 @@ export default function ModalLayer() {
                                 <div style={{ fontWeight:'800', fontSize:'1rem', color:'#1e293b' }}>⚡ Claim SPIFF</div>
                                 <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:'2px' }}>{opp.opportunityName || opp.account} · ${dealArr.toLocaleString()} ARR</div>
                             </div>
-                            <button onClick={() => setShowSpiffClaimModal(false)} style={{ background:'none', border:'none', fontSize:'1.25rem', color:'#94a3b8', cursor:'pointer', lineHeight:1 }}>×</button>
+                            <button onClick={closeClaimModal} style={{ background:'none', border:'none', fontSize:'1.25rem', color:'#94a3b8', cursor:'pointer', lineHeight:1 }}>×</button>
                         </div>
 
                         {existingClaims.length > 0 && (
@@ -991,6 +996,13 @@ export default function ModalLayer() {
                                         </div>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {spiffClaimError && (
+                            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'0.625rem 0.875rem', marginBottom:'0.875rem', fontSize:'0.8125rem', color:'#b91c1c', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                                <span>⚠</span><span style={{ flex:1 }}>{spiffClaimError}</span>
+                                <button onClick={() => setSpiffClaimError(null)} style={{ background:'none', border:'none', color:'#b91c1c', cursor:'pointer', fontSize:'1rem', lineHeight:1 }}>×</button>
                             </div>
                         )}
 
@@ -1036,20 +1048,33 @@ export default function ModalLayer() {
                                                         paidAt: null,
                                                         note: '',
                                                     };
+                                                    // dbFetch returns a Response and does NOT throw on 4xx/5xx.
+                                                    setSpiffClaimError(null);
+                                                    setSpiffClaimBusy(spiff.id);
                                                     try {
-                                                        const result = await dbFetch('/.netlify/functions/spiff-claims', {
+                                                        const res = await dbFetch('/.netlify/functions/spiff-claims', {
                                                             method: 'POST',
                                                             headers: { 'Content-Type': 'application/json' },
                                                             body: JSON.stringify(newClaim),
                                                         });
-                                                        setSpiffClaims(prev => [...prev, result.spiffClaim || newClaim]);
+                                                        let payload = null;
+                                                        try { payload = await res.json(); } catch { /* empty body */ }
+                                                        if (!res.ok) {
+                                                            setSpiffClaimError((payload && payload.error)
+                                                                || `Claim not submitted — the server returned ${res.status}.`);
+                                                            return;
+                                                        }
+                                                        setSpiffClaims(prev => [...prev, (payload && payload.spiffClaim) || newClaim]);
                                                     } catch (err) {
                                                         console.error('Failed to submit SPIFF claim:', err.message);
-                                                        setSpiffClaims(prev => [...prev, newClaim]); // optimistic fallback
+                                                        setSpiffClaimError('Claim not submitted — network error. Nothing was saved.');
+                                                    } finally {
+                                                        setSpiffClaimBusy(null);
                                                     }
                                                 }}
-                                                style={{ width:'100%', padding:'0.375rem', background:'#7c3aed', color:'#fff', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
-                                                    Submit Claim
+                                                disabled={spiffClaimBusy === spiff.id}
+                                                style={{ width:'100%', padding:'0.375rem', background: spiffClaimBusy === spiff.id ? '#a78bfa' : '#7c3aed', color:'#fff', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor: spiffClaimBusy === spiff.id ? 'wait' : 'pointer', fontFamily:'inherit' }}>
+                                                    {spiffClaimBusy === spiff.id ? 'Submitting…' : 'Submit Claim'}
                                                 </button>
                                             </div>
                                         );

@@ -132,6 +132,12 @@ export function useOpportunities(deps) {
                     if (enrichedData.salesRep && prevOpp?.salesRep !== enrichedData.salesRep) {
                         fireMentionSms({ type: 'dealAssigned', assigneeName: enrichedData.salesRep, assignedBy: currentUser, dealName: enrichedData.opportunityName || enrichedData.account, account: enrichedData.account });
                     }
+                    // SPIFF: offer a claim on any Closed Won save that still has
+                    // an unclaimed active SPIFF. deps.onDealWon no-ops when there
+                    // is nothing to claim.
+                    if (enrichedData.stage === 'Closed Won') {
+                        deps.onDealWon?.({ ...updatedOpp, id: editingOpp.id });
+                    }
                     // SMS: stage changed
                     if (stageChanged && enrichedData.salesRep) {
                         if (enrichedData.stage === 'Closed Won') {

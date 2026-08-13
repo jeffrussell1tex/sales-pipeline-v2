@@ -217,7 +217,7 @@ export default function KanbanView({
     setSelectedOpps,
     selectMode = false,
 }) {
-    const { stages, opportunities, setOpportunities, currentUser, activities } = useApp();
+    const { stages, opportunities, setOpportunities, currentUser, activities, promptSpiffClaim } = useApp();
 
     const handleKanbanDrop = (toStage) => {
         if (!kanbanDragging || kanbanDragging.fromStage === toStage) {
@@ -240,10 +240,14 @@ export default function KanbanView({
             ],
         };
         setOpportunities(prev => prev.map(o => o.id === kanbanDragging.oppId ? newOpp : o));
+        // dbFetch returns a Response and does NOT throw on 4xx/5xx.
         dbFetch('/.netlify/functions/opportunities', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newOpp),
+        }).then(res => {
+            if (!res.ok) { console.error('Stage change not saved:', res.status); return; }
+            if (toStage === 'Closed Won') promptSpiffClaim?.(newOpp);
         }).catch(console.error);
         setKanbanDragging(null);
         setKanbanDragOver(null);

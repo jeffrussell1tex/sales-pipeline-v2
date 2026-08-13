@@ -575,6 +575,13 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, o
                                     {canEditIncentives && <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>commitSpiffs(spiffList.filter((_,i)=>i!==si)))}
                                         style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>}
                                 </div>
+                                {/* Description — stored on `condition`, which the claim modal already renders */}
+                                <input type="text" value={spiff.condition||''} placeholder="Description (shown to reps)"
+                                    disabled={!canEditIncentives}
+                                    onChange={e=>applySpiffs(spiffList.map((s,i)=>i===si?{...s,condition:e.target.value}:s))}
+                                    style={{ width:'100%', marginTop:6, padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, outline:'none', color:T.inkMid, boxSizing:'border-box' }}
+                                    onFocus={e=>e.target.style.borderColor=T.info}
+                                    onBlur={e=>{ e.target.style.borderColor=T.border; if (canEditIncentives) saveSpiffs(spiffList); }} />
                             </div>
                         ))
                     }
