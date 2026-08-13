@@ -132,6 +132,434 @@ function QuotaRepCard({ u, quotaMode, quarters, inputSt, updateRepField, compact
     return null;
 }
 
+// ════════════════════════════════════════════════════════
+// FORECAST TAB
+// ════════════════════════════════════════════════════════
+function ForecastTab({ card, repStats, teamAttain, teamBest, teamClosed, teamCommit, teamPipe, teamQuota, updateRepField }) {
+    const [editingCommit, setEditingCommit] = useState(null);
+
+    // Stacked bar widths
+    const barTotal = Math.max(teamQuota, teamPipe);
+    const closedW  = barTotal > 0 ? (teamClosed/barTotal)*100 : 0;
+    const commitW  = barTotal > 0 ? (teamCommit/barTotal)*100 : 0;
+    const bestW    = barTotal > 0 ? (teamBest/barTotal)*100 : 0;
+    const pipeW    = barTotal > 0 ? (teamPipe/barTotal)*100 : 0;
+    const quotaW   = barTotal > 0 ? (teamQuota/barTotal)*100 : 0;
+
+    return (
+        <>
+        {/* ── Roll-up strip — matches design: bar on left, divider, commit call on right ── */}
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 20px', marginBottom:16, display:'flex', gap:28, alignItems:'center' }}>
+            <div style={{ flex:1 }}>
+                <div style={{ fontSize:10, letterSpacing:1, textTransform:'uppercase', color:T.inkMuted, fontWeight:700, fontFamily:T.sans }}>Team to quota</div>
+                <div style={{ display:'flex', alignItems:'baseline', gap:10, marginTop:4 }}>
+                    <span style={{ fontSize:28, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{fmtV(teamClosed)}</span>
+                    <span style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>of {fmtV(teamQuota)}</span>
+                    <span style={{ fontSize:12, fontWeight:600, color:teamAttain>=100?T.ok:T.inkMid, fontFamily:T.sans }}>{teamAttain !== null ? teamAttain+'%' : '—'}</span>
+                </div>
+
+                {/* Stacked bar — matches V1 design: flat, no borderRadius, segment order per spec */}
+                <div style={{ position:'relative', height:8, background:T.surface2, overflow:'visible', marginTop:10, marginBottom:8, border:`1px solid ${T.border}` }}>
+                    <div style={{ position:'absolute', inset:0, width:Math.min(pipeW,100)+'%', background:T.border }} />
+                    <div style={{ position:'absolute', inset:0, width:Math.min(bestW,100)+'%', background:T.gold }} />
+                    <div style={{ position:'absolute', inset:0, width:Math.min(commitW,100)+'%', background:T.goldInk }} />
+                    <div style={{ position:'absolute', inset:0, width:Math.min(closedW,100)+'%', background:T.ok }} />
+                    <div style={{ position:'absolute', left:quotaW+'%', top:-3, bottom:-3, width:2, background:T.ink, zIndex:3 }} />
+                </div>
+
+                {/* Legend */}
+                <div style={{ display:'flex', gap:16, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                    <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, background:T.ok }}/> Closed {fmtV(teamClosed)}</span>
+                    <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, background:T.goldInk }}/> Commit {fmtV(teamCommit)}</span>
+                    <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, background:T.gold }}/> Best-case {fmtV(teamBest)}</span>
+                    <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, border:`1px solid ${T.border}` }}/> Open pipeline {fmtV(teamPipe)}</span>
+                </div>
+            </div>
+
+            {/* Vertical divider */}
+            <div style={{ width:1, height:60, background:T.border, flexShrink:0 }} />
+
+            {/* Commit call */}
+            <div style={{ flexShrink:0 }}>
+                <div style={{ fontSize:10, letterSpacing:1, textTransform:'uppercase', color:T.inkMuted, fontWeight:700, fontFamily:T.sans }}>Commit call</div>
+                <div style={{ fontSize:22, fontWeight:700, color:T.ink, marginTop:4, fontFamily:T.sans }}>{fmtV(teamCommit)}</div>
+                {teamQuota > 0 && (
+                    <div style={{ fontSize:11, fontWeight:600, color:teamCommit >= teamQuota ? T.ok : T.warn, fontFamily:T.sans }}>
+                        {teamCommit >= teamQuota ? 'Above quota' : 'Under quota by ' + fmtV(teamQuota - teamCommit)}
+                    </div>
+                )}
+            </div>
+        </div>
+
+        {/* ── Ledger table ── */}
+        <div style={card}>
+            {/* Column headers */}
+            <div style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
+                <div>Rep</div><div style={{textAlign:'right'}}>Quota</div><div style={{textAlign:'right'}}>Closed</div>
+                <div style={{textAlign:'right'}}>Commit</div><div style={{textAlign:'right'}}>Best case</div>
+                <div style={{textAlign:'right'}}>Pipeline</div><div style={{textAlign:'right'}}>Attain</div>
+                <div style={{textAlign:'center'}}>Health</div><div style={{textAlign:'center'}}>Action</div>
+            </div>
+
+            {/* Rep rows */}
+            {repStats.map((rs, i) => {
+                const isEditing = editingCommit === rs.rep.id;
+                return (
+                    <div key={rs.rep.id} style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'12px 16px', borderBottom:`1px solid ${T.border}`, background: i%2===0 ? T.surface : T.bg, fontFamily:T.sans, transition:'background 80ms' }}
+                        onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                        onMouseLeave={e => e.currentTarget.style.background=i%2===0 ? T.surface : T.bg}>
+
+                        {/* Rep name */}
+                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                            <Avatar name={rs.rep.name} size={30} />
+                            <div>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{rs.rep.name}</div>
+                                <div style={{ fontSize:10.5, color:T.inkMuted }}>{rs.rep.territory || rs.rep.team || (rs.rep.userType === 'User' ? 'AE' : rs.rep.userType) }</div>
+                            </div>
+                        </div>
+
+                        {/* Quota */}
+                        <div style={{ textAlign:'right', fontSize:12.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.quota)}</div>
+
+                        {/* Closed */}
+                        <div style={{ textAlign:'right', fontSize:13, color:T.ink, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.closedArr)}</div>
+
+                        {/* Commit — dashed gold border box, editable */}
+                        <div style={{ textAlign:'right' }}>
+                            {isEditing ? (
+                                <input type="number" defaultValue={rs.commit}
+                                    autoFocus
+                                    onBlur={e => { updateRepField(rs.rep.id,'commit',parseFloat(e.target.value)||0); setEditingCommit(null); }}
+                                    onKeyDown={e => { if (e.key==='Enter'||e.key==='Escape') e.target.blur(); }}
+                                    style={{ width:80, padding:'3px 6px', border:`1.5px dashed ${T.goldInk}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, background:T.surface2, color:T.ink, textAlign:'right', outline:'none' }} />
+                            ) : (
+                                <span onClick={() => setEditingCommit(rs.rep.id)}
+                                    style={{ fontSize:13, fontWeight:600, color:T.goldInk, cursor:'text', display:'inline-block', border:`1px dashed ${T.gold}`, padding:'2px 6px', borderRadius:2 }}>
+                                    {fmtV(rs.commit)}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Best case */}
+                        <div style={{ textAlign:'right', fontSize:13, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.bestCase)}</div>
+
+                        {/* Pipeline */}
+                        <div style={{ textAlign:'right', fontSize:12.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.pipelineArr)}</div>
+
+                        {/* Attain % + mini bar */}
+                        <div style={{ textAlign:'right' }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:rs.attainPct>=100 ? T.ok : rs.attainPct>=70 ? T.ink : rs.attainPct>=40 ? T.warn : T.danger }}>
+                                {rs.attainPct !== null ? rs.attainPct+'%' : '—'}
+                            </div>
+                            <div style={{ height:3, background:T.border, marginTop:2, position:'relative' }}>
+                                <div style={{ position:'absolute', left:0, top:0, bottom:0, width:Math.min(rs.attainPct||0,100)+'%', background:rs.attainPct>=100?T.ok:rs.attainPct>=70?T.goldInk:T.danger }} />
+                            </div>
+                        </div>
+
+                        {/* Health dot + trend arrow */}
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
+                            <div style={{ width:7, height:7, borderRadius:'50%', background:rs.healthColor, flexShrink:0 }} />
+                            <span style={{ fontSize:11, color:rs.trend==='up' ? T.ok : rs.trend==='down' ? T.danger : T.inkMuted, fontWeight:700 }}>
+                                {rs.trend==='up' ? '↑' : rs.trend==='down' ? '↓' : '—'}
+                            </span>
+                        </div>
+
+                        {/* Coach action */}
+                        <div style={{ textAlign:'center' }}>
+                            <button style={{ fontSize:11, color:T.goldInk, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600 }}>Coach →</button>
+                        </div>
+                    </div>
+                );
+            })}
+
+            {/* Team total row */}
+            <div style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'12px 16px', background:T.surface2, borderTop:`2px solid ${T.ink}`, fontFamily:T.sans }}>
+                <div style={{ fontSize:12, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.5 }}>Team Total</div>
+                <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamQuota)}</div>
+                <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ok, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamClosed)}</div>
+                <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.goldInk, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamCommit)}</div>
+                <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamBest)}</div>
+                <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamPipe)}</div>
+                <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:teamAttain>=100?T.ok:T.inkMid }}>{teamAttain !== null ? teamAttain+'%' : '—'}</div>
+                <div /><div />
+            </div>
+        </div>
+        </>
+    );
+}
+
+// ════════════════════════════════════════════════════════
+// ADMINISTRATION TAB (unchanged logic, V1 tokens)
+// ════════════════════════════════════════════════════════
+function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, opportunities, quarters, quotaMode, setActiveTab, setAllQuotaMode, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, updateRepField, visibleReps }) {
+    const unassignedReps = isAdmin ? visibleReps.filter(u => !u.territory?.trim()) : [];
+    const visibleTerritories = [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort();
+    const terrFilter = settings.__qbTerrFilter || 'all';
+    const setTerrFilter = v => setSettings(prev => ({...prev, __qbTerrFilter:v}));
+    const filteredReps = isAdmin && terrFilter !== 'all' ? visibleReps.filter(u=>u.territory?.trim()===terrFilter) : visibleReps;
+    const renderTerritories = isAdmin && terrFilter === 'all' ? visibleTerritories : (terrFilter !== 'all' ? [terrFilter] : [...new Set(visibleReps.filter(u=>u.territory).map(u=>u.territory.trim()))].sort());
+    const filteredTotal = filteredReps.reduce((s,u)=>s+getRepTotal(u),0);
+    const terrColors = ['#9c6b4a','#4a6b5a','#3a5a7a','#7a6a48','#9c3a2e'];
+    const terrColorMap = {}; visibleTerritories.forEach((t,i) => { terrColorMap[t] = terrColors[i%terrColors.length]; });
+    const smCard2 = { ...card };
+
+    return (
+        <>
+        {/* Unassigned warning */}
+        {unassignedReps.length > 0 && (
+            <div style={{ background:'rgba(184,115,51,0.1)', border:`1.5px solid ${T.warn}`, borderRadius:T.r+1, padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:12, fontFamily:T.sans }}>
+                <span style={{ fontSize:16 }}>⚠️</span>
+                <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:700, color:T.warn, fontSize:12 }}>{unassignedReps.length} rep{unassignedReps.length>1?'s have':' has'} no territory: <strong>{unassignedReps.map(u=>u.name).join(', ')}</strong></div>
+                    <div style={{ fontSize:11, color:T.inkMid, marginTop:2 }}>Assign via Settings → Team Builder.</div>
+                </div>
+                <button onClick={()=>setActiveTab('settings')} style={{ padding:'4px 10px', background:T.warn, color:'#fff', border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Go to Settings</button>
+            </div>
+        )}
+
+        {/* Quota Board */}
+        <div style={smCard2}>
+            <div style={{ ...cardHdr, flexWrap:'wrap', gap:8 }}>
+                <div>
+                    <div style={eyebrow}>Assign Quotas</div>
+                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>${filteredTotal.toLocaleString()} assigned</div>
+                </div>
+                <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginLeft:'auto' }}>
+                    {isAdmin && visibleTerritories.length > 1 && (
+                        <div style={{ display:'flex', gap:4 }}>
+                            {['all',...visibleTerritories].map(t => (
+                                <button key={t} onClick={()=>setTerrFilter(t)} style={{ padding:'3px 9px', borderRadius:999, border:`1px solid ${terrFilter===t?T.ink:T.border}`, cursor:'pointer', fontFamily:T.sans, fontSize:10, fontWeight:600, background:terrFilter===t?T.ink:'transparent', color:terrFilter===t?T.surface:T.inkMid, transition:'all 120ms' }}>
+                                    {t==='all'?'All':t}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    <div style={{ display:'flex', background:T.surface2, borderRadius:T.r, padding:2, gap:2 }}>
+                        {['annual','quarterly'].map(t => (
+                            <button key={t} onClick={()=>setAllQuotaMode(t)} style={{ padding:'3px 9px', borderRadius:T.r-1, border:'none', cursor:'pointer', fontFamily:T.sans, fontSize:10, fontWeight:700, background:quotaMode===t?T.surface:'transparent', color:quotaMode===t?T.ink:T.inkMid, boxShadow:quotaMode===t?'0 1px 3px rgba(0,0,0,0.08)':'none' }}>
+                                {t==='annual'?'Annual':'Quarterly'}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Column headers */}
+            <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'6px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
+                <div>Rep</div><div>{quotaMode==='annual'?'Annual Quota':'Total Quota'}</div><div>Attainment</div>
+            </div>
+
+            {visibleReps.length === 0 ? (
+                <div style={{ padding:'2.5rem', textAlign:'center', color:T.inkMuted, fontSize:12, fontFamily:T.sans }}>No reps configured yet.</div>
+            ) : (
+                <>
+                {renderTerritories.map(terr => {
+                    const terrReps = filteredReps.filter(u=>u.territory?.trim()===terr);
+                    if (!terrReps.length) return null;
+                    const dotColor = terrColorMap[terr] || T.inkMuted;
+                    const terrTotal = terrReps.reduce((s,u)=>s+getRepTotal(u),0);
+                    return (
+                        <div key={terr}>
+                            {isAdmin && terrFilter==='all' && (
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 16px', background:dotColor+'18', borderBottom:`1px solid ${dotColor}33`, fontFamily:T.sans }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                        <div style={{ width:3, height:14, borderRadius:1, background:dotColor }} />
+                                        <span style={{ fontSize:9, fontWeight:800, color:dotColor, textTransform:'uppercase', letterSpacing:0.8 }}>{terr}</span>
+                                    </div>
+                                    <span style={{ fontSize:9, color:dotColor }}>{terrReps.length} rep{terrReps.length!==1?'s':''} · ${terrTotal.toLocaleString()}</span>
+                                </div>
+                            )}
+                            {terrReps.map((u,ui) => {
+                                const rWon = (opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                                const quota = getRepTotal(u);
+                                const attain = quota>0 ? Math.min((rWon/quota)*100,100) : 0;
+                                const aColor = attain>=100?T.ok:attain>=75?T.warn:attain>=40?T.info:T.inkMuted;
+                                const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+                                return (
+                                    <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, alignItems:'center', fontFamily:T.sans }}
+                                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                        onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                            <div style={{ width:28, height:28, borderRadius:'50%', background:dotColor+'44', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:dotColor, flexShrink:0 }}>{initials}</div>
+                                            <div>
+                                                <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div>
+                                                <div style={{ fontSize:10, color:T.inkMuted }}>{u.team||u.territory||'—'}</div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} updateRepField={updateRepField} compactInput />
+                                        </div>
+                                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                            <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}>
+                                                <div style={{ height:'100%', width:attain+'%', background:aColor, borderRadius:T.r }} />
+                                            </div>
+                                            <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{quota>0?attain.toFixed(1)+'%':'—'}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    );
+                })}
+                {/* Unassigned reps */}
+                {isAdmin && filteredReps.filter(u=>!u.territory?.trim()).map((u,ui,arr) => {
+                    const rWon=(opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                    const quota=getRepTotal(u), attain=quota>0?Math.min((rWon/quota)*100,100):0;
+                    const aColor=attain>=100?T.ok:attain>=75?T.warn:T.inkMuted;
+                    const initials=(u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+                    return (
+                        <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, alignItems:'center', fontFamily:T.sans }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                <div style={{ width:28, height:28, borderRadius:'50%', background:T.surface2, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:T.inkMuted }}>{initials}</div>
+                                <div><div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div><div style={{ fontSize:10, color:T.inkMuted }}>No territory</div></div>
+                            </div>
+                            <QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} updateRepField={updateRepField} compactInput />
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}><div style={{ height:'100%', width:attain+'%', background:aColor, borderRadius:T.r }} /></div>
+                                <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{quota>0?attain.toFixed(1)+'%':'—'}</span>
+                            </div>
+                        </div>
+                    );
+                })}
+                {/* Total */}
+                {filteredReps.length > 0 && (
+                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', background:T.surface2, borderTop:`2px solid ${T.border}`, fontFamily:T.sans }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5 }}>Total Assigned</div>
+                        <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>${filteredTotal.toLocaleString()}</div>
+                        <div />
+                    </div>
+                )}
+                </>
+            )}
+        </div>
+
+        {/* Commission Plan + Preview (preserved from original) */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+            <div style={smCard2}>
+                <div style={cardHdr}>
+                    <div>
+                        <div style={eyebrow}>Commission Plan</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Tiered rates applied to all reps based on quota attainment %</div>
+                    </div>
+                </div>
+                <div style={{ padding:'16px 20px' }}>
+                    {((settings.quotaData||{}).commissionTiers||[]).map((tier,idx) => (
+                        <div key={idx} style={{ display:'flex', gap:8, marginBottom:8, alignItems:'center', padding:'8px 10px', background:T.surface2, borderRadius:T.r, border:`1px solid ${T.border}` }}>
+                            {['minPercent','maxPercent','rate'].map((field,fi) => (
+                                <input key={fi} type="number" value={field==='maxPercent'&&tier.maxPercent>=999?'':tier[field]} placeholder={field==='maxPercent'?'∞':field==='rate'?'%':'%'}
+                                    onChange={e => { const t=[...(settings.quotaData||{}).commissionTiers||[]]; t[idx]={...t[idx],[field]:parseFloat(e.target.value)||(field==='maxPercent'?999:0)}; setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:t}})); }}
+                                    style={{ width:55, padding:'3px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, textAlign:'center', fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
+                                    onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
+                            ))}
+                            <span style={{ fontSize:10, color:T.inkMuted, fontWeight:600 }}>% rate</span>
+                            {((settings.quotaData||{}).commissionTiers||[]).length>1 && (
+                                <button onClick={()=>setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:(prev.quotaData||{}).commissionTiers.filter((_,i)=>i!==idx)}}))} style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, padding:'0', marginLeft:'auto' }}>×</button>
+                            )}
+                        </div>
+                    ))}
+                    <button onClick={()=>setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:[...((prev.quotaData||{}).commissionTiers||[]),{minPercent:0,maxPercent:999,rate:0}]}}))}
+                        style={{ marginTop:4, background:T.surface2, border:`1.5px dashed ${T.border}`, borderRadius:T.r, padding:'6px 12px', cursor:'pointer', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:T.sans, width:'100%' }}>
+                        + Add Tier
+                    </button>
+                </div>
+            </div>
+
+            {/* SPIFF Board */}
+            <div style={smCard2}>
+                <div style={{ ...cardHdr }}>
+                    <div>
+                        <div style={eyebrow}>SPIFF Board</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>One-time incentive bonuses</div>
+                    </div>
+                    <button onClick={()=>setSettings(prev=>({...prev,spiffs:[...(prev.spiffs||[]),{id:'spiff_'+Date.now(),name:'',amount:'',type:'flat',condition:'',active:true}]}))}
+                        style={{ padding:'4px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>+ Add SPIFF</button>
+                </div>
+                <div style={{ padding:'12px 16px' }}>
+                    {(settings.spiffs||[]).length === 0
+                        ? <div style={{ textAlign:'center', padding:'1.5rem', color:T.inkMuted, fontSize:11, fontFamily:T.sans }}>No SPIFFs defined yet.</div>
+                        : (settings.spiffs||[]).map((spiff,si) => (
+                            <div key={spiff.id} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'8px 10px', marginBottom:8 }}>
+                                <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+                                    <input type="text" value={spiff.name} placeholder="SPIFF name"
+                                        onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,name:e.target.value}:s)}))}
+                                        style={{ flex:2, minWidth:140, padding:'4px 8px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
+                                        onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
+                                    <select value={spiff.type} onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,type:e.target.value}:s)}))}
+                                        style={{ padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, cursor:'pointer', outline:'none', color:T.ink }}>
+                                        <option value="flat">Flat $</option><option value="pct">% Revenue</option><option value="multiplier">Multiplier</option>
+                                    </select>
+                                    <input type="number" value={spiff.amount} placeholder="0"
+                                        onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,amount:e.target.value}:s)}))}
+                                        style={{ width:70, padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, textAlign:'right', outline:'none', color:T.ink }}
+                                        onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
+                                    <label style={{ display:'flex', alignItems:'center', gap:3, cursor:'pointer' }}>
+                                        <input type="checkbox" checked={!!spiff.active} onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,active:e.target.checked}:s)}))} />
+                                        <span style={{ fontSize:10, color:T.inkMid, fontFamily:T.sans }}>Active</span>
+                                    </label>
+                                    <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).filter((_,i)=>i!==si)})))}
+                                        style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>
+                                </div>
+                            </div>
+                        ))
+                    }
+                </div>
+            </div>
+        </div>
+
+        {/* SPIFF Claims */}
+        <div style={smCard2}>
+            <div style={cardHdr}>
+                <div>
+                    <div style={eyebrow}>SPIFF Claims</div>
+                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Review and approve claims submitted by reps</div>
+                </div>
+                <div style={{ display:'flex', gap:4 }}>
+                    {['all','pending','approved','rejected','paid'].map(s => (
+                        <button key={s} onClick={()=>setSettings(prev=>({...prev,_spiffClaimFilter:s}))}
+                            style={{ padding:'2px 8px', borderRadius:999, border:'none', cursor:'pointer', fontSize:9, fontWeight:700, fontFamily:T.sans,
+                                background:(settings._spiffClaimFilter||'pending')===s?T.ink:T.surface2,
+                                color:(settings._spiffClaimFilter||'pending')===s?T.surface:T.inkMid }}>
+                            {s.charAt(0).toUpperCase()+s.slice(1)}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            <div style={{ padding:'12px 16px' }}>
+                {(() => {
+                    const filter = settings._spiffClaimFilter||'pending';
+                    const filtered = spiffClaims.filter(c=>filter==='all'||c.status===filter).sort((a,b)=>new Date(b.claimedAt)-new Date(a.claimedAt));
+                    if (!filtered.length) return <div style={{ textAlign:'center', padding:'1.5rem', color:T.inkMuted, fontSize:11, background:T.surface2, borderRadius:T.r, fontFamily:T.sans }}>No {filter==='all'?'':filter} claims.</div>;
+                    return filtered.map((claim,ci) => (
+                        <div key={claim.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:ci<filtered.length-1?`1px solid ${T.border}`:'none', flexWrap:'wrap', fontFamily:T.sans }}>
+                            <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontWeight:600, fontSize:12, color:T.ink }}>{claim.spiffName}</div>
+                                <div style={{ fontSize:10, color:T.inkMuted }}>{claim.repName} · {claim.opportunityName} · {new Date(claim.claimedAt).toLocaleDateString()}</div>
+                            </div>
+                            <div style={{ fontWeight:700, color:claim.spiffType==='multiplier'?T.info:T.ok, fontSize:13 }}>
+                                {claim.spiffType==='multiplier'?`${claim.multiplier}×`:`$${claim.amount.toLocaleString()}`}
+                            </div>
+                            <span style={{ fontSize:9, padding:'2px 7px', borderRadius:999, fontWeight:700,
+                                background:claim.status==='approved'?T.ok+'22':claim.status==='rejected'?T.danger+'22':claim.status==='paid'?T.info+'22':T.warn+'22',
+                                color:claim.status==='approved'?T.ok:claim.status==='rejected'?T.danger:claim.status==='paid'?T.info:T.warn }}>
+                                {claim.status.toUpperCase()}
+                            </span>
+                            {claim.status==='pending' && (
+                                <div style={{ display:'flex', gap:4 }}>
+                                    <button onClick={async()=>{ const u={...claim,status:'approved',approvedAt:new Date().toISOString(),approvedBy:currentUser}; await dbFetch('/.netlify/functions/spiff-claims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error); setSpiffClaims(prev=>prev.map(c=>c.id===claim.id?u:c)); }}
+                                        style={{ padding:'2px 8px', background:T.ok, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✓ Approve</button>
+                                    <button onClick={async()=>{ const u={...claim,status:'rejected',approvedAt:new Date().toISOString(),approvedBy:currentUser}; await dbFetch('/.netlify/functions/spiff-claims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error); setSpiffClaims(prev=>prev.map(c=>c.id===claim.id?u:c)); }}
+                                        style={{ padding:'2px 8px', background:T.danger, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✕ Reject</button>
+                                </div>
+                            )}
+                        </div>
+                    ));
+                })()}
+            </div>
+        </div>
+        </>
+    );
+}
+
 // ════════════════════════════════════════════════════════════
 export default function SalesManagerTab() {
     const {
@@ -234,162 +662,6 @@ export default function SalesManagerTab() {
             })}
         </div>
     );
-
-    // ════════════════════════════════════════════════════════
-    // FORECAST TAB
-    // ════════════════════════════════════════════════════════
-    const ForecastTab = () => {
-        const [editingCommit, setEditingCommit] = useState(null);
-
-        // Stacked bar widths
-        const barTotal = Math.max(teamQuota, teamPipe);
-        const closedW  = barTotal > 0 ? (teamClosed/barTotal)*100 : 0;
-        const commitW  = barTotal > 0 ? (teamCommit/barTotal)*100 : 0;
-        const bestW    = barTotal > 0 ? (teamBest/barTotal)*100 : 0;
-        const pipeW    = barTotal > 0 ? (teamPipe/barTotal)*100 : 0;
-        const quotaW   = barTotal > 0 ? (teamQuota/barTotal)*100 : 0;
-
-        return (
-            <>
-            {/* ── Roll-up strip — matches design: bar on left, divider, commit call on right ── */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 20px', marginBottom:16, display:'flex', gap:28, alignItems:'center' }}>
-                <div style={{ flex:1 }}>
-                    <div style={{ fontSize:10, letterSpacing:1, textTransform:'uppercase', color:T.inkMuted, fontWeight:700, fontFamily:T.sans }}>Team to quota</div>
-                    <div style={{ display:'flex', alignItems:'baseline', gap:10, marginTop:4 }}>
-                        <span style={{ fontSize:28, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{fmtV(teamClosed)}</span>
-                        <span style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>of {fmtV(teamQuota)}</span>
-                        <span style={{ fontSize:12, fontWeight:600, color:teamAttain>=100?T.ok:T.inkMid, fontFamily:T.sans }}>{teamAttain !== null ? teamAttain+'%' : '—'}</span>
-                    </div>
-
-                    {/* Stacked bar — matches V1 design: flat, no borderRadius, segment order per spec */}
-                    <div style={{ position:'relative', height:8, background:T.surface2, overflow:'visible', marginTop:10, marginBottom:8, border:`1px solid ${T.border}` }}>
-                        <div style={{ position:'absolute', inset:0, width:Math.min(pipeW,100)+'%', background:T.border }} />
-                        <div style={{ position:'absolute', inset:0, width:Math.min(bestW,100)+'%', background:T.gold }} />
-                        <div style={{ position:'absolute', inset:0, width:Math.min(commitW,100)+'%', background:T.goldInk }} />
-                        <div style={{ position:'absolute', inset:0, width:Math.min(closedW,100)+'%', background:T.ok }} />
-                        <div style={{ position:'absolute', left:quotaW+'%', top:-3, bottom:-3, width:2, background:T.ink, zIndex:3 }} />
-                    </div>
-
-                    {/* Legend */}
-                    <div style={{ display:'flex', gap:16, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
-                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, background:T.ok }}/> Closed {fmtV(teamClosed)}</span>
-                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, background:T.goldInk }}/> Commit {fmtV(teamCommit)}</span>
-                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, background:T.gold }}/> Best-case {fmtV(teamBest)}</span>
-                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, border:`1px solid ${T.border}` }}/> Open pipeline {fmtV(teamPipe)}</span>
-                    </div>
-                </div>
-
-                {/* Vertical divider */}
-                <div style={{ width:1, height:60, background:T.border, flexShrink:0 }} />
-
-                {/* Commit call */}
-                <div style={{ flexShrink:0 }}>
-                    <div style={{ fontSize:10, letterSpacing:1, textTransform:'uppercase', color:T.inkMuted, fontWeight:700, fontFamily:T.sans }}>Commit call</div>
-                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, marginTop:4, fontFamily:T.sans }}>{fmtV(teamCommit)}</div>
-                    {teamQuota > 0 && (
-                        <div style={{ fontSize:11, fontWeight:600, color:teamCommit >= teamQuota ? T.ok : T.warn, fontFamily:T.sans }}>
-                            {teamCommit >= teamQuota ? 'Above quota' : 'Under quota by ' + fmtV(teamQuota - teamCommit)}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* ── Ledger table ── */}
-            <div style={card}>
-                {/* Column headers */}
-                <div style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
-                    <div>Rep</div><div style={{textAlign:'right'}}>Quota</div><div style={{textAlign:'right'}}>Closed</div>
-                    <div style={{textAlign:'right'}}>Commit</div><div style={{textAlign:'right'}}>Best case</div>
-                    <div style={{textAlign:'right'}}>Pipeline</div><div style={{textAlign:'right'}}>Attain</div>
-                    <div style={{textAlign:'center'}}>Health</div><div style={{textAlign:'center'}}>Action</div>
-                </div>
-
-                {/* Rep rows */}
-                {repStats.map((rs, i) => {
-                    const isEditing = editingCommit === rs.rep.id;
-                    return (
-                        <div key={rs.rep.id} style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'12px 16px', borderBottom:`1px solid ${T.border}`, background: i%2===0 ? T.surface : T.bg, fontFamily:T.sans, transition:'background 80ms' }}
-                            onMouseEnter={e => e.currentTarget.style.background=T.surface2}
-                            onMouseLeave={e => e.currentTarget.style.background=i%2===0 ? T.surface : T.bg}>
-
-                            {/* Rep name */}
-                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                                <Avatar name={rs.rep.name} size={30} />
-                                <div>
-                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{rs.rep.name}</div>
-                                    <div style={{ fontSize:10.5, color:T.inkMuted }}>{rs.rep.territory || rs.rep.team || (rs.rep.userType === 'User' ? 'AE' : rs.rep.userType) }</div>
-                                </div>
-                            </div>
-
-                            {/* Quota */}
-                            <div style={{ textAlign:'right', fontSize:12.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.quota)}</div>
-
-                            {/* Closed */}
-                            <div style={{ textAlign:'right', fontSize:13, color:T.ink, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.closedArr)}</div>
-
-                            {/* Commit — dashed gold border box, editable */}
-                            <div style={{ textAlign:'right' }}>
-                                {isEditing ? (
-                                    <input type="number" defaultValue={rs.commit}
-                                        autoFocus
-                                        onBlur={e => { updateRepField(rs.rep.id,'commit',parseFloat(e.target.value)||0); setEditingCommit(null); }}
-                                        onKeyDown={e => { if (e.key==='Enter'||e.key==='Escape') e.target.blur(); }}
-                                        style={{ width:80, padding:'3px 6px', border:`1.5px dashed ${T.goldInk}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, background:T.surface2, color:T.ink, textAlign:'right', outline:'none' }} />
-                                ) : (
-                                    <span onClick={() => setEditingCommit(rs.rep.id)}
-                                        style={{ fontSize:13, fontWeight:600, color:T.goldInk, cursor:'text', display:'inline-block', border:`1px dashed ${T.gold}`, padding:'2px 6px', borderRadius:2 }}>
-                                        {fmtV(rs.commit)}
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Best case */}
-                            <div style={{ textAlign:'right', fontSize:13, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.bestCase)}</div>
-
-                            {/* Pipeline */}
-                            <div style={{ textAlign:'right', fontSize:12.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.pipelineArr)}</div>
-
-                            {/* Attain % + mini bar */}
-                            <div style={{ textAlign:'right' }}>
-                                <div style={{ fontSize:13, fontWeight:700, color:rs.attainPct>=100 ? T.ok : rs.attainPct>=70 ? T.ink : rs.attainPct>=40 ? T.warn : T.danger }}>
-                                    {rs.attainPct !== null ? rs.attainPct+'%' : '—'}
-                                </div>
-                                <div style={{ height:3, background:T.border, marginTop:2, position:'relative' }}>
-                                    <div style={{ position:'absolute', left:0, top:0, bottom:0, width:Math.min(rs.attainPct||0,100)+'%', background:rs.attainPct>=100?T.ok:rs.attainPct>=70?T.goldInk:T.danger }} />
-                                </div>
-                            </div>
-
-                            {/* Health dot + trend arrow */}
-                            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
-                                <div style={{ width:7, height:7, borderRadius:'50%', background:rs.healthColor, flexShrink:0 }} />
-                                <span style={{ fontSize:11, color:rs.trend==='up' ? T.ok : rs.trend==='down' ? T.danger : T.inkMuted, fontWeight:700 }}>
-                                    {rs.trend==='up' ? '↑' : rs.trend==='down' ? '↓' : '—'}
-                                </span>
-                            </div>
-
-                            {/* Coach action */}
-                            <div style={{ textAlign:'center' }}>
-                                <button style={{ fontSize:11, color:T.goldInk, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600 }}>Coach →</button>
-                            </div>
-                        </div>
-                    );
-                })}
-
-                {/* Team total row */}
-                <div style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'12px 16px', background:T.surface2, borderTop:`2px solid ${T.ink}`, fontFamily:T.sans }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.5 }}>Team Total</div>
-                    <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamQuota)}</div>
-                    <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ok, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamClosed)}</div>
-                    <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.goldInk, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamCommit)}</div>
-                    <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamBest)}</div>
-                    <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamPipe)}</div>
-                    <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:teamAttain>=100?T.ok:T.inkMid }}>{teamAttain !== null ? teamAttain+'%' : '—'}</div>
-                    <div /><div />
-                </div>
-            </div>
-            </>
-        );
-    };
 
     // ════════════════════════════════════════════════════════
     // TEAM TAB
@@ -783,288 +1055,6 @@ export default function SalesManagerTab() {
         );
     };
 
-    // ════════════════════════════════════════════════════════
-    // ADMINISTRATION TAB (unchanged logic, V1 tokens)
-    // ════════════════════════════════════════════════════════
-    const AdminTab = () => {
-        const unassignedReps = isAdmin ? visibleReps.filter(u => !u.territory?.trim()) : [];
-        const visibleTerritories = [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort();
-        const terrFilter = settings.__qbTerrFilter || 'all';
-        const setTerrFilter = v => setSettings(prev => ({...prev, __qbTerrFilter:v}));
-        const filteredReps = isAdmin && terrFilter !== 'all' ? visibleReps.filter(u=>u.territory?.trim()===terrFilter) : visibleReps;
-        const renderTerritories = isAdmin && terrFilter === 'all' ? visibleTerritories : (terrFilter !== 'all' ? [terrFilter] : [...new Set(visibleReps.filter(u=>u.territory).map(u=>u.territory.trim()))].sort());
-        const filteredTotal = filteredReps.reduce((s,u)=>s+getRepTotal(u),0);
-        const terrColors = ['#9c6b4a','#4a6b5a','#3a5a7a','#7a6a48','#9c3a2e'];
-        const terrColorMap = {}; visibleTerritories.forEach((t,i) => { terrColorMap[t] = terrColors[i%terrColors.length]; });
-        const calcCommission = (revenue, quota) => {
-            if (quota<=0||revenue<=0) return 0;
-            let comm = 0;
-            [...((settings.quotaData||{}).commissionTiers||[])].sort((a,b)=>a.minPercent-b.minPercent).forEach(tier => {
-                const mn=(tier.minPercent/100)*quota, mx=tier.maxPercent>=999?Infinity:(tier.maxPercent/100)*quota;
-                if (revenue>mn) comm+=(Math.min(revenue,mx)-mn)*(tier.rate/100);
-            });
-            return comm;
-        };
-        const smCard2 = { ...card };
-        const inputStAdmin = { width:'100%', padding:'0.5rem 0.625rem', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:'0.9375rem', fontWeight:600, fontFamily:T.sans, background:T.surface2, outline:'none', textAlign:'right', boxSizing:'border-box', color:T.ink };
-
-        return (
-            <>
-            {/* Unassigned warning */}
-            {unassignedReps.length > 0 && (
-                <div style={{ background:'rgba(184,115,51,0.1)', border:`1.5px solid ${T.warn}`, borderRadius:T.r+1, padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:12, fontFamily:T.sans }}>
-                    <span style={{ fontSize:16 }}>⚠️</span>
-                    <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:700, color:T.warn, fontSize:12 }}>{unassignedReps.length} rep{unassignedReps.length>1?'s have':' has'} no territory: <strong>{unassignedReps.map(u=>u.name).join(', ')}</strong></div>
-                        <div style={{ fontSize:11, color:T.inkMid, marginTop:2 }}>Assign via Settings → Team Builder.</div>
-                    </div>
-                    <button onClick={()=>setActiveTab('settings')} style={{ padding:'4px 10px', background:T.warn, color:'#fff', border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Go to Settings</button>
-                </div>
-            )}
-
-            {/* Quota Board */}
-            <div style={smCard2}>
-                <div style={{ ...cardHdr, flexWrap:'wrap', gap:8 }}>
-                    <div>
-                        <div style={eyebrow}>Assign Quotas</div>
-                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>${filteredTotal.toLocaleString()} assigned</div>
-                    </div>
-                    <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginLeft:'auto' }}>
-                        {isAdmin && visibleTerritories.length > 1 && (
-                            <div style={{ display:'flex', gap:4 }}>
-                                {['all',...visibleTerritories].map(t => (
-                                    <button key={t} onClick={()=>setTerrFilter(t)} style={{ padding:'3px 9px', borderRadius:999, border:`1px solid ${terrFilter===t?T.ink:T.border}`, cursor:'pointer', fontFamily:T.sans, fontSize:10, fontWeight:600, background:terrFilter===t?T.ink:'transparent', color:terrFilter===t?T.surface:T.inkMid, transition:'all 120ms' }}>
-                                        {t==='all'?'All':t}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                        <div style={{ display:'flex', background:T.surface2, borderRadius:T.r, padding:2, gap:2 }}>
-                            {['annual','quarterly'].map(t => (
-                                <button key={t} onClick={()=>setAllQuotaMode(t)} style={{ padding:'3px 9px', borderRadius:T.r-1, border:'none', cursor:'pointer', fontFamily:T.sans, fontSize:10, fontWeight:700, background:quotaMode===t?T.surface:'transparent', color:quotaMode===t?T.ink:T.inkMid, boxShadow:quotaMode===t?'0 1px 3px rgba(0,0,0,0.08)':'none' }}>
-                                    {t==='annual'?'Annual':'Quarterly'}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Column headers */}
-                <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'6px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
-                    <div>Rep</div><div>{quotaMode==='annual'?'Annual Quota':'Total Quota'}</div><div>Attainment</div>
-                </div>
-
-                {visibleReps.length === 0 ? (
-                    <div style={{ padding:'2.5rem', textAlign:'center', color:T.inkMuted, fontSize:12, fontFamily:T.sans }}>No reps configured yet.</div>
-                ) : (
-                    <>
-                    {renderTerritories.map(terr => {
-                        const terrReps = filteredReps.filter(u=>u.territory?.trim()===terr);
-                        if (!terrReps.length) return null;
-                        const dotColor = terrColorMap[terr] || T.inkMuted;
-                        const terrTotal = terrReps.reduce((s,u)=>s+getRepTotal(u),0);
-                        return (
-                            <div key={terr}>
-                                {isAdmin && terrFilter==='all' && (
-                                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 16px', background:dotColor+'18', borderBottom:`1px solid ${dotColor}33`, fontFamily:T.sans }}>
-                                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                                            <div style={{ width:3, height:14, borderRadius:1, background:dotColor }} />
-                                            <span style={{ fontSize:9, fontWeight:800, color:dotColor, textTransform:'uppercase', letterSpacing:0.8 }}>{terr}</span>
-                                        </div>
-                                        <span style={{ fontSize:9, color:dotColor }}>{terrReps.length} rep{terrReps.length!==1?'s':''} · ${terrTotal.toLocaleString()}</span>
-                                    </div>
-                                )}
-                                {terrReps.map((u,ui) => {
-                                    const rWon = (opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                                    const quota = getRepTotal(u);
-                                    const attain = quota>0 ? Math.min((rWon/quota)*100,100) : 0;
-                                    const aColor = attain>=100?T.ok:attain>=75?T.warn:attain>=40?T.info:T.inkMuted;
-                                    const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-                                    return (
-                                        <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, alignItems:'center', fontFamily:T.sans }}
-                                            onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                                <div style={{ width:28, height:28, borderRadius:'50%', background:dotColor+'44', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:dotColor, flexShrink:0 }}>{initials}</div>
-                                                <div>
-                                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div>
-                                                    <div style={{ fontSize:10, color:T.inkMuted }}>{u.team||u.territory||'—'}</div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} updateRepField={updateRepField} compactInput />
-                                            </div>
-                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                                <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}>
-                                                    <div style={{ height:'100%', width:attain+'%', background:aColor, borderRadius:T.r }} />
-                                                </div>
-                                                <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{quota>0?attain.toFixed(1)+'%':'—'}</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        );
-                    })}
-                    {/* Unassigned reps */}
-                    {isAdmin && filteredReps.filter(u=>!u.territory?.trim()).map((u,ui,arr) => {
-                        const rWon=(opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                        const quota=getRepTotal(u), attain=quota>0?Math.min((rWon/quota)*100,100):0;
-                        const aColor=attain>=100?T.ok:attain>=75?T.warn:T.inkMuted;
-                        const initials=(u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-                        return (
-                            <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, alignItems:'center', fontFamily:T.sans }}>
-                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                    <div style={{ width:28, height:28, borderRadius:'50%', background:T.surface2, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:T.inkMuted }}>{initials}</div>
-                                    <div><div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div><div style={{ fontSize:10, color:T.inkMuted }}>No territory</div></div>
-                                </div>
-                                <QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} updateRepField={updateRepField} compactInput />
-                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                    <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}><div style={{ height:'100%', width:attain+'%', background:aColor, borderRadius:T.r }} /></div>
-                                    <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{quota>0?attain.toFixed(1)+'%':'—'}</span>
-                                </div>
-                            </div>
-                        );
-                    })}
-                    {/* Total */}
-                    {filteredReps.length > 0 && (
-                        <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', background:T.surface2, borderTop:`2px solid ${T.border}`, fontFamily:T.sans }}>
-                            <div style={{ fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5 }}>Total Assigned</div>
-                            <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>${filteredTotal.toLocaleString()}</div>
-                            <div />
-                        </div>
-                    )}
-                    </>
-                )}
-            </div>
-
-            {/* Commission Plan + Preview (preserved from original) */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
-                <div style={smCard2}>
-                    <div style={cardHdr}>
-                        <div>
-                            <div style={eyebrow}>Commission Plan</div>
-                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Tiered rates applied to all reps based on quota attainment %</div>
-                        </div>
-                    </div>
-                    <div style={{ padding:'16px 20px' }}>
-                        {((settings.quotaData||{}).commissionTiers||[]).map((tier,idx) => (
-                            <div key={idx} style={{ display:'flex', gap:8, marginBottom:8, alignItems:'center', padding:'8px 10px', background:T.surface2, borderRadius:T.r, border:`1px solid ${T.border}` }}>
-                                {['minPercent','maxPercent','rate'].map((field,fi) => (
-                                    <input key={fi} type="number" value={field==='maxPercent'&&tier.maxPercent>=999?'':tier[field]} placeholder={field==='maxPercent'?'∞':field==='rate'?'%':'%'}
-                                        onChange={e => { const t=[...(settings.quotaData||{}).commissionTiers||[]]; t[idx]={...t[idx],[field]:parseFloat(e.target.value)||(field==='maxPercent'?999:0)}; setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:t}})); }}
-                                        style={{ width:55, padding:'3px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, textAlign:'center', fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
-                                        onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
-                                ))}
-                                <span style={{ fontSize:10, color:T.inkMuted, fontWeight:600 }}>% rate</span>
-                                {((settings.quotaData||{}).commissionTiers||[]).length>1 && (
-                                    <button onClick={()=>setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:(prev.quotaData||{}).commissionTiers.filter((_,i)=>i!==idx)}}))} style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, padding:'0', marginLeft:'auto' }}>×</button>
-                                )}
-                            </div>
-                        ))}
-                        <button onClick={()=>setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:[...((prev.quotaData||{}).commissionTiers||[]),{minPercent:0,maxPercent:999,rate:0}]}}))}
-                            style={{ marginTop:4, background:T.surface2, border:`1.5px dashed ${T.border}`, borderRadius:T.r, padding:'6px 12px', cursor:'pointer', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:T.sans, width:'100%' }}>
-                            + Add Tier
-                        </button>
-                    </div>
-                </div>
-
-                {/* SPIFF Board */}
-                <div style={smCard2}>
-                    <div style={{ ...cardHdr }}>
-                        <div>
-                            <div style={eyebrow}>SPIFF Board</div>
-                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>One-time incentive bonuses</div>
-                        </div>
-                        <button onClick={()=>setSettings(prev=>({...prev,spiffs:[...(prev.spiffs||[]),{id:'spiff_'+Date.now(),name:'',amount:'',type:'flat',condition:'',active:true}]}))}
-                            style={{ padding:'4px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>+ Add SPIFF</button>
-                    </div>
-                    <div style={{ padding:'12px 16px' }}>
-                        {(settings.spiffs||[]).length === 0
-                            ? <div style={{ textAlign:'center', padding:'1.5rem', color:T.inkMuted, fontSize:11, fontFamily:T.sans }}>No SPIFFs defined yet.</div>
-                            : (settings.spiffs||[]).map((spiff,si) => (
-                                <div key={spiff.id} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'8px 10px', marginBottom:8 }}>
-                                    <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
-                                        <input type="text" value={spiff.name} placeholder="SPIFF name"
-                                            onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,name:e.target.value}:s)}))}
-                                            style={{ flex:2, minWidth:140, padding:'4px 8px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
-                                            onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
-                                        <select value={spiff.type} onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,type:e.target.value}:s)}))}
-                                            style={{ padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, cursor:'pointer', outline:'none', color:T.ink }}>
-                                            <option value="flat">Flat $</option><option value="pct">% Revenue</option><option value="multiplier">Multiplier</option>
-                                        </select>
-                                        <input type="number" value={spiff.amount} placeholder="0"
-                                            onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,amount:e.target.value}:s)}))}
-                                            style={{ width:70, padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, textAlign:'right', outline:'none', color:T.ink }}
-                                            onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
-                                        <label style={{ display:'flex', alignItems:'center', gap:3, cursor:'pointer' }}>
-                                            <input type="checkbox" checked={!!spiff.active} onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,active:e.target.checked}:s)}))} />
-                                            <span style={{ fontSize:10, color:T.inkMid, fontFamily:T.sans }}>Active</span>
-                                        </label>
-                                        <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).filter((_,i)=>i!==si)})))}
-                                            style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>
-                                    </div>
-                                </div>
-                            ))
-                        }
-                    </div>
-                </div>
-            </div>
-
-            {/* SPIFF Claims */}
-            <div style={smCard2}>
-                <div style={cardHdr}>
-                    <div>
-                        <div style={eyebrow}>SPIFF Claims</div>
-                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Review and approve claims submitted by reps</div>
-                    </div>
-                    <div style={{ display:'flex', gap:4 }}>
-                        {['all','pending','approved','rejected','paid'].map(s => (
-                            <button key={s} onClick={()=>setSettings(prev=>({...prev,_spiffClaimFilter:s}))}
-                                style={{ padding:'2px 8px', borderRadius:999, border:'none', cursor:'pointer', fontSize:9, fontWeight:700, fontFamily:T.sans,
-                                    background:(settings._spiffClaimFilter||'pending')===s?T.ink:T.surface2,
-                                    color:(settings._spiffClaimFilter||'pending')===s?T.surface:T.inkMid }}>
-                                {s.charAt(0).toUpperCase()+s.slice(1)}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                <div style={{ padding:'12px 16px' }}>
-                    {(() => {
-                        const filter = settings._spiffClaimFilter||'pending';
-                        const filtered = spiffClaims.filter(c=>filter==='all'||c.status===filter).sort((a,b)=>new Date(b.claimedAt)-new Date(a.claimedAt));
-                        if (!filtered.length) return <div style={{ textAlign:'center', padding:'1.5rem', color:T.inkMuted, fontSize:11, background:T.surface2, borderRadius:T.r, fontFamily:T.sans }}>No {filter==='all'?'':filter} claims.</div>;
-                        return filtered.map((claim,ci) => (
-                            <div key={claim.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:ci<filtered.length-1?`1px solid ${T.border}`:'none', flexWrap:'wrap', fontFamily:T.sans }}>
-                                <div style={{ flex:1, minWidth:0 }}>
-                                    <div style={{ fontWeight:600, fontSize:12, color:T.ink }}>{claim.spiffName}</div>
-                                    <div style={{ fontSize:10, color:T.inkMuted }}>{claim.repName} · {claim.opportunityName} · {new Date(claim.claimedAt).toLocaleDateString()}</div>
-                                </div>
-                                <div style={{ fontWeight:700, color:claim.spiffType==='multiplier'?T.info:T.ok, fontSize:13 }}>
-                                    {claim.spiffType==='multiplier'?`${claim.multiplier}×`:`$${claim.amount.toLocaleString()}`}
-                                </div>
-                                <span style={{ fontSize:9, padding:'2px 7px', borderRadius:999, fontWeight:700,
-                                    background:claim.status==='approved'?T.ok+'22':claim.status==='rejected'?T.danger+'22':claim.status==='paid'?T.info+'22':T.warn+'22',
-                                    color:claim.status==='approved'?T.ok:claim.status==='rejected'?T.danger:claim.status==='paid'?T.info:T.warn }}>
-                                    {claim.status.toUpperCase()}
-                                </span>
-                                {claim.status==='pending' && (
-                                    <div style={{ display:'flex', gap:4 }}>
-                                        <button onClick={async()=>{ const u={...claim,status:'approved',approvedAt:new Date().toISOString(),approvedBy:currentUser}; await dbFetch('/.netlify/functions/spiff-claims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error); setSpiffClaims(prev=>prev.map(c=>c.id===claim.id?u:c)); }}
-                                            style={{ padding:'2px 8px', background:T.ok, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✓ Approve</button>
-                                        <button onClick={async()=>{ const u={...claim,status:'rejected',approvedAt:new Date().toISOString(),approvedBy:currentUser}; await dbFetch('/.netlify/functions/spiff-claims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error); setSpiffClaims(prev=>prev.map(c=>c.id===claim.id?u:c)); }}
-                                            style={{ padding:'2px 8px', background:T.danger, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✕ Reject</button>
-                                    </div>
-                                )}
-                            </div>
-                        ));
-                    })()}
-                </div>
-            </div>
-            </>
-        );
-    };
-
     return (
         <div className="tab-page" style={{ fontFamily:T.sans }}>
             {/* Header */}
@@ -1082,10 +1072,20 @@ export default function SalesManagerTab() {
 
             <SubTabs />
 
-            {subTab === 'forecast' && <ForecastTab />}
+            {subTab === 'forecast' && <ForecastTab
+                card={card} repStats={repStats} updateRepField={updateRepField}
+                teamQuota={teamQuota} teamClosed={teamClosed} teamCommit={teamCommit}
+                teamBest={teamBest} teamPipe={teamPipe} teamAttain={teamAttain} />}
             {subTab === 'team'     && <TeamTab />}
             {subTab === 'audit'    && <AuditTab />}
-            {subTab === 'admin'    && <AdminTab />}
+            {subTab === 'admin'    && <AdminTab
+                card={card} cardHdr={cardHdr} eyebrow={eyebrow}
+                settings={settings} setSettings={setSettings}
+                opportunities={opportunities} currentUser={currentUser} isAdmin={isAdmin}
+                visibleReps={visibleReps} quarters={quarters} quotaMode={quotaMode}
+                getRepTotal={getRepTotal} updateRepField={updateRepField}
+                setAllQuotaMode={setAllQuotaMode} setActiveTab={setActiveTab}
+                showConfirm={showConfirm} spiffClaims={spiffClaims} setSpiffClaims={setSpiffClaims} />}
         </div>
     );
 }
