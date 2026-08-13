@@ -5181,25 +5181,44 @@ function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
 // to the end of the field mid-word.
 //
 // Everything it needs already arrives as a prop, so nothing had to be re-threaded.
+// Hoisted out of ActivityHistoryTab. EntitySelector sits at module scope (it owns
+// an <input autoFocus>, so it must not be redeclared per render — 16) but it read
+// T from ActivityHistoryTab's closure, which module scope does not have. That threw
+// "T is not defined" and took down the whole Reports tab behind the error boundary.
+//
+// The object is a pure literal with no local dependencies, so hoisting it is
+// behaviour-neutral and both scopes now resolve the same T. check-tdz's
+// shouty-constant escape had been skipping the name outright; see 18b0.
+const T_ACTIVITY = {
+    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
+    border: '#e6ddd0', borderStrong: '#d4c8b4',
+    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
+    gold: '#c8b99a', goldInk: '#7a6a48',
+    danger: '#9c3a2e', warn: '#b87333', ok: '#4d6b3d', info: '#3a5a7a',
+    sans: '"Plus Jakarta Sans", system-ui, sans-serif',
+    serif: 'Georgia, serif',
+    r: 3,
+};
+
 const EntitySelector = ({ label, selected, filtered, search, setSearch, open, setOpen, onSelect, refEl, nameOf }) => (
     <div ref={refEl} style={{ position:'relative', minWidth:260 }}>
-        <div onClick={() => setOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, cursor:'pointer', fontSize:13, color:T.ink, fontFamily:T.sans }}>
-            <span style={{ flex:1, fontWeight: selected ? 500 : 400, color: selected ? T.ink : T.inkMuted }}>{selected ? nameOf(selected) : `Type to search ${label}s…`}</span>
-            <span style={{ fontSize:9, color:T.inkMuted }}>▾</span>
+        <div onClick={() => setOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', background:T_ACTIVITY.surface, border:`1px solid ${T_ACTIVITY.borderStrong}`, borderRadius:T_ACTIVITY.r, cursor:'pointer', fontSize:13, color:T_ACTIVITY.ink, fontFamily:T_ACTIVITY.sans }}>
+            <span style={{ flex:1, fontWeight: selected ? 500 : 400, color: selected ? T_ACTIVITY.ink : T_ACTIVITY.inkMuted }}>{selected ? nameOf(selected) : `Type to search ${label}s…`}</span>
+            <span style={{ fontSize:9, color:T_ACTIVITY.inkMuted }}>▾</span>
         </div>
         {open && (
-            <div style={{ position:'absolute', top:'100%', left:0, right:0, marginTop:3, zIndex:200, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', overflow:'hidden', maxHeight:260, display:'flex', flexDirection:'column' }}>
-                <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}` }}>
-                    <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${label}s…`} style={{ width:'100%', border:'none', outline:'none', fontSize:12, color:T.ink, background:'transparent', fontFamily:T.sans }} />
+            <div style={{ position:'absolute', top:'100%', left:0, right:0, marginTop:3, zIndex:200, background:T_ACTIVITY.surface, border:`1px solid ${T_ACTIVITY.borderStrong}`, borderRadius:T_ACTIVITY.r, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', overflow:'hidden', maxHeight:260, display:'flex', flexDirection:'column' }}>
+                <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T_ACTIVITY.border}` }}>
+                    <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${label}s…`} style={{ width:'100%', border:'none', outline:'none', fontSize:12, color:T_ACTIVITY.ink, background:'transparent', fontFamily:T_ACTIVITY.sans }} />
                 </div>
                 <div style={{ overflowY:'auto', flex:1 }}>
                     {filtered.length === 0 ? (
-                        <div style={{ padding:'12px', fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>No results.</div>
+                        <div style={{ padding:'12px', fontSize:12, color:T_ACTIVITY.inkMuted, fontFamily:T_ACTIVITY.sans }}>No results.</div>
                     ) : filtered.map(item => (
                         <div key={item.id} onClick={() => { onSelect(item.id); setOpen(false); setSearch(''); }}
-                            style={{ padding:'8px 12px', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans, background: item.id === (selected?.id) ? T.surface2 : 'transparent', fontWeight: item.id === (selected?.id) ? 600 : 400 }}
-                            onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                            onMouseLeave={e=>e.currentTarget.style.background=item.id===(selected?.id)?T.surface2:'transparent'}>
+                            style={{ padding:'8px 12px', fontSize:13, color:T_ACTIVITY.ink, cursor:'pointer', fontFamily:T_ACTIVITY.sans, background: item.id === (selected?.id) ? T_ACTIVITY.surface2 : 'transparent', fontWeight: item.id === (selected?.id) ? 600 : 400 }}
+                            onMouseEnter={e=>e.currentTarget.style.background=T_ACTIVITY.surface2}
+                            onMouseLeave={e=>e.currentTarget.style.background=item.id===(selected?.id)?T_ACTIVITY.surface2:'transparent'}>
                             {nameOf(item)}
                         </div>
                     ))}
@@ -5210,19 +5229,9 @@ const EntitySelector = ({ label, selected, filtered, search, setSearch, open, se
 );
 
 function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
+    const T = T_ACTIVITY;
     // Same: read from the parent's closure, absent here.
     const { setViewingAccount } = useApp();
-
-    const T = {
-        bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
-        border: '#e6ddd0', borderStrong: '#d4c8b4',
-        ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
-        gold: '#c8b99a', goldInk: '#7a6a48',
-        danger: '#9c3a2e', warn: '#b87333', ok: '#4d6b3d', info: '#3a5a7a',
-        sans: '"Plus Jakarta Sans", system-ui, sans-serif',
-        serif: 'Georgia, serif',
-        r: 3,
-    };
 
     const [historySubTab, setHistorySubTab] = React.useState('account');
     const [selectedAccountId, setSelectedAccountId] = React.useState('');

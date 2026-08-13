@@ -301,13 +301,35 @@ const checkUndefined = (ast, file, findings) => {
     };
     ast.program.body.forEach(visit);
 
+    // Every name bound ANYWHERE in this file, at any depth. Used to decide whether
+    // an all-caps name is an import (skip it) or a stranded closure read (report
+    // it). Without this, the shouty-constant escape below swallowed `T`.
+    const declaredSomewhere = new Set();
+    (function collectAll(n) {
+        if (!n || typeof n !== 'object') return;
+        if (Array.isArray(n)) return n.forEach(collectAll);
+        if (n.type === 'VariableDeclarator') declaredNames(n.id).forEach(x => declaredSomewhere.add(x));
+        if (n.type === 'FunctionDeclaration' && n.id) declaredSomewhere.add(n.id.name);
+        for (const k of Object.keys(n)) if (!['loc','start','end'].includes(k)) collectAll(n[k]);
+    })(ast.program.body);
+
     for (const c of components) {
         const local = new Set();
         (c.node.params || []).forEach(p => declaredNames(p).forEach(n => local.add(n)));
         collectScopeBindings(c.node.body, local);
         for (const [name, line] of usedIdentifiers(c.node.body)) {
             if (local.has(name) || moduleScope.has(name) || GLOBALS.has(name)) continue;
-            if (/^[A-Z_]+$/.test(name)) continue;          // shouty constants are usually imported
+            // Shouty constants are usually imported — UNLESS the name is declared
+            // somewhere else in this same file, which is the exact signature of a
+            // stranded closure read after a hoist (18b0).
+            //
+            // `T`, the design-token object, matches /^[A-Z_]+$/ as a single capital
+            // letter, so this escape skipped the identifier most likely to be
+            // stranded and most used in styling. ReportsTab shipped with
+            // EntitySelector at module scope reading T 10 times while T was declared
+            // inside ActivityHistoryTab — a hard crash of the whole Reports tab that
+            // this scan reported clean.
+            if (/^[A-Z_]+$/.test(name) && !declaredSomewhere.has(name)) continue;
             findings.push({ file, line: line || c.line, target: c.name, ref: name, at: null, label: 'not defined in any enclosing scope' });
         }
     }
