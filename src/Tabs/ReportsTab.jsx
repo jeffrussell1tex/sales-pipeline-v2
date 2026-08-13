@@ -5175,6 +5175,40 @@ function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
     );
 }
 
+// Module scope. Declared inside ActivityHistoryTab it was a new component type on
+// every render, and its search input sets state in the PARENT — so each keystroke
+// remounted it. `autoFocus` masked outright focus loss, but the caret still jumped
+// to the end of the field mid-word.
+//
+// Everything it needs already arrives as a prop, so nothing had to be re-threaded.
+const EntitySelector = ({ label, selected, filtered, search, setSearch, open, setOpen, onSelect, refEl, nameOf }) => (
+    <div ref={refEl} style={{ position:'relative', minWidth:260 }}>
+        <div onClick={() => setOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, cursor:'pointer', fontSize:13, color:T.ink, fontFamily:T.sans }}>
+            <span style={{ flex:1, fontWeight: selected ? 500 : 400, color: selected ? T.ink : T.inkMuted }}>{selected ? nameOf(selected) : `Type to search ${label}s…`}</span>
+            <span style={{ fontSize:9, color:T.inkMuted }}>▾</span>
+        </div>
+        {open && (
+            <div style={{ position:'absolute', top:'100%', left:0, right:0, marginTop:3, zIndex:200, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', overflow:'hidden', maxHeight:260, display:'flex', flexDirection:'column' }}>
+                <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}` }}>
+                    <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${label}s…`} style={{ width:'100%', border:'none', outline:'none', fontSize:12, color:T.ink, background:'transparent', fontFamily:T.sans }} />
+                </div>
+                <div style={{ overflowY:'auto', flex:1 }}>
+                    {filtered.length === 0 ? (
+                        <div style={{ padding:'12px', fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>No results.</div>
+                    ) : filtered.map(item => (
+                        <div key={item.id} onClick={() => { onSelect(item.id); setOpen(false); setSearch(''); }}
+                            style={{ padding:'8px 12px', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans, background: item.id === (selected?.id) ? T.surface2 : 'transparent', fontWeight: item.id === (selected?.id) ? 600 : 400 }}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                            onMouseLeave={e=>e.currentTarget.style.background=item.id===(selected?.id)?T.surface2:'transparent'}>
+                            {nameOf(item)}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+    </div>
+);
+
 function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
     // Same: read from the parent's closure, absent here.
     const { setViewingAccount } = useApp();
@@ -5581,35 +5615,6 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         <button onClick={() => setPeriod(value)} style={{ padding:'4px 12px', border:`1px solid ${period===value ? T.ink : T.border}`, borderRadius:999, background: period===value ? T.ink : T.surface, color: period===value ? T.surface : T.inkMid, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:T.sans }}>
             {label}
         </button>
-    );
-
-    // ── Selector dropdown ──────────────────────────────────────
-    const EntitySelector = ({ label, selected, filtered, search, setSearch, open, setOpen, onSelect, refEl, nameOf }) => (
-        <div ref={refEl} style={{ position:'relative', minWidth:260 }}>
-            <div onClick={() => setOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, cursor:'pointer', fontSize:13, color:T.ink, fontFamily:T.sans }}>
-                <span style={{ flex:1, fontWeight: selected ? 500 : 400, color: selected ? T.ink : T.inkMuted }}>{selected ? nameOf(selected) : `Type to search ${label}s…`}</span>
-                <span style={{ fontSize:9, color:T.inkMuted }}>▾</span>
-            </div>
-            {open && (
-                <div style={{ position:'absolute', top:'100%', left:0, right:0, marginTop:3, zIndex:200, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', overflow:'hidden', maxHeight:260, display:'flex', flexDirection:'column' }}>
-                    <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}` }}>
-                        <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${label}s…`} style={{ width:'100%', border:'none', outline:'none', fontSize:12, color:T.ink, background:'transparent', fontFamily:T.sans }} />
-                    </div>
-                    <div style={{ overflowY:'auto', flex:1 }}>
-                        {filtered.length === 0 ? (
-                            <div style={{ padding:'12px', fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>No results.</div>
-                        ) : filtered.map(item => (
-                            <div key={item.id} onClick={() => { onSelect(item.id); setOpen(false); setSearch(''); }}
-                                style={{ padding:'8px 12px', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans, background: item.id === (selected?.id) ? T.surface2 : 'transparent', fontWeight: item.id === (selected?.id) ? 600 : 400 }}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                                onMouseLeave={e=>e.currentTarget.style.background=item.id===(selected?.id)?T.surface2:'transparent'}>
-                                {nameOf(item)}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
     );
 
     // ── KPI card ───────────────────────────────────────────────

@@ -2,6 +2,73 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 
+// Module scope, NOT inside ContactModal. Declared inline it was a new component
+// type on every parent render, so React unmounted and remounted it — and because
+// the input's onChange sets state in the PARENT, that happened on every keystroke
+// and the field lost focus after each character.
+//
+// `allContacts`, `handleChange` and `openNestedNewContact` were closure reads from
+// the parent; they are props now.
+const ContactSearchField = ({ label, searchVal, setSearchVal, showSugg, setShowSugg,
+    selectedItems, fieldName, allContacts = [], handleChange, openNestedNewContact }) => {
+    const hasSearch = searchVal.trim().length > 0;
+    const filtered = hasSearch
+        ? allContacts.filter(c =>
+            ((c.firstName + ' ' + c.lastName).toLowerCase().startsWith(searchVal.toLowerCase()) ||
+             (c.firstName || '').toLowerCase().startsWith(searchVal.toLowerCase()) ||
+             (c.lastName  || '').toLowerCase().startsWith(searchVal.toLowerCase())) &&
+            !(selectedItems || []).some(s => s.id === c.id)
+          )
+        : [];
+    const showDropdown = showSugg && hasSearch;
+    return (
+        <div className="form-group full" style={{ position: 'relative' }}>
+            <label>{label}</label>
+            {(selectedItems || []).length > 0 && (
+                <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.375rem' }}>
+                    {(selectedItems || []).map((p, i) => (
+                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', background: '#dbeafe', color: '#1e40af', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}>
+                            {p.name}
+                            <button type="button"
+                                onClick={() => handleChange(fieldName, selectedItems.filter((_, idx) => idx !== i))}
+                                style={{ background: 'none', border: 'none', color: '#1e40af', cursor: 'pointer', fontSize: '0.875rem', padding: 0, lineHeight: 1 }}>×</button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            <input type="text" value={searchVal}
+                placeholder="Type to search contacts..."
+                onChange={e => { setSearchVal(e.target.value); setShowSugg(e.target.value.trim().length > 0); }}
+                onBlur={() => setTimeout(() => setShowSugg(false), 250)}
+                autoComplete="off" />
+            {showDropdown && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                    {filtered.slice(0, 8).map(c => (
+                        <div key={c.id}
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => { handleChange(fieldName, [...(selectedItems || []), { id: c.id, name: c.firstName + ' ' + c.lastName }]); setSearchVal(''); setShowSugg(false); }}
+                            style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', fontSize: '0.875rem', borderBottom: '1px solid #f1f3f5' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <strong>{c.firstName} {c.lastName}</strong>
+                            {c.title   && <span style={{ color: '#64748b' }}> — {c.title}</span>}
+                            {c.company && <span style={{ color: '#94a3b8' }}> ({c.company})</span>}
+                        </div>
+                    ))}
+                    <div
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => openNestedNewContact(fieldName, searchVal)}
+                        style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', color: '#2563eb', fontWeight: '600', fontSize: '0.875rem', borderTop: filtered.length > 0 ? '1px solid #e2e8f0' : 'none' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        + New Contact
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 export default function ContactModal({
     contact, contacts, accounts, settings,
     onClose, onSave, onSaveNewContact, onAddAccount,
@@ -118,65 +185,6 @@ export default function ContactModal({
     };
 
     // ── Contact search field sub-component ──────────────────────────────────
-    const ContactSearchField = ({ label, searchVal, setSearchVal, showSugg, setShowSugg, selectedItems, fieldName }) => {
-        const hasSearch = searchVal.trim().length > 0;
-        const filtered = hasSearch
-            ? allContacts.filter(c =>
-                ((c.firstName + ' ' + c.lastName).toLowerCase().startsWith(searchVal.toLowerCase()) ||
-                 (c.firstName || '').toLowerCase().startsWith(searchVal.toLowerCase()) ||
-                 (c.lastName  || '').toLowerCase().startsWith(searchVal.toLowerCase())) &&
-                !(selectedItems || []).some(s => s.id === c.id)
-              )
-            : [];
-        const showDropdown = showSugg && hasSearch;
-        return (
-            <div className="form-group full" style={{ position: 'relative' }}>
-                <label>{label}</label>
-                {(selectedItems || []).length > 0 && (
-                    <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.375rem' }}>
-                        {(selectedItems || []).map((p, i) => (
-                            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', background: '#dbeafe', color: '#1e40af', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}>
-                                {p.name}
-                                <button type="button"
-                                    onClick={() => handleChange(fieldName, selectedItems.filter((_, idx) => idx !== i))}
-                                    style={{ background: 'none', border: 'none', color: '#1e40af', cursor: 'pointer', fontSize: '0.875rem', padding: 0, lineHeight: 1 }}>×</button>
-                            </span>
-                        ))}
-                    </div>
-                )}
-                <input type="text" value={searchVal}
-                    placeholder="Type to search contacts..."
-                    onChange={e => { setSearchVal(e.target.value); setShowSugg(e.target.value.trim().length > 0); }}
-                    onBlur={() => setTimeout(() => setShowSugg(false), 250)}
-                    autoComplete="off" />
-                {showDropdown && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                        {filtered.slice(0, 8).map(c => (
-                            <div key={c.id}
-                                onMouseDown={e => e.preventDefault()}
-                                onClick={() => { handleChange(fieldName, [...(selectedItems || []), { id: c.id, name: c.firstName + ' ' + c.lastName }]); setSearchVal(''); setShowSugg(false); }}
-                                style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', fontSize: '0.875rem', borderBottom: '1px solid #f1f3f5' }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                <strong>{c.firstName} {c.lastName}</strong>
-                                {c.title   && <span style={{ color: '#64748b' }}> — {c.title}</span>}
-                                {c.company && <span style={{ color: '#94a3b8' }}> ({c.company})</span>}
-                            </div>
-                        ))}
-                        <div
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={() => openNestedNewContact(fieldName, searchVal)}
-                            style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', color: '#2563eb', fontWeight: '600', fontSize: '0.875rem', borderTop: filtered.length > 0 ? '1px solid #e2e8f0' : 'none' }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            + New Contact
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
     // ── Tab button style ─────────────────────────────────────────────────────
     const tabBtnStyle = (active) => ({
         padding: '0.5rem 1.25rem',
@@ -441,12 +449,16 @@ export default function ContactModal({
                                 label="Manager(s)"
                                 searchVal={managerSearch} setSearchVal={setManagerSearch}
                                 showSugg={showManagerSuggestions} setShowSugg={setShowManagerSuggestions}
-                                selectedItems={formData.managers || []} fieldName="managers" />
+                                selectedItems={formData.managers || []} fieldName="managers"
+                                allContacts={allContacts} handleChange={handleChange}
+                                openNestedNewContact={openNestedNewContact} />
                             <ContactSearchField
                                 label="Direct Report(s)"
                                 searchVal={reportSearch} setSearchVal={setReportSearch}
                                 showSugg={showReportSuggestions} setShowSugg={setShowReportSuggestions}
-                                selectedItems={formData.directReports || []} fieldName="directReports" />
+                                selectedItems={formData.directReports || []} fieldName="directReports"
+                                allContacts={allContacts} handleChange={handleChange}
+                                openNestedNewContact={openNestedNewContact} />
                             <div className="form-group full">
                                 <label>Assistant's Name</label>
                                 <input type="text" value={formData.assistantName || ''} onChange={e => handleChange('assistantName', e.target.value)} />

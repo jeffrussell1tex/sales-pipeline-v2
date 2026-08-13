@@ -521,6 +521,19 @@ const AddDestinationModal = ({ onClose, onSave }) => {
     );
 };
 
+// Module scope. Declared inside ConfigureStreamingPopover it was a new component
+// type on every render, so changing one setting remounted every <select> in the
+// popover — closing any open dropdown mid-choice. It reads only props and the
+// module-level tokens, so nothing needed re-threading.
+const SSelect = ({ value, options, onChange, width=130 }) => (
+    <select value={value} onChange={e => onChange(e.target.value)}
+        style={{ padding:'4px 8px', background:T.surface, border:`1px solid ${T.borderStrong}`,
+            borderRadius:T.r, fontSize:11.5, color:T.ink, outline:'none', cursor:'pointer',
+            fontFamily:T.sans, minWidth:width, appearance:'none' }}>
+        {options.map(o => <option key={o}>{o}</option>)}
+    </select>
+);
+
 const ConfigureStreamingPopover = ({ streams, onClose, onAddDest, onTogglePause, onRemoveDest, onSaveGlobals, btnRef }) => {
     const ref = React.useRef(null);
     const posRef = React.useRef(false);
@@ -584,15 +597,6 @@ const ConfigureStreamingPopover = ({ streams, onClose, onAddDest, onTogglePause,
             <span style={{ position:'absolute', top:2, left:on?16:2, width:14, height:14, borderRadius:'50%',
                 background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
         </div>
-    );
-
-    const SSelect = ({ value, options, onChange, width=130 }) => (
-        <select value={value} onChange={e => onChange(e.target.value)}
-            style={{ padding:'4px 8px', background:T.surface, border:`1px solid ${T.borderStrong}`,
-                borderRadius:T.r, fontSize:11.5, color:T.ink, outline:'none', cursor:'pointer',
-                fontFamily:T.sans, minWidth:width, appearance:'none' }}>
-            {options.map(o => <option key={o}>{o}</option>)}
-        </select>
     );
 
     return (
