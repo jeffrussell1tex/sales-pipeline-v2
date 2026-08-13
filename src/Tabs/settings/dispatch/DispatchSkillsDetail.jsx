@@ -108,7 +108,7 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
                     </div>
                 ) : (
                     <button onClick={()=>setAddingSkill(true)}
-                        style={{ marginTop:10, padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, fontWeight:600, color:T.ink, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                        style={{ marginTop:10, padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, fontWeight:600, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
                         + Add skill
                     </button>
                 )}
@@ -144,7 +144,7 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
                     </div>
                 ) : (
                     <button onClick={()=>setAddingCert(true)}
-                        style={{ marginTop:10, padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, fontWeight:600, color:T.ink, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                        style={{ marginTop:10, padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, fontWeight:600, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
                         + Add certification
                     </button>
                 )}
@@ -167,7 +167,7 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
                     ))}
                 </div>
                 <button onClick={()=>{ setLicenses(p=>[...p,'New level']); setDirty(true); }}
-                    style={{ marginTop:8, padding:'6px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, fontWeight:600, color:T.ink, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                    style={{ marginTop:8, padding:'6px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, fontWeight:600, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
                     + Add level
                 </button>
             </CSectionCard>

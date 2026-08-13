@@ -34,6 +34,11 @@ jobs:
       # The dummy key is REQUIRED. Without it `vite build` exits 0 and emits a
       # 212 kB bundle containing no application — see scripts/check-bundle.mjs.
       # `npm run build` runs the bundle guard, so this job fails on a hollow build.
+      # Duplicate keys/attributes silently discard the earlier value. esbuild
+      # already warns, but the warnings scroll past above a 2,500 kB summary and
+      # the build exits 0. Nine were shipping when this gate was added.
+      - name: Duplicate key / attribute scan
+        run: npm run check:dupes
       - name: Build + bundle guard
         env:
           VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder

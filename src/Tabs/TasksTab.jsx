@@ -1292,7 +1292,7 @@ export default function TasksTab() {
 
             {/* ── Single filter row (list view only) ── */}
             {view === 'list' && (
-                <div style={{ padding: '10px 0', display: 'flex', alignItems: 'center', gap: 10, background: T.surface, borderBottom: `1px solid ${T.border}`, margin: '0 -32px', padding: '10px 32px', flexWrap: 'nowrap', overflowX: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface, borderBottom: `1px solid ${T.border}`, margin: '0 -32px', padding: '10px 32px', flexWrap: 'nowrap', overflowX: 'auto' }}>
 
                     {/* Scope segmented control */}
                     <div style={{ display: 'inline-flex', border: `1px solid ${T.borderStrong}`, borderRadius: T.rMd, overflow: 'hidden', flexShrink: 0 }}>
