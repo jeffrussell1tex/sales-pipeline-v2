@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
+import { autoMapHeaders } from '../../utils/csvAutoMap';
 
 const T = {
     bg:'#f0ece4', surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', borderStrong:'#d4c8b4',
@@ -217,36 +218,11 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         setCsvHeaders(headers);
         setCsvRows(rows);
 
-        const autoMapping = {};
-        const autoConf = {};
-        getAppFields().forEach(field => {
-            const fieldLower = field.label.toLowerCase().replace(/[^a-z]/g, '');
-            const keyLower = field.key.toLowerCase();
-            const match = headers.findIndex(h => {
-                const hLower = h.toLowerCase().replace(/[^a-z]/g, '');
-                return hLower === fieldLower || hLower === keyLower ||
-                       hLower.includes(keyLower) || keyLower.includes(hLower) ||
-                       (field.key === 'firstName' && (hLower.includes('first') || hLower === 'givenname')) ||
-                       (field.key === 'lastName' && (hLower.includes('last') || hLower === 'surname' || hLower === 'familyname')) ||
-                       (field.key === 'name' && (hLower === 'accountname' || hLower === 'companyname' || hLower === 'name')) ||
-                       (field.key === 'email' && hLower.includes('email')) ||
-                       (field.key === 'phone' && (hLower.includes('phone') || hLower.includes('tel')) && !hLower.includes('mobile') && !hLower.includes('cell')) ||
-                       (field.key === 'mobile' && (hLower.includes('mobile') || hLower.includes('cell'))) ||
-                       (field.key === 'title' && (hLower.includes('title') || hLower.includes('jobtitle') || hLower.includes('position'))) ||
-                       (field.key === 'company' && (hLower.includes('company') || hLower.includes('organization') || hLower.includes('org'))) ||
-                       (field.key === 'website' && (hLower.includes('website') || hLower.includes('url') || hLower.includes('web'))) ||
-                       (field.key === 'zip' && (hLower.includes('zip') || hLower.includes('postal'))) ||
-                       (field.key === 'address' && (hLower.includes('address') || hLower.includes('street'))) ||
-                       (field.key === 'verticalMarket' && (hLower.includes('vertical') || hLower.includes('industry') || hLower.includes('sector'))) ||
-                       (field.key === 'parentAccount' && (hLower.includes('parent') || hLower.includes('parentaccount')));
-            });
-            if (match >= 0) {
-                autoMapping[field.key] = match;
-                const hL = headers[match].toLowerCase().replace(/[^a-z]/g, '');
-                autoConf[field.key] = (hL === fieldLower || hL === keyLower) ? 0.98
-                    : (hL.includes(keyLower) || keyLower.includes(hL)) ? 0.85 : 0.80;
-            }
-        });
+        // Header matching lives in src/utils/csvAutoMap.js: weighted aliases,
+        // deny rules and a global one-to-one assignment. It replaced an inline
+        // findIndex whose result depended on column order — see that file and
+        // tests/csv-automap.test.mjs.
+        const { mapping: autoMapping, confidence: autoConf } = autoMapHeaders(headers, getAppFields());
         setFieldMapping(autoMapping);
         setMappingConfidence(autoConf);
         setStep('mapping');
