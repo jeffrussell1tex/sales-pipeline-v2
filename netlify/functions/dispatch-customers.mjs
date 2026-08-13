@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { dispatchCustomers, dispatchServiceLocations } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, withNumberRetry } from './_lib.mjs';
 
@@ -16,14 +16,29 @@ const headers = {
 // the same number client-side. Immutable once set — the PUT whitelist below
 // deliberately omits customerNumber, and POST (an upsert) reuses any existing
 // value rather than reissuing one.
+// Previously this selected EVERY customer row in the org and found the maximum in
+// JS. Fine at hundreds, wasteful at tens of thousands, and it grew with the table
+// on every single create.
+//
+// The numeric part is extracted and MAX'd in SQL rather than taking MAX() of the
+// text: zero-padding only preserves ordering while the digit count is constant, so
+// a plain text MAX returns 'CUST-9999' once 'CUST-10001' exists — and would then
+// reissue numbers that are already in use. The unique index added earlier would
+// catch that, but only as a collision to retry, and every attempt would lose.
+//
+// Rows whose number does not match the pattern (NULL, or anything hand-edited) are
+// ignored by the WHERE, exactly as the old regex ignored them. TRIM matches the
+// old code's .trim(): a hand-edited value stored with surrounding whitespace must
+// still COUNT, or its number gets reissued to somebody else.
 async function nextCustomerNumber(orgId) {
-    const rows = await db.select({ n: dispatchCustomers.customerNumber })
-        .from(dispatchCustomers).where(eq(dispatchCustomers.orgId, orgId));
-    let max = 0;
-    for (const r of rows) {
-        const m = /^CUST-(\d+)$/.exec(String(r.n || '').trim());
-        if (m) { const v = parseInt(m[1], 10); if (Number.isFinite(v) && v > max) max = v; }
-    }
+    const [row] = await db
+        .select({ max: sql`MAX(CAST(SUBSTRING(TRIM(${dispatchCustomers.customerNumber}) FROM '^CUST-([0-9]+)$') AS INTEGER))` })
+        .from(dispatchCustomers)
+        .where(and(
+            eq(dispatchCustomers.orgId, orgId),
+            sql`TRIM(${dispatchCustomers.customerNumber}) ~ '^CUST-[0-9]+$'`,
+        ));
+    const max = parseInt(row?.max, 10) || 0;
     return 'CUST-' + String(max + 1).padStart(4, '0');
 }
 

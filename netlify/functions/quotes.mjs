@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { quotes, opportunities, settings as settingsTable } from '../../db/schema.js';
-import { eq, asc, and, desc } from 'drizzle-orm';
+import { eq, asc, and, desc, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, withNumberRetry } from './_lib.mjs';
 
@@ -39,18 +39,20 @@ function sanitize(data) {
 // same outstanding item that applies to customerNumber and jobNumber. Moving
 // generation to the server closes the much wider window that existed while the
 // number was derived from one browser's partial list.
+// See nextCustomerNumber. Quote numbers pad to only THREE digits, so the
+// lexicographic-MAX bug would appear at just 1000 quotes in a year rather than
+// 10000 — the shortest fuse of the three.
 async function nextQuoteNumber(orgId) {
     const year   = new Date().getFullYear();
     const prefix = `Q-${year}-`;
-    const rows   = await db.select({ n: quotes.quoteNumber })
-        .from(quotes).where(eq(quotes.orgId, orgId));
-    let max = 0;
-    for (const r of rows) {
-        const v = String(r.n || '');
-        if (!v.startsWith(prefix)) continue;
-        const num = parseInt(v.slice(prefix.length), 10);
-        if (Number.isFinite(num) && num > max) max = num;
-    }
+    const [row] = await db
+        .select({ max: sql`MAX(CAST(SUBSTRING(TRIM(${quotes.quoteNumber}) FROM ${'^' + prefix + '([0-9]+)$'}) AS INTEGER))` })
+        .from(quotes)
+        .where(and(
+            eq(quotes.orgId, orgId),
+            sql`TRIM(${quotes.quoteNumber}) ~ ${'^' + prefix + '[0-9]+$'}`,
+        ));
+    const max = parseInt(row?.max, 10) || 0;
     return prefix + String(max + 1).padStart(3, '0');
 }
 

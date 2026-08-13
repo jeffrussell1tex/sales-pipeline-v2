@@ -5,7 +5,7 @@ import {
     dispatchJobStatusHistory,
     dispatchTechnicians,
 } from '../../db/schema.js';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
 import { serverErrorBody, withNumberRetry } from './_lib.mjs';
 
@@ -107,18 +107,20 @@ async function recordStatusChange(orgId, jobId, fromStatus, toStatus, changedBy,
 // Human-readable job number, JOB-2026-0042. Same rules as customerNumber:
 // assigned SERVER-SIDE only (two dispatchers creating jobs at once would collide
 // client-side), immutable once set, and sequential per org per year.
+// See nextCustomerNumber for why the numeric part is extracted rather than taking
+// MAX() of the text. Here the year prefix also narrows the scan to the current
+// year's rows instead of the whole table.
 async function nextJobNumber(orgId) {
-    const year = new Date().getFullYear();
-    const rows = await db.select({ n: dispatchJobs.jobNumber })
-        .from(dispatchJobs).where(eq(dispatchJobs.orgId, orgId));
+    const year   = new Date().getFullYear();
     const prefix = `JOB-${year}-`;
-    let max = 0;
-    for (const r of rows) {
-        const v = String(r.n || '');
-        if (!v.startsWith(prefix)) continue;
-        const num = parseInt(v.slice(prefix.length), 10);
-        if (Number.isFinite(num) && num > max) max = num;
-    }
+    const [row] = await db
+        .select({ max: sql`MAX(CAST(SUBSTRING(TRIM(${dispatchJobs.jobNumber}) FROM ${'^' + prefix + '([0-9]+)$'}) AS INTEGER))` })
+        .from(dispatchJobs)
+        .where(and(
+            eq(dispatchJobs.orgId, orgId),
+            sql`TRIM(${dispatchJobs.jobNumber}) ~ ${'^' + prefix + '[0-9]+$'}`,
+        ));
+    const max = parseInt(row?.max, 10) || 0;
     return prefix + String(max + 1).padStart(4, '0');
 }
 
