@@ -88,6 +88,10 @@ export const handler = async (event) => {
             zip:           data.zip           || null,
             country:       data.country       || null,
             notes:         data.notes         || null,
+            // Personal email signature, appended to outbound mail this user sends.
+            // Stored as plain text and HTML-escaped at render — a rich-text field
+            // here would be an injection path into every recipient's inbox.
+            emailSignature: data.emailSignature || null,
             vertical:      data.vertical      || null,
             teamId:        data.teamId        || null,
             manager:       data.manager       || null,

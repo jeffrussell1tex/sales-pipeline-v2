@@ -11,7 +11,7 @@
  */
 
 import { db } from '../../db/index.js';
-import { quotes, opportunities, contacts, accounts } from '../../db/schema.js';
+import { quotes, opportunities, contacts, accounts, users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { sendEmail } from './send-email.mjs';
@@ -39,7 +39,7 @@ export const handler = async (event) => {
         return { statusCode: auth.status || 401, headers: responseHeaders, body: JSON.stringify({ error: auth.error }) };
     }
 
-    const { orgId } = auth;
+    const { orgId, userId } = auth;
 
     let body;
     try {
@@ -138,6 +138,28 @@ export const handler = async (event) => {
         const quoteNum = quote.quoteNumber || quote.id;
         const validUntil = quote.validUntil ? new Date(quote.validUntil).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null;
 
+        // ── 4b. Sender signature ──────────────────────────────────────────────
+        // Read server-side from the sender's own profile rather than accepted from
+        // the client: a signature is attacker-controlled text going into a
+        // customer's inbox, so the client must not be able to choose it for
+        // somebody else, or inject markup.
+        let signatureHtml = '';
+        try {
+            const [senderRow] = await db.select({ profile: users.profile })
+                .from(users).where(and(eq(users.id, userId), eq(users.orgId, orgId))).limit(1);
+            const raw = (senderRow?.profile || {}).emailSignature;
+            if (raw && String(raw).trim()) {
+                const esc = String(raw)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+                signatureHtml = `
+      <div style="margin-top:28px;padding-top:18px;border-top:1px solid #e8e3da;font-size:13px;color:#57534e;line-height:1.6;white-space:pre-line;">${esc}</div>`;
+            }
+        } catch (e) {
+            // A missing signature must never block the quote going out.
+            console.error('quote-email: signature lookup failed', e.message);
+        }
+
         const emailHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -184,9 +206,10 @@ export const handler = async (event) => {
 
       ${quote.notes ? `<div style="margin-top:20px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 18px;font-size:13px;color:#92400e;line-height:1.6;"><strong>Notes:</strong> ${quote.notes}</div>` : ''}
 
+      ${signatureHtml || `
       <p style="margin-top:28px;font-size:13px;color:#a8a29e;">
         This quote was prepared for you by your account representative. Please reply to this email with any questions.
-      </p>
+      </p>`}
     </div>
     <div style="background:#f8f6f3;padding:18px 36px;border-top:1px solid #e8e3da;font-size:11px;color:#a8a29e;text-align:center;">
       <p style="margin:0;">Accelerep · <a href="${APP_URL}" style="color:#78716c;text-decoration:none;">${APP_URL}</a></p>

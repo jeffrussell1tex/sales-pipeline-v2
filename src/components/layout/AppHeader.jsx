@@ -503,10 +503,26 @@ export default function AppHeader({
                                         <div style={{ marginBottom: '0.875rem' }}><label style={panelLabel}>Phone</label><input style={panelInput} type="tel" value={profileForm.phone} onChange={e => setProfileForm(p => ({ ...p, phone: e.target.value }))}/></div>
                                         <div style={{ marginBottom: '0.875rem' }}><label style={panelLabel}>Mobile <span style={{ fontWeight: 400, color: T.inkMuted }}>(SMS notifications)</span></label><input style={panelInput} type="tel" placeholder="+1 (555) 000-0000" value={profileForm.mobile || ''} onChange={e => setProfileForm(p => ({ ...p, mobile: e.target.value }))}/></div>
                                         <div style={{ marginBottom: '1.25rem' }}><label style={panelLabel}>Title</label><input style={panelInput} value={profileForm.title} onChange={e => setProfileForm(p => ({ ...p, title: e.target.value }))}/></div>
+
+                                        {/* Email signature. Plain text on purpose — this is appended
+                                            to mail sent to customers, and the server HTML-escapes it
+                                            before rendering. A rich-text field here would be an
+                                            injection path into every recipient's inbox. */}
+                                        <div style={{ marginBottom: '1.25rem' }}>
+                                            <label style={panelLabel}>Email signature</label>
+                                            <textarea
+                                                style={{ ...panelInput, minHeight: 96, resize: 'vertical', lineHeight: 1.5, fontFamily: T.sans }}
+                                                placeholder={'Jeff Russell\nAccount Executive · Accelerep\n(214) 555-0134'}
+                                                value={profileForm.emailSignature || ''}
+                                                onChange={e => setProfileForm(p => ({ ...p, emailSignature: e.target.value }))}/>
+                                            <div style={{ fontSize: '0.6875rem', color: T.inkMuted, marginTop: 4, lineHeight: 1.5, fontFamily: T.sans }}>
+                                                Added to quotes you email to customers. Line breaks are kept; formatting and links are not.
+                                            </div>
+                                        </div>
                                         <div style={{ padding: '0.75rem', background: T.bg, borderRadius: T.r, fontSize: 12, color: T.inkMid, marginBottom: '1rem', border: `1px solid ${T.border}`, fontFamily: T.sans }}>
                                             🔑 Password managed via Clerk. <a href="https://accounts.clerk.dev" target="_blank" rel="noreferrer" style={{ color: T.goldInk }}>Change password →</a>
                                         </div>
-                                        <button onClick={() => saveProfile({ firstName: profileForm.firstName, lastName: profileForm.lastName, email: profileForm.email, phone: profileForm.phone, mobile: profileForm.mobile, title: profileForm.title })} disabled={profileSaving}
+                                        <button onClick={() => saveProfile({ firstName: profileForm.firstName, lastName: profileForm.lastName, email: profileForm.email, phone: profileForm.phone, mobile: profileForm.mobile, title: profileForm.title, emailSignature: profileForm.emailSignature })} disabled={profileSaving}
                                             style={{ width: '100%', padding: '0.625rem', background: T.ink, color: T.surfaceInkFg, border: 'none', borderRadius: T.r, fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', fontFamily: T.sans }}>
                                             {profileSaving ? 'Saving…' : 'Save Profile'}
                                         </button>

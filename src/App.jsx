@@ -367,7 +367,12 @@ dbFetch('/.netlify/functions/users?me=true')
                 lastName:  data.user.lastName  || '',
                 email:     data.user.email     || '',
                 phone:     data.user.phone     || '',
+                // `mobile` was missing here while the Save Profile button sends it —
+                // so the field rendered blank and every profile save wiped a stored
+                // mobile number. Same trap the signature would have hit.
+                mobile:    data.user.mobile    || '',
                 title:     data.user.title     || '',
+                emailSignature: data.user.emailSignature || '',
             });
         }
     })
