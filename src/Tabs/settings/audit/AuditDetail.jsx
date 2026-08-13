@@ -434,6 +434,22 @@ const ManageAlertsModal = ({ alertCount, onClose }) => {
     );
 };
 
+// Module scope. Declared inside AddDestinationModal it was a new function identity
+// on every render, so React remounted the subtree on every keystroke and the
+// Destination name field lost focus after one character. The next keypress then
+// reached App.jsx's global hotkey handler — whose isTyping guard had gone false
+// along with the focus — and 'T' opened the New Task rail mid-typing.
+//
+// Reads only T, which is a module-level import, so nothing is stranded by the
+// hoist (guide 18b0).
+const FL = ({ label:lbl, hint, children }) => (
+    <div style={{ marginBottom:14 }}>
+        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{lbl}</label>
+        {children}
+        {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
+    </div>
+);
+
 const AddDestinationModal = ({ onClose, onSave }) => {
     const [dest,   setDest]   = React.useState('');
     const [url,    setUrl]    = React.useState('');
@@ -449,14 +465,6 @@ const AddDestinationModal = ({ onClose, onSave }) => {
     ];
 
     const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
-    const FL = ({ label:lbl, hint, children }) => (
-        <div style={{ marginBottom:14 }}>
-            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{lbl}</label>
-            {children}
-            {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
-        </div>
-    );
-
     const handleSave = async () => {
         if (!dest.trim()) { setErr('Destination name is required'); return; }
         if (!url.trim())  { setErr('Endpoint URL is required'); return; }

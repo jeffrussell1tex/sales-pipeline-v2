@@ -17,6 +17,58 @@ const jsxNames = (node, out = new Set()) => {
 // is lost when React unmounts it: focus in a form control, its own hook state, or
 // a DOM ref (scroll position, measurement). A stateless presentational wrapper
 // remounts too, but nothing observable changes — that is churn, not a bug.
+// A wrapper that renders {children} remounts WHATEVER IS PASSED IN, so it can lose
+// focus for a control it does not itself contain.
+const rendersChildren = (node) => {
+    let found = false;
+    const w = (x) => {
+        if (found || !x || typeof x !== 'object') return;
+        if (Array.isArray(x)) return x.forEach(w);
+        if (x.type === 'JSXExpressionContainer') {
+            const e = x.expression;
+            if (e?.type === 'Identifier' && e.name === 'children') { found = true; return; }
+            if (e?.type === 'MemberExpression' && e.property?.name === 'children') { found = true; return; }
+        }
+        for (const k of Object.keys(x)) if (!['loc','start','end'].includes(k)) w(x[k]);
+    };
+    w(node.body);
+    return found;
+};
+
+// Does any CALL SITE in this file pass a form control into <name>...</name>?
+//
+// riskOf() only inspects a component's own body, which is why `FL` in AuditDetail's
+// AddDestinationModal scored harmless and shipped: a label/hint wrapper whose
+// <input> lived in the parent and was passed in as children. Every keystroke gave
+// FL a new identity, React remounted the subtree, the field lost focus after one
+// character, and the next keystroke escaped to App.jsx's global hotkey handler --
+// whose isTyping guard had gone false along with the focus -- opening the New Task
+// rail mid-typing.
+//
+// Flagging every children-wrapper would be noise: ReportsTab has 12 presentational
+// <Panel>s that wrap only charts and tables. So resolve it the one way it can
+// actually be answered -- look at what the call sites pass.
+const CONTROLS = ['input', 'textarea', 'select'];
+const passesControlAsChild = (root, name) => {
+    let found = false;
+    const walk = (n) => {
+        if (found || !n || typeof n !== 'object') return;
+        if (Array.isArray(n)) return n.forEach(walk);
+        if (n.type === 'JSXElement' && n.openingElement?.name?.name === name) {
+            const inner = (c) => {
+                if (found || !c || typeof c !== 'object') return;
+                if (Array.isArray(c)) return c.forEach(inner);
+                if (c.type === 'JSXOpeningElement' && CONTROLS.includes(c.name?.name)) { found = true; return; }
+                for (const k of Object.keys(c)) if (!['loc','start','end'].includes(k)) inner(c[k]);
+            };
+            n.children?.forEach(inner);
+        }
+        for (const k of Object.keys(n)) if (!['loc','start','end'].includes(k)) walk(n[k]);
+    };
+    walk(root);
+    return found;
+};
+
 const riskOf = (node) => {
     const hits = new Set();
     const walk = (n) => {
@@ -109,11 +161,13 @@ for (const file of targets) {
                 if (!['ArrowFunctionExpression','FunctionExpression'].includes(dec.init?.type)) return;
                 if (!returnsJsx(dec.init)) return;
                 findings.push({ name: dec.id.name, line: n.loc.start.line, parent: parentName,
-                                usedAsElement: used.has(dec.id.name), risk: riskOf(dec.init) });
+                                usedAsElement: used.has(dec.id.name), risk: riskOf(dec.init),
+                                childControl: rendersChildren(dec.init) && passesControlAsChild(ast, dec.id.name) });
             });
         }
         if (n.type === 'FunctionDeclaration' && n.id && /^[A-Z]/.test(n.id.name) && returnsJsx(n)) {
-            findings.push({ name: n.id.name, line: n.loc.start.line, parent: parentName, usedAsElement: used.has(n.id.name), risk: riskOf(n) });
+            findings.push({ name: n.id.name, line: n.loc.start.line, parent: parentName, usedAsElement: used.has(n.id.name), risk: riskOf(n),
+                            childControl: rendersChildren(n) && passesControlAsChild(ast, n.id.name) });
         }
         for (const k of Object.keys(n)) if (!['loc','start','end'].includes(k)) scan(n[k], parentName, depth + 1);
     };
@@ -121,12 +175,13 @@ for (const file of targets) {
     topLevel.forEach(c => scan(c.node.body, c.name));
 
     const reportable = findings.filter(f => f.usedAsElement);
-    reportable.forEach(f => (f.risk || []).size ? totalVisible++ : totalChurn++);
+    const isVisible = f => (f.risk || []).size > 0 || f.childControl;
+    reportable.forEach(f => isVisible(f) ? totalVisible++ : totalChurn++);
 
     // Quiet by default. Printing a line for every clean file buried two real
     // findings under several hundred lines of "no inline components", and a
     // checker whose signal is hard to find stops being run.
-    const visible = reportable.filter(f => (f.risk || []).size);
+    const visible = reportable.filter(isVisible);
     const toPrint = showChurn ? reportable : visible;
     if (!toPrint.length && !showAll) continue;
 
@@ -134,7 +189,8 @@ for (const file of targets) {
     if (!findings.length) { console.log('  no inline components'); continue; }
     toPrint.sort((a,b) => a.line - b.line).forEach(f => {
         const risk = [...(f.risk || [])];
-        const tag = risk.length ? 'USER-VISIBLE' : 'churn only  ';
+        if (f.childControl) risk.push('a call site passes a form control as children');
+        const tag = isVisible(f) ? 'USER-VISIBLE' : 'churn only  ';
         console.log(`  ${tag}  line ${String(f.line).padStart(4)}  <${f.name}>  inside ${f.parent}${risk.length ? '  [' + risk.join(', ') + ']' : ''}`);
     });
 }
