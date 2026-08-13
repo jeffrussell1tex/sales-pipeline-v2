@@ -42,7 +42,46 @@ const returnsJsx = (node) => {
     return found;
 };
 
-const targets = process.argv.slice(2).length ? process.argv.slice(2) : (function walk(d,o=[]){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=d+'/'+e.name;if(e.isDirectory()){if(e.name!=='node_modules')walk(p,o);}else if(p.endsWith('.jsx'))o.push(p);}return o;})('src');
+// Flags are separated from paths BEFORE the file list is built — every argument
+// used to be treated as a path, so `--all` was opened as a filename and the script
+// died with ENOENT.
+const argv    = process.argv.slice(2);
+const flags   = new Set(argv.filter(a => a.startsWith('--')));
+const paths   = argv.filter(a => !a.startsWith('--'));
+const showAll   = flags.has('--all');      // include clean files
+const showChurn = flags.has('--churn') || showAll;   // include stateless wrappers
+
+if (flags.has('--help')) {
+    console.log(`
+check-inline-components — find components declared inside another component and
+used as a JSX element type. React sees a new type on every render, so it unmounts
+and remounts the subtree: focus, scroll position and local state are lost.
+
+  npm run check:inline                     user-visible findings only
+  npm run check:inline -- --churn          also list stateless wrappers
+  npm run check:inline -- --all            everything, including clean files
+  npm run check:inline -- src/Tabs/X.jsx   specific files
+
+USER-VISIBLE  the component owns a form control, hook state or a ref — remounting
+              is observable, and this is a real bug.
+churn only    stateless presentational wrapper. It remounts, but nothing the user
+              can see changes. Worth hoisting eventually; not urgent.
+`.trim());
+    process.exit(0);
+}
+
+const walk = (d, o = []) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = d + '/' + e.name;
+        if (e.isDirectory()) { if (e.name !== 'node_modules') walk(p, o); }
+        else if (p.endsWith('.jsx')) o.push(p);
+    }
+    return o;
+};
+
+const targets = paths.length ? paths : walk('src');
+let totalVisible = 0, totalChurn = 0;
+
 for (const file of targets) {
     const ast = parse(fs.readFileSync(file, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
     const used = jsxNames(ast.program.body);
@@ -81,12 +120,30 @@ for (const file of targets) {
 
     topLevel.forEach(c => scan(c.node.body, c.name));
 
+    const reportable = findings.filter(f => f.usedAsElement);
+    reportable.forEach(f => (f.risk || []).size ? totalVisible++ : totalChurn++);
+
+    // Quiet by default. Printing a line for every clean file buried two real
+    // findings under several hundred lines of "no inline components", and a
+    // checker whose signal is hard to find stops being run.
+    const visible = reportable.filter(f => (f.risk || []).size);
+    const toPrint = showChurn ? reportable : visible;
+    if (!toPrint.length && !showAll) continue;
+
     console.log(`\n=== ${file.split('/').pop()} — ${topLevel.length} top-level component(s) ===`);
     if (!findings.length) { console.log('  no inline components'); continue; }
-    findings.sort((a,b) => a.line - b.line).forEach(f => {
-        if (!f.usedAsElement) return;
+    toPrint.sort((a,b) => a.line - b.line).forEach(f => {
         const risk = [...(f.risk || [])];
         const tag = risk.length ? 'USER-VISIBLE' : 'churn only  ';
         console.log(`  ${tag}  line ${String(f.line).padStart(4)}  <${f.name}>  inside ${f.parent}${risk.length ? '  [' + risk.join(', ') + ']' : ''}`);
     });
 }
+
+console.log(
+    `\n${totalVisible} user-visible, ${totalChurn} churn-only across ${targets.length} file(s).` +
+    (totalVisible ? '' : ' Nothing that loses focus or state.') +
+    (showChurn ? '' : '  Run with --churn to list the stateless wrappers.'));
+
+// Non-zero only for the user-visible class: churn is worth fixing eventually but
+// must not fail a check that might one day gate a commit.
+process.exit(totalVisible ? 1 : 0);
