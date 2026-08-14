@@ -1177,23 +1177,25 @@ When data has to move between stores, prefer a **visible button in the UI** over
 
 ## 19. Deployment
 
-### Gates -- run all four
+### Gates -- run all five
 
 ```bash
 npm run check:tdz      # reads before declaration
 npm run check:inline   # components declared inline, used as a JSX element type
 npm run check:dupes    # duplicate object keys / JSX attributes
+npm run check:dbfetch  # discarded Response / Response read as JSON (18b1, 18b3)
 npm run build          # vite build + the bundle guard (18b4)
 ```
 
 **Use `npm run build`, not `npx vite build`** -- the latter bypasses the bundle
 guard. `check:inline` should report **0 user-visible**.
 
-All four, plus `node --test`, run in CI on every push and PR via the `gates` job in
+All five, plus `node --test`, run in CI on every push and PR via the `gates` job in
 `.github/workflows/test.yml`. Before that they ran only by hand, so anything pushed
 without remembering them reached Netlify ungated.
 
-`scripts/scan-dbfetch.mjs` is a diagnostic, not a gate, and is not wired to npm.
+`scan-dbfetch.mjs` was a diagnostic until its accuracy was proven; it is now the
+fifth gate (18b6).
 
 ### Netlify
 
@@ -1374,10 +1376,38 @@ means a file quietly drops out of coverage, which is exactly how four crashes
 stayed hidden in files "the scanner had not been covering".
 
 And verify a new diagnostic against a case whose answer you already know before
-acting on its output. The first `dbFetch` scanner reported 78 findings; **13 were
-false positives** — it peeled `.then(r => { if (!r.ok) … })` off to find the
-`dbFetch` underneath and called the Response discarded. Acting on that list would
-have meant rewriting the working data-loading layer.
+acting on its output. The first `dbFetch` scanner reported 78 findings, and its
+false-positive rate turned out to be far worse than first recorded: **59% on the
+hooks — 10 of 17**. It peeled `.then(r => { if (!r.ok) … })` off to find the
+`dbFetch` underneath and called the Response discarded. Acting on that list
+unreviewed would have meant rewriting the working data-loading layer.
+
+**RESOLVED.** `scan-dbfetch.mjs` now reads the callbacks instead of unwrapping
+past them, all 78 original sites are closed, and its behaviour is pinned by
+fixtures in `tests/scanners.test.mjs`. It is a gate: **`npm run check:dbfetch`**,
+exit non-zero on any finding, wired into CI.
+
+Deliberate fire-and-forget opts out at the call site, so exceptions are explicit
+and reviewable rather than permanent noise in the report:
+
+```js
+// dbfetch-ignore: an SMS notification must never block or fail the save
+dbFetch('/.netlify/functions/mention-sms', { … });
+```
+
+Three sites qualify and no more should without discussion: `addAudit` (mirrors the
+server's `writeAudit`, best-effort by design so an audit failure cannot roll back
+the operation it records) and the two `fireMentionSms` calls.
+
+The scanner also reports a second class now — **a Response read as if it were
+JSON** (18b3). That found `ReportsTab`'s saved-reports list, which called
+`.then(data => data?.reports)` on a Response with no `.json()` in the chain: always
+undefined, so the list had never loaded.
+
+The general lesson stands even though this instance is closed: a diagnostic's
+accuracy is a claim to be tested, not assumed. The original scanner could not even
+be pointed at a file — it ignored its arguments and always walked `src/` — which is
+why a 59% error rate went unmeasured for two sessions.
 
 ---
 
@@ -1532,7 +1562,7 @@ reaching production first. Never by reading the scanner.
 |---|---|---|
 | `check-tdz` | `/^[A-Z_]+$/` treated `T` as an imported SCREAMING_CASE constant | `EntitySelector` read `T` from a scope it lost on hoist; whole Reports tab down. Gate printed "No render-time TDZ issues in 135 file(s)". |
 | `check-inline` | `riskOf()` inspects only a component's own body, so a wrapper rendering `{children}` scored harmless | `FL` remounted the caller's `<input>`; focus lost per keystroke, and the escaped keypress opened the New Task rail. Gate reported 0 user-visible. |
-| `scan-dbfetch` | peels `.then(r => { if (!r.ok) … })` off to find the `dbFetch` underneath | 59% false positives in the hooks — 10 of 17. Acting on it unreviewed would have rewritten a working data layer. |
+| `scan-dbfetch` | peels `.then(r => { if (!r.ok) … })` off to find the `dbFetch` underneath | 59% false positives in the hooks — 10 of 17. Acting on it unreviewed would have rewritten a working data layer. **Fixed and promoted to a gate; see 18b6.** |
 
 ### The rules
 

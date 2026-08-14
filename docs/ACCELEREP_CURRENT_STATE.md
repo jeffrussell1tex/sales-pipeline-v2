@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** August 13, 2026  
-**Batch:** **three of the four gates had false-negative classes** · `dbFetch` remediation 78 → 29, all `settings/` clean · **`users.mjs` PUT was replacing rows** · 4 `settings.extra` keys never whitelisted · build guard · `check:dupes` · CSV auto-mapping · bulk PUT · 19 → 66 tests
+**Batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · CSV auto-mapping · bulk PUT · 19 → 69 tests
 **Prior batch:** SalesManagerTab hoist, SPIFF persistence & claim plumbing
 **Prior batch:** inline-component audit — **the backlog named the wrong three files**; 81 raw findings triaged to 5 user-visible, 3 fixed · new `check:inline` scanner
 **Prior batch:** calendar disconnect (endpoint already existed — client wiring only) · personal email signature, escaped server-side · record-number generators moved from full-table scan to indexed `MAX` · **`mobile` was being wiped on every profile save**
@@ -70,30 +70,53 @@ Ten were false positives (§0.1). The six real ones:
 - **CI now runs the gates.** New `gates` job: check:tdz, check:inline, check:dupes, and a build with a dummy key. **Previously none ran in CI.**
 - Test count **66 passing**, up from 19 at session start.
 
-### 0.8 `dbFetch` remediation — 78 → 29 sites
+### 0.8 `dbFetch` remediation — 78 → 0, and `check:dbfetch` is now a gate
 
-Hand-triaged and fixed across seven passes. **The entire `settings/` category is
-now clean.**
+Hand-triaged and fixed across nine passes. **The original handoff's blocked item is
+closed.**
 
-| Cluster | Sites | Real | Note |
-|---|---|---|---|
-| Hooks (4 files) | 17 | 6 | **59% false positives** — loads and deletes already checked `res.ok` |
-| `PipelinesDetail` | 9 | 9 | |
-| `settings/people` | 8 | 8 | |
-| `CompanyCalendarDetail` | 4 | 4 | |
-| Remaining `settings/` | 12 | 12 | ConnectedApps, Import/Export, Users, Brand, PriceBook, LeadScoring, LeadConversion, Sso |
-| `ContactsTab` + `AccountsTab` | 6 | 6 | |
-| `App.jsx` | 4 | 0 | `checkOk` / `r.ok` already; `addAudit` intentionally best-effort |
+| Cluster | Sites | Real |
+|---|---|---|
+| Hooks (4 files) | 17 | 6 |
+| `PipelinesDetail` | 9 | 9 |
+| `settings/people` | 8 | 8 |
+| `CompanyCalendarDetail` | 4 | 4 |
+| Remaining `settings/` | 12 | 12 |
+| `ContactsTab` + `AccountsTab` | 6 | 6 |
+| `App.jsx` | 4 | 0 |
+| Final sweep (9 files) | 12 | 9 |
 
-**The pattern is strongly categorical.** Settings panels ran **33/33 real** — they
-are fire-and-forget writes to an Admin-only endpoint, so every one silently 403s
-for a non-admin. Hooks ran 6/17 — mostly loads and deletes that were already
-correct. Worth knowing before triaging the rest: *where* a site is predicts whether
-it is real better than anything the scanner reports.
+**The pattern was strongly categorical.** Settings panels ran **33/33 real** — they
+are fire-and-forget writes to an Admin-only endpoint, so every one silently 403s for
+a non-admin. Hooks ran 6/17 — mostly loads and deletes that were already correct.
+*Where* a site is predicted whether it was real far better than the scanner did.
+
+**The worst single find was `useSettings`'s global autosave.** It wrote localStorage
+**before** the PUT and then discarded the Response, so a non-admin's 403 left the
+change cached locally forever: the UI showed it, a reload re-read it from cache, and
+nothing ever reached the database. A failure that masked itself indefinitely on one
+machine while nobody else saw the change. Now DB-first, cache only on success, error
+surfaced through the toast.
+
+**The scanner itself was the blocker.** It reported a 59% false-positive rate on the
+hooks because it unwrapped `.then()` chains without reading the callbacks, and it
+could not even be pointed at a file — it ignored its arguments and always walked
+`src/`, which is why the error rate went unmeasured for two sessions. Both fixed,
+behaviour pinned by fixtures, then promoted: **`npm run check:dbfetch`**, exit
+non-zero on any finding, in CI. Deliberate fire-and-forget opts out with a
+`dbfetch-ignore:` comment at the call site — three sites qualify.
+
+It also gained a second finding class, **Response read as if it were JSON** (§18b3),
+which immediately found `ReportsTab`'s saved-reports list calling
+`.then(data => data?.reports)` on a Response with no `.json()` in the chain. Always
+undefined — the list had never loaded.
 
 New shared helper **`dbWrite()`** in `src/utils/storage.js` — `{ ok, status, error }`,
 never throws, surfaces the `requestId`. 9 tests, mutation-tested. `putSettings()`
 remains the template for settings panels.
+
+**Five gates now, all in CI, all fixture-tested** — up from two that ran only by hand
+at session start. 69 tests, up from 19.
 
 ### 0.9 Two failures no client-side handling could ever catch
 
@@ -1894,22 +1917,10 @@ Plus indexes `leads_org_id_bucket_idx (org_id, lead_score_bucket)` and `leads_or
 
 > Build guard and the `drizzle-orm` bump both **shipped** — see §0.1 and §0.7.
 
-**The remaining `dbFetch` sites — 29 across 14 files.** Was 78.
-
-**About half are known false positives**: 12 in the four hooks (loads/deletes that
-already check `res.ok`), 2 in `App.jsx`, and 2 intentional `fireMentionSms`
-fire-and-forget calls. The genuinely open set is roughly 13: `ReportsTab` (3),
-`ModalLayer` (2), and singles in `AdminView`, `LeadsTab`, `KanbanView`,
-`QuickLogFab`, `ViewingContactPanel`.
-
-**Higher value than finishing the list: fix the scanner.** Seven passes of hand
-triage now cover 63 of the original 78, and the false-positive class is understood
-— it peels `.then(r => { if (!r.ok) … })` off to find the `dbFetch` underneath, and
-does not know about `dbWrite` or `putSettings`. Teaching it those would drop the
-noise and let `check:dbfetch` finally become a gate. Without that, the next person
-hits the same 59% and the same mandatory-hand-triage warning.
-
-Templates: `putSettings()` for settings panels, **`dbWrite()`** elsewhere.
+~~**The remaining `dbFetch` sites.**~~ **DONE.** 78 → 0. `check:dbfetch` is the
+fifth gate, exits non-zero on any finding, and runs in CI. Deliberate
+fire-and-forget opts out with a `dbfetch-ignore:` comment at the call site — three
+sites qualify (`addAudit`, two `fireMentionSms`). See guide §18b6.
 
 **Accounts / contacts bulk POST is unbatched.** One statement for every row; breaks above ~1,872 rows against the 65,535 bind-parameter ceiling, and one bad row kills the whole batch. The overwrite path was fixed this session (`bulkUpsert`); the insert path was not. Do this **before** the CSV Import + Export rollout below, since that multiplies the number of files pushed through it.
 
