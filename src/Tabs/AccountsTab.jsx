@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useApp } from '../AppContext';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, dbWrite } from '../utils/storage';
 
 // ── Design tokens ─────────────────────────────────────────────
 const T = {
@@ -582,7 +582,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
         opportunities, contacts, activities, tasks, settings,
         currentUser, userRole, canSeeAll,
         exportToCSV, exportingCSV,
-        showConfirm, softDelete,
+        showConfirm, softDelete, setUndoToast,
         getSubAccounts, getAccountRollup,
         visibleAccounts,
         handleDeleteAccount,
@@ -747,22 +747,41 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
 
             const deletedAccounts = snapshot.filter(a => toDelete.includes(a.id));
 
+            // dbFetch resolves for ANY status (guide 18b1), so the old .catch fired
+            // on a network failure only. Anything that did not delete is put back so
+            // the list matches the database rather than reappearing on reload.
+            const failedIds = [];
             for (const id of toDelete) {
-                await dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' }).catch(console.error);
+                const r = await dbWrite(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' });
+                if (!r.ok) failedIds.push(id);
+            }
+            if (failedIds.length) {
+                setAccounts(prev => {
+                    const have = new Set(prev.map(a => a.id));
+                    return [...prev, ...snapshot.filter(a => failedIds.includes(a.id) && !have.has(a.id))];
+                });
+                setUndoToast({ error: `${failedIds.length} of ${toDelete.length} account(s) were not deleted.` });
+                if (failedIds.length === toDelete.length) return;   // nothing deleted, no undo
             }
 
             softDelete(
                 `${count} account${count > 1 ? 's' : ''}`,
                 () => {},
-                () => {
+                async () => {
                     setAccounts(snapshot);
-                    deletedAccounts.forEach(a => {
-                        dbFetch('/.netlify/functions/accounts', {
+                    const notRestored = [];
+                    for (const a of deletedAccounts.filter(a => !failedIds.includes(a.id))) {
+                        const rr = await dbWrite('/.netlify/functions/accounts', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(a),
-                        }).catch(err => console.error('Failed to restore account to DB:', err));
-                    });
+                        });
+                        if (!rr.ok) notRestored.push(a.id);
+                    }
+                    if (notRestored.length) {
+                        setAccounts(prev => prev.filter(a => !notRestored.includes(a.id)));
+                        setUndoToast({ error: `${notRestored.length} account(s) could not be restored.` });
+                    }
                 }
             );
         });

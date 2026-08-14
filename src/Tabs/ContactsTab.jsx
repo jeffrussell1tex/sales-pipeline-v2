@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useApp } from '../AppContext';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, dbWrite } from '../utils/storage';
 
 // ── Design tokens ─────────────────────────────────────────────
 const T = {
@@ -662,7 +662,7 @@ export default function ContactsTab() {
         contactsSortBy, setContactsSortBy,
         selectedContacts, setSelectedContacts,
         exportToCSV, exportingCSV,
-        setCsvImportType, setShowCsvImportModal,
+        setCsvImportType, setShowCsvImportModal, setUndoToast,
         getAccountRollup,
         isMobile,
     } = useApp();
@@ -767,20 +767,32 @@ export default function ContactsTab() {
     const handleAddContact  = () => { setContactRailId('new'); setContactRailMode('new'); };
     const handleEditContact = (c) => { setContactRailId(c.id); setContactRailMode('edit'); };
 
-    const handleDeleteOne = (contact) => {
+    const handleDeleteOne = async (contact) => {
         const snapshot = [...(contacts || [])];
         setContacts(prev => prev.filter(c => c.id !== contact.id));
-        dbFetch(`/.netlify/functions/contacts?id=${contact.id}`, { method: 'DELETE' }).catch(console.error);
+        // dbFetch resolves for ANY status (guide 18b1), so the old .catch fired on
+        // a network failure only. A 403 left the contact gone from the list and
+        // still in the database until the next reload.
+        const r = await dbWrite(`/.netlify/functions/contacts?id=${contact.id}`, { method: 'DELETE' });
+        if (!r.ok) {
+            setContacts(snapshot);
+            setUndoToast({ error: `Contact not deleted — ${r.error}` });
+            return;                                   // nothing to undo
+        }
         const label = [contact.firstName, contact.lastName].filter(Boolean).join(' ') || 'Contact';
         softDelete(
             label,
             () => {},
-            () => {
+            async () => {
                 setContacts(snapshot);
-                dbFetch('/.netlify/functions/contacts', {
+                const rr = await dbWrite('/.netlify/functions/contacts', {
                     method: 'POST',
                     body: JSON.stringify(contact),
-                }).catch(console.error);
+                });
+                if (!rr.ok) {
+                    setContacts(prev => prev.filter(c => c.id !== contact.id));
+                    setUndoToast({ error: `Could not restore ${label} — ${rr.error}` });
+                }
             }
         );
     };
@@ -796,24 +808,48 @@ export default function ContactsTab() {
             // clear=true is now server-gated to Admin only — non-admins must use
             // per-id deletes or the request 403s and contacts reappear on refresh.
             const deletingAll = toDelete.length === contacts.length && userRole === 'Admin';
+            // The comment above was right about the 403 and the code swallowed it
+            // anyway. Failures are now collected and reported, and anything that
+            // did not delete is put back so the list matches the database.
+            const failedIds = [];
             if (deletingAll) {
-                await dbFetch('/.netlify/functions/contacts?clear=true', { method: 'DELETE' }).catch(console.error);
+                const r = await dbWrite('/.netlify/functions/contacts?clear=true', { method: 'DELETE' });
+                if (!r.ok) failedIds.push(...toDelete);
             } else {
                 for (const id of toDelete) {
-                    await dbFetch(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' }).catch(console.error);
+                    const r = await dbWrite(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' });
+                    if (!r.ok) failedIds.push(id);
                 }
+            }
+            if (failedIds.length) {
+                setContacts(prev => {
+                    const have = new Set(prev.map(c => c.id));
+                    return [...prev, ...snapshot.filter(c => failedIds.includes(c.id) && !have.has(c.id))];
+                });
+                setUndoToast({ error: `${failedIds.length} of ${toDelete.length} contact(s) were not deleted.` });
+                if (failedIds.length === toDelete.length) return;   // nothing deleted, no undo
             }
             softDelete(
                 `${toDelete.length} contact${toDelete.length === 1 ? '' : 's'}`,
                 () => {},
                 () => {
                     setContacts(snapshot);
-                    const deleted = snapshot.filter(c => toDelete.includes(c.id));
-                    deleted.forEach(c => dbFetch('/.netlify/functions/contacts', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(c),
-                    }).catch(console.error));
+                    const deleted = snapshot.filter(c => toDelete.includes(c.id) && !failedIds.includes(c.id));
+                    (async () => {
+                        const notRestored = [];
+                        for (const c of deleted) {
+                            const rr = await dbWrite('/.netlify/functions/contacts', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(c),
+                            });
+                            if (!rr.ok) notRestored.push(c.id);
+                        }
+                        if (notRestored.length) {
+                            setContacts(prev => prev.filter(c => !notRestored.includes(c.id)));
+                            setUndoToast({ error: `${notRestored.length} contact(s) could not be restored.` });
+                        }
+                    })();
                 }
             );
         });
