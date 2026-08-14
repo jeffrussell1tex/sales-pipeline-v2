@@ -39,6 +39,14 @@ jobs:
       # the build exits 0. Nine were shipping when this gate was added.
       - name: Duplicate key / attribute scan
         run: npm run check:dupes
+      # Promoted from diagnostic to gate once all 78 original sites were resolved
+      # and the scanner's accuracy was pinned by fixtures. It ran as a diagnostic
+      # only while its accuracy was unproven — the first version reported a 59%
+      # false-positive rate on the hooks. A finding now means new code discarding a
+      # Response, not pre-existing noise. Deliberate exceptions carry a
+      # `dbfetch-ignore:` comment at the call site.
+      - name: Discarded-Response dbFetch scan
+        run: npm run check:dbfetch
       - name: Build + bundle guard
         env:
           VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder

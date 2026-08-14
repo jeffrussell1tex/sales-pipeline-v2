@@ -4,6 +4,8 @@ import { dbFetch, dbWrite } from '../utils/storage';
 // Fire-and-forget SMS for task assignments.
 async function fireMentionSms(payload) {
     try {
+        // dbfetch-ignore: an SMS notification must never block or fail the save
+        // it accompanies. Deliberate fire-and-forget.
         await dbFetch('/.netlify/functions/mention-sms', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -78,7 +80,7 @@ export function useTasks(deps) {
                         body: JSON.stringify(task),
                     }).then(r => {
                         if (r.ok) return;
-                        setTasks(prev => prev.filter(t.id !== task.id));   // undo did not take
+                        setTasks(prev => prev.filter(t => t.id !== task.id));   // undo did not take
                         setUndoToast({ error: `Could not restore the task — ${r.error}` });
                     });
                 }

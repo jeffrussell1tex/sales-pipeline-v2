@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import AnalyticsDashboard from '../components/ui/AnalyticsDashboard';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, dbWrite } from '../utils/storage';
 
 export default function ReportsTab({ leadsEnabled = true }) {
     const {
@@ -4745,7 +4745,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                                 {r.description && <div style={{ fontSize:11.5, color:TS.inkMuted, lineHeight:1.4, fontFamily:TS.sans }}>{r.description}</div>}
                                 <div style={{ marginTop:'auto', paddingTop:6, borderTop:`1px solid ${TS.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:TS.inkMuted, fontFamily:TS.sans }}>
                                     <span>{r.ownerName||currentUser}</span>
-                                    <button onClick={async (e)=>{ e.stopPropagation(); if(!confirm('Delete this report?')) return; await dbFetch('/.netlify/functions/saved-reports',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); setSavedReportsList(prev=>prev.filter(x=>x.id!==r.id)); }}
+                                    <button onClick={async (e)=>{ e.stopPropagation(); if(!confirm('Delete this report?')) return; const rd = await dbWrite('/.netlify/functions/saved-reports',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); if(!rd.ok){ setSavedReportsList(prev=>prev); window.alert(`Report not deleted \u2014 ${rd.error}`); return; } setSavedReportsList(prev=>prev.filter(x=>x.id!==r.id)); }}
                                         style={{ background:'transparent', border:'none', color:TS.inkMuted, cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>×</button>
                                 </div>
                             </div>
@@ -6535,13 +6535,15 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
 
                                                     const handleSetPersona = async (contact, personaId) => {
                                                         setLocalPersonaMap(prev => ({ ...prev, [contact.id]: personaId }));
-                                                        try {
-                                                            await dbFetch(`/.netlify/functions/contacts?id=${contact.id}`, {
-                                                                method: 'PUT',
-                                                                body: JSON.stringify({ ...contact, buyerPersona: personaId }),
-                                                            });
-                                                        } catch(e) {
-                                                            console.error('Set persona failed:', e);
+                                                        // The revert existed but was
+                                                        // unreachable: dbFetch resolves
+                                                        // for ANY status (guide 18b1),
+                                                        // so a 403 never hit the catch.
+                                                        const rp = await dbWrite(`/.netlify/functions/contacts?id=${contact.id}`, {
+                                                            method: 'PUT',
+                                                            body: JSON.stringify({ ...contact, buyerPersona: personaId }),
+                                                        });
+                                                        if (!rp.ok) {
                                                             setLocalPersonaMap(prev => { const n={...prev}; delete n[contact.id]; return n; });
                                                         }
                                                     };

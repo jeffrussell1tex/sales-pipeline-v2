@@ -1,4 +1,4 @@
-import { dbFetch } from '../../utils/storage';
+import { dbFetch, dbWrite } from '../../utils/storage';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useApp } from '../../AppContext';
@@ -33,6 +33,7 @@ export default function ViewingContactPanel({
         meetingPrepOpen, setMeetingPrepOpen, setMeetingPrepEvent, setMeetingPrepOppId,
         contactShowAllDeals, setContactShowAllDeals,
         setContacts,
+        setUndoToast,
     } = useApp();
 
     const isReadOnly = userRole === 'ReadOnly';
@@ -515,8 +516,14 @@ export default function ViewingContactPanel({
                     const newId = 'id_' + crypto.randomUUID();
                     const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
                     setContacts(prev => [...prev, nc]);
-                    dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })
-                        .catch(err => console.error('inline contact save failed:', err));
+                    // Same shape as ModalLayer's inline create: a rejected POST left
+                    // a contact that existed only in local state.
+                    dbWrite('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })
+                        .then(r => {
+                            if (r.ok) return;
+                            setContacts(prev => prev.filter(c => c.id !== newId));
+                            setUndoToast({ error: `Contact not created — ${r.error}` });
+                        });
                     return nc;
                 }}
             />,

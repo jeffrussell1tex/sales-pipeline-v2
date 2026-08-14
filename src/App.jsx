@@ -203,7 +203,16 @@ function App() {
     const {
         settings, setSettings, settingsReady,
         loadSettings, handleUpdateFiscalYearStart, handleAddTaskType,
+        settingsSaveError,
     } = useSettings();
+
+    // The settings autosave is a background effect with no UI of its own. When it
+    // is rejected — a non-admin hitting the Admin-only PUT /settings — surface it
+    // through the existing toast, or the write fails with nothing on screen at all.
+    useEffect(() => {
+        if (!settingsSaveError) return;
+        setUndoToast({ error: `Settings not saved — ${settingsSaveError}` });
+    }, [settingsSaveError]);
 
     // Dependency refs — populated after showConfirm/softDelete/addAudit are defined below
     const _addAuditRef    = useRef(null);
@@ -307,6 +316,8 @@ function App() {
     const addAudit = (action, entity, entityId, label, detail = '') => {
         // Fire-and-forget POST to Neon — never blocks the UI
         const id = 'audit_' + crypto.randomUUID();
+        // dbfetch-ignore: mirrors the server's writeAudit, which is best-effort by
+        // design — an audit failure must never roll back the operation it records.
         dbFetch('/.netlify/functions/audit-log', {
             method: 'POST',
             body: JSON.stringify({

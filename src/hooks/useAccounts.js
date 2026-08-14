@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, dbWrite } from '../utils/storage';
 
 export function useAccounts(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel, showBlockedDelete } = deps;
@@ -86,14 +86,25 @@ export function useAccounts(deps) {
                     setAccounts(snapshot);
                     setUndoToast(null);
                     // Re-insert all deleted accounts back to the DB
+                    // Undo puts the rows back on screen and re-POSTs them. A failed
+                    // restore used to leave them visible but deleted in the database,
+                    // surfacing only on the next reload.
                     const deletedAccounts = snapshot.filter(a => allIds.includes(a.id));
-                    deletedAccounts.forEach(a => {
-                        dbFetch('/.netlify/functions/accounts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(a),
-                        }).catch(err => console.error('Failed to restore account to DB:', err));
-                    });
+                    (async () => {
+                        const notRestored = [];
+                        for (const a of deletedAccounts) {
+                            const r = await dbWrite('/.netlify/functions/accounts', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(a),
+                            });
+                            if (!r.ok) notRestored.push(a.id);
+                        }
+                        if (notRestored.length) {
+                            setAccounts(prev => prev.filter(a => !notRestored.includes(a.id)));
+                            setUndoToast({ error: `${notRestored.length} account(s) could not be restored.` });
+                        }
+                    })();
                 }
             );
         });

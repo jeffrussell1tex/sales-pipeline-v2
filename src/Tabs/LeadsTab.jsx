@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useApp } from '../AppContext';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, dbWrite } from '../utils/storage';
 
 // ── Design tokens ────────────────────────────────────────────
 const T = {
@@ -689,6 +689,7 @@ export default function LeadsTab() {
         setActiveTab,
         setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
+        setUndoToast,
     } = useApp();
 
     const [tab, setTab] = useState(() => {
@@ -710,14 +711,17 @@ export default function LeadsTab() {
 
     // ── Persist a lead field change to DB + local state ────────
     const saveLead = useCallback(async (id, patch) => {
-        setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
-        try {
-            await dbFetch(`/.netlify/functions/leads?id=${id}`, {
-                method: 'PUT',
-                body: JSON.stringify({ id, ...patch }),
-            });
-        } catch (err) {
-            console.error('saveLead failed', err);
+        let snapshot;
+        setLeads(prev => { snapshot = prev; return prev.map(l => l.id === id ? { ...l, ...patch } : l); });
+        // dbFetch resolves for ANY status (guide 18b1), so the old catch fired on a
+        // network failure only and a rejected edit stayed on screen until reload.
+        const r = await dbWrite(`/.netlify/functions/leads?id=${id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ id, ...patch }),
+        });
+        if (!r.ok) {
+            setLeads(snapshot);
+            setUndoToast({ error: `Lead not saved — ${r.error}` });
         }
     }, [setLeads]);
 

@@ -205,7 +205,7 @@ test('every gate script has at least one catch fixture and one safe fixture', ()
     const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
     const gates = Object.keys(pkg.scripts).filter(k => k.startsWith('check:'));
     const fixtures = fs.readdirSync(FIX);
-    const prefixOf = { 'check:tdz': 'tdz', 'check:inline': 'inline', 'check:dupes': 'dupes' };
+    const prefixOf = { 'check:tdz': 'tdz', 'check:inline': 'inline', 'check:dupes': 'dupes', 'check:dbfetch': 'dbfetch' };
 
     for (const gate of gates) {
         if (gate === 'check:bundle') continue;          // fixtures are built at run time above

@@ -165,6 +165,23 @@ const underlyingDbFetch = (node) => {
   return false;
 };
 
+// Deliberate fire-and-forget, opted out at the call site with a comment:
+//
+//     // dbfetch-ignore: <reason>
+//     dbFetch(...)
+//
+// Three sites qualify and no more should without discussion: addAudit (matches the
+// server's writeAudit, which is best-effort by design so an audit failure cannot
+// roll back the operation being audited) and the two fireMentionSms calls (an SMS
+// notification must never block or fail a save). Everything else must check.
+const IGNORE_RE = /dbfetch-ignore/;
+const ignoredLines = (src) => {
+  const out = new Set();
+  const lines = src.split('\n');
+  lines.forEach((l, i) => { if (IGNORE_RE.test(l)) { out.add(i + 2); out.add(i + 3); } });
+  return out;
+};
+
 const findStatements = (root) => {
   const out = [], stack = [root], seen = new Set();
   while (stack.length) {
@@ -190,7 +207,9 @@ for (const f of files) {
   try { ast = parse(fs.readFileSync(f, 'utf8'), { sourceType: 'module', plugins: ['jsx'] }); }
   catch { continue; }
   const stmts = findStatements(ast.program);
-  const hits = stmts.filter(s => underlyingDbFetch(s.expression)).map(s => s.loc.start.line);
+  const skip = ignoredLines(fs.readFileSync(f, 'utf8'));
+  const hits = stmts.filter(s => underlyingDbFetch(s.expression) && !skip.has(s.loc.start.line))
+    .map(s => s.loc.start.line);
   if (hits.length) { byFile.set(f, hits); total += hits.length; }
 
   // Second class, reported separately: the Response read as if it were JSON.
@@ -214,3 +233,9 @@ if (jsonMisuse.length) {
   console.log(`  ${jsonMisuse.length} site(s). These read undefined forever and fail silently.`);
 }
 
+// Promoted to a gate. It ran as a diagnostic only for as long as its accuracy was
+// unproven: the original version reported a 59% false-positive rate on the hooks
+// because it unwrapped .then() chains without reading the callbacks. That is fixed,
+// the behaviour is pinned by tests/scanners.test.mjs, and all 78 original sites are
+// resolved — so a new finding now means new code, not old noise.
+process.exit(total + jsonMisuse.length ? 1 : 0);

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
-import { dbFetch } from '../../utils/storage';
+import { dbFetch, dbWrite } from '../../utils/storage';
 
 export default function QuickLogFab() {
     const {
@@ -10,6 +10,7 @@ export default function QuickLogFab() {
         quickLogContactResults, setQuickLogContactResults,
         followUpPrompt, setFollowUpPrompt,
         setEditingTask, setTaskRailId, setTaskRailMode, isMobile,
+        setUndoToast,
     } = useApp();
 
     const inputStyle = {
@@ -156,9 +157,15 @@ export default function QuickLogFab() {
                                     createdAt: new Date().toISOString(),
                                 };
                                 setActivities(prev => [newActivity, ...(prev || [])]);
-                                try {
-                                    await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
-                                } catch(e) { console.error('Quick log save failed:', e); }
+                                // The FAB closes straight after this, so a failure was
+                                // invisible: the activity showed in the list and was
+                                // gone on reload.
+                                const rq = await dbWrite('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
+                                if (!rq.ok) {
+                                    setActivities(prev => (prev || []).filter(a => a.id !== newActivity.id));
+                                    setUndoToast({ error: `Activity not logged \u2014 ${rq.error}` });
+                                    return;
+                                }
                                 if (linkedOpp) setFollowUpPrompt({ opportunityId: linkedOpp.id, opportunityName: linkedOpp.opportunityName || linkedOpp.account });
                                 setQuickLogOpen(false);
                                 setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });

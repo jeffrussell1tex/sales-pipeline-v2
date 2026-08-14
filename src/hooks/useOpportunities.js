@@ -5,6 +5,8 @@ import { dbFetch, dbWrite } from '../utils/storage';
 // Calls mention-sms.mjs which resolves assignee prefs server-side.
 async function fireMentionSms(payload) {
     try {
+        // dbfetch-ignore: an SMS notification must never block or fail the save
+        // it accompanies. Deliberate fire-and-forget.
         await dbFetch('/.netlify/functions/mention-sms', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
-import { dbFetch } from '../../utils/storage';
+import { dbFetch, dbWrite } from '../../utils/storage';
 import OpportunityModal from '../modals/OpportunityModal';
 import ContactRail from '../rails/ContactRail';
 import AccountRail from '../rails/AccountRail';
@@ -186,22 +186,35 @@ export default function ModalLayer() {
                         const newId = 'id_' + crypto.randomUUID();
                         const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
                         setContacts(prev => [...prev, nc]);
-                        dbFetch('/.netlify/functions/contacts', {
+                        // Inline-created contacts get attached to whatever record the
+                        // picker belongs to. A rejected POST used to leave a contact
+                        // that exists only in this tab's state — it looks saved,
+                        // links fine, and is gone on reload along with the link.
+                        dbWrite('/.netlify/functions/contacts', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(nc)
-                        }).catch(err => console.error('Failed to save inline contact:', err));
+                        }).then(r => {
+                            if (r.ok) return;
+                            setContacts(prev => prev.filter(c => c.id !== newId));
+                            setUndoToast({ error: `Contact not created — ${r.error}` });
+                        });
                         return nc;
                     }}
                     onSaveNewAccount={(data) => {
                         const newId = 'id_' + crypto.randomUUID();
                         const na = { ...data, id: newId };
                         setAccounts(prev => [...prev, na]);
-                        dbFetch('/.netlify/functions/accounts', {
+                        // Account twin of the inline contact create above.
+                        dbWrite('/.netlify/functions/accounts', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(na)
-                        }).catch(err => console.error('Failed to save inline account:', err));
+                        }).then(r => {
+                            if (r.ok) return;
+                            setAccounts(prev => prev.filter(a => a.id !== newId));
+                            setUndoToast({ error: `Account not created — ${r.error}` });
+                        });
                         return na;
                     }}
                     onAddContact={() => {

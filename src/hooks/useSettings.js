@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { safeStorage, dbFetch, waitForToken } from '../utils/storage';
+import { safeStorage, dbFetch, dbWrite, waitForToken } from '../utils/storage';
 
 // ── BYOK key hygiene ──────────────────────────────────────────────────
 // The server no longer returns the org's Anthropic key, but browsers that ran
@@ -113,6 +113,9 @@ export function useSettings() {
         ? `salesSettings_${orgIdRef.current}`
         : 'salesSettings'; // fallback for initial paint before org known
 
+    // Non-empty when the last autosave was rejected.
+    const [saveError, setSaveError] = useState('');
+
     const [settings, setSettings] = useState(() => {
         // Bootstrap non-user settings from localStorage for instant paint,
         // but NEVER seed users from localStorage — always authoritative from DB.
@@ -219,15 +222,28 @@ export function useSettings() {
         // Never mirror key material to disk or echo it back to the server. The
         // key is written only by the AI settings panel, via an explicit PUT.
         const { value: settingsToSave } = stripKeyMaterial(rest);
-        try {
-            // Scope by orgId so switching orgs never reads another org's cached settings
-            safeStorage.setItem(getStorageKey(), JSON.stringify(settingsToSave));
-        } catch(e) {}
-        dbFetch('/.netlify/functions/settings', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(settingsToSave)
-        }).catch(err => console.error('Failed to save settings:', err));
+        // DB FIRST, cache second. This used to write localStorage BEFORE the PUT
+        // and then discard the Response — dbFetch resolves for ANY status (guide
+        // 18b1), so a non-admin's 403 on this Admin-only endpoint left the change
+        // cached locally forever: the UI showed it, a reload re-read it from cache,
+        // and nothing ever reached the database. A failure that masked itself
+        // indefinitely on one machine while no one else saw the change.
+        (async () => {
+            const r = await dbWrite('/.netlify/functions/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settingsToSave),
+            });
+            if (!r.ok) {
+                setSaveError(r.error);
+                return;                       // do NOT cache what the server rejected
+            }
+            setSaveError('');
+            try {
+                // Scope by orgId so switching orgs never reads another org's cached settings
+                safeStorage.setItem(getStorageKey(), JSON.stringify(settingsToSave));
+            } catch(e) {}
+        })();
     }, [settings]);
 
     const handleUpdateFiscalYearStart = (month) => {
@@ -244,6 +260,7 @@ export function useSettings() {
         settings,
         setSettings,
         settingsReady,
+        settingsSaveError: saveError,
         loadSettings,
         handleUpdateFiscalYearStart,
         handleAddTaskType,
