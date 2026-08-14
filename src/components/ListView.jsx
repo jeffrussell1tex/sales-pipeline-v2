@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
+import { quarterOf, quarterRange, groupByQuarter } from '../utils/quarters';
 
 // ── Tokens — exact match to PipelineTab ──────────────────────
 const T = {
@@ -37,60 +38,6 @@ const T = {
 const stageColor = (s) => T.stages[s] || T.inkMuted;
 const eyebrow = { fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans };
 
-// ── Quarter helpers (fiscal-year-aware) ──────────────────────
-// All functions accept fiscalStart (1–12). fiscalStart=1 = January = calendar year.
-// fiscalStart=10 = October: Q1=Oct-Dec, Q2=Jan-Mar, Q3=Apr-Jun, Q4=Jul-Sep.
-// "Fiscal year" is named by the calendar year in which the FY ENDS.
-// e.g. Oct 2025 → FY2026, Jan 2026 → FY2026.
-
-function quarterOf(isoDate, fiscalStart) {
-    if (!isoDate) return null;
-    const d = new Date(isoDate.slice(0, 10) + 'T12:00:00'); // normalize to date-only before appending time
-    if (isNaN(d)) return null;
-    const month = d.getMonth() + 1; // 1-12
-    const calYear = d.getFullYear();
-    const monthsIn = (month - fiscalStart + 12) % 12;
-    const q = Math.floor(monthsIn / 3) + 1; // 1-4
-    let fiscalYear;
-    if (fiscalStart === 1) {
-        fiscalYear = calYear;
-    } else if (month >= fiscalStart) {
-        fiscalYear = calYear + 1; // e.g. Oct 2025 → FY2026
-    } else {
-        fiscalYear = calYear;     // e.g. Jan 2026 → FY2026
-    }
-    const key = `${fiscalYear}-Q${q}`;
-    const longLabel = `Q${q} ${fiscalYear}`;
-    return { key, longLabel, fiscalYear, q, calYear, month };
-}
-
-function quarterRange(fiscalYear, q, fiscalStart) {
-    // Start month of this fiscal quarter (1-based)
-    const startMonth = ((fiscalStart - 1 + (q - 1) * 3) % 12) + 1;
-    let startYear;
-    if (fiscalStart === 1) {
-        startYear = fiscalYear;
-    } else if (startMonth >= fiscalStart) {
-        startYear = fiscalYear - 1; // Q starts before FY end cal year
-    } else {
-        startYear = fiscalYear;
-    }
-    const start = new Date(startYear, startMonth - 1, 1);
-    const end   = new Date(startYear, startMonth - 1 + 3, 0); // 0th day of month 4 after start = last day of month 3
-    const fmt   = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `${fmt(start)} – ${fmt(end)}`;
-}
-
-function groupByQuarter(opps, fiscalStart) {
-    const map = new Map();
-    for (const o of opps) {
-        const qk = quarterOf(o.forecastedCloseDate, fiscalStart);
-        if (!qk) continue;
-        if (!map.has(qk.key)) map.set(qk.key, { ...qk, opps: [] });
-        map.get(qk.key).opps.push(o);
-    }
-    return [...map.values()].sort((a, b) => a.fiscalYear - b.fiscalYear || a.q - b.q);
-}
 function qSummary(opps) {
     const commitStages = ['Negotiation', 'Negotiation/Review', 'Contracts', 'Closing'];
     const total    = opps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
@@ -327,9 +274,10 @@ function QuarterRail({ groups, activeKey, onSelect, totalAll, currentKey, fiscal
                             )}
                         </div>
 
-                        {/* Date range */}
+                        {/* Date range — undated has none, and quarterRange would
+                            invent one from the 9999 sort sentinel. */}
                         <div style={{ fontSize: 10, color: T.inkMuted }}>
-                            {quarterRange(g.fiscalYear, g.q, fiscalStart)}
+                            {g.undated ? 'Not scheduled' : quarterRange(g.fiscalYear, g.q, fiscalStart)}
                         </div>
 
                         {/* Total + count */}
@@ -358,7 +306,9 @@ function StatStrip({ sum, activeGroup, fiscalStart }) {
         { label: 'Weighted',  value: fmtMoney(sum.weighted), sub: 'probability-adjusted',        accent: T.borderStrong },
         { label: 'Commit',    value: fmtMoney(sum.commit),   sub: 'Negotiation + Closing',       accent: T.ok           },
         { label: 'Quarter',   value: activeGroup ? activeGroup.longLabel : '—',
-                                                              sub: activeGroup ? quarterRange(activeGroup.fiscalYear, activeGroup.q, fiscalStart) : '',
+                                                              sub: !activeGroup ? ''
+                                                                   : activeGroup.undated ? 'no close date set'
+                                                                   : quarterRange(activeGroup.fiscalYear, activeGroup.q, fiscalStart),
                                                                                                   accent: T.gold         },
     ];
 
@@ -475,7 +425,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit }) {
                             ))
                     ) : (
                         <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13 }}>
-                            No deals closing this quarter.
+                            {activeGroup?.undated ? 'No deals without a close date.' : 'No deals closing this quarter.'}
                         </div>
                     )}
                 </div>

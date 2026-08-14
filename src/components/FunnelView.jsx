@@ -190,8 +190,15 @@ function StageRow({ sd, idx, total, prevCount, widthPct, color, expanded, onTogg
                             </div>
                             {/* Deal rows */}
                             {sd.deals.map(opp => {
-                                const days = Math.round((today - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000);
-                                const stale = days > 14;
+                                // Unguarded, this rendered "NaNd" for any deal with no
+                                // stageChangedDate — and `stale` was NaN > 14, i.e.
+                                // permanently false, so such a deal could never flag as
+                                // stalled. The stage summary further down already
+                                // guarded this; the row did not.
+                                const days = opp.stageChangedDate
+                                    ? Math.round((today - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000)
+                                    : null;
+                                const stale = days !== null && days > 14;
                                 const closeDays = opp.forecastedCloseDate
                                     ? Math.round((new Date(opp.forecastedCloseDate + 'T12:00:00') - today) / 86400000)
                                     : null;
@@ -233,7 +240,7 @@ function StageRow({ sd, idx, total, prevCount, widthPct, color, expanded, onTogg
                                         </div>
                                         {/* Days in stage */}
                                         <div style={{ fontSize: 12, color: stale ? T.danger : T.inkMid, fontWeight: stale ? 600 : 400, textAlign: 'right' }}>
-                                            {days}d
+                                            {days === null ? '—' : `${days}d`}
                                         </div>
                                         {/* Close date */}
                                         <div style={{ fontSize: 12, color: overdue ? T.danger : T.inkMid, fontWeight: overdue ? 600 : 400, textAlign: 'right' }}>
@@ -452,7 +459,9 @@ export default function FunnelView({
                         </div>
                     ) : (
                         allStuck.slice(0, 10).map(opp => {
-                            const days = Math.round((today - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000);
+                            const days = opp.stageChangedDate
+                                ? Math.round((today - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000)
+                                : null;
                             return (
                                 <div key={opp.id}
                                     style={{ padding: '10px 0', borderBottom: `1px solid ${T.border}`, cursor: 'pointer' }}
@@ -464,7 +473,7 @@ export default function FunnelView({
                                             {(opp.opportunityName || opp.account).split(' — ')[0]}
                                         </div>
                                         <div style={{ fontSize: 10, fontWeight: 700, color: T.danger, whiteSpace: 'nowrap', fontFamily: T.sans }}>
-                                            {days}d
+                                            {days === null ? '—' : `${days}d`}
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

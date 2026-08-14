@@ -595,28 +595,54 @@ export default function ModalLayer() {
                         const activePipelineId = allPipelines?.[0]?.id || 'default';
                         const totalProgress = newOpps.length + overwrites.length;
 
-                        const buildOpp = (o, existingId) => ({
-                            id: existingId || crypto.randomUUID(),
-                            pipelineId: activePipelineId,
-                            opportunityName: o.opportunityName || o.account || 'Imported Deal',
-                            account:              o.account              || '',
-                            salesRep:             o.salesRep             || currentUser,
-                            stage:                o.stage                || 'Qualification',
-                            arr:                  parseFloat(o.arr)      || 0,
-                            implementationCost:   parseFloat(o.implementationCost) || 0,
-                            forecastedCloseDate:  o.forecastedCloseDate  || '',
-                            products:             o.products             || '',
-                            notes:                o.notes                || '',
-                            nextSteps:            o.nextSteps            || '',
-                            territory:            o.territory            || '',
-                            vertical:             o.vertical             || '',
-                            probability:          parseInt(o.probability) || null,
-                            createdDate:          o.createdDate          || today,
-                            createdBy:            currentUser,
-                            stageHistory:         [],
-                            comments:             [],
-                            contactIds:           [],
-                        });
+                        // `existingId` set means OVERWRITE, and the two cases are not
+                        // the same record.
+                        //
+                        // This used to build one shape for both, ending in
+                        // `stageHistory: []`, `comments: []`, `contactIds: []`.
+                        // bulkUpsert derives its SET clause from the keys actually
+                        // supplied, so an overwrite WIPED the deal's stage history,
+                        // every comment on it, and its contact links — replacing them
+                        // with empty arrays a CSV cannot possibly carry.
+                        //
+                        // That was inert only because the array PUT branch did not
+                        // exist and every overwrite 400'd. Making that branch work
+                        // turned a dead path into a destructive one, so an overwrite
+                        // now sends only the columns the CSV actually describes and
+                        // the server merges the rest.
+                        const buildOpp = (o, existingId) => {
+                            const fromCsv = {
+                                opportunityName: o.opportunityName || o.account || 'Imported Deal',
+                                account:              o.account              || '',
+                                salesRep:             o.salesRep             || currentUser,
+                                stage:                o.stage                || 'Qualification',
+                                arr:                  parseFloat(o.arr)      || 0,
+                                implementationCost:   parseFloat(o.implementationCost) || 0,
+                                forecastedCloseDate:  o.forecastedCloseDate  || '',
+                                products:             o.products             || '',
+                                notes:                o.notes                || '',
+                                nextSteps:            o.nextSteps            || '',
+                                territory:            o.territory            || '',
+                                vertical:             o.vertical             || '',
+                                probability:          parseInt(o.probability) || null,
+                            };
+                            if (existingId) return { id: existingId, ...fromCsv };
+                            return {
+                                id: crypto.randomUUID(),
+                                pipelineId: activePipelineId,
+                                ...fromCsv,
+                                createdDate:          o.createdDate          || today,
+                                createdBy:            currentUser,
+                                // The deal entered its stage in this system today.
+                                // Leaving it unset rendered "NaNd" in the funnel and
+                                // made `stale` NaN > 14 — permanently false, so an
+                                // imported deal could never flag as stalled.
+                                stageChangedDate:     today,
+                                stageHistory:         [],
+                                comments:             [],
+                                contactIds:           [],
+                            };
+                        };
 
                         // POST new opps
                         if (newOpps.length > 0) {
