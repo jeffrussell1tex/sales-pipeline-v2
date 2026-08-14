@@ -11,3 +11,18 @@ const alsoSafe = async () => {
     const res = await dbFetch('/.netlify/functions/x', { method: 'POST' });
     if (!res.ok) throw new Error('nope');
 };
+
+// MUST NOT BE CAUGHT — aliased AND checked. Alias resolution must not become a
+// second false-positive class: the name changing says nothing about whether the
+// Response is read.
+import { dbFetch as req } from '../../utils/storage';
+
+const loadAliased = async () => {
+    const res = await req('/.netlify/functions/contacts');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+};
+
+// Concise arrow body that returns a value nobody discards — the enclosing
+// position is a return, not an expression statement.
+const chained = () => req('/.netlify/functions/x').then(r => r.ok ? r.json() : null);

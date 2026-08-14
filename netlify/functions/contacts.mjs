@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkUpsert } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert } from './_lib.mjs';
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -63,10 +63,14 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
             // Bulk insert — body is an array
             if (Array.isArray(data)) {
-                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ contacts: [], inserted: 0 }) };
-                const rows = data.map(d => ({ ...sanitize(d), orgId }));
-                const inserted = await db.insert(contacts).values(rows).onConflictDoNothing().returning();
-                return { statusCode: 201, headers, body: JSON.stringify({ contacts: inserted, inserted: inserted.length }) };
+                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ contacts: [], inserted: 0, failed: [] }) };
+                if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
+                // Chunked with per-row isolation by bisection — see bulkInsert in
+                // _lib.mjs (18b8). The removed onConflictDoNothing() could never
+                // fire: the only unique constraint is the id primary key and every
+                // id is a fresh randomUUID from the client.
+                const result = await bulkInsert({ table: contacts, rows: data.map(d => sanitize(d)), orgId });
+                return { statusCode: 201, headers, body: JSON.stringify(result) };
             }
             // Single insert
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };

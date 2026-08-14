@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { accounts, settings as settingsTable, opportunities, contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkUpsert } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert } from './_lib.mjs';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
 // Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
@@ -21,8 +21,13 @@ const cleanWebsite = (w) => {
 // Reads assignmentRules from settings and returns territory/rep assignment if a rule matches.
 // Rule shape: { field: 'industry'|'verticalMarket'|'name', contains: string, territory: string, rep?: string }
 // First matching rule wins. Only runs if 'territory-rules' flag is enabled (default: true).
-async function resolveTerritory(orgId, account) {
-    if (account.assignedTerritory) return null; // already assigned, do not override
+//
+// Split into load + apply so the bulk path can read the rules ONCE for the whole
+// import rather than once per row. The bulk POST previously skipped territory
+// assignment altogether — every CSV-imported account landed unassigned while an
+// identical account created through the UI got a territory, which reads as the
+// rules being broken rather than as an import gap.
+async function loadTerritoryRules(orgId) {
     try {
         const rows = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
         if (!rows.length) return null;
@@ -30,20 +35,31 @@ async function resolveTerritory(orgId, account) {
         if (!Array.isArray(rules) || rules.length === 0) return null;
         const featureFlags = rows[0].extra?.featureFlags || {};
         if (featureFlags['territory-rules'] === false) return null;
-        for (const rule of rules) {
-            if (!rule.territory || !rule.contains) continue;
-            const haystack = (account[rule.field] || '').toLowerCase();
-            if (haystack.includes(rule.contains.toLowerCase())) {
-                return {
-                    assignedTerritory: rule.territory,
-                    assignedRep:       rule.rep || account.assignedRep || null,
-                };
-            }
-        }
+        return rules;
     } catch (e) {
-        console.error('resolveTerritory error:', e.message);
+        console.error('loadTerritoryRules error:', e.message);
+        return null;
+    }
+}
+
+function applyTerritoryRules(rules, account) {
+    if (!rules || account.assignedTerritory) return null;   // already assigned, do not override
+    for (const rule of rules) {
+        if (!rule.territory || !rule.contains) continue;
+        const haystack = (account[rule.field] || '').toLowerCase();
+        if (haystack.includes(rule.contains.toLowerCase())) {
+            return {
+                assignedTerritory: rule.territory,
+                assignedRep:       rule.rep || account.assignedRep || null,
+            };
+        }
     }
     return null;
+}
+
+async function resolveTerritory(orgId, account) {
+    if (account.assignedTerritory) return null; // already assigned, do not override
+    return applyTerritoryRules(await loadTerritoryRules(orgId), account);
 }
 
 export const handler = async (event) => {
@@ -104,11 +120,18 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
             // Bulk insert — body is an array
             if (Array.isArray(data)) {
-                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ accounts: [], inserted: 0 }) };
-                const rows = data.map(d => ({ ...sanitize(d), orgId }));
-                // onConflictDoNothing skips duplicates instead of erroring
-                const inserted = await db.insert(accounts).values(rows).onConflictDoNothing().returning();
-                return { statusCode: 201, headers, body: JSON.stringify({ accounts: inserted, inserted: inserted.length }) };
+                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ accounts: [], inserted: 0, failed: [] }) };
+                if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
+                // Rules read once for the batch, not once per row.
+                const rules = await loadTerritoryRules(orgId);
+                const rows = data.map(d => {
+                    const clean = sanitize(d);
+                    return { ...clean, ...(applyTerritoryRules(rules, clean) || {}) };
+                });
+                // Chunked with per-row isolation by bisection — see bulkInsert in
+                // _lib.mjs (18b8). One malformed row no longer discards the import.
+                const result = await bulkInsert({ table: accounts, rows, orgId });
+                return { statusCode: 201, headers, body: JSON.stringify(result) };
             }
             // Single insert
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };

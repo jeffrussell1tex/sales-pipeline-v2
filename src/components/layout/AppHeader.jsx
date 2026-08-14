@@ -439,10 +439,18 @@ export default function AppHeader({
                     <div onClick={() => {
                             setShowProfilePanel(v => !v);
                             setProfilePanelTab('profile');
+                            // Timezone drift is corrected through saveProfile, not a
+                            // hand-rolled PUT. The previous version dynamically imported
+                            // storage.js to alias dbFetch as `df` — three problems in one
+                            // line: the Response was discarded into an empty catch so a
+                            // 403 was invisible, the alias hid the call from
+                            // check:dbfetch entirely (18b1/18b11), and the dynamic import
+                            // bought nothing because ~80 modules import storage.js
+                            // statically, so rollup inlines it and warns on every build.
+                            // It also never updated myProfile, so the PUT re-fired on
+                            // every avatar click for the rest of the session.
                             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                            if (tz && myProfile && myProfile.timezone !== tz) {
-                                import('../../utils/storage').then(({ dbFetch: df }) => df('/.netlify/functions/users?me=true', { method: 'PUT', body: JSON.stringify({ ...(myProfile||{}), timezone: tz }) }).catch(() => {}));
-                            }
+                            if (tz && myProfile && myProfile.timezone !== tz) saveProfile({ timezone: tz });
                             setProfileForm({ firstName: myProfile?.firstName || currentUser.split(' ')[0] || '', lastName: myProfile?.lastName || currentUser.split(' ').slice(1).join(' ') || '', email: myProfile?.email || clerkUser?.emailAddresses?.[0]?.emailAddress || '', phone: myProfile?.phone || '', mobile: myProfile?.mobile || '', title: myProfile?.title || '' });
                         }}
                         title={`${currentUser} · click for profile`}

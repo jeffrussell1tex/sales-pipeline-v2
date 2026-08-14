@@ -5,7 +5,7 @@ import { verifyAuth, canSeeAll, isManager, isReadOnly, requireRole, requireWrite
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
-import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, bulkInsert, bulkUpsert } from './_lib.mjs';
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -164,10 +164,13 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
             // Bulk insert — body is an array
             if (Array.isArray(data)) {
-                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ opportunities: [], inserted: 0 }) };
-                const rows = data.map(d => ({ ...sanitize(d), orgId }));
-                const inserted = await db.insert(opportunities).values(rows).onConflictDoNothing().returning();
-                return { statusCode: 201, headers, body: JSON.stringify({ opportunities: inserted, inserted: inserted.length }) };
+                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ opportunities: [], inserted: 0, failed: [] }) };
+                if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
+                // Same unbatched single statement as accounts/contacts — the
+                // handoff named two files, this is the third. See bulkInsert in
+                // _lib.mjs (18b8).
+                const result = await bulkInsert({ table: opportunities, rows: data.map(d => sanitize(d)), orgId });
+                return { statusCode: 201, headers, body: JSON.stringify(result) };
             }
             // Single insert
             if (!data.id) {
@@ -210,6 +213,29 @@ export const handler = async (event) => {
         // ── PUT (update) ──────────────────────────────────────────────────────
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
+
+            // Bulk update — body is an array. accounts.mjs and contacts.mjs both
+            // grew this branch last session; opportunities did not, so the CSV
+            // importer's overwrite path (ModalLayer sends an array here) hit
+            // `!data.id` on an Array and 400'd every single time. Overwriting
+            // opportunities by import has never once worked.
+            if (Array.isArray(data)) {
+                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ updated: 0, notFound: [], forbidden: [] }) };
+                if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
+                // Reps may only overwrite their own or unassigned deals — the same
+                // salesRep check the single-record path applies below, resolved once
+                // for the batch.
+                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId);
+                const result = await bulkUpsert({
+                    table: opportunities,
+                    rows: data.map(d => sanitize(d)),
+                    orgId,
+                    ownerColumn: opportunities.salesRep,
+                    callerName,
+                });
+                return { statusCode: 200, headers, body: JSON.stringify(result) };
+            }
+
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }

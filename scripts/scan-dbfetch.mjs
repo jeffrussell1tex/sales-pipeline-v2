@@ -138,7 +138,7 @@ const responseUsedAsJson = (node) => {
       if (n.callee.property.name === 'then') bad.push(...nonResponseProps(n.arguments?.[0]));
       n = n.callee.object; continue;
     }
-    if (n.type === 'CallExpression' && n.callee?.name === 'dbFetch') return [...new Set(bad)];
+    if (isDbFetchCall(n)) return [...new Set(bad)];
     return [];
   }
   return [];
@@ -159,7 +159,7 @@ const underlyingDbFetch = (node) => {
       if (n.callee.property.name === 'then' && consumesResponse(n.arguments?.[0])) consumed = true;
       n = n.callee.object; continue;
     }
-    if (n.type === 'CallExpression' && n.callee?.name === 'dbFetch') return !consumed;
+    if (isDbFetchCall(n)) return !consumed;
     return false;
   }
   return false;
@@ -182,6 +182,67 @@ const ignoredLines = (src) => {
   return out;
 };
 
+// dbFetch is not always CALLED `dbFetch`. AppHeader had:
+//
+//     import('../../utils/storage').then(({ dbFetch: df }) =>
+//         df('/.netlify/functions/users?me=true', { … }).catch(() => {}));
+//
+// a real discarded Response that this scanner walked straight past, because it
+// matched the callee NAME. A gate reporting 0 is a claim about its matching as
+// much as about the code (18b11), so resolve every local binding of dbFetch:
+//
+//   import { dbFetch } from …            import { dbFetch as df } from …
+//   const { dbFetch: df } = await import(…)   .then(({ dbFetch: df }) => …)
+//   const df = dbFetch
+//
+// FILE-SCOPED, not lexically scoped. A different `df` elsewhere in the same file
+// would be checked too — deliberately the safe direction: a false positive is
+// visible and gets triaged, a false negative reads as "clean" forever.
+const collectAliases = (root) => {
+  const names = new Set(['dbFetch']);
+  const nodes = [];
+  const stack = [root], seen = new Set();
+  while (stack.length) {
+    const n = stack.pop();
+    if (!n || typeof n !== 'object' || seen.has(n)) continue;
+    seen.add(n);
+    if (Array.isArray(n)) { n.forEach(c => stack.push(c)); continue; }
+    nodes.push(n);
+    for (const k of Object.keys(n)) {
+      if (['loc', 'start', 'end'].includes(k)) continue;
+      const c = n[k];
+      if (c && typeof c === 'object') stack.push(c);
+    }
+  }
+  for (const n of nodes) {
+    // import { dbFetch as df } from '…'
+    if (n.type === 'ImportSpecifier' && n.imported?.name === 'dbFetch' && n.local?.name) {
+      names.add(n.local.name);
+    }
+    // { dbFetch: df } — destructured from a dynamic import, an await, or a param.
+    if (n.type === 'ObjectPattern') {
+      for (const prop of n.properties || []) {
+        if (prop.type === 'ObjectProperty' && prop.key?.name === 'dbFetch' &&
+            prop.value?.type === 'Identifier') names.add(prop.value.name);
+      }
+    }
+  }
+  // const df = dbFetch — resolve transitively; two passes settles any realistic
+  // chain and cannot loop.
+  for (let pass = 0; pass < 2; pass++) {
+    for (const n of nodes) {
+      if (n.type === 'VariableDeclarator' && n.id?.type === 'Identifier' &&
+          n.init?.type === 'Identifier' && names.has(n.init.name)) names.add(n.id.name);
+    }
+  }
+  return names;
+};
+
+let ALIASES = new Set(['dbFetch']);
+const isDbFetchCall = (n) =>
+  (n?.type === 'CallExpression' || n?.type === 'OptionalCallExpression') &&
+  n.callee?.type === 'Identifier' && ALIASES.has(n.callee.name);
+
 const findStatements = (root) => {
   const out = [], stack = [root], seen = new Set();
   while (stack.length) {
@@ -199,6 +260,40 @@ const findStatements = (root) => {
   return out;
 };
 
+// The second half of the AppHeader blind spot, and the same shape that made
+// check-tdz crash on concise arrows: `x => df(…)` has no ExpressionStatement
+// anywhere, so findStatements never saw it.
+//
+// The rule is narrow and provable. Inside an expression STATEMENT the value is
+// already thrown away, so anything a .then()/.catch()/.finally() callback returns
+// into that chain is thrown away with it — there is no caller left to check it.
+// Only concise (non-block) bodies qualify; block bodies contain real statements
+// and are already covered above.
+const findDiscardedBodies = (stmt) => {
+  const out = [], stack = [stmt], seen = new Set();
+  while (stack.length) {
+    const n = stack.pop();
+    if (!n || typeof n !== 'object' || seen.has(n)) continue;
+    seen.add(n);
+    if (Array.isArray(n)) { n.forEach(c => stack.push(c)); continue; }
+    if ((n.type === 'CallExpression' || n.type === 'OptionalCallExpression') &&
+        (n.callee?.type === 'MemberExpression' || n.callee?.type === 'OptionalMemberExpression') &&
+        ['then', 'catch', 'finally'].includes(n.callee.property?.name)) {
+      for (const cb of n.arguments || []) {
+        if (cb?.type === 'ArrowFunctionExpression' && cb.body && cb.body.type !== 'BlockStatement') {
+          out.push(cb.body);
+        }
+      }
+    }
+    for (const k of Object.keys(n)) {
+      if (['loc', 'start', 'end'].includes(k)) continue;
+      const c = n[k];
+      if (c && typeof c === 'object') stack.push(c);
+    }
+  }
+  return out;
+};
+
 const byFile = new Map();
 const jsonMisuse = [];
 let total = 0;
@@ -206,16 +301,32 @@ for (const f of files) {
   let ast;
   try { ast = parse(fs.readFileSync(f, 'utf8'), { sourceType: 'module', plugins: ['jsx'] }); }
   catch { continue; }
+  ALIASES = collectAliases(ast.program);
   const stmts = findStatements(ast.program);
   const skip = ignoredLines(fs.readFileSync(f, 'utf8'));
-  const hits = stmts.filter(s => underlyingDbFetch(s.expression) && !skip.has(s.loc.start.line))
-    .map(s => s.loc.start.line);
+
+  // Every position whose value is discarded: the statement itself, plus any
+  // concise arrow body returning into a chain that statement throws away.
+  // Deduped by line — one statement must not report the same defect twice.
+  const positions = [];
+  for (const st of stmts) {
+    positions.push(st.expression);
+    positions.push(...findDiscardedBodies(st));
+  }
+
+  const hits = [...new Set(positions
+    .filter(e => underlyingDbFetch(e) && !skip.has(e.loc.start.line))
+    .map(e => e.loc.start.line))].sort((a, b) => a - b);
   if (hits.length) { byFile.set(f, hits); total += hits.length; }
 
   // Second class, reported separately: the Response read as if it were JSON.
-  for (const st of stmts) {
-    const props = responseUsedAsJson(st.expression);
-    if (props.length) jsonMisuse.push({ file: f, line: st.loc.start.line, props });
+  const seenMisuse = new Set();
+  for (const e of positions) {
+    const props = responseUsedAsJson(e);
+    if (props.length && !seenMisuse.has(e.loc.start.line)) {
+      seenMisuse.add(e.loc.start.line);
+      jsonMisuse.push({ file: f, line: e.loc.start.line, props });
+    }
   }
 }
 

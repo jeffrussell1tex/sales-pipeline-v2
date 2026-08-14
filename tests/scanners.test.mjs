@@ -187,6 +187,20 @@ test('scan-dbfetch catches a Response read as if it were JSON', () => {
     assert.match(r.stdout, /reads \.reports on a Response/);
 });
 
+test('scan-dbfetch resolves aliases and concise arrow bodies', () => {
+    // The fourth false-negative class, and the one that proves the point: the gate
+    // reported 0 across the whole tree while AppHeader.jsx:444 discarded a Response
+    // into an empty catch. Two blind spots on one line — dbFetch aliased to `df`
+    // through a destructured dynamic import, and a concise arrow body with no
+    // ExpressionStatement for findStatements to find.
+    //
+    // Mutation-tested both ways: disabling alias resolution drops this to 0,
+    // disabling concise bodies drops it to 2.
+    const r = run('scripts/scan-dbfetch.mjs', [`${FIX}/dbfetch-aliased.jsx`]);
+    assert.match(r.stdout, /3 discarded-Response/);
+    assert.match(r.stdout, /lines 11, 18, 24/);
+});
+
 test('scan-dbfetch does not flag a checked Response', () => {
     // THE false-positive class. `.then(r => { if (!r.ok) throw })` fully checks the
     // Response; the scanner used to unwrap straight past it to the dbFetch beneath.

@@ -1675,6 +1675,65 @@ partial payload.
 
 ---
 
+## 18b14. Assess an Advisory Against the Code, Not the Version Range
+
+`npm audit` matches version ranges. It cannot tell whether the vulnerable *code
+path* is reachable, so its severity is an upper bound, not an assessment.
+
+The Clerk round makes the point in both directions.
+
+**A critical that did not apply.** `GHSA-vqx2-fgx2-5wq9`, CVSS 9.1, flagged against
+`@clerk/shared`. The actual flaw is `createRouteMatcher` in `@clerk/nextjs`,
+`@clerk/nuxt` and `@clerk/astro` — none of which are installed. `@clerk/shared` is
+flagged only because it hosts the code. Reachability: nil.
+
+**A high the previous handoff missed.** `GHSA-w24r-5266-9c3c` is an authorization
+bypass in Clerk's `has()` / `auth.protect()` when combining reverification with
+role, permission, plan or feature checks. It was the one most worth checking here,
+because it is specifically about *organization* checks and this app is org-scoped
+throughout. It does not apply — but only because authorization is the homegrown
+`requireRole()` over `verifyToken`, never Clerk's `has()`.
+
+### The procedure
+
+1. **Read the advisory, not the audit line.** `npm audit` gives you a package and a
+   range. The advisory names the vulnerable *function*.
+2. **Grep for that function.** Not for the package — for `createRouteMatcher`,
+   `has(`, `auth.protect(`, `clerkFrontendApiProxy`. Confirm each hit is really the
+   library's: the only `has()` here is a local
+   `(v) => String(v ?? '').trim() !== ''` in two merge modals, which an
+   assessment-by-name would have flagged as a false hit.
+3. **Record WHY it does not apply, not that it does not.** "Not affected" ages into
+   an unverifiable claim. "Not affected because authorization is `requireRole()`
+   over `verifyToken`, never `has()`" stays checkable, and tells the next person
+   what change would make it apply.
+4. **Patch anyway when the patch is cheap.** Reachability today is not reachability
+   after the next refactor.
+5. **Never `npm audit fix --force`.** It resolves dev-tooling advisories by
+   installing major versions — `vite@8` here. Plain `npm audit fix` cleared all
+   three Clerk advisories with no `package.json` change at all; the existing carets
+   already permitted the patched versions.
+
+### After any auth-layer bump
+
+Version ranges say nothing about runtime behaviour. Confirm the APIs the app
+actually calls still resolve, and that the claim the tenant boundary depends on is
+unchanged:
+
+```js
+// payload.o.id is how every org boundary is drawn.
+// verifyToken calls decodeJwt and returns claims UNMODIFIED, so the shape comes
+// from Clerk's server-side token format, not the SDK version — an SDK bump cannot
+// change it. auth.mjs also falls back through org_id / active_organization_id.
+```
+
+Then test it by hand: sign in, switch orgs, confirm scoping holds, and confirm a
+non-admin still receives 403s. No automated test covers the auth layer (Layer 3 E2E
+is still blocked on automating Clerk login), so a manual pass is the only evidence
+that exists.
+
+---
+
 ## 22. How to Work on This Codebase
 
 ### Where these docs live

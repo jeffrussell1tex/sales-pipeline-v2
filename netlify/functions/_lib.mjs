@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { db } from '../../db/index.js';
 import { auditLog, users } from '../../db/schema.js';
 import { eq, and, inArray, sql } from 'drizzle-orm';
+import { BULK_CHUNK, bulkInsert as coreBulkInsert } from './_bulk.mjs';
 
 // Browser origins allowed to call the API. Kept in sync with the Clerk
 // authorizedParties list in auth.mjs. Exported for the CORS follow-up; any
@@ -138,8 +139,11 @@ export async function withNumberRetry(attempt, { tries = 5, label = 'record numb
 //  - ownership is resolved once for the whole batch rather than per row.
 //  - CHUNK x columns must stay under 65,535. 400 x ~37 = ~14,800, which leaves
 //    room for the schema to roughly quadruple before this needs revisiting.
-const BULK_CHUNK = 400;
 const BULK_IMMUTABLE = new Set(['id', 'orgId', 'createdAt']);
+
+// bulkInsert lives in _bulk.mjs so it is testable without a database — see the
+// note at the top of that file. This binds the real client; callers pass none.
+export const bulkInsert = (args) => coreBulkInsert({ client: db, ...args });
 
 export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerName = null }) {
     if (!Array.isArray(rows) || rows.length === 0) return { updated: 0, notFound: [], forbidden: [] };

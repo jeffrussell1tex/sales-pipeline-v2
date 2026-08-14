@@ -25,11 +25,12 @@ import ContactMergeReviewModal from '../modals/ContactMergeReviewModal';
 // The previous path (saveAll) sent ONE PUT PER RECORD at CONCURRENCY 3. Re-importing
 // a 1,504-row contacts file meant ~500 sequential round-trips — 75s to 2.5min with
 // the tab largely unresponsive. The array branch of PUT takes 400 rows per request,
-// turning that into 4. See bulkUpsert in netlify/functions/_lib.mjs.
+// turning that into 4. See bulkUpsert in netlify/functions/_lib.mjs. The NEW-record
+// path had exactly the same shape and is now postNew, below.
 //
 // Module scope, not inside the component: both onImportContacts and onImportAccounts
 // need it, and a helper redefined on every render is a closure hazard for no benefit.
-const BULK_CHUNK = 400;   // must match BULK_CHUNK in _lib.mjs
+const BULK_CHUNK = 400;   // must match BULK_CHUNK in netlify/functions/_bulk.mjs
 
 const saveBulk = async (url, items, progressOffset = 0, progressTotal = items.length) => {
     let updated = 0, notFound = 0, forbidden = 0, done = 0;
@@ -57,6 +58,57 @@ const saveBulk = async (url, items, progressOffset = 0, progressTotal = items.le
         }
     }
     return { updated, notFound, forbidden };
+};
+
+// POST new records in chunks, and report EXACTLY what landed.
+//
+// Every import handler used to do `setX(prev => [...prev, ...rows])` BEFORE the
+// request and never roll it back, so a failed POST left the UI showing records
+// that were never saved — the on-screen count was untrustworthy until a hard
+// refresh. Rolling back is the obvious fix and the wrong one: on a partial
+// failure the client cannot know which rows to remove.
+//
+// The server now returns `insertedIds`, so there is nothing to guess and nothing
+// to roll back. State is applied from the server's answer, after the write.
+//
+// Never throws. It returns what landed so the caller can commit that to state
+// FIRST and report the failure second — throwing from inside the loop would
+// discard the chunks that did succeed.
+const postNew = async (url, items, progressOffset = 0, progressTotal = items.length) => {
+    const landed = [];
+    const failed = [];
+    let error = null, done = 0;
+
+    for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
+        const chunk = items.slice(i, i + BULK_CHUNK);
+        const r = await dbFetch(url, { method: 'POST', body: JSON.stringify(chunk) });
+        // dbFetch returns a Response and NEVER throws on 4xx/5xx — check res.ok.
+        let body = null;
+        try { body = await r.json(); } catch { /* non-JSON body */ }
+
+        if (!r.ok) {
+            error = body?.error
+                ? (body.requestId ? `${body.error} (ref ${body.requestId})` : body.error)
+                : `Bulk import failed (${r.status}).`;
+            break;
+        }
+
+        if (Array.isArray(body?.insertedIds)) {
+            const ids = new Set(body.insertedIds);
+            for (const row of chunk) (ids.has(row.id) ? landed : failed).push(row);
+        } else {
+            // Older deploy with no insertedIds — fall back to the count.
+            const n = body?.inserted ?? chunk.length;
+            landed.push(...chunk.slice(0, n));
+            failed.push(...chunk.slice(n));
+        }
+
+        done += chunk.length;
+        if (typeof window.__importProgressCb === 'function') {
+            window.__importProgressCb(progressOffset + done, progressTotal);
+        }
+    }
+    return { landed, failed, error };
 };
 
 export default function ModalLayer() {
@@ -413,50 +465,12 @@ export default function ModalLayer() {
                     opportunities={opportunities}
                     onClose={() => { document.activeElement?.blur(); setShowCsvImportModal(false); }}
                     onImportContacts={async (newContacts, overwrites = []) => {
-                        // Lower concurrency to avoid Neon connection limits with large imports
-                        const CONCURRENCY = 3;   // max simultaneous DB calls
-                        const BATCH_SIZE = 50;   // records processed per progress tick
-                        const RETRY = 2;         // retry each record up to 2 times on failure
-                        const DELAY_MS = 100;    // ms pause between batches
-
-                        const saveOne = async (url, method, item, retriesLeft = RETRY) => {
-                            try {
-                                const r = await dbFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
-                                if (!r || !r.ok) throw new Error('HTTP ' + (r?.status || 'no response'));
-                                return true;
-                            } catch (e) {
-                                if (retriesLeft > 0) {
-                                    await new Promise(res => setTimeout(res, 300));
-                                    return saveOne(url, method, item, retriesLeft - 1);
-                                }
-                                return false;
-                            }
-                        };
-
-                        const saveAll = async (url, method, items, progressOffset = 0, progressTotal = items.length) => {
-                            let failed = 0, done = 0;
-                            for (let i = 0; i < items.length; i += BATCH_SIZE) {
-                                const batch = items.slice(i, i + BATCH_SIZE);
-                                const queue = [...batch];
-                                const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-                                    while (queue.length > 0) {
-                                        const item = queue.shift();
-                                        const ok = await saveOne(url, method, item);
-                                        if (!ok) failed++;
-                                        done++;
-                                        if (typeof window.__importProgressCb === 'function') {
-                                            window.__importProgressCb(progressOffset + done, progressTotal);
-                                        }
-                                    }
-                                });
-                                await Promise.all(workers);
-                                if (i + BATCH_SIZE < items.length) {
-                                    await new Promise(res => setTimeout(res, DELAY_MS));
-                                }
-                            }
-                            return failed;
-                        };
-
+                        // This path never used the bulk endpoint at all. It POSTed
+                        // one record at a time at concurrency 3, with per-record
+                        // retries and a 100ms pause every 50 rows — ~500 round-trips
+                        // and roughly a minute of wall clock for a 1,500-row file,
+                        // against the same array endpoint the accounts importer has
+                        // been using all along. postNew chunks it into 4.
                         const totalProgress = newContacts.length + overwrites.length;
 
                         // Step 1: Auto-add new companies to accounts first (from newContacts only — overwrites keep existing account linkage)
@@ -470,8 +484,13 @@ export default function ModalLayer() {
                                 verticalMarket: '', address: '', city: '', state: '',
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
-                            setAccounts(prev => [...prev, ...newAccts]);
-                            await saveAll('/.netlify/functions/accounts', 'POST', newAccts);
+                            const acc = await postNew('/.netlify/functions/accounts', newAccts);
+                            if (acc.landed.length > 0) setAccounts(prev => [...prev, ...acc.landed]);
+                            // A company that failed here would leave its contacts
+                            // pointing at an account that does not exist, so this
+                            // stops rather than importing them orphaned.
+                            if (acc.error) throw new Error(acc.error);
+                            if (acc.failed.length > 0) throw new Error(`${acc.failed.length} of ${newAccts.length} new companies failed to save, so their contacts were not imported. Fix those rows and re-import.`);
                         }
 
                         // Step 2: POST new contacts
@@ -481,10 +500,11 @@ export default function ModalLayer() {
                             createdAt: new Date().toISOString()
                         }));
                         if (contactsWithIds.length > 0) {
-                            setContacts(prev => [...prev, ...contactsWithIds]);
-                            const contactsFailed = await saveAll('/.netlify/functions/contacts', 'POST', contactsWithIds, 0, totalProgress);
-                            if (contactsFailed > 0) {
-                                throw new Error(`${contactsFailed} of ${contactsWithIds.length} contacts failed to save. The rest imported successfully — try re-importing the failed records.`);
+                            const { landed, failed, error } = await postNew('/.netlify/functions/contacts', contactsWithIds, 0, totalProgress);
+                            if (landed.length > 0) setContacts(prev => [...prev, ...landed]);
+                            if (error) throw new Error(error);
+                            if (failed.length > 0) {
+                                throw new Error(`${failed.length} of ${contactsWithIds.length} contacts failed to save. The rest imported successfully — re-import the failed rows.`);
                             }
                         }
 
@@ -532,22 +552,24 @@ export default function ModalLayer() {
                         const allWithIds = [...parentsWithIds, ...subsWithIds];
 
                         if (allWithIds.length > 0) {
-                            setAccounts(prev => [...prev, ...allWithIds]);
                             if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, totalProgress);
-
-                            const r = await dbFetch('/.netlify/functions/accounts', {
-                                method: 'POST',
-                                body: JSON.stringify(allWithIds),
-                            });
-                            const result = await r.json();
-
-                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(allWithIds.length, totalProgress);
-
-                            if (!r.ok) throw new Error(result.error || 'Bulk import failed. Please try again.');
-
-                            const insertedCount = result.inserted ?? result.accounts?.length ?? allWithIds.length;
-                            const failedCount = allWithIds.length - insertedCount;
-                            if (failedCount > 0) throw new Error(`${failedCount} of ${allWithIds.length} accounts failed to save. The rest imported successfully.`);
+                            const { landed, failed, error } = await postNew('/.netlify/functions/accounts', allWithIds, 0, totalProgress);
+                            // Commit what actually saved before surfacing the failure.
+                            if (landed.length > 0) setAccounts(prev => [...prev, ...landed]);
+                            if (error) throw new Error(error);
+                            if (failed.length > 0) {
+                                // parentAccountId is a plain text column, not a foreign
+                                // key, so a sub-account whose parent failed lands with a
+                                // parent id that points at nothing — and the hierarchy
+                                // silently looks wrong rather than erroring. Name the
+                                // parents so the re-import fixes the cause, not the
+                                // symptom.
+                                const lostParents = failed.filter(f => parentsWithIds.some(p => p.id === f.id));
+                                const orphaned = lostParents.length > 0
+                                    ? ` ${lostParents.length} of them are parent accounts (${lostParents.slice(0, 3).map(p => p.name).join(', ')}${lostParents.length > 3 ? '…' : ''}), so any sub-accounts under them imported without a parent link.`
+                                    : '';
+                                throw new Error(`${failed.length} of ${allWithIds.length} accounts failed to save. The rest imported successfully — re-import the failed rows.${orphaned}`);
+                            }
                         }
 
                         // Overwrites — PUT each with its existing id
@@ -599,22 +621,11 @@ export default function ModalLayer() {
                         // POST new opps
                         if (newOpps.length > 0) {
                             const oppsWithIds = newOpps.map(o => buildOpp(o, null));
-                            setOpportunities(prev => [...prev, ...oppsWithIds]);
                             if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, totalProgress);
-
-                            const r = await dbFetch('/.netlify/functions/opportunities', {
-                                method: 'POST',
-                                body: JSON.stringify(oppsWithIds),
-                            });
-                            const result = await r.json();
-
-                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(newOpps.length, totalProgress);
-
-                            if (!r.ok) throw new Error(result.error || 'Bulk import failed. Please try again.');
-
-                            const insertedCount = result.inserted ?? result.opportunities?.length ?? oppsWithIds.length;
-                            const failedCount = oppsWithIds.length - insertedCount;
-                            if (failedCount > 0) throw new Error(`${failedCount} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully.`);
+                            const { landed, failed, error } = await postNew('/.netlify/functions/opportunities', oppsWithIds, 0, totalProgress);
+                            if (landed.length > 0) setOpportunities(prev => [...prev, ...landed]);
+                            if (error) throw new Error(error);
+                            if (failed.length > 0) throw new Error(`${failed.length} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully — re-import the failed rows.`);
                         }
 
                         // PUT overwrites

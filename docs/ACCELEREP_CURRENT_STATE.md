@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** August 13, 2026  
-**Batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · CSV auto-mapping · bulk PUT · 19 → 69 tests
+**Batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · **Clerk advisories cleared — Production migration unblocked** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · 19 → 69 tests
 **Prior batch:** SalesManagerTab hoist, SPIFF persistence & claim plumbing
 **Prior batch:** inline-component audit — **the backlog named the wrong three files**; 81 raw findings triaged to 5 user-visible, 3 fixed · new `check:inline` scanner
 **Prior batch:** calendar disconnect (endpoint already existed — client wiring only) · personal email signature, escaped server-side · record-number generators moved from full-table scan to indexed `MAX` · **`mobile` was being wiped on every profile save**
@@ -135,6 +135,45 @@ with `set: { ...updateData }`. Five cascade sites sent
 null** — wiping names, emails, phones, signatures and quotas. Every one sat in
 `catch(e) {}`. Fixed with `mergeForUpdate()` **in the endpoint**, so every caller
 inherits it. Test data only; no production damage. See §18b13.
+
+### 0.10 Clerk advisories cleared — Production migration unblocked
+
+Patched with **`npm audit fix`** (never `--force`): `@clerk/backend` 3.0.1 →
+3.16.5, `@clerk/clerk-react` 5.61.3 → 5.61.9. **`package.json` did not change** —
+the existing carets already permitted both, so only `package-lock.json` moved.
+
+`@clerk/shared` resolves to two nested copies, which is correct and not a conflict:
+`3.47.8` under clerk-react and `4.29.0` under backend. Both are above their patched
+thresholds (3.47.4 / 4.8.1).
+
+**Three advisories, not the two the handoff listed. None applied — and the reason
+matters more than the verdict:**
+
+| Advisory | Severity | Why not affected |
+|---|---|---|
+| `GHSA-vqx2-fgx2-5wq9` (CVE-2026-41248) | Critical, 9.1 | The flaw is `createRouteMatcher` in `@clerk/nextjs`/`nuxt`/`astro`. None installed, zero references. `@clerk/shared` is flagged only because it hosts the code. |
+| `GHSA-w24r-5266-9c3c` (CVE-2026-42349) | High, 7.6 | Bypass in Clerk's `has()` / `auth.protect()` when combining reverification with role, permission, plan or feature checks. Neither is used. The only `has()` in the codebase is a local `(v) => String(v ?? '').trim() !== ''` in the two merge modals. |
+| `GHSA-gjxx-92w9-8v8f` | High | SSRF in the opt-in `clerkFrontendApiProxy`. Not enabled; no `proxyUrl` anywhere. |
+
+**The handoff missed `GHSA-w24r`, and it was the one most worth checking** — it is
+specifically about *organization* checks, and this app is org-scoped throughout. It
+does not apply only because authorization is the homegrown `requireRole()` over
+`verifyToken`, never Clerk's `has()`. That is the load-bearing fact; "not affected"
+without it is an assertion, not a finding.
+
+Also checked and not applicable: `GHSA-9mp4-77wg-rwx9` (Clerk webhook
+verification). The only webhook verification here is Resend/Svix HMAC in
+`email-inbound.mjs`.
+
+**`payload.o.id` is unaffected by the SDK bump.** `verifyToken` calls `decodeJwt`
+and returns claims unmodified, so the claim shape is set by Clerk's *server-side*
+token format, not the SDK version. `auth.mjs` also falls back through `org_id` and
+`active_organization_id`.
+
+Verified: 69 tests, all five gates, build clean, and the Clerk APIs the app calls
+(`verifyToken`, `createClerkClient`, `users.getUser`, `users.getUserList`,
+`organizations.getOrganization`) all still resolve. Manually tested on dev — sign
+in, org switch, org scoping, and a non-admin still receiving 403s.
 
 ---
 
@@ -1926,7 +1965,14 @@ sites qualify (`addAudit`, two `fireMentionSms`). See guide §18b6.
 
 **`onConflictDoNothing()` in the POST bulk branch can never fire.** Fresh `crypto.randomUUID()` ids against an `id`-only unique constraint. Nothing dedupes by name at insert, so a repeated import inserts a complete new set. Decide whether insert-time name dedupe belongs here or stays with the smart-merge tooling.
 
-**Clerk advisories.** `@clerk/shared` 3.47.2, `@clerk/backend` 3.0.1, `@clerk/clerk-react` 5.61.3 are all in vulnerable ranges. No code path found that triggers them — the app uses **neither `has()` nor `auth.protect()` nor `clerkMiddleware`**, and authorization is the homegrown `requireRole()` over `verifyToken` with `payload.o.id`. Read `GHSA-vqx2-fgx2-5wq9` and `GHSA-gjxx-92w9-8v8f` in full before the Production migration. **Never `npm audit fix --force`** — it installs `vite@8`, a breaking change, to fix a dev-server-only issue.
+~~**Clerk advisories.**~~ **DONE — the Production migration is unblocked.** See §0.10.
+
+**Never `npm audit fix --force`** — it installs `vite@8`, a breaking change, to fix
+a dev-server-only issue. Five advisories remain after the Clerk fix, all in
+`vite`/`esbuild`/`drizzle-kit` dev tooling. The one high among them is
+Windows-specific (`server.fs.deny` bypass on alternate paths, NTLMv2 hash
+disclosure via UNC handling) and dev-server only — relevant to this machine, but
+it requires something reaching a localhost-bound dev server.
 
 **SPIFF panel on mobile.** The entire HomeTab right column is `{!isMobile && …}`, so the panel is desktop-only. Pre-existing pattern; reps are often on phones. Needs a deliberate decision about placement in the mobile stack.
 
