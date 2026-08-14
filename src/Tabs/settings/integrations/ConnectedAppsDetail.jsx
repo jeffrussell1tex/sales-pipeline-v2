@@ -1,6 +1,7 @@
 // settings/integrations/ConnectedAppsDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter } from './shared.jsx';
@@ -133,15 +134,22 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     }, []);
 
     // ── Persist connected state ────────────────────────────────
+    // Was fire-and-forget into console.error. dbFetch resolves for ANY status
+    // (guide 18b1), so that catch fired on a network failure only, and PUT
+    // /settings is Admin-only since SVR-2 — a non-admin's 403 landed in the
+    // success path. The `error` state below was already rendered; the write path
+    // simply never set it.
     const saveConnectedApps = async (next) => {
+        const snapshot = connectedApps;
         setConnectedApps(next);
+        setError('');
         try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ connectedApps: next }),
-            });
+            await putSettings({ connectedApps: next });
+            return true;
         } catch (e) {
-            console.error('saveConnectedApps error:', e.message);
+            setConnectedApps(snapshot);
+            setError(`Not saved — ${e.message}`);
+            return false;
         }
     };
 
@@ -159,18 +167,19 @@ export const ConnectedAppsDetail = ({ onBack }) => {
 
     // ── Slack config save ──────────────────────────────────────
     const handleSaveSlack = async (config) => {
-        setSlackConfig(config);
+        const cfgSnap = slackConfig, appSnap = connectedApps;
         const nextApps = { ...connectedApps, slack: true };
+        setSlackConfig(config);
         setConnectedApps(nextApps);
+        setError('');
         try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ slackConfig: config, connectedApps: nextApps }),
-            });
+            await putSettings({ slackConfig: config, connectedApps: nextApps });
+            setSlackModal(false);          // only close once the write has landed
         } catch (e) {
-            console.error('saveSlackConfig error:', e.message);
+            setSlackConfig(cfgSnap);
+            setConnectedApps(appSnap);
+            setError(`Slack settings not saved — ${e.message}`);
         }
-        setSlackModal(false);
     };
 
     // Build display lists — merge INT_APPS with real connected state

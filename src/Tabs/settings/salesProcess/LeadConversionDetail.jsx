@@ -1,6 +1,6 @@
 // settings/salesProcess/LeadConversionDetail.jsx
 import React, { useState } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T, eb } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
@@ -25,6 +25,7 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
         saved ? JSON.parse(JSON.stringify(saved)) : JSON.parse(JSON.stringify(DEFAULT_LEAD_CONV_BENCHMARKS))
     );
     const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [saved2, setSaved2] = useState(false);
     const [newSource, setNewSource] = useState('');
 
@@ -46,14 +47,15 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
 
     const handleSave = async () => {
         setSaving(true);
-        const updated = { ...settings, leadConvBenchmarks: rows };
-        setSettings(updated);
+        // Send ONLY the key this panel owns. It used to PUT the entire settings
+        // object, so every unrelated key was rewritten from this component's
+        // possibly-stale copy — a lost update for anything changed elsewhere since
+        // load. settings.mjs merges on 'key' in data, so a narrow patch is correct.
+        let snapshot;
+        setSettings(prev => { snapshot = prev; return { ...prev, leadConvBenchmarks: rows }; });
+        setSaveError('');
         try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updated),
-            });
+            await putSettings({ leadConvBenchmarks: rows });
             setSaved2(true);
             setTimeout(() => setSaved2(false), 2000);
         } catch (e) {
@@ -71,6 +73,14 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
 
     return (
         <div>
+            {/* saveError lives here, in the component that owns the write.
+                LeadConversionDetail renders the chrome but has no save state. */}
+            {saveError && (
+                <div style={{ padding:'10px 14px', marginBottom:14, background:'rgba(156,58,46,0.08)',
+                    border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12.5 }}>
+                    {saveError}
+                </div>
+            )}
             <div style={{ fontSize: 13, color: T.inkMid, marginBottom: 16, lineHeight: 1.55, fontFamily: T.sans }}>
                 These thresholds drive the colour coding in <strong>Reports → Leads → Source ROI</strong>.
                 Each source shows <span style={{ color: T.ok, fontWeight: 700 }}>green</span> when conversion rate ≥ Good,{' '}

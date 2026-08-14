@@ -1,6 +1,6 @@
 // settings/quoting/PriceBookDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T, eb } from '../shared/tokens.js';
 import { ATToggle } from './shared.jsx';
 
@@ -513,6 +513,7 @@ export const PriceBookDetail = ({ settings, setSettings, onBack }) => {
     const [search,    setSearch]      = useState('');
     const [dirty,     setDirty]       = useState(false);
     const [saving,    setSaving]       = useState(false);
+    const [saveError, setSaveError] = useState('');
     const [modal, setModal] = useState(null); // null | { mode:'new'|'edit', product, scrollTo }
     const fileInputRef = useRef(null);
 
@@ -528,10 +529,17 @@ export const PriceBookDetail = ({ settings, setSettings, onBack }) => {
 
     const handleSave = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, priceBookProducts: products }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ priceBookProducts: products }) }); }
-        catch(e) { console.error('price book save', e); }
-        setSaving(false); setDirty(false);
+        let snapshot;
+        setSettings(prev => { snapshot = prev; return { ...prev, priceBookProducts: products }; });
+        setSaveError('');
+        try {
+            await putSettings({ priceBookProducts: products });
+            setDirty(false);                 // only clear dirty once the write lands
+        } catch (e) {
+            setSettings(snapshot);
+            setSaveError(`Price book not saved — ${e.message}`);
+        }
+        setSaving(false);
     };
 
     const handleModalSave = (saved) => {
@@ -644,6 +652,13 @@ export const PriceBookDetail = ({ settings, setSettings, onBack }) => {
 
     return (
         <div style={{ fontFamily:T.sans }}>
+            {saveError && (
+                <div style={{ padding:'10px 14px', marginBottom:12, background:'rgba(156,58,46,0.08)',
+                    border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger,
+                    fontSize:12.5, fontFamily:T.sans }}>
+                    {saveError}
+                </div>
+            )}
             {/* Modal */}
             {modal && (
                 <PBProductModal

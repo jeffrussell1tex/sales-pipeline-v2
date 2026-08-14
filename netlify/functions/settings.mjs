@@ -102,6 +102,17 @@ export const handler = async (event) => {
                 // The whole streaming panel therefore persisted nothing: add, remove,
                 // pause and globals all appeared to work and reverted on reload.
                 streamingDestinations: row.extra?.streamingDestinations || [],
+                // Integrations panel. Written and read back by ConnectedAppsDetail,
+                // but present in neither half — so the PUT dropped both keys, the
+                // GET always returned {}, and connect/disconnect/Slack-config all
+                // appeared to work and reverted on reload. Third instance of this
+                // failure mode after the audit-streaming keys; see guide 18b.
+                connectedApps:  row.extra?.connectedApps  || {},
+                slackConfig:    row.extra?.slackConfig    || {},
+                // Written by ImportDetail's SavePresetModal. NOTE: nothing in the
+                // codebase reads this yet — whitelisting only stops the write being
+                // discarded. The load/apply path is still missing.
+                importPresets:  row.extra?.importPresets  || [],
                 streamingGlobals:      row.extra?.streamingGlobals      || null,
                 // Company profile detail fields
                 companyDisplayName:   row.extra?.companyDisplayName   || row.companyName || '',
@@ -236,6 +247,9 @@ export const handler = async (event) => {
                 companyProfile:   'companyProfile'   in data ? (data.companyProfile   || null) : existingExtra.companyProfile   || null,
                 leadConvBenchmarks:   'leadConvBenchmarks'   in data ? (data.leadConvBenchmarks   || null) : existingExtra.leadConvBenchmarks   || null,
                 streamingDestinations: 'streamingDestinations' in data ? (data.streamingDestinations || []) : existingExtra.streamingDestinations || [],
+                connectedApps:  'connectedApps'  in data ? (data.connectedApps  || {}) : existingExtra.connectedApps  || {},
+                slackConfig:    'slackConfig'    in data ? (data.slackConfig    || {}) : existingExtra.slackConfig    || {},
+                importPresets:  'importPresets'  in data ? (data.importPresets  || []) : existingExtra.importPresets  || [],
                 streamingGlobals:      'streamingGlobals'      in data ? (data.streamingGlobals      || null) : existingExtra.streamingGlobals      || null,
                 // Company profile detail fields
                 companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,

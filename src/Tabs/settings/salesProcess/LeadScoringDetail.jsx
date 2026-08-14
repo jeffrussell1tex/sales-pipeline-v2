@@ -1,6 +1,6 @@
 // settings/salesProcess/LeadScoringDetail.jsx
 import React, { useState, useEffect } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
@@ -120,6 +120,7 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
     const [saved, setSaved]   = useState(seed);
     const [dirty, setDirty]   = useState(false);
     const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
 
     useEffect(() => { const s = seed(); setCfg(s); setSaved(s); setDirty(false); /* eslint-disable-next-line */ }, [settings?.leadScoring]);
 
@@ -143,15 +144,21 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
     const handleReset  = () => { setCfg(JSON.parse(JSON.stringify(DEFAULT_LEAD_SCORING))); setDirty(true); };
     const handleSave   = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, leadScoring: cfg }));
+        // Was fire-and-forget: dbFetch resolves for ANY status (guide 18b1), so a
+        // 403 from the Admin-only PUT /settings cleared the dirty flag and left the
+        // panel looking saved. Revert on failure so the form stays dirty.
+        let snapshot;
+        setSettings(prev => { snapshot = prev; return { ...prev, leadScoring: cfg }; });
+        setSaveError('');
         try {
-            await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ leadScoring: cfg }) });
+            await putSettings({ leadScoring: cfg });
             setSaved(JSON.parse(JSON.stringify(cfg)));
+            setDirty(false);
         } catch (e) {
-            console.error('save lead scoring', e);
+            setSettings(snapshot);
+            setSaveError(`Lead scoring not saved — ${e.message}`);
         }
         setSaving(false);
-        setDirty(false);
     };
 
     const warmMin = cfg.buckets?.warm?.[0] ?? 41;
@@ -159,6 +166,7 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
 
     return (
         <CategoryDetailChrome
+            error={saveError}
             crumb="Lead scoring" category="Sales process" title="Lead scoring"
             subtitle="Rule-based Fit + Engagement scoring for leads. Scores recompute on lead edits and nightly."
             onBack={onBack} dirty={dirty} onCancel={handleCancel}

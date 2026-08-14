@@ -1,6 +1,7 @@
 // settings/data/ImportDetail.jsx
 import React, { useState, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { DataStatCard, DataCard, DPill, DataCrumb, DataTitle, DataBtn } from './shared.jsx';
 
@@ -198,19 +199,29 @@ const SavePresetModal = ({ columns, object, onClose }) => {
     const [name,   setName]   = useState('');
     const [saving, setSaving] = useState(false);
     const [saved,  setSaved]  = useState(false);
+    const [error,  setError]  = useState('');
 
+    // `importPresets` was in neither half of settings.mjs, so this PUT was
+    // discarded and the endpoint still returned 200 — no client-side error
+    // handling could ever have detected it. The key is now whitelisted.
+    //
+    // STILL INCOMPLETE: nothing in the codebase reads importPresets back, so a
+    // saved preset cannot yet be applied to an import. This write also REPLACES
+    // the array rather than appending, because SavePresetModal has no access to
+    // the existing settings — so only the most recent preset survives. Both need
+    // resolving before the feature is usable.
     const handleSave = async () => {
         if (!name.trim()) return;
         setSaving(true);
+        setError('');
         try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({
-                    importPresets: [{ name: name.trim(), object, columns: columns.map(c => ({ csv: c.csv, target: c.target })) }],
-                }),
+            await putSettings({
+                importPresets: [{ name: name.trim(), object, columns: columns.map(c => ({ csv: c.csv, target: c.target })) }],
             });
             setSaved(true); setTimeout(onClose, 800);
-        } catch(e) { /* silent */ } finally { setSaving(false); }
+        } catch(e) {
+            setError(`Preset not saved — ${e.message}`);   // was `catch(e) { }`
+        } finally { setSaving(false); }
     };
 
     const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, background:T.surface, fontFamily:T.sans, outline:'none', boxSizing:'border-box' };
@@ -225,6 +236,12 @@ const SavePresetModal = ({ columns, object, onClose }) => {
                     <div style={{ fontSize:12, color:T.inkMid, marginBottom:12 }}>Save this column mapping so you can reuse it for future <b>{object}</b> imports.</div>
                     <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Preset name</label>
                     <input value={name} onChange={e=>setName(e.target.value)} placeholder={`e.g. Salesforce → ${object}`} style={inp} autoFocus onKeyDown={e=>e.key==='Enter'&&handleSave()}/>
+                    {error && (
+                        <div style={{ marginTop:10, padding:'8px 11px', background:'rgba(156,58,46,0.08)',
+                            border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12 }}>
+                            {error}
+                        </div>
+                    )}
                 </div>
                 <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}` }}>
                     <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>

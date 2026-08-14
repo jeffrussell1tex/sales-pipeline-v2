@@ -1,7 +1,7 @@
 // settings/people/UsersDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, dbWrite } from '../../../utils/storage';
 import { T, eb } from '../shared/tokens.js';
 import { RToggle, RCheck, UserAvatar } from '../shared/ui.jsx';
 
@@ -902,8 +902,11 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
 
             // Persist updated teams if changed
             if (JSON.stringify(updatedTeams) !== JSON.stringify(settings.teams || [])) {
-                dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) })
-                    .catch(e => console.error('Failed to sync teams:', e));
+                // Was fire-and-forget. A failed team sync leaves the user assigned
+                // to a team the roster does not have, which reads as a data bug
+                // rather than a permissions one.
+                const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
+                if (!rt.ok) { setError(`User saved, but the team list was not updated — ${rt.error}`); return; }
             }
 
             // Update local settings state

@@ -4,7 +4,7 @@
 // applies to every quote template. Live quote-document preview re-renders as you edit.
 import React from 'react';
 import { T } from '../shared/tokens.js';
-import { dbFetch } from '../../../utils/storage';
+import { dbWrite } from '../../../utils/storage';
 import { useApp } from '../../../AppContext';
 
 const SERIF = 'Georgia, "Tiempos", serif';
@@ -249,9 +249,20 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, onClose }) => {
   const dirty = JSON.stringify(brand) !== JSON.stringify(initial);
   const { setSettings } = useApp();
   const close = () => { if (dirty && !window.confirm('Discard unsaved brand changes?')) return; onClose(); };
+  const [saveError, setSaveError] = React.useState('');
   const handleSave = async () => {
-    if (setSettings) setSettings((s) => ({ ...s, quoteBrand: brand }));
-    try { await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ quoteBrand: brand }) }); } catch (e) { console.error('save quote brand', e); }
+    // The modal used to close unconditionally. PUT /settings is Admin-only since
+    // SVR-2, so a non-admin's brand edit appeared to save, the modal closed, and
+    // the change was gone on reload. Now it stays open and says why.
+    let snapshot;
+    if (setSettings) setSettings((s) => { snapshot = s; return { ...s, quoteBrand: brand }; });
+    setSaveError('');
+    const r = await dbWrite('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ quoteBrand: brand }) });
+    if (!r.ok) {
+      if (setSettings && snapshot) setSettings(snapshot);
+      setSaveError(`Brand not saved — ${r.error}`);
+      return;
+    }
     onClose();
   };
   React.useEffect(() => {
@@ -437,6 +448,11 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, onClose }) => {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: T.goldInk }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.goldInk }}/>
               Unsaved changes
+            </span>
+          )}
+          {saveError && (
+            <span style={{ marginRight: 'auto', fontSize: 12, color: T.danger, fontWeight: 600 }}>
+              {saveError}
             </span>
           )}
           <button onClick={close} style={{

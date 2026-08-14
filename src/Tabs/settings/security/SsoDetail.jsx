@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { T, eb } from '../shared/tokens.js';
 import { SecCrumb, SecTitle, SecBtn, SecCallout, SecCard } from './shared.jsx';
 import { useApp } from '../../../AppContext';
-import { dbFetch } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 
 const SEC_SSO = {
     configured: false,
@@ -125,19 +125,35 @@ export const SsoDetail = ({ onBack }) => {
     const [attributeMap, setAttributeMap] = useState(() => (cfg.attributeMap || SEC_SSO.attributeMap).map(r => ({ ...r })));
     const [editingAttr, setEditingAttr] = useState(null);
     const providers = ['Okta','Azure AD','Google','OneLogin','Generic'];
+    const [saveError, setSaveError] = React.useState('');
     const handleSave = async () => {
         setSaving(true);
         const base = settings?.ssoConfig || SEC_SSO;
         const ssoConfig = { ...base, provider, attributeMap, idp: { ...(base.idp || {}), ssoUrl: idpSsoUrl, entityId: idpEntityId, cert: idpCert } };
-        if (setSettings) setSettings(s => ({ ...s, ssoConfig }));
-        try { await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ ssoConfig }) }); }
-        catch (e) { console.error('save sso', e); }
-        setSaving(false); setDirty(false);
+        // SSO config is the login path for the whole org — a save that silently
+        // did not land is worse here than anywhere else in settings.
+        let snapshot;
+        if (setSettings) setSettings(s => { snapshot = s; return { ...s, ssoConfig }; });
+        setSaveError('');
+        try {
+            await putSettings({ ssoConfig });
+            setDirty(false);
+        } catch (e) {
+            if (setSettings && snapshot) setSettings(snapshot);
+            setSaveError(`SSO settings not saved — ${e.message}`);
+        }
+        setSaving(false);
     };
     const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
 
     return (
         <div style={{ fontFamily:T.sans }}>
+            {saveError && (
+                <div style={{ padding:'10px 14px', marginBottom:12, background:'rgba(156,58,46,0.08)',
+                    border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12.5 }}>
+                    {saveError}
+                </div>
+            )}
             {showWizard && <ConfigureSsoModal onClose={()=>setShowWizard(false)}/>}
             <SecCrumb page="Single sign-on (SSO)" onBack={onBack}/>
             <SecTitle

@@ -1,6 +1,6 @@
 // settings/data/ExportDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, dbWrite } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
 
@@ -140,11 +140,16 @@ export const ExportDetail = ({ onBack }) => {
 
     // ── delete schedule ───────────────────────────────────────
     const handleDeleteSched = async (id) => {
+        // Optimistic removal, restored if the delete does not land. dbFetch
+        // resolves for ANY status (guide 18b1), so the old catch fired on a
+        // network failure only and the row vanished until the next reload.
+        const snapshot = schedules;
         setSchedules(prev => prev.filter(s => s.id !== id));
-        try {
-            await dbFetch(`/.netlify/functions/export-schedules?id=${id}`, { method:'DELETE' });
-        } catch (e) {
-            console.error('Delete schedule failed:', e.message);
+        setError('');
+        const r = await dbWrite(`/.netlify/functions/export-schedules?id=${id}`, { method:'DELETE' });
+        if (!r.ok) {
+            setSchedules(snapshot);
+            setError(`Schedule not deleted — ${r.error}`);
         }
     };
 
