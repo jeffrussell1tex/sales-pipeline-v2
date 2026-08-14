@@ -169,6 +169,33 @@ test('check-bundle rejects a dist whose entry chunk is missing', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// scan-dbfetch — a diagnostic, not a gate, but it drives the remediation work so
+// its accuracy matters. It ran at a 59% false-positive rate on the hooks (10 of
+// 17) because it unwrapped .then() chains without ever reading the callbacks.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('scan-dbfetch catches a Response that goes nowhere', () => {
+    const r = run('scripts/scan-dbfetch.mjs', [`${FIX}/dbfetch-discarded.jsx`]);
+    assert.match(r.stdout, /1 discarded-Response/);
+});
+
+test('scan-dbfetch catches a Response read as if it were JSON', () => {
+    // Guide 18b3. Live in ReportsTab: `data?.reports` on a Response with no
+    // .json() in the chain — the saved-reports list never loaded. Optional
+    // chaining, which an earlier version of the check missed entirely.
+    const r = run('scripts/scan-dbfetch.mjs', [`${FIX}/dbfetch-response-as-json.jsx`]);
+    assert.match(r.stdout, /reads \.reports on a Response/);
+});
+
+test('scan-dbfetch does not flag a checked Response', () => {
+    // THE false-positive class. `.then(r => { if (!r.ok) throw })` fully checks the
+    // Response; the scanner used to unwrap straight past it to the dbFetch beneath.
+    const r = run('scripts/scan-dbfetch.mjs', [`${FIX}/dbfetch-safe.jsx`]);
+    assert.match(r.stdout, /0 discarded-Response/);
+    assert.doesNotMatch(r.stdout, /on a Response/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Coverage
 // ─────────────────────────────────────────────────────────────────────────────
 

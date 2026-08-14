@@ -61,6 +61,11 @@ export default function ReportsTab({ leadsEnabled = true }) {
     React.useEffect(() => {
         let cancelled = false;
         dbFetch('/.netlify/functions/saved-reports')
+            // The callback was named `data` but receives a RESPONSE (guide 18b3).
+            // Nothing in the chain called .json(), so `data?.reports` was always
+            // undefined and this list has never loaded. The endpoint returns
+            // { reports: [...] } as a JSON body.
+            .then(r => (r.ok ? r.json() : { reports: [] }))
             .then(data => { if (!cancelled) setSavedReportsList(data?.reports || []); })
             .catch(() => {});
         return () => { cancelled = true; };

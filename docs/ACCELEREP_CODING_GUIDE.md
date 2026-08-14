@@ -1570,6 +1570,81 @@ confirm a 403 surfaces instead of reporting success.
 
 ---
 
+## 18b12. A `settings.extra` Key Must Exist in BOTH Halves (hard rule)
+
+`settings.mjs` PUT rebuilds `extra` from an explicit whitelist. **A key that is not
+in that list is dropped and the endpoint still returns 200.** The GET has its own
+separate list, so a key can also be stored and never read back.
+
+This has now shipped **four times**, in three separate features:
+
+| Keys | Panel | Symptom |
+|---|---|---|
+| `streamingDestinations`, `streamingGlobals` | Audit log streaming | add / remove / pause / globals all appeared to work, reverted on reload |
+| `connectedApps`, `slackConfig` | Connected Apps | full round-trip — written AND read back — persisting nothing |
+| `importPresets` | Import presets | "✓ Saved", stored nowhere, and nothing reads it even now |
+
+**No client-side error handling can detect this.** The response is 200. `res.ok` is
+true. `dbWrite` reports success. Every mitigation elsewhere in this guide is blind
+to it, which is why it survived three separate code reviews and two remediation
+passes over the same files.
+
+### Rules
+
+- Adding a `settings.extra` key means editing **both** the GET projection and the
+  PUT whitelist in `netlify/functions/settings.mjs`. One without the other is a
+  silent failure in one direction.
+- The PUT uses `'key' in data ? … : existingExtra.key` semantics. Preserve that: a
+  key sent is applied (including an explicit `''`, `[]` or `null`), a key omitted
+  keeps its stored value. Never rebuild the whole object from a partial body.
+- **Send only the key the panel owns.** `LeadConversionDetail` used to PUT the
+  entire settings object, rewriting every unrelated key from its own possibly-stale
+  copy — a lost update for anything changed elsewhere since load.
+- Before trusting any settings panel, check the key both ways:
+
+```bash
+grep -n "yourKey:" netlify/functions/settings.mjs   # expect TWO hits, GET and PUT
+```
+
+- A key that is written but **never read** is not a feature. `importPresets` is
+  whitelisted so the write lands, but nothing loads it and the write replaces the
+  array rather than appending. Recorded as incomplete rather than treated as done.
+
+---
+
+## 18b13. A Partial PUT Must Not Replace the Row (hard rule)
+
+`users.mjs` `sanitize()` rebuilds every top-level column and the entire `profile`
+jsonb from the request body, and `upsertUser` writes it with `set: { ...updateData }`.
+With no merge, **a partial payload does not update fields, it replaces the row.**
+
+Five call sites were sending five fields to cascade a team or territory change:
+
+```js
+{ id, team, territory, vertical, teamId }
+```
+
+Running the real `sanitize()` on that payload produced `name: "Unnamed User"`,
+`email: "<id>@placeholder.local"`, `quota: null`, and **31 of 35 profile fields
+null** — wiping the user's real name, email, phone, email signature, notification
+preferences and every quota figure. All five sat in `catch(e) {}` or a bare
+`console.error`, so it had never reported anything. Same mechanism as the
+`mobile`-wiped-on-save bug in §0A, with a far wider blast radius.
+
+`mergeForUpdate()` now reads the stored row, flattens it with the existing
+`flatten()`, and overlays the incoming body — exact field-present semantics, and
+an explicit `''` still clears.
+
+**The fix belongs in the endpoint, not the callers.** Fixing the five would have
+left the next partial PUT doing the same thing. When an endpoint rebuilds a row
+from its body, every caller inherits the hazard, so the merge goes once at the
+bottom.
+
+Check any endpoint that sanitizes-then-upserts for this shape before sending it a
+partial payload.
+
+---
+
 ## 22. How to Work on This Codebase
 
 ### Where these docs live

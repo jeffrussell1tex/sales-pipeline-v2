@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** August 13, 2026  
-**Batch:** **three of the four gates had false-negative classes** — all now fixture-tested · build guard (hollow bundles cannot deploy) · `check:dupes` + 9 duplicate keys · CSV auto-mapping rewritten · bulk PUT (~500 round-trips → 4) · audit streaming persisted nothing · hooks: Closed Lost audited a failed save · ReportsTab crash · 19 → 66 tests
+**Batch:** **three of the four gates had false-negative classes** · `dbFetch` remediation 78 → 29, all `settings/` clean · **`users.mjs` PUT was replacing rows** · 4 `settings.extra` keys never whitelisted · build guard · `check:dupes` · CSV auto-mapping · bulk PUT · 19 → 66 tests
 **Prior batch:** SalesManagerTab hoist, SPIFF persistence & claim plumbing
 **Prior batch:** inline-component audit — **the backlog named the wrong three files**; 81 raw findings triaged to 5 user-visible, 3 fixed · new `check:inline` scanner
 **Prior batch:** calendar disconnect (endpoint already existed — client wiring only) · personal email signature, escaped server-side · record-number generators moved from full-table scan to indexed `MAX` · **`mobile` was being wiped on every profile save**
@@ -70,6 +70,49 @@ Ten were false positives (§0.1). The six real ones:
 - **CI now runs the gates.** New `gates` job: check:tdz, check:inline, check:dupes, and a build with a dummy key. **Previously none ran in CI.**
 - Test count **66 passing**, up from 19 at session start.
 
+### 0.8 `dbFetch` remediation — 78 → 29 sites
+
+Hand-triaged and fixed across seven passes. **The entire `settings/` category is
+now clean.**
+
+| Cluster | Sites | Real | Note |
+|---|---|---|---|
+| Hooks (4 files) | 17 | 6 | **59% false positives** — loads and deletes already checked `res.ok` |
+| `PipelinesDetail` | 9 | 9 | |
+| `settings/people` | 8 | 8 | |
+| `CompanyCalendarDetail` | 4 | 4 | |
+| Remaining `settings/` | 12 | 12 | ConnectedApps, Import/Export, Users, Brand, PriceBook, LeadScoring, LeadConversion, Sso |
+| `ContactsTab` + `AccountsTab` | 6 | 6 | |
+| `App.jsx` | 4 | 0 | `checkOk` / `r.ok` already; `addAudit` intentionally best-effort |
+
+**The pattern is strongly categorical.** Settings panels ran **33/33 real** — they
+are fire-and-forget writes to an Admin-only endpoint, so every one silently 403s
+for a non-admin. Hooks ran 6/17 — mostly loads and deletes that were already
+correct. Worth knowing before triaging the rest: *where* a site is predicts whether
+it is real better than anything the scanner reports.
+
+New shared helper **`dbWrite()`** in `src/utils/storage.js` — `{ ok, status, error }`,
+never throws, surfaces the `requestId`. 9 tests, mutation-tested. `putSettings()`
+remains the template for settings panels.
+
+### 0.9 Two failures no client-side handling could ever catch
+
+**`settings.extra` keys missing from the whitelist — four keys, three features.**
+`streamingDestinations`/`streamingGlobals` (audit streaming), `connectedApps`/`slackConfig`
+(Connected Apps), `importPresets` (import presets). The PUT rebuilds `extra` from an
+explicit list, so unknown keys are dropped **and the endpoint still returns 200**.
+Connected Apps even read its keys back on mount — a complete round-trip persisting
+nothing. All now whitelisted in both halves. See guide §18b12.
+
+**`users.mjs` PUT was replacing rows, not updating them.** `sanitize()` rebuilds
+every column and the whole `profile` jsonb from the body; `upsertUser` writes it
+with `set: { ...updateData }`. Five cascade sites sent
+`{ id, team, territory, vertical, teamId }`, which produced `name: "Unnamed User"`,
+`email: "<id>@placeholder.local"`, `quota: null` and **31 of 35 profile fields
+null** — wiping names, emails, phones, signatures and quotas. Every one sat in
+`catch(e) {}`. Fixed with `mergeForUpdate()` **in the endpoint**, so every caller
+inherits it. Test data only; no production damage. See §18b13.
+
 ---
 
 ### Open — found this session, not fixed
@@ -78,7 +121,9 @@ Ten were false positives (§0.1). The six real ones:
 
 **`onConflictDoNothing()` is decorative.** POST bulk branch of `accounts.mjs` and `contacts.mjs`. The only unique constraint is the `id` primary key and every id is a fresh `crypto.randomUUID()`, so it can never fire. The comment claims it "skips duplicates instead of erroring". **Nothing dedupes by name at insert time.**
 
-**Optimistic local write before the request.** `ModalLayer` calls `setAccounts`/`setContacts` *before* the POST, so a failure leaves the UI showing records never saved. The `res.ok` check is correct — this is a write applied optimistically and never rolled back.
+**Optimistic local write before the request.** `ModalLayer` calls `setAccounts`/`setContacts` *before* the POST, so a failure leaves the UI showing records never saved. The `res.ok` check is correct — this is a write applied optimistically and never rolled back. (The equivalent in `ContactsTab`/`AccountsTab` delete paths **is** fixed; the CSV import path is not.)
+
+**`importPresets` is written but never read.** Whitelisted now so the write lands, but nothing loads a saved preset, and the write replaces the array rather than appending because `SavePresetModal` cannot see existing settings. Needs a load path and a merge before it is a usable feature.
 
 **An unexplained 500 on accounts bulk POST.** Reproduced once with a wrong-shaped payload. The POST path still discards the `requestId`; `saveBulk` surfaces it on the overwrite path only. Log entry never pulled.
 
@@ -1849,20 +1894,22 @@ Plus indexes `leads_org_id_bucket_idx (org_id, lead_score_bucket)` and `leads_or
 
 > Build guard and the `drizzle-orm` bump both **shipped** — see §0.1 and §0.7.
 
-**The remaining `dbFetch` sites — 66 across 30 files.** Was 78; `AuditDetail`,
-`SalesManagerTab` and the four hooks are done. Largest remaining:
-`PipelinesDetail.jsx` (9), then `App.jsx`, `ContactsTab.jsx` and
-`CompanyCalendarDetail.jsx` at 4 each.
+**The remaining `dbFetch` sites — 29 across 14 files.** Was 78.
 
-**Expect roughly half to be false positives.** The hooks ran at **59%** — 10 of 17
-already checked `res.ok` correctly. The scanner peels `.then(r => { if (!r.ok) … })`
-off to find the `dbFetch` underneath and calls the Response discarded. **Do not
-promote `scan-dbfetch.mjs` to `check:dbfetch`**; hand-triage remains mandatory.
+**About half are known false positives**: 12 in the four hooks (loads/deletes that
+already check `res.ok`), 2 in `App.jsx`, and 2 intentional `fireMentionSms`
+fire-and-forget calls. The genuinely open set is roughly 13: `ReportsTab` (3),
+`ModalLayer` (2), and singles in `AdminView`, `LeadsTab`, `KanbanView`,
+`QuickLogFab`, `ViewingContactPanel`.
 
-Templates: `putSettings()` for settings panels, **`dbWrite()`** (`src/utils/storage.js`)
-everywhere else — it returns `{ ok, status, error }`, never throws, and surfaces the
-`requestId`. The pattern to look for is `.catch(console.error)` on a write, which
-fires only on a network failure.
+**Higher value than finishing the list: fix the scanner.** Seven passes of hand
+triage now cover 63 of the original 78, and the false-positive class is understood
+— it peels `.then(r => { if (!r.ok) … })` off to find the `dbFetch` underneath, and
+does not know about `dbWrite` or `putSettings`. Teaching it those would drop the
+noise and let `check:dbfetch` finally become a gate. Without that, the next person
+hits the same 59% and the same mandatory-hand-triage warning.
+
+Templates: `putSettings()` for settings panels, **`dbWrite()`** elsewhere.
 
 **Accounts / contacts bulk POST is unbatched.** One statement for every row; breaks above ~1,872 rows against the 65,535 bind-parameter ceiling, and one bad row kills the whole batch. The overwrite path was fixed this session (`bulkUpsert`); the insert path was not. Do this **before** the CSV Import + Export rollout below, since that multiplies the number of files pushed through it.
 
