@@ -1,6 +1,7 @@
 // settings/company/CompanyCalendarDetail.jsx
 import React, { useState, useEffect } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, dbWrite } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard, DetailPageChrome } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
@@ -59,6 +60,27 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     const isAdmin = userRole === 'Admin';
     const [orgCals, setOrgCals]       = useState([]);
     const [orgCalsLoading, setOcl]    = useState(false);
+    // Every write below discarded its Response. dbFetch resolves for ANY status
+    // (guide 18b1), and PUT /settings is Admin-only since SVR-2, so a non-admin's
+    // 403 landed in the success path: the holiday appeared in the list, nothing
+    // reached the database, and it vanished on reload.
+    const [calError, setCalError] = useState('');
+
+    // Optimistic write, reverted on failure so the list never shows a holiday the
+    // database does not have.
+    const persistHolidays = async (patch, label) => {
+        let snapshot;
+        setSettings(prev => { snapshot = prev; return { ...prev, ...patch }; });
+        setCalError('');
+        try {
+            await putSettings(patch);
+            return true;
+        } catch (e) {
+            setSettings(snapshot);
+            setCalError(`${label} not saved — ${e.message}`);
+            return false;
+        }
+    };
 
     const loadOrgCals = async () => {
         setOcl(true);
@@ -76,10 +98,12 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
     };
     const disconnectCorporateCalendar = async (id) => {
-        try {
-            await dbFetch(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=org`, { method: 'DELETE' });
-            loadOrgCals();
-        } catch (e) { console.error('disconnect org calendar', e); }
+        setCalError('');
+        // The server requires isAdmin for scope=org. A non-admin used to see the
+        // calendar disappear from the list on the next load and reappear after.
+        const r = await dbWrite(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=org`, { method: 'DELETE' });
+        if (!r.ok) { setCalError(`Calendar not disconnected — ${r.error}`); return; }
+        loadOrgCals();
     };
 
     const now = new Date();
@@ -109,8 +133,17 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                 return toMs(a.date) - toMs(b.date);
             });
             // Store fresh federal list separately so FEDERAL_HOLIDAYS const stays in sync
+            // putSettings throws on non-2xx, so this reaches the catch below. The
+            // old bare dbFetch did not, and a rejected save still reported
+            // "✓ Synced N federal holidays".
+            const snapshot = settings;
             setSettings(prev => ({ ...prev, customHolidays: preserved, federalHolidays: fresh }));
-            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ customHolidays: preserved, federalHolidays: fresh }) });
+            try {
+                await putSettings({ customHolidays: preserved, federalHolidays: fresh });
+            } catch (e) {
+                setSettings(snapshot);
+                throw e;
+            }
             setSyncMsg(`✓ Synced ${fresh.length} federal holidays for ${year}`);
             setTimeout(() => setSyncMsg(''), 4000);
         } catch (err) {
@@ -139,20 +172,14 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         const newHoliday = { date: dateStr, name: formName.trim(), source: 'Custom', type: 'custom' };
         const updated = [...customHolidays, newHoliday];
         setSaving(true);
-        setSettings(prev => ({ ...prev, customHolidays: updated }));
-        try {
-            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ customHolidays: updated }) });
-        } catch(e) { console.error('save holiday', e); }
+        const ok = await persistHolidays({ customHolidays: updated }, 'Holiday');
         setSaving(false);
-        resetForm();
+        if (ok) resetForm();          // keep the form open so the entry is not lost
     };
 
     const handleDeleteHoliday = async (holiday) => {
         const updated = customHolidays.filter(h => !(h.date === holiday.date && h.name === holiday.name));
-        setSettings(prev => ({ ...prev, customHolidays: updated }));
-        try {
-            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ customHolidays: updated }) });
-        } catch(e) { console.error('delete holiday', e); }
+        await persistHolidays({ customHolidays: updated }, 'Holiday deletion');
     };
 
     const fedCount    = federalHolidays.length;
@@ -177,6 +204,17 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                 </button>
             }
         >
+            {/* A failed write must be visible here, not only in the console.
+                DetailPageChrome has no error prop, and the optimistic state is
+                reverted alongside this, so the list always matches the database. */}
+            {calError && (
+                <div style={{ padding:'10px 14px', marginBottom:14, background:'rgba(156,58,46,0.08)',
+                    border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger,
+                    fontSize:12.5, fontFamily:T.sans }}>
+                    {calError}
+                </div>
+            )}
+
             {/* Add holiday inline form */}
             {showForm && (
                 <div style={{ background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2, padding:16, marginBottom:14, boxShadow:'0 2px 12px rgba(42,38,34,0.1)' }}>
