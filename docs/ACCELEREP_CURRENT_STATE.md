@@ -258,6 +258,48 @@ turned an opaque 500 into a diagnosis.
 
 **Still not confirmed.** Retest check 1 in full after deploy.
 
+### 0.11 The deploy failed on a tree where all five gates were green
+
+```
+✘ No matching export in "netlify/functions/_lib.mjs" for import "bulkUpsert"
+✘ No matching export in "netlify/functions/_lib.mjs" for import "bulkInsert"
+```
+
+Moving `bulkUpsert` out of `_lib.mjs` deleted the span between two anchors, and
+`export const bulkInsert` sat inside it. The follow-up replace that was meant to
+re-add the binding matched text that no longer existed, so it was a silent no-op.
+
+**Every gate passed. Every one of 165 tests passed.** The unit tests import from
+`_bulk.mjs` directly, so nothing exercised the edge that broke.
+
+The reason is structural, not a slip: **`npm run build` runs vite, and vite bundles
+`src/`. The Netlify functions are bundled separately by esbuild at deploy time.**
+No gate had ever resolved an import edge between two function files. An entire
+class of error — the one esbuild exists to catch — was invisible to CI and visible
+only in a deploy log. That is a gate gap by §18b11's own definition.
+
+**Closed:** `tests/function-imports.test.mjs`. Parses every `netlify/functions/*.mjs`,
+resolves each relative import against the target's actual exports, and fails with
+esbuild's own wording. A file that will not parse is its own failure rather than a
+quiet skip (§18b6).
+
+Proven both directions before being trusted: with the two export lines removed it
+names `accounts.mjs:5`, `contacts.mjs:5` and `opportunities.mjs:8` — the same file
+and line Netlify reported — while `check:tdz`, `check:dbfetch` and the build guard
+all stay green on that same tree.
+
+Also run directly now as a belt-and-braces check: `esbuild --bundle` over the three
+changed functions, which is what Netlify actually does.
+
+**Tests 165 → 167, mutations 21 → 23.**
+
+**The pattern, for the third time in one session.** A correct fix broke something
+downstream that nothing was watching: the client fix was undone by the server
+(§0.9), the server fix was rejected by the upsert (§0.10), and the extraction that
+made the upsert testable broke the import graph (§0.11). Each was caught one layer
+later than the last — unit test, dev check, deploy log. The gate added here pulls
+the last of those three back into CI.
+
 ---
 
 ## 0A0000. Prior Batch — Bulk Insert, and Three Paths That Had Never Run

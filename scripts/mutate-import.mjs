@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs';
 
 const mutations = [
     ['bulkClient: chunking disabled',
@@ -120,6 +120,13 @@ const mutations = [
         'netlify/functions/_bulk.mjs',
         'return c && c.name && c.notNull && !c.hasDefault && !BULK_IMMUTABLE.has(k);',
         'return c && c.name && c.notNull && !BULK_IMMUTABLE.has(k);'],
+    ['deploy graph: _lib.mjs stops re-exporting bulkInsert (the failed deploy)',
+        'netlify/functions/_lib.mjs',
+        'export const bulkInsert = (args) => coreBulkInsert({ client: db, ...args });', ''],
+
+    ['deploy graph: _lib.mjs stops re-exporting bulkUpsert (the failed deploy)',
+        'netlify/functions/_lib.mjs',
+        'export const bulkUpsert = (args) => coreBulkUpsert({ client: db, ...args });', ''],
 ];
 
 let survived = 0;

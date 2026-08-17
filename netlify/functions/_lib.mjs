@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { db } from '../../db/index.js';
 import { auditLog, users } from '../../db/schema.js';
 import { eq, and, inArray, sql } from 'drizzle-orm';
-import { BULK_CHUNK, bulkInsert as coreBulkInsert, bulkUpsert as coreBulkUpsert } from './_bulk.mjs';
+import { bulkInsert as coreBulkInsert, bulkUpsert as coreBulkUpsert } from './_bulk.mjs';
 
 // Browser origins allowed to call the API. Kept in sync with the Clerk
 // authorizedParties list in auth.mjs. Exported for the CORS follow-up; any
@@ -124,6 +124,8 @@ export async function withNumberRetry(attempt, { tries = 5, label = 'record numb
 // into ONE statement, which breaks above the Postgres 65,535 bind-parameter
 // ceiling (accounts: 35 columns -> 1,872 rows). Neither extreme is right.
 //
+// (bulkUpsert itself now lives in _bulk.mjs; this note stays with the callers.)
+//
 // A server-side loop of single-row upserts was rejected: ~30ms per Neon HTTP
 // statement x 200 rows overruns Netlify's 10s function timeout. This emits one
 // multi-row INSERT ... ON CONFLICT DO UPDATE per chunk, using `excluded.<col>`
@@ -139,3 +141,14 @@ export async function withNumberRetry(attempt, { tries = 5, label = 'record numb
 //  - ownership is resolved once for the whole batch rather than per row.
 //  - CHUNK x columns must stay under 65,535. 400 x ~37 = ~14,800, which leaves
 //    room for the schema to roughly quadruple before this needs revisiting.
+
+// Both bulk helpers live in _bulk.mjs so they are testable without a database —
+// see the note at the top of that file. These bind the real client; callers pass
+// none and keep importing from _lib.mjs.
+export const bulkInsert = (args) => coreBulkInsert({ client: db, ...args });
+
+// bulkUpsert moved here from _lib.mjs after it shipped a 500 that no CI test
+// could have caught: its INSERT arm must satisfy every NOT NULL column even when
+// the row already exists, and a partial payload cannot. See the NOT NULL backfill
+// in _bulk.mjs.
+export const bulkUpsert = (args) => coreBulkUpsert({ client: db, ...args });

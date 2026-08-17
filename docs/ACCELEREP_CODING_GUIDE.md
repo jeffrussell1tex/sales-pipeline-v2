@@ -1718,6 +1718,33 @@ partial payload.
 
 ---
 
+### The gates do not bundle the Netlify functions
+
+`npm run build` runs vite over `src/`. `netlify/functions/` is bundled separately
+by esbuild AT DEPLOY TIME, so until `tests/function-imports.test.mjs` existed, no
+gate ever resolved an import edge between two function files. A tree with all five
+gates green and 165 passing tests failed its deploy on a missing re-export.
+
+Anything that edits imports or exports under `netlify/functions/` must run
+`npm test` — the graph check lives there, not in a `check:` script, because it
+needs the parser and belongs with the other static guards.
+
+For a larger change, bundle the affected functions the way Netlify will:
+
+```bash
+npx esbuild netlify/functions/<changed>.mjs --bundle --platform=node --format=esm \
+  --external:drizzle-orm --external:@neondatabase/* --outdir=/tmp/fnbundle
+```
+
+**Deleting a span between two anchors is how this happened.** `export const
+bulkInsert` sat between `BULK_IMMUTABLE` and `bulkUpsert` and went with the cut;
+the replace meant to restore it matched text that had already been removed and
+silently did nothing. A string replace that finds no match must be treated as a
+failure, not a no-op — the patch scripts assert an exact occurrence count for
+this reason (§18b2).
+
+---
+
 ### An upsert's INSERT arm must satisfy every NOT NULL column
 
 Narrowing a payload is only half the job. `INSERT ... ON CONFLICT DO UPDATE` is an
