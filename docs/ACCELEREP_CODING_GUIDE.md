@@ -1718,6 +1718,34 @@ partial payload.
 
 ---
 
+### `sanitize()` is a builder, not a filter
+
+This rule was committed and then not applied to the file it was about, so it is
+worth being blunt: every endpoint's `sanitize()` EXPANDS a payload into a full
+row. It emits every column with a default -- `comments: data.comments || []`,
+`pipelineId: data.pipelineId || 'default'`. Feeding it to `bulkUpsert`, which
+derives its SET clause from the keys supplied, writes all of them.
+
+```js
+// WRONG -- a seven-column CSV overwrite writes forty columns
+rows: data.map(d => sanitize(d)),
+
+// RIGHT -- keep only what the payload actually supplied
+rows: partialRows(data, sanitize),
+```
+
+`netlify/functions/_sanitize.mjs`. The narrowing is a UNION across the batch, so
+every row in a chunk has the same shape and the multi-row INSERT has no
+reconciliation question in it.
+
+**A caller-side version of this fix does not work.** §0A0000.1 stopped `buildOpp`
+sending the three array columns and `sanitize()` put them back; the overwrite went
+on erasing stage history, Team Notes and linked contacts for another session, and
+the dev check that would have caught it was the one deferred. If a payload is
+partial, the endpoint is the only place that knows which columns were absent.
+
+---
+
 ## 18b14. Assess an Advisory Against the Code, Not the Version Range
 
 `npm audit` matches version ranges. It cannot tell whether the vulnerable *code

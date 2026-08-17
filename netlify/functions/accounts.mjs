@@ -3,6 +3,7 @@ import { accounts, settings as settingsTable, opportunities, contacts } from '..
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
 import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert } from './_lib.mjs';
+import { partialRows } from './_sanitize.mjs';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
 // Unwraps markdown links — e.g. "[www.x.com](https://www.x.com)" -> "https://www.x.com"
@@ -150,9 +151,18 @@ export const handler = async (event) => {
                 // Reps may only overwrite their own or unassigned records. Resolved
                 // once here rather than per row; null means "may edit everything".
                 const callerName = canSeeAll(userRole) ? null : await getCallerName(userId);
+                    // partialRows, not sanitize() alone. sanitize() is a FULL-ROW
+                    // builder -- it expands a payload rather than filtering one --
+                    // and bulkUpsert derives its SET clause from the keys supplied,
+                    // so feeding it a sanitized row wrote every column. A CSV
+                    // overwrite carrying fourteen columns wrote all forty, blanking
+                    // stage history, Team Notes and linked contacts with the empty
+                    // arrays sanitize had just invented. 18b13: the fix belongs
+                    // here, in the endpoint. The previous one was in the caller and
+                    // sanitize put the columns straight back.
                 const result = await bulkUpsert({
                     table: accounts,
-                    rows: data.map(d => sanitize(d)),
+                    rows: partialRows(data, sanitize),
                     orgId,
                     ownerColumn: accounts.accountOwner,
                     callerName,

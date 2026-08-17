@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** August 17, 2026  
-**Batch:** **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · 89 → 140 tests, 14 mutations
+**Batch:** **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · 89 → 140 tests, 14 mutations
 **Prior batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
 **Prior batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · **Clerk advisories cleared — Production migration unblocked** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · 19 → 69 tests
 **Prior batch:** SalesManagerTab hoist, SPIFF persistence & claim plumbing
@@ -140,19 +140,80 @@ in-loop; drops going silent) and the `.some` → `.every` tightening. Files are 
 and restored in memory, never via `git checkout`, which has reverted unrelated
 fixes mid-session before.
 
-### 0.8 Not yet confirmed on dev
+### 0.8 Confirmed on dev — and check 1 failed
 
-Gates are green and the suites are mutation-tested, but §18b8 is explicit that
-generation proving out is not execution proving out. **Nothing below is confirmed
-until run against `accelerep.netlify.app` with `ZZTest` data and a hard refresh.**
+Run against `accelerep.netlify.app` with `ZZTest` opportunities. §18b8 is explicit
+that generation proving out is not execution proving out, and this is what that
+buys you.
 
-| Check | Status |
+| Check | Result |
 |---|---|
-| Accounts CSV into the Contacts importer now blocks at Preview with the cause named | not yet run |
-| An overwrite of deleted records reports `failed`/`no longer exist`, not success | not yet run |
+| A comment survives a CSV overwrite | **FAILED** — Team Notes, the linked contact and the stage history were all erased. Root-caused to the endpoint; see §0.9 |
+| Deals themselves survive | Pass — the three deals persisted, reverted to their seeded field values |
+| Accounts CSV into the Contacts importer blocks at Preview | not yet run |
+| An overwrite of deleted records reports failure, not success | not yet run — same path as §0.9, retest after that ships |
 | Overwrite counts survive a hard refresh and match the tiles | not yet run |
-| A comment survives a CSV overwrite (carried from §0A0000.10) | **not yet run** |
-| Avatar timezone PUT fires once (carried from §0A0000.10) | **not yet run** |
+| Avatar timezone PUT fires once (carried from §0A0000.10) | not yet run |
+
+**No production exposure.** Nobody is running Accelerep in production; every
+affected row was dev `ZZTest` data. This is a bug, not an incident.
+
+### 0.9 The overwrite was still destructive, and the fix was in the wrong file
+
+`sanitize()` in all three endpoints is a **full-row builder, not a filter**. It
+does not narrow a payload; it expands one, emitting every column with a default:
+
+```js
+stageHistory:     data.stageHistory     || [],
+comments:         data.comments         || [],
+contactIds:       data.contactIds       || [],
+pipelineId:       data.pipelineId       || 'default',
+createdBy:        data.createdBy        || null,
+```
+
+That is correct for POST, where the row does not exist. The bulk PUT branches ran
+`rows: data.map(d => sanitize(d))`, and `bulkUpsert` derives its `SET` clause from
+the keys supplied — which after `sanitize()` is **every** key. A seven-column CSV
+overwrite wrote roughly forty columns.
+
+**§0A0000.1 fixed this in the caller.** `buildOpp` stopped sending `stageHistory`
+/ `comments` / `contactIds`; `sanitize()` put them straight back. The client-side
+fix was correct and completely ineffective — and §18b13 already said, in as many
+words, that a partial PUT fix belongs in the endpoint and not the caller. The rule
+was right, committed, and not applied to the file it was about.
+
+It is also why §0A0000.10 recorded the opportunities overwrite as passing. It did
+pass, on stage and ARR — both CSV columns, both genuinely written. Every field the
+CSV did *not* carry was being destroyed in the same request, and no check looked
+at one until now.
+
+**Fix:** `netlify/functions/_sanitize.mjs`. `partialRows(rows, sanitize)` narrows
+each sanitized row to the columns the payload actually supplied, as a union across
+the batch so the multi-row INSERT keeps one shape. Wired into the bulk PUT branch
+of `opportunities.mjs`, `contacts.mjs` and `accounts.mjs` — accounts and contacts
+had the identical shape and had been destructive a session longer.
+
+The distinction the old code could not make: **a column not mapped in the CSV
+never appears and is never written; a column mapped and left empty appears in
+every row and is written empty.** `sanitize()` made both look supplied.
+
+Pure and dependency-free for the usual reason — all three endpoints import
+`db/index.js`, which is TypeScript, so anything defined in them loads only under
+`tsx` and never runs in the gates.
+
+**Tests 140 → 151, mutations 14 → 17.** `tests/partial-sanitize.test.mjs` pins the
+narrowing, the batch union in both directions, the coercion surviving on kept
+columns, and the exact regression — the CSV overwrite shape asserted not to carry
+`stageHistory`, `comments`, `contactIds`, `createdBy`, `createdDate`,
+`stageChangedDate` or `pipelineId`.
+
+One clause was written and then deleted: an `ALWAYS_KEEP = ['id']` guard. The
+mutation harness survived its removal, because every bulk branch 400s on a row
+without an id, so it could never fire. Removed rather than given a contrived test
+— §0A0000.3, a clause that cannot fire is worse than none.
+
+**Not yet confirmed on dev.** Retest check 1 in full after deploy, then check 4,
+which exercises the same path.
 
 ---
 

@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs';
 
 const mutations = [
     ['bulkClient: chunking disabled',
@@ -86,6 +86,21 @@ const mutations = [
         'src/utils/csvMapping.js',
         '.filter(f => !isMapped(fieldMapping?.[f.key]))\n        .map(f => f.label);',
         '.filter(() => false)\n        .map(f => f.label);'],
+
+    ['_sanitize: the union is computed per row, breaking INSERT uniformity',
+        'netlify/functions/_sanitize.mjs',
+        'for (const row of rows) {\n        if (!row || typeof row !== \'object\') continue;\n        for (const key of Object.keys(row)) supplied.add(key);\n    }',
+        'const firstRow = rows[0] || {};\n    for (const key of Object.keys(firstRow)) supplied.add(key);'],
+
+    ['_sanitize: narrowing removed entirely (the original defect)',
+        'netlify/functions/_sanitize.mjs',
+        'if (supplied.has(key)) out[key] = full[key];',
+        'out[key] = full[key];'],
+
+    ['_sanitize: a missing sanitize function passes raw rows through',
+        'netlify/functions/_sanitize.mjs',
+        "throw new TypeError('partialRows requires the endpoint sanitize function');",
+        'return rows;'],
 ];
 
 let survived = 0;

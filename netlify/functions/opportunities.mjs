@@ -6,6 +6,7 @@ import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import { serverErrorBody, writeAudit, getCallerName, bulkInsert, bulkUpsert } from './_lib.mjs';
+import { partialRows } from './_sanitize.mjs';
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -226,9 +227,18 @@ export const handler = async (event) => {
                 // salesRep check the single-record path applies below, resolved once
                 // for the batch.
                 const callerName = canSeeAll(userRole) ? null : await getCallerName(userId);
+                    // partialRows, not sanitize() alone. sanitize() is a FULL-ROW
+                    // builder -- it expands a payload rather than filtering one --
+                    // and bulkUpsert derives its SET clause from the keys supplied,
+                    // so feeding it a sanitized row wrote every column. A CSV
+                    // overwrite carrying fourteen columns wrote all forty, blanking
+                    // stage history, Team Notes and linked contacts with the empty
+                    // arrays sanitize had just invented. 18b13: the fix belongs
+                    // here, in the endpoint. The previous one was in the caller and
+                    // sanitize put the columns straight back.
                 const result = await bulkUpsert({
                     table: opportunities,
-                    rows: data.map(d => sanitize(d)),
+                    rows: partialRows(data, sanitize),
                     orgId,
                     ownerColumn: opportunities.salesRep,
                     callerName,
