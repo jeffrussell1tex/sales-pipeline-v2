@@ -1,6 +1,10 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch, dbWrite } from '../../utils/storage';
+import { makeBulkClient } from '../../utils/bulkClient';
+import {
+    mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError,
+} from '../../utils/importReceipt';
 import OpportunityModal from '../modals/OpportunityModal';
 import ContactRail from '../rails/ContactRail';
 import AccountRail from '../rails/AccountRail';
@@ -20,95 +24,49 @@ import MergeReviewModal from '../modals/MergeReviewModal';
 import ContactMergeReviewModal from '../modals/ContactMergeReviewModal';
 // ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
-// Bulk overwrite for the CSV importer.
+// Chunked bulk transport for the CSV importer.
 //
-// The previous path (saveAll) sent ONE PUT PER RECORD at CONCURRENCY 3. Re-importing
-// a 1,504-row contacts file meant ~500 sequential round-trips — 75s to 2.5min with
-// the tab largely unresponsive. The array branch of PUT takes 400 rows per request,
-// turning that into 4. See bulkUpsert in netlify/functions/_lib.mjs. The NEW-record
-// path had exactly the same shape and is now postNew, below.
+// postNew and saveBulk used to live here, at module scope inside a file that
+// imports React — so neither could be reached by `node --test`, and every
+// property that makes them correct (chunk size, accumulation across chunks, the
+// never-throw contract) is invisible in the return value. They now live in
+// src/utils/bulkClient.js with an injected fetch, the same seam bulkInsert uses
+// for its db client, and are pinned by tests/bulk-client.test.mjs.
 //
-// Module scope, not inside the component: both onImportContacts and onImportAccounts
-// need it, and a helper redefined on every render is a closure hazard for no benefit.
-const BULK_CHUNK = 400;   // must match BULK_CHUNK in netlify/functions/_bulk.mjs
+// saveBulk is gone rather than renamed: it threw from inside its own loop, so a
+// failure on chunk 3 discarded the counts from chunks 1 and 2 even though those
+// rows were already written server-side. 18b15 forbids exactly that for postNew;
+// it was live in the PUT half. putBulk returns instead, and returns appliedIds.
+const bulk = makeBulkClient(dbFetch);
 
-const saveBulk = async (url, items, progressOffset = 0, progressTotal = items.length) => {
-    let updated = 0, notFound = 0, forbidden = 0, done = 0;
-    for (let i = 0; i < items.length; i += BULK_CHUNK) {
-        const chunk = items.slice(i, i + BULK_CHUNK);
-        const r = await dbFetch(url, { method: 'PUT', body: JSON.stringify(chunk) });
-        // dbFetch returns a Response and NEVER throws on 4xx/5xx — check res.ok.
-        if (!r.ok) {
-            let msg = `Bulk update failed (${r.status}).`;
-            try {
-                const b = await r.json();
-                // serverErrorBody returns a requestId; surface it so the Netlify
-                // function log for this exact failure can be found.
-                if (b.error) msg = b.requestId ? `${b.error} (ref ${b.requestId})` : b.error;
-            } catch { /* non-JSON error body */ }
-            throw new Error(msg);
-        }
-        const res = await r.json();
-        updated   += res.updated || 0;
-        notFound  += (res.notFound  || []).length;
-        forbidden += (res.forbidden || []).length;
-        done += chunk.length;
-        if (typeof window.__importProgressCb === 'function') {
-            window.__importProgressCb(progressOffset + done, progressTotal);
-        }
-    }
-    return { updated, notFound, forbidden };
+// Progress is a module-level callback because CsvImportModal owns the bar and
+// ModalLayer owns the requests. Unchanged in behaviour, named once here.
+const onProgress = (done, total) => {
+    if (typeof window.__importProgressCb === 'function') window.__importProgressCb(done, total);
 };
 
-// POST new records in chunks, and report EXACTLY what landed.
+// Apply an overwrite to local state for EXACTLY the ids the server accepted.
 //
-// Every import handler used to do `setX(prev => [...prev, ...rows])` BEFORE the
-// request and never roll it back, so a failed POST left the UI showing records
-// that were never saved — the on-screen count was untrustworthy until a hard
-// refresh. Rolling back is the obvious fix and the wrong one: on a partial
-// failure the client cannot know which rows to remove.
-//
-// The server now returns `insertedIds`, so there is nothing to guess and nothing
-// to roll back. State is applied from the server's answer, after the write.
-//
-// Never throws. It returns what landed so the caller can commit that to state
-// FIRST and report the failure second — throwing from inside the loop would
-// discard the chunks that did succeed.
-const postNew = async (url, items, progressOffset = 0, progressTotal = items.length) => {
-    const landed = [];
-    const failed = [];
-    let error = null, done = 0;
+// Every overwrite path used to do setX(...) and THEN await the request, so the
+// UI showed edits that may never have been written — the same defect 18b15 fixed
+// on the new-record paths, left in place on the overwrite ones. appliedIds is
+// (sent - notFound - forbidden), derived per chunk, with any chunk whose count
+// disagrees with its own id lists excluded rather than guessed at.
+const applyOverwrites = (setter, rows, appliedIds) => {
+    if (!appliedIds.length) return;
+    const byId = new Map(rows.filter(r => appliedIds.includes(r.id)).map(r => [r.id, r]));
+    if (byId.size === 0) return;
+    setter(prev => prev.map(existing => {
+        const ow = byId.get(existing.id);
+        return ow ? { ...existing, ...ow } : existing;
+    }));
+};
 
-    for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
-        const chunk = items.slice(i, i + BULK_CHUNK);
-        const r = await dbFetch(url, { method: 'POST', body: JSON.stringify(chunk) });
-        // dbFetch returns a Response and NEVER throws on 4xx/5xx — check res.ok.
-        let body = null;
-        try { body = await r.json(); } catch { /* non-JSON body */ }
-
-        if (!r.ok) {
-            error = body?.error
-                ? (body.requestId ? `${body.error} (ref ${body.requestId})` : body.error)
-                : `Bulk import failed (${r.status}).`;
-            break;
-        }
-
-        if (Array.isArray(body?.insertedIds)) {
-            const ids = new Set(body.insertedIds);
-            for (const row of chunk) (ids.has(row.id) ? landed : failed).push(row);
-        } else {
-            // Older deploy with no insertedIds — fall back to the count.
-            const n = body?.inserted ?? chunk.length;
-            landed.push(...chunk.slice(0, n));
-            failed.push(...chunk.slice(n));
-        }
-
-        done += chunk.length;
-        if (typeof window.__importProgressCb === 'function') {
-            window.__importProgressCb(progressOffset + done, progressTotal);
-        }
-    }
-    return { landed, failed, error };
+// Every handler ends the same way: hand the modal a receipt it can render from,
+// or throw one it can read fields off. Never a sentence to be parsed back.
+const settle = (receipt, noun) => {
+    if (!isClean(receipt)) throw new ImportError(receipt, noun);
+    return receipt;
 };
 
 export default function ModalLayer() {
@@ -465,15 +423,16 @@ export default function ModalLayer() {
                     opportunities={opportunities}
                     onClose={() => { document.activeElement?.blur(); setShowCsvImportModal(false); }}
                     onImportContacts={async (newContacts, overwrites = []) => {
-                        // This path never used the bulk endpoint at all. It POSTed
-                        // one record at a time at concurrency 3, with per-record
-                        // retries and a 100ms pause every 50 rows — ~500 round-trips
-                        // and roughly a minute of wall clock for a 1,500-row file,
-                        // against the same array endpoint the accounts importer has
-                        // been using all along. postNew chunks it into 4.
+                        // Three phases: auto-create missing companies, POST new
+                        // contacts, PUT overwrites. Each returns a receipt; the
+                        // modal renders the sum. Counts never travel as prose
+                        // (18b15) — the accounts phase in particular used to
+                        // throw "2 of 3 new companies failed to save", which the
+                        // modal regexed and rendered as contacts.
                         const totalProgress = newContacts.length + overwrites.length;
+                        const phases = [];
 
-                        // Step 1: Auto-add new companies to accounts first (from newContacts only — overwrites keep existing account linkage)
+                        // Phase 1: companies referenced by the incoming contacts.
                         const existingNames = accounts.map(a => a.name.toLowerCase());
                         const newCompanies = [...new Set(
                             newContacts.map(c => c.company).filter(c => c && !existingNames.includes(c.toLowerCase()))
@@ -484,31 +443,30 @@ export default function ModalLayer() {
                                 verticalMarket: '', address: '', city: '', state: '',
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
-                            const acc = await postNew('/.netlify/functions/accounts', newAccts);
+                            const acc = await bulk.postNew('/.netlify/functions/accounts', newAccts);
                             if (acc.landed.length > 0) setAccounts(prev => [...prev, ...acc.landed]);
-                            // A company that failed here would leave its contacts
-                            // pointing at an account that does not exist, so this
-                            // stops rather than importing them orphaned.
-                            if (acc.error) throw new Error(acc.error);
-                            if (acc.failed.length > 0) throw new Error(`${acc.failed.length} of ${newAccts.length} new companies failed to save, so their contacts were not imported. Fix those rows and re-import.`);
+                            const accReceipt = receiptFromInsert(acc);
+                            // A contact whose company failed would point at an
+                            // account that does not exist, so this stops rather
+                            // than importing them orphaned — and reports the
+                            // company figures as company figures.
+                            if (!isClean(accReceipt)) throw new ImportError(accReceipt, 'company');
+                            phases.push(accReceipt);
                         }
 
-                        // Step 2: POST new contacts
+                        // Phase 2: new contacts.
                         const contactsWithIds = newContacts.map((c) => ({
                             ...c,
                             id: crypto.randomUUID(),
                             createdAt: new Date().toISOString()
                         }));
                         if (contactsWithIds.length > 0) {
-                            const { landed, failed, error } = await postNew('/.netlify/functions/contacts', contactsWithIds, 0, totalProgress);
-                            if (landed.length > 0) setContacts(prev => [...prev, ...landed]);
-                            if (error) throw new Error(error);
-                            if (failed.length > 0) {
-                                throw new Error(`${failed.length} of ${contactsWithIds.length} contacts failed to save. The rest imported successfully — re-import the failed rows.`);
-                            }
+                            const res = await bulk.postNew('/.netlify/functions/contacts', contactsWithIds, { onProgress, progressTotal: totalProgress });
+                            if (res.landed.length > 0) setContacts(prev => [...prev, ...res.landed]);
+                            phases.push(receiptFromInsert(res));
                         }
 
-                        // Step 3: PUT overwrites — use the existing record's id
+                        // Phase 3: overwrites — state applied from appliedIds.
                         if (overwrites.length > 0) {
                             const overwritesWithIds = overwrites.map((c) => ({
                                 ...c,
@@ -516,20 +474,16 @@ export default function ModalLayer() {
                                 updatedAt: new Date().toISOString(),
                                 _existingId: undefined,
                             }));
-                            setContacts(prev => prev.map(existing => {
-                                const ow = overwritesWithIds.find(o => o.id === existing.id);
-                                return ow ? { ...existing, ...ow } : existing;
-                            }));
-                            const ow = await saveBulk('/.netlify/functions/contacts', overwritesWithIds, contactsWithIds.length, totalProgress);
-                            const missed = overwritesWithIds.length - ow.updated;
-                            if (missed > 0) {
-                                const why = ow.forbidden ? ` ${ow.forbidden} were owned by another rep.` : '';
-                                throw new Error(`${missed} of ${overwritesWithIds.length} overwrites failed to save.${why} Try re-importing the failed records.`);
-                            }
+                            const ow = await bulk.putBulk('/.netlify/functions/contacts', overwritesWithIds, { onProgress, progressOffset: contactsWithIds.length, progressTotal: totalProgress });
+                            applyOverwrites(setContacts, overwritesWithIds, ow.appliedIds);
+                            phases.push(receiptFromUpdate(ow));
                         }
+
+                        return settle(mergeReceipts(...phases), 'contact');
                     }}
                     onImportAccounts={async (newAccounts, overwrites = []) => {
                         const totalProgress = newAccounts.length + overwrites.length;
+                        const phases = [];
 
                         // Pass 1: new accounts — parents first, then sub-accounts
                         const parents = newAccounts.filter(a => !a.parentAccount?.trim());
@@ -552,43 +506,42 @@ export default function ModalLayer() {
                         const allWithIds = [...parentsWithIds, ...subsWithIds];
 
                         if (allWithIds.length > 0) {
-                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, totalProgress);
-                            const { landed, failed, error } = await postNew('/.netlify/functions/accounts', allWithIds, 0, totalProgress);
+                            onProgress(0, totalProgress);
+                            const res = await bulk.postNew('/.netlify/functions/accounts', allWithIds, { onProgress, progressTotal: totalProgress });
                             // Commit what actually saved before surfacing the failure.
-                            if (landed.length > 0) setAccounts(prev => [...prev, ...landed]);
-                            if (error) throw new Error(error);
-                            if (failed.length > 0) {
-                                // parentAccountId is a plain text column, not a foreign
-                                // key, so a sub-account whose parent failed lands with a
-                                // parent id that points at nothing — and the hierarchy
-                                // silently looks wrong rather than erroring. Name the
-                                // parents so the re-import fixes the cause, not the
-                                // symptom.
-                                const lostParents = failed.filter(f => parentsWithIds.some(p => p.id === f.id));
-                                const orphaned = lostParents.length > 0
-                                    ? ` ${lostParents.length} of them are parent accounts (${lostParents.slice(0, 3).map(p => p.name).join(', ')}${lostParents.length > 3 ? '…' : ''}), so any sub-accounts under them imported without a parent link.`
-                                    : '';
-                                throw new Error(`${failed.length} of ${allWithIds.length} accounts failed to save. The rest imported successfully — re-import the failed rows.${orphaned}`);
+                            if (res.landed.length > 0) setAccounts(prev => [...prev, ...res.landed]);
+
+                            // parentAccountId is a plain text column, not a
+                            // foreign key, so a sub-account whose parent failed
+                            // lands pointing at nothing and the hierarchy looks
+                            // wrong rather than erroring. Name the parents so a
+                            // re-import fixes the cause, not the symptom. This is
+                            // the one piece of prose that survives, because it
+                            // identifies ROWS rather than reporting a count.
+                            const lostParents = res.failed.filter(f => parentsWithIds.some(p => p.id === f.id));
+                            const receipt = receiptFromInsert(res);
+                            if (lostParents.length > 0) {
+                                receipt.error = [
+                                    receipt.error,
+                                    `${lostParents.length} of the failures are parent accounts (${lostParents.slice(0, 3).map(p => p.name).join(', ')}${lostParents.length > 3 ? '…' : ''}), so any sub-accounts under them imported without a parent link.`,
+                                ].filter(Boolean).join(' ');
                             }
+                            phases.push(receipt);
+                            if (!isClean(receipt)) throw new ImportError(mergeReceipts(...phases), 'account');
                         }
 
-                        // Overwrites — PUT each with its existing id
+                        // Overwrites — PUT with the existing id, state from appliedIds
                         if (overwrites.length > 0) {
                             const overwritesWithIds = overwrites.map(a => {
                                 const { parentAccount: _drop, _existingId, ...rest } = a;
                                 return { ...rest, id: _existingId };
                             });
-                            setAccounts(prev => prev.map(existing => {
-                                const ow = overwritesWithIds.find(o => o.id === existing.id);
-                                return ow ? { ...existing, ...ow } : existing;
-                            }));
-                            const owA = await saveBulk('/.netlify/functions/accounts', overwritesWithIds, allWithIds.length, totalProgress);
-                            const missedA = overwritesWithIds.length - owA.updated;
-                            if (missedA > 0) {
-                                const whyA = owA.forbidden ? ` ${owA.forbidden} were owned by another rep.` : '';
-                                throw new Error(`${missedA} of ${overwritesWithIds.length} overwrites failed to save.${whyA}`);
-                            }
+                            const ow = await bulk.putBulk('/.netlify/functions/accounts', overwritesWithIds, { onProgress, progressOffset: allWithIds.length, progressTotal: totalProgress });
+                            applyOverwrites(setAccounts, overwritesWithIds, ow.appliedIds);
+                            phases.push(receiptFromUpdate(ow));
                         }
+
+                        return settle(mergeReceipts(...phases), 'account');
                     }}
                     onImportOpportunities={async (newOpps, overwrites = []) => {
                         const today = new Date().toISOString().split('T')[0];
@@ -644,33 +597,37 @@ export default function ModalLayer() {
                             };
                         };
 
+                        const phases = [];
+
                         // POST new opps
                         if (newOpps.length > 0) {
                             const oppsWithIds = newOpps.map(o => buildOpp(o, null));
-                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, totalProgress);
-                            const { landed, failed, error } = await postNew('/.netlify/functions/opportunities', oppsWithIds, 0, totalProgress);
-                            if (landed.length > 0) setOpportunities(prev => [...prev, ...landed]);
-                            if (error) throw new Error(error);
-                            if (failed.length > 0) throw new Error(`${failed.length} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully — re-import the failed rows.`);
+                            onProgress(0, totalProgress);
+                            const res = await bulk.postNew('/.netlify/functions/opportunities', oppsWithIds, { onProgress, progressTotal: totalProgress });
+                            if (res.landed.length > 0) setOpportunities(prev => [...prev, ...res.landed]);
+                            const receipt = receiptFromInsert(res);
+                            phases.push(receipt);
+                            if (!isClean(receipt)) throw new ImportError(mergeReceipts(...phases), 'opportunity');
                         }
 
-                        // PUT overwrites
+                        // PUT overwrites.
+                        //
+                        // This path called dbFetch directly with the entire array
+                        // and read the body only when the response was NOT ok, so
+                        // it was the one overwrite path with no chunking, and
+                        // `updated` / `notFound` / `forbidden` were discarded
+                        // outright. An overwrite matching zero ids returned 200
+                        // with updated: 0, and the Results tile rendered
+                        // "3 overwritten" — the count the CLIENT decided to send,
+                        // never a number the server agreed with.
                         if (overwrites.length > 0) {
                             const overwritesBuilt = overwrites.map(o => buildOpp(o, o._existingId));
-                            setOpportunities(prev => prev.map(existing => {
-                                const ow = overwritesBuilt.find(o => o.id === existing.id);
-                                return ow ? { ...existing, ...ow } : existing;
-                            }));
-                            const r2 = await dbFetch('/.netlify/functions/opportunities', {
-                                method: 'PUT',
-                                body: JSON.stringify(overwritesBuilt),
-                            });
-                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(totalProgress, totalProgress);
-                            if (!r2.ok) {
-                                const res2 = await r2.json();
-                                throw new Error(res2.error || 'Overwrite failed. Please try again.');
-                            }
+                            const ow = await bulk.putBulk('/.netlify/functions/opportunities', overwritesBuilt, { onProgress, progressOffset: newOpps.length, progressTotal: totalProgress });
+                            applyOverwrites(setOpportunities, overwritesBuilt, ow.appliedIds);
+                            phases.push(receiptFromUpdate(ow));
                         }
+
+                        return settle(mergeReceipts(...phases), 'opportunity');
                     }}
                 />
             )}

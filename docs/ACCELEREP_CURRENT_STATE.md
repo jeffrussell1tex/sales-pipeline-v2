@@ -1,6 +1,7 @@
 # ACCELEREP — Current State
-**Updated:** August 14, 2026  
-**Batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
+**Updated:** August 17, 2026  
+**Batch:** **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · 89 → 140 tests, 14 mutations
+**Prior batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
 **Prior batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · **Clerk advisories cleared — Production migration unblocked** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · 19 → 69 tests
 **Prior batch:** SalesManagerTab hoist, SPIFF persistence & claim plumbing
 **Prior batch:** inline-component audit — **the backlog named the wrong three files**; 81 raw findings triaged to 5 user-visible, 3 fixed · new `check:inline` scanner
@@ -13,7 +14,149 @@
 
 ---
 
-## 0. Latest Batch — Bulk Insert, and Three Paths That Had Never Run
+## 0. Latest Batch — The Importer Reports What Landed
+
+> Four backlog items turned out to be one defect with four faces. The importer's
+> Results screen reported numbers that were never derived from what the server
+> said: some were parsed back out of an error sentence, some were the count the
+> CLIENT decided to send, and one path threw the server's answer away without
+> reading it. Every one of them failed in the reassuring direction.
+
+### 0.1 Counts travelled as prose
+
+`CsvImportModal` recovered its Results figures by regex-parsing the thrown error
+message:
+
+```js
+const isPartial = msg.includes('of') && msg.includes('failed to save');
+const m = msg.match(/(\d+)\s+of\s+(\d+)/);
+```
+
+So the numbers a user saw depended on the wording of a string thrown in another
+module. The accounts phase of a contacts import throws about **companies** — "2
+of 3 new companies failed to save" on a 5-contact file rendered **"1 of 5 records
+saved"**: a number describing companies, presented as contacts, against a total it
+did not come from. Both figures wrong, both reassuring.
+
+Replaced by a **receipt** — `src/utils/importReceipt.js`. Numbers come off the
+response, travel as fields, and prose is generated FROM them at the very end by
+`describeReceipt()`. Nothing parses a sentence back into a number. `ImportError`
+carries the receipt; `receiptFromError()` returns `null` for anything else, so a
+`TypeError` in a handler is no longer rendered as a counted partial failure.
+
+The invariant `attempted === created + updated + failed` is asserted directly.
+`skipped` and `dropped` sit deliberately outside it — neither was ever sent, and
+folding them into `failed` is how "6 rows in, 0 out" came to render as success.
+
+### 0.2 `saveBulk` threw from inside its own loop
+
+§18b15 states the rule and names `postNew` as the compliant example — an early
+chunk that succeeded has to reach state before the failure is reported. `saveBulk`
+sat twenty lines above `postNew` in the same file and violated it: a failure on
+chunk 3 discarded the accumulated `updated` / `notFound` / `forbidden` from chunks
+1 and 2, rows already written server-side.
+
+It was inert only because the overwrite paths wrote state optimistically **before**
+the request — §0.5 masked it. Fixing §0.5 alone would have made it live. Same shape
+as §0A0000.1: a correctness fix turning a latent defect reachable. The rule that
+predicted it was committed in the same commit as the code that broke it.
+
+### 0.3 The opportunities overwrite bypassed chunking entirely
+
+`ModalLayer.jsx:664` called `dbFetch` directly with the whole array and read the
+body **only when the response was not ok**. Contacts and accounts both went
+through `saveBulk`. Consequences, in order of severity:
+
+- `updated`, `notFound` and `forbidden` were **discarded**. An overwrite matching
+  zero ids returns `200 {updated: 0}`, and the Results tile rendered
+  "3 overwritten" — `overwriteCount`, the number the client chose to send.
+- No client-side chunking, so one request body for the entire file. `bulkUpsert`
+  chunks server-side, so this was a payload/timeout risk rather than a bind-param
+  crash — but it is the one path §18b8 did not reach.
+
+**§0A0000.10 recorded this check as passing, and it did** — on the refresh, not on
+the tile. The tile would have read "3 overwritten" if the server had matched
+nothing. Checking the write landed rather than that the call returned is the only
+reason that row was evidence.
+
+### 0.4 Both transport helpers extracted and made testable
+
+`postNew` and `saveBulk` lived at module scope in `ModalLayer.jsx`, which imports
+React — so neither was reachable by `node --test`, and chunk size, cross-chunk
+accumulation and the never-throw contract are all invisible in the return value.
+Same argument as `_bulk.mjs`, `quarters.js` and `csvAutoMap.js`.
+
+They are now `src/utils/bulkClient.js`, behind `makeBulkClient(fetchFn)`. The
+injected fetch is the same seam `bulkInsert` uses for its db client: the recording
+stub goes in through the front door, no module mocks, no `--experimental` flag, no
+`window`.
+
+### 0.5 Overwrite state applies from what the server accepted — three paths
+
+`putBulk` returns **`appliedIds`**: `(sent − notFound − forbidden)`, derived per
+chunk. `bulkUpsert` partitions each chunk into exactly those three groups, so this
+is exact rather than inferred. A chunk whose derivation disagrees with the
+server's own `updated` count contributes **no** ids and is counted as a
+`discrepancy` — applying an ambiguous set is precisely how the UI came to show
+records that were never written, and the honest answer is that a refresh will
+settle it.
+
+The handoff and §0A0000.6 both said two paths. It was **three**: contacts at
+`ModalLayer.jsx:519` had the identical shape.
+
+### 0.6 The importer no longer congratulates you on importing nothing
+
+`getMappedData()` ended in a silent `.filter()`. An accounts CSV run through the
+Contacts importer maps neither required field, so every row failed it: six rows
+in, zero out, green tick, *"Import Complete!"*.
+
+Now `src/utils/csvMapping.js`. The drop **rule** is preserved exactly — `.some`,
+not `.every`, so a mononym still imports and the required marks mean "at least one
+of these". The **silence** is not. `mapCsvRows` returns `dropped[]` with row
+numbers counted as the user sees them in Excel (header is row 1), and
+`unmappedRequired` names the cause rather than the symptom: *"No column is mapped
+to First Name or Last Name."*
+
+Surfaced at **Preview**, the last step where the mapping can still be fixed, and
+the primary button is disabled when nothing is importable. Results is too late.
+
+Also fixed there: the tile labelled **"imported"** rendered `total`
+(`newRecords.length + overwriteCount`), so an overwrite-only run read
+"3 imported · 3 overwritten" when nothing was created. Tiles are now `created`,
+`overwritten`, `skipped`, `not sent` and `failed`, each a receipt field, each
+hidden at zero.
+
+### 0.7 Tests 89 → 140, and 14 mutations
+
+| Suite | Pins |
+|---|---|
+| `bulk-client.test.mjs` (18) | chunk size, never-throw, cross-chunk accumulation, `appliedIds` derivation, discrepancy exclusion, progress offsets, POST/PUT methods |
+| `import-receipt.test.mjs` (18) | the `attempted` invariant, unsent-chunk accounting, merge precedence, `isClean`/`isPartial`, receipt-not-message |
+| `csv-mapping.test.mjs` (15) | the `.some` rule, drop numbering, cause diagnosis, the accounts-in-contacts regression and its control |
+
+`scripts/mutate-import.mjs` breaks each rule in turn and asserts the suites go
+red — **14/14 caught**, including both original defects (`putBulk` throwing
+in-loop; drops going silent) and the `.some` → `.every` tightening. Files are saved
+and restored in memory, never via `git checkout`, which has reverted unrelated
+fixes mid-session before.
+
+### 0.8 Not yet confirmed on dev
+
+Gates are green and the suites are mutation-tested, but §18b8 is explicit that
+generation proving out is not execution proving out. **Nothing below is confirmed
+until run against `accelerep.netlify.app` with `ZZTest` data and a hard refresh.**
+
+| Check | Status |
+|---|---|
+| Accounts CSV into the Contacts importer now blocks at Preview with the cause named | not yet run |
+| An overwrite of deleted records reports `failed`/`no longer exist`, not success | not yet run |
+| Overwrite counts survive a hard refresh and match the tiles | not yet run |
+| A comment survives a CSV overwrite (carried from §0A0000.10) | **not yet run** |
+| Avatar timezone PUT fires once (carried from §0A0000.10) | **not yet run** |
+
+---
+
+## 0A0000. Prior Batch — Bulk Insert, and Three Paths That Had Never Run
 
 > This started as two handoff items and turned into six, because each fix exposed
 > the next. Last session the pattern was code that *looked* finished. This session
@@ -108,6 +251,11 @@ state is applied from the server's answer after the write.
 
 **Still outstanding:** the accounts and opportunities OVERWRITE paths keep the old
 optimistic shape. Only the new-record paths were converted.
+
+> **Correction (§0.5 below).** That is an undercount, and the same undercount
+> §0.2 above is named after: it was **three** paths. `ModalLayer.jsx:519` did it for
+> contacts too. Whatever produced the original two-of-three miss produced it again
+> four sections later, in the same document. All three are converted now.
 
 ### 0.7 Bulk accounts POST skipped territory assignment
 

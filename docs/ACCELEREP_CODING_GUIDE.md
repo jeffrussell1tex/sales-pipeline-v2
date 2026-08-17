@@ -1816,7 +1816,25 @@ const m = msg.match(/(\d+)\s+of\s+(\d+)/);
 So the numbers a user sees depend on the wording of an error string in another
 module. A message reading "2 of 3 new companies failed to save" on a 5-contact
 import renders "1 of 5 records saved" -- both numbers wrong, in the reassuring
-direction. Throw a structured error carrying `savedCount` and `total` as fields.
+direction.
+
+**Fixed.** `src/utils/importReceipt.js` is the structured value; handlers throw
+`ImportError`, which carries a receipt, and `receiptFromError()` returns null for
+anything else so a `TypeError` is never rendered as a counted partial failure.
+Prose is generated FROM the numbers by `describeReceipt()` and never parsed back.
+
+The never-throw rule above applies to the PUT half too. `saveBulk` threw from
+inside its own loop and discarded the counts from chunks already written
+server-side; `putBulk` in `src/utils/bulkClient.js` returns instead.
+
+### Apply overwrite state from the ids the server accepted
+
+`insertedIds` answers this for POST. For PUT the answer is `bulkUpsert`'s own
+partition: the ids that took are `(sent - notFound - forbidden)`, and `putBulk`
+returns them as `appliedIds`. A chunk whose derivation disagrees with the
+server's `updated` count contributes NO ids and is reported as a discrepancy --
+applying an ambiguous set is how the UI came to show records that were never
+written, and a refresh is the honest answer.
 
 ### An overwrite is not a create
 
@@ -1837,6 +1855,43 @@ nothing about it has been proven.
 
 Send only the columns the source actually describes and let the endpoint merge the
 rest (18b13).
+
+---
+
+## 18b16. A Row You Discard Must Be Reported (hard rule)
+
+A filter that removes records before a write is a decision made on the user's
+behalf. If nothing in the UI says it happened, the absence of the data is the only
+evidence -- and the success screen actively argues against it.
+
+```js
+// WRONG -- returns records, discards the rest, says nothing
+return rows.map(toRecord)
+    .filter(r => required.some(f => r[f.key]?.trim()));
+
+// RIGHT -- the discards come back too, and the caller must decide what to say
+const { records, dropped, unmappedRequired } = mapCsvRows(rows, fields, mapping);
+```
+
+`getMappedData()` in `CsvImportModal` dropped every row missing all of its
+required fields. An accounts CSV run through the CONTACTS importer maps neither
+`firstName` nor `lastName`, so every row failed the filter: **six rows in, zero
+out, a green tick and "Import Complete!"**. The count rendered was `total`, which
+was `newRecords.length + overwriteCount` -- both zero, and zero renders quietly.
+
+Three requirements, all of them learned from that screen:
+
+1. **Report the cause, not the symptom.** A file where EVERY row drops is almost
+   never 500 bad rows; it is a required field mapped to no column. Name the field.
+2. **Report it at the step where it can still be fixed.** Preview, not Results.
+   By Results the request has been sent and the mapping screen is two steps back.
+3. **Do not change the rule while you are fixing the silence.** The filter is
+   `.some`, not `.every`, so a mononym imports and the required marks mean "at
+   least one of these". Tightening it is a product decision with an
+   import-breaking blast radius. It is pinned by test, not quietly corrected.
+
+The general form: **an empty result and a discarded result must not render the
+same.** A count of zero is what both a clean no-op and a total failure look like.
 
 ---
 

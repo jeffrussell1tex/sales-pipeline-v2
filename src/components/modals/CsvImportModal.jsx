@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { autoMapHeaders } from '../../utils/csvAutoMap';
+import { mapCsvRows, describeDropped } from '../../utils/csvMapping';
+import {
+    mergeReceipts, receiptFromPreflight, isClean, isPartial, describeReceipt,
+    receiptFromError, emptyReceipt,
+} from '../../utils/importReceipt';
 
 const T = {
     bg:'#f0ece4', surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', borderStrong:'#d4c8b4',
@@ -251,16 +256,14 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // Map CSV rows → app field objects
     // ---------------------------------------------------------------------------
 
-    const getMappedData = () => {
-        return csvRows.map(row => {
-            const record = {};
-            appFields.forEach(field => {
-                const colIdx = fieldMapping[field.key];
-                record[field.key] = (colIdx !== undefined && colIdx !== '' && colIdx >= 0) ? (row[colIdx] || '') : '';
-            });
-            return record;
-        }).filter(r => appFields.filter(f => f.required).some(f => r[f.key]?.trim()));
-    };
+    // Mapping and the account of what it discarded both live in
+    // src/utils/csvMapping.js. The trailing .filter() that used to be here
+    // dropped every row missing all its required fields with nothing anywhere to
+    // say so — an accounts CSV run through the CONTACTS importer produced a green
+    // tick, "Import Complete!" and 0 imported. The rule is unchanged; the silence
+    // is not.
+    const getMapped = () => mapCsvRows(csvRows, appFields, fieldMapping);
+    const getMappedData = () => getMapped().records;
 
     // ---------------------------------------------------------------------------
     // "Preview → Conflicts" transition
@@ -268,7 +271,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // ---------------------------------------------------------------------------
 
     const handleCheckDuplicates = () => {
-        const data = getMappedData();
+        const { records: data, dropped } = getMapped();
         const found = detectDuplicates(
             data,
             contacts || [],
@@ -283,7 +286,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         } else {
             // No duplicates — go straight to import
             setConflicts([]);
-            runImport(data, []);
+            runImport(data, [], dropped.length);
         }
     };
 
@@ -304,7 +307,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // Passes { newRecords, overwrites } to the ModalLayer callback.
     // ---------------------------------------------------------------------------
 
-    const runImport = async (data, resolvedConflicts) => {
+    const runImport = async (data, resolvedConflicts, droppedCount = 0) => {
         setImporting(true);
         setImportProgress(0);
         window.__importProgressCb = (done, total) => setImportProgress(Math.round((done / total) * 100));
@@ -324,41 +327,39 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
             .map(c => ({ ...c.incoming, _existingId: c.existing.id }));
 
         const skippedCount = resolvedConflicts.filter(c => c.action === 'skip').length;
-        const overwriteCount = overwrites.length;
+
+        // Rows the user skipped, and rows the mapper never sent. Neither is a
+        // failure; both belong on the receipt, because an import that discarded
+        // six rows before sending them is not a clean import.
+        const preflight = receiptFromPreflight({ skipped: skippedCount, dropped: droppedCount });
 
         try {
+            let result;
             if (importType === 'contacts') {
-                await onImportContacts(newRecords, overwrites);
+                result = await onImportContacts(newRecords, overwrites);
             } else if (importType === 'opportunities') {
-                await onImportOpportunities(newRecords, overwrites);
+                result = await onImportOpportunities(newRecords, overwrites);
             } else if (importType === 'accounts') {
-                await onImportAccounts(newRecords, overwrites);
+                result = await onImportAccounts(newRecords, overwrites);
             } else {
                 throw new Error(`Unknown import type: "${importType}"`);
             }
-            setImportStats({
-                total: newRecords.length + overwriteCount,
-                skipped: skippedCount,
-                overwritten: overwriteCount,
-                error: null,
-                partial: false
-            });
+            setImportStats(mergeReceipts(preflight, result || emptyReceipt()));
         } catch (err) {
-            const msg = err.message || '';
-            const isPartial = msg.includes('of') && msg.includes('failed to save');
-            let savedCount = null;
-            if (isPartial) {
-                const m = msg.match(/(\d+)\s+of\s+(\d+)/);
-                if (m) savedCount = parseInt(m[2]) - parseInt(m[1]);
-            }
-            setImportStats({
-                total: newRecords.length + overwriteCount,
-                skipped: skippedCount,
-                overwritten: overwriteCount,
-                error: msg || 'Import failed. Please try again.',
-                partial: isPartial,
-                savedCount
-            });
+            // The handlers throw an ImportError carrying a receipt, so the
+            // figures rendered below are the server's, read as fields.
+            //
+            // This used to regex the thrown MESSAGE — `msg.match(/(\d+) of (\d+)/)`
+            // — so "2 of 3 new companies failed to save" on a 5-contact import
+            // rendered "1 of 5 records saved": both numbers wrong, in the
+            // reassuring direction. Guide 18b15.
+            const fromHandler = receiptFromError(err);
+            setImportStats(mergeReceipts(
+                preflight,
+                // No receipt means a bug in a handler, not a counted partial
+                // failure, and it must not be rendered as one.
+                fromHandler || { ...emptyReceipt(), error: err.message || 'Import failed. Please try again.' },
+            ));
         }
 
         window.__importProgressCb = null;
@@ -369,13 +370,20 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
 
     // Called from the conflicts step "Import" button
     const handleImportFromConflicts = () => {
-        const data = getMappedData();
-        runImport(data, conflicts);
+        const { records, dropped } = getMapped();
+        runImport(records, conflicts, dropped.length);
     };
 
     // Called from the preview step when there are no duplicates detected
     // (fast path — also used by handleCheckDuplicates when 0 conflicts found)
-    const previewData = (step === 'preview' || step === 'conflicts') ? getMappedData() : [];
+    const previewMap  = (step === 'preview' || step === 'conflicts')
+        ? getMapped()
+        : { records: [], dropped: [], unmappedRequired: [] };
+    const previewData = previewMap.records;
+    // Surfaced at PREVIEW, not at Results: this is the last step where the user
+    // can still fix the column mapping, and it is the step where "0 valid
+    // records" used to render as an unremarkable count above an enabled button.
+    const droppedNotice = describeDropped(previewMap, csvRows.length);
 
     // Declared below previewData and conflicts because both are read here at
     // render time — see coding guide 18b0.
@@ -633,8 +641,19 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 {step === 'preview' && (
                     <div>
                         <p style={{ color: T.inkMid, marginBottom: '16px', fontSize: '14px' }}>
-                            <strong>{previewData.length}</strong> valid records ready to import. Review a sample below:
+                            <strong>{previewData.length}</strong> of {csvRows.length} rows ready to import. Review a sample below:
                         </p>
+                        {droppedNotice && (
+                            <div style={{
+                                fontSize: '13px', marginBottom: '16px', padding: '10px 12px',
+                                background: previewData.length === 0 ? 'rgba(156,58,46,0.10)' : 'rgba(184,115,51,0.10)',
+                                border: `1px solid ${previewData.length === 0 ? T.danger : T.warn}`,
+                                color: previewData.length === 0 ? T.danger : T.warn,
+                                borderRadius: '6px', textAlign: 'left',
+                            }}>
+                                {previewData.length === 0 ? '\u26d4' : '\u26a0\ufe0f'} {droppedNotice}
+                            </div>
+                        )}
                         {importType === 'contacts' && previewData.length > 0 && (
                             <div style={{ fontSize: '13px', color: T.ok, marginBottom: '16px', padding: '8px 12px', background: 'rgba(77,107,61,0.10)', borderRadius: '6px' }}>
                                 💡 Companies from imported contacts will be auto-added to your Accounts list if they don't already exist.
@@ -674,8 +693,8 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                             <button
                                 type="button"
                                 onClick={handleCheckDuplicates}
-                                disabled={importing}
-                                style={{ ...priBtn, display: 'flex', alignItems: 'center', gap: '8px', opacity: importing ? 0.8 : 1 }}
+                                disabled={importing || previewData.length === 0}
+                                style={{ ...priBtn, display: 'flex', alignItems: 'center', gap: '8px', opacity: (importing || previewData.length === 0) ? 0.5 : 1, cursor: previewData.length === 0 ? 'not-allowed' : 'pointer' }}
                             >
                                 {importing ? (
                                     <>
@@ -845,61 +864,64 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 )}
 
                 {/* ── Step: Results ── */}
-                {step === 'results' && (
+                {/* Every figure below is a receipt field. Nothing here parses a
+                    message, and nothing renders a number the client chose: the
+                    "imported" tile used to show importStats.total, which was
+                    newRecords.length + overwriteCount — the count the client
+                    DECIDED to send, so an overwrite-only run read "3 imported"
+                    when nothing was created, and an all-notFound overwrite read
+                    "3 overwritten" when the server had matched zero ids. */}
+                {step === 'results' && (() => {
+                    const r = importStats || emptyReceipt();
+                    const clean = isClean(r);
+                    const partial = isPartial(r);
+                    const tiles = [
+                        { n: r.created,   label: 'created',   color: '#1c1917', show: r.created > 0 || clean },
+                        { n: r.updated,   label: 'overwritten', color: T.info,  show: r.updated > 0 },
+                        { n: r.skipped,   label: 'skipped',   color: T.inkMid,  show: r.skipped > 0 },
+                        { n: r.dropped,   label: 'not sent',  color: T.warn,    show: r.dropped > 0 },
+                        { n: r.failed,    label: 'failed',    color: T.danger,  show: r.failed > 0 },
+                    ].filter(t => t.show);
+
+                    return (
                     <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                        {importStats?.error ? (
-                            <>
-                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>
-                                    {importStats.partial && importStats.savedCount > 0 ? '⚠️' : '❌'}
+                        <div style={{ fontSize: '48px', marginBottom: '16px' }}>
+                            {clean ? '\u2705' : partial ? '\u26a0\ufe0f' : '\u274c'}
+                        </div>
+                        <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: clean ? T.ink : partial ? T.warn : T.danger }}>
+                            {clean ? 'Import Complete!' : partial ? 'Partially Imported' : 'Nothing Was Imported'}
+                        </h3>
+                        <p style={{ color: T.inkMid, marginBottom: '24px', fontSize: '14px', maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
+                            {describeReceipt(r, importType === 'contacts' ? 'contact' : importType === 'accounts' ? 'account' : 'opportunity')}
+                            {clean && importType === 'contacts' && ' Any new companies have been added to your Accounts list.'}
+                        </p>
+
+                        {/* Results breakdown */}
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '24px', flexWrap: 'wrap' }}>
+                            {tiles.map(t => (
+                                <div key={t.label} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '10px 20px', minWidth: '80px' }}>
+                                    <div style={{ fontSize: '22px', fontWeight: '700', color: t.color }}>{t.n}</div>
+                                    <div style={{ fontSize: '12px', color: T.inkMid }}>{t.label}</div>
                                 </div>
-                                <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: importStats.partial && importStats.savedCount > 0 ? T.warn : T.danger }}>
-                                    {importStats.partial && importStats.savedCount > 0 ? 'Partially Imported' : 'Import Failed'}
-                                </h3>
-                                <p style={{ color: T.inkMid, marginBottom: '24px', fontSize: '14px' }}>
-                                    {importStats.partial && importStats.savedCount != null
-                                        ? importStats.savedCount > 0
-                                            ? `${importStats.savedCount} of ${importStats.total} records saved. The remaining ${importStats.total - importStats.savedCount} failed — try re-importing them.`
-                                            : `All ${importStats.total} records failed to save. This is likely a server error — please try again.`
-                                        : importStats.error}
-                                </p>
-                                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                                    <button style={secBtn} onClick={() => setStep('preview')}>← Back</button>
-                                    <button style={priBtn} onClick={onClose}>Close</button>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
-                                <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px' }}>
-                                    Import Complete!
-                                </h3>
-                                <p style={{ color: T.inkMid, marginBottom: '24px', fontSize: '14px' }}>
-                                    {importType === 'contacts' && ' Any new companies have been added to your Accounts list.'}
-                                </p>
-                                {/* Results breakdown */}
-                                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '24px' }}>
-                                    <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '10px 20px', minWidth: '80px' }}>
-                                        <div style={{ fontSize: '22px', fontWeight: '700', color: '#1c1917' }}>{importStats?.total ?? 0}</div>
-                                        <div style={{ fontSize: '12px', color: T.inkMid }}>imported</div>
-                                    </div>
-                                    {importStats?.skipped > 0 && (
-                                        <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '10px 20px', minWidth: '80px' }}>
-                                            <div style={{ fontSize: '22px', fontWeight: '700', color: T.inkMid }}>{importStats.skipped}</div>
-                                            <div style={{ fontSize: '12px', color: T.inkMid }}>skipped</div>
-                                        </div>
-                                    )}
-                                    {importStats?.overwritten > 0 && (
-                                        <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '10px 20px', minWidth: '80px' }}>
-                                            <div style={{ fontSize: '22px', fontWeight: '700', color: T.info }}>{importStats.overwritten}</div>
-                                            <div style={{ fontSize: '12px', color: T.inkMid }}>overwritten</div>
-                                        </div>
-                                    )}
-                                </div>
-                                <button style={priBtn} onClick={onClose}>Done</button>
-                            </>
+                            ))}
+                        </div>
+
+                        {/* A discrepancy means the server's count disagreed with
+                            its own id lists, so those rows were deliberately not
+                            applied to local state rather than guessed at. */}
+                        {r.discrepancy > 0 && (
+                            <p style={{ color: T.warn, fontSize: '12.5px', marginBottom: '16px' }}>
+                                {r.discrepancy} record{r.discrepancy === 1 ? '' : 's'} returned an inconsistent result — refresh to see their current state.
+                            </p>
                         )}
+
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                            {!clean && <button style={secBtn} onClick={() => setStep('preview')}>← Back</button>}
+                            <button style={priBtn} onClick={onClose}>{clean ? 'Done' : 'Close'}</button>
+                        </div>
                     </div>
-                )}
+                    );
+                })()}
 
             </div>{/* end body */}
 
