@@ -127,7 +127,17 @@ export const isPartial = (r) => (r.created + r.updated) > 0 && !isClean(r);
 
 // ── Prose, generated last and only here ──────────────────────────────────────
 
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+// "opportunity" -> "opportunities", not "opportunitys". The naive `${one}s`
+// shipped and rendered "2 opportunitys created" on the Results screen.
+// Deliberately small: this pluralises the handful of entity nouns the importer
+// passes, not English.
+const pluralise = (one) => {
+    if (/[^aeiou]y$/i.test(one)) return `${one.slice(0, -1)}ies`;   // opportunity -> opportunities
+    if (/(s|x|z|ch|sh)$/i.test(one)) return `${one}es`;              // address -> addresses
+    return `${one}s`;                                                // contact -> contacts
+};
+
+const plural = (n, one, many = pluralise(one)) => `${n} ${n === 1 ? one : many}`;
 
 // The single place a sentence is produced from the numbers. Nothing parses this
 // back; it is terminal output for a human.

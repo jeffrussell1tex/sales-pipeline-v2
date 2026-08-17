@@ -187,6 +187,10 @@ const mutations = [
         'netlify/functions/_audit.mjs',
         "if (v === null || v === undefined || String(v).trim() === '') continue;",
         'if (false) continue;'],
+    ['receipt: the naive pluraliser is back ("2 opportunitys")',
+        'src/utils/importReceipt.js',
+        "if (/[^aeiou]y$/i.test(one)) return `${one.slice(0, -1)}ies`;   // opportunity -> opportunities",
+        '/* naive */'],
 ];
 
 let survived = 0;

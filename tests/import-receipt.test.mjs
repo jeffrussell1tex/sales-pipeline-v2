@@ -131,6 +131,24 @@ test('singular and plural both read correctly', () => {
     assert.match(describeReceipt(receiptFromInsert({ attempted: 2, landed: [{}, {}] }), 'contact'), /2 contacts created/);
 });
 
+test('REGRESSION: a noun ending in -y pluralises correctly', () => {
+    // The Results screen shipped "2 opportunitys created".
+    const two = describeReceipt(receiptFromInsert({ attempted: 2, landed: [{}, {}] }), 'opportunity');
+    assert.match(two, /2 opportunities created/);
+    assert.doesNotMatch(two, /opportunitys/);
+    assert.match(describeReceipt(receiptFromInsert({ attempted: 1, landed: [{}] }), 'opportunity'), /1 opportunity created/);
+});
+
+test('every noun the importer actually passes reads correctly', () => {
+    // The three call sites in ModalLayer, pinned so a fourth cannot slip through
+    // unpluralised.
+    const two = (noun) => describeReceipt(receiptFromInsert({ attempted: 2, landed: [{}, {}] }), noun);
+    assert.match(two('contact'), /2 contacts/);
+    assert.match(two('account'), /2 accounts/);
+    assert.match(two('opportunity'), /2 opportunities/);
+    assert.match(two('company'), /2 companies/);
+});
+
 // ── the error carries fields, not a sentence ─────────────────────────────────
 
 test('ImportError carries the receipt so nothing has to parse its message', () => {
