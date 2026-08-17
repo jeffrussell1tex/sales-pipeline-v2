@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs';
 
 const mutations = [
     ['bulkClient: chunking disabled',
@@ -136,6 +136,24 @@ const mutations = [
         'src/utils/csvMapping.js',
         'if (isMapped(colIdx)) record[field.key] = row[colIdx] || \'\';',
         'if (isMapped(colIdx) && row[colIdx]) record[field.key] = row[colIdx];'],
+    ['importRows: an overwrite re-materialises every column (the Next Steps wipe)',
+        'src/utils/importRows.js',
+        'if (Object.prototype.hasOwnProperty.call(row || {}, key)) out[key] = coerce(row[key]);',
+        'out[key] = coerce((row || {})[key]);'],
+
+    ['importRows: an overwrite rewrites createdDate',
+        'src/utils/importRows.js',
+        'const { createdDate: _drop, ...rest } = fromCsv;\n        return { id: existingId, ...rest };',
+        'return { id: existingId, ...fromCsv };'],
+
+    ['importRows: a create no longer fills defaults',
+        'src/utils/importRows.js',
+        'const merged = { ...CREATE_DEFAULTS, ...fromCsv };',
+        'const merged = { ...fromCsv };'],
+
+    ['importRows: stageChangedDate unset on create (the NaNd / never-stale bug)',
+        'src/utils/importRows.js',
+        'stageChangedDate: today,', 'stageChangedDate: undefined,'],
 ];
 
 let survived = 0;

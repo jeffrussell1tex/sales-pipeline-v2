@@ -347,6 +347,58 @@ mapped-but-empty columns.
 
 **Still not confirmed.** Re-run check 1 with all four probes.
 
+### 0.13 Next Steps was still blanked — `buildOpp` re-materialised every column
+
+Re-ran check 1 with §0.12 deployed. Same result: three probes survived, Next Steps
+blanked, control fired.
+
+`mapCsvRows` was omitting unmapped fields correctly. `buildOpp` put them all back:
+
+```js
+salesRep:           o.salesRep           || currentUser,
+implementationCost: parseFloat(o.implementationCost) || 0,
+nextSteps:          o.nextSteps          || '',
+```
+
+Thirteen columns, built unconditionally, whatever the file contained. Narrowing at
+the mapper and narrowing at the endpoint were both defeated by the step between
+them.
+
+**And Next Steps was the least of it.** Every overwrite also:
+- **reassigned the deal** — `salesRep || currentUser` took ownership for whoever
+  ran the import
+- **zeroed `implementationCost`** — `parseFloat(undefined) || 0`
+- blanked `products`, `territory`, `vertical`
+
+Nobody noticed because Next Steps was the field being watched. The other three
+probes survived only because Team Notes, contacts and stage history are **not in
+the importer's field list at all**, so nothing existed to re-materialise them.
+
+**The comment directly above the code said the opposite:** *"an overwrite now
+sends only the columns the CSV actually describes and the server merges the
+rest."* Written in §0A0000.1, describing an intent the code beneath it never
+implemented. Third false comment of this shape in one session — §0.9's
+`sanitize()`, §0.12's `_sanitize.mjs`, and this.
+
+**Fix:** `src/utils/importRows.js`. `buildOpportunityRow` coerces only keys the
+record actually carries (`hasOwnProperty`, so a mapped-but-empty column still
+asserts empty), and the create and overwrite paths are now structurally distinct
+rather than one shape with a branch. `createdDate` is dropped from an overwrite
+entirely — provenance is not content, and a file carrying a Created Date column
+must not rewrite when the deal was created.
+
+Contacts and accounts were already correct once §0.12 landed — both overwrite
+mappers are pure spreads of the mapped record. Only opportunities had a builder.
+
+**Tests 169 → 185, mutations 25 → 29.**
+
+**Three narrowing points, and all three had to be right.** `mapCsvRows` decides
+what the file described; `buildOpportunityRow` must not add to it;
+`partialRows` narrows the sanitized row back down to it. Each was fixed in turn
+and each time the next one downstream undid it.
+
+**Still not confirmed.** Re-run check 1.
+
 ---
 
 ## 0A0000. Prior Batch — Bulk Insert, and Three Paths That Had Never Run

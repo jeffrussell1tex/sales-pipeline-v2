@@ -1766,6 +1766,29 @@ added later is covered without anyone remembering this rule exists.
 
 ---
 
+### Count the narrowing points before declaring a partial PUT fixed
+
+A CSV overwrite passes through three places that each decide what "supplied"
+means. All three must agree, and fixing one moves the bug rather than removing it:
+
+| Step | File | Must |
+|---|---|---|
+| 1. map | `src/utils/csvMapping.js` | omit unmapped columns |
+| 2. build | `src/utils/importRows.js` | add nothing the record does not carry |
+| 3. narrow | `netlify/functions/_sanitize.mjs` | keep only supplied keys |
+
+Step 2 is the one that hides. `buildOpp` built all thirteen columns
+unconditionally while carrying a comment saying it sent only what the CSV
+described, so steps 1 and 3 were both correct and both irrelevant.
+
+**A builder with one shape for create and overwrite is the smell.** They are not
+the same record: a create fills every column because the row does not exist; an
+overwrite fills only what the file described because every other column already
+holds a real value. `|| currentUser` and `parseFloat(x) || 0` are reasonable
+defaults on a create and silent destruction on an overwrite.
+
+---
+
 ### Unmapped is not empty
 
 A partial PUT is only partial if the CLIENT sends a partial payload. Narrowing on
