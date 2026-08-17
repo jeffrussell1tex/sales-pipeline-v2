@@ -300,6 +300,53 @@ made the upsert testable broke the import graph (§0.11). Each was caught one la
 later than the last — unit test, dev check, deploy log. The gate added here pulls
 the last of those three back into CI.
 
+### 0.12 Check 1 run: three of four probes survived, and the fourth found the other half
+
+| Probe | Result |
+|---|---|
+| 💬 Team Notes (`comments`) | **survived** |
+| Linked contacts (`contactIds`) | **survived** — all three |
+| Stage history (`stageHistory`) | **survived** |
+| Description / Background (`notes`) — positive control | **changed** to the OVERWRITTEN text, so the overwrite genuinely ran |
+| **Next Steps (`nextSteps`)** | **BLANKED** |
+
+The three that survived are not in the importer's field list at all. Next Steps
+is. That is the entire difference, and it is the tell.
+
+`mapCsvRows` wrote `''` for **unmapped** fields as well as empty ones:
+
+```js
+record[field.key] = isMapped(colIdx) ? (row[colIdx] || '') : '';
+```
+
+So a CSV with no Next Steps column still sent `nextSteps: ''`. `partialRows` saw a
+supplied column, `sanitize()` coerced it to null, and the overwrite blanked it.
+**Server-side narrowing is necessary and not sufficient** — it can only omit what
+the client did not send, and the client was sending everything.
+
+`_sanitize.mjs` carried the claim *"a column NOT MAPPED in the CSV never appears in
+any row"*. It was never verified, and it was false. Both files now carry the
+contract explicitly and each points at the other: **unmapped is omitted; mapped is
+present even when the cell is empty.**
+
+New records are unaffected — `buildOpp` and the account/contact mappers all
+coalesce with `|| ''`, so an absent key still lands as empty. Every downstream
+consumer of a mapped record was already undefined-safe (`?.`, `|| ''`,
+`filter(Boolean)`, `norm()`), checked one by one.
+
+**A test asserted the wrong behaviour, confidently.** `an unmapped field is present
+and empty, never undefined` had a plausible rationale about `undefined` vs `''` and
+was exactly backwards. It is inverted now, with the reasoning recorded, plus a
+regression pinning an overwrite payload to the file's columns only. Mutation
+testing does not catch a test that encodes the wrong rule — only running the thing
+does.
+
+**Tests 167 → 169, mutations 23 → 25.** Both directions of the contract are
+mutation-covered: emitting `''` for unmapped fields again, and dropping
+mapped-but-empty columns.
+
+**Still not confirmed.** Re-run check 1 with all four probes.
+
 ---
 
 ## 0A0000. Prior Batch — Bulk Insert, and Three Paths That Had Never Run

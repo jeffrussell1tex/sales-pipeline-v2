@@ -127,6 +127,15 @@ const mutations = [
     ['deploy graph: _lib.mjs stops re-exporting bulkUpsert (the failed deploy)',
         'netlify/functions/_lib.mjs',
         'export const bulkUpsert = (args) => coreBulkUpsert({ client: db, ...args });', ''],
+    ['csvMapping: unmapped fields emit \'\' again (the Next Steps wipe)',
+        'src/utils/csvMapping.js',
+        'if (isMapped(colIdx)) record[field.key] = row[colIdx] || \'\';',
+        'record[field.key] = isMapped(colIdx) ? (row[colIdx] || \'\') : \'\';'],
+
+    ['csvMapping: a mapped-but-empty column is dropped too',
+        'src/utils/csvMapping.js',
+        'if (isMapped(colIdx)) record[field.key] = row[colIdx] || \'\';',
+        'if (isMapped(colIdx) && row[colIdx]) record[field.key] = row[colIdx];'],
 ];
 
 let survived = 0;

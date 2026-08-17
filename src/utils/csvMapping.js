@@ -54,10 +54,23 @@ export function mapCsvRows(csvRows, appFields, fieldMapping) {
     const dropped = [];
 
     (csvRows || []).forEach((row, idx) => {
+        // An UNMAPPED field is omitted entirely; a MAPPED field is always
+        // present, even when the cell is empty.
+        //
+        // That distinction is the whole contract with partialRows() on the
+        // server. This used to write '' for both, so a CSV with no Next Steps
+        // column still sent `nextSteps: ''`, the endpoint saw a supplied column,
+        // and an overwrite blanked the field. Confirmed on dev: Team Notes, the
+        // linked contacts and the stage history all survived an overwrite and
+        // Next Steps did not -- because those three are never in the field list
+        // at all, and Next Steps is.
+        //
+        // New records are unaffected: buildOpp and the account/contact mappers
+        // all coalesce with `|| ''`, so an absent key still lands as empty.
         const record = {};
         for (const field of fields) {
             const colIdx = fieldMapping?.[field.key];
-            record[field.key] = isMapped(colIdx) ? (row[colIdx] || '') : '';
+            if (isMapped(colIdx)) record[field.key] = row[colIdx] || '';
         }
 
         if (rowHasAnyRequired(record, required)) {

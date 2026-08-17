@@ -1766,6 +1766,31 @@ added later is covered without anyone remembering this rule exists.
 
 ---
 
+### Unmapped is not empty
+
+A partial PUT is only partial if the CLIENT sends a partial payload. Narrowing on
+the server can omit what was never sent; it cannot un-send an empty string.
+
+```js
+// WRONG -- every field in the importer's list arrives looking supplied
+record[field.key] = isMapped(colIdx) ? (row[colIdx] || '') : '';
+
+// RIGHT -- unmapped says nothing; mapped says what it says, including empty
+if (isMapped(colIdx)) record[field.key] = row[colIdx] || '';
+```
+
+A CSV with no Next Steps column sent `nextSteps: ''`, and the overwrite blanked
+the field. The fields that survived the same import -- stage history, Team Notes,
+linked contacts -- survived only because they are not in the importer's field list
+at all.
+
+**Two halves, and neither works alone.** `src/utils/csvMapping.js` decides what is
+supplied; `netlify/functions/_sanitize.mjs` narrows to it. Each file's comment
+points at the other, because fixing one and calling it done is precisely what
+happened twice.
+
+---
+
 ### `sanitize()` is a builder, not a filter
 
 This rule was committed and then not applied to the file it was about, so it is

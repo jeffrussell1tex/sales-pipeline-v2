@@ -51,6 +51,12 @@
  * That is the distinction the old code could not make, because sanitize() made
  * every column look supplied.
  *
+ * THIS ONLY HOLDS IF THE CLIENT KEEPS ITS HALF. It did not, at first: mapCsvRows
+ * wrote '' for unmapped fields as well as empty ones, so every field in the
+ * importer's list arrived looking supplied and an overwrite blanked the ones the
+ * file never mentioned. Narrowing here is necessary and not sufficient -- see the
+ * matching comment in src/utils/csvMapping.js. Neither half works alone.
+ *
  * @param {Object[]} rows      raw payload rows, before sanitize
  * @param {(row:Object)=>Object} sanitize  the endpoint's own full-row sanitizer
  * @returns {Object[]} sanitized rows carrying only the supplied columns

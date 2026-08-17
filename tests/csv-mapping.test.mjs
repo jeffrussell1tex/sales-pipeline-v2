@@ -30,19 +30,54 @@ test('columns land in the fields they are mapped to', () => {
     assert.deepEqual(records, [{ firstName: 'Ada', lastName: 'Lovelace', email: 'ada@x.com', company: 'Analytical' }]);
 });
 
-test('an unmapped field is present and empty, never undefined', () => {
-    // Downstream builders spread these straight into a request body; undefined
-    // and '' are not the same thing to a PUT that merges by supplied keys (18b13).
+test('an unmapped field is ABSENT, not empty', () => {
+    // This test previously asserted the opposite, with a confident rationale
+    // about undefined vs '' -- and it was wrong, which is how the bug shipped.
+    // Downstream builders spread these straight into a request body, and to a PUT
+    // that merges by supplied keys (18b13) a present '' means "set this empty".
+    // A field the CSV never mapped must not say anything at all.
     const { records } = mapCsvRows([['Ada', 'Lovelace']], contactFields, { firstName: 0, lastName: 1 });
+    assert.equal('email' in records[0], false);
+    assert.equal('company' in records[0], false);
+    assert.deepEqual(Object.keys(records[0]).sort(), ['firstName', 'lastName']);
+});
+
+test('a MAPPED field is present even when the cell is empty', () => {
+    // The other half of the same contract: the user mapped this column and left
+    // it blank, which is an assertion of blank, not silence.
+    const { records } = mapCsvRows([['Ada', 'Lovelace', '']], contactFields,
+        { firstName: 0, lastName: 1, email: 2 });
+    assert.ok('email' in records[0]);
     assert.equal(records[0].email, '');
-    assert.ok('company' in records[0]);
+});
+
+test("REGRESSION: an overwrite payload carries only the file's columns", () => {
+    // Next Steps is in the opportunity field list but not in the CSV. It was
+    // arriving as '' and being blanked on every overwrite -- confirmed on dev,
+    // where Team Notes, contacts and stage history all survived and Next Steps
+    // did not, because those three are not in the field list at all.
+    const oppFields = [
+        { key: 'opportunityName', label: 'Opportunity Name', required: true },
+        { key: 'account', label: 'Account Name', required: true },
+        { key: 'stage', label: 'Stage' },
+        { key: 'nextSteps', label: 'Next Steps' },
+        { key: 'territory', label: 'Territory' },
+    ];
+    const { records } = mapCsvRows(
+        [['ZZTest Alpha Renewal', 'ZZTest Alpha Industries', 'Proposal']],
+        oppFields,
+        { opportunityName: 0, account: 1, stage: 2 },
+    );
+    assert.equal('nextSteps' in records[0], false, 'Next Steps must survive an overwrite');
+    assert.equal('territory' in records[0], false);
+    assert.deepEqual(Object.keys(records[0]).sort(), ['account', 'opportunityName', 'stage']);
 });
 
 test("the '— Skip this field —' option and a blank mapping both mean unmapped", () => {
     const { records } = mapCsvRows([['Ada', 'Lovelace', 'ada@x.com']], contactFields,
         { firstName: 0, lastName: 1, email: '', company: -1 });
-    assert.equal(records[0].email, '');
-    assert.equal(records[0].company, '');
+    assert.equal('email' in records[0], false, "'' is the Skip option, not a column");
+    assert.equal('company' in records[0], false, 'a negative index is not a column');
 });
 
 test('a column index past the end of a short row yields empty, not a crash', () => {
