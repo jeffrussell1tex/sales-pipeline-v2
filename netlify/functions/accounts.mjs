@@ -144,7 +144,7 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
             // Bulk update — body is an array. Used by the CSV importer's
             // "overwrite" path, which previously issued one PUT per record.
-            // See bulkUpsert in _lib.mjs for the chunking and safety notes.
+            // See bulkUpsert in _bulk.mjs for the chunking and safety notes.
             if (Array.isArray(data)) {
                 if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ updated: 0, notFound: [], forbidden: [] }) };
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };

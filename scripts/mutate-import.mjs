@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs';
 
 const mutations = [
     ['bulkClient: chunking disabled',
@@ -101,6 +101,25 @@ const mutations = [
         'netlify/functions/_sanitize.mjs',
         "throw new TypeError('partialRows requires the endpoint sanitize function');",
         'return rows;'],
+    ['bulkUpsert: NOT NULL backfill removed (the 500)',
+        'netlify/functions/_bulk.mjs',
+        'if (!(k in out) && prior && prior[k] !== undefined) out[k] = prior[k];',
+        '/* no backfill */'],
+
+    ['bulkUpsert: backfilled columns leak into the SET clause (data loss)',
+        'netlify/functions/_bulk.mjs',
+        'const cols = [...new Set(eligible.flatMap(Object.keys))]',
+        'const cols = [...new Set(eligible.map(backfill).flatMap(Object.keys))]'],
+
+    ['bulkUpsert: required columns not requested in the projection',
+        'netlify/functions/_bulk.mjs',
+        'for (const k of required) projection[k] = table[k];',
+        '/* projection unchanged */'],
+
+    ['bulkUpsert: hasDefault columns are backfilled too',
+        'netlify/functions/_bulk.mjs',
+        'return c && c.name && c.notNull && !c.hasDefault && !BULK_IMMUTABLE.has(k);',
+        'return c && c.name && c.notNull && !BULK_IMMUTABLE.has(k);'],
 ];
 
 let survived = 0;

@@ -215,6 +215,49 @@ without an id, so it could never fire. Removed rather than given a contrived tes
 **Not yet confirmed on dev.** Retest check 1 in full after deploy, then check 4,
 which exercises the same path.
 
+### 0.10 The fix in §0.9 then 500'd, for the reason §0.9 exists
+
+Retested on dev. The overwrite no longer destroyed anything — it failed outright:
+*"Nothing was saved. 3 did not save. Internal server error."*
+
+`opportunities.pipelineId` is `.notNull()` with no database default.
+`INSERT ... ON CONFLICT DO UPDATE` **is an INSERT first**: Postgres forms the
+candidate tuple and checks its constraints BEFORE resolving the conflict and
+switching to the update. So every NOT NULL column without a default must be
+present in the values — even for a row that already exists and will only ever be
+updated.
+
+`partialRows` correctly stopped sending `pipelineId`, because a CSV does not
+describe which pipeline a deal is in. Correct narrowing, incompatible upsert.
+
+**Fix:** `bulkUpsert` now backfills NOT NULL-without-default columns **from the
+row that already exists**, and keeps them out of the SET clause. The tuple can
+form; the update still writes only what the caller supplied. The backfilled value
+is never invented — the old `sanitize()` default of `'default'` would have moved
+every overwritten deal into another pipeline.
+
+Required columns are detected generically off Drizzle's own `notNull` /
+`hasDefault`, so a future NOT NULL column is covered without anyone remembering.
+
+**`bulkUpsert` moved from `_lib.mjs` to `_bulk.mjs`,** injected client, same as
+`bulkInsert`. It shipped a 500 that a test would have caught in one line, and it
+could not be tested at all where it lived. `tests/bulk-upsert.test.mjs` (14) pins
+both properties that are in tension — omitted columns are never written (18b13),
+NOT NULL columns still reach the INSERT arm — because fixing either alone
+reintroduces the other bug.
+
+**Tests 151 → 165, mutations 17 → 21.** One mutation initially survived: the
+fixture omitted `updatedAt`, so "does not backfill defaulted columns" had nothing
+to catch. A fixture that omits a column cannot prove the code declined to copy it;
+it proves only there was nothing to copy.
+
+**Worth recording:** the Results screen behaved exactly as designed. It said
+*"Nothing Was Imported"*, showed `3 failed`, and printed the requestId. The
+previous UI would have shown a green tick and "3 overwritten". §0.1–§0.6 are what
+turned an opaque 500 into a diagnosis.
+
+**Still not confirmed.** Retest check 1 in full after deploy.
+
 ---
 
 ## 0A0000. Prior Batch — Bulk Insert, and Three Paths That Had Never Run

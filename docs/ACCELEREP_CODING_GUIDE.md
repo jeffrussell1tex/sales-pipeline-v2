@@ -1718,6 +1718,27 @@ partial payload.
 
 ---
 
+### An upsert's INSERT arm must satisfy every NOT NULL column
+
+Narrowing a payload is only half the job. `INSERT ... ON CONFLICT DO UPDATE` is an
+INSERT first -- Postgres forms the candidate tuple and checks its constraints
+BEFORE resolving the conflict -- so a NOT NULL column with no database default
+must be present even for a row that exists and will only be updated.
+
+Omit one and the whole batch 500s with nothing written. `opportunities.pipelineId`
+is exactly that column, and the first correct partial PUT killed every bulk
+overwrite.
+
+**Backfill from the stored row, never from a default.** `bulkUpsert` reads the
+required columns in the same query that establishes existence and ownership, adds
+them to the VALUES only, and keeps them out of the SET clause. Inventing a value
+instead -- `pipelineId: data.pipelineId || 'default'` -- silently moves records.
+
+Detection is generic, off Drizzle's `notNull` / `hasDefault`, so a NOT NULL column
+added later is covered without anyone remembering this rule exists.
+
+---
+
 ### `sanitize()` is a builder, not a filter
 
 This rule was committed and then not applied to the file it was about, so it is

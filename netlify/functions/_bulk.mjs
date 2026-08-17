@@ -9,6 +9,8 @@
 //
 // CHUNK x columns must stay under the Postgres ceiling of 65,535 bind parameters.
 // 400 x ~37 = ~14,800, leaving room for the schema to roughly quadruple.
+import { and, eq, inArray, sql } from 'drizzle-orm';
+
 export const BULK_CHUNK = 400;
 
 // ── bulkInsert ───────────────────────────────────────────────────────────────
@@ -93,3 +95,105 @@ export async function bulkInsert({ table, rows, orgId, budgetMs = BULK_INSERT_BU
     return { inserted: insertedIds.length, insertedIds, failed, timedOut };
 }
 
+// ── bulkUpsert ───────────────────────────────────────────────────────────────
+// The UPDATE half. Moved here from _lib.mjs after it shipped a 500 that no test
+// in the gates job could have caught, for the reason given at the top of this
+// file: _lib.mjs imports db/index.js, which is TypeScript.
+//
+// Contract, unchanged:
+//  - PUT is strictly an update. Rows whose id is not already present in this org
+//    come back as `notFound`; the upsert half can never create a record.
+//  - `setWhere` pins org_id, so an id belonging to another tenant is not updated
+//    even if it were guessed.
+//  - ownership is resolved once for the whole batch rather than per row.
+//  - CHUNK x columns stays under the 65,535 bind-parameter ceiling.
+export const BULK_IMMUTABLE = new Set(['id', 'orgId', 'createdAt']);
+
+// Columns the INSERT arm cannot omit: NOT NULL with no database default.
+//
+// This is the crux of the 500. `INSERT ... ON CONFLICT DO UPDATE` is an INSERT
+// first: Postgres forms the candidate tuple and checks its constraints BEFORE it
+// resolves the conflict and switches to the update. So every NOT NULL column
+// without a default must be present in the values -- even for a row that already
+// exists and will only ever be updated.
+//
+// `opportunities.pipelineId` is exactly that, and once partial rows stopped
+// sending it (correctly -- a CSV does not describe which pipeline a deal is in),
+// every bulk overwrite 500'd on a NOT NULL violation.
+//
+// The fix is NOT to send it back as a value the caller invented. It is to
+// backfill it FROM THE ROW THAT ALREADY EXISTS, and to keep it out of the SET
+// clause, so the tuple can form and the update still writes only what the caller
+// supplied.
+const requiredColumns = (table) =>
+    Object.keys(table).filter((k) => {
+        const c = table[k];
+        return c && c.name && c.notNull && !c.hasDefault && !BULK_IMMUTABLE.has(k);
+    });
+
+export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerName = null, client }) {
+    const db = client;
+    if (!Array.isArray(rows) || rows.length === 0) return { updated: 0, notFound: [], forbidden: [] };
+
+    const ids = rows.map(r => r.id).filter(Boolean);
+    if (ids.length !== rows.length) {
+        const err = new Error('every row in a bulk update requires an id');
+        err.statusCode = 400;
+        throw err;
+    }
+
+    // One query establishes existence, ownership AND the NOT NULL backfill for
+    // the whole batch. Reading the required columns here is what lets a partial
+    // payload through without inventing values for the columns it omits.
+    const required = requiredColumns(table);
+    const projection = { id: table.id };
+    if (ownerColumn) projection.owner = ownerColumn;
+    for (const k of required) projection[k] = table[k];
+
+    const existing = await db.select(projection).from(table)
+        .where(and(eq(table.orgId, orgId), inArray(table.id, ids)));
+    const byId = new Map(existing.map(r => [r.id, r]));
+
+    const notFound = [];
+    const forbidden = [];
+    const eligible = [];
+    for (const row of rows) {
+        const prior = byId.get(row.id);
+        if (!prior) { notFound.push(row.id); continue; }
+        // callerName null means the caller may edit everything (canSeeAll role).
+        if (callerName !== null && prior.owner && prior.owner !== callerName) {
+            forbidden.push(row.id); continue;
+        }
+        eligible.push(row);
+    }
+    if (eligible.length === 0) return { updated: 0, notFound, forbidden };
+
+    // The SET clause is derived from the columns the CALLER supplied, before any
+    // backfill. That is what makes a partial PUT non-destructive (18b13): a
+    // column the payload never mentioned is never written.
+    const cols = [...new Set(eligible.flatMap(Object.keys))]
+        .filter(k => !BULK_IMMUTABLE.has(k) && table[k]?.name);
+    const set = Object.fromEntries(cols.map(k => [k, sql`excluded.${sql.identifier(table[k].name)}`]));
+    set.updatedAt = sql`now()`;
+
+    // Backfill runs only on the VALUES, never on SET. These columns exist solely
+    // so the candidate tuple can be formed; the ON CONFLICT branch discards them.
+    const backfill = (row) => {
+        const prior = byId.get(row.id);
+        const out = { ...row, orgId };
+        for (const k of required) {
+            if (!(k in out) && prior && prior[k] !== undefined) out[k] = prior[k];
+        }
+        return out;
+    };
+
+    let updated = 0;
+    for (let i = 0; i < eligible.length; i += BULK_CHUNK) {
+        const chunk = eligible.slice(i, i + BULK_CHUNK).map(backfill);
+        const done = await db.insert(table).values(chunk)
+            .onConflictDoUpdate({ target: table.id, setWhere: eq(table.orgId, orgId), set })
+            .returning({ id: table.id });
+        updated += done.length;
+    }
+    return { updated, notFound, forbidden };
+}
