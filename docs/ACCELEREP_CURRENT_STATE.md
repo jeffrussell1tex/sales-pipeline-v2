@@ -1,6 +1,7 @@
 # ACCELEREP — Current State
-**Updated:** August 13, 2026  
-**Batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · **Clerk advisories cleared — Production migration unblocked** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · 19 → 69 tests
+**Updated:** August 14, 2026  
+**Batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
+**Prior batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · **Clerk advisories cleared — Production migration unblocked** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · 19 → 69 tests
 **Prior batch:** SalesManagerTab hoist, SPIFF persistence & claim plumbing
 **Prior batch:** inline-component audit — **the backlog named the wrong three files**; 81 raw findings triaged to 5 user-visible, 3 fixed · new `check:inline` scanner
 **Prior batch:** calendar disconnect (endpoint already existed — client wiring only) · personal email signature, escaped server-side · record-number generators moved from full-table scan to indexed `MAX` · **`mobile` was being wiped on every profile save**
@@ -12,7 +13,171 @@
 
 ---
 
-## 0. Latest Batch — Gate Audit, Build Guard, CSV Import Hardening, Hooks Remediation
+## 0. Latest Batch — Bulk Insert, and Three Paths That Had Never Run
+
+> This started as two handoff items and turned into six, because each fix exposed
+> the next. Last session the pattern was code that *looked* finished. This session
+> it was **code that had never run at all**: a PUT branch that 400'd on every call
+> ever made, a dedupe clause that could not fire, a territory rule with no UI to
+> author it, and a scanner walking past the one line it existed to catch.
+
+### 0.1 The one that matters most: fixing a 400 created a data-loss path
+
+`opportunities.mjs` PUT had **no array branch**. `ModalLayer` sends an array, so
+`!data.id` on an Array returned 400 — **CSV overwrite of opportunities had never
+once worked.** Adding the branch was three lines.
+
+Then `buildOpp` turned out to build ONE shape for both new deals and overwrites,
+ending in `stageHistory: []`, `comments: []`, `contactIds: []`. `bulkUpsert`
+derives its `SET` clause from the keys supplied, so an overwrite wrote those empty
+arrays over real data — **erasing the deal's stage history, every comment on it,
+and its contact links.**
+
+That was inert only while the branch 400'd. **Fixing the 400 converted a dead path
+into a destructive one, in the same commit that made it reachable.** Guide §18b15
+carries the rule: when you make a broken write path work, re-read what it writes —
+it has never been exercised, so nothing about it has been proven.
+
+### 0.2 Bulk INSERT — three endpoints, not the two the handoff named
+
+`accounts.mjs`, `contacts.mjs` **and `opportunities.mjs`** each did
+`db.insert(t).values(allRows)` — one statement for the entire import. Above ~1,872
+accounts that breaks the 65,535 bind-parameter ceiling, and being one statement it
+is atomic: one over-length field rolled back the whole file with nothing saved and
+no indication which row was at fault.
+
+`bulkInsert` chunks at 400 and **isolates by bisection**, not row by row. One bad
+row in 400 costs ~9 extra statements instead of 400 — and 400 round-trips at ~30ms
+is 12s against a 10s function timeout, so the obvious "safe" fallback would itself
+have been the outage. A 7.5s wall-clock budget bounds every path; whatever landed
+is reported and the rest comes back as failed-not-attempted.
+
+It lives in **`netlify/functions/_bulk.mjs`, not `_lib.mjs`**, and takes an injected
+client. `_lib.mjs` imports `db/index.js`, which is TypeScript, so anything there
+loads only under `tsx` — outside the gates job. Chunk size, bisection depth and the
+deadline are invisible in the return value, so if they cannot be asserted in CI they
+are not enforced.
+
+### 0.3 `onConflictDoNothing()` could never fire — removed, not replaced
+
+All three carried it with a comment claiming it "skips duplicates instead of
+erroring". The only unique constraint is the `id` primary key and every id is a
+fresh `crypto.randomUUID()`, so it never triggered once. Name-based dedupe at insert
+time would fight the smart-merge tooling that already owns that decision. A clause
+that cannot fire is worse than none — it reads as protection that was never there.
+
+### 0.4 `check:dbfetch` had TWO blind spots on one line
+
+`AppHeader.jsx:444` discarded a Response into an empty catch, and the gate reported
+0 across the whole tree:
+
+```js
+import('../../utils/storage').then(({ dbFetch: df }) =>
+    df('/.netlify/functions/users?me=true', { … }).catch(() => {}));
+```
+
+The alias is the obvious one — the scanner matched the callee name `dbFetch`. The
+second is structural: `x => df(…)` is a **concise arrow body**, so there is no
+`ExpressionStatement` anywhere for `findStatements` to find. Alias resolution alone
+would still have missed it. Same shape as the concise-arrow bug that hit
+`check-tdz` (§0A000.1).
+
+Both fixed, with a catch fixture and an aliased-but-checked false-positive guard.
+Mutation-tested independently: disabling alias resolution drops the fixture 3 → 0;
+disabling concise bodies drops it 3 → 2.
+
+The call site now routes through the existing `saveProfile`, which also fixes a bug
+nobody had noticed — it never updated `myProfile`, so the PUT **re-fired on every
+avatar click** for the rest of the session. The pointless dynamic import went with
+it (~80 modules import `storage.js` statically; rollup inlined it and warned on
+every build).
+
+### 0.5 Contacts import never used the bulk endpoint at all
+
+One POST per record at concurrency 3, with per-record retries and a 100ms pause
+every 50 rows — ~500 round-trips for a 1,500-row file, against the same array
+endpoint the accounts importer had been using all along. Now 4 requests. ~40 lines
+of `saveOne`/`saveAll` deleted.
+
+### 0.6 State applied from what landed (§18b15)
+
+Every import handler wrote `setX(prev => [...prev, ...rows])` **before** the request
+and never rolled back. Rolling back is the wrong fix — on a partial failure the
+client cannot know which rows to remove. The server now returns `insertedIds`, so
+state is applied from the server's answer after the write.
+
+**Still outstanding:** the accounts and opportunities OVERWRITE paths keep the old
+optimistic shape. Only the new-record paths were converted.
+
+### 0.7 Bulk accounts POST skipped territory assignment
+
+`resolveTerritory()` ran on the single-record path only, so every CSV-imported
+account landed unassigned while an identical account created through the UI got a
+territory — which reads as the rules being broken rather than as an import gap.
+Split into `loadTerritoryRules` + `applyTerritoryRules` so the batch reads settings
+once rather than per row. **Cannot be verified by clicking** — see §0.10.
+
+### 0.8 Deals with no close date were invisible in the Pipeline list
+
+`groupByQuarter` dropped them with a bare `if (!qk) continue`, so the header read
+"3 open deals · $73K" directly above a table saying "No deals closing this quarter",
+while Funnel, Kanban and Forecast showed the same deals because they group by stage.
+A rep who saved a deal without a close date would reasonably conclude it had not
+saved. They now get an explicit bucket, sorted last, labelled *No close date ·
+Not scheduled*.
+
+Also `NaNd` in the funnel: `days` was computed from `stageChangedDate` with no guard
+at **two** sites, while the stage-summary calculation in the same file guarded it.
+The display was the visible half — the real problem is `stale = NaN > 14` being
+permanently false, so such a deal **could never flag as stalled**. Imported deals now
+get `stageChangedDate` set on create.
+
+Quarter helpers extracted to `src/utils/quarters.js`: `ListView.jsx` imports React
+and `useApp`, so nothing inside it is reachable by `node --test`. Same reasoning as
+`csvAutoMap.js`. A fix for a silent drop should not itself be untestable.
+
+### 0.9 Tests 69 → 89, every new rule mutation-tested
+
+| Suite | Pins |
+|---|---|
+| `bulk-insert.test.mjs` (9) | chunk size, bind ceiling, bisection cost, per-row isolation, deadline, orgId stamping |
+| `quarters.test.mjs` (10) | undated bucket, deal-count conservation, sort order, fiscal-year offsets |
+| `scanners.test.mjs` (+1) | aliased + concise-body dbFetch |
+
+`bulk-insert` asserts on the **shape of the traffic** — statement count, chunk size,
+which rows were isolated — because none of that is visible in the return value: a
+single statement and four chunked ones respond identically.
+
+Mutations run: kill chunking → 3 fail · kill bisection → 4 · kill the deadline → 1 ·
+make `orgId` overridable → 1 · restore the silent `continue` → 5 · sort undated
+first → 1 · fiscal year off by one → 2.
+
+### 0.10 Confirmed on dev, which is the part that counts
+
+§18b8 is explicit that generation proving out is not execution proving out. Run
+against `accelerep.netlify.app` with throwaway `ZZTest` data:
+
+| Check | Result |
+|---|---|
+| 6-row accounts import, one 64-char ZIP against `varchar(20)` | **5 saved, 1 failed, named.** Search confirms 8 ZZTest accounts and **no Row03** — isolated, not merely uncounted |
+| Count survives a hard refresh | **133 before and after** — §18b15 holds |
+| Contacts import, 3 new companies | 1519 → 1524, companies auto-created |
+| Opportunities overwrite | **3 overwritten, Proposal at 25/31/17K, persisted through refresh** — a path that had never once succeeded |
+| Territory rules on bulk import | **BLOCKED** — nothing writes territory-shaped rules, so the rule cannot be authored. Verify by test instead |
+| Avatar timezone PUT fires once | **not yet run** |
+| Comment survives a CSV overwrite | **not yet run** — covers §0.1, the one thing a commit made worse before it was fixed |
+
+**Two false alarms worth recording**, both instructive:
+
+- An accounts CSV run through the CONTACTS importer reported *"Import Complete!"*
+  with a green tick and **0 imported**. `getMappedData()` drops every row lacking a
+  required field, silently — six rows in, zero out, and the UI congratulates you.
+- The first runbook named files but never named the tab. Instructions that assume
+  context are how a correct fix gets reported as a failure.
+
+---
+
+## 0A000. Prior Batch — Gate Audit, Build Guard, CSV Import Hardening, Hooks Remediation
 
 > Every real bug this session was code that *looked* finished. **So were three of the four gates** — `check-tdz`, `check-inline` and `scan-dbfetch` each had a false-negative class, each reported clean over a live defect, and every one was found by a bug reaching production first rather than by reviewing the scanner. All four now have fixture suites proving they catch what they claim.
 

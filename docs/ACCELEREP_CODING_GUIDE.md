@@ -1445,13 +1445,56 @@ the full column list (see 18c):
 |---|---|---|
 | `accounts` | 35 | 1,872 |
 | `contacts` | 37 | 1,771 |
+| `opportunities` | 37 | 1,771 |
 
 Above that the statement fails outright -- and because it is one statement, one bad
 row kills the whole batch with no per-row isolation.
 
-**Use `bulkUpsert` in `_lib.mjs`.** 400 rows per chunk: 400 x ~37 = ~14,800
-parameters, leaving room for the schema to roughly quadruple before it needs
-revisiting.
+**Use `bulkUpsert` for updates and `bulkInsert` for inserts.** Both chunk at 400
+rows: 400 x ~37 = ~14,800 parameters, leaving room for the schema to roughly
+quadruple before it needs revisiting.
+
+### The INSERT half was fixed a session later than the UPDATE half
+
+`bulkUpsert` landed for PUT while POST stayed a single statement for every row --
+in **three** endpoints, not the two the handoff named (`opportunities.mjs` was
+missed by the audit). Fix both halves at once, or the one left behind reads as
+covered.
+
+`bulkInsert` lives in `netlify/functions/_bulk.mjs`, NOT `_lib.mjs`, and takes an
+injected `client`. `_lib.mjs` imports `../../db/index.js`, which is TypeScript, so
+anything defined there loads only under `tsx` -- `npm run test:int`, which needs a
+real database and does not run in the gates job. **Chunk size, bisection depth and
+the deadline are all properties of the traffic, invisible in the return value:** a
+single statement and four chunked ones produce an identical response. If they
+cannot be asserted in CI they are not enforced.
+
+### Isolate by bisection, never row by row
+
+A failed chunk is split in half and each half retried, recursing to a single row.
+One bad row in 400 costs ~9 extra statements instead of 400 -- and 400 round-trips
+at ~30ms is 12s against a 10s function timeout, so the "safe" fallback would itself
+have been the outage.
+
+Every path is bounded by a wall-clock budget (7.5s, leaving headroom under the 10s
+kill). Whatever landed is reported, and the remainder comes back as
+failed-not-attempted. **A truthful partial result beats a 502 that says nothing
+about what was written.**
+
+### `onConflictDoNothing()` on a fresh UUID is decoration
+
+All three endpoints carried it with a comment claiming it "skips duplicates instead
+of erroring". The only unique constraint is the `id` primary key and every id is a
+fresh `crypto.randomUUID()` from the client, so it **could never fire**. It was
+removed rather than replaced: name-based dedupe at insert time would fight the
+smart-merge tooling that already owns that decision, and a clause that cannot fire
+is worse than none -- it reads as protection that was never there.
+
+### Return `insertedIds`, not just a count
+
+The client needs to know WHICH rows landed, not how many. With ids it applies state
+from the server's answer after the write; with a count it can only guess, and on a
+partial failure it cannot know what to roll back. See 18b15.
 
 ### A multi-row upsert needs `excluded.<col>`
 
@@ -1731,6 +1774,69 @@ Then test it by hand: sign in, switch orgs, confirm scoping holds, and confirm a
 non-admin still receives 403s. No automated test covers the auth layer (Layer 3 E2E
 is still blocked on automating Clerk login), so a manual pass is the only evidence
 that exists.
+
+---
+
+## 18b15. Apply Local State From What Landed, Not Before the Write (hard rule)
+
+```js
+// WRONG -- the UI shows records that were never saved
+setAccounts(prev => [...prev, ...rows]);
+const r = await dbFetch(url, { method: 'POST', body: JSON.stringify(rows) });
+
+// RIGHT -- the server says which ids landed; apply exactly those
+const { landed, failed, error } = await postNew(url, rows);
+if (landed.length > 0) setAccounts(prev => [...prev, ...landed]);
+if (error) throw new Error(error);
+if (failed.length > 0) throw new Error(`${failed.length} of ${rows.length} failed...`);
+```
+
+Every CSV import handler wrote state before the request and never rolled back, so
+on a failure the on-screen count was wrong until a hard refresh.
+
+**Rolling back is the obvious fix and the wrong one.** On a partial failure the
+client cannot know which rows to remove. Have the server return `insertedIds` and
+there is nothing to guess and nothing to undo.
+
+The helper must **not throw from inside its own loop** -- an early chunk that
+succeeded has to reach state before the failure is reported. `postNew` in
+`ModalLayer.jsx` returns `{ landed, failed, error }` and never throws; the caller
+commits `landed` first and raises second.
+
+### Counts must not travel as prose
+
+`CsvImportModal` recovers its Results figures by **regex-parsing the thrown error
+message**:
+
+```js
+const isPartial = msg.includes('of') && msg.includes('failed to save');
+const m = msg.match(/(\d+)\s+of\s+(\d+)/);
+```
+
+So the numbers a user sees depend on the wording of an error string in another
+module. A message reading "2 of 3 new companies failed to save" on a 5-contact
+import renders "1 of 5 records saved" -- both numbers wrong, in the reassuring
+direction. Throw a structured error carrying `savedCount` and `total` as fields.
+
+### An overwrite is not a create
+
+`buildOpp` produced one shape for both, ending in:
+
+```js
+stageHistory: [], comments: [], contactIds: [],
+```
+
+`bulkUpsert` derives its `SET` clause from the keys supplied, so an overwrite wrote
+those empty arrays over real data -- **erasing stage history, comments and contact
+links** that no CSV could ever carry.
+
+It was inert only because the array PUT branch did not exist and every overwrite
+400'd. Fixing the 400 turned a dead path into a destructive one. **When you make a
+broken write path work, re-read what it writes** -- it has never been exercised, so
+nothing about it has been proven.
+
+Send only the columns the source actually describes and let the endpoint merge the
+rest (18b13).
 
 ---
 
