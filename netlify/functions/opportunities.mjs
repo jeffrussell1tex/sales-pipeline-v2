@@ -1,12 +1,14 @@
 import { db } from '../../db/index.js';
 import { opportunities, users } from '../../db/schema.js';
-import { eq, asc, and } from 'drizzle-orm';
+import { eq, asc, and, inArray } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isManager, isReadOnly, requireRole, requireWrite } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import { serverErrorBody, writeAudit, getCallerName, bulkInsert, bulkUpsert } from './_lib.mjs';
+import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
+import { applyStageChanges } from './_stage.mjs';
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -227,6 +229,23 @@ export const handler = async (event) => {
                 // salesRep check the single-record path applies below, resolved once
                 // for the batch.
                 const callerName = canSeeAll(userRole) ? null : await getCallerName(userId);
+
+                // Stage clock and history. Only the server can resolve these: the
+                // client does not know a deal's prior stage. One SELECT for the
+                // batch, not one per row.
+                //
+                // An import that moved a deal used to leave stageChangedDate alone
+                // and add no history entry, so the move was invisible in History
+                // and "0 days in Proposal" was measured from the deal's creation.
+                // Stamping the date unconditionally would be worse -- see _stage.mjs
+                // for why a same-file re-import must not reset every clock.
+                const importDate = new Date().toISOString().slice(0, 10);
+                const priorRows = await db
+                    .select({ id: opportunities.id, stage: opportunities.stage, stageHistory: opportunities.stageHistory })
+                    .from(opportunities)
+                    .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.id, data.map(d => d.id))));
+                const priors = new Map(priorRows.map(r => [r.id, r]));
+                const staged = applyStageChanges(data, priors, importDate);
                     // partialRows, not sanitize() alone. sanitize() is a FULL-ROW
                     // builder -- it expands a payload rather than filtering one --
                     // and bulkUpsert derives its SET clause from the keys supplied,
@@ -238,12 +257,22 @@ export const handler = async (event) => {
                     // sanitize put the columns straight back.
                 const result = await bulkUpsert({
                     table: opportunities,
-                    rows: partialRows(data, sanitize),
+                    rows: partialRows(staged.rows, sanitize),
                     orgId,
                     ownerColumn: opportunities.salesRep,
                     callerName,
                 });
-                return { statusCode: 200, headers, body: JSON.stringify(result) };
+                // One audit record for the batch, not one per deal. A 500-row
+                // import moving 200 deals is one action by one person.
+                if (staged.changedCount > 0) {
+                    await writeAudit(orgId, {
+                        action: 'opportunity.stage_changed_bulk', entityType: 'opportunity', entityId: 'BATCH',
+                        entityName: `${staged.changedCount} deals`,
+                        detail: `CSV import moved ${staged.changedCount} of ${data.length} deals to a new stage`,
+                        userId,
+                    });
+                }
+                return { statusCode: 200, headers, body: JSON.stringify({ ...result, stageChanged: staged.changedCount }) };
             }
 
             if (!data.id) {
@@ -394,7 +423,21 @@ export const handler = async (event) => {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }
             }
-            await db.delete(opportunities).where(and(eq(opportunities.id, id), eq(opportunities.orgId, orgId)));
+            // Admin only. Reps close deals Won or Lost rather than deleting them,
+            // and that rule was DESIGN INTENT ONLY -- this branch was ownership-
+            // checked, so canSeeAll being false for a rep still let them delete
+            // their own records through the API. The clear=true branch above has
+            // always been gated; this one never was.
+            const forbiddenDelete = requireRole(auth, ['Admin'], headers);
+            if (forbiddenDelete) return forbiddenDelete;
+            // .returning() rather than a bare delete: a hard delete destroys the
+            // audit trail's subject, so the row has to be captured in the same
+            // statement that removes it. An id alone cannot be resolved back to a
+            // name once the record is gone.
+            const [deletedRow] = await db.delete(opportunities).where(and(eq(opportunities.id, id), eq(opportunities.orgId, orgId))).returning();
+            // An unknown id used to return success:true. It deleted nothing.
+            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await writeAudit(orgId, deletionAudit('opportunity', deletedRow, { userId, byRole: 'Admin' }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
 

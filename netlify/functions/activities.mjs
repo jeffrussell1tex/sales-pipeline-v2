@@ -3,6 +3,7 @@ import { activities, leads, settings as settingsTable } from '../../db/schema.js
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
+import { deletionAudit } from './_audit.mjs';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
 async function rescoreLead(orgId, leadId) {
@@ -126,7 +127,14 @@ export const handler = async (event) => {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }
             }
-            await db.delete(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId)));
+            // .returning() rather than a bare delete: a hard delete destroys the
+            // audit trail's subject, so the row has to be captured in the same
+            // statement that removes it. An id alone cannot be resolved back to a
+            // name once the record is gone.
+            const [deletedRow] = await db.delete(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId))).returning();
+            // An unknown id used to return success:true. It deleted nothing.
+            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await writeAudit(orgId, deletionAudit('activity', deletedRow, { userId }));
             if (delActy?.leadId) { try { await rescoreLead(orgId, delActy.leadId); } catch (e) { console.warn('lead rescore (del) failed:', e.message); } }
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

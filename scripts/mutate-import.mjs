@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs';
 
 const mutations = [
     ['bulkClient: chunking disabled',
@@ -148,12 +148,45 @@ const mutations = [
 
     ['importRows: a create no longer fills defaults',
         'src/utils/importRows.js',
-        'const merged = { ...CREATE_DEFAULTS, ...fromCsv };',
-        'const merged = { ...fromCsv };'],
+        'const merged = { ...CREATE_DEFAULTS, ...csvColumns };',
+        'const merged = { ...csvColumns };'],
 
     ['importRows: stageChangedDate unset on create (the NaNd / never-stale bug)',
         'src/utils/importRows.js',
-        'stageChangedDate: today,', 'stageChangedDate: undefined,'],
+        'stageChangedDate: backdate(today, parseDaysInStage(daysInStage) || 0),', 'stageChangedDate: undefined,'],
+    ['stage: an unchanged stage resets the clock anyway (the re-import trap)',
+        'netlify/functions/_stage.mjs',
+        '    } else if (changed) {\n        patch.stageChangedDate = importDate;\n    }',
+        '    } else {\n        patch.stageChangedDate = importDate;\n    }'],
+
+    ['stage: history is replaced rather than appended (0A0000.1 again)',
+        'netlify/functions/_stage.mjs',
+        'patch.stageHistory = [...existing, {',
+        'patch.stageHistory = [{'],
+
+    ['stage: the history entry uses the import date, not the derived one',
+        'netlify/functions/_stage.mjs',
+        'date:      patch.stageChangedDate || importDate,',
+        'date:      importDate,'],
+
+    ['stage: a negative daysInStage is not clamped (future date, never stale)',
+        'src/utils/stageClock.js',
+        'if (n < 0) return 0;', 'if (n < 0) return n;'],
+
+    ['stage: daysInStage leaks through as a column',
+        'netlify/functions/_stage.mjs',
+        'const { daysInStage: _transport, ...rest } = row;\n        return { ...rest, ...patch };',
+        'return { ...row, ...patch };'],
+
+    ['audit: values are no longer truncated',
+        'netlify/functions/_audit.mjs',
+        'parts.push(`${k}=${String(v).slice(0, 60)}`);',
+        'parts.push(`${k}=${String(v)}`);'],
+
+    ['audit: empty fields are rendered instead of omitted',
+        'netlify/functions/_audit.mjs',
+        "if (v === null || v === undefined || String(v).trim() === '') continue;",
+        'if (false) continue;'],
 ];
 
 let survived = 0;

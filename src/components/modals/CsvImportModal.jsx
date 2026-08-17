@@ -170,6 +170,9 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         { key: 'vertical',        label: 'Vertical' },
         { key: 'probability',     label: 'Probability (%)' },
         { key: 'createdDate',     label: 'Created Date' },
+        // Transport only — not a column. The server turns it into
+        // stageChangedDate (importDate − days); see netlify/functions/_stage.mjs.
+        { key: 'daysInStage',     label: 'Days in Stage' },
     ];
 
     const appFields = importType === 'contacts' ? contactFields

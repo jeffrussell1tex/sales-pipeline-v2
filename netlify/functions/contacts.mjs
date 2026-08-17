@@ -3,6 +3,7 @@ import { contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
 import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert } from './_lib.mjs';
+import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
 
 export const handler = async (event) => {
@@ -149,7 +150,14 @@ export const handler = async (event) => {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }
             }
-            await db.delete(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId)));
+            // .returning() rather than a bare delete: a hard delete destroys the
+            // audit trail's subject, so the row has to be captured in the same
+            // statement that removes it. An id alone cannot be resolved back to a
+            // name once the record is gone.
+            const [deletedRow] = await db.delete(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId))).returning();
+            // An unknown id used to return success:true. It deleted nothing.
+            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await writeAudit(orgId, deletionAudit('contact', deletedRow, { userId }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };

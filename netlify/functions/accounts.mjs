@@ -3,6 +3,7 @@ import { accounts, settings as settingsTable, opportunities, contacts } from '..
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
 import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert } from './_lib.mjs';
+import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
@@ -230,7 +231,21 @@ export const handler = async (event) => {
             await db.update(accounts)
                 .set({ parentAccountId: null })
                 .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)));
-            await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId)));
+            // Admin only. Reps close deals Won or Lost rather than deleting them,
+            // and that rule was DESIGN INTENT ONLY -- this branch was ownership-
+            // checked, so canSeeAll being false for a rep still let them delete
+            // their own records through the API. The clear=true branch above has
+            // always been gated; this one never was.
+            const forbiddenDelete = requireRole(auth, ['Admin'], headers);
+            if (forbiddenDelete) return forbiddenDelete;
+            // .returning() rather than a bare delete: a hard delete destroys the
+            // audit trail's subject, so the row has to be captured in the same
+            // statement that removes it. An id alone cannot be resolved back to a
+            // name once the record is gone.
+            const [deletedRow] = await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId))).returning();
+            // An unknown id used to return success:true. It deleted nothing.
+            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await writeAudit(orgId, deletionAudit('account', deletedRow, { userId, byRole: 'Admin' }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };

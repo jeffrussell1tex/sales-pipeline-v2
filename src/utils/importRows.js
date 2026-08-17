@@ -32,6 +32,8 @@
 //
 // Pure and dependency-free so the split is pinned by tests/import-rows.test.mjs.
 
+import { parseDaysInStage, backdate } from './stageClock.js';
+
 // Coercions, keyed by column. Applied ONLY to keys the caller actually supplied —
 // `mapCsvRows` omits unmapped fields, and that omission has to survive this step
 // or it was pointless. The two halves of the contract are here and in
@@ -51,6 +53,10 @@ const CSV_COLUMNS = {
     vertical:           (v) => v || '',
     probability:        (v) => parseInt(v, 10) || null,
     createdDate:        (v) => v || '',
+    // Transport only. On an OVERWRITE it is passed through for the server to
+    // resolve against the deal's prior stage. On a CREATE there is no prior
+    // stage, so it is applied here and never sent as a column.
+    daysInStage:        (v) => v,
 };
 
 // Columns a new deal always gets, even when the file is silent.
@@ -85,12 +91,14 @@ export function buildOpportunityRow(row, { existingId = null, currentUser = '', 
     if (existingId) {
         // createdDate is provenance, not content. A file that happens to carry a
         // Created Date column must not rewrite when the deal was created.
+        // daysInStage stays: only the server knows the prior stage.
         const { createdDate: _drop, ...rest } = fromCsv;
         return { id: existingId, ...rest };
     }
 
     // CREATE: fill everything.
-    const merged = { ...CREATE_DEFAULTS, ...fromCsv };
+    const { daysInStage, ...csvColumns } = fromCsv;
+    const merged = { ...CREATE_DEFAULTS, ...csvColumns };
     merged.opportunityName = merged.opportunityName || merged.account || 'Imported Deal';
     merged.salesRep        = merged.salesRep        || currentUser;
     merged.stage           = merged.stage           || 'Qualification';
@@ -104,7 +112,11 @@ export function buildOpportunityRow(row, { existingId = null, currentUser = '', 
         // The deal entered its stage in this system today. Leaving it unset
         // rendered "NaNd" in the funnel and made `stale = NaN > 14` permanently
         // false, so an imported deal could never flag as stalled.
-        stageChangedDate: today,
+        // A new deal entered its stage today unless the file says otherwise.
+        // Leaving it unset rendered "NaNd" in the funnel and made
+        // `stale = NaN > 14` permanently false, so an imported deal could never
+        // flag as stalled (0A0000.8).
+        stageChangedDate: backdate(today, parseDaysInStage(daysInStage) || 0),
         stageHistory: [],
         comments:     [],
         contactIds:   [],

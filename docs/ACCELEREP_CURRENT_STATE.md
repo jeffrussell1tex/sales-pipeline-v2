@@ -397,7 +397,162 @@ what the file described; `buildOpportunityRow` must not add to it;
 `partialRows` narrows the sanitized row back down to it. Each was fixed in turn
 and each time the next one downstream undid it.
 
-**Still not confirmed.** Re-run check 1.
+**CONFIRMED ON DEV.** Check 1 passed after a hard refresh, third attempt:
+
+| Probe | Result |
+|---|---|
+| Next Steps (`nextSteps`) — unmapped column | **survived** |
+| 💬 Team Notes (`comments`) | **survived** |
+| Linked contacts (`contactIds`) — all three | **survived** |
+| Stage history (`stageHistory`) | **survived** |
+| Sales rep | **not reassigned** |
+| Description / Background — positive control | **changed**, so the overwrite ran |
+| Stage / Revenue | Proposal, $44,000 |
+
+Three attempts, three distinct defects: the server re-expanded the payload
+(§0.9), the endpoint then rejected the narrowed row (§0.10), the mapper emitted
+`''` for unmapped columns (§0.12), and the builder put every column back (§0.13).
+
+
+### 0.14 Two columns the importer can write and nothing else can
+
+Raised by Jeff during check 1: **Products and Territory have no input on an
+opportunity.**
+
+- **Products** — the picker (`toggleProduct`, `setProductRevenue`) was deleted in
+  `4bab072`, 23 Apr 2026, *"remove ARR term and replace with ARR"*. Product line
+  items moved to the Quotes tab, which the modal still says under Revenue.
+  Intentional; the column was not retired with it.
+- **Territory** — `handleChange('territory')` has **never existed** in
+  `OpportunityModal` across all 1,161 commits. The only territory inputs are on
+  users (`UsersDetail`, `UserModal`).
+
+Both are still READ, and one will crash.
+
+**`ReportsTab:6405` treats `products` as an array:**
+
+```js
+{selectedOpp.products?.length > 0 && <>
+    {selectedOpp.products.map((p,i) => (
+```
+
+The schema is `text('products')`. A non-empty string passes `.length > 0` and then
+`.map is not a function` — **TypeError, and the Reports panel goes behind the error
+boundary.** Same shape as the ReportsTab TDZ incident in §0A000.1.
+
+Nothing can populate `products` through the UI any more — **but the CSV importer
+still can, and it writes a string.** Latent since April, reachable only through the
+importer, which means it became reachable again the moment CSV overwrite started
+working (§0A0000.1).
+
+`territory` is read at `ReportsTab:3883`, driving a territory grid that filters
+`o => o.territory` and buckets pipeline by it. No crash, but the visualisation can
+only ever be fed by CSV import — the §0.7 shape one table over: a feature whose
+input has no author.
+
+**Decide, do not drift:** fix the ReportsTab consumer to accept a string (safer —
+existing rows may already hold one), or drop `products` from the importer's field
+list so nothing can write one. Territory is the same call as handoff item 2.
+
+### 0.15 An import-driven stage change is not recorded
+
+Noticed while confirming check 1. The overwrite moved the deal to Proposal, and:
+
+- `stageChangedDate` was **not** updated — correctly, in that the client does not
+  send it, but it means "0 days in Proposal" is measured from the deal's creation
+  rather than from the stage change. A deal moved by import can therefore read as
+  fresh indefinitely, which is the **inverse of the `NaN > 14` never-stale bug in
+  §0A0000.8** and has the same consequence.
+- `stageHistory` gained **no entry**, so an import-driven stage change is invisible
+  in the History tab.
+
+§0A0000.1 established that an import must not WIPE stage history. Whether it should
+APPEND to it is a separate, unanswered question. The client cannot answer it — it
+does not know the prior stage. The endpoint does: `bulkUpsert` already selects the
+existing rows. **Product decision, not a bug fix.** Left as a decision rather than
+quietly implemented.
+
+### 0.16 Delete was never gated, and was never audited anywhere
+
+Raised as a feature request — "Admins should be able to delete deals". The
+endpoint already existed, and the gap was the opposite of that.
+
+**All six entities had the same shape:** `clear=true` (org-wide wipe) was
+Admin-gated AND audited; the per-id delete beneath it was ownership-checked only
+and **audited nothing**. So:
+
+- The rule *"reps cannot delete deals, they close them Won or Lost"* was **design
+  intent only**. `canSeeAll` is false for a rep, so the ownership check passed on
+  their own records — **a rep could delete their own deals through the API.**
+- **Six endpoints, six single-record deletes, zero audit records.** A deal,
+  account, lead, contact, task or activity could be removed leaving no trace.
+- An unknown id returned `success: true` having deleted nothing.
+- `useOpportunities.js:67` already called the endpoint with no UI surfacing it —
+  the §18b7 shape, wiring without a feature.
+
+**Now:** `requireRole(auth, ['Admin'])` on the per-id delete for **opportunities,
+accounts and leads**; contacts, tasks and activities keep the rep-level ownership
+check, per Jeff's call. All six capture the row with `.returning()` and write an
+audit record built by `netlify/functions/_audit.mjs`, and all six 404 on an
+unknown id.
+
+A hard delete destroys the audit trail's subject, so the record carries a
+**snapshot** — name plus the fields that identify it. An `entityId` alone cannot
+be resolved back to a name once the row is gone.
+
+**Still to build: the Admin-only UI.** `handleDelete` in `useOpportunities.js` is
+wired to nothing. Deliberately not half-built here — the backend is verified and
+the UI is a clean separate piece.
+
+### 0.17 Import: stage clock and history
+
+Per Jeff: an imported deal should sit at the stage the file says, and days-in-stage
+should be importable, defaulting to zero.
+
+**`stageChangedDate = importDate − daysInStage`.** No new concept and no schema
+change — days-in-stage is a back-dated write to a column that already exists, so
+stall detection, the funnel and "0 days in Proposal" all work unchanged.
+
+The unconditional version of this rule is a trap and was rejected. Re-importing
+the same file is normal here, so stamping `importDate` on every overwrite would
+reset every deal's stage clock on every refresh and **nothing would ever flag as
+stalled again** — while looking entirely plausible. The clock therefore moves only
+when the stage actually changed, or when the file explicitly asserts a value,
+which is the same mapped-is-an-assertion contract as §0.12/§0.13:
+
+| stage changed | daysInStage mapped | stageChangedDate |
+|---|---|---|
+| yes | yes | `importDate − days` |
+| yes | no  | `importDate` |
+| no  | yes | `importDate − days` — asserted |
+| no  | no  | **untouched** |
+
+A stage change also appends `{ prevStage, stage, date, source: 'import' }` to
+history, **built server-side from the array already in the database.** The client
+never sends a `stageHistory` array — that is what wiped history in §0A0000.1, and
+this is the one place the field legitimately re-enters a write. The entry carries
+the DERIVED date, or History would contradict the header.
+
+Guards: a negative value is clamped to zero (a future `stageChangedDate` makes
+`days > 14` permanently false — the never-stale bug through the front door), a
+non-numeric value is treated as unmapped rather than guessed, and anything over
+ten years is ignored rather than dating a deal to 1753.
+
+Only the server can resolve this — the client does not know a deal's prior stage —
+so it runs in `opportunities.mjs` with **one** SELECT for the batch. The create
+path has no prior stage, so it derives the date in the browser; the two pure date
+helpers live in `src/utils/stageClock.js` and `_stage.mjs` re-exports them, because
+two implementations of one date rule is how they drift.
+
+One audit record per batch, not per deal: a 500-row import moving 200 deals is one
+action by one person. No per-deal emails.
+
+**Tests 185 → 209, mutations 29 → 36.** A second unreachable clause was written and
+deleted — an outer cap on the audit snapshot that could never fire because values
+are already truncated at 60 and there are at most five fields. Same call as
+`ALWAYS_KEEP` in §0.10, same reason (§0A0000.3).
+
+**Not confirmed on dev.** Nothing here has been exercised.
 
 ---
 

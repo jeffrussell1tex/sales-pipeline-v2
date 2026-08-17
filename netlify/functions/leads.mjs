@@ -5,6 +5,7 @@ import { verifyAuth, canSeeAll, isReadOnly, requireRole, requireWrite } from './
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
+import { deletionAudit } from './_audit.mjs';
 import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
@@ -199,7 +200,21 @@ export const handler = async (event) => {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }
             }
-            await db.delete(leads).where(and(eq(leads.id, id), eq(leads.orgId, orgId)));
+            // Admin only. Reps close deals Won or Lost rather than deleting them,
+            // and that rule was DESIGN INTENT ONLY -- this branch was ownership-
+            // checked, so canSeeAll being false for a rep still let them delete
+            // their own records through the API. The clear=true branch above has
+            // always been gated; this one never was.
+            const forbiddenDelete = requireRole(auth, ['Admin'], headers);
+            if (forbiddenDelete) return forbiddenDelete;
+            // .returning() rather than a bare delete: a hard delete destroys the
+            // audit trail's subject, so the row has to be captured in the same
+            // statement that removes it. An id alone cannot be resolved back to a
+            // name once the record is gone.
+            const [deletedRow] = await db.delete(leads).where(and(eq(leads.id, id), eq(leads.orgId, orgId))).returning();
+            // An unknown id used to return success:true. It deleted nothing.
+            if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await writeAudit(orgId, deletionAudit('lead', deletedRow, { userId, byRole: 'Admin' }));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
