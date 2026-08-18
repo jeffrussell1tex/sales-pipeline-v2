@@ -240,8 +240,17 @@ export const handler = async (event) => {
                 // Stamping the date unconditionally would be worse -- see _stage.mjs
                 // for why a same-file re-import must not reset every clock.
                 const importDate = new Date().toISOString().slice(0, 10);
+                // stageChangedDate is selected as well as stage and stageHistory:
+                // applyStageChanges backfills the derived columns of untouched rows
+                // from the STORED values when any row in the batch moves. Drop it
+                // from this select and the backfill writes null. See _stage.mjs.
                 const priorRows = await db
-                    .select({ id: opportunities.id, stage: opportunities.stage, stageHistory: opportunities.stageHistory })
+                    .select({
+                        id:               opportunities.id,
+                        stage:            opportunities.stage,
+                        stageHistory:     opportunities.stageHistory,
+                        stageChangedDate: opportunities.stageChangedDate,
+                    })
                     .from(opportunities)
                     .where(and(eq(opportunities.orgId, orgId), inArray(opportunities.id, data.map(d => d.id))));
                 const priors = new Map(priorRows.map(r => [r.id, r]));
