@@ -1,5 +1,9 @@
 # Accelerep — Claude Coding Guide
 
+**Updated:** August 18, 2026 · rules current through **§18b17**.
+A missing date line here is why a reader once judged this file stale from its
+header while the body was current — check the highest §18b number, not the date.
+
 Upload this file at the start of every new conversation to give Claude full context on the Accelerep project architecture, conventions, and known pitfalls.
 
 ---
