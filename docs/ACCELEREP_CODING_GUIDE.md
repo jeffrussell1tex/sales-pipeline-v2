@@ -1982,6 +1982,49 @@ rest (18b13).
 
 ---
 
+## 18b17. A Comment Is Not Evidence (hard rule)
+
+Three comments were found in one session, each describing behaviour the code
+beneath it did not have, each written by an earlier session, each claiming the
+thing a reader would want to be true:
+
+| Comment | Reality |
+|---|---|
+| `sanitize()` — read as a filter | a full-row BUILDER; expanded every payload |
+| `_sanitize.mjs` — "a column not mapped never appears in any row" | false; `mapCsvRows` emitted `''` for unmapped |
+| `buildOpp` — "sends only the columns the CSV actually describes" | built all thirteen unconditionally, ten lines below |
+
+Each was believed, each shaped a fix, and each fix was correct where it was
+written and useless where it mattered.
+
+**Read the adjacent code. Do not assert its behaviour.** If a fix depends on what
+another module does with the payload, open that module. A comment describing a
+neighbour is a claim about something that can change without it.
+
+And when you write one, write what the code does, not what the change was for.
+The three above were all accurate as statements of INTENT.
+
+### A test can encode the wrong rule, and mutation testing will not tell you
+
+```js
+// This shipped, passed, and was mutation-tested:
+test('an unmapped field is present and empty, never undefined', () => {
+    // "undefined and '' are not the same thing to a PUT that merges by
+    //  supplied keys (18b13)."
+    assert.equal(records[0].email, '');
+});
+```
+
+Correct rule cited, opposite conclusion drawn. The importer then blanked every
+field the file did not mention, and the test certified it.
+
+Mutation testing proves a test NOTICES when the code stops matching it. It cannot
+prove the test asserts the right thing. **Only running the feature does that** —
+which is why every dev check in §0 is written as a user action with an expected
+screen, and why a positive control belongs in every one of them.
+
+---
+
 ## 18b16. A Row You Discard Must Be Reported (hard rule)
 
 A filter that removes records before a write is a decision made on the user's

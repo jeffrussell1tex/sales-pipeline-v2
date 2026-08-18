@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** August 17, 2026  
-**Batch:** **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · 89 → 140 tests, 14 mutations
+**Batch:** **seven defects, four of them in code written this session; every one of those four found by running the app, not by a gate** · delete was never gated and never audited on any entity · import stage clock · **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · 89 → 140 tests, 14 mutations
 **Prior batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
 **Prior batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · **Clerk advisories cleared — Production migration unblocked** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · 19 → 69 tests
 **Prior batch:** SalesManagerTab hoist, SPIFF persistence & claim plumbing
@@ -553,6 +553,106 @@ are already truncated at 60 and there are at most five fields. Same call as
 `ALWAYS_KEEP` in §0.10, same reason (§0A0000.3).
 
 **Not confirmed on dev.** Nothing here has been exercised.
+
+### 0.18 Session close — what is confirmed and what is not
+
+**Confirmed on dev, by running it:**
+
+| | |
+|---|---|
+| Check 1 — CSV overwrite preserves Team Notes, contacts, stage history, Next Steps | passed, hard-refreshed, third attempt |
+| Receipt reports created vs overwritten accurately | passed — "2 created, 1 overwritten" matched the list exactly |
+| Admin delete + audit | passed — five deletions, audit records written |
+| 404 on an unknown delete id | passed — a placeholder id returned 404 where the old code returned `success: true` |
+| Partial PUT on `dispatch-technicians` | verified by reading it — `if (f in data)`, id from the query param. **Clean.** The pattern `_sanitize.mjs` exists to impose on the bulk endpoints |
+
+**Committed, gated, and NOT exercised on dev:**
+
+- The delete sweep across all six entities — in particular the **Admin gate**. The
+  sharpest test is running a delete from a Technician or User account and getting
+  **403**. Never run.
+- The import stage clock (§0.17) in every one of its four cases.
+- **Days in Stage** as a mapped column.
+- Dev checks 3 (accounts CSV blocked at Preview), 4 (`notFound`), 5 (avatar timezone).
+
+Check 4 was attempted twice and **never reached `notFound`** either time. Conflict
+detection matches against deals that currently exist, so deleting them first makes
+them new records rather than missing targets. Reaching it needs the modal held at
+the Conflicts step while the deletes run — a genuine race, and a fair thing to
+defer.
+
+### 0.19 Field evidence of §0.9, found by accident
+
+Three ZZTest deals from the 14 August session carried **`createdDate: null`**.
+That is §0.9's `sanitize()` expansion, visible in real rows: `createdDate ||
+null` was written over real provenance by the overwrite. §0A0000.10 recorded that
+check as passing, and it did — on stage and ARR. Nobody looked at provenance.
+
+`dealAge` handles the null correctly and renders —, so there was no `NaNd`. The
+data was simply gone, quietly, and the UI told the truth about not knowing.
+
+### 0.20 Technician linkage — a live instance of Clerk ID drift
+
+`dispatch_technicians.userId` for Savannah Miller held
+`user_3HaqZL0cu6O6NIpRDG0YvweJs0g`. Karen, the account it was supposed to link, is
+`user_3BieCZ9auTtufcerK0lH1FmV9js`. Same org, different user — so
+`resolveTechnicianId` found nothing and `dispatch-jobs.mjs:173` returned 403 with
+*"No technician record is linked to your account."* That fail-closed path is
+correct and worked exactly as designed.
+
+**The orphan id was never identified.** If it is absent from the org's user list it
+came from the production Clerk instance — both environments share one Neon `main`
+branch while user and org ids differ per instance. **That is the Clerk Production
+migration's org-ID sweep, visible in a single row, before cutover.** Worth chasing.
+
+Resolved: Savannah unlinked (`userId: null`, confirmed from the response body),
+Karen moved Technician → User and verified server-side (`opportunities` 200 on her
+own token — a Technician is denied there by default, so 200 is proof the Clerk
+metadata changed and not just the Settings mirror).
+
+**Two UI gaps found in passing, neither fixed:**
+
+- A Technician with no linked record sees a bare `Dispatch data failed to load:
+  jobs (403)` and a one-tab nav. The endpoint's message is already good; the client
+  drops it. Same class as the importer congratulating you on importing nothing —
+  the information existed and the UI discarded it.
+- `dbFetch` logs `DB error 403` for a response the caller **deliberately expects**
+  (`useSettings.js:196`, `// 403 for reps — don't touch users array`). Harmless,
+  but it trains you to ignore console errors, which is a poor habit in a product
+  that produced four silent-failure bugs in one day.
+
+### 0.21 The pattern this session actually established
+
+Seven defects. **Four were in code written during this session**, and every one of
+those four was caught by Jeff running the app — none by a gate, a test, or a
+review.
+
+The chain, in order, each one exposed only by fixing the last:
+
+1. `sanitize()` re-expanded the payload server-side (§0.9)
+2. narrowing it made the upsert's INSERT arm fail NOT NULL (§0.10)
+3. extracting `bulkUpsert` to make that testable broke the import graph (§0.11)
+4. `mapCsvRows` emitted `''` for unmapped columns (§0.12)
+5. `buildOpp` re-materialised all thirteen columns anyway (§0.13)
+
+**Three false comments were found, all written by a previous session, all claiming
+the behaviour the reader wanted to be true:**
+
+- `sanitize()` — presented as a filter, was a builder
+- `_sanitize.mjs` — *"a column not mapped in the CSV never appears in any row"*,
+  which was never verified and was false
+- `buildOpp` — *"an overwrite now sends only the columns the CSV actually
+  describes"*, contradicted by the ten lines beneath it
+
+**And a test that encoded the wrong rule, confidently.** `an unmapped field is
+present and empty, never undefined` cited 18b13 correctly and drew the opposite
+conclusion. It passed, it was mutation-tested, and it certified the bug as
+correct. **Mutation testing cannot catch a test that encodes the wrong rule** — it
+only proves the test notices when the code stops matching it. Only running the
+thing catches that.
+
+Carry forward: **read the next step, do not assert it in a comment.** Every one of
+these was a claim about adjacent code that nobody checked.
 
 ---
 
