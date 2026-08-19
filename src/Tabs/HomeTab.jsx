@@ -184,7 +184,11 @@ export default function HomeTab() {
 
     // ── Date / greeting ──────────────────────────────────────
     const now        = new Date();
-    const todayStr   = now.toISOString().split('T')[0];
+    // isoLocal, not toISOString(): the latter converts to UTC before formatting, so
+    // west of Greenwich it returns TOMORROW's date all evening (UTC-5 from 7pm) and
+    // east of it yesterday's all morning. todayStr drives todayTasks, so an evening
+    // user saw tomorrow's tasks under "due today" and none of today's.
+    const todayStr   = isoLocal(now);
     const today12    = new Date(todayStr + 'T12:00:00');
     // Company calendar (Settings → Company → Company calendar) acts as the corporate calendar.
     // Entries are stored as 'MMM D' (e.g. 'Jun 4'), so match on that.
@@ -407,14 +411,22 @@ export default function HomeTab() {
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - now.getDay());
     weekStart.setHours(0,0,0,0);
-    const weekStartStr = weekStart.toISOString().split('T')[0];
+    // Local midnight Sunday. toISOString() happens to survive this in negative UTC
+    // offsets and loses a day in positive ones (Tokyo midnight is the previous day
+    // in UTC), so it was right in Chicago and wrong in Sydney.
+    const weekStartStr = isoLocal(weekStart);
 
     const prevWeekStart = new Date(weekStart);
     prevWeekStart.setDate(weekStart.getDate() - 7);
     const prevWeekEnd = new Date(weekStart);
     prevWeekEnd.setMilliseconds(-1);
-    const prevWeekStartStr = prevWeekStart.toISOString().split('T')[0];
-    const prevWeekEndStr   = prevWeekEnd.toISOString().split('T')[0];
+    const prevWeekStartStr = isoLocal(prevWeekStart);
+    // prevWeekEnd is Saturday 23:59:59.999 LOCAL, which in UTC-5 is Sunday 04:59
+    // UTC — so toISOString() returned THIS Sunday and the previous-week range ran
+    // [lastSunday .. thisSunday] inclusive, overlapping the current week by a day.
+    // Today's activities were counted in both, inflating prevWeekActs and skewing
+    // the delta arrow on the "This week" tile.
+    const prevWeekEndStr   = isoLocal(prevWeekEnd);
 
     const weekActs      = myActivities.filter(a => a.date >= weekStartStr);
     const prevWeekActs  = myActivities.filter(a => a.date >= prevWeekStartStr && a.date <= prevWeekEndStr);
