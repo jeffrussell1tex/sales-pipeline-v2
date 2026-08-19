@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { useAuth } from '@clerk/clerk-react';
-import { quarterOf, quarterStartDate, quarterEndDate, isoLocal } from '../utils/quarters';
+import { quarterOf, quarterStartDate, quarterEndDate } from '../utils/quarters';
+import { isoLocal } from '../utils/dateLocal';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (V1 — matches variation1.jsx TOKENS exactly)

@@ -60,14 +60,6 @@ export function quarterEndDate(fiscalYear, q, fiscalStart) {
     return new Date(start.getFullYear(), start.getMonth() + 3, 0);
 }
 
-// yyyy-mm-dd in LOCAL time. Deliberately not toISOString(), which converts to UTC
-// first: west of Greenwich that returns tomorrow's date all evening, and east of it
-// yesterday's all morning.
-export function isoLocal(d) {
-    const p = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 export function quarterRange(fiscalYear, q, fiscalStart) {
     const start = quarterStartDate(fiscalYear, q, fiscalStart);
     const end   = quarterEndDate(fiscalYear, q, fiscalStart);
