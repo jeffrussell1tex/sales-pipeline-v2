@@ -1,7 +1,7 @@
 # ACCELEREP — Current State
-**Updated:** August 18, 2026  
-**Verified at:** all six gates green · **211 tests** · **37/37 mutations caught** · all 66 functions bundle under esbuild  
-**Batch:** **seven defects, four of them in code written this session; every one of those four found by running the app, not by a gate** · delete was never gated and never audited on any entity · import stage clock · **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · **89 → 211 tests, 0 → 37 mutations**
+**Updated:** August 19, 2026  
+**Verified at:** all six gates green · **232 tests** · **50/50 mutations caught** · all 66 functions bundle under esbuild  
+**Batch:** **seven defects, four of them in code written this session; every one of those four found by running the app, not by a gate** · delete was never gated and never audited on any entity · import stage clock · **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · **the stage clock shipped in §0.17 wiped the rows it did not touch** — a deal lost its clock AND its whole stage history because a DIFFERENT deal in the same file moved · **`37/37 mutations` was never reproducible** — CRLF vs `\n` anchors meant 8 of them had never run · Home showed the wrong fiscal quarter · `toISOString` was building local dates in 29 places · **89 → 232 tests, 0 → 50 mutations**
 **Prior batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
 **Prior batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · **Clerk advisories cleared — Production migration unblocked** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · 19 → 69 tests
 **Prior batch:** SalesManagerTab hoist, SPIFF persistence & claim plumbing
@@ -15,7 +15,7 @@
 
 ---
 
-## 0. Latest Batch — The Importer Reports What Landed
+## 0. Latest Batch — The Importer Reports What Landed, and Three Rules Composed Wrongly
 
 > Four backlog items turned out to be one defect with four faces. The importer's
 > Results screen reported numbers that were never derived from what the server
@@ -655,6 +655,122 @@ thing catches that.
 Carry forward: **read the next step, do not assert it in a comment.** Every one of
 these was a claim about adjacent code that nobody checked.
 
+### 0.22 Three Rules, Each Correct, Composed Wrongly
+
+Three defects this session. None was a wrong rule. Each was a correct rule meeting
+another correct rule at a seam neither owned.
+
+#### The stage clock, batched
+
+`applyStageChanges` derives `stageChangedDate` and `stageHistory` PER ROW. A deal
+that did not move, in a file asserting no `daysInStage`, gets an EMPTY patch, so
+its stored clock survives. That rule is right and the suite proved it.
+
+`partialRows` keeps the UNION of supplied keys across the batch, because
+`bulkUpsert` hands one chunk to ONE multi-row INSERT and the rows must share a
+shape. That rule is also right, and its reasoning — "if any row in the file
+supplies a column, that column is part of what this import describes" — is sound
+for CSV columns, where mapped-or-not is a property of the file.
+
+These two keys are not CSV columns. They are derived, per row, after the mapping
+step. So one deal moving stage put both into the union for the whole batch, and
+every row without a patch went through `sanitize()`, which emitted
+`stageChangedDate: null` and `stageHistory: []`, and `bulkUpsert` wrote them.
+
+Observed on dev. A two-row overwrite where Charlie moved and Alpha did not:
+
+| ZZTest Alpha | before | after |
+|---|---|---|
+| stageChangedDate | `2026-08-06` | `null` |
+| stageHistory | 1 entry | `[]` |
+
+Alpha was not mentioned by the file in any way that should have touched those
+columns. It lost its clock and its entire stage history because a DIFFERENT deal
+in the same import moved stage. In a 500-row import where 200 deals move, the
+other 300 are wiped.
+
+**Why 211 tests and 29 live mutations passed over it.** Every existing fixture was
+single-row. Delta imported alone would have passed — the defect does not exist in a
+batch of one. The fix's tests are all multi-row for that reason.
+
+**The fix.** Two passes. Compute patches first; then, for each derived key that
+some row in the batch actually acquired, backfill the rows that did not from the
+STORED row rather than from `sanitize()`'s invented default. The shape stays
+uniform, so union reason #1 still holds, and the write becomes a no-op instead of
+an erasure. Same move as backfilling NOT NULL columns from the stored row in the
+`bulkUpsert` INSERT arm.
+
+This required `stageChangedDate` in the priors SELECT in `opportunities.mjs`. It
+was not there. Without it the backfill writes null with complete confidence, and
+no unit test of `_stage.mjs` can see the endpoint's query — so that dependency is
+pinned by a source assertion in `tests/stage-batch.test.mjs`.
+
+#### 37/37 was never true
+
+`scripts/mutate-import.mjs` matched anchors with `\n`. The working tree is CRLF.
+Every multi-line anchor therefore never matched, was reported `SKIP`, and its
+mutation never ran.
+
+Eight of them. Every single-line anchor caught; every multi-line one skipped. That
+is not drift — those eight had never executed on any CRLF checkout, while the docs
+recorded 37/37. The harness was reporting coverage it did not have, which is the
+failure mode it exists to prevent, one level up.
+
+Anchors are now matched EOL-agnostically and the replacement is rewritten to the
+target file's convention. `SKIP` became `STALE ... this mutation DID NOT RUN`, with
+a summary line, because the old wording read like a neutral omission rather than an
+absence of evidence printed beside genuine passes. It always exited non-zero; that
+part was already right.
+
+Now 50 mutations, all caught, no stale anchors.
+
+#### The fiscal quarter, and dates that are not days
+
+`HomeTab` computed `Math.floor(now.getMonth() / 3) + 1` — a calendar quarter that
+never read `fiscalYearStart`. Under an October fiscal year, August rendered as Q3
+when it is Q4. `getQuarter` was already destructured from `useApp()` at the top of
+the file and used correctly 140 lines below for the quota card: the fiscal rule was
+in scope and simply not called.
+
+That is the same shape as the stage clock — one rule, two implementations. There
+are SEVEN implementations of fiscal-quarter maths in this codebase. Only
+`ListView.jsx` imports the tested helper.
+
+Underneath it, a second and wider defect. `toISOString().split('T')[0]` converts to
+UTC before truncating, so it returns a date the user is not looking at: tomorrow's
+all evening west of Greenwich, yesterday's all morning east of it. Twenty-nine
+sites in `src/`. The worst STORES a wrong date on a coaching note; `TaskItem` turns
+tasks due today red as overdue from 7pm Central; and HomeTab's previous-week window
+ended on a boundary that landed on the wrong side of midnight in EVERY zone tested,
+so "last week" included today and the week-over-week delta was skewed.
+
+`src/utils/dateLocal.js` now holds `isoLocal` and `todayLocal`. Four sites fixed;
+24 triaged and listed in the handoff.
+
+#### What the tests taught, which is the part worth keeping
+
+The first draft of `tests/date-local.test.mjs` was 10 tests, green in five
+timezones. Mutation testing then showed that reverting `isoLocal` to `toISOString`
+**SURVIVED at UTC** — not because the assertions were weak, but because at UTC the
+two functions are identical and no assertion on output can distinguish them
+anywhere. A CI container at UTC would have run that suite green forever.
+
+A second mutation, `todayLocal` bypassing `isoLocal`, survived in Chicago too —
+only because the suite happened to run at midday, when the two agree. A test that
+works after 7pm and not before is worse than no test.
+
+Both closed: a source assertion that the module contains no `toISOString` at all,
+which holds in every zone; and a child process spawned with `TZ` set, so the suite
+can exercise Chicago and Tokyo regardless of where it runs. The child reports the
+zone it actually adopted and skips with a reason if the platform ignored `TZ`,
+rather than passing vacuously. Confirmed working on Windows.
+
+The through-line across all three defects: **a rule can be correct, tested, and
+mutation-proven, and still be wrong where it meets the next component.** The stage
+clock was invisible to every single-row fixture. The date rule is invisible at UTC.
+The harness was blind to every multi-line anchor. In each case the missing thing
+was not a better assertion but a second setting of an ambient condition. That is
+now §18b18 in the guide.
 ---
 
 ## 0A0000. Prior Batch — Bulk Insert, and Three Paths That Had Never Run

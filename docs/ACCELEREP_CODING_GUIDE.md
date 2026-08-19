@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** August 18, 2026 · rules current through **§18b17**.
+**Updated:** August 19, 2026 · rules current through **§18b18**.
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -2063,6 +2063,63 @@ Three requirements, all of them learned from that screen:
 
 The general form: **an empty result and a discarded result must not render the
 same.** A count of zero is what both a clean no-op and a total failure look like.
+
+## 18b18. Mutate Under The Condition That Could Hide It
+
+§18b10 requires every new suite to be mutation-tested. This narrows it.
+
+**A mutation must be run under at least two settings of any ambient value the
+behaviour depends on** — clock, timezone, locale, batch size, row count, role.
+Where no setting of that value can distinguish correct from incorrect output,
+assert on SOURCE instead.
+
+Three defects on 19 August 2026 shared one shape, and this rule is what would have
+caught each of them earlier.
+
+**Batch size.** `applyStageChanges` was correct per row and proven so. The defect
+only existed when a batch contained both a row that moved stage and a row that did
+not: the mover's derived keys entered the union and `sanitize()` supplied `null`
+and `[]` for the others. Every existing fixture was single-row. The same deal
+imported alone passed. *A single-row fixture cannot express a batch bug.*
+
+**Timezone.** `isoLocal` replaces `toISOString().split('T')[0]`. At UTC those two
+functions return identical strings — they are the same function there. A suite of
+ten output assertions was green in five timezones and the reverting mutation
+SURVIVED at UTC. A CI container on UTC would have run it green forever.
+
+**Clock.** A second mutation, `todayLocal` bypassing `isoLocal`, survived when the
+suite ran at midday and was caught in the evening. A test whose result depends on
+the hour it runs is not a test.
+
+**Line endings — the same rule applied to the harness itself.** Anchors in
+`scripts/mutate-import.mjs` used `\n` against a CRLF tree. All eight multi-line
+anchors silently never matched and their mutations never ran, while the docs
+recorded 37/37. The harness reported coverage it did not have.
+
+### What to do
+
+1. Name the ambient values the behaviour depends on. Clock and timezone for
+   anything date-shaped; batch size for anything that goes through `partialRows` or
+   `bulkUpsert`; role for anything behind `requireRole`.
+2. Run the mutation under at least two settings of each. For timezone, spawn a
+   child with `TZ` set — Node fixes its zone at process start, so in-process
+   manipulation does not work. Have the child report the zone it actually adopted
+   and skip with a reason if the platform ignored `TZ`, rather than passing
+   vacuously.
+3. Where two implementations are provably identical under some setting, no output
+   assertion can separate them there. Assert on source: "this module contains no
+   `toISOString`" holds in every zone.
+4. Cross-file dependencies get a source assertion too. `_stage.mjs` reads
+   `prior.stageChangedDate`; no unit test of `_stage.mjs` can see whether
+   `opportunities.mjs` selects that column. `tests/stage-batch.test.mjs` asserts it
+   against the endpoint's source.
+
+### The general form
+
+A green suite is a claim about the conditions it ran under, not about the code. If
+the suite has only ever run under one clock, one zone, one batch size or one role,
+say so — an unstated condition is how "37/37 mutations caught" stayed in the docs
+for a fortnight while eight of them had never executed.
 
 ---
 
