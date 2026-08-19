@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -245,6 +245,43 @@ const mutations = [
         'netlify/functions/_stage.mjs',
         "const DERIVED_KEYS = ['stageChangedDate', 'stageHistory'];",
         "const DERIVED_KEYS = ['stageChangedDate'];"],
+
+    // ---- local dates (dateLocal.js) ----------------------------------------
+    // `toISOString().split('T')[0]` converts to UTC before truncating, so it
+    // returns tomorrow's date all evening west of Greenwich and yesterday's all
+    // morning east of it. It was in 29 places in src/; the worst STORED a wrong
+    // date on a coaching note, and TaskItem turned tasks due today red as overdue
+    // from 7pm Central.
+    //
+    // Note the first entry is caught by a SOURCE assertion, not by output: at UTC
+    // isoLocal and toISOString are the same function, so an output-only suite
+    // passes with the bug restored on any UTC machine. Verified by running the
+    // mutation under TZ=UTC before relying on it.
+    ['dateLocal: isoLocal reverts to toISOString (the 29-site defect)',
+        'src/utils/dateLocal.js',
+        `    const p = (n) => String(n).padStart(2, '0');
+    return \`\${d.getFullYear()}-\${p(d.getMonth() + 1)}-\${p(d.getDate())}\`;`,
+        "    return d.toISOString().split('T')[0];"],
+
+    ['dateLocal: todayLocal stops going through isoLocal',
+        'src/utils/dateLocal.js',
+        '    return isoLocal(new Date());',
+        "    return new Date().toISOString().split('T')[0];"],
+
+    ['dateLocal: the month is left 0-based',
+        'src/utils/dateLocal.js',
+        '${p(d.getMonth() + 1)}',
+        '${p(d.getMonth())}'],
+
+    ['dateLocal: zero-padding removed, so the strings stop sorting',
+        'src/utils/dateLocal.js',
+        "    const p = (n) => String(n).padStart(2, '0');",
+        '    const p = (n) => String(n);'],
+
+    ['dateLocal: day and month transposed',
+        'src/utils/dateLocal.js',
+        'return \`\${d.getFullYear()}-\${p(d.getMonth() + 1)}-\${p(d.getDate())}\`;',
+        'return \`\${d.getFullYear()}-\${p(d.getDate())}-\${p(d.getMonth() + 1)}\`;'],
 
     // Cross-file: the backfill reads prior.stageChangedDate, so the endpoint must
     // select it. Drop it there and _stage.mjs backfills null just as confidently --
