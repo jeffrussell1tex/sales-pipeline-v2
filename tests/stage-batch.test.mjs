@@ -19,6 +19,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { applyStageChanges, resolveStageChange } from '../netlify/functions/_stage.mjs';
 
 const IMPORT_DATE = '2026-08-18';
@@ -139,4 +140,22 @@ test('resolveStageChange still returns an EMPTY patch for the untouched case', (
     );
     assert.equal(changed, false);
     assert.deepEqual(patch, {});
+});
+
+test('opportunities.mjs selects stageChangedDate into priors', () => {
+    // Cross-file, and no unit test of _stage.mjs can see it: storedValue() reads
+    // prior.stageChangedDate, so if the endpoint's priors query stops selecting
+    // that column the backfill writes null with complete confidence and every
+    // test above still passes. Asserted against the source because the failure
+    // lives in the seam between two correct components — the shape that has
+    // produced the last several defects here.
+    const src = readFileSync(
+        new URL('../netlify/functions/opportunities.mjs', import.meta.url),
+        'utf8',
+    );
+    const at = src.indexOf('const priorRows');
+    assert.notEqual(at, -1, 'priors query not found — this assertion needs repointing');
+    const block = src.slice(at, at + 800);
+    assert.match(block, /stageChangedDate/, 'the priors SELECT must carry stageChangedDate');
+    assert.match(block, /stageHistory/, 'the priors SELECT must carry stageHistory');
 });

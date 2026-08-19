@@ -9,7 +9,22 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs';
+
+// LINE ENDINGS. The anchors below are written with \n, and most of the tree is
+// checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
+// matches, is reported stale, and its mutation never runs.
+//
+// That was not hypothetical. Eight anchors -- every multi-line one in this file --
+// silently failed to match while every single-line one caught. The suite had been
+// recorded as 37/37 and was really 29/37, because eight mutations had never been
+// applied on any CRLF checkout. A harness that reports coverage it does not have
+// is worse than no harness, so anchors are matched EOL-agnostically and the
+// replacement is rewritten to whatever the target file actually uses.
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const anchorRe = (from) => new RegExp(escapeRe(from).replace(/\r?\n/g, '\\r?\\n'));
+const toFileEol = (text, src) =>
+    src.includes('\r\n') ? text.replace(/\r?\n/g, '\r\n') : text.replace(/\r\n/g, '\n');
 
 const mutations = [
     ['bulkClient: chunking disabled',
@@ -175,8 +190,71 @@ const mutations = [
 
     ['stage: daysInStage leaks through as a column',
         'netlify/functions/_stage.mjs',
-        'const { daysInStage: _transport, ...rest } = row;\n        return { ...rest, ...patch };',
-        'return { ...row, ...patch };'],
+        'const { daysInStage: _transport, ...rest } = row;\n        return { row: { ...rest, ...patch }, patch, prior };',
+        'return { row: { ...row, ...patch }, patch, prior };'],
+
+    // ---- batch uniformity (0.22) -------------------------------------------
+    // applyStageChanges derives stageChangedDate and stageHistory PER ROW;
+    // partialRows keeps the UNION across the batch. One deal moving stage put both
+    // keys into the union for every row, sanitize() supplied null and [], and
+    // bulkUpsert wrote them -- an unmoved deal losing its clock and its whole stage
+    // history because a DIFFERENT deal in the same file moved. Every fixture in
+    // tests/stage-batch.test.mjs is multi-row: a single-row fixture cannot express
+    // this, which is why 211 tests and 29 live mutations all passed over it.
+
+    ['stage/batch: the backfill is removed (the shipped defect)',
+        'netlify/functions/_stage.mjs',
+        `        for (const key of inBatch) {
+            if (!Object.prototype.hasOwnProperty.call(row, key)) {
+                row[key] = storedValue(key, prior);
+            }
+        }
+`,
+        ''],
+
+    ['stage/batch: every derived key is backfilled, not only those in the batch',
+        'netlify/functions/_stage.mjs',
+        `    const inBatch = DERIVED_KEYS.filter(
+        key => staged.some(s => Object.prototype.hasOwnProperty.call(s.patch, key))
+    );`,
+        '    const inBatch = DERIVED_KEYS;'],
+
+    ['stage/batch: backfill invents null instead of reading the stored row',
+        'netlify/functions/_stage.mjs',
+        '    return prior?.[key] ?? null;',
+        '    return null;'],
+
+    ['stage/batch: the stageHistory backfill discards the stored array',
+        'netlify/functions/_stage.mjs',
+        '        return Array.isArray(prior?.stageHistory) ? prior.stageHistory : [];',
+        '        return [];'],
+
+    ['stage/batch: the backfill overwrites a row\'s own patch',
+        'netlify/functions/_stage.mjs',
+        `            if (!Object.prototype.hasOwnProperty.call(row, key)) {
+                row[key] = storedValue(key, prior);
+            }`,
+        '            row[key] = storedValue(key, prior);'],
+
+    ['stage/batch: stageChangedDate drops out of DERIVED_KEYS',
+        'netlify/functions/_stage.mjs',
+        "const DERIVED_KEYS = ['stageChangedDate', 'stageHistory'];",
+        "const DERIVED_KEYS = ['stageHistory'];"],
+
+    ['stage/batch: stageHistory drops out of DERIVED_KEYS',
+        'netlify/functions/_stage.mjs',
+        "const DERIVED_KEYS = ['stageChangedDate', 'stageHistory'];",
+        "const DERIVED_KEYS = ['stageChangedDate'];"],
+
+    // Cross-file: the backfill reads prior.stageChangedDate, so the endpoint must
+    // select it. Drop it there and _stage.mjs backfills null just as confidently --
+    // a correct fix undone by the next component along, which is how five sessions
+    // went on the Next Steps chain. Pinned by a source assertion because no unit
+    // test of _stage.mjs can see the endpoint's query.
+    ['stage/batch: opportunities.mjs stops selecting stageChangedDate into priors',
+        'netlify/functions/opportunities.mjs',
+        '                        stageChangedDate: opportunities.stageChangedDate,\n',
+        ''],
 
     ['audit: values are no longer truncated',
         'netlify/functions/_audit.mjs',
@@ -194,14 +272,20 @@ const mutations = [
 ];
 
 let survived = 0;
+let stale = 0;
 for (const [name, file, from, to] of mutations) {
     const original = readFileSync(file, 'utf8');
-    if (!original.includes(from)) {
-        console.log(`SKIP  ${name}\n      target string not found in ${file} — the harness is stale`);
+    const re = anchorRe(from);
+    if (!re.test(original)) {
+        // Counts as survived, and says DID NOT RUN rather than the old "SKIP".
+        // An unmatched anchor is an absence of evidence being printed in the same
+        // column as genuine passes; it must not read like one.
+        console.log(`STALE  ${name}\n       anchor not found in ${file} — this mutation DID NOT RUN`);
         survived++;
+        stale++;
         continue;
     }
-    writeFileSync(file, original.replace(from, to));
+    writeFileSync(file, original.replace(re, () => toFileEol(to, original)));
     let failed = false;
     try {
         execSync(`node --test ${SUITES}`, { stdio: 'pipe' });
@@ -214,4 +298,5 @@ for (const [name, file, from, to] of mutations) {
 }
 
 console.log(`\n${mutations.length - survived}/${mutations.length} mutations caught.`);
+if (stale) console.log(`${stale} anchor(s) STALE — those mutations never ran. Repoint them before trusting the count.`);
 process.exit(survived ? 1 : 0);

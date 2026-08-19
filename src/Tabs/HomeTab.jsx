@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { useAuth } from '@clerk/clerk-react';
+import { quarterOf, quarterStartDate, quarterEndDate, isoLocal } from '../utils/quarters';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (V1 — matches variation1.jsx TOKENS exactly)
@@ -197,11 +198,26 @@ export default function HomeTab() {
     const dayNames   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
-    const weekNum     = Math.ceil(((now - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7);
-    const quarter     = Math.floor(now.getMonth() / 3) + 1;
-    const qWeekStart  = Math.floor((quarter - 1) * 13);
-    const qWeek       = weekNum - qWeekStart;
+    // Q and week come from utils/quarters.js, the same helper the Pipeline list
+    // uses. This block previously computed `Math.floor(now.getMonth() / 3) + 1`,
+    // a CALENDAR quarter that ignored settings.fiscalYearStart entirely: with an
+    // October fiscal year, August rendered as Q3 when it is Q4. getQuarter was
+    // already destructured from useApp() above and used correctly 140 lines below
+    // for the quota card, so the fiscal rule was in scope and simply not called.
+    //
+    // Default 10 matches App.jsx, OpportunityModal, AnalyticsDashboard and
+    // ReportsTab. NOTE: ListView.jsx:349 defaults to 1 instead, so an org that has
+    // never set fiscalYearStart gets calendar quarters there and October quarters
+    // everywhere else. Not fixed here — flagged for the consolidation pass.
+    const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
+    const todayQk     = quarterOf(todayStr, fiscalStart);
+    const quarter     = todayQk ? todayQk.q : Math.floor(now.getMonth() / 3) + 1;
+
+    // Weeks INTO the fiscal quarter, counted from its real first day. The old
+    // `weekNum - (quarter - 1) * 13` assumed every quarter is exactly 13 weeks
+    // from Jan 1, which drifts within a year and cannot follow a fiscal start.
+    const qStart      = todayQk ? quarterStartDate(todayQk.fiscalYear, todayQk.q, fiscalStart) : new Date(now.getFullYear(), 0, 1);
+    const qWeek       = Math.floor((today12 - qStart) / 86400000 / 7) + 1;
     const dateContext = `${dayNames[now.getDay()]}, ${monthNames[now.getMonth()]} ${now.getDate()} · Q${quarter} · Week ${qWeek}`;
 
     // ── Task / calendar data ──────────────────────────────────
@@ -355,8 +371,13 @@ export default function HomeTab() {
     const activePipelineARR = activeMyOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
 
     // Closing this quarter (for "This Week" 4th tile)
-    const quarterStart = new Date(now.getFullYear(), (quarter-1)*3, 1).toISOString().split('T')[0];
-    const quarterEnd   = new Date(now.getFullYear(), quarter*3, 0).toISOString().split('T')[0];
+    // Fiscal quarter window, not the calendar one. With an October fiscal start the
+    // two happen to coincide because the boundaries line up; with a start month of
+    // 2, 3, 5, 6, 8, 9, 11 or 12 they do not, and this tile would have counted the
+    // wrong three months. isoLocal rather than toISOString: the latter converts to
+    // UTC first, so west of Greenwich it returns tomorrow's date all evening.
+    const quarterStart = isoLocal(todayQk ? quarterStartDate(todayQk.fiscalYear, todayQk.q, fiscalStart) : new Date(now.getFullYear(), (quarter-1)*3, 1));
+    const quarterEnd   = isoLocal(todayQk ? quarterEndDate(todayQk.fiscalYear, todayQk.q, fiscalStart)   : new Date(now.getFullYear(), quarter*3, 0));
     const closingThisQ = myOpps.filter(o => {
         const cd = o.forecastedCloseDate || o.closeDate || '';
         return cd >= quarterStart && cd <= quarterEnd && !['Closed Won','Closed Lost'].includes(o.stage);

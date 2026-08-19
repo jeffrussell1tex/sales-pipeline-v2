@@ -33,8 +33,14 @@ export function quarterOf(isoDate, fiscalStart) {
     return { key, longLabel, fiscalYear, q, calYear, month };
 }
 
-export function quarterRange(fiscalYear, q, fiscalStart) {
-    // Start month of this fiscal quarter (1-based)
+// The first calendar day of a fiscal quarter, as a local Date.
+//
+// Split out of quarterRange, which needed the same date but only ever returned it
+// formatted. HomeTab needs the Date itself to count weeks into the quarter, and a
+// second copy of this arithmetic is exactly how the greeting drifted from the
+// Pipeline list in the first place — there are already seven implementations of
+// fiscal quarters in this codebase and this module is meant to be the last one.
+export function quarterStartDate(fiscalYear, q, fiscalStart) {
     const startMonth = ((fiscalStart - 1 + (q - 1) * 3) % 12) + 1;
     let startYear;
     if (fiscalStart === 1) {
@@ -44,8 +50,27 @@ export function quarterRange(fiscalYear, q, fiscalStart) {
     } else {
         startYear = fiscalYear;
     }
-    const start = new Date(startYear, startMonth - 1, 1);
-    const end   = new Date(startYear, startMonth - 1 + 3, 0); // 0th day of month 4 after start = last day of month 3
+    return new Date(startYear, startMonth - 1, 1);
+}
+
+// The last calendar day of a fiscal quarter. Day 0 of the month three after the
+// start is the last day of the third month.
+export function quarterEndDate(fiscalYear, q, fiscalStart) {
+    const start = quarterStartDate(fiscalYear, q, fiscalStart);
+    return new Date(start.getFullYear(), start.getMonth() + 3, 0);
+}
+
+// yyyy-mm-dd in LOCAL time. Deliberately not toISOString(), which converts to UTC
+// first: west of Greenwich that returns tomorrow's date all evening, and east of it
+// yesterday's all morning.
+export function isoLocal(d) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+export function quarterRange(fiscalYear, q, fiscalStart) {
+    const start = quarterStartDate(fiscalYear, q, fiscalStart);
+    const end   = quarterEndDate(fiscalYear, q, fiscalStart);
     const fmt   = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     return `${fmt(start)} – ${fmt(end)}`;
 }
