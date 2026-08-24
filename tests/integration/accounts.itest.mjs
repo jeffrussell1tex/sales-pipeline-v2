@@ -141,14 +141,21 @@ test('persistence round-trip — POST then GET returns the row', async () => {
 // would pass just as happily against the broken ordering.
 
 const seedFamily = async (org, prefix, owner) => {
-    await handler(ev(org, 'POST', { id: prefix + '_parent', name: prefix + ' Parent', accountOwner: owner }));
+    // Every insert is checked. An unchecked seed that fails leaves the test
+    // asserting against rows that were never written -- see the org-scope test
+    // below for the version of this that actually happened.
+    const post = async (row) => {
+        const r = await handler(ev(org, 'POST', row));
+        assert.equal(r.statusCode, 201, `seed ${row.id} failed: ${r.statusCode} ${r.body}`);
+    };
+    await post({ id: prefix + '_parent', name: prefix + ' Parent', accountOwner: owner });
     for (const child of ['a', 'b']) {
-        await handler(ev(org, 'POST', {
+        await post({
             id: prefix + '_child_' + child,
             name: prefix + ' Child ' + child.toUpperCase(),
             accountOwner: owner,
             parentAccountId: prefix + '_parent',
-        }));
+        });
     }
 };
 const parentOf = async (id) => (await db.select().from(accounts).where(eq(accounts.id, id)))[0]?.parentAccountId;
@@ -205,13 +212,28 @@ test('an unknown id is a 404 and touches nothing', async () => {
 });
 
 test('promotion is org-scoped — deleting A\'s parent cannot touch B\'s children', async () => {
-    // The UPDATE matches on parentAccountId, and ids are client-supplied. Two
-    // orgs using the same id string must not reach across the boundary.
+    // The UPDATE matches on parentAccountId, which is a plain text column with
+    // NO foreign key -- so a row in org B can perfectly well hold org A's parent
+    // id. Nothing but the orgId term in the WHERE clause stops the promotion
+    // reaching across the tenant boundary, which is exactly what this asserts.
+    //
+    // An earlier version of this test also created a parent row in B carrying
+    // A's id, to model "two orgs using the same id". That is impossible:
+    // accounts.id is a GLOBAL primary key, not unique-per-org, so the insert
+    // failed with a duplicate key, logged a 500, and the test passed anyway
+    // because the assertion did not depend on it. A test that passes while
+    // swallowing an error is the thing this suite exists to catch, so the
+    // scaffolding is gone and every seed is now checked.
     await seedFamily(A, 'acc_scope', REP_NAME);
-    await handler(ev(B, 'POST', { id: 'acc_scope_parent', name: 'B Parent', accountOwner: 'B Rep' }));
-    await handler(ev(B, 'POST', { id: 'b_child', name: 'B Child', accountOwner: 'B Rep', parentAccountId: 'acc_scope_parent' }));
+    const seeded = await handler(ev(B, 'POST', {
+        id: 'b_scope_child', name: 'B Child', accountOwner: 'B Rep',
+        parentAccountId: 'acc_scope_parent',        // deliberately A's id
+    }));
+    assert.equal(seeded.statusCode, 201, `seed must succeed, got ${seeded.statusCode}: ${seeded.body}`);
 
-    await handler(ev(A, 'DELETE', null, { id: 'acc_scope_parent' }));
+    const res = await handler(ev(A, 'DELETE', null, { id: 'acc_scope_parent' }));
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(JSON.parse(res.body).promoted, 2, 'only A\'s two children may be promoted');
 
-    assert.equal(await parentOf('b_child'), 'acc_scope_parent', 'org B\'s hierarchy must be untouched');
+    assert.equal(await parentOf('b_scope_child'), 'acc_scope_parent', 'org B\'s row must be untouched');
 });
