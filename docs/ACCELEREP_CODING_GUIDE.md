@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** August 19, 2026 · rules current through **§18b18**.
+**Updated:** August 24, 2026 · rules current through **§18b19**.
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -2120,6 +2120,78 @@ A green suite is a claim about the conditions it ran under, not about the code. 
 the suite has only ever run under one clock, one zone, one batch size or one role,
 say so — an unstated condition is how "37/37 mutations caught" stayed in the docs
 for a fortnight while eight of them had never executed.
+
+---
+
+## 18b19. Authorization Belongs In One Place, Resolved Against The Real Schema (hard rule)
+
+Object-level authorization was hand-copied into every mutating branch:
+
+```js
+if (!canSeeAll(userRole)) {
+    const [target] = await db.select({ owner: <table>.<someColumn> })…
+    const callerName = await getCallerName(userId);
+    if (target?.owner && target.owner !== callerName) return 403;
+}
+```
+
+Eleven copies across six endpoints. Eleven independent chances to name the wrong
+column, and no single place to read to find out what the policy is.
+
+**Two of the eleven named a column that does not exist.** `contacts.createdBy` —
+the contacts owner column is `assignedRep`. `activities.repName` — that table's is
+`author`. Both are perfectly valid JavaScript. Drizzle resolves a missing property
+to `undefined` rather than throwing, and **`undefined` then means two opposite
+things depending on where it lands**:
+
+| Caller | Effect |
+|---|---|
+| `db.select({ owner: undefined })` | throws → **500** |
+| `bulkUpsert({ ownerColumn: undefined })` | `if (ownerColumn)` is false → the owner is never projected → `prior.owner` is undefined → **no row can be forbidden** |
+
+So one typo produced hard errors on two paths and a **silent org-wide write
+bypass** on a third. The failing-open one is the one that would have shipped.
+
+### The rules
+
+**1. One registry, one predicate.** Entity → owner column lives in
+`netlify/functions/_ownership.mjs` and nowhere else. No endpoint names an owner
+column directly. `assertOwnership()` in `_lib.mjs` is the only thing that queries
+for one.
+
+**2. Fail closed on the unknown.** An unregistered entity **throws**. It must
+never fall through to "no rule, therefore allowed" — that is how a new entity
+silently ships unprotected.
+
+**3. A registered column is checked against the real table by `npm test`.**
+`tests/ownership-registry.test.mjs` reads `db/schema.ts` and asserts every
+registered property exists on its table. Source-level deliberately: the schema is
+TypeScript and loads only under `tsx`, which would strand this check in
+`test:int` — a suite that needs a database, is not in `npm test`, and had itself
+been broken at import for long enough that nobody noticed. **The guard found the
+second bad column on its first run, before the manual test that would have hit
+it.**
+
+**4. A resolver that can return `undefined` must throw instead.**
+`ownerColumnOf(table, entity)` throws by name. The general rule: where a lookup
+feeds an authorization decision, absence must be an error, never a value — because
+a falsy value will be read as "no restriction" by the first caller that guards
+with `if (x)`.
+
+### The generalisation
+
+**Any string that names a schema element — a column, an index, a JSON key in
+`settings.extra` — is unchecked until something asserts it exists.** The type
+system does not help; a wrong name is a valid expression. If the string decides
+who may write, the assertion is not optional.
+
+### How this class stayed invisible
+
+Every unit test, every integration stub and every manual session authenticated as
+**Admin**, which returns early from `canSeeAll` and skips the ownership branch
+entirely. The rep path had never been executed by anything. **A role matrix over
+the mutating endpoints is worth more than another gate** — see §0.24 and §0.26 in
+ACCELEREP_CURRENT_STATE.md.
 
 ---
 

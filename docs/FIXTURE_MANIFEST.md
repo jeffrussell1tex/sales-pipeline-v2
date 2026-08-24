@@ -1,5 +1,20 @@
 # ZZFX Fixture Org — Manifest & Delete-Gate Procedure
 
+> **STATUS — 24 Aug 2026: the gate has been run in full and PASSED.**
+> Six 403s split correctly across the two checks, three 200s, the Admin half
+> clean, and step 15 confirmed the child-promotion defect with before/after
+> evidence. Six further defects surfaced during the run, all on the rep path —
+> see §0.23–§0.26 in ACCELEREP_CURRENT_STATE.md.
+>
+> **This fixture is now spent.** Step 15 is one-way (the Ashgrove children are
+> orphaned) and steps 12–16 deleted their own subjects. Regenerate into a clean
+> org before re-running:
+> `node scripts/make-fixtures.mjs --rep="<exact users.name>"`
+>
+> Corrections made to this document after the run are marked
+> **CORRECTED 24 Aug** — three claims here were written from reading one side of
+> a call chain and were wrong.
+
 Companion to `make-fixtures.mjs`. Generated CSVs: `ZZFX-accounts.csv`,
 `ZZFX-contacts.csv`, `ZZFX-opportunities.csv`, `ZZFX-leads.csv`.
 
@@ -114,7 +129,14 @@ Notes on each:
   `.every`.
 - **Step 3** — `daysInStage` is transport-only, never a column. `ZZFX Beacon
   Trial` leaves it blank on purpose (the fourth stage-clock case).
-- **Step 4** — `leads.mjs` POST has **no array branch**, so this is one request
+- **Step 4** — CORRECTED 24 Aug. This originally said the leads importer sends
+  one request per row. It does not: `ModalLayer.jsx` sends the whole array in a
+  single POST, and `leads.mjs` had no `Array.isArray` branch, so **every leads
+  import returned 400 before touching the database** — the feature had never
+  worked. Fixed in §0.23; the endpoint now has the same bulk branch as accounts
+  and contacts. The original claim was inferred from the endpoint without
+  reading the caller. Left visible here as a reminder that half a chain read is
+  not a reading. Formerly: one request
   per row. Fine at 6; do not scale this file up.
 
 **PASS:** all four counts match, and each receipt reports the server's numbers.
@@ -199,21 +221,39 @@ Three 403s alone are indistinguishable from delete being broken for everyone.
 These are what make them mean something. Still **as the rep**.
 
 **Step 12 — contact `Emeka Obi` → expect 200.**
-`contacts.mjs` `sanitize()` has no `createdBy` key, so no insert path ever
-populates it. Owner is null, the ownership check passes, and there is no Admin
-gate on contacts. This is the cleanest positive subject in the fixture.
+Owner is null on every imported contact, the ownership check passes, and there is
+no Admin gate on contacts. The cleanest positive subject in the fixture.
+
+> CORRECTED 24 Aug. This originally reasoned that `sanitize()` has no `createdBy`
+> key so the owner is simply always null. The truth was worse: **`createdBy` is
+> not a column on the contacts table at all** — the owner column is
+> `assignedRep`. `db.select({ owner: undefined })` threw, so this step returned
+> **500**, and the same wrong name in the bulk PUT made that path fail OPEN,
+> letting any rep overwrite every contact in the org. See §0.24. Ownership now
+> resolves through the registry in `_ownership.mjs`, which throws by name rather
+> than degrading to `undefined`.
 
 **Step 13 — task → expect 200.** No CSV importer exists for tasks. As the rep,
 create a task in the app assigned to herself (`ZZFX Rep Task`), then DELETE it by
 id.
 
 **Step 14 — activity → expect 200.** Same: log an activity as the rep against any
-visible record, then DELETE it by id. Ownership is `activities.repName`.
+visible record, then DELETE it by id. Ownership is `activities.author`.
+
+> CORRECTED 24 Aug. `activities.mjs` selected `activities.repName`, which is not
+> a column either — the ownership registry guard caught it on its first run,
+> before this step was reached. It would have produced a 500 identical to step
+> 12's and looked like the same bug recurring. See §0.24.
 
 **PASS:** three 200s. **FAIL — a 403 on step 12:** something now writes
 `createdBy`; re-read the endpoint before assuming the gate is wrong. **FAIL — a
 403 on 13 or 14:** the record was assigned to someone else; check `assignedTo` /
-`repName` matches `users.name` exactly.
+`author` matches `users.name` exactly. Note that anything the rep CREATES is
+stamped with the client's `currentUser`, which is derived from Clerk's
+first + last name and falls back to the EMAIL when those are blank — while the
+server compares against `users.name`. A rep whose Clerk profile has no name will
+therefore author records the server refuses to let them delete, and the 403 will
+look exactly like the gate working. See §0.26.
 
 ---
 
@@ -232,15 +272,50 @@ passes.
    Expected: **403 · insufficient role** — the parent still exists.
 3. As **Admin**, re-read both children.
 
-**PASS (defect confirmed):** the delete was refused **and** both children now have
-`parentAccountId: null`. That is the bug, evidenced, with the audit log empty for
-the event.
-**PASS (defect already fixed):** children still point at the parent — then the
-ordering was corrected at some point and the open item can be closed.
+### RESULT — 24 Aug 2026: DEFECT CONFIRMED
 
-Either outcome is a result worth recording. The fix is a two-line move of the
-promotion below `requireRole`, but it should be its own commit with a test, not a
-change made mid-gate.
+Run against `accelerep.netlify.app`, rep account Karen Russell.
+
+**Before**
+
+```json
+[{ "name": "ZZFX Ashgrove Holdings", "id": "995b97c6-…", "parent": null },
+ { "name": "ZZFX Ashgrove North",    "parent": "995b97c6-…" },
+ { "name": "ZZFX Ashgrove South",    "parent": "995b97c6-…" }]
+```
+
+**The refusal**
+
+```
+accounts 403 {"error":"Forbidden: insufficient role"}
+```
+
+**After**
+
+```json
+[{ "name": "ZZFX Ashgrove Holdings", "parent": null },
+ { "name": "ZZFX Ashgrove North",    "parent": null },
+ { "name": "ZZFX Ashgrove South",    "parent": null }]
+```
+
+The delete was refused and both children were detached anyway. No audit record
+for the event — `writeAudit` sits after the gate the request never passed.
+
+So a rep who lacks permission to delete an account can still permanently flatten
+its entire sub-account hierarchy simply by attempting it. The account survives;
+the structure does not; nothing records that it happened; and the parent ids are
+gone, so it is not recoverable from the row itself.
+
+**Fix (not yet applied):** move the promotion `UPDATE` below `requireRole` in
+`accounts.mjs:230–240`. Two lines, but it wants its own commit and an integration
+test asserting the children survive a refused delete —
+`tests/integration/contacts.itest.mjs` is the template, and the `x-test-role`
+header added to the auth stub makes the rep-role case straightforward to write.
+
+**Re-running this step needs fresh fixture data.** It is one-way: the Ashgrove
+children are now orphaned, so a second run would start from a flat hierarchy and
+prove nothing. Regenerate with `node scripts/make-fixtures.mjs --rep="…"` into a
+clean org before retesting the fix.
 
 ---
 

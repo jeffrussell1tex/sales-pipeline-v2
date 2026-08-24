@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** August 19, 2026  
-**Verified at:** all six gates green · **232 tests** · **50/50 mutations caught** · all 66 functions bundle under esbuild  
-**Batch:** **seven defects, four of them in code written this session; every one of those four found by running the app, not by a gate** · delete was never gated and never audited on any entity · import stage clock · **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · **the stage clock shipped in §0.17 wiped the rows it did not touch** — a deal lost its clock AND its whole stage history because a DIFFERENT deal in the same file moved · **`37/37 mutations` was never reproducible** — CRLF vs `\n` anchors meant 8 of them had never run · Home showed the wrong fiscal quarter · `toISOString` was building local dates in 29 places · **89 → 232 tests, 0 → 50 mutations**
+**Updated:** August 24, 2026  
+**Verified at:** all six gates green · **244 tests** · **21 integration tests** · **50/50 mutations caught** · all 66 functions bundle under esbuild  
+**Batch:** **the delete gate RAN and passed — first time in four sessions** · **the leads CSV import had never written a single row** (client sent an array, endpoint had no array branch, 400 every time, error rendered on a step the user never sees) · **two ownership columns that do not exist** — `contacts.createdBy` and `activities.repName` — producing four hard 500s on rep paths and one SILENT ORG-WIDE WRITE BYPASS · **object-level authorization centralised** into `_ownership.mjs` with a registry checked against the real schema by `npm test` — the guard found the second bad column on its first run · **the integration suite had been dead at import** since `requireWrite` landed, so every cross-tenant isolation test including the post-wipe `clear=true` guard was dormant · **the test database schema had drifted** and `drizzle-kit push` had never been run against it · **`currentUser` comes from Clerk and disagrees with `users.name`**, so a rep with no Clerk profile name is identified by EMAIL and sees only unowned records · `GET /users` was Admin-only, so every user picker rendered empty for reps · **child promotion runs BEFORE the Admin gate — CONFIRMED: a refused delete still orphans every sub-account, permanently, with no audit record** · 232 → 244 tests, 0 → 21 integration tests
+**Prior batch:** **seven defects, four of them in code written this session; every one of those four found by running the app, not by a gate** · delete was never gated and never audited on any entity · import stage clock · **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · **the stage clock shipped in §0.17 wiped the rows it did not touch** — a deal lost its clock AND its whole stage history because a DIFFERENT deal in the same file moved · **`37/37 mutations` was never reproducible** — CRLF vs `\n` anchors meant 8 of them had never run · Home showed the wrong fiscal quarter · `toISOString` was building local dates in 29 places · **89 → 232 tests, 0 → 50 mutations**
 **Prior batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
 **Prior batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · **Clerk advisories cleared — Production migration unblocked** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · 19 → 69 tests
 **Prior batch:** SalesManagerTab hoist, SPIFF persistence & claim plumbing
@@ -15,7 +16,229 @@
 
 ---
 
-## 0. Latest Batch — The Importer Reports What Landed, and Three Rules Composed Wrongly
+## 0. Latest Batch — The Delete Gate Ran, and the Rep Path Had Never Been Executed
+
+> The delete gate finally ran end to end: six 403s splitting correctly across the
+> ownership check and the Admin role gate, three 200s, the Admin half clean, and
+> the child-promotion defect confirmed with before/after evidence. Getting there
+> surfaced six further defects, every one of them on the REP path — a path that
+> no unit test, no integration stub (all hard-coded Admin) and no manual session
+> had ever executed. All six gates were green before each fix and after it.
+
+### 0.23 The Leads Import Had Never Written A Single Row
+
+Found by running the delete-gate fixture through it. The mapping flow completed,
+Preview showed 6 rows, Import was pressed, and nothing arrived — with no error
+on screen.
+
+**Three defects, stacked.**
+
+**1. The client sent a shape the endpoint refuses.** `ModalLayer.jsx` posted the
+whole array in one request; `leads.mjs` POST began `if (!data.id) return 400`.
+An array has no `.id`. Unlike accounts, contacts and opportunities — all of which
+gained an `Array.isArray(data)` branch under 18b8 — leads never did. **Every
+leads CSV import returned 400 before touching the database**, in every deploy the
+feature has existed.
+
+**2. The response key was wrong too, independently.** The handler read
+`data.leads`; the single-insert branch returns `{ lead: inserted }`. Two mistakes
+on one call, each sufficient alone.
+
+**3. The failure was invisible, which is why it survived.** `doImport` caught the
+error into `setParseError`, but `parseError` rendered only inside the
+`step === 'upload'` block. The request fires from the **preview** step, which had
+no error surface. The modal absorbed a 400 and sat there looking idle.
+
+**Fixes.** Bulk branch added to `leads.mjs`, mirroring accounts/contacts: empty
+array short-circuits, every row must carry an id, scoring config read once per
+batch, then `bulkInsert` for chunking and per-row isolation. Scoring on the bulk
+path calls `scoreLead` directly rather than `scoreColumns` — the latter queries
+`activities` by `leadId`, and these ids are freshly minted client-side, so it was
+one guaranteed-empty round-trip per lead. No `lead.created` webhook or automation
+on the bulk path (N inline dispatches would exceed the same budget `bulkInsert`
+is bounded by); the single-insert branch still dispatches. `ModalLayer.jsx` now
+uses `bulk.postNew`, committing `landed` before raising (18b15).
+`LeadImportModal.jsx` renders `parseError` on the preview step and clears it on
+retry.
+
+---
+
+### 0.24 Two Ownership Columns That Do Not Exist
+
+`contacts.mjs` performed object-level authorization against
+`contacts.createdBy`. **That property is not on the contacts table and never has
+been** — the column is `assignedRep`. Drizzle resolves a missing property to
+`undefined` rather than throwing, and `undefined` then meant two different things
+in two different callers:
+
+| Site | Effect for a rep |
+|---|---|
+| single PUT (`:115`) | `db.select({ owner: undefined })` **threw → 500** |
+| single DELETE (`:147`) | same → **500** |
+| bulk PUT `ownerColumn` (`:106`) | `if (ownerColumn)` false → owner never projected → **no row could be forbidden** |
+
+So contact edit and contact delete were hard 500s for every rep, and the bulk
+overwrite path **failed open**: any rep could overwrite every contact in the org.
+Two hard errors and one silent authorization bypass, from one wrong name.
+
+It survived because every unit test, every integration stub and every manual
+session authenticated as **Admin**, which returns early from `canSeeAll` and
+skips the ownership branch entirely. The rep path had never executed.
+
+**The fix is the class, not the instance.** `netlify/functions/_ownership.mjs`
+now holds a registry — entity → owner property — plus the policy as a pure
+predicate. `assertOwnership()` in `_lib.mjs` is the query half, returning a ready
+403 or null. An unregistered entity throws; a registered-but-missing property
+throws **by name** rather than degrading to `undefined`.
+
+`tests/ownership-registry.test.mjs` checks every registered property against the
+real table by reading `db/schema.ts` as text — deliberately source-level so it
+runs in the **default** suite with no database.
+
+**The guard found a second instance on its first run.** `activities.mjs` selected
+`activities.repName`; that column does not exist either — it is `author`. Two
+more sites, both 500s for a rep. Delete-gate step 14 would have failed exactly as
+step 12 did, and the second instance would have looked like the first bug
+recurring rather than a different wrong column.
+
+**Policy decisions, recorded deliberately:**
+- **Fail closed** when `getCallerName` returns null — no resolvable name owns
+  nothing, so owned records are refused rather than treated as unowned.
+- **Unassigned records stay mutable** by any writer. That is how a rep picks up
+  unowned work, and the delete-gate fixture depends on it.
+- Contacts point at `assignedRep` rather than gaining a `createdBy` column: no
+  migration, and nothing touches the Neon `main` branch dev and production share.
+
+**Ownership only bites where the column is populated.** Existing contacts with a
+null `assignedRep` remain deletable by any rep. That is the intended policy, but
+on current data it means most contacts are effectively unowned. Backfilling is a
+separate, deliberate data decision.
+
+`tests/integration/contacts.itest.mjs` adds nine rep-role tests, including the
+fail-open one asserting `forbidden: ['ct_bulk_other']` with the row untouched.
+
+**Still hand-rolled:** nine ownership checks across accounts, opportunities,
+leads and tasks. Their columns are correctly named — the guard confirms it — so
+they are not broken, merely not yet centralised.
+
+---
+
+### 0.25 The Integration Suite Had Been Dead At Import
+
+`npm run test:int` failed before a single test ran:
+
+```
+SyntaxError: The requested module './auth.mjs' does not provide an export named 'isReadOnly'
+```
+
+`mock.module` **replaces** a module wholesale, so the stub must export every name
+the endpoint imports. It exported two — `verifyAuth` and `canSeeAll` — while the
+endpoints had since grown `isReadOnly`, `requireRole` and `requireWrite`.
+
+**Nothing in either integration file had run since `requireWrite` was added.**
+That includes the whole cross-tenant isolation suite: org read leakage,
+cross-tenant upsert, and the `clear=true` regression guard written after the user
+wipe. All present, all dormant, all reading as coverage. It was invisible because
+`test:int` is not part of `npm test`, so a broken stub only fails when somebody
+runs it — and nobody had.
+
+**Underneath that, a second dormancy: the test database schema had drifted.**
+Once the stub was repaired, every contacts insert failed with
+`column "account_id" does not exist` (42703). `drizzle-kit push` had never been
+run against `DATABASE_URL_TEST`.
+
+**Fixes.** Both stubs now export all five names, and reimplement `requireRole`
+and `requireWrite` faithfully rather than stubbing them open — a stub that always
+allows makes every authorization test a tautology. `verifyAuth` reads an optional
+`x-test-role` header, defaulting to Admin so pre-existing tests are unchanged.
+`drizzle.test.config.ts` targets `DATABASE_URL_TEST` only, with a host guard that
+refuses to run against the shared app database; it also loads `.env` in-process
+because under MINGW64 the node wrapper reports "stdout is not a tty" and writes
+nothing to a pipe, so `export VAR="$(node -p ...)"` silently captures an empty
+string.
+
+**`x-test-role` makes the delete gate itself automatable.** The manual procedure
+in `FIXTURE_MANIFEST.md` — assert the ownership 403 and the role 403 are
+distinguishable by message — can now be written as assertions instead of run by
+hand each time.
+
+**Two guards worth adding, neither written yet:**
+1. A unit test asserting each integration stub's `namedExports` cover every name
+   its target endpoint imports from `auth.mjs`. No database; runs in the default
+   suite; would have caught this the day `requireWrite` landed.
+2. A `before()` hook asserting a recently-added column exists, failing with
+   "run drizzle-kit push against DATABASE_URL_TEST" instead of a wall of SQL.
+
+---
+
+### 0.26 Identity Is Stored In Two Places And They Disagree
+
+Surfaced during delete-gate step 13. A task created by a rep, assigned to
+`Karen Russell` from the roster picker, did not appear in that same rep's own
+task list.
+
+```
+clientCurrentUser : "accelerep@outlook.com"
+taskAssignedTo    : "Karen Russell"
+```
+
+`App.jsx:95` derives `currentUser` from **Clerk's** `firstName + lastName`, with
+the email address as fallback when both are blank. Every ownership column in the
+database stores **`users.name`**. Nothing keeps the two equal, and this rep's
+Clerk profile had no name set, so the client called her by her email while the
+server called her by her name.
+
+**The blast radius is not just the task list.**
+- `isRepVisible` (`App.jsx:569`) is `!repName || repName === currentUser`, so in
+  the UI she saw only *unowned* records. Her eight opportunities were visible via
+  the console only because that filtering happens server-side against
+  `users.name`.
+- Anything she creates is stamped with the client value —
+  `useActivities.js:123` sets `author: currentUser`. An activity logged by that
+  rep would carry the email, and the server's ownership check would refuse the
+  delete with a **403 that looks exactly like the gate working correctly**.
+
+**Resolved for now** by setting first and last name in Clerk, after which
+`currentUser` matched and the tasks appeared.
+
+**Not fixed.** `currentUser` should not be derived from Clerk when every
+ownership column stores `users.name`. It should come from the `?me=true` roster
+row, which `users.mjs` already serves and already self-heals id/name drift, with
+the Clerk name only as a fallback for a user with no roster row. One source, and
+the email fallback stops being reachable. Small edit, wide reach — `currentUser`
+feeds visibility on every tab — so it wants its own batch and its own
+verification. **Any invited user whose Clerk profile has no name hits this.**
+
+**Related, same session:** `GET /users` was Admin-only, and
+`useSettings.js:196` swallowed the 403, leaving `settings.users` as `[]` for
+every rep. Every user picker in the app rendered an empty typeahead — the
+Assigned To field on a task looked broken when it simply had nothing to offer,
+and a rep could not assign a task even to themselves. `users.mjs` now answers a
+GET from any org member with a **directory read** (`id`, `name`, `active`, plus
+`directory: true`); email, role, quota, team, territory and the profile blob stay
+Admin-only, and all writes stay behind the existing gate. Names were never secret
+here — ownership is stored and displayed as display names throughout the UI.
+
+---
+
+### 0.27 What This Batch Says About the Gates
+
+Every defect above was found by running the app as a **rep**. All six gates were
+green before each fix and after it. They could not see any of it:
+
+- §0.23 lived *between* the client and the endpoint, each internally coherent.
+- §0.24 was a valid JavaScript identifier that happened to name nothing.
+- §0.25 was a test suite that is not part of `npm test`.
+- §0.26 is two stores of one string with no invariant between them.
+
+The common thread is not carelessness — it is that **the rep path had never been
+executed by anything**: not the unit tests, not the integration stubs (Admin
+hard-coded), not manual testing. A role matrix over the mutating endpoints is
+worth more than any additional gate.
+
+---
+
+## 0PB. Prior Batch — The Importer Reports What Landed, and Three Rules Composed Wrongly
 
 > Four backlog items turned out to be one defect with four faces. The importer's
 > Results screen reported numbers that were never derived from what the server
@@ -1418,7 +1641,7 @@ Each widening found real bugs immediately, and each needed verification against 
 
 ---
 
-## 0PB. Earlier Batch — Customers Redesign, Won→Dispatch Bridge, Quotes Hardening, Record-Number Integrity, Template Axes
+## 0PC. Earlier Batch — Customers Redesign, Won→Dispatch Bridge, Quotes Hardening, Record-Number Integrity, Template Axes
 
 > **Two production incidents this session, both mine, both invisible to every existing gate.** A quote-save regression from an allowlist change, and a Dispatch crash from hoisting a component out of its parent. Babel passed and `vite build` passed on both. The tooling response — `scripts/check-tdz.mjs` extended to catch undefined references — then found a *third* instance I had not been looking for. §0PB.20 and §0PB.21.
 
@@ -2881,6 +3104,55 @@ Plus indexes `leads_org_id_bucket_idx (org_id, lead_score_bucket)` and `leads_or
 ---
 
 ## 9. On the Horizon
+
+### From the delete-gate batch (24 Aug)
+
+**Settings auto-save fires for users who can never save.** `useSettings.js:223`
+PUTs on every change to `settings`, and `/settings` PUT is Admin-only. For a rep,
+`settings` changes once during load — the roster arrives at `:201` — the effect
+fires, the server refuses, and a "Settings not saved — You do not have permission
+to make this change" toast appears for a write the user never requested. The
+surfacing is correct (the comment above the write documents a real past bug where
+a swallowed 403 cached a change locally forever); the redundant write is not.
+`users` is stripped from the payload anyway, so this PUT sends a body identical
+to what was just loaded — a no-op write that can only fail. Skip the effect when
+the stripped payload is unchanged from what was loaded; that fixes it for Admins
+too, who are also making this write on every load.
+
+**Restyle `LeadImportModal` onto `CsvImportModal`'s chrome.** It predates the
+design language — blue `#2563eb` primaries where the guide says `#1c1917`, its
+own header, step indicators and drop zone. It also carries its own copy of the
+superseded column matcher (`:63–76`): first-match-wins substring matching in both
+directions, with no confidence reporting, which `csvAutoMap.js` was written to
+replace. Porting it retires the matcher in the same pass rather than restyling
+around it.
+
+**`currentUser` from the roster, not Clerk.** See §0.26. Highest-value item here:
+it is a live correctness bug for any user without a Clerk profile name.
+
+**Centralise the nine remaining ownership checks** on `assertOwnership`. Not
+broken, but each is an independent chance to name the wrong column.
+
+**`tasks.mjs` GET has no rep scoping** — it selects by `orgId` alone, unlike
+leads and opportunities, so every rep sees every task in the org (13 distinct
+owners were visible to one rep). Mutation is still gated, so this is visibility,
+not a write hole. Contacts GET is likewise unscoped, plausibly deliberately.
+Decide whether either is intended.
+
+**Bulk-import notification for leads.** The new bulk branch deliberately fires no
+`lead.created` webhook or automation. If either matters for imported leads, it
+needs a batched or deferred dispatch, not an inline loop.
+
+**End-to-end importer test.** §0.23 is the fourth cross-layer import defect. One
+test running a fixture CSV through all six modules — `csvAutoMap` → `csvMapping`
+→ `importRows` → `bulkInsert`/`bulkUpsert` → `_sanitize` → `_stage` — asserting
+the final row shape for create and overwrite, is what closes the class.
+
+**Stray scanner fixture.** `tests/fixtures/scanners/dupes-jsx-attribute - Copy.jsx`
+is byte-identical to `dupes-jsx-attribute.jsx` and referenced by no test — a
+Windows Explorer duplicate that got committed. One-line delete.
+
+---
 
 ### Next up
 
