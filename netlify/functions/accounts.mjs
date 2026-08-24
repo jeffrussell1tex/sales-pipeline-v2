@@ -227,10 +227,6 @@ export const handler = async (event) => {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }
             }
-            // Promote children to top-level before deleting parent — prevents orphaned rows
-            await db.update(accounts)
-                .set({ parentAccountId: null })
-                .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)));
             // Admin only. Reps close deals Won or Lost rather than deleting them,
             // and that rule was DESIGN INTENT ONLY -- this branch was ownership-
             // checked, so canSeeAll being false for a rep still let them delete
@@ -245,8 +241,38 @@ export const handler = async (event) => {
             const [deletedRow] = await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId))).returning();
             // An unknown id used to return success:true. It deleted nothing.
             if (!deletedRow) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
-            await writeAudit(orgId, deletionAudit('account', deletedRow, { userId, byRole: 'Admin' }));
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+
+            // Promote children to top-level -- AFTER the gate and AFTER the row is
+            // actually gone.
+            //
+            // This UPDATE used to run ABOVE the role gate, which made an attempt
+            // destructive on its own: a rep who could not delete an account still
+            // detached every sub-account under it, permanently, and left no trace.
+            // The audit write sits below the gate the request never reached, so
+            // there was no record that anything had happened, and parentAccountId
+            // is not recoverable from the surviving row. Confirmed on dev
+            // 24 Aug 2026 -- see 0.24 and FIXTURE_MANIFEST step 15.
+            //
+            // Promotion is a CONSEQUENCE of a deletion, so it is now conditional
+            // on one: a 403 and a 404 both return before reaching this, and only a
+            // row that really was removed detaches its children. Ordering after
+            // the delete is safe because parentAccountId is a plain text column
+            // with no foreign key -- no constraint fires in the window between the
+            // two statements.
+            const promoted = await db.update(accounts)
+                .set({ parentAccountId: null })
+                .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)))
+                .returning({ id: accounts.id });
+
+            // Record the detachment. A deletion that silently restructured other
+            // rows is exactly the shape this defect had; the count belongs in the
+            // audit entry rather than only in the deleted row's snapshot.
+            const audit = deletionAudit('account', deletedRow, { userId, byRole: 'Admin' });
+            if (promoted.length > 0) {
+                audit.detail += ` \u2014 ${promoted.length} sub-account${promoted.length === 1 ? '' : 's'} promoted to top level`;
+            }
+            await writeAudit(orgId, audit);
+            return { statusCode: 200, headers, body: JSON.stringify({ success: true, promoted: promoted.length }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {

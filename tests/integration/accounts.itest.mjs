@@ -62,19 +62,39 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
 // 3) Import the REAL handler + real db/schema (tsx resolves the .ts files).
 const { handler } = await import('../../netlify/functions/accounts.mjs');
 const { db } = await import('../../db/index.js');
-const { accounts } = await import('../../db/schema.js');
+const { accounts, users } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
 
 const A = 'itest_org_A', B = 'itest_org_B';
-const ev = (org, method, body, qs) => ({
+const ev = (org, method, body, qs, role) => ({
     httpMethod: method,
-    headers: { 'x-test-org': org, 'content-type': 'application/json' },
+    // Omitting x-test-role leaves the stub on its Admin default, so every
+    // pre-existing call site below behaves exactly as it did.
+    headers: { 'x-test-org': org, 'content-type': 'application/json', ...(role ? { 'x-test-role': role } : {}) },
     body: body ? JSON.stringify(body) : undefined,
     queryStringParameters: qs || {},
 });
-const cleanup = async () => { for (const o of [A, B]) await db.delete(accounts).where(eq(accounts.orgId, o)); };
+const asRep = (org, method, body, qs) => ev(org, method, body, qs, 'User');
+const REP_NAME = 'Itest Rep';
+const cleanup = async () => {
+    for (const o of [A, B]) {
+        await db.delete(accounts).where(eq(accounts.orgId, o));
+        await db.delete(users).where(eq(users.orgId, o));
+    }
+};
 
-before(cleanup);
+before(async () => {
+    await cleanup();
+    // getCallerName() reads users.name for the caller's id, and the auth stub
+    // uses 'u_' + orgId. WITHOUT this row it returns null, every owned account
+    // fails the ownership check, and the role-gate test below would be refused
+    // by OWNERSHIP while asserting on the ROLE message -- testing the wrong gate
+    // entirely. Seeding it is what makes the two refusal paths distinguishable.
+    await db.insert(users).values({
+        id: 'u_' + A, name: REP_NAME, email: 'itest-acc-rep@example.test',
+        role: 'User', active: true, orgId: A,
+    });
+});
 after(cleanup);
 
 test('read isolation — org A cannot see org B accounts', async () => {
@@ -105,4 +125,93 @@ test('persistence round-trip — POST then GET returns the row', async () => {
     await handler(ev(A, 'POST', { id: 'acc_A2', name: 'Persisted' }));
     const res = JSON.parse((await handler(ev(A, 'GET'))).body);
     assert.ok((res.accounts || []).some(a => a.id === 'acc_A2' && a.name === 'Persisted'), 'created account should be readable');
+});
+
+// ── Child promotion must not outlive a refused delete ───────────────────────
+//
+// accounts.mjs ran the child-promotion UPDATE ABOVE the Admin role gate, so an
+// ATTEMPT was destructive on its own: a rep who could not delete an account
+// still detached every sub-account under it, permanently, and left no trace --
+// the audit write sits below the gate the request never reached, and
+// parentAccountId is not recoverable from the surviving row.
+//
+// Confirmed on dev 24 Aug 2026 with before/after evidence (FIXTURE_MANIFEST
+// step 15). The whole point of these three tests is the SECOND assertion in
+// each: the 403 and the 404 were already correct, and asserting only those
+// would pass just as happily against the broken ordering.
+
+const seedFamily = async (org, prefix, owner) => {
+    await handler(ev(org, 'POST', { id: prefix + '_parent', name: prefix + ' Parent', accountOwner: owner }));
+    for (const child of ['a', 'b']) {
+        await handler(ev(org, 'POST', {
+            id: prefix + '_child_' + child,
+            name: prefix + ' Child ' + child.toUpperCase(),
+            accountOwner: owner,
+            parentAccountId: prefix + '_parent',
+        }));
+    }
+};
+const parentOf = async (id) => (await db.select().from(accounts).where(eq(accounts.id, id)))[0]?.parentAccountId;
+
+test('REGRESSION — a delete refused by the ROLE gate leaves the hierarchy intact', async () => {
+    // Owned by the rep, so the ownership check PASSES and requireRole is what
+    // refuses. That ordering is the bug's habitat: a refusal that arrives after
+    // the promotion has already run.
+    await seedFamily(A, 'acc_rolegate', REP_NAME);   // owner === users.name, so ownership PASSES
+    assert.equal(await parentOf('acc_rolegate_child_a'), 'acc_rolegate_parent', 'precondition: child A starts attached');
+
+    const res = await handler(asRep(A, 'DELETE', null, { id: 'acc_rolegate_parent' }));
+    assert.equal(res.statusCode, 403);
+    assert.match(JSON.parse(res.body).error, /insufficient role/);
+
+    assert.equal(await parentOf('acc_rolegate_child_a'), 'acc_rolegate_parent', 'a refused delete must NOT detach child A');
+    assert.equal(await parentOf('acc_rolegate_child_b'), 'acc_rolegate_parent', 'a refused delete must NOT detach child B');
+    assert.ok((await db.select().from(accounts).where(eq(accounts.id, 'acc_rolegate_parent')))[0], 'the parent must survive');
+});
+
+test('REGRESSION — a delete refused by the OWNERSHIP check leaves the hierarchy intact', async () => {
+    // The other refusal path. Both return 403 and only the message differs, so
+    // both need covering -- fixing one ordering would not fix the other.
+    await seedFamily(A, 'acc_owner', 'Someone Else');
+    const res = await handler(asRep(A, 'DELETE', null, { id: 'acc_owner_parent' }));
+    assert.equal(res.statusCode, 403);
+    assert.match(JSON.parse(res.body).error, /your own or unassigned records/);
+
+    assert.equal(await parentOf('acc_owner_child_a'), 'acc_owner_parent', 'an ownership refusal must not detach children');
+    assert.equal(await parentOf('acc_owner_child_b'), 'acc_owner_parent');
+});
+
+test('an Admin delete DOES promote the children, and says so in the response', async () => {
+    // The behaviour being protected. Promotion is correct -- it just has to be a
+    // consequence of a deletion rather than of an attempt.
+    await seedFamily(A, 'acc_admin', REP_NAME);
+    const res = await handler(ev(A, 'DELETE', null, { id: 'acc_admin_parent' }));
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(JSON.parse(res.body).promoted, 2);
+
+    assert.equal(await parentOf('acc_admin_child_a'), null, 'children are promoted to top level');
+    assert.equal(await parentOf('acc_admin_child_b'), null);
+    assert.ok(!(await db.select().from(accounts).where(eq(accounts.id, 'acc_admin_parent')))[0], 'the parent is gone');
+});
+
+test('an unknown id is a 404 and touches nothing', async () => {
+    // Promotion is now conditional on a row actually being removed, so a 404
+    // must not restructure anything either. Under the old ordering this UPDATE
+    // ran before the delete discovered there was nothing to delete.
+    await seedFamily(A, 'acc_404', REP_NAME);
+    const res = await handler(ev(A, 'DELETE', null, { id: 'acc_404_does_not_exist' }));
+    assert.equal(res.statusCode, 404);
+    assert.equal(await parentOf('acc_404_child_a'), 'acc_404_parent', 'a 404 must not detach anything');
+});
+
+test('promotion is org-scoped — deleting A\'s parent cannot touch B\'s children', async () => {
+    // The UPDATE matches on parentAccountId, and ids are client-supplied. Two
+    // orgs using the same id string must not reach across the boundary.
+    await seedFamily(A, 'acc_scope', REP_NAME);
+    await handler(ev(B, 'POST', { id: 'acc_scope_parent', name: 'B Parent', accountOwner: 'B Rep' }));
+    await handler(ev(B, 'POST', { id: 'b_child', name: 'B Child', accountOwner: 'B Rep', parentAccountId: 'acc_scope_parent' }));
+
+    await handler(ev(A, 'DELETE', null, { id: 'acc_scope_parent' }));
+
+    assert.equal(await parentOf('b_child'), 'acc_scope_parent', 'org B\'s hierarchy must be untouched');
 });
