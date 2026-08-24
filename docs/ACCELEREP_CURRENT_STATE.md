@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** August 24, 2026  
-**Verified at:** all six gates green · **244 tests** · **21 integration tests** · **50/50 mutations caught** · all 66 functions bundle under esbuild  
+**Verified at:** all six gates green · **244 tests** · **26 integration tests** · **50/50 mutations caught** · all 66 functions bundle under esbuild  
 **Batch:** **the delete gate RAN and passed — first time in four sessions** · **the leads CSV import had never written a single row** (client sent an array, endpoint had no array branch, 400 every time, error rendered on a step the user never sees) · **two ownership columns that do not exist** — `contacts.createdBy` and `activities.repName` — producing four hard 500s on rep paths and one SILENT ORG-WIDE WRITE BYPASS · **object-level authorization centralised** into `_ownership.mjs` with a registry checked against the real schema by `npm test` — the guard found the second bad column on its first run · **the integration suite had been dead at import** since `requireWrite` landed, so every cross-tenant isolation test including the post-wipe `clear=true` guard was dormant · **the test database schema had drifted** and `drizzle-kit push` had never been run against it · **`currentUser` comes from Clerk and disagrees with `users.name`**, so a rep with no Clerk profile name is identified by EMAIL and sees only unowned records · `GET /users` was Admin-only, so every user picker rendered empty for reps · **child promotion runs BEFORE the Admin gate — CONFIRMED: a refused delete still orphans every sub-account, permanently, with no audit record** · 232 → 244 tests, 0 → 21 integration tests
 **Prior batch:** **seven defects, four of them in code written this session; every one of those four found by running the app, not by a gate** · delete was never gated and never audited on any entity · import stage clock · **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · **the stage clock shipped in §0.17 wiped the rows it did not touch** — a deal lost its clock AND its whole stage history because a DIFFERENT deal in the same file moved · **`37/37 mutations` was never reproducible** — CRLF vs `\n` anchors meant 8 of them had never run · Home showed the wrong fiscal quarter · `toISOString` was building local dates in 29 places · **89 → 232 tests, 0 → 50 mutations**
 **Prior batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
@@ -116,6 +116,29 @@ separate, deliberate data decision.
 
 `tests/integration/contacts.itest.mjs` adds nine rep-role tests, including the
 fail-open one asserting `forbidden: ['ct_bulk_other']` with the row untouched.
+
+### The child-promotion defect is CLOSED
+
+Confirmed on dev with before/after evidence (FIXTURE_MANIFEST step 15), then
+fixed: `accounts.mjs` now runs the promotion `UPDATE` **after** `requireRole` and
+**after** the delete has confirmed a row was actually removed. Promotion is a
+consequence of a deletion, not of an attempt — a 403 and a 404 both return before
+reaching it. Ordering after the delete is safe because `parentAccountId` has no
+foreign key, so nothing fires in the window between the two statements. The audit
+entry and the response now both carry the number of sub-accounts detached; a
+deletion that silently restructured other rows is the shape this defect had.
+
+Five integration tests pin it (`tests/integration/accounts.itest.mjs`): refused by
+the role gate, refused by the ownership check, Admin success, unknown id, and
+org-scoping. **The second assertion in each is the point** — the 403s and the 404
+were already correct, so asserting only those would pass just as happily against
+the broken ordering.
+
+One of those tests initially passed while swallowing a 500: it tried to create a
+parent in org B carrying org A's id, which is impossible because `accounts.id` is
+a **global** primary key rather than unique-per-org. The insert failed, the test
+passed anyway because its assertion did not depend on that row. Corrected, and
+every seed in the file now asserts a 201. Integration tests 21 → 26.
 
 **Still hand-rolled:** nine ownership checks across accounts, opportunities,
 leads and tasks. Their columns are correctly named — the guard confirms it — so
