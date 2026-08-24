@@ -19,12 +19,43 @@ import assert from 'node:assert/strict';
 // 2) Mock Clerk auth: the org comes from an 'x-test-org' header (no real JWT needed).
 mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
     namedExports: {
+        // mock.module REPLACES the module wholesale, so this stub must export
+        // every name the endpoint imports. It exported only verifyAuth and
+        // canSeeAll, while the endpoints had since grown imports of isReadOnly,
+        // requireRole and requireWrite -- so both integration files died at
+        // import with "does not provide an export named 'isReadOnly'" and no
+        // test in either had run since. A partial stub fails loudly, but only
+        // when someone runs the suite; it is not part of `npm test`.
+        //
+        // The gates are reimplemented here rather than stubbed open. A stub that
+        // always allows would make every authorization test in this file a
+        // tautology -- and the delete gate is precisely what needs covering.
         verifyAuth: async (event) => {
             const orgId = event.headers?.['x-test-org'];
             if (!orgId) return { error: 'no test org', status: 401 };
-            return { userId: 'u_' + orgId, orgId, userRole: 'Admin', managedReps: [], error: null };
+            // x-test-role lets a test act as a rep. Defaults to Admin so every
+            // pre-existing test in this file behaves exactly as before.
+            const userRole = event.headers?.['x-test-role'] || 'Admin';
+            return { userId: 'u_' + orgId, orgId, userRole, managedReps: [], error: null };
         },
-        canSeeAll: () => true,
+        canSeeAll:    (role) => role === 'Admin' || role === 'Manager',
+        isReadOnly:   (role) => role === 'ReadOnly',
+        isTechnician: (role) => role === 'Technician',
+        requireRole: (auth, allowedRoles, headers) => (
+            allowedRoles.includes(auth?.userRole)
+                ? null
+                : { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: insufficient role' }) }
+        ),
+        requireWrite: (auth, event, headers, opts = {}) => {
+            if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(event?.httpMethod)) return null;
+            if (auth?.userRole === 'ReadOnly') {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: read-only access' }) };
+            }
+            if (auth?.userRole === 'Technician' && !opts.allowTechnician) {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: technicians may only update their own assigned jobs' }) };
+            }
+            return null;
+        },
     },
 });
 
