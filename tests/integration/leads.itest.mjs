@@ -71,3 +71,65 @@ test('cross-tenant write — A cannot overwrite B\'s lead via upsert with B\'s i
     assert.equal(row.firstName, 'B Original', 'B\'s lead must be unchanged by A');
     assert.equal(row.orgId, B);
 });
+
+// ── Bulk insert (the CSV importer's path) ────────────────────────────────────
+// These cover 0.23. The importer has always POSTed an ARRAY, and this endpoint
+// had no Array.isArray branch, so every leads CSV import returned
+// 400 'id is required' before touching the database. Nothing caught it: the
+// unit suites each import a single module, and this file only ever POSTed one
+// lead at a time. Both halves were internally coherent; the contract between
+// them was not tested.
+
+test('REGRESSION — an ARRAY body inserts every row instead of returning 400', async () => {
+    const batch = [
+        { id: 'lead_A_bulk1', firstName: 'Bulk', lastName: 'One',   status: 'New',       source: 'Referral', assignedTo: 'Rep One' },
+        { id: 'lead_A_bulk2', firstName: 'Bulk', lastName: 'Two',   status: 'Contacted', source: 'Web Form', assignedTo: 'Rep One' },
+        { id: 'lead_A_bulk3', firstName: 'Bulk', lastName: 'Three', status: 'New',       source: 'Referral', assignedTo: '' },
+    ];
+    const res = await handler(ev(A, 'POST', batch));
+    assert.equal(res.statusCode, 201, 'an array body must be accepted, not rejected as a single row');
+
+    const body = JSON.parse(res.body);
+    assert.equal(body.inserted, 3, 'every row in the batch should land');
+
+    // bulkClient.postNew partitions landed-vs-failed by insertedIds. Without it
+    // the client falls back to a count and reports rows as saved by position,
+    // so this key is part of the contract, not an implementation detail.
+    assert.ok(Array.isArray(body.insertedIds), 'the response must carry insertedIds');
+    assert.deepEqual([...body.insertedIds].sort(), batch.map(b => b.id).sort());
+
+    const ids = (await get(A)).map(l => l.id);
+    for (const b of batch) assert.ok(ids.includes(b.id), b.id + ' should be readable after import');
+});
+
+test('REGRESSION — a blank assignedTo stays unassigned, never filled with the importer', async () => {
+    // The opportunities importer does `salesRep || currentUser`, which makes an
+    // unassigned deal impossible to create from a CSV. Leads must not acquire
+    // the same behaviour: rep scoping treats null assignedTo as visible-to-all,
+    // and the delete-gate fixture depends on genuinely unowned rows existing.
+    await handler(ev(A, 'POST', [{ id: 'lead_A_bulk4', firstName: 'Unowned', status: 'New', assignedTo: '' }]));
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_A_bulk4'));
+    assert.ok(!row.assignedTo, 'a blank Assigned To must remain blank, not become the caller');
+});
+
+test('a bulk row without an id is refused for the whole batch, not silently dropped', async () => {
+    const res = await handler(ev(A, 'POST', [
+        { id: 'lead_A_bulk5', firstName: 'Has Id', status: 'New' },
+        { firstName: 'No Id', status: 'New' },
+    ]));
+    assert.equal(res.statusCode, 400, 'a batch containing an id-less row must be refused');
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_A_bulk5'));
+    assert.ok(!row, 'nothing from a refused batch may be written');
+});
+
+test('an empty array is a no-op, not an error', async () => {
+    const res = await handler(ev(A, 'POST', []));
+    assert.equal(res.statusCode, 200);
+    assert.equal(JSON.parse(res.body).inserted, 0);
+});
+
+test('bulk insert is org-scoped — B cannot see rows A imported', async () => {
+    await handler(ev(A, 'POST', [{ id: 'lead_A_bulk6', firstName: 'Scoped', status: 'New' }]));
+    const ids = (await get(B)).map(l => l.id);
+    assert.ok(!ids.includes('lead_A_bulk6'), 'a bulk-imported row must not leak across orgs');
+});
