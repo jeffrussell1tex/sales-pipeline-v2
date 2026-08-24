@@ -652,15 +652,18 @@ export default function ModalLayer() {
                     existingLeads={leads}
                     onClose={() => { document.activeElement?.blur(); setShowLeadImportModal(false); }}
                     onImport={async (newLeads) => {
-                        const resp = await dbFetch('/.netlify/functions/leads', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(newLeads),
-                        });
-                        if (!resp.ok) throw new Error('Import failed');
-                        const data = await resp.json();
-                        const imported = data.leads || [];
-                        setLeads(prev => [...prev, ...imported]);
+                        // Was a hand-rolled single POST that sent the whole array
+                        // and then read `data.leads` off the response — a key the
+                        // endpoint has never returned. Both halves were wrong and
+                        // neither was reachable by a test. This uses the same
+                        // chunked client as the other three importers.
+                        const res = await bulk.postNew('/.netlify/functions/leads', newLeads);
+
+                        // 18b15: commit what actually landed BEFORE raising, or a
+                        // failure in a later chunk discards rows already written
+                        // server-side and state disagrees with the database.
+                        if (res.landed.length > 0) setLeads(prev => [...(prev || []), ...res.landed]);
+                        if (res.error) throw new Error(res.error);
                         // Modal handles its own close via Done button
                     }}
                 />

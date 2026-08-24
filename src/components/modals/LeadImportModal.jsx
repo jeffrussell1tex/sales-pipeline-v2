@@ -140,6 +140,7 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
     // ── Import ────────────────────────────────────────────────────────────────
     const doImport = async () => {
         if (!preview || !preview.leads.length) return;
+        setParseError('');
         setImporting(true);
         try {
             await onImport(preview.leads);
@@ -274,6 +275,11 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
                 {step === 'preview' && preview && (
                     <>
                     <div style={body}>
+                        {/* The import request fires from THIS step, but parseError
+                            was only ever rendered inside the upload step — so a
+                            failed import set an error nobody could see and the
+                            modal simply sat there having done nothing. */}
+                        {parseError && <div style={{ background:'#fee2e2', border:'1px solid #fecaca', borderRadius:'8px', padding:'0.75rem', color:'#dc2626', fontSize:'0.8125rem', marginBottom:'1rem' }}>{parseError}</div>}
                         <div style={{ display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap' }}>
                             <div style={{ background:'#d1fae5', border:'1px solid #a7f3d0', borderRadius:'8px', padding:'0.5rem 0.875rem', textAlign:'center' }}>
                                 <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#047857' }}>{preview.added}</div>

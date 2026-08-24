@@ -4,7 +4,7 @@ import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isReadOnly, requireRole, requireWrite } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
-import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, bulkInsert } from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
@@ -80,6 +80,46 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
+
+            // Bulk insert — body is an array. The CSV importer has always sent
+            // one, and this branch did not exist: an array has no `.id`, so
+            // every leads import fell into the single-insert guard below and
+            // returned 400 'id is required' before touching the database. The
+            // import had therefore never worked. Mirrors the accounts and
+            // contacts POST branches (18b8).
+            if (Array.isArray(data)) {
+                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ leads: [], inserted: 0, failed: [] }) };
+                if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
+
+                // Config read ONCE for the batch, not once per row.
+                const cfgBulk = await getLeadScoring(orgId);
+                const nowIso = new Date().toISOString();
+                const rows = data.map(d => {
+                    const clean = sanitize(d);
+                    // scoreColumns() queries activities by leadId to fold
+                    // engagement into the score. These ids are freshly minted by
+                    // the client, so that query can only ever return zero rows —
+                    // scoring inline with no events skips one DB round-trip per
+                    // lead, which at 400 rows a chunk is the difference between
+                    // finishing and hitting the function timeout.
+                    const sc = scoreLead({ ...clean, createdAt: nowIso }, cfgBulk, Date.now(), []);
+                    return { ...clean, ...(sc ? { ...sc, scoreUpdatedAt: new Date() } : {}) };
+                });
+
+                // Chunked with per-row isolation by bisection — see bulkInsert
+                // in _bulk.mjs (18b8). One malformed row no longer discards the
+                // whole import.
+                const result = await bulkInsert({ table: leads, rows, orgId });
+
+                // Deliberately no lead.created webhook or automation dispatch on
+                // this path: firing N of them inline would exceed the same time
+                // budget bulkInsert is bounded by. The single-insert branch below
+                // still dispatches. Bulk-import notification is a separate job —
+                // see the note in ACCELEREP_CURRENT_STATE.
+                return { statusCode: 201, headers, body: JSON.stringify(result) };
+            }
+
+            // Single insert
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const cleanPost = sanitize(data);
             const cfgPost = await getLeadScoring(orgId);
