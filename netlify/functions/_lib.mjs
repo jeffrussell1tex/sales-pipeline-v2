@@ -4,6 +4,7 @@ import { db } from '../../db/index.js';
 import { auditLog, users } from '../../db/schema.js';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { bulkInsert as coreBulkInsert, bulkUpsert as coreBulkUpsert } from './_bulk.mjs';
+import { ownerColumnOf, ownerKeyFor, mayMutate, OWNERSHIP_FORBIDDEN } from './_ownership.mjs';
 
 // Browser origins allowed to call the API. Kept in sync with the Clerk
 // authorizedParties list in auth.mjs. Exported for the CORS follow-up; any
@@ -152,3 +153,55 @@ export const bulkInsert = (args) => coreBulkInsert({ client: db, ...args });
 // the row already exists, and a partial payload cannot. See the NOT NULL backfill
 // in _bulk.mjs.
 export const bulkUpsert = (args) => coreBulkUpsert({ client: db, ...args });
+
+
+// Admin and Manager see and mutate everything. Duplicated from auth.mjs rather
+// than imported: auth.mjs is replaced wholesale by mock.module in the
+// integration tests, and importing it here would drag the stub's completeness
+// into every consumer of _lib.
+const canSeeAllRole = (role) => role === 'Admin' || role === 'Manager';
+
+// ── assertOwnership ──────────────────────────────────────────────────────────
+//
+// The query half of _ownership.mjs. It lives here rather than there because it
+// needs db, and _ownership.mjs is kept pure so the gates and `npm test` can
+// import it without tsx.
+//
+// Returns a ready-to-return 403 when the caller may not mutate the row, or null
+// when they may. Replaces the six hand-copied lines in every mutating branch:
+//
+//     const forbidden = await assertOwnership({
+//         table: contacts, entity: 'contact', id, orgId, userId, userRole, headers,
+//     });
+//     if (forbidden) return forbidden;
+//
+// `row` is an optimisation, not a shortcut. Branches that have ALREADY loaded
+// the record pass it and no second query is issued; the policy applied is
+// identical either way.
+//
+// A row that does not exist returns null — "not forbidden" — because 404 is the
+// caller's answer to give after its own delete or update reports nothing
+// touched. Answering 403 here would tell an unauthorized caller which ids exist.
+export async function assertOwnership({ table, entity, id, orgId, userId, userRole, headers, row = undefined }) {
+    if (canSeeAllRole(userRole)) return null;
+
+    // Resolves the registry against the real table, and throws BY NAME if the
+    // registered property is not on it — the guard contacts.createdBy needed.
+    const column = ownerColumnOf(table, entity);
+
+    let owner;
+    if (row !== undefined) {
+        if (!row) return null;
+        owner = row[ownerKeyFor(entity)];
+    } else {
+        const [target] = await db.select({ owner: column }).from(table)
+            .where(and(eq(table.id, id), eq(table.orgId, orgId)));
+        if (!target) return null;
+        owner = target.owner;
+    }
+
+    const callerName = await getCallerName(userId);
+    if (mayMutate({ owner, callerName, canSeeAll: false })) return null;
+
+    return { statusCode: 403, headers, body: JSON.stringify({ error: OWNERSHIP_FORBIDDEN }) };
+}

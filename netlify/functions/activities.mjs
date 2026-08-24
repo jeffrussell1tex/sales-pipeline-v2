@@ -2,7 +2,8 @@ import { db } from '../../db/index.js';
 import { activities, leads, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
-import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, assertOwnership } from './_lib.mjs';
+import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 
@@ -85,17 +86,19 @@ export const handler = async (event) => {
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             // PUT is strictly an update: unknown ids 404 instead of silently creating.
-            const [target] = await db.select({ owner: activities.repName }).from(activities).where(and(eq(activities.id, data.id), eq(activities.orgId, orgId)));
+            const [target] = await db.select({ id: activities.id, [ownerKeyFor('activity')]: ownerColumnOf(activities, 'activity') })
+                .from(activities).where(and(eq(activities.id, data.id), eq(activities.orgId, orgId)));
             if (!target) {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Activity not found' }) };
             }
-            // Object-level authorization: reps may only edit their own or unassigned activities
-            if (!canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId);
-                if (target.owner && target.owner !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization. Previously selected activities.repName,
+            // which is not a column on this table -- the column is `author`. As
+            // with contacts.createdBy, db.select({ owner: undefined }) THREW, so
+            // a rep editing any activity got a 500 rather than an answer.
+            const forbiddenPut = await assertOwnership({
+                table: activities, entity: 'activity', id: data.id, orgId, userId, userRole, headers, row: target,
+            });
+            if (forbiddenPut) return forbiddenPut;
             const [upserted] = await db.insert(activities).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: activities.id, setWhere: eq(activities.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
@@ -119,14 +122,14 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            const [delActy] = await db.select({ leadId: activities.leadId, owner: activities.repName }).from(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId)));
-            // Object-level authorization: reps may only delete their own or unassigned activities
-            if (delActy && !canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId);
-                if (delActy.owner && delActy.owner !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            const [delActy] = await db.select({ leadId: activities.leadId, [ownerKeyFor('activity')]: ownerColumnOf(activities, 'activity') })
+                .from(activities).where(and(eq(activities.id, id), eq(activities.orgId, orgId)));
+            // Object-level authorization: reps may only delete their own or
+            // unassigned activities. Same repName fault as the PUT above.
+            const forbiddenDel = await assertOwnership({
+                table: activities, entity: 'activity', id, orgId, userId, userRole, headers, row: delActy,
+            });
+            if (forbiddenDel) return forbiddenDel;
             // .returning() rather than a bare delete: a hard delete destroys the
             // audit trail's subject, so the row has to be captured in the same
             // statement that removes it. An id alone cannot be resolved back to a

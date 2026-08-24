@@ -2,7 +2,8 @@ import { db } from '../../db/index.js';
 import { contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert, assertOwnership } from './_lib.mjs';
+import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
 
@@ -103,7 +104,13 @@ export const handler = async (event) => {
                     table: contacts,
                     rows: partialRows(data, sanitize),
                     orgId,
-                    ownerColumn: contacts.createdBy,
+                    // Was `contacts.createdBy` -- a property that does not exist on
+                    // this table. bulkUpsert does `if (ownerColumn)`, so undefined
+                    // silently removed the owner from the projection and the
+                    // forbidden branch could never fire: every rep could overwrite
+                    // every contact in the org. Resolved through the registry now,
+                    // which throws by name rather than degrading to "no owner".
+                    ownerColumn: ownerColumnOf(contacts, 'contact'),
                     callerName,
                 });
                 return { statusCode: 200, headers, body: JSON.stringify(result) };
@@ -112,17 +119,18 @@ export const handler = async (event) => {
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             // PUT is strictly an update: unknown ids 404 instead of silently creating.
-            const [target] = await db.select({ owner: contacts.createdBy }).from(contacts).where(and(eq(contacts.id, data.id), eq(contacts.orgId, orgId)));
+            const [target] = await db.select({ id: contacts.id, [ownerKeyFor('contact')]: ownerColumnOf(contacts, 'contact') })
+                .from(contacts).where(and(eq(contacts.id, data.id), eq(contacts.orgId, orgId)));
             if (!target) {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Contact not found' }) };
             }
-            // Object-level authorization: reps may only edit their own or unassigned contacts
-            if (!canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId);
-                if (target.owner && target.owner !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization. Previously selected contacts.createdBy,
+            // which does not exist -- db.select({ owner: undefined }) THREW, so a
+            // rep editing any contact got a 500 rather than an answer.
+            const forbiddenPut = await assertOwnership({
+                table: contacts, entity: 'contact', id: data.id, orgId, userId, userRole, headers, row: target,
+            });
+            if (forbiddenPut) return forbiddenPut;
             const [upserted] = await db.insert(contacts).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: contacts.id, setWhere: eq(contacts.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
@@ -142,14 +150,13 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            // Object-level authorization: reps may only delete their own or unassigned contacts
-            if (!canSeeAll(userRole)) {
-                const [target] = await db.select({ owner: contacts.createdBy }).from(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId)));
-                const callerName = await getCallerName(userId);
-                if (target?.owner && target.owner !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization: reps may only delete their own or
+            // unassigned contacts. Same createdBy fault as the PUT above -- this
+            // branch 500'd for every rep, for as long as it has existed.
+            const forbiddenDel = await assertOwnership({
+                table: contacts, entity: 'contact', id, orgId, userId, userRole, headers,
+            });
+            if (forbiddenDel) return forbiddenDel;
             // .returning() rather than a bare delete: a hard delete destroys the
             // audit trail's subject, so the row has to be captured in the same
             // statement that removes it. An id alone cannot be resolved back to a
