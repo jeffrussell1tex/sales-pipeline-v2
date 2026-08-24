@@ -269,7 +269,41 @@ export const handler = async (event) => {
         }
     }
 
-    // Only Admins and Managers can access the full user list
+    // ── Directory read: any member of the org ────────────────────────────────
+    //
+    // A rep needs colleagues' NAMES to assign work. Blocking GET entirely meant
+    // useSettings.js:196 silently left `settings.users` as [], so every user
+    // picker in the app rendered an empty typeahead for a rep -- the Assigned To
+    // field on a task looked broken when it simply had nothing to offer, and a
+    // rep could not assign a task even to themselves.
+    //
+    // Names are not a secret here: task, opportunity, account and lead ownership
+    // are all stored and displayed AS display names, so a rep already sees them
+    // throughout the UI. What is withheld is the administrative record --
+    // email, role, quota, team, territory and the whole profile blob -- none of
+    // which a picker needs.
+    //
+    // Writes stay Admin/Manager-only: the gate below still guards POST, PUT and
+    // DELETE, and this branch returns before reaching them.
+    const DIRECTORY_FIELDS = (row) => ({ id: row.id, name: row.name, active: row.active });
+
+    if (event.httpMethod === 'GET' && !ADMIN_ROLES.includes(userRole)) {
+        try {
+            const rows = await db.select({ id: users.id, name: users.name, active: users.active })
+                .from(users).where(eq(users.orgId, orgId)).orderBy(asc(users.name));
+            return {
+                statusCode: 200,
+                headers,
+                // `directory: true` tells the client these rows are deliberately
+                // partial, so an absent quota or email is not read as a blank one.
+                body: JSON.stringify({ users: rows.map(DIRECTORY_FIELDS), directory: true }),
+            };
+        } catch (err) {
+            return { statusCode: 500, headers, body: serverErrorBody(err, 'users') };
+        }
+    }
+
+    // Everything else -- the full record, and all writes -- stays Admin/Manager.
     if (!ADMIN_ROLES.includes(userRole)) {
         console.warn('users.mjs: forbidden role', userRole);
         return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: insufficient role' }) };

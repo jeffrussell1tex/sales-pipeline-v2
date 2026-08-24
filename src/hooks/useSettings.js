@@ -193,7 +193,11 @@ export function useSettings() {
             .then(() =>
                 dbFetch('/.netlify/functions/users')
                     .then(r => {
-                        if (!r.ok) return null; // 403 for reps — don't touch users array
+                        // Reps now receive a DIRECTORY read (id/name/active only)
+                        // rather than a 403, so the user pickers have names to
+                        // offer. A genuine failure still leaves the array alone
+                        // rather than blanking a roster already loaded.
+                        if (!r.ok) return null;
                         return r.json();
                     })
                     .then(data => {
