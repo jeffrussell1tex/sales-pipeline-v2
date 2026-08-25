@@ -15,6 +15,7 @@ process.env.NETLIFY_DATABASE_URL = process.env.DATABASE_URL_TEST;
 
 import { test, before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { assertTestSchema } from './_schema-guard.mjs';
 
 // 2) Mock Clerk auth: the org comes from an 'x-test-org' header (no real JWT needed).
 mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
@@ -84,6 +85,11 @@ const cleanup = async () => {
 };
 
 before(async () => {
+    // Fails one readable line if the TEST database is behind db/schema.ts.
+    // Must come first: everything below seeds rows and would otherwise die
+    // once per test with a raw Postgres 42703 and no instruction.
+    await assertTestSchema(db);
+
     await cleanup();
     // resolveCaller() looks the caller up by CLERK_USER_ID, and the auth stub
     // uses 'u_' + orgId as the Clerk id. WITHOUT this row it returns null, every

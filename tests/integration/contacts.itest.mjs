@@ -25,6 +25,7 @@ process.env.NETLIFY_DATABASE_URL = process.env.DATABASE_URL_TEST;
 
 import { test, before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { assertTestSchema } from './_schema-guard.mjs';
 
 mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
     namedExports: {
@@ -94,6 +95,11 @@ const cleanup = async () => {
 };
 
 before(async () => {
+    // Fails one readable line if the TEST database is behind db/schema.ts.
+    // Must come first: everything below seeds rows and would otherwise die
+    // once per test with a raw Postgres 42703 and no instruction.
+    await assertTestSchema(db);
+
     await cleanup();
     // resolveCaller() looks the caller up by CLERK_USER_ID, not by users.id.
     // Without this row the rep resolves to null and every ownership check fails

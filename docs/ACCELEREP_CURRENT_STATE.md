@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** August 24, 2026  
-**Verified at:** all six gates green · **244 tests** · **26 integration tests** · **50/50 mutations caught** · all 66 functions bundle under esbuild  
-**Batch:** **the delete gate RAN and passed — first time in four sessions** · **the leads CSV import had never written a single row** (client sent an array, endpoint had no array branch, 400 every time, error rendered on a step the user never sees) · **two ownership columns that do not exist** — `contacts.createdBy` and `activities.repName` — producing four hard 500s on rep paths and one SILENT ORG-WIDE WRITE BYPASS · **object-level authorization centralised** into `_ownership.mjs` with a registry checked against the real schema by `npm test` — the guard found the second bad column on its first run · **the integration suite had been dead at import** since `requireWrite` landed, so every cross-tenant isolation test including the post-wipe `clear=true` guard was dormant · **the test database schema had drifted** and `drizzle-kit push` had never been run against it · **`currentUser` comes from Clerk and disagrees with `users.name`**, so a rep with no Clerk profile name is identified by EMAIL and sees only unowned records · `GET /users` was Admin-only, so every user picker rendered empty for reps · **child promotion runs BEFORE the Admin gate — CONFIRMED: a refused delete still orphans every sub-account, permanently, with no audit record** · 232 → 244 tests, 0 → 21 integration tests
+**Updated:** August 25, 2026  
+**Verified at:** all six gates green · **250 tests** · **26 integration tests** · **55/55 mutations caught** · all 66 functions bundle under esbuild  
+**Batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
+**Prior batch:** **the delete gate RAN and passed — first time in four sessions** · **the leads CSV import had never written a single row** (client sent an array, endpoint had no array branch, 400 every time, error rendered on a step the user never sees) · **two ownership columns that do not exist** — `contacts.createdBy` and `activities.repName` — producing four hard 500s on rep paths and one SILENT ORG-WIDE WRITE BYPASS · **object-level authorization centralised** into `_ownership.mjs` with a registry checked against the real schema by `npm test` — the guard found the second bad column on its first run · **the integration suite had been dead at import** since `requireWrite` landed, so every cross-tenant isolation test including the post-wipe `clear=true` guard was dormant · **the test database schema had drifted** and `drizzle-kit push` had never been run against it · **`currentUser` comes from Clerk and disagrees with `users.name`**, so a rep with no Clerk profile name is identified by EMAIL and sees only unowned records · `GET /users` was Admin-only, so every user picker rendered empty for reps · **child promotion runs BEFORE the Admin gate — CONFIRMED: a refused delete still orphans every sub-account, permanently, with no audit record** · 232 → 244 tests, 0 → **26** integration tests (this line read `0 → 21` until 25 Aug; it was written before the five accounts child-promotion tests landed and never updated — §0.24's own text says 26)
 **Prior batch:** **seven defects, four of them in code written this session; every one of those four found by running the app, not by a gate** · delete was never gated and never audited on any entity · import stage clock · **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · **the stage clock shipped in §0.17 wiped the rows it did not touch** — a deal lost its clock AND its whole stage history because a DIFFERENT deal in the same file moved · **`37/37 mutations` was never reproducible** — CRLF vs `\n` anchors meant 8 of them had never run · Home showed the wrong fiscal quarter · `toISOString` was building local dates in 29 places · **89 → 232 tests, 0 → 50 mutations**
 **Prior batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
 **Prior batch:** **`dbFetch` remediation 78 → 0, `check:dbfetch` promoted to the fifth gate** · **Clerk advisories cleared — Production migration unblocked** · three of four gates had false-negative classes, all now fixture-tested · `users.mjs` PUT was replacing rows · 4 `settings.extra` keys never whitelisted · settings autosave cached rejected writes forever · build guard · 19 → 69 tests
@@ -241,6 +242,80 @@ GET from any org member with a **directory read** (`id`, `name`, `active`, plus
 `directory: true`); email, role, quota, team, territory and the profile blob stay
 Admin-only, and all writes stay behind the existing gate. Names were never secret
 here — ownership is stored and displayed as display names throughout the UI.
+
+---
+
+### 0.28 Identity Split — `users.id` Is Ours, Clerk's Id Is An Attribute
+
+**All data was test data and there were no live customers**, which is the only
+reason this was done as one migration rather than a phased dual-write. That
+window is now closed for anything similar.
+
+**What changed.**
+
+| Before | After |
+|---|---|
+| `users.id` = Clerk userId, or `pending_…` **overwritten at acceptance** | `usr_<uuid>`, generated by us, never reassigned |
+| Clerk identity IS the primary key | `clerk_user_id` column, NULL until acceptance |
+| `users.email` **globally unique** — one address, one org, forever | `uniqueIndex(orgId, email)` |
+| Caller looked up by `users.id`, **unscoped** | by `(clerkUserId, orgId)`, `orgId` required or throws |
+| `getCallerName(userId)` | `resolveCaller(clerkUserId, orgId)` → `{ id, name }` |
+| Sync **rewrote** `users.name` from Clerk | drift REPORTED as `nameDrift`, never applied |
+
+Ten rows migrated across two orgs, all ten linked to Clerk, zero unlinked.
+Verified three ways: row contents, `pg_indexes` names, and `indisunique`.
+
+**Why the email constraint mattered more than it looked.** `users.mjs:430` checks
+for an existing row *scoped to the org*, finds nothing, inserts, and the global
+constraint rejects it — returning "A user with that email address already
+exists." Customer B is told they cannot invite their own employee, and the
+message confirms that person exists somewhere else in the system. A hard blocker
+for any consultant or partner working with two customers, plus a cross-tenant
+disclosure. It had been worked around in development with three separate email
+addresses for one person.
+
+**The fail-open bulk path.** Found only because an integration fixture was left
+seeding the OLD identity. `bulkUpsert` treated a null `callerName` as the
+canSeeAll signal, and the caller resolver returns null when it cannot identify
+anyone. Unreachable while every caller resolved to a name; the identity split
+made it reachable — any unlinked user — and on the bulk path that is unrestricted
+write access to every record in the org. Fixed by an explicit `canSeeAll`
+parameter defaulting to `false`, routed through `mayMutate()` so the bulk and
+single-record paths share one policy. See guide **§18b20**.
+
+**A test was certifying it.** `a null callerName may edit everything` did not
+merely miss the bug — it asserted the bug was correct, and would have survived
+mutation testing while doing so. Replaced by three tests: the Admin bypass, the
+unidentified-caller refusal, and the default direction. The pairing is the point;
+closing the hole is trivial if you are willing to refuse Admins too.
+
+**And one of the new guards was scenery.** The schema test asserted the STRING
+`users_org_email_uq` appeared in `db/schema.ts`. Changing `uniqueIndex(` to
+`index(` leaves the name intact, enforces nothing, and the test still passed.
+Reported SURVIVED by the mutation harness and fixed to assert the constructor.
+Written by someone who had flagged that same trap during the migration an hour
+before — which is the argument for mutation testing in one sentence.
+
+**Found in passing, not fixed:**
+
+- `documents.mjs:244` sets `ownerName: auth.userName || data.ownerName || 'Unknown'`.
+  `verifyAuth` **never returns `userName`** (`auth.mjs:74`). So document owner
+  names come from the client's request body, or are literally "Unknown". Same
+  shape as §0.24 — a property name that names nothing.
+- `schema.ts:637` says `dispatchTechnicians.userId` is `// FK → users.id`, but
+  `dispatch-technicians.mjs:60` compares it against the **Clerk** id. Nothing
+  breaks — that subsystem compares Clerk id to Clerk id and never joins — but the
+  comment now asserts the opposite of the adjacent code.
+- **Renaming a user detaches every record they own.** Ownership columns store
+  display names. Nothing in the code prevents the rename, and nothing warns. The
+  automatic path (`users-sync.mjs`) is suspended; the manual path through the
+  Users panel is not. This is what Phase 2 exists to end.
+- **`users.name` has no unique constraint.** Two people with the same name in one
+  org would share ownership of each other's records, and every gate would agree
+  it was fine. Not observed in the current data; not prevented either.
+
+**Deferred deliberately:** the Users settings panel does not yet surface the
+`nameDrift` list the sync response now returns.
 
 ---
 
