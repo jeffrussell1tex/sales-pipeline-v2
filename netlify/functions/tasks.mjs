@@ -66,7 +66,7 @@ export const handler = async (event) => {
             }
             // Object-level authorization: reps may only edit their own or unassigned tasks
             if (!canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId);
+                const callerName = await getCallerName(userId, orgId);
                 if (existing.assignedTo && existing.assignedTo !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }
@@ -110,7 +110,7 @@ export const handler = async (event) => {
             // Object-level authorization: reps may only delete their own or unassigned tasks
             if (!canSeeAll(userRole)) {
                 const [target] = await db.select({ owner: tasks.assignedTo }).from(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, orgId)));
-                const callerName = await getCallerName(userId);
+                const callerName = await getCallerName(userId, orgId);
                 if (target?.owner && target.owner !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }

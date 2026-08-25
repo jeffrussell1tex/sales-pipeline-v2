@@ -90,7 +90,7 @@ export const handler = async (event) => {
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
                 // Reps may only overwrite their own or unassigned records. Resolved
                 // once here rather than per row; null means "may edit everything".
-                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId);
+                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId, orgId);
                     // partialRows, not sanitize() alone. sanitize() is a FULL-ROW
                     // builder -- it expands a payload rather than filtering one --
                     // and bulkUpsert derives its SET clause from the keys supplied,

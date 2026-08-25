@@ -228,7 +228,7 @@ export const handler = async (event) => {
                 // Reps may only overwrite their own or unassigned deals — the same
                 // salesRep check the single-record path applies below, resolved once
                 // for the batch.
-                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId);
+                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId, orgId);
 
                 // Stage clock and history. Only the server can resolve these: the
                 // client does not know a deal's prior stage. One SELECT for the
@@ -297,7 +297,7 @@ export const handler = async (event) => {
             }
             // Object-level authorization: reps may only edit their own or unassigned records
             if (!canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId);
+                const callerName = await getCallerName(userId, orgId);
                 if (existing.salesRep && existing.salesRep !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }
@@ -427,7 +427,7 @@ export const handler = async (event) => {
             // Object-level authorization: reps may only delete their own or unassigned records
             if (!canSeeAll(userRole)) {
                 const [target] = await db.select({ owner: opportunities.salesRep }).from(opportunities).where(and(eq(opportunities.id, id), eq(opportunities.orgId, orgId)));
-                const callerName = await getCallerName(userId);
+                const callerName = await getCallerName(userId, orgId);
                 if (target?.owner && target.owner !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }

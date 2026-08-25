@@ -340,7 +340,7 @@ export const handler = async (event) => {
             // integrity event the audit log exists for. Key material is never
             // recorded — only the fact that the key changed.
             const changedKeys = Object.keys(data).filter(k => k !== 'anthropicApiKey');
-            const callerName = await getCallerName(userId);
+            const callerName = await getCallerName(userId, orgId);
             await writeAudit(orgId, {
                 action: keyAction ? 'settings.apikey.' + keyAction : 'settings.updated',
                 entityType: 'settings',

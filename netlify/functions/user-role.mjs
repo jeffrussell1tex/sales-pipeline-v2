@@ -96,7 +96,7 @@ export const handler = async (event) => {
             entityName: name,
             detail: `Role ${priorRole} \u2192 ${role}`,
             userId,
-            userName: await getCallerName(userId),
+            userName: await getCallerName(userId, orgId),
         });
 
         return {

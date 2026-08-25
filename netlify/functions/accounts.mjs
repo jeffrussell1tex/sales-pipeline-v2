@@ -151,7 +151,7 @@ export const handler = async (event) => {
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
                 // Reps may only overwrite their own or unassigned records. Resolved
                 // once here rather than per row; null means "may edit everything".
-                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId);
+                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId, orgId);
                     // partialRows, not sanitize() alone. sanitize() is a FULL-ROW
                     // builder -- it expands a payload rather than filtering one --
                     // and bulkUpsert derives its SET clause from the keys supplied,
@@ -181,7 +181,7 @@ export const handler = async (event) => {
             }
             // Object-level authorization: reps may only edit their own or unassigned accounts
             if (!canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId);
+                const callerName = await getCallerName(userId, orgId);
                 if (prior.accountOwner && prior.accountOwner !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }
@@ -222,7 +222,7 @@ export const handler = async (event) => {
             // Object-level authorization: reps may only delete their own or unassigned accounts
             if (!canSeeAll(userRole)) {
                 const [target] = await db.select({ owner: accounts.accountOwner }).from(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId)));
-                const callerName = await getCallerName(userId);
+                const callerName = await getCallerName(userId, orgId);
                 if (target?.owner && target.owner !== callerName) {
                     return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
                 }

@@ -55,28 +55,67 @@ export async function writeAudit(orgId, { action, entityType, entityId, entityNa
     }
 }
 
-// Resolve the caller's display name for name-based ownership checks.
-// Entity ownership fields (salesRep, accountOwner, assignedTo, repName,
-// createdBy) store display names, not Clerk userIds, so object-level write
-// authorization compares against this. Cached briefly (per warm container)
-// since it runs on every rep-role mutation. Returns null on miss/error —
-// callers treat null as "does not own any assigned record" (fail closed).
-const callerNameCache = new Map();
+// ── Caller identity ──────────────────────────────────────────────────────────
+//
+// Resolves a Clerk userId to the caller's ROSTER ROW for this org: their
+// permanent app id and their current display name.
+//
+// TWO THINGS CHANGED HERE AND BOTH MATTER.
+//
+// 1. The lookup is now `clerkUserId`, not `id`. `users.id` is app-owned and no
+//    longer holds the Clerk identity, so matching on it would silently find
+//    nothing -- and a null caller name fails CLOSED in mayMutate(), which
+//    presents as "every rep is refused on every owned record" rather than as an
+//    error. Fail-closed is right, but only if the lookup is right.
+//
+// 2. It is scoped to orgId. It never was. That was survivable only because a
+//    Clerk id could appear in exactly one row -- users.email was globally
+//    unique, so one person could belong to one org, full stop. Now that a
+//    person can hold a roster row in several orgs, an unscoped lookup returns
+//    an ARBITRARY one of them, and would authorize a write in org A using the
+//    name from org B. Removing the global email constraint is what makes this
+//    scoping mandatory rather than merely correct.
+//
+// Cached briefly per warm container since it runs on every rep-role mutation.
+// Returns nulls on miss/error -- callers treat a null name as "owns nothing".
+const callerCache = new Map();
 const CALLER_NAME_TTL_MS = 30_000;
-export async function getCallerName(userId) {
-    if (!userId) return null;
-    const cached = callerNameCache.get(userId);
-    if (cached && Date.now() - cached.ts < CALLER_NAME_TTL_MS) return cached.name;
+
+export async function resolveCaller(clerkUserId, orgId) {
+    const empty = { id: null, name: null };
+    if (!clerkUserId || !orgId) return empty;
+    const key = `${orgId}::${clerkUserId}`;
+    const cached = callerCache.get(key);
+    if (cached && Date.now() - cached.ts < CALLER_NAME_TTL_MS) return cached.caller;
     try {
-        const [row] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
-        const name = row?.name || null;
-        callerNameCache.set(userId, { name, ts: Date.now() });
-        if (callerNameCache.size > 500) callerNameCache.delete(callerNameCache.keys().next().value);
-        return name;
+        const [row] = await db
+            .select({ id: users.id, name: users.name })
+            .from(users)
+            .where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));
+        const caller = { id: row?.id || null, name: row?.name || null };
+        callerCache.set(key, { caller, ts: Date.now() });
+        if (callerCache.size > 500) callerCache.delete(callerCache.keys().next().value);
+        return caller;
     } catch (e) {
-        console.warn('getCallerName error:', e.message);
-        return null;
+        console.warn('resolveCaller error:', e.message);
+        return empty;
     }
+}
+
+// Display-name half, kept for the ownership checks that still compare names.
+// orgId is REQUIRED and throws when absent rather than defaulting to an
+// unscoped query. Guide 18b19: where a lookup feeds an authorization decision,
+// absence must be an error and never a value -- a missing orgId that quietly
+// widened the search is exactly the failure this rule exists to prevent.
+export async function getCallerName(clerkUserId, orgId) {
+    if (!orgId) {
+        throw new Error(
+            '_lib.getCallerName: orgId is required. Pass the orgId from verifyAuth() -- ' +
+            'an unscoped caller lookup can resolve a name from a different tenant.'
+        );
+    }
+    const { name } = await resolveCaller(clerkUserId, orgId);
+    return name;
 }
 
 // ── Sequential record numbers ────────────────────────────────────────────────
@@ -200,7 +239,7 @@ export async function assertOwnership({ table, entity, id, orgId, userId, userRo
         owner = target.owner;
     }
 
-    const callerName = await getCallerName(userId);
+    const callerName = await getCallerName(userId, orgId);
     if (mayMutate({ owner, callerName, canSeeAll: false })) return null;
 
     return { statusCode: 403, headers, body: JSON.stringify({ error: OWNERSHIP_FORBIDDEN }) };

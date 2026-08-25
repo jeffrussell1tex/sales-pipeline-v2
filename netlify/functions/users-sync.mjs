@@ -19,6 +19,9 @@ import { users, auditLog } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireRole } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
+import { randomUUID } from 'crypto';
+
+const newUserId = () => 'usr_' + randomUUID();
 
 const CORS = {
     'Content-Type': 'application/json',
@@ -64,11 +67,17 @@ export const handler = async (event) => {
             allMembers.map((m) => clerk.users.getUser(m.publicUserData?.userId || m.userId))
         );
 
-        // 3. Load current DB roster once, index by lowercased email.
+        // 3. Load current DB roster once. Index by Clerk id AND by email --
+        //    the Clerk link is the reliable key once it exists, and email is
+        //    only the fallback for a row that has not been linked yet. Matching
+        //    on email alone meant a user who changed their email address in
+        //    Clerk looked like a departure plus a new hire.
         const dbRows = await db.select().from(users).where(eq(users.orgId, orgId));
         const dbByEmail = new Map();
+        const dbByClerkId = new Map();
         for (const r of dbRows) {
             if (r.email) dbByEmail.set(r.email.toLowerCase(), r);
+            if (r.clerkUserId) dbByClerkId.set(r.clerkUserId, r);
         }
 
         // Dry run (?check=true): compute exactly the same reconciliation but write
@@ -76,7 +85,7 @@ export const handler = async (event) => {
         // drift is visible rather than discovered by chance.
         const dryRun = (event.queryStringParameters || {}).check === 'true';
 
-        const summary = { created: [], updated: [], unchanged: [], skipped: [], dryRun };
+        const summary = { created: [], updated: [], unchanged: [], skipped: [], nameDrift: [], dryRun };
         const clerkEmails = new Set();
 
         for (let i = 0; i < detail.length; i++) {
@@ -97,22 +106,24 @@ export const handler = async (event) => {
             const team = cu.publicMetadata?.team ?? null;
             const territory = cu.publicMetadata?.territory ?? null;
 
-            const existing = dbByEmail.get(email);
+            const existing = dbByClerkId.get(clerkUserId) || dbByEmail.get(email);
 
             if (!existing) {
-                // CREATE — new roster row from Clerk.
+                // CREATE — new roster row from Clerk. The id is ours; the Clerk
+                // identity goes in its own column.
                 if (!dryRun) {
                     await db.insert(users).values({
-                        id:        clerkUserId,
+                        id:          newUserId(),
+                        clerkUserId,
                         orgId,
                         name,
                         email,
                         role,
                         team,
                         territory,
-                        active:    true,
-                        profile:   { status: 'Active', userType: role },
-                        updatedAt: new Date(),
+                        active:      true,
+                        profile:     { status: 'Active', userType: role },
+                        updatedAt:   new Date(),
                     }).onConflictDoNothing();
                 }
                 summary.created.push({ email, name, role });
@@ -123,18 +134,37 @@ export const handler = async (event) => {
             const patch = {};
             // role: Clerk is authoritative (permissions).
             if (existing.role !== role) patch.role = role;
-            // name: refresh if Clerk has a real one and it differs.
-            if (name && existing.name !== name) patch.name = name;
+            // email: follow Clerk once the row is linked by identity rather than
+            // by address, so an address change is an update and not a departure.
+            if (email && existing.email !== email) patch.email = email;
             // team / territory: fill blanks only — never clobber an in-app assignment.
             if ((existing.team == null || existing.team === '') && team) patch.team = team;
             if ((existing.territory == null || existing.territory === '') && territory) patch.territory = territory;
-            // If the row still carries a placeholder/pending id, promote it to the real Clerk id.
-            if (existing.id !== clerkUserId && (existing.id?.startsWith('pending_') || existing.id?.endsWith('@placeholder.local'))) {
-                patch.id = clerkUserId;
-            }
+            // Link an unlinked row. The id is NOT touched -- that rewrite is the
+            // defect this batch removes.
+            if (!existing.clerkUserId) patch.clerkUserId = clerkUserId;
+
+            // NAME IS DELIBERATELY NOT SYNCED, and this is a behaviour change.
+            //
+            // It used to read:  if (name && existing.name !== name) patch.name = name;
+            //
+            // Ownership columns across the CRM store the display NAME, so
+            // rewriting users.name detaches every record that user owns -- their
+            // deals vanish from their own pipeline and the server refuses their
+            // deletes with a 403 that reads exactly like the gate working. An
+            // Admin pressing "Sync from Clerk" fired that for every member whose
+            // Clerk name differed by so much as a middle initial.
+            //
+            // Name sync returns in the phase that moves ownership onto ids, where
+            // renaming a user is a display change and nothing more. Until then a
+            // Clerk name change is REPORTED, not applied.
+            const nameDrift = (name && existing.name !== name)
+                ? { email, dbName: existing.name, clerkName: name }
+                : null;
+            if (nameDrift) summary.nameDrift.push(nameDrift);
 
             if (Object.keys(patch).length === 0) {
-                summary.unchanged.push({ email });
+                summary.unchanged.push({ email, nameDrift: !!nameDrift });
                 continue;
             }
             patch.updatedAt = new Date();
@@ -144,8 +174,12 @@ export const handler = async (event) => {
             summary.updated.push({ email, changed: Object.keys(patch).filter((k) => k !== 'updatedAt') });
         }
 
-        // 4. Report DB rows whose email is not in Clerk — never auto-remove.
+        // 4. Report DB rows not present in Clerk — never auto-remove. A row that
+        //    is linked by clerkUserId counts as present even if its stored email
+        //    is stale, which is the case email-only matching got wrong.
+        const clerkIds = new Set(allMembers.map((m) => m.publicUserData?.userId || m.userId).filter(Boolean));
         const dbOnly = dbRows
+            .filter((r) => !(r.clerkUserId && clerkIds.has(r.clerkUserId)))
             .filter((r) => r.email && !clerkEmails.has(r.email.toLowerCase()))
             .map((r) => ({ id: r.id, name: r.name, email: r.email }));
 
@@ -176,11 +210,13 @@ export const handler = async (event) => {
                     updated:      summary.updated.length,
                     unchanged:    summary.unchanged.length,
                     skipped:      summary.skipped.length,
+                    nameDrift:    summary.nameDrift.length,
                     dbOnly:       dbOnly.length,
                 },
                 created:   summary.created,
                 updated:   summary.updated,
                 skipped:   summary.skipped,
+                nameDrift: summary.nameDrift,  // reported, never applied — see the note above
                 dbOnly,    // rows in Accelerep not found in Clerk — review manually
             }),
         };

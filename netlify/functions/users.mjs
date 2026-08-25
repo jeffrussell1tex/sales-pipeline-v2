@@ -3,9 +3,15 @@ import { users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, resolveCaller } from './_lib.mjs';
+import { randomUUID } from 'crypto';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
+
+// Roster ids are ours and permanent. This function is the ONLY place a new one
+// is minted. Nothing derives an id from Clerk, from an email, or from a name:
+// all three can change, and a primary key that changes is not a primary key.
+const newUserId = () => 'usr_' + randomUUID();
 
 const writeAudit = async (orgId, action, entityId, entityName, actorId, actorName) => {
     try {
@@ -60,6 +66,9 @@ export const handler = async (event) => {
     // explicitly via withRole() below.
     const sanitize = (data) => ({
         id:           data.id,
+        // Carried through so an update cannot blank the Clerk link. Absent on
+        // create (an invited row has no Clerk identity until acceptance).
+        clerkUserId:  data.clerkUserId ?? null,
         name:         ((data.firstName || '') + ' ' + (data.lastName || '')).trim() || data.name || 'Unnamed User',
         // email is notNull + unique in schema — use a unique placeholder if not provided
         email:        (data.email && data.email.trim()) ? data.email.trim() : `${data.id}@placeholder.local`,
@@ -127,6 +136,7 @@ export const handler = async (event) => {
 
     const flatten = (row) => ({
         id:            row.id,
+        clerkUserId:   row.clerkUserId || null,
         name:          row.name,
         // Don't expose placeholder emails to the frontend
         email:         (row.email && row.email.endsWith('@placeholder.local')) ? '' : (row.email || ''),
@@ -172,16 +182,25 @@ export const handler = async (event) => {
     };
 
     // ── GET ?me=true — any authenticated user can fetch their own record ──────
-    // Lookup order:
-    //   1. Direct id match (id col = real Clerk userId)
-    //   2. Email match (covers invite flow where DB row has pending_ id)
-    //   3. Display name match (legacy fallback for manually created rows)
-    // When a match is found via email or name and the id differs (pending_ row),
-    // the row's id is updated to the real Clerk userId so future lookups are direct.
+    //
+    // Lookup order, all of it scoped to THIS org:
+    //   1. clerkUserId match — the normal path once a user has accepted
+    //   2. Email match       — an invited row that has not been linked yet
+    //   3. Display name      — legacy fallback for hand-created rows
+    //
+    // On a match via email or name we LINK the row by setting clerkUserId. We do
+    // NOT rewrite users.id, which is what this used to do. Rewriting the primary
+    // key at acceptance is how an invited user's id changed underneath anything
+    // already pointed at it.
+    //
+    // Every branch is org-scoped. The direct lookup was not, which was invisible
+    // while a Clerk id could only ever appear in one row; with per-org rosters it
+    // would return a row from whichever org happened to come back first.
     if (event.httpMethod === 'GET' && event.queryStringParameters?.me === 'true') {
         try {
-            // 1. Direct id lookup
-            let [row] = await db.select().from(users).where(eq(users.id, userId));
+            // 1. Direct Clerk-identity lookup, scoped to this org
+            let [row] = await db.select().from(users)
+                .where(and(eq(users.clerkUserId, userId), eq(users.orgId, orgId)));
 
             if (!row) {
                 const { createClerkClient } = await import('@clerk/backend');
@@ -204,26 +223,31 @@ export const handler = async (event) => {
                     );
                 }
 
-                // If we found a row via email/name but id doesn't match (pending_ or old placeholder),
-                // update id AND pull real name/role/active from Clerk so the row is fully promoted.
-                if (row && row.id !== userId) {
-                    const realName = displayName || row.name;
+                // Found by email or name and not yet linked: LINK it. The row keeps
+                // its id -- only clerkUserId, role and active are written.
+                //
+                // NOTE ON NAME. This deliberately does NOT refresh the display
+                // name from Clerk. Ownership columns still store names, so
+                // rewriting one here would detach every record this user owns,
+                // on an ordinary page load, with no audit trail. users-sync.mjs
+                // has the same hazard and is Admin-triggered; this path fires
+                // for every user on every load and must not carry it.
+                if (row && !row.clerkUserId) {
                     const realRole = clerkUser.publicMetadata?.role || row.role || 'User';
                     try {
                         await db.update(users)
                             .set({
-                                id:        userId,
-                                name:      realName,
-                                role:      realRole,
-                                active:    true,
-                                profile:   { ...(row.profile || {}), status: 'Active', userType: realRole },
-                                updatedAt: new Date(),
+                                clerkUserId: userId,
+                                role:        realRole,
+                                active:      true,
+                                profile:     { ...(row.profile || {}), status: 'Active', userType: realRole },
+                                updatedAt:   new Date(),
                             })
                             .where(and(eq(users.id, row.id), eq(users.orgId, orgId)));
-                        row = { ...row, id: userId, name: realName, role: realRole, active: true };
-                        console.log(`users.mjs: reconciled pending_ → ${userId} (${realName}) for ${clerkEmail}`);
-                    } catch (reconcileErr) {
-                        console.warn('users.mjs: reconcile update failed:', reconcileErr.message);
+                        row = { ...row, clerkUserId: userId, role: realRole, active: true };
+                        console.log(`users.mjs: linked roster row ${row.id} → clerk ${userId} (${clerkEmail})`);
+                    } catch (linkErr) {
+                        console.warn('users.mjs: link update failed:', linkErr.message);
                     }
                 }
             }
@@ -240,8 +264,18 @@ export const handler = async (event) => {
         try {
             const data = JSON.parse(event.body || '{}');
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            // Security: only allow a user to update their own row
-            if (data.id !== userId) {
+            // Security: only allow a user to update their own row.
+            //
+            // This compared data.id against the CLERK id, which worked only while
+            // the two were the same string. They are not any more, so the check is
+            // resolved against the roster instead: whatever row this Clerk identity
+            // owns in this org is the only row it may write.
+            //
+            // A caller with no roster row resolves to null and is refused. That is
+            // the fail-closed direction: an unlinked caller must not be able to
+            // claim an arbitrary id by sending it.
+            const me = await resolveCaller(userId, orgId);
+            if (!me.id || data.id !== me.id) {
                 return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: cannot update another user\'s profile' }) };
             }
             // Keep whatever role is already stored. A profile save must never
@@ -251,13 +285,14 @@ export const handler = async (event) => {
             const { id, ...updateData } = clean;
             let upsertResult;
             try {
-                // Include orgId so the row is properly scoped to this tenant
-                const [ins] = await db.insert(users).values({ ...clean, orgId }).returning();
+                // Include orgId so the row is properly scoped to this tenant, and
+                // pin the Clerk link -- a self-save must never orphan it.
+                const [ins] = await db.insert(users).values({ ...clean, clerkUserId: userId, orgId }).returning();
                 upsertResult = ins;
             } catch {
                 const [upd] = await db
                     .update(users)
-                    .set({ ...updateData, updatedAt: new Date() })
+                    .set({ ...updateData, clerkUserId: userId, updatedAt: new Date() })
                     .where(and(eq(users.id, data.id), eq(users.orgId, orgId)))
                     .returning();
                 upsertResult = upd;
@@ -344,7 +379,7 @@ export const handler = async (event) => {
                 const isUniqueViolation = err.code === '23505' || errStr.includes('unique');
                 const isEmailField = errStr.includes('email');
                 if (isUniqueViolation && isEmailField) {
-                    const dupErr = new Error('A user with that email address already exists. Please use a different email.');
+                    const dupErr = new Error('A user with that email address already exists in this organization. Please use a different email.');
                     dupErr.code = 'EMAIL_DUPLICATE';
                     throw dupErr;
                 }
@@ -441,9 +476,13 @@ export const handler = async (event) => {
                                 .returning();
                             results.push(flatten(row || existingRow));
                         } else {
-                            const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                            // A real, permanent id from the start. The row is simply
+                            // not linked to a Clerk identity yet (clerkUserId null),
+                            // and acceptance fills that in without touching the id.
+                            // The old `pending_` id was a placeholder that later got
+                            // overwritten -- the rewrite this batch removes.
                             const row = await upsertUser(withRole(sanitize({
-                                id:        pendingId,
+                                id:        newUserId(),
                                 email,
                                 name:      email.split('@')[0],
                                 userType:  invite.role      || 'User',
@@ -470,11 +509,12 @@ export const handler = async (event) => {
                 };
             }
             // ── Single user create ────────────────────────────────────────────
-            if (!data.id) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            }
+            // The id is minted here when the client does not supply one. It used
+            // to be required, which pushed identity generation into the browser --
+            // the client cannot know what is unique in this org, and any id it
+            // invents is a guess.
             try {
-                const result = await upsertUser(withRole(sanitize(data), data.userType || data.role || 'User'));
+                const result = await upsertUser(withRole(sanitize({ ...data, id: data.id || newUserId() }), data.userType || data.role || 'User'));
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
                 }

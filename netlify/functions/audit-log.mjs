@@ -34,7 +34,7 @@ export const handler = async (event) => {
             // (App.jsx sends a display name as userId), which let any authenticated
             // member forge entries attributing arbitrary actions to another user at
             // an arbitrary timestamp — and a log anyone can write to is not evidence.
-            const callerName = await getCallerName(userId);
+            const callerName = await getCallerName(userId, orgId);
             const [inserted] = await db.insert(auditLog).values({ orgId,
                 id:         data.id,
                 action:     data.action,

@@ -87,7 +87,7 @@ export const handler = async (event) => {
                 startTime: data.allDay === false ? (data.startTime ?? null) : null,
                 endTime:   data.allDay === false ? (data.endTime   ?? null) : null,
                 notes:     data.notes     ?? null,
-                createdBy: await getCallerName(userId),
+                createdBy: await getCallerName(userId, orgId),
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
