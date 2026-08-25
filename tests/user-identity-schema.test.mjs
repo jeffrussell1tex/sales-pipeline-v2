@@ -55,12 +55,24 @@ test('users has a clerkUserId column, separate from the primary key', () => {
     );
 });
 
-test('users has per-org unique indexes on email and clerkUserId', () => {
+test('users has per-org UNIQUE indexes on email and clerkUserId', () => {
+    // Asserts the CONSTRUCTOR, not the name.
+    //
+    // The first version of this checked only that the string 'users_org_email_uq'
+    // appeared in the block. Changing uniqueIndex(...) to index(...) leaves the
+    // name untouched, so the index would enforce NOTHING while keeping a name
+    // that says it does -- and this test would still pass. The mutation harness
+    // reported it SURVIVED, which is the only reason it was caught.
+    //
+    // Same trap as the migration itself: a plain index with a unique-sounding
+    // name looks identical in pg_indexes until you read indisunique. A test that
+    // cannot distinguish enforcement from naming is not coverage.
     for (const idx of ['users_org_email_uq', 'users_org_clerk_uq']) {
         assert.ok(
-            usersBlock.includes(idx),
-            `missing uniqueIndex '${idx}' on users. Without it the per-org identity ` +
-            `contract is a convention rather than a constraint.`
+            usersBlock.includes(`uniqueIndex('${idx}')`),
+            `users is missing uniqueIndex('${idx}'). Note the check is for ` +
+            `uniqueIndex specifically -- a plain index('${idx}') has the right ` +
+            `name and enforces nothing, which is the failure mode this guards.`
         );
     }
 });
