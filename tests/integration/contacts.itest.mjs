@@ -95,11 +95,20 @@ const cleanup = async () => {
 
 before(async () => {
     await cleanup();
-    // getCallerName reads users.name for the caller's id. Without this row the
-    // rep resolves to null and every ownership check fails closed, which would
-    // make the 403 assertions below pass for entirely the wrong reason.
+    // resolveCaller() looks the caller up by CLERK_USER_ID, not by users.id.
+    // Without this row the rep resolves to null and every ownership check fails
+    // closed, which would make the 403 assertions below pass for entirely the
+    // wrong reason.
+    //
+    // The two ids are DELIBERATELY DIFFERENT. users.id is app-owned since the
+    // identity split; the Clerk id is an attribute. Seeding them equal would let
+    // a code path that still looks up by users.id pass this suite unnoticed --
+    // the fixture would agree with the bug. Different values make the lookup key
+    // itself an assertion.
     await db.insert(users).values({
-        id: REP_ID, name: REP_NAME, email: 'itest-rep@example.test',
+        id: 'usr_itest_contacts_rep',
+        clerkUserId: REP_ID,
+        name: REP_NAME, email: 'itest-rep@example.test',
         role: 'User', active: true, orgId: ORG,
     });
 });

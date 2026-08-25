@@ -112,6 +112,7 @@ export const handler = async (event) => {
                     // which throws by name rather than degrading to "no owner".
                     ownerColumn: ownerColumnOf(contacts, 'contact'),
                     callerName,
+                    canSeeAll: canSeeAll(userRole),
                 });
                 return { statusCode: 200, headers, body: JSON.stringify(result) };
             }

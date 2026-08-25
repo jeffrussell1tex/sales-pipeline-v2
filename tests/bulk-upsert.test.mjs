@@ -171,10 +171,57 @@ test('a row owned by another rep is forbidden, not silently updated', async () =
     assert.equal(insertedChunks.length, 0);
 });
 
-test('a null callerName may edit everything', async () => {
+// THESE TWO REPLACE ONE TEST THAT CONFLATED THEM, and the conflation was the bug.
+//
+// It read: `a null callerName may edit everything`, asserting updated === 1 for
+// { callerName: null }. bulkUpsert encoded canSeeAll AS a null callerName --
+//
+//     if (callerName !== null && prior.owner && prior.owner !== callerName)
+//
+// -- so null carried two opposite meanings: "Admin, skip the check" and "the
+// caller could not be identified". The permissive one won. Meanwhile
+// _ownership.mjs asserted the opposite for the same input:
+//
+//     ✔ policy — FAIL CLOSED when the caller has no resolvable name
+//
+// Both suites were green. Nothing compared them, because the rule lived in two
+// files and neither knew the other existed. The identity split made the second
+// state reachable -- an unlinked user resolves to no name -- and an integration
+// test caught a rep bulk-overwriting rows owned by someone else.
+//
+// So: two states, two tests, and canSeeAll is now an explicit parameter.
+// The pairing is the point. Closing the fail-open path is trivial if you are
+// willing to refuse Admins too; the first test is what proves the bypass still
+// works, and the second is what proves it is not the default.
+
+test('canSeeAll edits everything, including rows owned by others', async () => {
     reset([existingDeal]);
-    const r = await call([{ id: 'o1', stage: 'Proposal' }], { ownerColumn: table.stage, callerName: null });
-    assert.equal(r.updated, 1);
+    const r = await call([{ id: 'o1', stage: 'Proposal' }], {
+        ownerColumn: table.stage, callerName: null, canSeeAll: true,
+    });
+    assert.equal(r.updated, 1, 'an Admin must still bypass ownership on the bulk path');
+    assert.deepEqual(r.forbidden, []);
+});
+
+test('SECURITY: a null callerName without canSeeAll may edit NOTHING it does not own', async () => {
+    reset([existingDeal]);
+    const r = await call([{ id: 'o1', stage: 'Proposal' }], {
+        ownerColumn: table.stage, callerName: null, canSeeAll: false,
+    });
+    assert.equal(r.updated, 0, 'an unidentifiable caller owns nothing and must be refused');
+    assert.deepEqual(r.forbidden, ['o1'], 'and the refusal must be REPORTED, not silent');
+});
+
+test('canSeeAll defaults to false, so a caller that forgets it fails CLOSED', async () => {
+    // The default direction is the whole safety argument. A caller that omits
+    // canSeeAll refuses Admins -- visible and annoying. The other default
+    // authorizes everyone -- silent and unbounded.
+    reset([existingDeal]);
+    const r = await call([{ id: 'o1', stage: 'Proposal' }], {
+        ownerColumn: table.stage, callerName: null,
+    });
+    assert.equal(r.updated, 0);
+    assert.deepEqual(r.forbidden, ['o1']);
 });
 
 test('every row must carry an id', async () => {

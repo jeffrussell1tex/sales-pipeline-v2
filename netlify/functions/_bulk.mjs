@@ -10,6 +10,10 @@
 // CHUNK x columns must stay under the Postgres ceiling of 65,535 bind parameters.
 // 400 x ~37 = ~14,800, leaving room for the schema to roughly quadruple.
 import { and, eq, inArray, sql } from 'drizzle-orm';
+// The ownership POLICY lives in one place and is applied here too. Both modules
+// are pure, so importing costs nothing and removes the possibility of the bulk
+// path and the single-record path disagreeing -- which is exactly what happened.
+import { mayMutate } from './_ownership.mjs';
 
 export const BULK_CHUNK = 400;
 
@@ -131,7 +135,29 @@ const requiredColumns = (table) =>
         return c && c.name && c.notNull && !c.hasDefault && !BULK_IMMUTABLE.has(k);
     });
 
-export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerName = null, client }) {
+// `canSeeAll` is an EXPLICIT parameter and defaults to false.
+//
+// It used to be encoded as `callerName === null`, with the comment "callerName
+// null means the caller may edit everything (canSeeAll role)". But null is also
+// what the caller resolver returns when it CANNOT IDENTIFY the caller, so one
+// value carried two opposite meanings -- "trusted, skip the check" and "unknown,
+// check nothing is possible" -- and the permissive one won:
+//
+//     if (callerName !== null && prior.owner && prior.owner !== callerName)
+//
+// An unidentifiable caller skipped the branch entirely and could overwrite every
+// owned row in the org. Unreachable while every caller resolved to a name; the
+// identity split made it reachable, and an integration test caught it live.
+//
+// This is the same defect as `ownerColumn: undefined` documented at the top of
+// _ownership.mjs -- a falsy value read as "no restriction" by the guard. Guide
+// 18b19: where a lookup feeds an authorization decision, absence must be an
+// error or a refusal, never a permission.
+//
+// The default is false, so a caller that forgets to pass it refuses Admins on
+// the bulk path rather than authorizing everyone. That is visible and annoying;
+// the other direction is silent and unbounded.
+export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerName = null, canSeeAll = false, client }) {
     const db = client;
     if (!Array.isArray(rows) || rows.length === 0) return { updated: 0, notFound: [], forbidden: [] };
 
@@ -160,8 +186,10 @@ export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, calle
     for (const row of rows) {
         const prior = byId.get(row.id);
         if (!prior) { notFound.push(row.id); continue; }
-        // callerName null means the caller may edit everything (canSeeAll role).
-        if (callerName !== null && prior.owner && prior.owner !== callerName) {
+        // One policy, shared with assertOwnership. An unassigned row is mutable
+        // by anyone; an owned row needs a caller who matches it; a caller with
+        // no resolvable name owns nothing and is refused.
+        if (!mayMutate({ owner: prior.owner, callerName, canSeeAll })) {
             forbidden.push(row.id); continue;
         }
         eligible.push(row);

@@ -270,6 +270,7 @@ export const handler = async (event) => {
                     orgId,
                     ownerColumn: opportunities.salesRep,
                     callerName,
+                    canSeeAll: canSeeAll(userRole),
                 });
                 // One audit record for the batch, not one per deal. A 500-row
                 // import moving 200 deals is one action by one person.

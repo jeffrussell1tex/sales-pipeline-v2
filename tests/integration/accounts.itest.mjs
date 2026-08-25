@@ -85,13 +85,20 @@ const cleanup = async () => {
 
 before(async () => {
     await cleanup();
-    // getCallerName() reads users.name for the caller's id, and the auth stub
-    // uses 'u_' + orgId. WITHOUT this row it returns null, every owned account
-    // fails the ownership check, and the role-gate test below would be refused
-    // by OWNERSHIP while asserting on the ROLE message -- testing the wrong gate
-    // entirely. Seeding it is what makes the two refusal paths distinguishable.
+    // resolveCaller() looks the caller up by CLERK_USER_ID, and the auth stub
+    // uses 'u_' + orgId as the Clerk id. WITHOUT this row it returns null, every
+    // owned account fails the ownership check, and the role-gate test below is
+    // refused by OWNERSHIP while asserting on the ROLE message -- testing the
+    // wrong gate entirely. That is exactly what happened when the lookup moved
+    // from users.id to users.clerk_user_id and this seed did not follow.
+    //
+    // The two ids are DELIBERATELY DIFFERENT. users.id is app-owned since the
+    // identity split; the Clerk id is an attribute. Seeding them equal would let
+    // a code path that still looks up by users.id pass this suite unnoticed.
     await db.insert(users).values({
-        id: 'u_' + A, name: REP_NAME, email: 'itest-acc-rep@example.test',
+        id: 'usr_itest_accounts_rep',
+        clerkUserId: 'u_' + A,
+        name: REP_NAME, email: 'itest-acc-rep@example.test',
         role: 'User', active: true, orgId: A,
     });
 });

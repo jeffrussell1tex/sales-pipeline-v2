@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -27,6 +27,37 @@ const toFileEol = (text, src) =>
     src.includes('\r\n') ? text.replace(/\r?\n/g, '\r\n') : text.replace(/\r\n/g, '\n');
 
 const mutations = [
+    // ── Identity split: users.id is app-owned, Clerk's id is an attribute ────
+    // These five cover assertions added with that change. Without them the
+    // harness still reports a clean run while the guards are decorative --
+    // exactly the shape 18b11 warns about, since adding a TEST does not add a
+    // MUTATION and the count keeps reading green either way.
+
+    ['_bulk: the fail-open ownership guard returns (a rep overwrites the whole org)',
+        'netlify/functions/_bulk.mjs',
+        'if (!mayMutate({ owner: prior.owner, callerName, canSeeAll })) {',
+        'if (callerName !== null && prior.owner && prior.owner !== callerName) {'],
+
+    ['schema: users.email is globally unique again (one email, one org, forever)',
+        'db/schema.ts',
+        "email:         varchar('email', { length: 255 }).notNull(),",
+        "email:         varchar('email', { length: 255 }).notNull().unique(),"],
+
+    ['schema: clerkUserId disappears, so identity collapses back onto the PK',
+        'db/schema.ts',
+        "clerkUserId:   text('clerk_user_id'),",
+        "clerkUserIdGone: text('clerk_user_id_gone'),"],
+
+    ['schema: the per-org email index stops being UNIQUE (enforces nothing)',
+        'db/schema.ts',
+        "uniqueIndex('users_org_email_uq').on(t.orgId, t.email),",
+        "index('users_org_email_uq').on(t.orgId, t.email),"],
+
+    ['users.mjs: acceptance rewrites the PRIMARY KEY again (the orphaning defect)',
+        'netlify/functions/users.mjs',
+        '                                clerkUserId: userId,\n                                role:        realRole,',
+        '                                id: userId,\n                                role:        realRole,'],
+
     ['bulkClient: chunking disabled',
         'src/utils/bulkClient.js', 'export const BULK_CHUNK = 400;', 'export const BULK_CHUNK = 100000;'],
 

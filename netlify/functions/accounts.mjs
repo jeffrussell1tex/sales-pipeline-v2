@@ -167,6 +167,7 @@ export const handler = async (event) => {
                     orgId,
                     ownerColumn: accounts.accountOwner,
                     callerName,
+                    canSeeAll: canSeeAll(userRole),
                 });
                 return { statusCode: 200, headers, body: JSON.stringify(result) };
             }
