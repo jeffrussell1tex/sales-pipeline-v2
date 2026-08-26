@@ -1,248 +1,179 @@
 # SESSION_HANDOFF.md
 
-**Session of 25 August 2026.** Repo root. Read this first, then verify every claim
+**Session of 26 August 2026.** Repo root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this file**.
-Two of the previous session's handoff claims were written from reading one side of
-a call chain, and two of mine this session were too. Both are recorded below
-rather than quietly corrected, because the failure mode is worth seeing.
+Last session's handoff got a count wrong (nine vs ten) and this one may too.
 
-**Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b20**,
-and does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.28**? If not, you are looking
+**Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b21**,
+and does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.33**? If not, you are looking
 at a copy that predates this session. Check section numbers, never dates.
 
-**State at close:** 250 tests, 26 integration tests, **55/55 mutations**, six gates
-green. Phase 1 of the identity migration shipped and is live on dev.
+**State at close:** 255 tests, 26 integration tests, **65/65 mutations**, six gates
+green. Commit 1 of Phase 2 shipped: object-level authorization is centralised.
 
 ---
 
-## 1. What shipped: identity is a value we own
+## 1. What shipped
 
-`users.id` used to hold the Clerk userId, and an invited row carried a
-`pending_...` placeholder that was **overwritten with the real Clerk id when the
-user accepted**. A primary key that changes at the moment someone starts being
-assigned work is not a primary key.
+**The last nine hand-rolled ownership checks are gone.** All ten sites — eight
+single-record plus two bulk `ownerColumn:` literals — now go through
+`assertOwnership()` / `ownerColumnOf()`. Twelve call sites, one policy.
 
-| Before | After |
-|---|---|
-| `users.id` = Clerk userId, rewritten at acceptance | `usr_<uuid>`, ours, never reassigned |
-| Clerk identity IS the PK | `clerk_user_id` column, NULL until acceptance |
-| `users.email` **globally unique** | `uniqueIndex(orgId, email)` |
-| Caller looked up by `users.id`, unscoped | by `(clerkUserId, orgId)`, `orgId` required |
-| Sync **rewrote** `users.name` from Clerk | drift REPORTED, never applied |
+No schema change. Nothing touched Neon. That was the point: **the id flip in
+Commit 2 is now a change to `_ownership.mjs` alone rather than to ten sites in
+four files while also changing their semantics.**
 
-Ten rows migrated across two orgs, all ten linked, zero unlinked. Verified three
-ways: row contents, index names, and `indisunique` — because a plain index with a
-unique-sounding name is indistinguishable from a real one in `pg_indexes`.
+Files: `accounts.mjs`, `opportunities.mjs`, `leads.mjs`, `tasks.mjs`,
+`tests/ownership-registry.test.mjs`, `scripts/mutate-import.mjs`.
 
-`scripts/migrate-user-identity.mjs` is re-runnable and dry-run by default. It
-talks to Neon directly rather than through `db/index.js`, which only resolves
-under Netlify's bundler (`.js` → `.ts`) and cannot be loaded by plain node.
-
-**Why now.** All data was test data and there were no live customers. That is the
-only reason this was one migration rather than a phased dual-write with a
-backfill and a reconciliation pass. **That window is now closed** for anything of
-this shape.
+**Ordering is load-bearing and is commented at each site.** On accounts,
+opportunities and leads the ownership check runs BEFORE the Admin role gate. Both
+refusals are 403; only the body distinguishes them. Reordering them silently
+collapses six delete-gate outcomes into one. Tasks deliberately has no role gate
+after it.
 
 ---
 
-## 2. The defect that was found by a broken fixture
+## 2. Three live defects, all one shape
 
-`bulkUpsert` encoded "Admin, skip the ownership check" as `callerName === null`.
-The caller resolver also returns null when it **cannot identify the caller**. One
-value, two opposite meanings, and the permissive one won — an unidentifiable
-caller could overwrite every owned row in the org.
+**A display name compared to a Clerk id.** Found by reading the ten sites, not by
+any gate.
 
-Unreachable while every caller resolved to a name. The identity split made it
-reachable: any user not yet linked to Clerk resolves to null.
+1. **Two GET filters — every rep saw only unassigned records.**
+   `eq(users.id, userId)` where `userId` is Clerk's and `users.id` is now
+   `usr_<uuid>`. Resolves nothing → rep name null → predicate collapses to "only
+   unassigned". Reps lost sight of their own pipeline and leads. **Silent** — the
+   query succeeds and returns no row, so the `try/catch` never fires.
+   **This shipped in §0.28 and had been live on dev since**, undetected because
+   that session verified as Admin, which skips the branch entirely.
+2. **`getRepUser()` unscoped.** Returns an EMAIL ADDRESS that deal names and ARR
+   are sent to. Two orgs with a "John Smith" = cross-tenant delivery.
+3. **A guard that could never fire.** `inserted.salesRep !== userId` — never
+   equal, so a rep has always been emailed about their own new deals.
 
-It surfaced because two integration fixtures still seeded the old identity shape,
-so the rep resolved to nobody and one test reported `[]` where it expected
-`['ct_bulk_other']`. **Had the fixture been correct, that test would have gone
-green and the hole would have shipped.** That is a thin thread.
-
-**A unit test was asserting the bug was correct.** `a null callerName may edit
-everything` sat green in `bulk-upsert.test.mjs` while `_ownership.mjs` asserted
-`FAIL CLOSED when the caller has no resolvable name` for the same input. Two
-files, opposite rules, nothing comparing them. Now three tests: the Admin bypass,
-the unidentified-caller refusal, and the default direction.
-
-Fixed with an explicit `canSeeAll` parameter defaulting to `false`, routed
-through `mayMutate()` so the bulk and single-record paths share one policy and
-cannot drift apart again. Guide **§18b20** generalises §18b19 from `ownerColumn`
-to any value feeding an authorization decision.
+**The lesson worth carrying.** The Phase 1 sweep rewrote CALL SITES of
+`getCallerName`. These are inline queries that REIMPLEMENT it. A textual sweep
+finds callers; it cannot find code that duplicates the callee. **After a sweep,
+search for the behaviour, not the function name.**
 
 ---
 
-## 3. One of the new guards was scenery
+## 3. The guard suite was not in SUITES
 
-The schema test asserted the string `users_org_email_uq` appeared in
-`db/schema.ts`. Changing `uniqueIndex(` to `index(` leaves the name untouched,
-enforces nothing, and the test still passes.
+`tests/ownership-registry.test.mjs` shipped last session and was never added to
+`SUITES` in `scripts/mutate-import.mjs`. The registry, `mayMutate` and both
+fail-closed throws had **zero mutation coverage** while the count read 55/55.
 
-The mutation harness reported **SURVIVED**. Nothing else would have.
-
-Worth stating plainly: that test was written by the same party that, an hour
-earlier, had insisted on checking `indisunique` in the Neon console *precisely
-because* a plain index with a unique-sounding name is indistinguishable from a
-real one. The trap was known and the assertion fell into it anyway.
-
-**Adding a test does not add a mutation.** A new suite must be added to `SUITES`
-in `scripts/mutate-import.mjs` and given at least one mutation, or the count keeps
-reading green while the guard checks nothing.
+That is §18b20's closing paragraph recurring in the file it is about, one session
+later. **55 → 65 is not new coverage. It is coverage that was being counted
+without being tested.**
 
 ---
 
-## 4. Errors made this session, recorded
+## 4. Errors and gaps recorded
 
-- **The migration imported `db/index.js`.** Netlify's bundler resolves that to
-  `.ts`; plain node cannot. The guide already said the schema loads only under
-  `tsx`. Read the import, inferred the file. Rewritten against the Neon driver.
-- **A test that asserted a name instead of a constructor.** Section 3.
-- **Ordering.** `2d520fe` was committed before `test:int` had run, which is how the
-  `drizzle-kit push` surprise happened — the schema file was already updated, so
-  push compared against it and applied changes rather than reporting none. The
-  guide asks for one commit per **verified** batch for exactly this reason.
-
----
-
-## 5. Phase 2 — ownership keys on ids, not names
-
-**This is the actual fix.** Phase 1 made identity stable; ownership still compares
-display-name strings, which means:
-
-- **Renaming a user detaches every record they own.** No warning, no audit entry.
-  The automatic path (`users-sync.mjs`) is suspended; the manual path through the
-  Users panel is not.
-- **Two people with the same name in one org share ownership of each other's
-  records**, and every gate agrees it is fine. `users.name` has no unique
-  constraint. Not observed in current data; not prevented either.
-
-**Tier 1 — authorization (6 columns).** `accounts.accountOwner`,
-`contacts.assignedRep`, `opportunities.salesRep`, `tasks.assignedTo`,
-`leads.assignedTo`, `activities.author`.
-
-**Tier 2 — money and reporting (4).** `spiffClaims.repName` (notNull) and
-`approvedBy`, `recommendationLog.repName` (notNull), and `accounts.assignedRep`
-— **confirmed with Jeff as a leftover duplicate of `accountOwner`**, same meaning,
-so it collapses rather than migrating.
-
-**Tier 3 — provenance only (~12).** Every `createdBy` / `dispatchedBy` /
-`triggeredBy`. Displayed, never authorizing. Convert opportunistically.
-
-**Already correct — leave alone.** `documents`, `savedReports`,
-`dashboardConfigs`, `userCalendarConnections`, `dispatchTechnicians`, and all of
-Dispatch, which was built id-first (`assignedTechId`, `customerId`, `coTechIds`).
-The pattern already exists in this schema four times; Phase 2 brings the older
-CRM core up to it rather than inventing anything.
-
-**Sequence:**
-
-1. Owner id columns on the six Tier 1 tables, nullable, alongside the names.
-2. Switch `_ownership.mjs` and the nine hand-rolled checks to ids. **This closes
-   the same-name authorization hole.**
-3. **Server stamps the owner on create; the client stops sending it.** Every
-   endpoint already knows the caller from the JWT. This kills the class that
-   produced `importRows.js:103`, and it removes the need for the client to have
-   resolved its own identity before a record can be created.
-4. Client visibility (`isRepVisible`) onto ids; introduce `currentUserId`.
-5. Importer resolves names → ids with a real error on ambiguity. Customer CSVs
-   will always contain names; this is where that stops being a silent string copy.
-6. Regenerate fixtures, re-run the delete gate. **The fixture is spent** — step 15
-   is one-way and steps 12–16 deleted their own subjects.
-7. Decide the fate of the name columns. Recommendation: drop them. The browser
-   already holds the roster in `settings.users`, so it can render a name from an
-   id for free with nothing to go stale. Server-side exports and scheduled reports
-   need a lookup — two or three places, not forty.
+- **A regex was the wrong tool** for threading `orgId` through five multi-line
+  `maybeEmail` calls; the object literals' own braces defeated it. It reported two
+  call sites unpatched and refused to write — which is the only reason it was not
+  a silent half-patch. Rewritten with paren balancing. **Every patch script in
+  this session verified its own result and exited non-zero rather than writing.**
+- **The docs said nine checks; there were ten.** The two bulk literals were
+  omitted, and they are the more dangerous half.
+- **Three `netlify/functions/` files are CRLF** — `_bulk.mjs`,
+  `opportunities.mjs`, `tasks.mjs` — against the LF rule for that directory.
+  Preserved, not normalised, so this diff stayed readable. Worth its own commit.
+- **`isReadOnly` is an unused import in all six endpoints**, pre-existing since
+  `requireWrite` replaced it. `activities.mjs` also has dead `canSeeAll` and
+  `getCallerName`.
 
 ---
 
-## 6. Still open from the previous session
+## 5. What is NOT proven — read before trusting the green
 
-**CSV import is NOT finished.** Four items carry forward unchanged:
+**Proven at runtime:** the accounts delete-gate 403 split. Both regressions pass.
 
-1. `importRows.js:103` — `merged.salesRep = merged.salesRep || currentUser`.
-   Phase 1 defused the worst of this (identity no longer resolves to an email),
-   but **an unassigned opportunity still cannot be created by import at all**.
-   Phase 2 step 3 is where it closes properly.
-2. `LeadImportModal.jsx:63–76` still runs the superseded column matcher.
-3. Leads has no overwrite path — dedupes by email and silently skips.
-4. No end-to-end test spans `csvAutoMap` → `csvMapping` → `importRows` →
-   `bulkInsert`/`bulkUpsert` → `_sanitize` → `_stage`.
+**Not proven at runtime:**
+- `opportunities.mjs` and `tasks.mjs` have **no integration file at all**.
+- `leads.itest.mjs` has **no rep-role ownership tests**.
+- `contacts.itest.mjs` has the full rep suite — but contacts was UNCHANGED.
+- **Both GET filter fixes have no runtime coverage whatsoever.**
 
-**`currentUser` still derives from Clerk** (`App.jsx:95`). Phase 1 fixed the
-SERVER's view of identity; the client's is unchanged. This is Phase 2 step 4, and
-it is smaller than it looks now that the server stamps ownership — the async gap
-stops being able to corrupt data.
+**Do this before trusting Commit 1:** sign in on dev **as a rep, not Admin**, and
+confirm Opportunities and Leads show records assigned to that rep rather than only
+unassigned ones. No gate can see this.
 
-**Settings auto-save fires for users who can never save.** `useSettings.js:223`
-PUTs on every change; `/settings` PUT is Admin-only. A rep gets a "not saved"
-toast for a write they never requested, and the body is identical to what was
-just loaded. Skip the effect when the stripped payload is unchanged — that fixes
-it for Admins too.
-
-**Centralise the nine remaining ownership checks** onto `assertOwnership`. Their
-columns are correctly named; they are nine more chances to name the wrong one.
-
-**Restyle `LeadImportModal`** onto `CsvImportModal`'s chrome — retires the
-superseded matcher in the same pass.
-
-**Scoping questions, not bugs.** `tasks.mjs` GET selects by `orgId` alone; every
-rep sees every task. Contacts GET likewise. Mutation is gated in both cases.
-Decide whether the visibility is intended.
-
-**Bulk-import notification for leads** — the bulk branch fires no webhook.
-
-**Stray scanner fixture** — `tests/fixtures/scanners/dupes-jsx-attribute - Copy.jsx`
-is byte-identical to its sibling and referenced by no test. One-line delete.
+**Highest-value test debt in the repo:** a rep-role integration file for
+opportunities and tasks. The absence of one is what let §0.23, §0.24 and §0.30 all
+ship.
 
 ---
 
-## 7. Environment notes
+## 6. Commit 2 — ownership onto ids
 
-**`test:int` needs a database and is not in `npm test`.** It targets
-`DATABASE_URL_TEST` — a **different Neon endpoint** from the app's. It has now
-drifted twice in two sessions. `tests/integration/_schema-guard.mjs` now fails one
-readable line instead of eighteen stack traces; **add a `[table, column]` pair to
-its `REQUIRED` list whenever a schema change lands that the suites depend on.**
+Scope agreed with Jeff: **no live users, no real data, so no backfill and no
+dual-write.** That also means the handoff's original step 1 ("id columns alongside
+the names") is the WRONG shape — six tables each holding two columns that mean the
+same thing, with nothing enforcing agreement, is the defect this codebase has hit
+four times running. Ids end this commit as the only authorization truth.
+
+1. `ownerId` columns on the six Tier 1 tables, nullable. Collapse
+   `accounts.assignedRep` — confirmed a leftover duplicate of `accountOwner`.
+2. **Server stamps `ownerId` on create** from `resolveCaller().id`; client stops
+   sending it. `resolveCaller` ALREADY returns the id, so this is nearly free.
+   **This closes `importRows.js:103`, open five sessions.**
+3. Flip `_ownership.mjs` to the id columns. One file, because of Commit 1.
+4. Fix the client: `isRepVisible` onto ids, introduce `currentUserId`.
+5. Add `[table, owner_id]` pairs to `_schema-guard.mjs` `REQUIRED`.
+
+**Ordering (§18c):** `drizzle-kit push` against the app DB **and**
+`drizzle.test.config.ts` BEFORE the code that reads the columns, or `test:int`
+dies in a wall of 42703s.
 
 ```bash
 npx drizzle-kit push --config=drizzle.test.config.ts
 ```
 
-**Never `set -a; source .env`.** A space after one `=` makes bash execute the
-value; that printed a Clerk secret and two Neon passwords to a terminal last
-session. Use `node --env-file=.env`.
+**Deferred to Commit 3:** importer name→id resolution with a real error on
+ambiguity; dropping the name columns.
 
-**`npm run build` needs `VITE_CLERK_PUBLISHABLE_KEY` exported**, or rollup
-tree-shakes the app to ~200 kB and the build guard fails with five findings. That
-is §18b4 working.
+---
 
-**`npm test` prints two BUILD GUARD FAILED blocks and they are healthy.** They
-come from the `hollow-` and `stale-` temp fixtures the check-bundle tests
-deliberately feed it. The three tests around them pass.
+## 7. Still open, carried forward unchanged
 
-**`git status` may hide untracked files** in this repo. Use `git ls-files`,
-`git status --short`, `git --no-pager diff --stat`.
+**CSV import — four items.** `importRows.js:103` (closes in Commit 2 step 2);
+`LeadImportModal.jsx:63–76` superseded matcher; leads has no overwrite path; no
+end-to-end test spanning all six import modules.
+
+**`currentUser` still derives from Clerk** (`App.jsx:95`). Commit 2 step 4.
+
+**Settings auto-save fires for users who can never save** (`useSettings.js:223`).
+
+**`tasks.mjs` GET has no rep scoping** — every rep sees every task. Contacts GET
+likewise. Mutation is gated in both. Decide whether the visibility is intended.
+**Note this interacts with Commit 2**: the two GET filters that WERE scoped are
+now correct, which makes the two that are not more conspicuous.
+
+**Bulk-import notification for leads** — the bulk branch fires no webhook.
+
+**Stray scanner fixture** — `tests/fixtures/scanners/dupes-jsx-attribute - Copy.jsx`,
+byte-identical to its sibling, referenced by no test. One-line delete.
 
 ---
 
 ## 8. The thread running through this session
 
-Last session's thread was that **the rep path had never been executed by
-anything**. This session's is narrower and sharper:
+Last session's was *every defect was a value that meant two things*. This one is
+narrower:
 
-**Every defect was a value that meant two things.**
+**A rule is not a guard. A guard is not a mutation. A mutation is not in SUITES.**
 
-- `users.id` meant both "our row" and "Clerk's user".
-- `callerName === null` meant both "trusted Admin" and "cannot identify".
-- `users.email` unique meant both "one row per person" and "one org per person".
-- `users_org_email_uq` meant both "unique index" and "a name that says unique".
+§18b19 put the policy in one place and could not tell whether anyone used it.
+The registry test proved a registered column existed and could not tell whether an
+endpoint used the registry. The suite holding both had never been mutated because
+nobody added it to a list in a different file.
 
-Each was survivable in isolation. Each became dangerous when something else moved
-and made the second meaning reachable. And in every case both meanings were
-documented, tested, and green — the two readings simply lived in different files,
-and nothing compared them.
+Each layer looked like the layer below it was covered. **Every one of them was
+green while nine endpoints ignored the whole apparatus.**
 
-The generalisable defence is not another gate. It is: **when a value can be
-absent, say what absence means at the point of use, and make the safe reading the
-default.** That is §18b20.
+The defence is mechanical: guard the CALL SITE, assert the result is USED, and
+prove each guard fails before believing it. That is §18b21.

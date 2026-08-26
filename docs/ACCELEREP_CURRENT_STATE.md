@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** August 25, 2026  
-**Verified at:** all six gates green · **250 tests** · **26 integration tests** · **55/55 mutations caught** · all 66 functions bundle under esbuild  
-**Batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
+**Updated:** August 26, 2026  
+**Verified at:** all six gates green · **255 tests** · **26 integration tests** · **65/65 mutations caught** · all 66 functions bundle under esbuild  
+**Batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
+**Prior batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
 **Prior batch:** **the delete gate RAN and passed — first time in four sessions** · **the leads CSV import had never written a single row** (client sent an array, endpoint had no array branch, 400 every time, error rendered on a step the user never sees) · **two ownership columns that do not exist** — `contacts.createdBy` and `activities.repName` — producing four hard 500s on rep paths and one SILENT ORG-WIDE WRITE BYPASS · **object-level authorization centralised** into `_ownership.mjs` with a registry checked against the real schema by `npm test` — the guard found the second bad column on its first run · **the integration suite had been dead at import** since `requireWrite` landed, so every cross-tenant isolation test including the post-wipe `clear=true` guard was dormant · **the test database schema had drifted** and `drizzle-kit push` had never been run against it · **`currentUser` comes from Clerk and disagrees with `users.name`**, so a rep with no Clerk profile name is identified by EMAIL and sees only unowned records · `GET /users` was Admin-only, so every user picker rendered empty for reps · **child promotion runs BEFORE the Admin gate — CONFIRMED: a refused delete still orphans every sub-account, permanently, with no audit record** · 232 → 244 tests, 0 → **26** integration tests (this line read `0 → 21` until 25 Aug; it was written before the five accounts child-promotion tests landed and never updated — §0.24's own text says 26)
 **Prior batch:** **seven defects, four of them in code written this session; every one of those four found by running the app, not by a gate** · delete was never gated and never audited on any entity · import stage clock · **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · **the stage clock shipped in §0.17 wiped the rows it did not touch** — a deal lost its clock AND its whole stage history because a DIFFERENT deal in the same file moved · **`37/37 mutations` was never reproducible** — CRLF vs `\n` anchors meant 8 of them had never run · Home showed the wrong fiscal quarter · `toISOString` was building local dates in 29 places · **89 → 232 tests, 0 → 50 mutations**
 **Prior batch:** **bulk INSERT chunked with per-row isolation (3 endpoints)** · `check:dbfetch` was blind to aliases AND concise arrow bodies · **opportunities CSV overwrite had never worked** · **an overwrite wiped stage history, comments and contact links** · contacts import was ~500 round-trips · undated deals invisible in the Pipeline list · 69 → 89 tests · **confirmed on dev, not just in CI**
@@ -17,7 +18,130 @@
 
 ---
 
-## 0. Latest Batch — The Delete Gate Ran, and the Rep Path Had Never Been Executed
+## 0. Latest Batch — Centralising the Gate, and Three Names Compared to Ids
+
+> Phase 2 step 3, pulled forward and done first: the nine remaining hand-rolled
+> ownership checks are now `assertOwnership()`. Pure refactor by intent — no
+> schema change, nothing near Neon — which is what makes the id flip a change to
+> ONE file instead of ten. Reading those ten sites to move them surfaced three
+> live defects that all five gates were green over, and **two of them were
+> introduced by the identity split in §0.28 and had been live on dev since.**
+
+### 0.29 The count was ten, not nine
+
+Eight single-record checks (accounts PUT/DELETE, opportunities PUT/DELETE, leads
+PUT/DELETE, tasks PUT/DELETE) plus two bulk `ownerColumn:` literals naming a
+column directly. Contacts and activities were already centralised — they were the
+two whose columns did not exist (§0.24).
+
+`ACCELEREP_CURRENT_STATE.md` and `SESSION_HANDOFF.md` both said **nine**. Neither
+was wrong about the single-record checks; both omitted the bulk literals, which
+are the MORE dangerous half — `bulkUpsert` does `if (ownerColumn)`, so a wrong
+name there is a silent org-wide write bypass rather than a 500. Counted by
+reading, not by trusting the figure.
+
+**Ordering preserved deliberately.** On accounts, opportunities and leads the
+ownership check runs BEFORE the Admin role gate, and must keep doing so: both
+refusals are 403 and the BODY is the only way to tell them apart, so a non-owner
+gets the ownership message and an owner gets the role message. FIXTURE_MANIFEST's
+delete gate asserts exactly that split. Each site now carries a comment saying so.
+Tasks has no role gate after it — a rep may delete a task they own — and that
+asymmetry is preserved.
+
+### 0.30 Three live defects, one shape: a name compared to an id
+
+**1. Two GET filters — reps could not see their own records.**
+`opportunities.mjs:152` and `leads.mjs:72` each hand-rolled:
+
+```js
+const [repRow] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
+```
+
+`userId` is Clerk's; `users.id` became `usr_<uuid>` in §0.28. The match resolves
+nothing, `repDisplayName` falls to null, and the predicate collapses to
+`!o.salesRep || o.salesRep === null` — **only unassigned records**. Every rep lost
+sight of their own pipeline and their own leads.
+
+**Silent, not merely wrong.** The query SUCCEEDS and returns no row, so the
+`try/catch` wrapped around it never fired. Neither was org-scoped either.
+
+This is §0.26 inverted. Before the split the server was right and the client
+wrong; after it, both were wrong. **§0.28 shipped this and it went undetected
+because the session verified as Admin**, which skips the `!canSeeAll` branch —
+the identical reason §0.24 survived.
+
+**2. `getRepUser()` was unscoped** (`opportunities.mjs:28`). It matches a display
+name against `users` with no `orgId`, and its result is an **email address** that
+`maybeEmail` sends deal names, ARR and stage transitions to. Two orgs each
+employing a "John Smith" means one tenant's pipeline activity delivered to the
+other tenant's employee. Same class as §18b20.3, still open in a second place.
+
+**3. A guard that could never fire.** `opportunities.mjs:206` read
+`inserted.salesRep !== userId` — display name against Clerk id, never equal — so
+"notify the assigned rep only if someone else created it" has **never** suppressed
+anything. Every rep has always been emailed about every deal they created for
+themselves. Pre-existing, unrelated to the split, fixed in the same pass.
+
+**Why the Phase 1 sweep missed all three.** It rewrote CALL SITES of
+`getCallerName`. These are inline queries that REIMPLEMENT it. A textual sweep
+finds callers and cannot find code that duplicates the callee. After a sweep,
+search for the behaviour, not the function name.
+
+### 0.31 The guard suite was not in SUITES
+
+`tests/ownership-registry.test.mjs` shipped in §0.28 and was never added to
+`SUITES` in `scripts/mutate-import.mjs`. The registry, `mayMutate`, and both
+fail-closed throws — every object-level authorization decision in the app — had
+**zero mutation coverage**. The count read 55/55 throughout, because the single
+ownership mutation targets `_bulk.mjs` and is caught by `bulk-upsert.test.mjs`.
+
+This is §18b20's own closing paragraph, recurring in the file it is about, one
+session later.
+
+Now in `SUITES`, with ten mutations. **All ten cover guards that already
+existed** — 55 → 65 is not new coverage, it is coverage that was being counted
+without being tested.
+
+### 0.32 Five new guards, all mutation-verified
+
+Source-level, in the default suite, reading the six endpoint files as text:
+
+| Guard | Catches |
+|---|---|
+| no `!== callerName` / `db.select({ owner:` | an endpoint re-rolling the comparison |
+| `ownerColumn:` must start `ownerColumnOf(` | a column named at the call site |
+| every `assertOwnership` result is returned | **a gate computed and discarded** |
+| no `eq(users.id, userId)` | §0.30 defect 1 returning |
+| every `.from(users)` filters `orgId` | §0.30 defect 2 returning |
+
+Each was mutated and confirmed to fail before being trusted. Guide **§18b21**.
+
+### 0.33 What is proven, and what is not
+
+Worth stating precisely, because the gates being green means less here than usual.
+
+**Proven at runtime.** The accounts delete-gate 403 split — both the ROLE-refused
+and OWNERSHIP-refused regressions pass in `accounts.itest.mjs`. That was the main
+risk of moving ten call sites.
+
+**NOT proven at runtime:**
+- `opportunities.mjs` and `tasks.mjs` have **no integration file at all**.
+- `leads.itest.mjs` covers isolation and bulk, but has **no rep-role ownership
+  tests**.
+- `contacts.itest.mjs` has the full rep suite — and contacts was UNCHANGED by this
+  batch, so it proves nothing about it.
+- **Both GET filter fixes have no runtime coverage whatsoever.** They are guarded
+  source-level only, and they are the user-visible half of the batch.
+
+The ownership reorder in opportunities, leads and tasks rests on the accounts
+tests passing plus the same pattern being applied identically. Reasonable; not
+proof. **A rep-role integration file for opportunities and tasks is the highest-
+value test debt in the repo** — it is the same gap that let §0.23, §0.24 and
+§0.30 all ship.
+
+---
+
+## 0PA. Prior Batch — The Delete Gate Ran, and the Rep Path Had Never Been Executed
 
 > The delete gate finally ran end to end: six 403s splitting correctly across the
 > ownership check and the Admin role gate, three 200s, the Admin half clean, and

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** August 25, 2026 · rules current through **§18b20**.
+**Updated:** August 26, 2026 · rules current through **§18b21**.
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -903,7 +903,7 @@ Before this existed, the Settings role selector wrote only the mirror and change
 - **Every mutating function must have a gate.** As of the SVR-3 sweep: 29 of 29 covered — 28 by role check, plus `dashboard-configs.mjs`, which needs none because its PUT writes a self-scoped id (`'dash_' + userId + '_' + orgId`) and so can only ever touch the caller's own row. Self-scoping by construction is an acceptable substitute for a role gate; org-scoping alone is **not** (that was the `saved-reports` DELETE bug — any member could delete anyone's report).
 - **Dispatch:** any non-ReadOnly role (Admin/Manager/Sales Rep) has full write access to all `dispatch-*` records.
 - **Audit rows are server-derived, never client-supplied.** `audit-log.mjs` POST ignores the client's `userId` / `userName` / `timestamp` and derives them from `auth` + `getCallerName()`. Accepting them from the body let any member forge entries attributing actions to another user — which would make the audit trail worthless as evidence for every other control. GET is Admin/Manager only.
-- **Ownership is name-based** (display names in `salesRep` / `accountOwner` / `createdBy` / `assignedTo` / `repName`), compared against `getCallerName(userId)` — which **fails closed** (null → caller owns nothing assigned). Known limitation: renames/duplicate names; the fix is `ownerId` userId columns (post-launch migration).
+- **Ownership is name-based** (display names in `salesRep` / `accountOwner` / `createdBy` / `assignedTo` / `repName`), compared against `getCallerName(userId, orgId)` — which **fails closed** (null → caller owns nothing assigned). `orgId` is REQUIRED and throws when absent (§18b20.3); this line read `getCallerName(userId)` until 26 Aug, having been written before the identity split added the parameter. Known limitation: renames/duplicate names. The fix is `ownerId` columns and it is **in progress**, not post-launch — Phase 2, sequenced in SESSION_HANDOFF.md. **No endpoint calls this directly for object-level authorization any more**; they all go through `assertOwnership()` (§18b21).
 - Manager writes are **org-wide in v1** (team-scoped writes = Phase 2).
 - The 30s `verifyAuth` role cache means role changes take up to 30s to bite on these gates.
 - Not yet swept: `documents.mjs`, `dispatch-*`, `products`, `saved-reports` (backlog).
@@ -2130,13 +2130,20 @@ Object-level authorization was hand-copied into every mutating branch:
 ```js
 if (!canSeeAll(userRole)) {
     const [target] = await db.select({ owner: <table>.<someColumn> })…
-    const callerName = await getCallerName(userId);
+    const callerName = await getCallerName(userId, orgId);   // orgId added 25 Aug, §18b20.3
     if (target?.owner && target.owner !== callerName) return 403;
 }
 ```
 
 Eleven copies across six endpoints. Eleven independent chances to name the wrong
 column, and no single place to read to find out what the policy is.
+
+> **Status, 26 Aug: zero copies remain.** Two were retired with this rule; the
+> other nine (eight single-record checks plus two bulk `ownerColumn:` literals —
+> the "nine" recorded in earlier docs was an undercount, verified by reading) went
+> onto `assertOwnership()` / `ownerColumnOf()` in one pass. §18b21 is the guard
+> that keeps them gone, because this rule on its own could not tell whether an
+> endpoint was obeying it.
 
 **Two of the eleven named a column that does not exist.** `contacts.createdBy` —
 the contacts owner column is `assignedRep`. `activities.repName` — that table's is
@@ -2338,3 +2345,83 @@ that exact trap in the migration an hour earlier.
 Adding a test does not add a mutation. `scripts/mutate-import.mjs` carries its own
 list; a new suite must be added to `SUITES` and given a mutation, or the count
 keeps reading green while the guard is scenery.
+
+---
+
+## 18b21. A Centralised Gate Needs A Guard That Notices Its Absence (hard rule)
+
+§18b19 put the ownership policy in one place. It did not, and could not, stop an
+endpoint from ignoring that place and hand-rolling the check anyway — which is
+what all six of them were still doing for nine of the eleven copies, for a full
+session after the rule was written.
+
+The registry test proved a *registered* column existed. Nothing proved an
+endpoint *used the registry*. Those are different claims, and only the first one
+had a test.
+
+### 1. Guard the call site, not just the definition
+
+Five source-level assertions now run in the default suite
+(`tests/ownership-registry.test.mjs`). They read the six endpoint files as text
+and fail if any of these reappears:
+
+| Guard | Catches |
+|---|---|
+| no `!== callerName`, no `db.select({ owner:` | an endpoint re-rolling the comparison |
+| every `ownerColumn:` starts `ownerColumnOf(` | a column named at the call site, unchecked against the schema |
+| every `assertOwnership` result is `return`ed | **a gate computed and then discarded** |
+| no `eq(users.id, userId)` | a display-name lookup keyed on the Clerk id |
+| every `.from(users)` filters `users.orgId` | an unscoped cross-tenant resolve |
+
+Source-level for the reason given throughout this file: the endpoints import
+`db/index.js`, which is TypeScript, so importing them would strand these checks in
+`test:int` — a suite that needs a database, is not in `npm test`, and had itself
+been dead at import for a fortnight.
+
+**The third guard is the one to keep.** `const forbidden = await assertOwnership(…)`
+with no `if (forbidden) return forbidden;` beneath it reads as protection in
+review, passes every other gate, and enforces nothing.
+
+### 2. Comparing a name to an id is a defect class, not an incident
+
+Three separate live instances were found in one pass, all of the same shape and
+none caught by any gate:
+
+- Two GET filters matched `users.id` against the Clerk id. After the identity
+  split that resolves nothing, the rep's name fell to `null`, and the visibility
+  predicate collapsed to *only unassigned records*. **Every rep lost sight of
+  their own pipeline and their own leads.** Silent: the query succeeded and
+  returned no row, so the surrounding `try/catch` never fired.
+- `getRepUser()` matched a display name with no `orgId`. It returns an **email
+  address** that deal names, ARR and stage changes are then sent to — so one
+  tenant's pipeline activity could be delivered to another tenant's employee.
+- `inserted.salesRep !== userId` — a name against a Clerk id, **never equal**, so
+  the guard reading "don't notify the rep about a deal they created" had never
+  suppressed a single email.
+
+**Why the Phase 1 sweep missed all three:** it rewrote call sites of
+`getCallerName`. These are *inline queries that duplicate it*. A textual sweep
+finds callers; it cannot find code that reimplements the callee. **After any
+sweep, search for the BEHAVIOUR, not the function name.**
+
+### 3. Adding a suite to `SUITES` is a separate act from writing it
+
+`tests/ownership-registry.test.mjs` existed for a session and was **absent from
+`SUITES` in `scripts/mutate-import.mjs`**. Every guard in it — the registry, the
+policy predicate, both fail-closed throws — carried every object-level
+authorization decision in the app with **zero mutation coverage**. The count read
+55/55 the whole time, because the one ownership mutation targeted `_bulk.mjs` and
+was caught by a different suite.
+
+This is §18b20's closing paragraph recurring three weeks later, in the file that
+paragraph is about. The count is now 65/65, and **ten of those ten new mutations
+cover guards that already existed** — that is not new coverage, it is coverage
+that was being counted without being tested.
+
+**Checklist when centralising anything:**
+
+1. Move the logic.
+2. Assert no caller re-rolls it — at the call site, in the default suite.
+3. Assert the result is actually *used*, not merely computed.
+4. Add the suite to `SUITES` and give each guard a mutation.
+5. Confirm each mutation reports CAUGHT before believing any of it.
