@@ -1,160 +1,122 @@
 # SESSION_HANDOFF.md
 
-**Session of 26 August 2026 (second batch).** Repo root. Read this first, then
+**Session of 26 August 2026 (third batch).** Repo root. Read this first, then
 verify every claim in it against the live repo before acting — **including the
 claims in this file**.
 
-**Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b23**,
-and does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.40**? If not, you are looking
+**Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b24**,
+and does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.45**? If not, you are looking
 at a copy that predates this session. Check section numbers, never dates.
 
-**State at close:** 261 tests, 26 integration tests, **73/73 mutations on a
-verified green baseline**, six gates green. **Migration applied. Rep path verified
-in the browser.** Commit 2 is complete — code, docs, database and a human check.
+**State at close:** role vocabulary unified. **The gates were NOT run by the
+session that wrote this** — the numbers in the state doc header (275 tests, 80
+mutations) are arithmetic, not observation. Run the six gates plus
+`node scripts/mutate-import.mjs` and correct that line before believing it.
 
 ---
 
-## 1. Commit 2 is DONE, including the parts no gate can prove
+## 1. What shipped
 
-**The backfill is applied.** 1,569 `owner_id`s set across the six tables, and every
-count matched the dry run exactly — `accounts` 5, `contacts` 1445,
-`opportunities` 34, `tasks` 51, `leads` 4, `activities` 30. A plan that does not
-predict its own apply is not a plan; this one did.
+One list (`APP_ROLES` in `auth.mjs`), one gate direction (allowlist), one identity
+space per use in `user-role.mjs`, one field answering "what is this user's role"
+(`users.role`, via a `flatten()` spread order).
 
-**The rep path was verified in the app, signed in as a rep rather than an Admin.**
-Three checks, each mapping to a defect that shipped GREEN earlier the same day:
+Three defects underneath, each recorded in §0.41–§0.45:
 
-| Check | What it proves |
-|---|---|
-| Karen sees and edits her own contact | the GET filter keys on `ownerId`, and the backfill landed |
-| someone else's contact returns the OWNERSHIP message, not the role one | `assertOwnership` fires, and the two 403s are still distinguishable |
-| a contact she creates comes back owned by her | the server stamps from the JWT — this is what closed `importRows.js:103` |
+1. **`requireWrite` was a blocklist.** It denied `ReadOnly` and `Technician` by
+   exact string and permitted everything else, so any unrecognised value — and
+   the invite screen was minting one — carried full write access to ~28
+   endpoints.
+2. **Role changes had been impossible since the Phase 1 identity split.**
+   `user-role.mjs` used `targetUserId` as both a Clerk id and an app id. The UI
+   sent the app id, so every Clerk call 404'd. With a Clerk id the mirror update
+   would have matched zero rows silently, because a drizzle UPDATE that matches
+   nothing does not throw.
+3. **The Users UI read a frozen copy of the role.** `profile.userType` was
+   written once at row creation, never updated by any role change, and `flatten()`
+   spread the blob last so it overrode the column. Badges, both seat counters,
+   the header, the permissions summary and the select all read it.
 
-**Admin skips every `!canSeeAll` branch.** That is how §0.24, §0.30 and §0.36 all
-shipped green, and it is why this check is worth more than the six gates put
-together. Do it again after any change to ownership or visibility.
+**The ordering mattered.** Fixing (2) without fixing the selects would have armed
+a one-click Admin grant: three `<select>`s presented **Admin** for any unmatched
+value, and the control was live. Both are in this commit for that reason.
 
-**2,408 rows are genuinely unowned and 92 name someone who is on no roster**, so
-roughly 61% of dev data is editable org-wide. That is the policy working, not a
-gap — but it means a rep seeing MOST records is expected, and the meaningful
-signal is one of the 1,569 owned rows.
+## 2. Corrections to the previous handoff
 
----
+§0.40's headline hypothesis does not hold, and it said so itself ("Not verified
+against `auth.mjs`"). `canSeeAll` **is** case-sensitive, but it reads Clerk
+`publicMetadata.role` while the badge read the mirror's `profile.userType`. They
+disagreed because they were **different fields in different stores**, not because
+either was miscomparing.
 
-## 2. What shipped
+The generalisation is in §18b24.5: *"these two disagree" almost never means one of
+them is miscomparing; it usually means they are not the same field.* Find both
+sources before theorising about the comparison.
 
-Ownership keys on `users.id`. `ownerId` + `(orgId, ownerId)` index on the six Tier
-1 tables; the server stamps on create; `_ownership.mjs` compares ids; both rep GET
-filters key on `ownerId`; `bulkUpsert` takes `callerId`.
+## 3. Errors made this session, recorded
 
-**A display name can no longer confer ownership. Only a real roster user can own
-anything.** A name resolving to nobody stamps NULL — unassigned, mutable by any
-writer. That is the policy and it is also what broke four integration tests, whose
-fixtures owned records to bare strings like `'Someone Else'`.
+- **Two patch anchors were written from memory rather than from the file.** The
+  invite screen's default-role `<select>` was assumed to cascade to the rows (it
+  does not), and `UserModal`'s options were assumed to use `&mdash;` (they use a
+  literal em dash). Both failed loudly at the assert, wrote nothing, and cost one
+  round trip each — which is the patch script working as intended (§18b2).
+- **The first source guard was too broad.** It banned the string `'Sales Rep'`
+  anywhere in `UsersDetail.jsx`, which fails on the two places it is correctly a
+  *label*. A guard that fails on legitimate code gets deleted, so it was narrowed
+  to the two seeds. §18b23.2 cuts both ways: guard the class, but the class has
+  to be the actual class.
+- **A session opened by rewriting a labelled hypothesis as a "correction" and
+  proposing a new module, a normalizer layer and a new guide section for what was
+  fifteen lines of bug.** Called out by Jeff, and rightly. The docs' register —
+  every session has an "errors made" section — makes architecture-scale proposals
+  feel proportionate to defect-scale problems. They are not.
 
-**`importRows.js:103` is CLOSED.** Single create defaults to the caller; BULK
-create leaves a blank owner unassigned. Importing someone else's spreadsheet does
-not make you the owner of all of it.
+## 4. Next — start here
 
-`resolveOwnerId` **refuses ambiguity** with a 409 naming both roster rows. Picking
-one would write the Phase 2 defect permanently into the id column, where — unlike
-a name — nobody would ever re-examine it.
+**Run the gates.** Nothing in this batch has been executed against the real tree:
+the session had `auth.mjs`, `users.mjs`, `users-sync.mjs`, `user-role.mjs`,
+`_lib.mjs`, `UsersDetail.jsx`, `UserModal.jsx`, `schema.ts`, `mutate-import.mjs`
+and `function-imports.test.mjs` and nothing else. `tests/role-vocabulary.test.mjs`
+and its seven mutations were verified green and CAUGHT against that partial tree
+only.
 
----
+**Then run `scripts/check-clerk-roles.mjs`** (read-only) — it names any test
+account whose Clerk role the new allowlist will refuse. There are no live users,
+so this is a diagnostic, not a migration.
 
-## 3. Three things that were green and wrong
+**`invalidateRoster` is now called** — that item is closed.
 
-Recorded because each looked correct at the moment it was not.
+**Carried forward, unchanged:** `LeadImportModal.jsx:63–76` superseded matcher;
+leads has no overwrite path; no end-to-end test across the six import modules;
+settings auto-save fires for users who can never save (`useSettings.js:223`);
+`tasks.mjs` and contacts GET have no rep scoping; bulk-import lead notification;
+the stray `dupes-jsx-attribute - Copy.jsx` fixture.
 
-1. **The mutation score was vacuous.** The harness judges CAUGHT by non-zero exit;
-   `bulk-upsert.test.mjs` was RED, so every mutation exited non-zero. It printed
-   **73/73 twice** over code it never tested. A green baseline is now proven first.
-   **Never trust a score without the `Baseline: green.` line.**
-2. **`bulkUpsert` failed OPEN on a projection miss.** `undefined` (column not
-   projected) read identically to `null` (genuinely unowned). Now throws.
-3. **A guard covered the instances, not the class.** Five guards for name-vs-id
-   defects; a sixth instance survived — `l.assignedTo === callerId` in a
-   visibility filter. **Visibility filters compare in the endpoint and never reach
-   `mayMutate()`.** Reads need their own guards.
+**Test debt, still the highest-value item:** `opportunities.mjs` and `tasks.mjs`
+have **no integration file at all**, and `leads.itest.mjs` has no rep-role
+ownership tests.
 
----
+**Commit 3 — finish Phase 2.** Client visibility (`isRepVisible` →
+`currentUserId`, `App.jsx:95`); importer name→id with a real error on ambiguity;
+`managedReps` off display names; collapse `accounts.assignedRep`; decide the fate
+of the name columns.
 
-## 4. `ownerId` already meant two things
+**Raised, not decided:** `UserModal`'s role select is disabled on edit rather than
+wired to `user-role.mjs`. `sanitize()` still writes `profile.userType` from the
+body — harmless now that `flatten()` prefers the column, and it is what lets the
+blob self-heal, but it is still a second stored answer.
 
-`documents.ownerId` holds a **Clerk** userId; `savedReports.ownerId` is notNull and
-undocumented. §0.28 called both "already correct" — true about the shape, wrong
-about the space. `isAppUserId()` asserts it, `mayMutate()` refuses a wrong space
-LOUDLY, and a registry tripwire keeps both entities out of the policy. §18b22.
+## 5. The thread
 
----
+Last batch: *every measuring instrument was, at some point, reporting on itself
+rather than on the code.* This one is narrower and older:
 
-## 5. Errors made this session, recorded
+**A string enum is a schema, and this repo had eight versions of one schema.**
 
-- **The migration used the wrong Neon call style.** `sql(text, params)` throws;
-  `@neondatabase/serverless` requires `sql.query()` for non-tagged calls. Every
-  statement interpolates a table identifier, which a tagged template cannot carry.
-  Died at the backfill, wrote nothing.
-- **A regex could not thread `orgId` through five multi-line calls.** It reported
-  two sites unpatched and refused to write, which is the only reason it was not a
-  silent half-patch. Rewritten with paren balancing.
-- **A retracted claim about line endings.** Three files looked CRLF against the
-  LF rule; the same files arrived with DIFFERENT endings in a later upload.
-  `core.autocrlf=true`, so git normalises and **line endings in this repo are a
-  non-issue**. The earlier note was wrong; ignore it.
-- **"It's you" without naming the org.** The duplicate "Jeff Russell" was in UKG,
-  not the current org. Say which scope.
+Not eight bugs — eight copies, each correct on the day it was written. The blocklist
+permitted what nobody had named. The select chose a value nobody picked. The blob
+answered a question the column had already answered. Every one of them was a place
+where **something unnamed was given a default, and the default was permissive**.
 
----
-
-## 6. Next — start here
-
-**Role vocabulary — own commit, and the only item with a live security edge.** Badges read `member`, `Admin`,
-`member`, `User`: Clerk's names mixed with the app's. The seat counter reads
-**Admins 0** for lowercase `admin` and **1** for `Admin`, so the comparison is
-case-sensitive. If `canSeeAll()` compares the same way, **a user the UI calls an
-admin has rep access**. And the ROLE select showed `Admin` for a user whose header
-and permissions summary both said `member` — consistent with `member` missing from
-the option list, so **saving that page writes `Admin` to a member.** Needs
-`auth.mjs`, `users-sync.mjs`, and the component rendering that select.
-
-**`invalidateRoster(orgId)` is exported and never called.** The roster caches 30s,
-so inviting a user and immediately assigning them a record can stamp NULL. Needs a
-call after any `users` write in `users.mjs`.
-
-**Commit 3 — finish Phase 2.** Client visibility (`isRepVisible` → `currentUserId`,
-`App.jsx:95`); importer name→id with a real error on ambiguity; `managedReps` off
-display names; collapse `accounts.assignedRep` (deferred — it has live write paths
-through `applyTerritoryRules()`); decide the fate of the name columns.
-
-**Test debt, unchanged and still the highest-value item:** `opportunities.mjs` and
-`tasks.mjs` have **no integration file at all**, and `leads.itest.mjs` has no
-rep-role ownership tests. That absence is what let §0.23, §0.24, §0.30 and §0.36
-all ship.
-
-**Carried forward:** `LeadImportModal.jsx:63–76` superseded matcher; leads has no
-overwrite path; no end-to-end test across the six import modules; settings
-auto-save fires for users who can never save (`useSettings.js:223`); `tasks.mjs`
-and contacts GET have no rep scoping; bulk-import lead notification; the stray
-`dupes-jsx-attribute - Copy.jsx` fixture.
-
----
-
-## 7. The thread
-
-Last batch: *a rule is not a guard, a guard is not a mutation, a mutation is not in
-SUITES.* This one goes one layer further:
-
-**Every measuring instrument in this repo was, at some point today, reporting on
-itself rather than on the code.**
-
-The mutation score measured that node exits 1. A security test measured that two
-unequal strings are unequal. A guard measured the instance it was written from. A
-projection measured a key nobody was writing.
-
-All four were green. All four were wrong. And the defect underneath was the same
-one as always — **two things that are not the same being compared as though they
-were**: a Clerk id and an app id, `undefined` and `null`, a display name and a user
-id, a red suite and a caught mutation.
-
-The defence that keeps working: **ask what would be DIFFERENT if the code were
-wrong, and assert that.** Not the outcome you expect — the outcome that diverges.
+The defence is the same as §18b20's: enumerate what you allow, refuse the rest,
+and say out loud which value you refused.

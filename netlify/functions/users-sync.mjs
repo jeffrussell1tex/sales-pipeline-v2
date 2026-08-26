@@ -4,7 +4,9 @@
 // full org membership list and:
 //   • CREATES a users row for any Clerk member missing from the DB
 //   • UPDATES existing rows conservatively (safe defaults):
-//       - role: Clerk wins (it drives permissions)
+//       - role: Clerk publicMetadata wins (it drives permissions). Clerk's
+//         ORGANIZATION MEMBERSHIP role (org:admin / org:member) is NOT a
+//         fallback for it — see the note at the role resolution below.
 //       - name: refreshed from Clerk when Clerk has one
 //       - team / territory: fill blanks only — never overwrite an in-app edit
 //       - quota, profile prefs, and all other DB-only fields: left untouched
@@ -17,8 +19,8 @@
 import { db } from '../../db/index.js';
 import { users, auditLog } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { verifyAuth, requireRole } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { verifyAuth, requireRole, isAppRole } from './auth.mjs';
+import { serverErrorBody, invalidateRoster } from './_lib.mjs';
 import { randomUUID } from 'crypto';
 
 const newUserId = () => 'usr_' + randomUUID();
@@ -85,7 +87,7 @@ export const handler = async (event) => {
         // drift is visible rather than discovered by chance.
         const dryRun = (event.queryStringParameters || {}).check === 'true';
 
-        const summary = { created: [], updated: [], unchanged: [], skipped: [], nameDrift: [], dryRun };
+        const summary = { created: [], updated: [], unchanged: [], skipped: [], nameDrift: [], roleDrift: [], dryRun };
         const clerkEmails = new Set();
 
         for (let i = 0; i < detail.length; i++) {
@@ -102,7 +104,36 @@ export const handler = async (event) => {
             clerkEmails.add(email);
 
             const name = [cu.firstName, cu.lastName].filter(Boolean).join(' ') || email.split('@')[0];
-            const role = cu.publicMetadata?.role || member.role?.replace('org:', '') || 'User';
+            // ROLE. Clerk carries TWO different things called a role and this line
+            // used to fall through from one to the other:
+            //
+            //   publicMetadata.role   Accelerep's role   Admin | Manager | User | ReadOnly | Technician
+            //   member.role           Clerk ORG role     org:admin | org:member
+            //
+            // The second governs who may administer the Clerk organization. It says
+            // nothing about what anyone may do in this application, and stripping
+            // `org:` off it produced `admin` and `member` — which is where the
+            // lowercase badges in the Users list came from, and why the seat counter
+            // read Admins 0 with an admin on screen (the comparison is, correctly,
+            // case-sensitive; the VALUE was wrong).
+            //
+            // A member with no Accelerep role in Clerk is a REP, because that is what
+            // auth.mjs decides on every request (`meta.role || 'User'`). The mirror
+            // now says the same thing instead of inventing a third answer. The
+            // divergence is REPORTED — same treatment as nameDrift below — so an
+            // Admin can see who needs a role set rather than discovering it from a
+            // badge that was never true.
+            const rawRole = cu.publicMetadata?.role;
+            const role = isAppRole(rawRole) ? rawRole : 'User';
+            if (!isAppRole(rawRole)) {
+                summary.roleDrift.push({
+                    email,
+                    clerkRole:   rawRole ?? null,
+                    clerkOrgRole: member?.role ?? null,
+                    appliedRole: role,
+                    reason: rawRole ? 'not an Accelerep role' : 'no Accelerep role set in Clerk',
+                });
+            }
             const team = cu.publicMetadata?.team ?? null;
             const territory = cu.publicMetadata?.territory ?? null;
 
@@ -174,6 +205,12 @@ export const handler = async (event) => {
             summary.updated.push({ email, changed: Object.keys(patch).filter((k) => k !== 'updatedAt') });
         }
 
+        // 3b. The roster cache in _lib.mjs is 30s and keyed by org. This endpoint
+        //     creates rows and renames nothing else does, so a sync followed
+        //     immediately by an assignment could resolve against the pre-sync
+        //     roster and stamp NULL — an unassigned record, editable org-wide.
+        if (!dryRun && (summary.created.length || summary.updated.length)) invalidateRoster(orgId);
+
         // 4. Report DB rows not present in Clerk — never auto-remove. A row that
         //    is linked by clerkUserId counts as present even if its stored email
         //    is stale, which is the case email-only matching got wrong.
@@ -211,12 +248,14 @@ export const handler = async (event) => {
                     unchanged:    summary.unchanged.length,
                     skipped:      summary.skipped.length,
                     nameDrift:    summary.nameDrift.length,
+                    roleDrift:    summary.roleDrift.length,
                     dbOnly:       dbOnly.length,
                 },
                 created:   summary.created,
                 updated:   summary.updated,
                 skipped:   summary.skipped,
                 nameDrift: summary.nameDrift,  // reported, never applied — see the note above
+                roleDrift: summary.roleDrift,  // members with no (or an unknown) Accelerep role — treated as Sales Rep
                 dbOnly,    // rows in Accelerep not found in Clerk — review manually
             }),
         };

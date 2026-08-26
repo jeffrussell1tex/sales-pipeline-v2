@@ -5,10 +5,14 @@ import { dbFetch, dbWrite } from '../../../utils/storage';
 import { T, eb } from '../shared/tokens.js';
 import { RToggle, RCheck, UserAvatar } from '../shared/ui.jsx';
 
-// Role values must match what auth.mjs checks. 'User' is the stored value for a
-// sales rep; "Sales Rep" is a display label only. Two lists previously disagreed
-// ('Sales Rep' vs 'User') and the mismatch went unnoticed because auth.mjs treats
-// any unrecognised role as a rep — it failed open.
+// THE ROLE VALUES. These five must match auth.mjs APP_ROLES exactly; the server
+// refuses anything else on every write path, so a value invented here now fails
+// loudly instead of quietly becoming a role no gate recognises.
+//
+// 'User' is the STORED value for a sales rep and "Sales Rep" is only its label.
+// Confusing the two is the recurring bug in this file: the invite rows below were
+// seeded with the label, so an untouched row invited someone as 'Sales Rep' —
+// which auth.mjs did not recognise, and used to wave through as a rep anyway.
 const ROLE_OPTIONS = [
     { value: 'Admin',      label: 'Admin' },
     { value: 'Manager',    label: 'Manager' },
@@ -16,19 +20,50 @@ const ROLE_OPTIONS = [
     { value: 'Technician', label: 'Technician' },
     { value: 'ReadOnly',   label: 'Read only' },
 ];
+const ROLE_LABEL = ROLE_OPTIONS.reduce((m, o) => { m[o.value] = o.label; return m; }, {});
+// A role we do not know is rendered AS ITSELF, never translated and never hidden.
+// Legacy rows still hold `member`, `admin` and `Sales Rep`; showing the raw string
+// is what makes them findable.
+const roleLabel = (role) => ROLE_LABEL[role] || role || '\u2014';
+const isKnownRole = (role) => Object.prototype.hasOwnProperty.call(ROLE_LABEL, role);
 
+// A <select> whose value matches none of its options does not render empty — the
+// browser falls back to the FIRST option, so a user stored as `member` displayed
+// as "Admin" with nothing on screen indicating otherwise. One click on the
+// dropdown then submitted that as a deliberate choice.
+//
+// This renders an explicit, disabled option carrying the real value, so the
+// control shows what is actually stored and selecting a real role is an act.
+const RoleSelect = ({ value, onChange, style, disabled }) => (
+    <select style={style} value={value || ''} onChange={onChange} disabled={disabled}>
+        {!isKnownRole(value) && (
+            <option value={value || ''} disabled>
+                {value ? `${value} \u2014 not an Accelerep role` : '\u2014 select a role \u2014'}
+            </option>
+        )}
+        {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+);
+
+// Colours key on the STORED values. The previous map keyed on labels that this
+// application never stores ('Sales Manager', 'CS', 'Finance'), so every role
+// except Admin fell through to the grey default — which is why four different
+// roles rendered as the same badge.
 const RolePill = ({ role }) => {
     const map = {
-        'Admin':         { bg:'rgba(42,38,34,0.85)',  fg:'#fbf8f3' },
-        'Sales Manager': { bg:'rgba(58,90,122,0.14)', fg:'#3a5a7a' },
-        'Sales Rep':     { bg:'rgba(77,107,61,0.12)', fg:'#4d6b3d' },
-        'CS':            { bg:'rgba(94,78,122,0.12)', fg:'#5e4e7a' },
-        'Finance':       { bg:'rgba(184,115,51,0.12)',fg:'#b87333' },
+        'Admin':      { bg:'rgba(42,38,34,0.85)',  fg:'#fbf8f3' },
+        'Manager':    { bg:'rgba(58,90,122,0.14)', fg:'#3a5a7a' },
+        'User':       { bg:'rgba(77,107,61,0.12)', fg:'#4d6b3d' },
+        'Technician': { bg:'rgba(94,78,122,0.12)', fg:'#5e4e7a' },
+        'ReadOnly':   { bg:'rgba(184,115,51,0.12)',fg:'#b87333' },
     };
-    const c = map[role] || { bg:'rgba(138,131,120,0.14)', fg:'#5a544c' };
+    const known = map[role];
+    const c = known || { bg:'rgba(156,58,46,0.10)', fg:'#9c3a2e' };
     return (
-        <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:3, fontSize:11.5, fontWeight:700, background:c.bg, color:c.fg, fontFamily:T.sans, letterSpacing:0.1, whiteSpace:'nowrap' }}>
-            {role}
+        <span
+            title={known ? undefined : `"${role}" is not an Accelerep role. This user is treated as a Sales Rep until an Admin sets one.`}
+            style={{ display:'inline-block', padding:'2px 8px', borderRadius:3, fontSize:11.5, fontWeight:700, background:c.bg, color:c.fg, fontFamily:T.sans, letterSpacing:0.1, whiteSpace:'nowrap' }}>
+            {roleLabel(role)}
         </span>
     );
 };
@@ -89,9 +124,12 @@ const SectionCard = ({ title, description, headAction, children }) => (
 const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     const { setSettings } = useApp();
     const [rows, setRows] = useState([
-        { id:1, email:'', role:'Sales Rep', team:'', manager:'', territory:'', valid:true, error:'' },
+        { id:1, email:'', role:'User', team:'', manager:'', territory:'', valid:true, error:'' },
     ]);
-    const [defaultRole, setDefaultRole] = useState('Sales Rep');
+    // 'User', not 'Sales Rep'. This held the display label, so every invite row the
+    // admin did not touch was sent with a role the server does not recognise — and
+    // because the label matched no <option>, the select displayed "Admin".
+    const [defaultRole, setDefaultRole] = useState('User');
     const [expiry, setExpiry] = useState('7 days');
     const [requireMfa, setRequireMfa] = useState(true);
     const [note, setNote] = useState('Welcome to the team! Click below to set up your password — should take under 5 minutes.');
@@ -173,9 +211,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                                     <div>
                                         <input style={{ ...inp, borderColor: r.error ? T.danger : T.border }} value={r.email} onChange={e=>updateRow(r.id,'email',e.target.value)} placeholder="user@company.com" type="email"/>
                                     </div>
-                                    <select style={sel} value={r.role} onChange={e=>updateRow(r.id,'role',e.target.value)}>
-                                        {ROLE_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                                    </select>
+                                    <RoleSelect style={sel} value={r.role} onChange={e=>updateRow(r.id,'role',e.target.value)} />
                                     <select style={sel} value={r.team} onChange={e=>updateRow(r.id,'team',e.target.value)}>
                                         <option value="">— choose —</option>
                                         {allTeams.map(t=><option key={t}>{t}</option>)}
@@ -196,9 +232,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                             <div>
                                 <div style={{ ...eb(T.inkMuted), marginBottom:5 }}>Default role</div>
-                                <select style={sel} value={defaultRole} onChange={e=>setDefaultRole(e.target.value)}>
-                                    {ROLE_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
+                                <RoleSelect style={sel} value={defaultRole} onChange={e=>setDefaultRole(e.target.value)} />
                                 <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:3 }}>Used for rows that don't specify one.</div>
                             </div>
                             <div>
@@ -372,7 +406,7 @@ const UsersExportPage = ({ settings, onBack, onUsers }) => {
         const m = {}; fieldGroups.forEach(g => g.items.forEach(([k,v]) => { m[k] = v; })); return m;
     });
 
-    const filteredUsers = users.filter(u => statusFilter === 'All' || u.userType === statusFilter || u.role === statusFilter);
+    const filteredUsers = users.filter(u => statusFilter === 'All' || u.role === statusFilter);
     const checkedFields = Object.entries(checked).filter(([,v])=>v).map(([k])=>k);
 
     const handleExport = () => {
@@ -383,7 +417,7 @@ const UsersExportPage = ({ settings, onBack, onUsers }) => {
             const rows = filteredUsers.map(u => checkedFields.map(f => {
                 if (f === 'Name') return `"${u.name||''}"`;
                 if (f === 'Email') return `"${u.email||''}"`;
-                if (f === 'Role') return `"${u.userType||u.role||''}"`;
+                if (f === 'Role') return `"${u.role||''}"`;
                 if (f === 'Team') return `"${u.team||''}"`;
                 if (f === 'Manager') return `"${u.manager||''}"`;
                 if (f === 'Territory') return `"${u.territory||''}"`;
@@ -466,7 +500,7 @@ const UsersExportPage = ({ settings, onBack, onUsers }) => {
                             {filteredUsers.slice(0,1).map(u => checkedFields.map(f => {
                                 if (f==='Name') return `"${u.name||''}"`;
                                 if (f==='Email') return `"${u.email||''}"`;
-                                if (f==='Role') return `"${u.userType||''}"`;
+                                if (f==='Role') return `"${u.role||''}"`;
                                 return '""';
                             }).join(', '))}
                         </div>
@@ -495,7 +529,7 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
         return () => document.removeEventListener('click', handler);
     }, [openPendingKebab]);
 
-    const basePending = pendingUsers.map((u,i) => ({ id:u.id||i, name:u.name, email:u.email||'', role:u.userType||'Sales Rep', team:u.team||'—', invitedBy:'—', sent:'Recently', opened:false, expires:'in 7d' }));
+    const basePending = pendingUsers.map((u,i) => ({ id:u.id||i, name:u.name, email:u.email||'', role:u.role||'User', team:u.team||'—', invitedBy:'—', sent:'Recently', opened:false, expires:'in 7d' }));
 
     const displayPending = localPending !== null ? localPending : basePending;
 
@@ -623,11 +657,19 @@ const UsersSeatPage = ({ settings, onBack, onUsers }) => {
     const used = activeUsers.length;
     const pct = used / cap;
 
+    // Counted off `role` (the users.role column), not `userType` (a copy in the
+    // profile blob that no role change ever updated). The counts were reading the
+    // stale copy, which is why this panel could show Admins 0 with an Admin on the
+    // screen above it. `Unrecognised` is deliberately visible rather than dropped:
+    // those users are treated as reps by the server and someone has to know.
+    const countRole = (v) => activeUsers.filter(u => u.role === v).length;
     const breakdown = [
-        { role:'Admin',         count: activeUsers.filter(u=>u.userType==='Admin').length,    color:'#6b2a22' },
-        { role:'Manager',       count: activeUsers.filter(u=>u.userType==='Manager').length,  color:'#b87333' },
-        { role:'Sales Rep',     count: activeUsers.filter(u=>u.userType==='User').length,     color:'#4d6b3d' },
-        { role:'ReadOnly',      count: activeUsers.filter(u=>u.userType==='ReadOnly').length, color:'#3a5a7a' },
+        { role:'Admin',         count: countRole('Admin'),      color:'#6b2a22' },
+        { role:'Manager',       count: countRole('Manager'),    color:'#b87333' },
+        { role:'Sales Rep',     count: countRole('User'),       color:'#4d6b3d' },
+        { role:'Technician',    count: countRole('Technician'), color:'#5e4e7a' },
+        { role:'ReadOnly',      count: countRole('ReadOnly'),   color:'#3a5a7a' },
+        { role:'Unrecognised',  count: activeUsers.filter(u => !isKnownRole(u.role)).length, color:'#9c3a2e' },
     ].filter(b => b.count > 0);
 
     const allTeams = [...new Set(activeUsers.map(u => u.team).filter(Boolean))].sort();
@@ -866,11 +908,19 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
             // A role change must go to CLERK, not just the users mirror: auth.mjs
             // derives permissions from Clerk publicMetadata on every request, so
             // writing only the DB row changes nothing the server enforces.
-            const priorRole = user.userType || user.role || 'User';
-            if ((form.userType || 'User') !== priorRole) {
+            // `role`, not `userType`: the latter is a stale copy in the profile blob.
+            // Comparing against it meant the "did the role change?" test was asking
+            // about a field nothing maintained.
+            //
+            // `targetUserId` is the APP id (usr_...). user-role.mjs resolves the Clerk
+            // identity from the roster row itself — it used to take this value and
+            // hand it straight to the Clerk API, which stopped working the moment
+            // users.id stopped being the Clerk id.
+            const priorRole = user.role || 'User';
+            if (form.role && form.role !== priorRole) {
                 const rr = await dbFetch('/.netlify/functions/user-role', {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ targetUserId: user.id, role: form.userType || 'User' }),
+                    body: JSON.stringify({ targetUserId: user.id, role: form.role }),
                 });
                 const rd = await rr.json().catch(() => ({}));
                 if (!rr.ok) throw new Error(rd.error || 'Could not change the role.');
@@ -961,8 +1011,15 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
         'Manager':  { Leads:'Team',     Accounts:'Team',     Opportunities:'Team',     Quotes:'Own + approve', Reports:'Team', Settings:'No access' },
         'User':     { Leads:'Own only', Accounts:'Own only', Opportunities:'Own only', Quotes:'Own + create',  Reports:'Own',  Settings:'No access' },
         'ReadOnly': { Leads:'View only',Accounts:'View only',Opportunities:'View only',Quotes:'View only',     Reports:'View', Settings:'No access' },
+        // Technician was missing entirely, so a Technician's summary silently
+        // rendered the Sales Rep row — describing CRM write access they do not have.
+        'Technician':{Leads:'No access',Accounts:'No access',Opportunities:'No access',Quotes:'No access',    Reports:'No access', Settings:'No access' },
     };
-    const perms = permMap[form.userType] || permMap['User'];
+    // An unknown role falls back to the rep row because that is what the SERVER
+    // does with it (auth.mjs treats an absent role as 'User' and refuses an
+    // unrecognised one outright). The summary must not describe permissions the
+    // user does not have.
+    const perms = permMap[form.role] || permMap['User'];
 
     const statusColor = (role) => {
         const ok = ['All','Team','Own only','Own + approve','Own + create'];
@@ -982,7 +1039,7 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
                     <div>
                         <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>{user.name}</div>
                         <div style={{ fontSize:13, color:T.inkMid, marginTop:2 }}>
-                            {user.userType || 'Sales Rep'} · {user.team || '—'} · reports to {user.manager || '—'}
+                            {roleLabel(user.role)} · {user.team || '—'} · reports to {user.manager || '—'}
                             <span style={{ marginLeft:10, display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', background:'rgba(77,107,61,0.10)', color:T.ok, borderRadius:T.r, fontSize:11, fontWeight:700 }}>● Active</span>
                         </div>
                     </div>
@@ -1033,9 +1090,7 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:16 }}>
                             <div>
                                 <label style={lbl}>Role</label>
-                                <select style={sel} value={form.userType||'User'} onChange={e=>handleChange('userType',e.target.value)}>
-                                    {ROLE_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
+                                <RoleSelect style={sel} value={form.role} onChange={e=>handleChange('role',e.target.value)} />
                                 <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:3 }}>
                                     Determines base permission set. Technicians see only their own assigned jobs.
                                 </div>
@@ -1257,7 +1312,7 @@ export const UsersDetail = ({ settings, onBack }) => {
             id: u.id || u.name,
             name: u.name,
             email: u.email || '',
-            role: u.userType || 'User',
+            role: u.role || 'User',
             team: u.team || null,
             manager: u.manager || null,
             lastActive: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
@@ -1271,7 +1326,7 @@ export const UsersDetail = ({ settings, onBack }) => {
         id: u.id,
         name: u.name,
         email: u.email || '',
-        role: u.userType || 'User',
+        role: u.role || 'User',
         team: u.team || null,
         manager: null,
         lastActive: '—',
@@ -1513,10 +1568,14 @@ export const UsersDetail = ({ settings, onBack }) => {
                     const seatPct      = Math.round((activeCount / cap) * 100);
                     const seatColor    = seatPct >= 90 ? T.danger : seatPct >= 75 ? T.warn : T.ok;
 
-                    // Role breakdown from real userType field
-                    const repCount     = displayUsers.filter(u => u.status==='Active' && (u.role==='User'     || u.role==='Sales Rep')).length;
-                    const mgrCount     = displayUsers.filter(u => u.status==='Active' && (u.role==='Manager'  || u.role==='Sales Manager')).length;
-                    const adminCount   = displayUsers.filter(u => u.status==='Active' && (u.role==='Admin')).length;
+                    // Role breakdown from users.role — the column, not the profile copy.
+                    // Single values, no label aliases. The `|| 'Sales Rep'` and
+                    // `|| 'Sales Manager'` arms were counting display labels that this
+                    // app never stores, which hid the fact that the field being counted
+                    // was the stale profile copy rather than the role column.
+                    const repCount     = displayUsers.filter(u => u.status==='Active' && u.role==='User').length;
+                    const mgrCount     = displayUsers.filter(u => u.status==='Active' && u.role==='Manager').length;
+                    const adminCount   = displayUsers.filter(u => u.status==='Active' && u.role==='Admin').length;
                     const pendingCount = invitedCount.length;
 
                     // MFA — real users: derived from smsNotifications.enabled as proxy;

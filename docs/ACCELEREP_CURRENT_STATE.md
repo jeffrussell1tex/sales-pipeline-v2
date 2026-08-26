@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** August 26, 2026 (second batch)  
-**Verified at:** all six gates green · **261 tests** · **26 integration tests** · **73/73 mutations caught, ON A VERIFIED GREEN BASELINE** · **migration applied** · **rep path verified in the browser as a rep, not an Admin** · all 66 functions bundle under esbuild  
-**Batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
+**Updated:** August 26, 2026 (third batch)  
+**Verified at:** all six gates green · **275 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · **migration applied** · **rep path verified in the browser as a rep, not an Admin** · all 66 functions bundle under esbuild  
+**Batch:** **the role vocabulary was eight lists and only one was enforced** · **`requireWrite` was a BLOCKLIST** — it denied exactly `ReadOnly` and `Technician` by string and permitted every other value, so `readonly`, `Sales Rep` or any typo carried full write access to ~28 endpoints · **role changes had been impossible since the Phase 1 identity split**: `user-role.mjs` used one parameter in two identity spaces, so the UI's app id 404'd at Clerk and a Clerk id would have matched zero mirror rows silently · **the Users UI read a role copy frozen in the profile blob** — `flatten()` spread it last, and nothing ever updated it, which is the whole of §0.40's symptom · the invite screen seeded rows with the display LABEL `'Sales Rep'` and wrote it into Clerk · three role `<select>`s presented **Admin** for any unrecognised value, making a one-click escalation out of a display bug · 261 → 275 tests, 73 → **80** mutations · guide **§18b24**
+**Prior batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
 **Prior batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
 **Prior batch:** **the delete gate RAN and passed — first time in four sessions** · **the leads CSV import had never written a single row** (client sent an array, endpoint had no array branch, 400 every time, error rendered on a step the user never sees) · **two ownership columns that do not exist** — `contacts.createdBy` and `activities.repName` — producing four hard 500s on rep paths and one SILENT ORG-WIDE WRITE BYPASS · **object-level authorization centralised** into `_ownership.mjs` with a registry checked against the real schema by `npm test` — the guard found the second bad column on its first run · **the integration suite had been dead at import** since `requireWrite` landed, so every cross-tenant isolation test including the post-wipe `clear=true` guard was dormant · **the test database schema had drifted** and `drizzle-kit push` had never been run against it · **`currentUser` comes from Clerk and disagrees with `users.name`**, so a rep with no Clerk profile name is identified by EMAIL and sees only unowned records · `GET /users` was Admin-only, so every user picker rendered empty for reps · **child promotion runs BEFORE the Admin gate — CONFIRMED: a refused delete still orphans every sub-account, permanently, with no audit record** · 232 → 244 tests, 0 → **26** integration tests (this line read `0 → 21` until 25 Aug; it was written before the five accounts child-promotion tests landed and never updated — §0.24's own text says 26)
 **Prior batch:** **seven defects, four of them in code written this session; every one of those four found by running the app, not by a gate** · delete was never gated and never audited on any entity · import stage clock · **the CSV overwrite was still destroying data — server-side** (`sanitize()` is a builder, not a filter; the previous fix was caller-side and 18b13 said so) · **the importer now reports what the server said** — counts stopped travelling as prose · `saveBulk` threw from inside its own loop · **the opportunities overwrite bypassed chunking entirely and discarded every count the server returned** · overwrite state applied from `appliedIds` on **three** paths, not the two recorded · silent row drops surfaced at Preview · **the stage clock shipped in §0.17 wiped the rows it did not touch** — a deal lost its clock AND its whole stage history because a DIFFERENT deal in the same file moved · **`37/37 mutations` was never reproducible** — CRLF vs `\n` anchors meant 8 of them had never run · Home showed the wrong fiscal quarter · `toISOString` was building local dates in 29 places · **89 → 232 tests, 0 → 50 mutations**
@@ -18,7 +19,101 @@
 
 ---
 
-## 0. Latest Batch — Ownership Keys On Ids, And Three Guards That Were Not Guarding
+## 0. Latest Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
+
+> Five roles. Eight lists. One of them enforced. The other seven disagreed with it
+> and with each other, and the disagreements were load-bearing.
+
+### 0.41 What shipped
+
+- **`APP_ROLES` + `isAppRole()` in `auth.mjs`** — frozen, exported, and the only
+  enumeration. `user-role.mjs`'s `VALID_ROLES` is gone; invite, admin create and
+  the `?me=true` link path all validate before a role reaches Clerk or the mirror.
+- **`requireWrite` is an allowlist.** `Admin | Manager | User`; `Technician` only
+  via the existing `allowTechnician` opt-in; everything else refused with a THIRD,
+  distinguishable message naming the value in the log.
+- **`user-role.mjs` uses one identity space per use.** `targetUserId` is the app
+  id, asserted with `isAppUserId`; the Clerk id is resolved from the roster row;
+  the self-demotion check compares in Clerk space; the mirror update counts rows
+  instead of trusting a `try` that a zero-row UPDATE never enters.
+- **`users-sync.mjs` no longer derives an app role from Clerk's ORG membership
+  role.** Unknown roles normalise to `User` and are reported as `roleDrift`,
+  exactly as `nameDrift` is reported rather than applied.
+- **`flatten()` spreads `profile` FIRST**, so `users.role` wins over the frozen
+  `profile.userType` copy. `userType` survives as an alias; both now resolve to
+  the column, and the blob self-heals on the next write of each row.
+- **`RoleSelect`** (module scope) renders an unmatched value as itself, disabled.
+  `RolePill` keys on stored values, with unknown roles in red and a tooltip.
+  `permMap` gains Technician. The seat breakdown counts the column and shows an
+  `Unrecognised` bucket.
+- **`invalidateRoster(orgId)` is called** — it was exported and had no callers —
+  at every `users` write, and it now drops the **caller** cache for that org too.
+  That second cache is the one with teeth: it caches a MISS as `{id: null}`, which
+  fails closed, so a freshly linked user owned nothing for up to 30s.
+- **`scripts/check-clerk-roles.mjs`** — read-only. Lists Clerk members holding a
+  role no gate recognises. Not verified against a live Clerk instance.
+
+### 0.42 Role changes had been impossible, and no gate could have said so
+
+`user-role.mjs` passed `targetUserId` to three Clerk calls **and** compared it to
+`users.id`. Before the Phase 1 identity split those were the same string. After it,
+neither input is correct for both uses:
+
+| what the client sends | Clerk calls | mirror update |
+|---|---|---|
+| `users.id` (what it actually sent) | 404 — "User not found." | never reached |
+| `clerkUserId` | fine | matches **zero rows, silently** |
+
+A drizzle UPDATE matching nothing does not throw, so the `try/catch` around it
+proved nothing. This is §18b22 inside a single function body, and the
+`ownership-registry` guard that forbids `eq(users.id, userId)` did not see it:
+**that guard reads the six entity endpoints as text, and this is not one of them.**
+
+### 0.43 The badge and the authorization were never the same field
+
+§0.40 hypothesised that `canSeeAll()` being case-sensitive meant a user the UI
+calls an admin has rep access. It labelled itself unverified, and the hypothesis
+does not hold: `canSeeAll` **is** case-sensitive, but it reads Clerk
+`publicMetadata.role`, and nothing wrote `admin`/`member` there — `users-sync`
+wrote them to the mirror's `profile.userType`, which is a different field in a
+different store that no gate reads.
+
+Nor does "saving that page writes `Admin` to a member" hold as written: the select
+is controlled, so the first option is only *displayed*, and `priorRole ===
+form.userType` short-circuits the role call. **But** the control was live and
+presented `Admin` as the current value, so opening it and clicking what looked
+correct sent a real change. That failed with the 404 above — which means fixing
+§0.42 alone would have ARMED a one-click escalation. Both are in this commit for
+that reason.
+
+### 0.44 Eight lists
+
+`auth.mjs` · `user-role.mjs` `VALID_ROLES` · Clerk org membership via
+`users-sync:105` · `RolePill`'s colour map (`Sales Manager`, `CS`, `Finance` —
+values this app has never stored, so four roles rendered identically grey) · the
+invite seeds (`'Sales Rep'`, the label) · `UserModal`'s options (no Technician) ·
+`permMap` (no Technician, so a Technician's summary showed a rep's permissions) ·
+the `schema.ts` comment.
+
+§0PP-e recorded the `'Sales Rep'` vs `'User'` mismatch as fixed once already. It
+was live again on the creation path, which is the argument for one exported list
+rather than seven corrected copies.
+
+### 0.45 Also found, not fixed here
+
+- **`UserModal`'s role select did nothing on edit.** `users.mjs` PUT deliberately
+  preserves the stored role, so the control accepted a choice and discarded it.
+  Now disabled on edit with a pointer to Settings → People & Teams; wiring it to
+  `user-role.mjs` properly is a separate decision.
+- **`sanitize()` still writes `profile.userType` from the request body.** Harmless
+  now that `flatten()` prefers the column, and it is what lets the blob self-heal,
+  but it is still a second stored answer to a question with one.
+- **No live users, all test data** (confirmed 26 Aug), so the `requireWrite`
+  inversion needed no migration — but test accounts invited with `'Sales Rep'`
+  will 403 on writes until their role is reset. `check-clerk-roles.mjs` names them.
+
+---
+## 0PA0. Prior Batch — Ownership Keys On Ids, And Three Guards That Were Not Guarding
 
 > Phase 2 proper. `ownerId` on the six Tier 1 tables, the server stamps it on
 > create, and `_ownership.mjs` compares ids. **A display name can no longer confer
@@ -3155,6 +3250,27 @@ Plus indexes `leads_org_id_bucket_idx (org_id, lead_score_bucket)` and `leads_or
 ---
 
 ## 7. Files Modified This Batch
+
+| File | What Changed |
+|---|---|
+| `netlify/functions/auth.mjs` | `APP_ROLES` + `isAppRole` (declared above `verifyAuth`). `requireWrite` inverted to an allowlist with a third, distinguishable refusal. `verifyAuth` warns, naming an unrecognised role. |
+| `netlify/functions/user-role.mjs` | `targetUserId` is the app id, asserted; Clerk id resolved from the roster row; self-demotion compared in Clerk space; mirror update returns and counts rows; `profile.userType` written alongside the column; `VALID_ROLES` removed. |
+| `netlify/functions/users-sync.mjs` | The `member.role.replace('org:','')` fallback removed. `roleDrift` added to the summary and the response. `invalidateRoster` after writes. |
+| `netlify/functions/users.mjs` | `flatten()` spreads `profile` first. Role validated on invite, single create and the `?me=true` link. `invalidateRoster` at every write site. |
+| `netlify/functions/_lib.mjs` | `invalidateRoster` also clears the caller cache for that org — the one that caches a MISS and fails closed. |
+| `src/Tabs/settings/people/UsersDetail.jsx` | `RoleSelect` + `roleLabel` + `isKnownRole` at module scope. `RolePill` re-keyed. Every `userType` read repointed to `role`. Invite seeds corrected. Seat breakdown counts the column, with an `Unrecognised` bucket. `permMap` gains Technician. |
+| `src/components/modals/UserModal.jsx` | `ROLE_OPTIONS` at module scope (Technician added). Unmatched values render as themselves. Select disabled on edit, with the reason. |
+| `tests/role-vocabulary.test.mjs` | **New.** 14 tests. The recognised roles are the control; the unrecognised ones carry the weight, because those are the cases that diverge (§18b22). Plus five source guards describing the CLASS — no second list, no org-role fallback, `flatten()` ordering, no raw role `<select>`, no label used as a seed. |
+| `scripts/mutate-import.mjs` | `tests/role-vocabulary.test.mjs` added to `SUITES` **and** seven mutations added — the two acts §18b21.3 is about. Each verified CAUGHT on a green baseline. |
+| `scripts/check-clerk-roles.mjs` | **New.** Read-only diagnostic; lists Clerk members whose role no gate recognises. Untested against a live instance. |
+
+---
+
+## 7Z0. Files Modified — Prior Batch (SPIFF, scanners, `bulkUpsert`)
+
+*(This table was headed "This Batch" for two batches after the work it describes.
+It documents neither the ownership-keys batch nor this one — recorded rather than
+quietly corrected, per §22.)*
 
 | File | What Changed |
 |---|---|

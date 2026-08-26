@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** August 26, 2026 · rules current through **§18b23**.
+**Updated:** August 26, 2026 · rules current through **§18b24**.
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -857,6 +857,20 @@ const isManager = userRole === 'Manager';
 const canSeeAll = isAdmin || isManager; // exposed on context
 ```
 
+**`APP_ROLES` in `auth.mjs` is the only list of role values.** Five strings,
+`Object.freeze`d, exported with `isAppRole()`. Every path that writes a role —
+invite, admin create, `user-role.mjs`, the Clerk sync — validates against it, and
+the client's `ROLE_OPTIONS` must mirror it exactly. There were **eight** lists
+before 26 Aug (§18b24); each one that is not this one will drift.
+
+**Clerk carries a second vocabulary and it is not this one.** `org:admin` /
+`org:member` are *organization membership* roles: they govern who administers the
+Clerk org, not what anyone may do in Accelerep. `users-sync.mjs` used to fall
+back to them, stripped of the `org:` prefix, which is where the `member` and
+`admin` badges in the Users list came from. A member with no `publicMetadata.role`
+is a **rep** — that is what `auth.mjs` decides — and the sync now says the same
+instead of inventing a third answer, reporting the divergence as `roleDrift`.
+
 ### Server-side enforcement (shipped — client-side `canEdit` is UX only, never security)
 
 | Action | Admin | Manager | Sales Rep | ReadOnly |
@@ -895,7 +909,7 @@ Before this existed, the Settings role selector wrote only the mirror and change
 | `PUT /settings` (org config) | ✅ | ❌ 403 | ❌ 403 | ❌ 403 |
 
 - Enforced in all six core entity endpoints (+ `users.mjs` clear is Admin-only; `quotes.mjs` had its own gates already).
-- **`requireWrite(auth, event, headers)` (`auth.mjs`) is the shared write gate.** ReadOnly is the only role with no write capability at all, so this encodes that half of the matrix once. Non-mutating methods pass through, so call it **once at the top of a handler**, not per branch — that also covers sub-resource branches (e.g. `dispatch-jobs?resource=lineitems`) that a per-branch gate would miss:
+- **`requireWrite(auth, event, headers)` (`auth.mjs`) is the shared write gate, and it is an ALLOWLIST.** `Admin | Manager | User` may write; `Technician` only through the single `allowTechnician` opt-in; **everything else is refused, loudly, including a value nobody recognises.** It read the other way until 26 Aug — denying exactly two strings and permitting all others — so `readonly`, `Read Only`, `technician`, `Sales Rep` or any typo carried full write access to ~28 endpoints (§18b24). Non-mutating methods pass through, so call it **once at the top of a handler**, not per branch — that also covers sub-resource branches (e.g. `dispatch-jobs?resource=lineitems`) that a per-branch gate would miss:
   ```js
   const forbidden = requireWrite(auth, event, headers);
   if (forbidden) return forbidden;
@@ -1181,7 +1195,7 @@ When data has to move between stores, prefer a **visible button in the UI** over
 
 ## 19. Deployment
 
-### Gates -- run all five
+### Gates -- run all six
 
 ```bash
 npm run check:tdz      # reads before declaration
@@ -1189,7 +1203,25 @@ npm run check:inline   # components declared inline, used as a JSX element type
 npm run check:dupes    # duplicate object keys / JSX attributes
 npm run check:dbfetch  # discarded Response / Response read as JSON (18b1, 18b3)
 npm run build          # vite build + the bundle guard (18b4)
+npm test               # unit suites INCLUDING the function-import graph (18b11)
 ```
+
+**`npm test` is load-bearing for the deploy, not just for correctness.**
+`tests/function-imports.test.mjs` resolves the import edges between Netlify
+functions, which nothing else in the gates job does — vite bundles `src/`, and
+esbuild bundles the functions at deploy time. A broken function import graph
+passes the other five and fails the Netlify build.
+
+Then, not in CI but before trusting a change to any guard:
+
+```bash
+npm run test:int                       # needs DATABASE_URL_TEST
+node scripts/mutate-import.mjs         # must print `Baseline: green.` first (18b23)
+```
+
+*(This section said "run all five" and omitted `npm test` entirely for two
+sessions after the sixth gate landed — recorded here rather than silently
+corrected, per §22.)*
 
 **Use `npm run build`, not `npx vite build`** -- the latter bypasses the bundle
 guard. `check:inline` should report **0 user-visible**.
@@ -2543,3 +2575,106 @@ does: **anything compared against `callerId` must end in `.ownerId`.**
 Note also why the write-path policy did not save it — visibility filters do their
 comparison in the endpoint and never reach `mayMutate()`. **Reads need their own
 guards.** A policy function protects only the callers that call it.
+
+---
+
+## 18b24. A Vocabulary Is A Schema (hard rule)
+
+Every rule from §18b20 through §18b23 is about two things that are not the same
+being compared as though they were: a Clerk id and an app id, `undefined` and
+`null`, a display name and a user id, a red suite and a caught mutation. This one
+is the same defect in a **string enum**, and it had eight instances at once.
+
+### 1. Count the lists before adding one
+
+Five roles. Eight enumerations of them, no two identical:
+
+| Where | Set |
+|---|---|
+| `auth.mjs` (the only enforced one) | `Admin · Manager · User · ReadOnly · Technician` |
+| `user-role.mjs` `VALID_ROLES` | the same five, separately maintained |
+| Clerk org membership → `users-sync:105` | `admin · member` |
+| `UsersDetail` `RolePill` colour map | `Admin · Sales Manager · Sales Rep · CS · Finance` |
+| `UsersDetail` invite seeds | `Sales Rep` |
+| `UserModal` `<option>`s | four — **no Technician** |
+| `UserProfilePage` `permMap` | four — no Technician |
+| `schema.ts` comment | four |
+
+Only the first was enforced. The colour map keyed on labels this app never
+stores, so four roles rendered as the same grey badge. `permMap` fell back to the
+rep row for a Technician, describing write access they do not have.
+
+**One frozen list, exported, imported by every writer and every renderer.** A
+copy that agrees today is edited by someone else tomorrow — the same argument
+§18b19 makes for the ownership registry, and `VALID_ROLES` was already a live
+counter-example when that rule was written.
+
+### 2. A gate that DENIES named values permits everything you did not name
+
+```js
+// WRONG -- a blocklist
+if (isReadOnly(role))   return forbidden;
+if (isTechnician(role)) return forbidden;
+return null;                                  // 'readonly' lands here. So does 'Sales Rep'.
+
+// RIGHT -- an allowlist
+if (WRITE_ROLES.includes(role)) return null;
+return forbidden;                             // and say WHICH value, in the log
+```
+
+This is §18b20.2 ("absence must be an error or a refusal — never a permission")
+applied to a string rather than to `null`. The failure is quieter here, because a
+role string is never absent — it is merely *unrecognised*, which reads like a
+value and behaves like a wildcard.
+
+The invite screen was seeding its rows with `'Sales Rep'` — the display LABEL for
+`'User'` — and `users.mjs` wrote it straight into Clerk `publicMetadata`. So the
+wildcard was not hypothetical: it was being minted by the UI, on the default path,
+and §0PP-e had already recorded this exact `'Sales Rep'` vs `'User'` mismatch as
+fixed once.
+
+### 3. A `<select>` with an unmatched value is an input, not a display bug
+
+§16 has said since well before this batch that *a `<select>` with an unmatched
+value silently shows the first option*. It was true, it was written down, and it
+shipped anyway — in three places — because the rule had no guard.
+
+The reason it is not cosmetic: the first option in every one of these lists is
+**Admin**. A user stored as `member` therefore presented as an Admin, and the
+control was live, so opening the dropdown and clicking what looked like the
+current value submitted a real role change. The display bug and the escalation
+are the same line of code.
+
+**Render an unmatched value as itself, disabled.** Never let the browser choose a
+value on the user's behalf, and never translate a value you do not recognise —
+showing the raw `member` string is what makes the drift findable.
+
+### 4. Two fields answering one question: the column wins
+
+`users.role` (the column) and `profile.userType` (a copy inside the jsonb blob)
+both travelled to the client on every response. `flatten()` spread the blob LAST,
+so the copy silently won — and **nothing ever updated the copy**: not a role
+change, not a Clerk sync. It was frozen at row creation.
+
+The entire Users UI read the frozen copy: badges, both seat counters, the profile
+header, the permissions summary, the role select. That is the whole of §0.40's
+symptom, and it was a spread order.
+
+**Where two fields hold one fact, the response must resolve them, and the
+authoritative one must be last in the object literal.** Better still, do not ship
+both — but if an alias must stay for compatibility, make it an alias in code
+rather than a second stored value that can disagree.
+
+### 5. What was NOT true
+
+Recorded because a session spent effort on it. §0.40 hypothesised that
+`canSeeAll()` being case-sensitive meant *a user the UI calls an admin has rep
+access*. `canSeeAll` **is** case-sensitive — but it reads Clerk
+`publicMetadata.role`, and nothing wrote `admin`/`member` to Clerk; the sync wrote
+them to the **mirror** only. The badge and the authorization were reading
+different fields from different stores, which is why they disagreed.
+
+§0.40 labelled itself unverified and was right to. The lesson is not that the note
+was wrong — it is that **"these two disagree" almost never means one of them is
+miscomparing; it usually means they are not the same field.** Find the two
+sources before theorising about the comparison.

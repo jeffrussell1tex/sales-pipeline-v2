@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -434,6 +434,46 @@ const mutations = [
         'src/utils/importReceipt.js',
         "if (/[^aeiou]y$/i.test(one)) return `${one.slice(0, -1)}ies`;   // opportunity -> opportunities",
         '/* naive */'],
+    // ── Role vocabulary ─────────────────────────────────────────────────────
+    // The gate here was a BLOCKLIST: it denied 'ReadOnly' and 'Technician' by exact
+    // string and permitted everything else, so every unrecognised value carried full
+    // write access to ~28 endpoints. The first mutation is the one that matters --
+    // it restores that, and the suite must notice.
+
+    ['role: requireWrite reverts to a BLOCKLIST (any unknown role writes)',
+        'netlify/functions/auth.mjs',
+        '    if (WRITE_ROLES.includes(auth?.userRole)) return null;\n    if (isTechnician(auth?.userRole) && opts.allowTechnician) return null;',
+        '    if (isTechnician(auth?.userRole) && opts.allowTechnician) return null;'],
+
+    ['role: isAppRole accepts anything, so no writer validates',
+        'netlify/functions/auth.mjs',
+        'export const isAppRole = (role) => APP_ROLES.includes(role);',
+        'export const isAppRole = (role) => true;'],
+
+    ['role: the unrecognised refusal reuses the read-only message (three problems, one report)',
+        'netlify/functions/auth.mjs',
+        "body: JSON.stringify({ error: 'Forbidden: unrecognised role. Ask an administrator to reset your role.' }),",
+        "body: JSON.stringify({ error: 'Forbidden: read-only role' }),"],
+
+    ['role: users-sync falls back to the Clerk ORG membership role again',
+        'netlify/functions/users-sync.mjs',
+        "            const rawRole = cu.publicMetadata?.role;\n            const role = isAppRole(rawRole) ? rawRole : 'User';",
+        "            const rawRole = cu.publicMetadata?.role;\n            const role = cu.publicMetadata?.role || member.role?.replace('org:', '') || 'User';"],
+
+    ['role: flatten() spreads the profile blob last, so userType overrides the column',
+        'netlify/functions/users.mjs',
+        '    const flatten = (row) => ({\n        ...(row.profile || {}),\n        id:            row.id,',
+        '    const flatten = (row) => ({\n        id:            row.id,'],
+
+    ['role: the invite rows are seeded with the display label again',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "{ id:1, email:'', role:'User', team:'', manager:'', territory:'', valid:true, error:'' },",
+        "{ id:1, email:'', role:'Sales Rep', team:'', manager:'', territory:'', valid:true, error:'' },"],
+
+    ['role: the role select drops its unmatched-value option (member displays as Admin)',
+        'src/components/modals/UserModal.jsx',
+        "                                    {!KNOWN_ROLES.includes(formData.userType || 'User') && (",
+        '                                    {false && ('],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

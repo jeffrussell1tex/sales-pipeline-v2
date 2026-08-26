@@ -1,9 +1,9 @@
 import { db } from '../../db/index.js';
 import { users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth, requireRole } from './auth.mjs';
+import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
-import { serverErrorBody, resolveCaller } from './_lib.mjs';
+import { serverErrorBody, resolveCaller, invalidateRoster } from './_lib.mjs';
 import { randomUUID } from 'crypto';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
@@ -134,7 +134,30 @@ export const handler = async (event) => {
         return row?.role || null;
     };
 
+    // THE PROFILE BLOB IS SPREAD FIRST, and the order is the whole point.
+    //
+    // It used to be spread LAST, and `profile` carries its own `userType` key, so
+    // the blob silently overrode the column on every response. Two answers to one
+    // question shipped to the client on every load:
+    //
+    //   role      users.role          maintained by user-role.mjs and the Clerk sync
+    //   userType  profile.userType    written once at row creation and never again
+    //
+    // Nothing updated the blob copy — not a role change, not a sync — so it was
+    // frozen at whatever the row was created with, and the ENTIRE Users UI read it:
+    // the badges, both seat counters, the profile header, the permissions summary
+    // and the role select. That is where `member` and `admin` were displayed from.
+    //
+    // `userType` is kept as an alias because UserModal and the export columns send
+    // and read it, but both fields now resolve to the column. The blob copy
+    // self-heals on the next write of each row: mergeForUpdate re-flattens the
+    // stored row, so sanitize() writes the column value back into profile.userType.
+    //
+    // `userType` is the ONLY key the two objects share — every other profile field
+    // is absent from the scalars above — so this reordering changes exactly one
+    // value and nothing else.
     const flatten = (row) => ({
+        ...(row.profile || {}),
         id:            row.id,
         clerkUserId:   row.clerkUserId || null,
         name:          row.name,
@@ -146,7 +169,6 @@ export const handler = async (event) => {
         territory:     row.territory,
         quota:         row.quota,
         active:        row.active,
-        ...(row.profile || {}),
     });
 
     // ── Partial-update merge (hard requirement) ──────────────────────────────
@@ -233,7 +255,13 @@ export const handler = async (event) => {
                 // has the same hazard and is Admin-triggered; this path fires
                 // for every user on every load and must not carry it.
                 if (row && !row.clerkUserId) {
-                    const realRole = clerkUser.publicMetadata?.role || row.role || 'User';
+                    // Validated, not copied. auth.mjs refuses a role it does not
+                    // recognise, so mirroring one here would only make the roster
+                    // agree with a value that authorizes nothing.
+                    const clerkRole = clerkUser.publicMetadata?.role;
+                    const realRole = isAppRole(clerkRole) ? clerkRole
+                                   : isAppRole(row.role)  ? row.role
+                                   : 'User';
                     try {
                         await db.update(users)
                             .set({
@@ -245,6 +273,11 @@ export const handler = async (event) => {
                             })
                             .where(and(eq(users.id, row.id), eq(users.orgId, orgId)));
                         row = { ...row, clerkUserId: userId, role: realRole, active: true };
+                        // The caller cache keys on clerkUserId and has just been proved
+                        // wrong by this very write: it holds a 30s 'no roster row' answer
+                        // for this identity, which fails CLOSED — the user would own
+                        // nothing for half a minute after their first load.
+                        invalidateRoster(orgId);
                         console.log(`users.mjs: linked roster row ${row.id} → clerk ${userId} (${clerkEmail})`);
                     } catch (linkErr) {
                         console.warn('users.mjs: link update failed:', linkErr.message);
@@ -297,6 +330,7 @@ export const handler = async (event) => {
                     .returning();
                 upsertResult = upd;
             }
+            invalidateRoster(orgId);
             return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(upsertResult) }) };
         } catch (err) {
             console.error('Users /me PUT error:', err.message);
@@ -358,6 +392,11 @@ export const handler = async (event) => {
         }
 
         // ── Upsert helper — returns the saved row, throws on email conflict ────
+        // Every create and update funnels through here, which makes it the one
+        // place the 30s roster cache in _lib.mjs has to be dropped. Without it,
+        // inviting a user and immediately assigning them a record resolves against
+        // the pre-write roster, finds no match, and stamps NULL — an UNASSIGNED
+        // record, which by policy is editable org-wide.
         const upsertUser = async (clean) => {
             const { id, ...updateData } = clean;
             try {
@@ -369,6 +408,7 @@ export const handler = async (event) => {
                         set: { ...updateData, updatedAt: new Date() },
                     })
                     .returning();
+                invalidateRoster(orgId);
                 return row;
             } catch (err) {
                 // Postgres unique_violation = code 23505
@@ -427,6 +467,18 @@ export const handler = async (event) => {
                 for (const invite of invites) {
                     const email = (invite.email || '').trim().toLowerCase();
                     if (!email) { errors.push({ email: '', error: 'Email required' }); continue; }
+
+                    // The invited role is written into Clerk publicMetadata below, and
+                    // auth.mjs reads that on every request for the life of the account.
+                    // An unvalidated value therefore persists as a role no gate knows:
+                    // the invite screen seeded its rows with 'Sales Rep' (the LABEL for
+                    // 'User'), so an untouched row created exactly that. Refuse the row
+                    // rather than coercing it — the caller chose a role and is entitled
+                    // to be told it was not one.
+                    if (invite.role !== undefined && invite.role !== null && !isAppRole(invite.role)) {
+                        errors.push({ email, error: `"${invite.role}" is not a valid role. Expected one of: ${APP_ROLES.join(', ')}.` });
+                        continue;
+                    }
 
                     try {
                         // 1. Revoke any existing pending invitation for this email so the
@@ -513,8 +565,12 @@ export const handler = async (event) => {
             // to be required, which pushed identity generation into the browser --
             // the client cannot know what is unique in this org, and any id it
             // invents is a guess.
+            const createRole = data.userType || data.role || 'User';
+            if (!isAppRole(createRole)) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: `"${createRole}" is not a valid role. Expected one of: ${APP_ROLES.join(', ')}.` }) };
+            }
             try {
-                const result = await upsertUser(withRole(sanitize({ ...data, id: data.id || newUserId() }), data.userType || data.role || 'User'));
+                const result = await upsertUser(withRole(sanitize({ ...data, id: data.id || newUserId() }), createRole));
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
                 }
@@ -563,6 +619,7 @@ export const handler = async (event) => {
                 const forbidden = requireRole(auth, ['Admin'], headers);
                 if (forbidden) return forbidden;
                 const deleted = await db.delete(users).where(eq(users.orgId, orgId)).returning({ id: users.id });
+                invalidateRoster(orgId);
                 await writeAudit(orgId, 'user.cleared', 'ALL', `All users (${deleted.length})`, userId, null);
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
             }
@@ -572,6 +629,7 @@ export const handler = async (event) => {
             }
             const [deletedRow] = await db.select().from(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
             await db.delete(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
+            invalidateRoster(orgId);
             await writeAudit(orgId, 'user.deleted', id, deletedRow?.name || id, userId, deletedRow?.name || id);
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

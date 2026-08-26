@@ -3,6 +3,18 @@ import { useApp } from '../../AppContext';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 
+// Must match auth.mjs APP_ROLES. Technician was missing from this list, so any
+// Technician opened in this modal displayed as "Admin" — a <select> whose value
+// matches no option falls back to the first one.
+const ROLE_OPTIONS = [
+    { value: 'Admin',      label: 'Admin \u2014 Full access, manage settings & users' },
+    { value: 'Manager',    label: 'Manager \u2014 View all data, edit & delete' },
+    { value: 'User',       label: 'Sales Rep \u2014 Own data only, create & edit' },
+    { value: 'Technician', label: 'Technician \u2014 Field jobs assigned to them only' },
+    { value: 'ReadOnly',   label: 'Read-Only \u2014 View only, no changes' },
+];
+const KNOWN_ROLES = ROLE_OPTIONS.map(o => o.value);
+
 export default function UserModal({ user, settings: settingsProp, onClose, onSave, errorMessage, onDismissError, saving }) {
     // Always use context settings to ensure territories/teams/verticals are current
     const { settings: contextSettings } = useApp();
@@ -15,6 +27,12 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         address: '', city: '', state: '', zip: '', country: '',
         homeAddress: '', notes: ''
     });
+    // On CREATE this select genuinely sets the new roster row's role. On EDIT it
+    // did nothing at all: users.mjs PUT deliberately preserves the stored role
+    // (roleOf) and never takes one from the body, because a role that changes here
+    // and not in Clerk changes nothing the server enforces. It rendered, it
+    // accepted a choice, and it discarded it silently — so on edit it now says so.
+    const isExistingUser = !!(user && user.id);
     const [activeUserTab, setActiveUserTab] = useState('primary');
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(650, 520, 440, 340);
@@ -135,12 +153,24 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                             </p>
                             <div className="form-group" style={{ marginBottom: 0 }}>
                                 <label>User Type / Role*</label>
-                                <select value={formData.userType || 'User'} onChange={e => setFormData(prev => ({ ...prev, userType: e.target.value }))} required>
-                                    <option value="Admin">Admin — Full access, manage settings &amp; users</option>
-                                    <option value="Manager">Manager — View all data, edit &amp; delete</option>
-                                    <option value="User">Sales Rep — Own data only, create &amp; edit</option>
-                                    <option value="ReadOnly">Read-Only — View only, no changes</option>
+                                <select value={formData.userType || 'User'} onChange={e => setFormData(prev => ({ ...prev, userType: e.target.value }))} disabled={isExistingUser} required>
+                                    {/* An unrecognised stored value is shown as itself. Without this the
+                                        control silently displays the first option instead, so a user
+                                        stored as `member` reads as "Admin". */}
+                                    {!KNOWN_ROLES.includes(formData.userType || 'User') && (
+                                        <option value={formData.userType} disabled>
+                                            {formData.userType} &mdash; not an Accelerep role
+                                        </option>
+                                    )}
+                                    {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                 </select>
+                                {isExistingUser && (
+                                    <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '0.375rem', lineHeight: 1.5 }}>
+                                        Roles are stored in Clerk, so changing one here would update the roster
+                                        without changing what the server enforces. Change it in
+                                        <strong> Settings &rarr; People &amp; Teams &rarr; {formData.name || 'this user'}</strong>.
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div style={{ padding: '0.875rem 1rem', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe', fontSize: '0.75rem', color: '#1e40af', lineHeight: 1.6 }}>

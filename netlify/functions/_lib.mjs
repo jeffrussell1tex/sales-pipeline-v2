@@ -178,9 +178,28 @@ async function orgRoster(orgId) {
     return rows;
 }
 
-/** Clears the roster cache. Call after any write to `users` in the same request. */
+/**
+ * Clears the cached views of the `users` table for one org. Call after ANY write
+ * to `users` in the same request.
+ *
+ * There are TWO caches over that table and both are 30s, so clearing one and not
+ * the other leaves half a stale answer:
+ *
+ *   rosterCache  orgId              name -> id resolution (resolveOwnerId)
+ *   callerCache  orgId::clerkUserId this caller's own id and name (resolveCaller)
+ *
+ * The caller cache is the one with teeth. It caches a MISS as `{id: null}`, and a
+ * null caller id fails CLOSED in mayMutate() — so a user whose roster row was
+ * created or linked moments ago owns nothing at all until the entry expires.
+ * Dropping both together is why this takes an orgId and not a user id.
+ */
 export function invalidateRoster(orgId) {
-    if (orgId) rosterCache.delete(orgId); else rosterCache.clear();
+    if (!orgId) { rosterCache.clear(); callerCache.clear(); return; }
+    rosterCache.delete(orgId);
+    const prefix = `${orgId}::`;
+    for (const key of callerCache.keys()) {
+        if (key.startsWith(prefix)) callerCache.delete(key);
+    }
 }
 
 export async function resolveOwnerId(name, orgId) {

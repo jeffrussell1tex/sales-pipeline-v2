@@ -1,5 +1,21 @@
 import { verifyToken, createClerkClient } from '@clerk/backend';
 
+// ── THE ROLE VOCABULARY ──────────────────────────────────────────────────────
+//
+// These five strings are the only roles this application understands, and this
+// is the only list. Clerk carries a SECOND vocabulary -- organization membership
+// roles, `org:admin` / `org:member` -- which is a different thing entirely: it
+// governs who may manage the Clerk organization, not what anyone may do in
+// Accelerep. Those two were being mixed (users-sync fell back to the membership
+// role when publicMetadata carried none), which is where the `member` and
+// `admin` badges came from.
+//
+// Every path that writes a role -- invite, admin create, user-role -- validates
+// against isAppRole() before the value reaches Clerk or the mirror.
+export const APP_ROLES = Object.freeze(['Admin', 'Manager', 'User', 'ReadOnly', 'Technician']);
+export const isAppRole = (role) => APP_ROLES.includes(role);
+
+
 // Short-lived in-memory cache keyed by token to avoid repeated Clerk API calls
 // during bulk imports (97 records × 3 concurrent = ~97 getUser calls → rate limit)
 // TTL is kept short (30s) and we always validate the token's own exp claim so that
@@ -68,7 +84,15 @@ export async function verifyAuth(event) {
         const user = await clerk.users.getUser(userId);
         const meta = user.publicMetadata || {};
 
-        const userRole    = meta.role || 'User';
+        // An ABSENT role is a rep -- that is deliberate and safe. A role that is
+        // PRESENT but not one of ours is neither: it means something wrote a value
+        // into Clerk that no gate in this app recognises. requireWrite refuses it
+        // below; warn here so the log names the string and the user.
+        const rawRole     = meta.role;
+        const userRole    = rawRole || 'User';
+        if (rawRole && !isAppRole(rawRole)) {
+            console.warn('verifyAuth: UNRECOGNISED role', JSON.stringify(rawRole), 'for user', userId, 'in org', orgId);
+        }
         const managedReps = meta.managedReps || [];
 
         const result = { userId, orgId, userRole, managedReps, error: null };
@@ -111,12 +135,22 @@ export const isTechnician = (role) => role === 'Technician';
 // applies. Non-mutating methods pass straight through, so it is safe to call
 // once at the top of a handler rather than per branch.
 //
-// TWO roles have no general write capability: ReadOnly and Technician. Technician
-// is denied BY DEFAULT here so that adding the role cannot silently grant write
-// access to the ~28 endpoints that call this. Exactly one caller opts in
-// (dispatch-jobs.mjs), and it then applies its own per-field whitelist and
-// ownership check. Deny-by-default with a single explicit opt-in is the point:
-// a new role must never inherit write access simply by not being ReadOnly.
+// THIS IS AN ALLOWLIST, and it did not used to be. It denied exactly two strings
+// -- 'ReadOnly' and 'Technician' -- and permitted everything else, so ANY value
+// that was not spelled precisely that way carried full write access to ~28
+// endpoints. 'readonly', 'Read Only', 'technician', a typo, or a role invented by
+// a future Clerk config all passed. That is guide 18b20.2 in a role string:
+// absence of a known role was being read as a permission.
+//
+// Three roles may write: Admin, Manager, User. Technician may write ONLY through
+// the one caller that opts in (dispatch-jobs.mjs), which then applies its own
+// per-field whitelist and ownership check. Everything else is refused LOUDLY --
+// a quiet refusal here is indistinguishable from the gate working and gets
+// debugged at the wrong layer (18b22).
+//
+// DEPLOY NOTE: this can lock out a user whose Clerk publicMetadata.role holds a
+// non-canonical string. Run `node --env-file=.env scripts/check-clerk-roles.mjs`
+// (read-only) BEFORE deploying and fix anyone it names.
 //
 // Usage:
 //   const forbidden = requireWrite(auth, event, headers);
@@ -124,8 +158,12 @@ export const isTechnician = (role) => role === 'Technician';
 // Opt-in (dispatch-jobs only):
 //   const forbidden = requireWrite(auth, event, headers, { allowTechnician: true });
 const MUTATING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+const WRITE_ROLES = Object.freeze(['Admin', 'Manager', 'User']);
 export function requireWrite(auth, event, headers, opts = {}) {
     if (!MUTATING_METHODS.includes(event?.httpMethod)) return null;
+
+    if (WRITE_ROLES.includes(auth?.userRole)) return null;
+    if (isTechnician(auth?.userRole) && opts.allowTechnician) return null;
 
     if (isReadOnly(auth?.userRole)) {
         console.warn('requireWrite: read-only role blocked', event?.httpMethod, 'for user', auth?.userId);
@@ -135,7 +173,7 @@ export function requireWrite(auth, event, headers, opts = {}) {
         };
     }
 
-    if (isTechnician(auth?.userRole) && !opts.allowTechnician) {
+    if (isTechnician(auth?.userRole)) {
         console.warn('requireWrite: technician role blocked', event?.httpMethod, 'for user', auth?.userId);
         return {
             statusCode: 403, headers,
@@ -143,7 +181,17 @@ export function requireWrite(auth, event, headers, opts = {}) {
         };
     }
 
-    return null;
+    // Not ReadOnly, not Technician, and not a write role: a value no gate in this
+    // application knows. Name it in the log -- this is the only place the string
+    // becomes visible, and it is what tells you a role was written to Clerk by a
+    // path that did not validate.
+    console.warn('requireWrite: UNRECOGNISED role', JSON.stringify(auth?.userRole),
+        'blocked', event?.httpMethod, 'for user', auth?.userId,
+        '-- expected one of', APP_ROLES.join(' | '));
+    return {
+        statusCode: 403, headers,
+        body: JSON.stringify({ error: 'Forbidden: unrecognised role. Ask an administrator to reset your role.' }),
+    };
 }
 
 export function requireRole(auth, allowedRoles, headers) {
