@@ -34,15 +34,50 @@ const mutations = [
     // object-level authorization decision in the app with the harness reporting
     // a clean run over them. 18b20: adding a test does not add a mutation.
 
+    ['ownership: the id registry reverts to a DISPLAY NAME column',
+        'netlify/functions/_ownership.mjs',
+        "    opportunity: 'ownerId',",
+        "    opportunity: 'salesRep',"],
+
     ['ownership: contacts reverts to createdBy — the column that never existed',
         'netlify/functions/_ownership.mjs',
-        "contact:     'assignedRep',",
-        "contact:     'createdBy',"],
+        "    contact:     'assignedRep',   // NOT createdBy — that column does not exist",
+        "    contact:     'createdBy',"],
 
-    ['ownership: the policy FAILS OPEN for a caller with no resolvable name',
+    ['ownership: a CLERK id is compared instead of refused (owner side)',
         'netlify/functions/_ownership.mjs',
-        'if (!callerName) return false;',
-        'if (!callerName) return true;'],
+        '    if (!isAppUserId(owner)) {',
+        '    if (false) {'],
+
+    ['ownership: a CLERK id is compared instead of refused (caller side)',
+        'netlify/functions/_ownership.mjs',
+        '    if (!isAppUserId(callerId)) {',
+        '    if (false) {'],
+
+    ['ownership: the usr_ prefix check accepts the bare prefix',
+        'netlify/functions/_ownership.mjs',
+        "v.startsWith(APP_USER_ID_PREFIX) && v.length > APP_USER_ID_PREFIX.length",
+        "v.startsWith(APP_USER_ID_PREFIX)"],
+
+    ['ownership: documents is registered (Clerk id vs app id, silently unequal)',
+        'netlify/functions/_ownership.mjs',
+        'export const OWNER_ID_COLUMNS = Object.freeze({',
+        "export const OWNER_ID_COLUMNS = Object.freeze({\n    document:    'ownerId',"],
+
+    ['schema: an owner_id column is renamed, so push and code diverge',
+        'db/schema.ts',
+        "    ownerId:                text('owner_id'),",
+        "    ownerId:                text('owner'),"],
+
+    ['ownership: the policy FAILS OPEN for a caller who cannot be identified',
+        'netlify/functions/_ownership.mjs',
+        '    if (!callerId) return false;',
+        '    if (!callerId) return true;'],
+
+    ['ownership: an UNASSIGNED record stops being mutable (reps cannot take unowned work)',
+        'netlify/functions/_ownership.mjs',
+        "    if (owner === null || owner === undefined || owner === '') return true;   // unassigned",
+        "    if (owner === null || owner === undefined || owner === '') return false;  // unassigned"],
 
     ['ownership: Admin/Manager stop bypassing the check',
         'netlify/functions/_ownership.mjs',
@@ -51,8 +86,8 @@ const mutations = [
 
     ['ownership: an unregistered entity resolves to undefined instead of throwing',
         'netlify/functions/_ownership.mjs',
-        '    if (!key) {',
-        '    if (false) {'],
+        '    const key = OWNER_ID_COLUMNS[entity];\n    if (!key) {',
+        '    const key = OWNER_ID_COLUMNS[entity];\n    if (false) {'],
 
     ['ownership: a registered-but-missing property degrades to undefined again',
         'netlify/functions/_ownership.mjs',
@@ -69,6 +104,11 @@ const mutations = [
         "ownerColumn: ownerColumnOf(accounts, 'account'),",
         'ownerColumn: accounts.accountOwner,'],
 
+    ['endpoints: the rep GET filter reverts to comparing display names',
+        'netlify/functions/leads.mjs',
+        'results = results.filter(l => !l.ownerId || l.ownerId === callerId);',
+        'results = results.filter(l => !l.assignedTo || l.assignedTo === callerId);'],
+
     ['endpoints: an assertOwnership result is computed and then discarded',
         'netlify/functions/leads.mjs',
         '            if (forbiddenOwn) return forbiddenOwn;',
@@ -76,8 +116,8 @@ const mutations = [
 
     ['endpoints: the users.id-vs-Clerk-id filter returns (every rep loses their own records)',
         'netlify/functions/leads.mjs',
-        '                const repDisplayName = await getCallerName(userId, orgId);',
-        '                const [rr] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));\n                const repDisplayName = rr?.name || null;'],
+        '                const callerId = await getCallerId(userId, orgId);',
+        '                const [rr] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));\n                const callerId = rr?.id || null;'],
 
     ['endpoints: getRepUser loses its org scope (one tenant emailed another tenant deal data)',
         'netlify/functions/opportunities.mjs',
@@ -92,8 +132,8 @@ const mutations = [
 
     ['_bulk: the fail-open ownership guard returns (a rep overwrites the whole org)',
         'netlify/functions/_bulk.mjs',
-        'if (!mayMutate({ owner: prior.owner, callerName, canSeeAll })) {',
-        'if (callerName !== null && prior.owner && prior.owner !== callerName) {'],
+        'if (!mayMutate({ ownerId: prior.ownerId, callerId, canSeeAll })) {',
+        'if (callerId !== null && prior.ownerId && prior.ownerId !== callerId) {'],
 
     ['schema: users.email is globally unique again (one email, one org, forever)',
         'db/schema.ts',
@@ -395,6 +435,32 @@ const mutations = [
         "if (/[^aeiou]y$/i.test(one)) return `${one.slice(0, -1)}ies`;   // opportunity -> opportunities",
         '/* naive */'],
 ];
+
+// ── BASELINE ────────────────────────────────────────────────────────────────
+//
+// A mutation is judged CAUGHT when the suite exits non-zero. If the suite is
+// ALREADY failing, every mutation exits non-zero and the harness reports a
+// perfect score over code it never actually tested.
+//
+// That is not hypothetical. This ran twice reporting 73/73 while
+// tests/bulk-upsert.test.mjs had three RED tests -- including the three security
+// assertions about ownership on the bulk path. The number that was supposed to
+// prove the guards worked was, at that moment, proving only that node exits 1.
+//
+// So: prove GREEN first, and refuse to grade anything otherwise.
+console.log('Baseline: running the suites unmutated...');
+try {
+    execSync(`node --test ${SUITES}`, { stdio: 'pipe' });
+    console.log('Baseline: green.\n');
+} catch (e) {
+    console.error('\nBASELINE IS RED — refusing to run mutations.\n');
+    console.error('Every mutation would report CAUGHT because the suite already fails,');
+    console.error('and the score would be meaningless. Fix the failing test(s) first:\n');
+    const out = `${e.stdout || ''}${e.stderr || ''}`;
+    const fails = out.split(/\r?\n/).filter((l) => /^(not ok|✖|# fail)/.test(l.trim()));
+    console.error(fails.length ? fails.join('\n') : out.slice(-2000));
+    process.exit(1);
+}
 
 let survived = 0;
 let stale = 0;

@@ -32,6 +32,7 @@ const table = {
     notes:            col('notes'),
     comments:         col('comments', { hasDefault: true }),
     stageHistory:     col('stage_history', { hasDefault: true }),
+    ownerId:          col('owner_id'),
     createdAt:        col('created_at', { notNull: true, hasDefault: true }),
     updatedAt:        col('updated_at', { notNull: true, hasDefault: true }),
 };
@@ -50,7 +51,14 @@ const fakeDb = {
                 where: async () => stored.map(r => {
                     const out = {};
                     for (const k of Object.keys(projection)) {
-                        out[k] = k === 'owner' ? r.salesRep : r[k];
+                        // The projection key is ownerId now. It used to be
+                        // 'owner', and when the code moved and this did not,
+                        // prior.ownerId came back UNDEFINED — which read as
+                        // "unassigned" and made every owned row writable. The
+                        // mismatch failed OPEN, silently. _bulk.mjs now
+                        // distinguishes undefined (column not projected) from
+                        // null (genuinely unowned) and throws on the first.
+                        out[k] = k === 'ownerId' ? r.ownerId : r[k];
                     }
                     return out;
                 }),
@@ -82,6 +90,10 @@ const existingDeal = {
     opportunityName: 'ZZTest Alpha Renewal', arr: 25000, notes: 'seed',
     comments: [{ text: 'comment survival probe' }], stageHistory: [{ stage: 'Qualification' }],
     salesRep: 'Jeff',
+    // Ownership keys on the ID. salesRep stays as the DISPLAY name, and is
+    // deliberately a different value from the owner id so that anything still
+    // comparing names cannot accidentally agree with the id comparison.
+    ownerId: 'usr_jeff',
     // Present so the "do not backfill defaulted columns" assertions have
     // something to catch. A fixture that omits a column cannot prove the code
     // declined to copy it -- it proves only that there was nothing to copy.
@@ -165,7 +177,7 @@ test('an unknown id is reported as notFound and never created', async () => {
 
 test('a row owned by another rep is forbidden, not silently updated', async () => {
     reset([existingDeal]);
-    const r = await call([{ id: 'o1', stage: 'Proposal' }], { ownerColumn: table.stage, callerName: 'Karen' });
+    const r = await call([{ id: 'o1', stage: 'Proposal' }], { ownerColumn: table.ownerId, callerId: 'usr_karen' });
     assert.deepEqual(r.forbidden, ['o1']);
     assert.equal(r.updated, 0);
     assert.equal(insertedChunks.length, 0);
@@ -197,7 +209,7 @@ test('a row owned by another rep is forbidden, not silently updated', async () =
 test('canSeeAll edits everything, including rows owned by others', async () => {
     reset([existingDeal]);
     const r = await call([{ id: 'o1', stage: 'Proposal' }], {
-        ownerColumn: table.stage, callerName: null, canSeeAll: true,
+        ownerColumn: table.ownerId, callerId: null, canSeeAll: true,
     });
     assert.equal(r.updated, 1, 'an Admin must still bypass ownership on the bulk path');
     assert.deepEqual(r.forbidden, []);
@@ -206,7 +218,7 @@ test('canSeeAll edits everything, including rows owned by others', async () => {
 test('SECURITY: a null callerName without canSeeAll may edit NOTHING it does not own', async () => {
     reset([existingDeal]);
     const r = await call([{ id: 'o1', stage: 'Proposal' }], {
-        ownerColumn: table.stage, callerName: null, canSeeAll: false,
+        ownerColumn: table.ownerId, callerId: null, canSeeAll: false,
     });
     assert.equal(r.updated, 0, 'an unidentifiable caller owns nothing and must be refused');
     assert.deepEqual(r.forbidden, ['o1'], 'and the refusal must be REPORTED, not silent');
@@ -218,7 +230,7 @@ test('canSeeAll defaults to false, so a caller that forgets it fails CLOSED', as
     // authorizes everyone -- silent and unbounded.
     reset([existingDeal]);
     const r = await call([{ id: 'o1', stage: 'Proposal' }], {
-        ownerColumn: table.stage, callerName: null,
+        ownerColumn: table.ownerId, callerId: null,
     });
     assert.equal(r.updated, 0);
     assert.deepEqual(r.forbidden, ['o1']);

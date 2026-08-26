@@ -86,12 +86,25 @@ export const accounts = pgTable('accounts', {
     mergeArchived:     boolean('merge_archived').default(false),
     mergedIntoId:      text('merged_into_id'),
     archivedAt:        timestamp('archived_at'),
+    // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.
+    // Nullable: null means UNASSIGNED, and an unassigned record is mutable by
+    // any writer -- that is how a rep picks up unowned work. It does NOT mean
+    // "unknown owner"; see mayMutate() in netlify/functions/_ownership.mjs,
+    // where an unknown CALLER is refused while an unowned RECORD is allowed.
+    // Conflating those two is the defect 18b20 was written about.
+    //
+    // The display-name column above is retained for rendering and export ONLY.
+    // Nothing authorizes on it any more. Two people sharing a display name in
+    // one org shared ownership of each other's records; renaming a user
+    // detached everything they owned. This column is what ends both.
+    ownerId:             text('owner_id'),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('accounts_org_id_parent_idx').on(t.orgId, t.parentAccountId),
     index('accounts_org_id_created_idx').on(t.orgId, t.createdAt),
+    index('accounts_org_owner_idx').on(t.orgId, t.ownerId),
 ]);
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
 export const contacts = pgTable('contacts', {
@@ -130,12 +143,25 @@ export const contacts = pgTable('contacts', {
     mergeArchived:     boolean('merge_archived').default(false),
     mergedIntoId:      text('merged_into_id'),
     archivedAt:        timestamp('archived_at'),
+    // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.
+    // Nullable: null means UNASSIGNED, and an unassigned record is mutable by
+    // any writer -- that is how a rep picks up unowned work. It does NOT mean
+    // "unknown owner"; see mayMutate() in netlify/functions/_ownership.mjs,
+    // where an unknown CALLER is refused while an unowned RECORD is allowed.
+    // Conflating those two is the defect 18b20 was written about.
+    //
+    // The display-name column above is retained for rendering and export ONLY.
+    // Nothing authorizes on it any more. Two people sharing a display name in
+    // one org shared ownership of each other's records; renaming a user
+    // detached everything they owned. This column is what ends both.
+    ownerId:             text('owner_id'),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('contacts_org_id_idx').on(t.orgId),
     index('contacts_org_id_created_idx').on(t.orgId, t.createdAt),
+    index('contacts_org_owner_idx').on(t.orgId, t.ownerId),
 ]);
 // ── OPPORTUNITIES ─────────────────────────────────────────────────────────────
 export const opportunities = pgTable('opportunities', {
@@ -173,12 +199,25 @@ export const opportunities = pgTable('opportunities', {
     stageHistory:         jsonb('stage_history').default('[]'),
     comments:             jsonb('comments').default('[]'),
     aiScore:              jsonb('ai_score'),
+    // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.
+    // Nullable: null means UNASSIGNED, and an unassigned record is mutable by
+    // any writer -- that is how a rep picks up unowned work. It does NOT mean
+    // "unknown owner"; see mayMutate() in netlify/functions/_ownership.mjs,
+    // where an unknown CALLER is refused while an unowned RECORD is allowed.
+    // Conflating those two is the defect 18b20 was written about.
+    //
+    // The display-name column above is retained for rendering and export ONLY.
+    // Nothing authorizes on it any more. Two people sharing a display name in
+    // one org shared ownership of each other's records; renaming a user
+    // detached everything they owned. This column is what ends both.
+    ownerId:                text('owner_id'),
     createdAt:            timestamp('created_at').notNull().defaultNow(),
     orgId:                text('org_id').notNull(),
     updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('opportunities_org_id_stage_idx').on(t.orgId, t.stage),
     index('opportunities_org_id_created_idx').on(t.orgId, t.createdAt),
+    index('opportunities_org_owner_idx').on(t.orgId, t.ownerId),
 ]);
 // ── TASKS ─────────────────────────────────────────────────────────────────────
 export const tasks = pgTable('tasks', {
@@ -200,12 +239,25 @@ export const tasks = pgTable('tasks', {
     contacts:      jsonb('contacts'),
     accountId:     text('account_id'),
     relatedTo:     text('related_to'),
+    // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.
+    // Nullable: null means UNASSIGNED, and an unassigned record is mutable by
+    // any writer -- that is how a rep picks up unowned work. It does NOT mean
+    // "unknown owner"; see mayMutate() in netlify/functions/_ownership.mjs,
+    // where an unknown CALLER is refused while an unowned RECORD is allowed.
+    // Conflating those two is the defect 18b20 was written about.
+    //
+    // The display-name column above is retained for rendering and export ONLY.
+    // Nothing authorizes on it any more. Two people sharing a display name in
+    // one org shared ownership of each other's records; renaming a user
+    // detached everything they owned. This column is what ends both.
+    ownerId:         text('owner_id'),
     createdAt:     timestamp('created_at').notNull().defaultNow(),
     orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('tasks_org_id_idx').on(t.orgId),
     index('tasks_org_id_created_idx').on(t.orgId, t.createdAt),
+    index('tasks_org_owner_idx').on(t.orgId, t.ownerId),
 ]);
 // ── ACTIVITIES ────────────────────────────────────────────────────────────────
 export const activities = pgTable('activities', {
@@ -222,12 +274,25 @@ export const activities = pgTable('activities', {
     accountId:     text('account_id'),
     leadId:        text('lead_id'),
     author:        varchar('author', { length: 255 }),
+    // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.
+    // Nullable: null means UNASSIGNED, and an unassigned record is mutable by
+    // any writer -- that is how a rep picks up unowned work. It does NOT mean
+    // "unknown owner"; see mayMutate() in netlify/functions/_ownership.mjs,
+    // where an unknown CALLER is refused while an unowned RECORD is allowed.
+    // Conflating those two is the defect 18b20 was written about.
+    //
+    // The display-name column above is retained for rendering and export ONLY.
+    // Nothing authorizes on it any more. Two people sharing a display name in
+    // one org shared ownership of each other's records; renaming a user
+    // detached everything they owned. This column is what ends both.
+    ownerId:         text('owner_id'),
     createdAt:     timestamp('created_at').notNull().defaultNow(),
     orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('activities_org_id_opp_idx').on(t.orgId, t.opportunityId),
     index('activities_org_id_created_idx').on(t.orgId, t.createdAt),
+    index('activities_org_owner_idx').on(t.orgId, t.ownerId),
     index('activities_org_id_lead_idx').on(t.orgId, t.leadId),
 ]);
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
@@ -325,6 +390,18 @@ export const leads = pgTable('leads', {
     notes:        text('notes'),
     convertedAt:      varchar('converted_at', { length: 30 }),
     firstTouchDate:   varchar('first_touch_date', { length: 30 }),
+    // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.
+    // Nullable: null means UNASSIGNED, and an unassigned record is mutable by
+    // any writer -- that is how a rep picks up unowned work. It does NOT mean
+    // "unknown owner"; see mayMutate() in netlify/functions/_ownership.mjs,
+    // where an unknown CALLER is refused while an unowned RECORD is allowed.
+    // Conflating those two is the defect 18b20 was written about.
+    //
+    // The display-name column above is retained for rendering and export ONLY.
+    // Nothing authorizes on it any more. Two people sharing a display name in
+    // one org shared ownership of each other's records; renaming a user
+    // detached everything they owned. This column is what ends both.
+    ownerId:        text('owner_id'),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     orgId:        text('org_id').notNull(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
@@ -336,6 +413,7 @@ export const leads = pgTable('leads', {
 }, (t) => [
     index('leads_org_id_idx').on(t.orgId),
     index('leads_org_id_created_idx').on(t.orgId, t.createdAt),
+    index('leads_org_owner_idx').on(t.orgId, t.ownerId),
     index('leads_org_id_bucket_idx').on(t.orgId, t.leadScoreBucket),
     index('leads_org_id_fit_idx').on(t.orgId, t.leadScoreFit),
 ]);

@@ -4,7 +4,7 @@ import { db } from '../../db/index.js';
 import { auditLog, users } from '../../db/schema.js';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { bulkInsert as coreBulkInsert, bulkUpsert as coreBulkUpsert } from './_bulk.mjs';
-import { ownerColumnOf, ownerKeyFor, mayMutate, OWNERSHIP_FORBIDDEN } from './_ownership.mjs';
+import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor, mayMutate, OWNERSHIP_FORBIDDEN, isAppUserId } from './_ownership.mjs';
 
 // Browser origins allowed to call the API. Kept in sync with the Clerk
 // authorizedParties list in auth.mjs. Exported for the CORS follow-up; any
@@ -102,11 +102,17 @@ export async function resolveCaller(clerkUserId, orgId) {
     }
 }
 
-// Display-name half, kept for the ownership checks that still compare names.
+// Display-name half. FOR RENDERING, AUDIT AND EXPORT ONLY.
+//
+// NOTHING AUTHORIZES ON THIS ANY MORE. Ownership compares ids (see getCallerId
+// below and mayMutate in _ownership.mjs). It is kept because audit rows, email
+// templates and the visibility filters still render a human-readable name, and
+// because a name is what a CSV carries.
+//
 // orgId is REQUIRED and throws when absent rather than defaulting to an
-// unscoped query. Guide 18b19: where a lookup feeds an authorization decision,
-// absence must be an error and never a value -- a missing orgId that quietly
-// widened the search is exactly the failure this rule exists to prevent.
+// unscoped query. Guide 18b19: where a lookup feeds a decision, absence must be
+// an error and never a value -- a missing orgId that quietly widened the search
+// is exactly the failure this rule exists to prevent.
 export async function getCallerName(clerkUserId, orgId) {
     if (!orgId) {
         throw new Error(
@@ -116,6 +122,217 @@ export async function getCallerName(clerkUserId, orgId) {
     }
     const { name } = await resolveCaller(clerkUserId, orgId);
     return name;
+}
+
+// The id half — THIS is what authorization compares.
+//
+// Returns the caller's `users.id` (`usr_<uuid>`), or null when they have no
+// roster row in this org. Null fails CLOSED in mayMutate(): a caller who owns
+// nothing is refused every owned record. That is the safe direction, but only
+// because the lookup itself is right -- resolveCaller matches on clerkUserId and
+// scopes to orgId, and getting either wrong presents as "every rep is refused
+// everything" rather than as an error.
+export async function getCallerId(clerkUserId, orgId) {
+    if (!orgId) {
+        throw new Error(
+            '_lib.getCallerId: orgId is required. Pass the orgId from verifyAuth() -- ' +
+            'an unscoped caller lookup can resolve an id from a different tenant.'
+        );
+    }
+    const { id } = await resolveCaller(clerkUserId, orgId);
+    return id;
+}
+
+// ── Display name -> users.id ─────────────────────────────────────────────────
+//
+// The one place a NAME becomes an ID. Needed because names arrive from outside:
+// a CSV column, a roster picker that still sends a label, a legacy payload.
+//
+// AMBIGUITY IS REFUSED, NOT GUESSED. If two roster rows in one org share a
+// display name, this throws a 409 naming both. That collision is precisely what
+// Phase 2 exists to eliminate, and the alternatives are both worse:
+//
+//   - picking the first match assigns the record to an arbitrary one of two
+//     people, permanently, in a column nobody will ever re-check;
+//   - stamping null creates an UNASSIGNED record, and unassigned records are
+//     mutable by anyone -- a quiet authorization hole dressed as a successful
+//     write.
+//
+// A name that matches nobody returns null, which is different: that is a genuine
+// "no such owner", and the caller decides whether to leave the record unassigned
+// or reject the row.
+//
+// Matching is trimmed and case-insensitive because CSV data is neither. The
+// roster is small (tens of rows) and cached per warm container, so this is one
+// query per org rather than one per row of an import.
+const rosterCache = new Map();
+const ROSTER_TTL_MS = 30_000;
+
+async function orgRoster(orgId) {
+    const cached = rosterCache.get(orgId);
+    if (cached && Date.now() - cached.ts < ROSTER_TTL_MS) return cached.rows;
+    const rows = await db.select({ id: users.id, name: users.name, email: users.email })
+        .from(users).where(eq(users.orgId, orgId));
+    rosterCache.set(orgId, { rows, ts: Date.now() });
+    if (rosterCache.size > 200) rosterCache.delete(rosterCache.keys().next().value);
+    return rows;
+}
+
+/** Clears the roster cache. Call after any write to `users` in the same request. */
+export function invalidateRoster(orgId) {
+    if (orgId) rosterCache.delete(orgId); else rosterCache.clear();
+}
+
+export async function resolveOwnerId(name, orgId) {
+    if (!orgId) throw new Error('_lib.resolveOwnerId: orgId is required.');
+    const wanted = String(name ?? '').trim().toLowerCase();
+    if (!wanted) return null;
+
+    const matches = (await orgRoster(orgId))
+        .filter((u) => String(u.name ?? '').trim().toLowerCase() === wanted);
+
+    if (matches.length === 0) return null;
+    if (matches.length > 1) {
+        const err = new Error(
+            `Ambiguous owner: ${matches.length} users in this organization are named ` +
+            `"${String(name).trim()}" (${matches.map((m) => m.email || m.id).join(', ')}). ` +
+            `Rename one of them, or assign this record by picking the user directly.`
+        );
+        err.statusCode = 409;
+        err.ambiguous = true;
+        err.candidates = matches.map((m) => ({ id: m.id, email: m.email }));
+        throw err;
+    }
+    return matches[0].id;
+}
+
+/**
+ * The owner id to stamp on a record being created or re-assigned.
+ *
+ * `suppliedName` is whatever the payload called the owner -- null/absent when the
+ * client said nothing. The rule:
+ *
+ *   a name was supplied  -> resolve it (throws on ambiguity, null on no match)
+ *   nothing was supplied -> the CALLER owns what they create
+ *
+ * The second half is the point of Phase 2 step 3: the server already knows who
+ * is calling, from the JWT. The client no longer has to have resolved its own
+ * identity before a record can be created -- which is the class of bug that
+ * produced importRows.js:103, where a blank Sales Rep was filled in with
+ * whatever string the browser happened to be calling the current user, up to and
+ * including their email address.
+ */
+export async function ownerIdForWrite({ suppliedName, clerkUserId, orgId }) {
+    const supplied = String(suppliedName ?? '').trim();
+    if (supplied) return await resolveOwnerId(supplied, orgId);
+    return await getCallerId(clerkUserId, orgId);
+}
+
+// ── Stamping ownership on writes ─────────────────────────────────────────────
+//
+// The endpoints call these rather than assembling an ownerId themselves, for the
+// reason 18b19 gives about the ownership COLUMN: a rule copied into six handlers
+// is six chances to get it subtly different, and the differences are invisible
+// because each one reads fine on its own.
+
+/**
+ * A single CREATE through the UI.
+ *
+ * A named owner is resolved; nothing named means THE CALLER OWNS WHAT THEY
+ * CREATE. The server has known who is calling since the JWT was verified, so the
+ * client never has to have resolved its own identity first — which is the class
+ * of bug that produced `importRows.js:103`, where a blank Sales Rep was filled in
+ * with whatever string the browser was calling the current user, up to and
+ * including their email address.
+ */
+export async function stampOwnerId(row, entity, { clerkUserId, orgId }) {
+    const nameKey = ownerNameKeyFor(entity);
+    return {
+        ...row,
+        ownerId: await ownerIdForWrite({ suppliedName: row?.[nameKey], clerkUserId, orgId }),
+    };
+}
+
+/**
+ * A BULK create — a CSV import.
+ *
+ * Deliberately different from the single-create path in one respect: a blank
+ * owner stays UNASSIGNED rather than defaulting to the caller.
+ *
+ * That difference is the point, not an inconsistency. Creating a deal in the UI
+ * means you own it. Importing three hundred rows of somebody else's spreadsheet
+ * does not make you the owner of all of them — and stamping the importer was
+ * exactly what `importRows.js:103` did, which is why an unassigned opportunity
+ * could not be created by import AT ALL. Unassigned records are mutable by any
+ * writer, so leaving them null is also what lets a rep pick them up afterwards.
+ *
+ * Names that are ambiguous or match nobody are REPORTED, not guessed at, and the
+ * row is still imported — unowned. 18b16: a row you alter must say so.
+ */
+export async function stampOwnerIds(rows, entity, { clerkUserId, orgId, defaultToCaller = false }) {
+    const nameKey = ownerNameKeyFor(entity);
+    const fallback = defaultToCaller ? await getCallerId(clerkUserId, orgId) : null;
+    const ambiguous = new Set();
+    const unmatched = new Set();
+
+    const out = [];
+    for (const row of rows) {
+        const supplied = String(row?.[nameKey] ?? '').trim();
+        let ownerId = fallback;
+        if (supplied) {
+            try {
+                ownerId = await resolveOwnerId(supplied, orgId);
+                if (ownerId === null) unmatched.add(supplied);
+            } catch (err) {
+                if (!err?.ambiguous) throw err;
+                ambiguous.add(supplied);
+                ownerId = null;
+            }
+        }
+        out.push({ ...row, ownerId });
+    }
+    return { rows: out, ambiguousOwners: [...ambiguous], unmatchedOwners: [...unmatched] };
+}
+
+/**
+ * An UPDATE. Answers "should ownerId be written, and to what?"
+ *
+ * Returns `{ change: false }` when the payload never mentioned the owner, so a
+ * partial PUT cannot blank an ownership it said nothing about (18b13).
+ *
+ * The result is an OBJECT rather than a bare value on purpose. The natural
+ * shape here returns `undefined` for "leave it alone" and `null` for "clear it",
+ * and this codebase has been bitten four times by one value carrying two
+ * meanings — `users.id`, `callerName`, `users.email`, `ownerColumn`. An explicit
+ * flag cannot be misread by the first caller that writes `if (x)`.
+ *
+ * Reads the RAW payload, never the sanitized row: `sanitize()` is a full-row
+ * builder, so every owner key exists in its output whether or not the caller
+ * sent one, and `nameKey in clean` is therefore always true.
+ */
+export async function ownerIdForUpdate({ payload, entity, orgId }) {
+    const nameKey = ownerNameKeyFor(entity);
+    if (!payload || !(nameKey in payload)) return { change: false };
+    const supplied = String(payload[nameKey] ?? '').trim();
+    if (!supplied) return { change: true, ownerId: null };      // explicitly cleared
+    return { change: true, ownerId: await resolveOwnerId(supplied, orgId) };
+}
+
+/**
+ * Turns an ambiguous-owner error into a 409 the client can act on.
+ *
+ * Returns null for any other error so the caller falls through to its own 500.
+ * Without this the collision surfaces as "Internal server error" plus a
+ * correlation id, and the one thing the user needs to know — that two people in
+ * their organization share a display name — is only in the server log.
+ */
+export function ambiguousOwnerResponse(err, headers) {
+    if (!err?.ambiguous) return null;
+    return {
+        statusCode: err.statusCode || 409,
+        headers,
+        body: JSON.stringify({ error: err.message, ambiguous: true, candidates: err.candidates || [] }),
+    };
 }
 
 // ── Sequential record numbers ────────────────────────────────────────────────
@@ -226,21 +443,22 @@ export async function assertOwnership({ table, entity, id, orgId, userId, userRo
 
     // Resolves the registry against the real table, and throws BY NAME if the
     // registered property is not on it — the guard contacts.createdBy needed.
+    // This is now the OWNER ID column; the display name is not consulted.
     const column = ownerColumnOf(table, entity);
 
-    let owner;
+    let ownerId;
     if (row !== undefined) {
         if (!row) return null;
-        owner = row[ownerKeyFor(entity)];
+        ownerId = row[ownerKeyFor(entity)];
     } else {
-        const [target] = await db.select({ owner: column }).from(table)
+        const [target] = await db.select({ ownerId: column }).from(table)
             .where(and(eq(table.id, id), eq(table.orgId, orgId)));
         if (!target) return null;
-        owner = target.owner;
+        ownerId = target.ownerId;
     }
 
-    const callerName = await getCallerName(userId, orgId);
-    if (mayMutate({ owner, callerName, canSeeAll: false })) return null;
+    const callerId = await getCallerId(userId, orgId);
+    if (mayMutate({ ownerId, callerId, canSeeAll: false })) return null;
 
     return { statusCode: 403, headers, body: JSON.stringify({ error: OWNERSHIP_FORBIDDEN }) };
 }

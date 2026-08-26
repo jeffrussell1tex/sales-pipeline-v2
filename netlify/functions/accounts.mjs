@@ -2,7 +2,10 @@ import { db } from '../../db/index.js';
 import { accounts, settings as settingsTable, opportunities, contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert, assertOwnership } from './_lib.mjs';
+import {
+    serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
+} from './_lib.mjs';
 import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
@@ -133,13 +136,22 @@ export const handler = async (event) => {
                 });
                 // Chunked with per-row isolation by bisection — see bulkInsert in
                 // _lib.mjs (18b8). One malformed row no longer discards the import.
-                const result = await bulkInsert({ table: accounts, rows, orgId });
-                return { statusCode: 201, headers, body: JSON.stringify(result) };
+                // A blank owner stays UNASSIGNED on an import — it is not
+                // stamped with whoever ran it. See stampOwnerIds.
+                const owned = await stampOwnerIds(rows, 'account', { clerkUserId: userId, orgId });
+                const result = await bulkInsert({ table: accounts, rows: owned.rows, orgId });
+                return { statusCode: 201, headers, body: JSON.stringify({
+                    ...result,
+                    ambiguousOwners: owned.ambiguousOwners,
+                    unmatchedOwners: owned.unmatchedOwners,
+                }) };
             }
             // Single insert
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const territoryAssign = await resolveTerritory(orgId, sanitize(data));
-            const [inserted] = await db.insert(accounts).values({ ...sanitize(data), ...(territoryAssign || {}), orgId }).returning();
+            // The caller owns what they create unless the payload names someone else.
+            const newRow = await stampOwnerId({ ...sanitize(data), ...(territoryAssign || {}) }, 'account', { clerkUserId: userId, orgId });
+            const [inserted] = await db.insert(accounts).values({ ...newRow, orgId }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ account: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -159,7 +171,7 @@ export const handler = async (event) => {
                 // "trusted Admin" as well as "could not identify the caller".
                 // canSeeAll is an explicit parameter now, so the ternary bought
                 // one cached lookup and kept a retired hazard in the source.
-                const callerName = await getCallerName(userId, orgId);
+                const callerId = await getCallerId(userId, orgId);
                     // partialRows, not sanitize() alone. sanitize() is a FULL-ROW
                     // builder -- it expands a payload rather than filtering one --
                     // and bulkUpsert derives its SET clause from the keys supplied,
@@ -179,7 +191,7 @@ export const handler = async (event) => {
                     // bulkUpsert's `if (ownerColumn)` turns a wrong name into a
                     // silent org-wide write bypass rather than an error (18b19).
                     ownerColumn: ownerColumnOf(accounts, 'account'),
-                    callerName,
+                    callerId,
                     canSeeAll: canSeeAll(userRole),
                 });
                 return { statusCode: 200, headers, body: JSON.stringify(result) };
@@ -203,6 +215,10 @@ export const handler = async (event) => {
             if (forbiddenPut) return forbiddenPut;
             const territoryAssignPut = await resolveTerritory(orgId, clean);
             const mergedPut = { ...clean, ...(territoryAssignPut || {}) };
+            // Re-key ownership only when the payload actually mentioned the owner.
+            // A partial PUT that says nothing about it must not blank it (18b13).
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'account', orgId });
+            if (ownPut.change) mergedPut.ownerId = ownPut.ownerId;
             const { id: _putId, ...updateDataMerged } = mergedPut;
             const [upserted] = await db.insert(accounts).values({ ...mergedPut, orgId })
                 .onConflictDoUpdate({ target: accounts.id, setWhere: eq(accounts.orgId, orgId), set: { ...updateDataMerged, updatedAt: new Date() } })
@@ -297,6 +313,8 @@ export const handler = async (event) => {
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
+        const amb = ambiguousOwnerResponse(err, headers);
+        if (amb) return amb;
         console.error('Accounts error:', err.message);
         console.error('Accounts error stack:', err.stack);
         console.error('Accounts error detail:', JSON.stringify({ method: event.httpMethod, body: event.body?.slice(0, 500) }));

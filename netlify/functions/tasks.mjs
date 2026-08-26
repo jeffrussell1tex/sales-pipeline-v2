@@ -3,7 +3,10 @@ import { tasks } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, isReadOnly, requireWrite } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
-import { serverErrorBody, writeAudit, assertOwnership } from './_lib.mjs';
+import {
+    serverErrorBody, writeAudit, assertOwnership,
+    stampOwnerId, ownerIdForUpdate, ambiguousOwnerResponse,
+} from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 
 export const handler = async (event) => {
@@ -51,7 +54,10 @@ export const handler = async (event) => {
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const [inserted] = await db.insert(tasks).values({ ...sanitize(data), orgId }).returning();
+            // A task created with no assignee belongs to its creator; one
+            // assigned from the roster picker belongs to that person.
+            const newRow = await stampOwnerId(sanitize(data), 'task', { clerkUserId: userId, orgId });
+            const [inserted] = await db.insert(tasks).values({ ...newRow, orgId }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ task: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -79,6 +85,10 @@ export const handler = async (event) => {
             const wasCompleted = existing?.completed === true;
 
             const clean = sanitize(data);
+            // Reassigning a task re-keys its ownership; a PUT that never
+            // mentioned the assignee leaves it alone (18b13).
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'task', orgId });
+            if (ownPut.change) clean.ownerId = ownPut.ownerId;
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(tasks).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: tasks.id, setWhere: eq(tasks.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
@@ -135,6 +145,8 @@ export const handler = async (event) => {
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
+        const amb = ambiguousOwnerResponse(err, headers);
+        if (amb) return amb;
         console.error('Tasks error:', err.message);
         return { statusCode: 500, headers, body: serverErrorBody(err, 'tasks') };
     }

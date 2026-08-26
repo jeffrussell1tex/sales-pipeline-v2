@@ -5,7 +5,10 @@ import { verifyAuth, canSeeAll, isManager, isReadOnly, requireRole, requireWrite
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkInsert, bulkUpsert, assertOwnership } from './_lib.mjs';
+import {
+    serverErrorBody, writeAudit, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
+} from './_lib.mjs';
 import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
@@ -174,10 +177,23 @@ export const handler = async (event) => {
                 // clerkUserId, scope to orgId. A caller it cannot resolve stays
                 // null and sees only unassigned work, which is the same fail-
                 // closed direction mayMutate() takes for writes.
-                const repDisplayName = await getCallerName(userId, orgId);
-                results = results.filter(o => !o.salesRep || o.salesRep === repDisplayName);
+                // Visibility keys on the OWNER ID now, matching the write path.
+                // The display-name comparison this replaces meant a renamed user
+                // vanished from their own pipeline and two users sharing a name
+                // saw each other's deals.
+                //
+                // A caller who cannot be resolved stays null and sees only
+                // unassigned deals — the same fail-closed direction mayMutate()
+                // takes on writes.
+                const callerId = await getCallerId(userId, orgId);
+                results = results.filter(o => !o.ownerId || o.ownerId === callerId);
             } else if (isManager(userRole) && managedReps.length > 0) {
-                // managedReps are stored as display names in Clerk publicMetadata — this comparison is correct
+                // STILL NAME-BASED, and deliberately so for now: managedReps lives
+                // in Clerk publicMetadata as an array of DISPLAY NAMES, so this
+                // cannot move to ids until that list does. It carries the Phase 2
+                // hazards in full — rename a managed rep and they drop out of
+                // their manager's view silently. Tracked for Commit 3; it is a
+                // visibility filter, not an authorization gate.
                 results = results.filter(o => !o.salesRep || managedReps.includes(o.salesRep));
             }
             return { statusCode: 200, headers, body: JSON.stringify({ opportunities: results }) };
@@ -193,14 +209,18 @@ export const handler = async (event) => {
                 // Same unbatched single statement as accounts/contacts — the
                 // handoff named two files, this is the third. See bulkInsert in
                 // _lib.mjs (18b8).
-                const result = await bulkInsert({ table: opportunities, rows: data.map(d => sanitize(d)), orgId });
+                const owned = await stampOwnerIds(data.map(d => sanitize(d)), 'opportunity', { clerkUserId: userId, orgId });
+                const result = await bulkInsert({ table: opportunities, rows: owned.rows, orgId });
+                result.ambiguousOwners = owned.ambiguousOwners;
+                result.unmatchedOwners = owned.unmatchedOwners;
                 return { statusCode: 201, headers, body: JSON.stringify(result) };
             }
             // Single insert
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            const [inserted] = await db.insert(opportunities).values({ ...sanitize(data), orgId }).returning();
+            const newRow = await stampOwnerId(sanitize(data), 'opportunity', { clerkUserId: userId, orgId });
+            const [inserted] = await db.insert(opportunities).values({ ...newRow, orgId }).returning();
 
             // Email: new opportunity created — notify the assigned rep only if
             // SOMEONE ELSE created it.
@@ -263,7 +283,7 @@ export const handler = async (event) => {
                 // (`canSeeAll(userRole) ? null : ...`) made a null callerName mean
                 // "trusted Admin" as well as "unidentifiable", which is the
                 // conflation 18b20 exists to end. canSeeAll is explicit below.
-                const callerName = await getCallerName(userId, orgId);
+                const callerId = await getCallerId(userId, orgId);
 
                 // Stage clock and history. Only the server can resolve these: the
                 // client does not know a deal's prior stage. One SELECT for the
@@ -305,7 +325,7 @@ export const handler = async (event) => {
                     orgId,
                     // Through the registry, never named at the call site (18b19).
                     ownerColumn: ownerColumnOf(opportunities, 'opportunity'),
-                    callerName,
+                    callerId,
                     canSeeAll: canSeeAll(userRole),
                 });
                 // One audit record for the batch, not one per deal. A 500-row
@@ -343,6 +363,10 @@ export const handler = async (event) => {
             const previousComments = existing?.comments || [];
 
             const clean = sanitize(data);
+            // Reassigning a deal re-keys its ownership; a PUT that never
+            // mentioned salesRep leaves it alone (18b13).
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'opportunity', orgId });
+            if (ownPut.change) clean.ownerId = ownPut.ownerId;
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(opportunities)
                 .values({ ...clean, orgId })
@@ -493,6 +517,8 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
     } catch (err) {
+        const amb = ambiguousOwnerResponse(err, headers);
+        if (amb) return amb;
         console.error('Opportunities function error:', err.message);
         return { statusCode: 500, headers, body: serverErrorBody(err, 'opportunities') };
     }

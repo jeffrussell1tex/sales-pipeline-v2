@@ -25,44 +25,108 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { OWNER_COLUMNS, ENTITY_TABLES, ownerKeyFor, ownerColumnOf, mayMutate } from '../netlify/functions/_ownership.mjs';
+import {
+    OWNER_ID_COLUMNS, OWNER_NAME_COLUMNS, ENTITY_TABLES,
+    ownerKeyFor, ownerColumnOf, mayMutate, isAppUserId,
+} from '../netlify/functions/_ownership.mjs';
 
 const schemaSrc = readFileSync(new URL('../db/schema.ts', import.meta.url), 'utf8');
 
 // Pull the property names out of one `export const <name> = pgTable('...', { ... })`
 // block. The block ends at the closing brace of the column object, which is
 // either `}, (t) => [` for a table with indexes or `});` for one without.
-function propertiesOf(tableExport) {
+function blockOf(tableExport) {
     const start = schemaSrc.indexOf(`export const ${tableExport} = pgTable(`);
     assert.notEqual(start, -1, `db/schema.ts has no export named '${tableExport}'`);
     const rest = schemaSrc.slice(start);
     const endIdx = rest.search(/\n\}, \(t\) =>|\n\}\);/);
     assert.notEqual(endIdx, -1, `could not find the end of the '${tableExport}' table definition`);
-    const block = rest.slice(0, endIdx);
-    // `    assignedRep:       varchar('assigned_rep', ...` -> assignedRep
-    return new Set([...block.matchAll(/^\s{4}([A-Za-z_$][\w$]*)\s*:/gm)].map(m => m[1]));
+    return rest.slice(0, endIdx);
 }
 
-test('every entity in OWNER_COLUMNS names a table in ENTITY_TABLES', () => {
-    for (const entity of Object.keys(OWNER_COLUMNS)) {
+function propertiesOf(tableExport) {
+    // `    assignedRep:       varchar('assigned_rep', ...` -> assignedRep
+    return new Set([...blockOf(tableExport).matchAll(/^\s{4}([A-Za-z_$][\w$]*)\s*:/gm)].map(m => m[1]));
+}
+
+// The SQL column name behind a drizzle property, or null.
+// `    ownerId:   text('owner_id'),` -> owner_id
+//
+// A fixed-length slice was used here first and it OVERRAN THE TABLE BOUNDARY,
+// matching the next table's identically-named property — so renaming one table's
+// column survived the mutation harness. Bounded by blockOf now.
+function columnNameOf(tableExport, prop) {
+    const m = blockOf(tableExport).match(new RegExp(`^\\s{4}${prop}:\\s*\\w+\\('([^']+)'`, 'm'));
+    return m ? m[1] : null;
+}
+
+test('every entity in OWNER_ID_COLUMNS names a table in ENTITY_TABLES', () => {
+    for (const entity of Object.keys(OWNER_ID_COLUMNS)) {
         assert.ok(ENTITY_TABLES[entity], `'${entity}' is registered as owned but has no table mapping`);
+        assert.ok(OWNER_NAME_COLUMNS[entity], `'${entity}' has no display-name column registered`);
     }
     for (const entity of Object.keys(ENTITY_TABLES)) {
-        assert.ok(OWNER_COLUMNS[entity], `'${entity}' has a table mapping but no owner column`);
+        assert.ok(OWNER_ID_COLUMNS[entity], `'${entity}' has a table mapping but no owner id column`);
     }
 });
 
 test('THE GUARD — every registered owner property exists on its real table', () => {
     const missing = [];
     for (const [entity, tableExport] of Object.entries(ENTITY_TABLES)) {
-        const key = OWNER_COLUMNS[entity];
-        if (!propertiesOf(tableExport).has(key)) missing.push(`${entity} -> ${tableExport}.${key}`);
+        const props = propertiesOf(tableExport);
+        for (const key of [OWNER_ID_COLUMNS[entity], OWNER_NAME_COLUMNS[entity]]) {
+            if (!props.has(key)) missing.push(`${entity} -> ${tableExport}.${key}`);
+        }
     }
     assert.deepEqual(missing, [], `registered owner columns that do not exist:\n  ${missing.join('\n  ')}`);
 });
 
-test('REGRESSION — contacts is owned by assignedRep, and createdBy is not a contacts column', () => {
-    assert.equal(OWNER_COLUMNS.contact, 'assignedRep');
+test('THE GUARD — every registered owner column is really the owner_id COLUMN', () => {
+    // Two separate things this must catch, and an existence check catches
+    // NEITHER:
+    //
+    //  1. The registry pointing back at a display-name column. `salesRep` exists
+    //     on opportunities, so "the property exists" is satisfied while ownership
+    //     silently reverts to comparing names — the whole defect of Phase 2.
+    //  2. The property being backed by a differently-named column. drizzle-kit
+    //     pushes the COLUMN name and the migration ALTERs the COLUMN name; if
+    //     they disagree the push and the code diverge silently.
+    const wrong = [];
+    for (const [entity, tableExport] of Object.entries(ENTITY_TABLES)) {
+        const prop = OWNER_ID_COLUMNS[entity];
+        const col = columnNameOf(tableExport, prop);
+        if (col !== 'owner_id') wrong.push(`${entity}: ${tableExport}.${prop} -> ${col ?? 'MISSING'}`);
+        if (prop === OWNER_NAME_COLUMNS[entity]) wrong.push(`${entity}: id column IS the display column`);
+    }
+    assert.deepEqual(wrong, [], `ownership must key on owner_id:\n  ${wrong.join('\n  ')}`);
+});
+
+test('REGRESSION — documents and savedReports are NOT in the ownership registry', () => {
+    // BOTH have an `ownerId` column already, and documents.ownerId holds a CLERK
+    // userId — the schema says so. Registering either here would compare a Clerk
+    // id against a usr_<uuid>: two non-null strings that can never be equal, so
+    // no throw, just a silent refuse-everything or match-nothing. That is the
+    // `users.id` two-meanings defect all over again (18b20).
+    //
+    // If either is ever brought under this policy, its column must be migrated to
+    // users.id FIRST. This test is the tripwire.
+    for (const entity of ['document', 'savedReport', 'savedReports', 'documents']) {
+        assert.equal(OWNER_ID_COLUMNS[entity], undefined,
+            `'${entity}' was registered — migrate its owner_id to users.id before doing that`);
+    }
+});
+
+test('THE GUARD — the app user id prefix is asserted, not assumed', () => {
+    assert.equal(isAppUserId('usr_abc'), true);
+    assert.equal(isAppUserId('user_2abcXYZ'), false, 'a CLERK id must not read as an app id');
+    assert.equal(isAppUserId('usr_'), false, 'the bare prefix is not an id');
+    assert.equal(isAppUserId(''), false);
+    assert.equal(isAppUserId(null), false);
+    assert.equal(isAppUserId(123), false);
+});
+
+test('REGRESSION — contacts displays assignedRep, and createdBy is not a contacts column', () => {
+    assert.equal(OWNER_NAME_COLUMNS.contact, 'assignedRep');
     const props = propertiesOf('contacts');
     assert.ok(props.has('assignedRep'), 'contacts must have assignedRep');
     assert.ok(!props.has('createdBy'), 'contacts has no createdBy — if it gains one, revisit the ownership rule deliberately');
@@ -185,35 +249,85 @@ test('a registered property missing from the table throws BY NAME, not as undefi
     assert.throws(() => ownerColumnOf({ id: {}, name: {} }, 'contact'), /does not exist on its table/);
 });
 
-test('ownerColumnOf returns the column when it is there', () => {
-    const column = { name: 'assigned_rep' };
-    assert.equal(ownerColumnOf({ assignedRep: column }, 'contact'), column);
+test('ownerColumnOf returns the OWNER ID column when it is there', () => {
+    // The registry resolves to ownerId now. A fixture keyed on the display
+    // column would pass only if the policy still read names.
+    const column = { name: 'owner_id' };
+    assert.equal(ownerColumnOf({ ownerId: column }, 'contact'), column);
 });
 
+const KAREN = 'usr_karen-0000-0000';
+const OTHER = 'usr_other-0000-0000';
+
 test('policy — an owned record is refused to anyone else and allowed to its owner', () => {
-    assert.equal(mayMutate({ owner: 'Karen Russell', callerName: 'Karen Russell' }), true);
-    assert.equal(mayMutate({ owner: 'Other Rep',     callerName: 'Karen Russell' }), false);
+    assert.equal(mayMutate({ ownerId: KAREN, callerId: KAREN }), true);
+    assert.equal(mayMutate({ ownerId: OTHER, callerId: KAREN }), false);
 });
 
 test('policy — unassigned records are mutable, including blank and whitespace owners', () => {
-    for (const owner of [null, undefined, '', '   ']) {
-        assert.equal(mayMutate({ owner, callerName: 'Karen Russell' }), true, `owner ${JSON.stringify(owner)} should be unassigned`);
+    for (const ownerId of [null, undefined, '', '   ']) {
+        assert.equal(mayMutate({ ownerId, callerId: KAREN }), true, `ownerId ${JSON.stringify(ownerId)} should be unassigned`);
     }
 });
 
-test('policy — FAIL CLOSED when the caller has no resolvable name', () => {
-    // getCallerName returns null on a missing roster row or a database error. A
-    // caller with no name owns nothing, so an owned record must be refused —
-    // never treated as "no owner, allow".
-    assert.equal(mayMutate({ owner: 'Karen Russell', callerName: null }), false);
-    assert.equal(mayMutate({ owner: 'Karen Russell', callerName: '' }), false);
+test('policy — FAIL CLOSED when the CALLER cannot be identified', () => {
+    // getCallerId returns null on a missing roster row or a database error. A
+    // caller with no roster row owns nothing, so an owned record must be refused
+    // — never treated as "no owner, allow".
+    assert.equal(mayMutate({ ownerId: KAREN, callerId: null }), false);
+    assert.equal(mayMutate({ ownerId: KAREN, callerId: '' }), false);
     // ...but an unowned record is still fair game.
-    assert.equal(mayMutate({ owner: null, callerName: null }), true);
+    assert.equal(mayMutate({ ownerId: null, callerId: null }), true);
+});
+
+test('policy — THE TWO EMPTY CASES RESOLVE IN OPPOSITE DIRECTIONS', () => {
+    // This pairing IS the rule. Conflating "the owner is unknown" with "the
+    // caller is unknown" is how bulkUpsert shipped a path that let an
+    // unidentifiable caller overwrite every owned row in the org (18b20).
+    assert.equal(mayMutate({ ownerId: null,  callerId: KAREN }), true,  'unowned record -> anyone may take it');
+    assert.equal(mayMutate({ ownerId: KAREN, callerId: null  }), false, 'unknown caller -> owns nothing');
+});
+
+test('SECURITY — a wrong-identity-space value that MATCHES must not authorize', () => {
+    // This is the assertion that has teeth. Asserting `false` for
+    // { ownerId: 'user_X', callerId: 'usr_Y' } proves nothing: two unequal
+    // strings return false whether the guard exists or not. The behaviour only
+    // diverges when the two sides are EQUAL —
+    //
+    //   without the guard  'user_X' === 'user_X'  -> TRUE, authorized
+    //   with it            wrong space            -> refused
+    //
+    // documents.ownerId holds a Clerk id today, so this is the shape a future
+    // caller passing the wrong id would actually produce.
+    assert.equal(mayMutate({ ownerId: 'user_2abcXYZ', callerId: 'user_2abcXYZ' }), false,
+        'two matching CLERK ids must not authorize — they are not app user ids');
+    assert.equal(mayMutate({ ownerId: 'Karen Russell', callerId: 'Karen Russell' }), false,
+        'two matching DISPLAY NAMES must not authorize — that is the pre-Phase-2 comparison');
+    // ...and the correct space still works, so the guard is not simply refusing all.
+    assert.equal(mayMutate({ ownerId: KAREN, callerId: KAREN }), true);
+});
+
+test('SECURITY — a wrong-identity-space value is refused LOUDLY, not silently', () => {
+    // Refusing quietly is indistinguishable from the gate working correctly.
+    // A Clerk id reaching this policy is a programming error and has to say so,
+    // or it presents as "that rep just cannot edit anything" and gets debugged
+    // for an hour at the wrong layer.
+    const seen = [];
+    const real = console.warn;
+    console.warn = (...a) => seen.push(a.join(' '));
+    try {
+        mayMutate({ ownerId: 'user_2abcXYZ', callerId: KAREN });
+        mayMutate({ ownerId: KAREN, callerId: 'user_2abcXYZ' });
+    } finally {
+        console.warn = real;
+    }
+    assert.equal(seen.length, 2, 'both the owner and the caller side must warn');
+    assert.ok(seen.every((m) => /not an app user id/.test(m)), `unhelpful warning: ${seen.join(' | ')}`);
 });
 
 test('policy — Admin and Manager bypass ownership entirely', () => {
-    assert.equal(mayMutate({ owner: 'Other Rep', callerName: 'Karen Russell', canSeeAll: true }), true);
-    assert.equal(mayMutate({ owner: 'Other Rep', callerName: null, canSeeAll: true }), true);
+    assert.equal(mayMutate({ ownerId: OTHER, callerId: KAREN, canSeeAll: true }), true);
+    assert.equal(mayMutate({ ownerId: OTHER, callerId: null,  canSeeAll: true }), true);
 });
 
 test('the two 403s stay distinguishable — ownership and role must not share a message', async () => {

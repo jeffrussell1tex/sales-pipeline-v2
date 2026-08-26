@@ -27,6 +27,15 @@ import { sql } from 'drizzle-orm';
 // [table, column] pairs the suites need. Newest first -- the most recently added
 // column is the one most likely to be missing.
 const REQUIRED = [
+    // Phase 2: ownership keys on ids. Every object-level authorization check
+    // reads these, so a test database without them refuses every owned record
+    // and the suites fail as 403s rather than as a missing column.
+    ['accounts',      'owner_id'],
+    ['contacts',      'owner_id'],
+    ['opportunities', 'owner_id'],
+    ['tasks',         'owner_id'],
+    ['leads',         'owner_id'],
+    ['activities',    'owner_id'],
     ['users', 'clerk_user_id'],   // identity split: users.id is app-owned, Clerk's id is an attribute
 ];
 

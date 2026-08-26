@@ -117,6 +117,23 @@ before(async () => {
         name: REP_NAME, email: 'itest-rep@example.test',
         role: 'User', active: true, orgId: ORG,
     });
+    //
+    // THE OTHER REP NEEDS A ROSTER ROW NOW, and that is a real semantic change
+    // rather than fixture bookkeeping. Under name-based ownership the STRING
+    // 'Itest Other Rep' was enough to own a record -- no such user had to exist.
+    // Ownership keys on users.id now, so a name that resolves to nobody stamps
+    // ownerId NULL, the record is UNASSIGNED, and unassigned records are mutable
+    // by anyone. Without this row the 403 assertions below returned 200 and the
+    // suite reported the gate open.
+    //
+    // Worth keeping in mind beyond the test: a display name can no longer confer
+    // ownership. Only a real roster user can own anything.
+    await db.insert(users).values({
+        id: 'usr_itest_contacts_other',
+        clerkUserId: 'u_itest_other',
+        name: OTHER_NAME, email: 'itest-other@example.test',
+        role: 'User', active: true, orgId: ORG,
+    });
 });
 after(cleanup);
 

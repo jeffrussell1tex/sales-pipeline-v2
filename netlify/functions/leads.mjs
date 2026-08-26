@@ -4,7 +4,10 @@ import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isReadOnly, requireRole, requireWrite } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkInsert, assertOwnership } from './_lib.mjs';
+import {
+    serverErrorBody, writeAudit, getCallerId, bulkInsert, assertOwnership,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
+} from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
@@ -66,22 +69,16 @@ export const handler = async (event) => {
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(leads).where(eq(leads.orgId, orgId)).orderBy(asc(leads.createdAt));
             if (!canSeeAll(userRole)) {
-                // assignedTo stores a display name, so the caller's name is what
-                // this filters on.
+                // Visibility keys on the OWNER ID now. The display-name
+                // comparison this replaces was the same string equality the
+                // write path used, so a renamed user disappeared from their own
+                // list and two users sharing a name saw each other's records.
                 //
-                // THIS WAS BROKEN BY THE IDENTITY SPLIT, identically to the
-                // opportunities GET. It matched `users.id` against the CLERK id,
-                // which stopped resolving when users.id became usr_<uuid>. The
-                // lookup returned no row, repDisplayName fell to null, and every
-                // rep saw ONLY unassigned leads -- silently, because an empty
-                // result is not an error and the catch never fired. It was also
-                // unscoped across orgs.
-                //
-                // A caller getCallerName cannot resolve stays null and sees only
-                // unassigned leads: the same fail-closed direction mayMutate()
-                // takes on the write path.
-                const repDisplayName = await getCallerName(userId, orgId);
-                results = results.filter(l => !l.assignedTo || l.assignedTo === repDisplayName);
+                // A caller who cannot be resolved stays null and sees only
+                // unassigned rows — the same fail-closed direction mayMutate()
+                // takes on writes.
+                const callerId = await getCallerId(userId, orgId);
+                results = results.filter(l => !l.ownerId || l.ownerId === callerId);
             }
             return { statusCode: 200, headers, body: JSON.stringify({ leads: results }) };
         }
@@ -116,7 +113,10 @@ export const handler = async (event) => {
                 // Chunked with per-row isolation by bisection — see bulkInsert
                 // in _bulk.mjs (18b8). One malformed row no longer discards the
                 // whole import.
-                const result = await bulkInsert({ table: leads, rows, orgId });
+                const owned = await stampOwnerIds(rows, 'lead', { clerkUserId: userId, orgId });
+                const result = await bulkInsert({ table: leads, rows: owned.rows, orgId });
+                result.ambiguousOwners = owned.ambiguousOwners;
+                result.unmatchedOwners = owned.unmatchedOwners;
 
                 // Deliberately no lead.created webhook or automation dispatch on
                 // this path: firing N of them inline would exceed the same time
@@ -131,7 +131,8 @@ export const handler = async (event) => {
             const cleanPost = sanitize(data);
             const cfgPost = await getLeadScoring(orgId);
             const scoredPost = await scoreColumns(orgId, { ...cleanPost, createdAt: new Date().toISOString() }, cfgPost);
-            const [inserted] = await db.insert(leads).values({ ...cleanPost, ...scoredPost, orgId }).returning();
+            const newRow = await stampOwnerId({ ...cleanPost, ...scoredPost }, 'lead', { clerkUserId: userId, orgId });
+            const [inserted] = await db.insert(leads).values({ ...newRow, orgId }).returning();
 
             // Webhook: lead.created
             await dispatchWebhook(orgId, 'lead.created', {
@@ -173,6 +174,11 @@ export const handler = async (event) => {
             const wasConverted = existing?.status === 'Converted';
 
             const clean = sanitize(data);
+            // Reassigning a lead re-keys its ownership; a PUT that never
+            // mentioned assignedTo leaves it alone (18b13). Applied to `clean`
+            // AFTER sanitize, which would otherwise not carry the column.
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'lead', orgId });
+            if (ownPut.change) clean.ownerId = ownPut.ownerId;
             const today = new Date().toISOString().slice(0, 10);
 
             // Auto-set convertedAt the first time status flips to Converted
@@ -269,6 +275,8 @@ export const handler = async (event) => {
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
+        const amb = ambiguousOwnerResponse(err, headers);
+        if (amb) return amb;
         console.error('Leads error:', err.message);
         return { statusCode: 500, headers, body: serverErrorBody(err, 'leads') };
     }

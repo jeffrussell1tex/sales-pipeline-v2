@@ -2,7 +2,10 @@ import { db } from '../../db/index.js';
 import { contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert, assertOwnership } from './_lib.mjs';
+import {
+    serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
+} from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
@@ -72,12 +75,16 @@ export const handler = async (event) => {
                 // _lib.mjs (18b8). The removed onConflictDoNothing() could never
                 // fire: the only unique constraint is the id primary key and every
                 // id is a fresh randomUUID from the client.
-                const result = await bulkInsert({ table: contacts, rows: data.map(d => sanitize(d)), orgId });
+                const owned = await stampOwnerIds(data.map(d => sanitize(d)), 'contact', { clerkUserId: userId, orgId });
+                const result = await bulkInsert({ table: contacts, rows: owned.rows, orgId });
+                result.ambiguousOwners = owned.ambiguousOwners;
+                result.unmatchedOwners = owned.unmatchedOwners;
                 return { statusCode: 201, headers, body: JSON.stringify(result) };
             }
             // Single insert
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const [inserted] = await db.insert(contacts).values({ ...sanitize(data), orgId }).returning();
+            const newRow = await stampOwnerId(sanitize(data), 'contact', { clerkUserId: userId, orgId });
+            const [inserted] = await db.insert(contacts).values({ ...newRow, orgId }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ contact: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -90,7 +97,10 @@ export const handler = async (event) => {
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
                 // Reps may only overwrite their own or unassigned records. Resolved
                 // once here rather than per row; null means "may edit everything".
-                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId, orgId);
+                // Resolved unconditionally; canSeeAll is an explicit parameter
+                // below. The retired ternary made a null caller mean both
+                // "trusted Admin" and "unidentifiable" (18b20).
+                const callerId = await getCallerId(userId, orgId);
                     // partialRows, not sanitize() alone. sanitize() is a FULL-ROW
                     // builder -- it expands a payload rather than filtering one --
                     // and bulkUpsert derives its SET clause from the keys supplied,
@@ -111,13 +121,15 @@ export const handler = async (event) => {
                     // every contact in the org. Resolved through the registry now,
                     // which throws by name rather than degrading to "no owner".
                     ownerColumn: ownerColumnOf(contacts, 'contact'),
-                    callerName,
+                    callerId,
                     canSeeAll: canSeeAll(userRole),
                 });
                 return { statusCode: 200, headers, body: JSON.stringify(result) };
             }
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'contact', orgId });
+            if (ownPut.change) clean.ownerId = ownPut.ownerId;
             const { id, ...updateData } = clean;
             // PUT is strictly an update: unknown ids 404 instead of silently creating.
             const [target] = await db.select({ id: contacts.id, [ownerKeyFor('contact')]: ownerColumnOf(contacts, 'contact') })
@@ -170,6 +182,8 @@ export const handler = async (event) => {
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
+        const amb = ambiguousOwnerResponse(err, headers);
+        if (amb) return amb;
         console.error('Contacts error:', err.message);
         return { statusCode: 500, headers, body: serverErrorBody(err, 'contacts') };
     }

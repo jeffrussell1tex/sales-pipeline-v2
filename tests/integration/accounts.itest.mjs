@@ -77,6 +77,7 @@ const ev = (org, method, body, qs, role) => ({
 });
 const asRep = (org, method, body, qs) => ev(org, method, body, qs, 'User');
 const REP_NAME = 'Itest Rep';
+const OTHER_NAME = 'Itest Other Acc Rep';
 const cleanup = async () => {
     for (const o of [A, B]) {
         await db.delete(accounts).where(eq(accounts.orgId, o));
@@ -105,6 +106,18 @@ before(async () => {
         id: 'usr_itest_accounts_rep',
         clerkUserId: 'u_' + A,
         name: REP_NAME, email: 'itest-acc-rep@example.test',
+        role: 'User', active: true, orgId: A,
+    });
+    // The OTHER rep needs a roster row now. Under name-based ownership the bare
+    // string 'Someone Else' owned a record without any such user existing.
+    // Ownership keys on users.id, so a name resolving to nobody stamps ownerId
+    // NULL -- the record is UNASSIGNED and mutable by anyone, which is why the
+    // ownership-refusal test received 'insufficient role' from the gate below it
+    // instead of a 403 from the ownership check.
+    await db.insert(users).values({
+        id: 'usr_itest_accounts_other',
+        clerkUserId: 'u_other_' + A,
+        name: OTHER_NAME, email: 'itest-acc-other@example.test',
         role: 'User', active: true, orgId: A,
     });
 });
@@ -192,7 +205,12 @@ test('REGRESSION — a delete refused by the ROLE gate leaves the hierarchy inta
 test('REGRESSION — a delete refused by the OWNERSHIP check leaves the hierarchy intact', async () => {
     // The other refusal path. Both return 403 and only the message differs, so
     // both need covering -- fixing one ordering would not fix the other.
-    await seedFamily(A, 'acc_owner', 'Someone Else');
+    // OTHER_NAME, not a bare string. 'Someone Else' matched no roster row, so
+    // ownerId stamped NULL, the family was UNASSIGNED, ownership ALLOWED the
+    // delete and it fell through to the role gate -- this test failed asserting
+    // the ownership message and receiving 'insufficient role'. A display name
+    // can no longer confer ownership; only a real roster user can own anything.
+    await seedFamily(A, 'acc_owner', OTHER_NAME);
     const res = await handler(asRep(A, 'DELETE', null, { id: 'acc_owner_parent' }));
     assert.equal(res.statusCode, 403);
     assert.match(JSON.parse(res.body).error, /your own or unassigned records/);

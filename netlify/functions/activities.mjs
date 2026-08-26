@@ -2,7 +2,10 @@ import { db } from '../../db/index.js';
 import { activities, leads, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
-import { serverErrorBody, writeAudit, getCallerName, assertOwnership } from './_lib.mjs';
+import {
+    serverErrorBody, writeAudit, assertOwnership,
+    stampOwnerId, ownerIdForUpdate, ambiguousOwnerResponse,
+} from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
@@ -76,7 +79,8 @@ export const handler = async (event) => {
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const [inserted] = await db.insert(activities).values({ ...sanitize(data), orgId }).returning();
+            const newRow = await stampOwnerId(sanitize(data), 'activity', { clerkUserId: userId, orgId });
+            const [inserted] = await db.insert(activities).values({ ...newRow, orgId }).returning();
             if (inserted.leadId) { try { await rescoreLead(orgId, inserted.leadId); } catch (e) { console.warn('lead rescore (post) failed:', e.message); } }
             return { statusCode: 201, headers, body: JSON.stringify({ activity: inserted }) };
         }
@@ -99,6 +103,10 @@ export const handler = async (event) => {
                 table: activities, entity: 'activity', id: data.id, orgId, userId, userRole, headers, row: target,
             });
             if (forbiddenPut) return forbiddenPut;
+            // Changing the author re-keys ownership; a PUT that never mentioned
+            // it leaves it alone (18b13).
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'activity', orgId });
+            if (ownPut.change) { clean.ownerId = ownPut.ownerId; updateData.ownerId = ownPut.ownerId; }
             const [upserted] = await db.insert(activities).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: activities.id, setWhere: eq(activities.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
@@ -143,6 +151,8 @@ export const handler = async (event) => {
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
+        const amb = ambiguousOwnerResponse(err, headers);
+        if (amb) return amb;
         console.error('Activities error:', err.message);
         return { statusCode: 500, headers, body: serverErrorBody(err, 'activities') };
     }

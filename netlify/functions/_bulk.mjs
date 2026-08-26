@@ -135,6 +135,12 @@ const requiredColumns = (table) =>
         return c && c.name && c.notNull && !c.hasDefault && !BULK_IMMUTABLE.has(k);
     });
 
+// OWNERSHIP KEYS ON IDS. `ownerColumn` is the table's `ownerId` column and
+// `callerId` is the caller's `users.id`, both resolved by the endpoint through
+// _ownership.mjs and _lib.mjs. The previous parameter was `callerName` and
+// compared display names, which meant a renamed user lost every row they owned
+// and two users sharing a name shared each other's.
+//
 // `canSeeAll` is an EXPLICIT parameter and defaults to false.
 //
 // It used to be encoded as `callerName === null`, with the comment "callerName
@@ -157,7 +163,7 @@ const requiredColumns = (table) =>
 // The default is false, so a caller that forgets to pass it refuses Admins on
 // the bulk path rather than authorizing everyone. That is visible and annoying;
 // the other direction is silent and unbounded.
-export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerName = null, canSeeAll = false, client }) {
+export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, callerId = null, canSeeAll = false, client }) {
     const db = client;
     if (!Array.isArray(rows) || rows.length === 0) return { updated: 0, notFound: [], forbidden: [] };
 
@@ -173,7 +179,7 @@ export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, calle
     // payload through without inventing values for the columns it omits.
     const required = requiredColumns(table);
     const projection = { id: table.id };
-    if (ownerColumn) projection.owner = ownerColumn;
+    if (ownerColumn) projection.ownerId = ownerColumn;
     for (const k of required) projection[k] = table[k];
 
     const existing = await db.select(projection).from(table)
@@ -187,9 +193,32 @@ export async function bulkUpsert({ table, rows, orgId, ownerColumn = null, calle
         const prior = byId.get(row.id);
         if (!prior) { notFound.push(row.id); continue; }
         // One policy, shared with assertOwnership. An unassigned row is mutable
-        // by anyone; an owned row needs a caller who matches it; a caller with
-        // no resolvable name owns nothing and is refused.
-        if (!mayMutate({ owner: prior.owner, callerName, canSeeAll })) {
+        // by anyone; an owned row needs a caller whose id matches it; a caller
+        // with no roster row owns nothing and is refused.
+        //
+        // Ownership compares IDS now, not display names. Passing a name here
+        // would compare a name against a usr_<uuid> -- two non-null strings that
+        // can never be equal -- and every owned row in every batch would be
+        // refused. mayMutate warns rather than silently refusing, precisely so
+        // that mistake is visible instead of looking like the gate working.
+        // A projection that did not come back is a BUG, not an answer.
+        //
+        //   undefined  the SELECT never returned the column
+        //   null       the row is genuinely unowned
+        //
+        // Those resolved identically until now, and the permissive one won: an
+        // undefined ownerId read as "unassigned" and made every owned row in the
+        // batch writable by anyone. That is 18b20 inside the function 18b20 was
+        // written about, and it is not hypothetical -- a stale test fixture
+        // projecting the OLD key produced exactly this and three security tests
+        // went green-to-red only because they asserted the outcome directly.
+        if (ownerColumn && !('ownerId' in prior)) {
+            throw new Error(
+                `bulkUpsert: an ownerColumn was supplied but the projection returned no ownerId for row '${prior.id}'. ` +
+                `Refusing to treat a missing projection as an unowned record.`
+            );
+        }
+        if (!mayMutate({ ownerId: prior.ownerId, callerId, canSeeAll })) {
             forbidden.push(row.id); continue;
         }
         eligible.push(row);
