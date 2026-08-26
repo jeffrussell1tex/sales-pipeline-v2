@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
-**Updated:** August 26, 2026  
-**Verified at:** all six gates green · **255 tests** · **26 integration tests** · **65/65 mutations caught** · all 66 functions bundle under esbuild  
+**Updated:** August 26, 2026 (second batch)  
+**Verified at:** all six gates green · **261 tests** · **26 integration tests** · **73/73 mutations caught, ON A VERIFIED GREEN BASELINE** · **migration applied** · **rep path verified in the browser as a rep, not an Admin** · all 66 functions bundle under esbuild  
 **Batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
 **Prior batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
 **Prior batch:** **the delete gate RAN and passed — first time in four sessions** · **the leads CSV import had never written a single row** (client sent an array, endpoint had no array branch, 400 every time, error rendered on a step the user never sees) · **two ownership columns that do not exist** — `contacts.createdBy` and `activities.repName` — producing four hard 500s on rep paths and one SILENT ORG-WIDE WRITE BYPASS · **object-level authorization centralised** into `_ownership.mjs` with a registry checked against the real schema by `npm test` — the guard found the second bad column on its first run · **the integration suite had been dead at import** since `requireWrite` landed, so every cross-tenant isolation test including the post-wipe `clear=true` guard was dormant · **the test database schema had drifted** and `drizzle-kit push` had never been run against it · **`currentUser` comes from Clerk and disagrees with `users.name`**, so a rep with no Clerk profile name is identified by EMAIL and sees only unowned records · `GET /users` was Admin-only, so every user picker rendered empty for reps · **child promotion runs BEFORE the Admin gate — CONFIRMED: a refused delete still orphans every sub-account, permanently, with no audit record** · 232 → 244 tests, 0 → **26** integration tests (this line read `0 → 21` until 25 Aug; it was written before the five accounts child-promotion tests landed and never updated — §0.24's own text says 26)
@@ -18,7 +18,145 @@
 
 ---
 
-## 0. Latest Batch — Centralising the Gate, and Three Names Compared to Ids
+## 0. Latest Batch — Ownership Keys On Ids, And Three Guards That Were Not Guarding
+
+> Phase 2 proper. `ownerId` on the six Tier 1 tables, the server stamps it on
+> create, and `_ownership.mjs` compares ids. **A display name can no longer confer
+> ownership: only a real roster user can own anything.**
+>
+> Three separate things that read as working were not. Each is recorded below
+> because each was green at the moment it was wrong.
+
+### 0.34 What shipped
+
+- `ownerId text` + `(orgId, ownerId)` index on accounts, contacts, opportunities,
+  tasks, leads, activities.
+- `_ownership.mjs` rewritten: `OWNER_ID_COLUMNS` is the policy registry;
+  `OWNER_NAME_COLUMNS` is retained for RENDERING AND RESOLUTION ONLY. **There is
+  deliberately no name-based policy function** — if one existed something would
+  eventually call it, and the two policies would drift the way `bulkUpsert` and
+  `_ownership` drifted (§18b20).
+- `_lib.mjs`: `getCallerId`, `resolveOwnerId` (refuses ambiguity with a 409 naming
+  both roster rows), `ownerIdForWrite`, `stampOwnerId`, `stampOwnerIds`,
+  `ownerIdForUpdate`, `ambiguousOwnerResponse`.
+- `bulkUpsert` takes `callerId`, not `callerName`.
+- All six endpoints stamp on create and re-key on reassign; the two rep GET
+  filters key on `ownerId`.
+- `scripts/migrate-owner-ids.mjs` — additive DDL plus a name→id backfill that
+  **refuses ambiguity rather than guessing**.
+
+**Single create defaults to the caller; BULK create does not.** Creating a deal in
+the UI means you own it. Importing three hundred rows of someone else's
+spreadsheet does not make you the owner of all of them — and stamping the importer
+is exactly what `importRows.js:103` did, which is why an unassigned opportunity
+could not be created by import at all. **That item is now closed.**
+
+### 0.35 `ownerId` already meant two things in this schema
+
+`documents.ownerId` holds a **Clerk** userId — the schema comment says so.
+`savedReports.ownerId` is notNull and undocumented. Adding six more `ownerId`
+columns holding `usr_<uuid>` would have made three identity spaces sharing one
+property name, all `text`, all comparing without error and never matching.
+
+§0.28 recorded both as *"already correct — leave alone"* because they were
+id-first. **True about the shape, wrong about the space.**
+
+`isAppUserId()` now asserts the space and `mayMutate()` refuses a wrong-space value
+LOUDLY. A registry tripwire keeps `document` and `savedReport` out of the ownership
+policy until their columns are migrated. Guide **§18b22**.
+
+### 0.36 Three things that were green and wrong
+
+**1. The mutation score was vacuous.** The harness judges CAUGHT by non-zero exit.
+`tests/bulk-upsert.test.mjs` was RED — three security assertions about bulk
+ownership — so every mutation exited non-zero and it printed **73/73 twice** over
+code it never tested. A green baseline is now proven before anything is graded.
+
+**2. `bulkUpsert` failed OPEN on a projection miss.** `prior.ownerId` was
+`undefined` (column not projected) and that read as `null` (genuinely unowned), so
+every owned row in every batch became writable. Now throws.
+
+**3. A guard covered the instances, not the class.** Five source-level guards were
+written for the name-vs-id defects found in the previous batch. A sixth instance
+then SURVIVED the harness:
+
+```js
+results.filter(l => !l.assignedTo || l.assignedTo === callerId)
+```
+
+The write-path policy could not save it — **visibility filters compare in the
+endpoint and never reach `mayMutate()`**. The sixth guard describes the class:
+anything compared against `callerId` must end in `.ownerId`. Guide **§18b23**.
+
+### 0.37 The collision is real, and it was in the data
+
+The backfill's ambiguity check found **two roster rows named "Jeff Russell" in the
+UKG org** — `jeff.russell@ukg.com` and `jeffrussell1@yahoo.com`. Under name-based
+ownership those two accounts owned each other's records and every gate agreed it
+was fine. Not a hypothetical from the design note; live in dev data.
+
+Resolved by renaming the member row. **Renaming before the backfill would have
+silently reassigned the admin's records to the member** — §5's "renaming a user
+detaches every record they own", live. The correct row was renamed instead.
+
+Also visible in the plan: `activities.author` contains **`jeffrussell1@live.com`
+and `jeffrussell1@yahoo.com`** — email addresses in an owner column, the
+`importRows.js:103` contamination, in data rather than inferred from code.
+
+### 0.38 Migration APPLIED, and the rep path verified by hand
+
+`accounts` 813 rows / 5 owned · `contacts` 3038 / 1445 · `opportunities` 66 / 34 ·
+`tasks` 74 / 51 · `leads` 25 / 4 · `activities` 53 / 30.
+
+**1,569 set. 2,408 genuinely unowned. 92 rows name someone who is on no roster**
+(Dana Holloway, Carlos Mendez, Marcus Webb, Lauren Xu and other demo-seed reps,
+plus `ZZFX Other Rep` — a test fixture name that reached dev data). Those stay
+unassigned, and **unassigned means editable org-wide** — the policy, not a gap,
+but it is what it means for roughly 61% of dev rows.
+
+**Every applied count matched the dry run exactly.** Worth stating: a plan that
+does not predict its own apply is not a plan, and this file has recorded two
+migrations that surprised their operator.
+
+**Verified in the browser, signed in as a REP rather than an Admin.** Own contact
+visible and editable; someone else's refused with the OWNERSHIP message rather
+than the role one; a self-created contact came back owned by the creator. Those
+three map to the GET filter keying on `ownerId`, `assertOwnership` firing with the
+two 403s still distinguishable, and the server stamping from the JWT.
+
+**No gate can perform this check**, and Admin skips every `!canSeeAll` branch,
+which is exactly how §0.24, §0.30 and §0.36 shipped green. Repeat it after any
+change to ownership or visibility.
+
+### 0.39 Still name-based, deliberately
+
+`opportunities.mjs` manager visibility filters on `managedReps`, which lives in
+Clerk `publicMetadata` as an array of DISPLAY NAMES. It cannot move to ids until
+that list does, and it carries the Phase 2 hazards in full — rename a managed rep
+and they drop out of their manager's view silently. Commented in place. It is a
+visibility filter, not an authorization gate.
+
+### 0.40 Open, found this batch, not yet fixed
+
+**The role vocabulary is two vocabularies.** The Users list shows badges reading
+`member`, `Admin`, `member`, `User` — Clerk's role names (`member`/`admin`) mixed
+with the app's (`Admin`/`Manager`/`User`/`Technician`). The seat counter read
+**Admins 0** with a lowercase `admin` and **Admins 1** after it became `Admin`, so
+the comparison is case-sensitive. If `canSeeAll()` compares the same way, **a user
+the UI calls an admin has rep access**.
+
+Worse, the user-detail ROLE select showed `Admin` for a user whose header and
+effective-permissions summary both said `member` — consistent with `member` not
+being in the option list, so the browser renders the first option. **Saving that
+page would write `Admin` to a member.** Not verified against `auth.mjs`; own commit.
+
+**`invalidateRoster(orgId)` is exported and never called.** `resolveOwnerId`
+caches the roster for 30s, so inviting a user and immediately assigning them a
+record can resolve stale and stamp NULL. Needs a call after any `users` write.
+
+---
+
+## 0PA. Prior Batch — Centralising the Gate, and Three Names Compared to Ids
 
 > Phase 2 step 3, pulled forward and done first: the nine remaining hand-rolled
 > ownership checks are now `assertOwnership()`. Pure refactor by intent — no
@@ -141,7 +279,7 @@ value test debt in the repo** — it is the same gap that let §0.23, §0.24 and
 
 ---
 
-## 0PA. Prior Batch — The Delete Gate Ran, and the Rep Path Had Never Been Executed
+## 0PB2. Prior Batch — The Delete Gate Ran, and the Rep Path Had Never Been Executed
 
 > The delete gate finally ran end to end: six 403s splitting correctly across the
 > ownership check and the Admin role gate, three 200s, the Admin half clean, and

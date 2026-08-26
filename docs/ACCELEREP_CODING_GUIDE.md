@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** August 26, 2026 · rules current through **§18b21**.
+**Updated:** August 26, 2026 · rules current through **§18b23**.
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -2425,3 +2425,121 @@ that was being counted without being tested.
 3. Assert the result is actually *used*, not merely computed.
 4. Add the suite to `SUITES` and give each guard a mutation.
 5. Confirm each mutation reports CAUGHT before believing any of it.
+
+---
+
+## 18b22. An Id Column Is Not An Identity — Assert The Space (hard rule)
+
+Phase 2 moved ownership from display names onto `users.id`. Adding the columns
+nearly recreated the defect it was removing.
+
+**Three different `ownerId` columns already existed in this schema:**
+
+| Column | Holds |
+|---|---|
+| `documents.ownerId` | a **Clerk** userId (`user_…`) — the schema comment says so |
+| `savedReports.ownerId` | notNull, undocumented, unaudited |
+| the six Tier 1 columns | our `usr_<uuid>` |
+
+All three are `text`. A Clerk id compared against an app id is a valid expression
+between two non-null strings that **can never be equal**, so it does not throw. It
+silently refuses everything, or silently matches nothing, depending which side it
+lands on.
+
+`documents` and `savedReports` were recorded in §0.28 as *"already correct — leave
+alone"* because they were id-first. That was true about the SHAPE and wrong about
+the SPACE.
+
+### The rule
+
+**Where a value's identity space is not enforced by the type system, assert it at
+the point of use, and make a wrong space refuse LOUDLY.**
+
+```js
+export const isAppUserId = (v) =>
+    typeof v === 'string' && v.startsWith('usr_') && v.length > 4;
+```
+
+`mayMutate()` refuses and `console.warn`s on a wrong-space value. Quiet refusal is
+indistinguishable from the gate working correctly, and gets debugged for an hour
+at the wrong layer.
+
+`tests/ownership-registry.test.mjs` carries a tripwire asserting `document` and
+`savedReport` are NOT in the ownership registry. If either is ever brought under
+this policy its column must be migrated to `users.id` first.
+
+### Assert the OUTCOME THAT DIFFERS, not the outcome you expect
+
+The first version of that test asserted:
+
+```js
+assert.equal(mayMutate({ ownerId: 'user_X', callerId: 'usr_Y' }), false);
+```
+
+**Deleting the guard SURVIVED it.** Two unequal strings return `false` whether the
+guard exists or not. The behaviour only diverges when the two sides MATCH:
+
+```
+without the guard   'user_X' === 'user_X'  ->  TRUE, authorized
+with it             wrong space            ->  refused
+```
+
+A test that passes for the same reason with and without the code under test is not
+a test. Ask what would be DIFFERENT, and assert that.
+
+### `undefined` and `null` are not the same absence
+
+`bulkUpsert` read `prior.ownerId` from its own projection:
+
+- `undefined` — the SELECT never returned the column
+- `null` — the row is genuinely unowned
+
+They resolved identically and the permissive one won, so a stale fixture
+projecting the OLD key made **every owned row in every batch writable by anyone**.
+It now throws when an `ownerColumn` was requested and the projection came back
+without it. §18b20, inside the function §18b20 was written about.
+
+---
+
+## 18b23. A Guard Guards A SHAPE; A Score Needs A BASELINE (hard rule)
+
+### 1. The harness cannot grade a red suite
+
+`scripts/mutate-import.mjs` judges a mutation CAUGHT when the suite exits
+non-zero. If the suite is ALREADY red, **every** mutation exits non-zero and the
+harness prints a perfect score over code it never tested.
+
+It reported **73/73 twice** while `tests/bulk-upsert.test.mjs` had three RED
+tests — including all three security assertions about ownership on the bulk path.
+The number meant to prove the guards worked was proving only that node exits 1.
+
+The harness now runs the suites unmutated first and refuses to grade anything
+otherwise:
+
+```
+Baseline: running the suites unmutated...
+Baseline: green.
+```
+
+**Never trust a mutation score that did not print a green baseline.**
+
+### 2. Guard the shape, not the instance you happened to find
+
+Five source-level guards were written for the name-vs-id defects found in one
+batch: `!== callerName`, a projected owner, a literal `ownerColumn:`,
+`eq(users.id, userId)`, an unscoped users lookup.
+
+A sixth instance of the SAME defect class then survived the harness:
+
+```js
+results.filter(l => !l.ownerId    || l.ownerId    === callerId)   // correct
+results.filter(l => !l.assignedTo || l.assignedTo === callerId)   // SURVIVED
+```
+
+A display name compared against a `usr_<uuid>`. Every guard was written against
+the instances already discovered, and none described the CLASS. The sixth guard
+does: **anything compared against `callerId` must end in `.ownerId`.**
+
+Note also why the write-path policy did not save it — visibility filters do their
+comparison in the endpoint and never reach `mayMutate()`. **Reads need their own
+guards.** A policy function protects only the callers that call it.
