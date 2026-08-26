@@ -240,6 +240,39 @@ test('REGRESSION — every users lookup in an endpoint is org-scoped', () => {
     assert.deepEqual(offenders, [], `${offenders.join('\n  ')}`);
 });
 
+test('THE GUARD — callerId is only ever compared against an ownerId', () => {
+    // The mutation this exists for SURVIVED 72/73:
+    //
+    //     results.filter(l => !l.ownerId  || l.ownerId  === callerId)   // correct
+    //     results.filter(l => !l.assignedTo || l.assignedTo === callerId)   // mutant
+    //
+    // A DISPLAY NAME compared against a usr_<uuid>. Two non-null strings that
+    // can never be equal, so no error -- every rep silently sees only unassigned
+    // records, which is precisely the live regression found in the GET filters
+    // earlier in this batch.
+    //
+    // The five guards written then covered the shapes already discovered:
+    // `!== callerName`, a projected owner, a literal ownerColumn, users.id vs the
+    // Clerk id, an unscoped users lookup. None covered this one. The lesson is
+    // the same one 18b21 records: guard the SHAPE, not the instance you happened
+    // to find.
+    //
+    // mayMutate() refuses a wrong-space value on the WRITE path. Visibility
+    // filters do their own comparison in the endpoint and never reach it, so
+    // reads need this check separately.
+    const offenders = [];
+    for (const name of ENDPOINTS) {
+        const code = codeOnly(endpointSrc(name));
+        for (const m of code.matchAll(/([A-Za-z_$][\w$.?\[\]'"]*)\s*===\s*callerId\b/g)) {
+            const lhs = m[1];
+            if (!/\.ownerId$/.test(lhs)) {
+                offenders.push(`${name}: '${lhs} === callerId' compares a non-ownerId value against a user id`);
+            }
+        }
+    }
+    assert.deepEqual(offenders, [], `${offenders.join('\n  ')}`);
+});
+
 test('an unregistered entity throws rather than authorizing everyone', () => {
     assert.throws(() => ownerKeyFor('invoice'), /no ownership rule registered/);
 });
