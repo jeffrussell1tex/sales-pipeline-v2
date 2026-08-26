@@ -5,7 +5,8 @@ import { verifyAuth, canSeeAll, isManager, isReadOnly, requireRole, requireWrite
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkInsert, bulkUpsert } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, bulkInsert, bulkUpsert, assertOwnership } from './_lib.mjs';
+import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
 import { applyStageChanges } from './_stage.mjs';
@@ -24,13 +25,24 @@ const DEFAULT_PREFS = {
     overdueTaskNudge:    { enabled: true,  mode: 'digest'  },
 };
 
-// Fetch a rep's full user record (email + notification prefs) by display name
-async function getRepUser(repName) {
-    if (!repName) return null;
+// Fetch a rep's full user record (email + notification prefs) by display name.
+//
+// orgId IS REQUIRED. This lookup was unscoped, which was survivable only while
+// users.email carried a GLOBAL unique constraint -- one person, one org, so a
+// display name could resolve in exactly one place. Per-org rosters removed that
+// guarantee: two orgs may now each employ a "John Smith", and an unscoped match
+// returns an ARBITRARY one of them. This function's result is an EMAIL ADDRESS
+// that maybeEmail() then sends deal names, ARR and stage changes to, so the
+// failure mode is one tenant's pipeline activity delivered to another tenant's
+// employee. Same defect class as the caller lookup in 18b20.3, and missed by
+// that sweep for the same reason: it is an inline query, not a call to the
+// shared helper, so nothing textual matched it.
+async function getRepUser(repName, orgId) {
+    if (!repName || !orgId) return null;
     try {
         const [user] = await db.select({ email: users.email, profile: users.profile })
             .from(users)
-            .where(eq(users.name, repName));
+            .where(and(eq(users.name, repName), eq(users.orgId, orgId)));
         return user || null;
     } catch (err) {
         console.error('getRepUser error:', err.message);
@@ -46,9 +58,9 @@ function shouldSendInstant(repUser, alertType) {
 }
 
 // Fire an instant email if the rep has opted in
-async function maybeEmail(repName, alertType, templateArgs) {
+async function maybeEmail(repName, alertType, templateArgs, orgId) {
     try {
-        const repUser = await getRepUser(repName);
+        const repUser = await getRepUser(repName, orgId);
         if (!repUser?.email) {
             console.warn(`${alertType}: no email found for rep`, repName);
             return;
@@ -145,15 +157,24 @@ export const handler = async (event) => {
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(opportunities).where(eq(opportunities.orgId, orgId)).orderBy(asc(opportunities.createdAt));
             if (!canSeeAll(userRole)) {
-                // salesRep is stored as a display name (e.g. "Jeff Russell"), not a Clerk userId.
-                // Look up the current user's display name from the users table so we can filter correctly.
-                let repDisplayName = null;
-                try {
-                    const [repRow] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
-                    repDisplayName = repRow?.name || null;
-                } catch (e) {
-                    console.warn('Could not look up rep display name for filtering:', e.message);
-                }
+                // salesRep stores a display name, so the caller's name is what
+                // this filters on.
+                //
+                // THIS WAS BROKEN BY THE IDENTITY SPLIT. It read
+                //     .where(eq(users.id, userId))
+                // where userId is the CLERK id and users.id is now usr_<uuid>.
+                // The match found nothing, repDisplayName fell to null, and the
+                // predicate collapsed to `!o.salesRep || o.salesRep === null`:
+                // every rep saw ONLY unassigned deals and none of their own. No
+                // error, because the query succeeded and simply returned no row --
+                // the catch below never fired. It was also unscoped, so it could
+                // resolve a name from another tenant.
+                //
+                // getCallerName is the one lookup that knows both facts: match on
+                // clerkUserId, scope to orgId. A caller it cannot resolve stays
+                // null and sees only unassigned work, which is the same fail-
+                // closed direction mayMutate() takes for writes.
+                const repDisplayName = await getCallerName(userId, orgId);
                 results = results.filter(o => !o.salesRep || o.salesRep === repDisplayName);
             } else if (isManager(userRole) && managedReps.length > 0) {
                 // managedReps are stored as display names in Clerk publicMetadata — this comparison is correct
@@ -181,8 +202,17 @@ export const handler = async (event) => {
             }
             const [inserted] = await db.insert(opportunities).values({ ...sanitize(data), orgId }).returning();
 
-            // Email: new opportunity created — notify assigned rep if someone else created it
-            if (inserted.salesRep && inserted.salesRep !== userId) {
+            // Email: new opportunity created — notify the assigned rep only if
+            // SOMEONE ELSE created it.
+            //
+            // This compared `inserted.salesRep !== userId`: a display name against
+            // a Clerk user id. Those can never be equal, so the guard never
+            // suppressed anything and a rep creating their own deal always emailed
+            // themselves about it. Pre-existing (userId has always been Clerk's),
+            // and the same category as the two GET filters -- a name compared to
+            // an id -- so it is fixed in the same pass.
+            const creatorName = await getCallerName(userId, orgId);
+            if (inserted.salesRep && inserted.salesRep !== creatorName) {
                 await maybeEmail(inserted.salesRep, 'opportunityCreated', {
                     repName:       inserted.salesRep,
                     dealName:      inserted.opportunityName || 'New Deal',
@@ -191,7 +221,7 @@ export const handler = async (event) => {
                     stage:         inserted.stage,
                     createdBy:     userId,
                     opportunityId: inserted.id,
-                });
+                }, orgId);
             }
 
             // Webhook: opportunity.created
@@ -226,9 +256,14 @@ export const handler = async (event) => {
                 if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ updated: 0, notFound: [], forbidden: [] }) };
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
                 // Reps may only overwrite their own or unassigned deals — the same
-                // salesRep check the single-record path applies below, resolved once
-                // for the batch.
-                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId, orgId);
+                // check the single-record path applies below, resolved once for
+                // the batch.
+                //
+                // Resolved UNCONDITIONALLY. The retired ternary
+                // (`canSeeAll(userRole) ? null : ...`) made a null callerName mean
+                // "trusted Admin" as well as "unidentifiable", which is the
+                // conflation 18b20 exists to end. canSeeAll is explicit below.
+                const callerName = await getCallerName(userId, orgId);
 
                 // Stage clock and history. Only the server can resolve these: the
                 // client does not know a deal's prior stage. One SELECT for the
@@ -268,7 +303,8 @@ export const handler = async (event) => {
                     table: opportunities,
                     rows: partialRows(staged.rows, sanitize),
                     orgId,
-                    ownerColumn: opportunities.salesRep,
+                    // Through the registry, never named at the call site (18b19).
+                    ownerColumn: ownerColumnOf(opportunities, 'opportunity'),
                     callerName,
                     canSeeAll: canSeeAll(userRole),
                 });
@@ -296,13 +332,13 @@ export const handler = async (event) => {
             if (!existing) {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Opportunity not found' }) };
             }
-            // Object-level authorization: reps may only edit their own or unassigned records
-            if (!canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId, orgId);
-                if (existing.salesRep && existing.salesRep !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization: reps may only edit their own or
+            // unassigned deals. `existing` is the full row, already loaded, so no
+            // second query is issued.
+            const forbiddenPut = await assertOwnership({
+                table: opportunities, entity: 'opportunity', id: data.id, orgId, userId, userRole, headers, row: existing,
+            });
+            if (forbiddenPut) return forbiddenPut;
             const previousStage    = existing?.stage    || null;
             const previousComments = existing?.comments || [];
 
@@ -333,7 +369,7 @@ export const handler = async (event) => {
                         outcome:       isClosedWon ? 'Won' : 'Lost',
                         closedBy:      userId,
                         opportunityId: upserted.id,
-                    });
+                    }, orgId);
                 } else {
                     await maybeEmail(rep, 'stageChanged', {
                         repName:       rep,
@@ -344,7 +380,7 @@ export const handler = async (event) => {
                         toStage:       upserted.stage,
                         changedBy:     userId,
                         opportunityId: upserted.id,
-                    });
+                    }, orgId);
                 }
             }
 
@@ -361,7 +397,7 @@ export const handler = async (event) => {
                         comment:       comment.text || '',
                         commentBy:     comment.author || userId,
                         opportunityId: upserted.id,
-                    });
+                    }, orgId);
                 }
             }
 
@@ -375,7 +411,7 @@ export const handler = async (event) => {
                     stage:         upserted.stage,
                     updatedBy:     userId,
                     opportunityId: upserted.id,
-                });
+                }, orgId);
             }
 
             // Webhooks: fire based on what changed
@@ -425,14 +461,17 @@ export const handler = async (event) => {
             if (!id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
             }
-            // Object-level authorization: reps may only delete their own or unassigned records
-            if (!canSeeAll(userRole)) {
-                const [target] = await db.select({ owner: opportunities.salesRep }).from(opportunities).where(and(eq(opportunities.id, id), eq(opportunities.orgId, orgId)));
-                const callerName = await getCallerName(userId, orgId);
-                if (target?.owner && target.owner !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization: reps may only delete their own or
+            // unassigned deals.
+            //
+            // ORDERING IS LOAD-BEARING: this must stay ABOVE the Admin role gate.
+            // Both refusals are 403 and only the body distinguishes them, so a
+            // non-owner gets the ownership message and an owner gets the role
+            // message. The delete gate asserts that split.
+            const forbiddenOwn = await assertOwnership({
+                table: opportunities, entity: 'opportunity', id, orgId, userId, userRole, headers,
+            });
+            if (forbiddenOwn) return forbiddenOwn;
             // Admin only. Reps close deals Won or Lost rather than deleting them,
             // and that rule was DESIGN INTENT ONLY -- this branch was ownership-
             // checked, so canSeeAll being false for a rep still let them delete

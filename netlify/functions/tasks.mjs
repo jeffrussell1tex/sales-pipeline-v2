@@ -1,9 +1,9 @@
 import { db } from '../../db/index.js';
 import { tasks } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
-import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
+import { verifyAuth, requireRole, isReadOnly, requireWrite } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
-import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
+import { serverErrorBody, writeAudit, assertOwnership } from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 
 export const handler = async (event) => {
@@ -64,13 +64,18 @@ export const handler = async (event) => {
             if (!existing) {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Task not found' }) };
             }
-            // Object-level authorization: reps may only edit their own or unassigned tasks
-            if (!canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId, orgId);
-                if (existing.assignedTo && existing.assignedTo !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization: reps may only edit their own or
+            // unassigned tasks. `existing` is the full row, already loaded above,
+            // so no second query is issued.
+            //
+            // OPEN QUESTION, unchanged by this refactor: a rep completing a
+            // teammate's task 403s here, the client rolls back, and the checkbox
+            // flips itself off. Correct per the role matrix, arguably wrong for
+            // the workflow. Recorded in CURRENT_STATE section 9; not decided.
+            const forbiddenPut = await assertOwnership({
+                table: tasks, entity: 'task', id: data.id, orgId, userId, userRole, headers, row: existing,
+            });
+            if (forbiddenPut) return forbiddenPut;
             const wasCompleted = existing?.completed === true;
 
             const clean = sanitize(data);
@@ -107,14 +112,17 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            // Object-level authorization: reps may only delete their own or unassigned tasks
-            if (!canSeeAll(userRole)) {
-                const [target] = await db.select({ owner: tasks.assignedTo }).from(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, orgId)));
-                const callerName = await getCallerName(userId, orgId);
-                if (target?.owner && target.owner !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization: reps may only delete their own or
+            // unassigned tasks.
+            //
+            // Unlike accounts / opportunities / leads, there is NO Admin role gate
+            // after this: a rep may delete a task they own. That asymmetry is
+            // deliberate -- deals are closed Won/Lost rather than deleted, tasks
+            // are ordinary work items -- and is preserved unchanged here.
+            const forbiddenOwn = await assertOwnership({
+                table: tasks, entity: 'task', id, orgId, userId, userRole, headers,
+            });
+            if (forbiddenOwn) return forbiddenOwn;
             // .returning() rather than a bare delete: a hard delete destroys the
             // audit trail's subject, so the row has to be captured in the same
             // statement that removes it. An id alone cannot be resolved back to a

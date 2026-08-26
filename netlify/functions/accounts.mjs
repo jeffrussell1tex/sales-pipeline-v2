@@ -2,7 +2,8 @@ import { db } from '../../db/index.js';
 import { accounts, settings as settingsTable, opportunities, contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, bulkUpsert, bulkInsert, assertOwnership } from './_lib.mjs';
+import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
 
@@ -149,9 +150,16 @@ export const handler = async (event) => {
             if (Array.isArray(data)) {
                 if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ updated: 0, notFound: [], forbidden: [] }) };
                 if (data.some(d => !d.id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'every row requires an id' }) };
-                // Reps may only overwrite their own or unassigned records. Resolved
-                // once here rather than per row; null means "may edit everything".
-                const callerName = canSeeAll(userRole) ? null : await getCallerName(userId, orgId);
+                // Reps may only overwrite their own or unassigned records,
+                // resolved once here rather than per row.
+                //
+                // The caller is resolved UNCONDITIONALLY. This used to be
+                // `canSeeAll(userRole) ? null : await getCallerName(...)`, which
+                // is the shape 18b20 is about: it made a null callerName carry
+                // "trusted Admin" as well as "could not identify the caller".
+                // canSeeAll is an explicit parameter now, so the ternary bought
+                // one cached lookup and kept a retired hazard in the source.
+                const callerName = await getCallerName(userId, orgId);
                     // partialRows, not sanitize() alone. sanitize() is a FULL-ROW
                     // builder -- it expands a payload rather than filtering one --
                     // and bulkUpsert derives its SET clause from the keys supplied,
@@ -165,7 +173,12 @@ export const handler = async (event) => {
                     table: accounts,
                     rows: partialRows(data, sanitize),
                     orgId,
-                    ownerColumn: accounts.accountOwner,
+                    // Through the registry, never named here. A column named at
+                    // the call site is a column nothing checks against the real
+                    // schema -- that is how contacts.createdBy survived, and
+                    // bulkUpsert's `if (ownerColumn)` turns a wrong name into a
+                    // silent org-wide write bypass rather than an error (18b19).
+                    ownerColumn: ownerColumnOf(accounts, 'account'),
                     callerName,
                     canSeeAll: canSeeAll(userRole),
                 });
@@ -180,13 +193,14 @@ export const handler = async (event) => {
             if (!prior) {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Account not found' }) };
             }
-            // Object-level authorization: reps may only edit their own or unassigned accounts
-            if (!canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId, orgId);
-                if (prior.accountOwner && prior.accountOwner !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization: reps may only edit their own or
+            // unassigned accounts. `prior` is the full row, already loaded above,
+            // so passing it means no second query -- the policy applied is
+            // identical either way.
+            const forbiddenPut = await assertOwnership({
+                table: accounts, entity: 'account', id: clean.id, orgId, userId, userRole, headers, row: prior,
+            });
+            if (forbiddenPut) return forbiddenPut;
             const territoryAssignPut = await resolveTerritory(orgId, clean);
             const mergedPut = { ...clean, ...(territoryAssignPut || {}) };
             const { id: _putId, ...updateDataMerged } = mergedPut;
@@ -220,14 +234,20 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            // Object-level authorization: reps may only delete their own or unassigned accounts
-            if (!canSeeAll(userRole)) {
-                const [target] = await db.select({ owner: accounts.accountOwner }).from(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId)));
-                const callerName = await getCallerName(userId, orgId);
-                if (target?.owner && target.owner !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization: reps may only delete their own or
+            // unassigned accounts.
+            //
+            // ORDERING IS LOAD-BEARING. This runs BEFORE the Admin role gate
+            // below, and must keep doing so: both refusals are 403 and the BODY
+            // is the only way to tell them apart, so a rep who does not own the
+            // row gets the ownership message while a rep who does own it gets the
+            // role message. FIXTURE_MANIFEST's delete gate asserts exactly that
+            // split. Reordering these two silently collapses six distinct
+            // outcomes into one.
+            const forbiddenOwn = await assertOwnership({
+                table: accounts, entity: 'account', id, orgId, userId, userRole, headers,
+            });
+            if (forbiddenOwn) return forbiddenOwn;
             // Admin only. Reps close deals Won or Lost rather than deleting them,
             // and that rule was DESIGN INTENT ONLY -- this branch was ownership-
             // checked, so canSeeAll being false for a rep still let them delete

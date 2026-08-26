@@ -76,6 +76,106 @@ test('REGRESSION — no endpoint reaches for contacts.createdBy in code again', 
     assert.ok(!src.includes('contacts.createdBy'), 'contacts.createdBy is not a column; use ownerColumnOf(contacts, \'contact\')');
 });
 
+// ── The centralisation guard ─────────────────────────────────────────────────
+//
+// The registry above proves a REGISTERED column exists. It says nothing about an
+// endpoint that ignores the registry and hand-rolls the check anyway -- which is
+// what all six of them used to do, in eleven copies, two of which named a column
+// that was not there.
+//
+// These read the endpoint sources. Source-level for the same reason as the rest
+// of this file: the endpoints import db/index.js (TypeScript), so importing them
+// would strand these checks in test:int, a suite that needs a database and had
+// itself been broken at import for a fortnight without anyone noticing.
+
+const ENDPOINTS = ['accounts', 'opportunities', 'leads', 'tasks', 'contacts', 'activities'];
+
+const endpointSrc = (name) =>
+    readFileSync(new URL(`../netlify/functions/${name}.mjs`, import.meta.url), 'utf8');
+
+// Comments explain these defects at length and would otherwise trip every scan.
+const codeOnly = (src) =>
+    src.split(/\r?\n/).filter((l) => !l.trim().startsWith('//')).join('\n');
+
+test('THE GUARD — no endpoint hand-rolls an ownership comparison', () => {
+    const offenders = [];
+    for (const name of ENDPOINTS) {
+        const code = codeOnly(endpointSrc(name));
+        // The exact shape of the eleven copies: compare a projected owner against
+        // a resolved caller name, inline, with the refusal written out longhand.
+        if (/!==\s*callerName/.test(code)) offenders.push(`${name}: compares !== callerName inline`);
+        if (/db\.select\(\{\s*owner:/.test(code)) offenders.push(`${name}: projects an owner itself`);
+    }
+    assert.deepEqual(offenders, [], `use assertOwnership():\n  ${offenders.join('\n  ')}`);
+});
+
+test('THE GUARD — no endpoint names an owner column at the call site', () => {
+    // `ownerColumn: accounts.accountOwner` is a column name nothing checks
+    // against the schema, and bulkUpsert's `if (ownerColumn)` turns a wrong one
+    // into a silent org-wide write bypass rather than an error.
+    const offenders = [];
+    for (const name of ENDPOINTS) {
+        for (const m of codeOnly(endpointSrc(name)).matchAll(/ownerColumn:\s*([^,\n]+)/g)) {
+            if (!m[1].trim().startsWith('ownerColumnOf(')) offenders.push(`${name}: ownerColumn: ${m[1].trim()}`);
+        }
+    }
+    assert.deepEqual(offenders, [], `resolve through the registry:\n  ${offenders.join('\n  ')}`);
+});
+
+test('THE GUARD — every assertOwnership result is actually returned', () => {
+    // A gate whose answer is computed and discarded is worse than no gate: it
+    // reads as protection in review and enforces nothing at runtime.
+    const offenders = [];
+    for (const name of ENDPOINTS) {
+        const code = codeOnly(endpointSrc(name));
+        for (const m of code.matchAll(/const\s+(\w+)\s*=\s*await\s+assertOwnership\(\{/g)) {
+            const v = m[1];
+            const after = code.slice(m.index, m.index + 600);
+            if (!new RegExp(`if\\s*\\(\\s*${v}\\s*\\)\\s*return\\s+${v}\\s*;`).test(after)) {
+                offenders.push(`${name}: ${v} is computed but never returned`);
+            }
+        }
+    }
+    assert.deepEqual(offenders, [], `${offenders.join('\n  ')}`);
+});
+
+test('REGRESSION — no endpoint matches users.id against a Clerk user id', () => {
+    // users.id became app-owned (usr_<uuid>) in the identity split; `userId` from
+    // verifyAuth is Clerk's. `eq(users.id, userId)` therefore matches NOTHING.
+    //
+    // It survived in two GET filters, where the failure is silent: the query runs,
+    // returns no row, the rep's display name falls to null, and the visibility
+    // predicate collapses to "only unassigned records". Every rep lost sight of
+    // their own pipeline and their own leads, with no error anywhere. The sweep
+    // that org-scoped getCallerName could not match these because they are inline
+    // queries rather than calls to the helper.
+    //
+    // The caller is resolved in exactly one place. This asserts nobody re-rolls it.
+    const offenders = [];
+    for (const name of ENDPOINTS) {
+        const code = codeOnly(endpointSrc(name));
+        if (/eq\(\s*users\.id\s*,\s*userId\s*\)/.test(code)) {
+            offenders.push(`${name}: matches users.id against the Clerk id — use getCallerName(userId, orgId)`);
+        }
+    }
+    assert.deepEqual(offenders, [], `${offenders.join('\n  ')}`);
+});
+
+test('REGRESSION — every users lookup in an endpoint is org-scoped', () => {
+    // Removing the global unique on users.email made an unscoped users query able
+    // to resolve a row from another tenant. getCallerName now throws without an
+    // orgId; getRepUser in opportunities.mjs did not, and its result is an EMAIL
+    // ADDRESS that deal names and ARR get sent to.
+    const offenders = [];
+    for (const name of ENDPOINTS) {
+        const code = codeOnly(endpointSrc(name));
+        for (const m of code.matchAll(/\.from\(users\)\s*\r?\n?\s*\.where\(([^;]*?)\);/g)) {
+            if (!/users\.orgId/.test(m[1])) offenders.push(`${name}: unscoped users lookup`);
+        }
+    }
+    assert.deepEqual(offenders, [], `${offenders.join('\n  ')}`);
+});
+
 test('an unregistered entity throws rather than authorizing everyone', () => {
     assert.throws(() => ownerKeyFor('invoice'), /no ownership rule registered/);
 });

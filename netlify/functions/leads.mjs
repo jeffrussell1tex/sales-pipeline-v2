@@ -1,10 +1,10 @@
 import { db } from '../../db/index.js';
-import { leads, users } from '../../db/schema.js';
+import { leads } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isReadOnly, requireRole, requireWrite } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
-import { serverErrorBody, writeAudit, getCallerName, bulkInsert } from './_lib.mjs';
+import { serverErrorBody, writeAudit, getCallerName, bulkInsert, assertOwnership } from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
@@ -66,14 +66,21 @@ export const handler = async (event) => {
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(leads).where(eq(leads.orgId, orgId)).orderBy(asc(leads.createdAt));
             if (!canSeeAll(userRole)) {
-                // assignedTo is stored as a display name, not a Clerk userId — look up the current user's name
-                let repDisplayName = null;
-                try {
-                    const [repRow] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
-                    repDisplayName = repRow?.name || null;
-                } catch (e) {
-                    console.warn('Could not look up rep display name for leads filtering:', e.message);
-                }
+                // assignedTo stores a display name, so the caller's name is what
+                // this filters on.
+                //
+                // THIS WAS BROKEN BY THE IDENTITY SPLIT, identically to the
+                // opportunities GET. It matched `users.id` against the CLERK id,
+                // which stopped resolving when users.id became usr_<uuid>. The
+                // lookup returned no row, repDisplayName fell to null, and every
+                // rep saw ONLY unassigned leads -- silently, because an empty
+                // result is not an error and the catch never fired. It was also
+                // unscoped across orgs.
+                //
+                // A caller getCallerName cannot resolve stays null and sees only
+                // unassigned leads: the same fail-closed direction mayMutate()
+                // takes on the write path.
+                const repDisplayName = await getCallerName(userId, orgId);
                 results = results.filter(l => !l.assignedTo || l.assignedTo === repDisplayName);
             }
             return { statusCode: 200, headers, body: JSON.stringify({ leads: results }) };
@@ -156,13 +163,13 @@ export const handler = async (event) => {
             if (!existing) {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Lead not found' }) };
             }
-            // Object-level authorization: reps may only edit their own or unassigned leads
-            if (!canSeeAll(userRole)) {
-                const callerName = await getCallerName(userId, orgId);
-                if (existing.assignedTo && existing.assignedTo !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization: reps may only edit their own or
+            // unassigned leads. `existing` is the full row, already loaded above,
+            // so no second query is issued.
+            const forbiddenPut = await assertOwnership({
+                table: leads, entity: 'lead', id: data.id, orgId, userId, userRole, headers, row: existing,
+            });
+            if (forbiddenPut) return forbiddenPut;
             const wasConverted = existing?.status === 'Converted';
 
             const clean = sanitize(data);
@@ -232,14 +239,17 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            // Object-level authorization: reps may only delete their own or unassigned leads
-            if (!canSeeAll(userRole)) {
-                const [target] = await db.select({ owner: leads.assignedTo }).from(leads).where(and(eq(leads.id, id), eq(leads.orgId, orgId)));
-                const callerName = await getCallerName(userId, orgId);
-                if (target?.owner && target.owner !== callerName) {
-                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you can only modify your own or unassigned records' }) };
-                }
-            }
+            // Object-level authorization: reps may only delete their own or
+            // unassigned leads.
+            //
+            // ORDERING IS LOAD-BEARING: this must stay ABOVE the Admin role gate.
+            // Both refusals are 403 and only the body distinguishes them, so a
+            // non-owner gets the ownership message and an owner gets the role
+            // message. The delete gate asserts that split.
+            const forbiddenOwn = await assertOwnership({
+                table: leads, entity: 'lead', id, orgId, userId, userRole, headers,
+            });
+            if (forbiddenOwn) return forbiddenOwn;
             // Admin only. Reps close deals Won or Lost rather than deleting them,
             // and that rule was DESIGN INTENT ONLY -- this branch was ownership-
             // checked, so canSeeAll being false for a rep still let them delete

@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -27,6 +27,63 @@ const toFileEol = (text, src) =>
     src.includes('\r\n') ? text.replace(/\r?\n/g, '\r\n') : text.replace(/\r\n/g, '\n');
 
 const mutations = [
+    // ── Object-level authorization ──────────────────────────────────────────
+    // tests/ownership-registry.test.mjs was absent from SUITES until this batch,
+    // so NONE of what follows had ever been mutation-tested. The registry, the
+    // policy predicate and both fail-closed throws were carrying every
+    // object-level authorization decision in the app with the harness reporting
+    // a clean run over them. 18b20: adding a test does not add a mutation.
+
+    ['ownership: contacts reverts to createdBy — the column that never existed',
+        'netlify/functions/_ownership.mjs',
+        "contact:     'assignedRep',",
+        "contact:     'createdBy',"],
+
+    ['ownership: the policy FAILS OPEN for a caller with no resolvable name',
+        'netlify/functions/_ownership.mjs',
+        'if (!callerName) return false;',
+        'if (!callerName) return true;'],
+
+    ['ownership: Admin/Manager stop bypassing the check',
+        'netlify/functions/_ownership.mjs',
+        'if (canSeeAll) return true;',
+        'if (canSeeAll && false) return true;'],
+
+    ['ownership: an unregistered entity resolves to undefined instead of throwing',
+        'netlify/functions/_ownership.mjs',
+        '    if (!key) {',
+        '    if (false) {'],
+
+    ['ownership: a registered-but-missing property degrades to undefined again',
+        'netlify/functions/_ownership.mjs',
+        '    if (!column) {',
+        '    if (false) {'],
+
+    ['endpoints: a hand-rolled ownership comparison comes back',
+        'netlify/functions/tasks.mjs',
+        '            const forbiddenOwn = await assertOwnership({',
+        "            const callerName = 'x';\n            if (existing && existing.assignedTo !== callerName) return { statusCode: 403 };\n            const forbiddenOwn = await assertOwnership({"],
+
+    ['endpoints: an owner column is named at the call site instead of the registry',
+        'netlify/functions/accounts.mjs',
+        "ownerColumn: ownerColumnOf(accounts, 'account'),",
+        'ownerColumn: accounts.accountOwner,'],
+
+    ['endpoints: an assertOwnership result is computed and then discarded',
+        'netlify/functions/leads.mjs',
+        '            if (forbiddenOwn) return forbiddenOwn;',
+        '            if (false) return forbiddenOwn;'],
+
+    ['endpoints: the users.id-vs-Clerk-id filter returns (every rep loses their own records)',
+        'netlify/functions/leads.mjs',
+        '                const repDisplayName = await getCallerName(userId, orgId);',
+        '                const [rr] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));\n                const repDisplayName = rr?.name || null;'],
+
+    ['endpoints: getRepUser loses its org scope (one tenant emailed another tenant deal data)',
+        'netlify/functions/opportunities.mjs',
+        '.where(and(eq(users.name, repName), eq(users.orgId, orgId)));',
+        '.where(eq(users.name, repName));'],
+
     // ── Identity split: users.id is app-owned, Clerk's id is an attribute ────
     // These five cover assertions added with that change. Without them the
     // harness still reports a clean run while the guards are decorative --
