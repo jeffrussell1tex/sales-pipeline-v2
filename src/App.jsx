@@ -92,7 +92,21 @@ function App() {
         window.__getClerkToken = () => getToken({ organizationId: organization.id });
     }, [getToken, organization]);
     const clerkUserMeta = clerkUser?.publicMetadata || {};
-    const currentUser = clerkUser
+
+    // Clerk's display name is a FALLBACK, not the identity.
+    //
+    // Every ownership column in the database stores `users.name`, and nothing
+    // keeps Clerk's profile equal to it. A rep whose Clerk first/last name was
+    // blank fell through to the EMAIL branch below, so the client called her by
+    // her email while the server called her by her name (0.26). Two consequences,
+    // both silent: isRepVisible showed her only UNOWNED records, and every write
+    // site that stamps `currentUser` wrote an email address into an owner column
+    // (0.37 found exactly those addresses sitting in activities.author).
+    //
+    // The roster row is the source. `?me=true` already returns it, already
+    // self-heals id/name drift, and is already loaded into myProfile. Clerk is
+    // reached for only when there is no roster row at all.
+    const clerkName = clerkUser
         ? (((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim() || clerkUser.emailAddresses?.[0]?.emailAddress || 'User')
         : '';
     const [userRole, setUserRole] = React.useState('User');
@@ -101,7 +115,6 @@ function App() {
         if (clerkUser) {
             const meta = clerkUser.publicMetadata || {};
             setUserRole(meta.role || 'User');
-            window.clerkCurrentUser = currentUser;
             window.clerkUserRole = meta.role || 'User';
             window.clerkManagedReps = meta.managedReps || [];
         }
@@ -140,6 +153,36 @@ function App() {
         exportingCSV, setExportingCSV, exportingBackup, setExportingBackup, restoringBackup, setRestoringBackup,
         dbOffline, setDbOffline,
     } = uiState;
+
+    // ── Caller identity ──────────────────────────────────────────────────
+    //
+    // Declared HERE, not at the top of the component, because myProfile is
+    // destructured from uiState immediately above and a const cannot be read
+    // before its declaration (18b0 — the failure is a minified-build TDZ crash,
+    // not a lint warning).
+    //
+    // currentUser is the display NAME, still what every ownership column stores
+    // and what ~30 comparisons across the app use. currentUserId is the app id
+    // (`usr_<uuid>`), the same value the server compares in mayMutate(); it is
+    // exposed now and consumed in the next commit.
+    //
+    // myProfile is null until `?me=true` resolves. During that window currentUser
+    // falls back to the Clerk name, which is the pre-existing behaviour, and
+    // currentUserId is null — which fails CLOSED wherever it is compared, matching
+    // the server's getCallerId contract.
+    const currentUser   = myProfile?.name || clerkName;
+    const currentUserId = myProfile?.id   || null;
+
+    // Its own effect, with its own dependencies. These globals used to be set by
+    // the role effect above, keyed on [clerkUser] — correct while the name came
+    // from Clerk and could not change afterwards. It can now: it changes the
+    // moment the roster row lands, which [clerkUser] does not observe. A console
+    // global that lags the value it mirrors is worse than no global, because it
+    // is what gets read while diagnosing exactly this class of bug.
+    React.useEffect(() => {
+        window.clerkCurrentUser   = currentUser;
+        window.clerkCurrentUserId = currentUserId;
+    }, [currentUser, currentUserId]);
 
     const {
         showModal, setShowModal, showSpiffClaimModal, setShowSpiffClaimModal,
@@ -1399,6 +1442,7 @@ dbFetch('/.netlify/functions/users?me=true')
         findContactDuplicates, handleContactMerge, reverseContactMerge,
         // Auth
         currentUser,
+        currentUserId,
         userRole,
         clerkUser,
         canSeeAll: userRole === 'Admin' || userRole === 'Manager',

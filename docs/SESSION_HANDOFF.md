@@ -5,16 +5,19 @@ verify every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b24**,
-and does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.46**? If not, you are looking
+and does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.47**? If not, you are looking
 at a copy that predates this session. Check section numbers, never dates.
 
 **State at close:** role vocabulary unified. **Six gates green, 276 tests,
 26 integration tests, 80/80 mutations caught on a proven green baseline** — all
 observed, not predicted.
 
-**One thing was NOT done and is not claimed: the rep-path browser check.** No gate
-can perform it, and Admin skips every branch this batch touches — which is exactly
-how §0.24, §0.30 and §0.36 all shipped green.
+**The rep path was verified in the browser, signed in as a rep rather than an
+Admin** — a rep can still save; the Users list reads Admin / Manager / Sales Rep
+rather than `member`; an Admin changing a role sticks and the badge follows. That
+last one had been dead since the Phase 1 identity split. Admin skips every branch
+this batch touches, which is how §0.24, §0.30 and §0.36 all shipped green, so the
+check is worth more than the gates.
 
 ---
 
@@ -76,16 +79,10 @@ sources before theorising about the comparison.
 
 ## 4. Next — start here
 
-**Finish verifying this batch.** Gates, unit suite, integration suite and the
-mutation harness are all done and green. One thing is not:
+**This batch is closed.** Gates, unit suite, integration suite, mutation harness
+and the rep-path browser check are all done. Nothing here is outstanding.
 
-**The rep-path browser check (§0.38).** Sign in as a REP, not an Admin — Admin
-skips every branch this touches, which is how §0.24, §0.30 and §0.36 all shipped
-green. Confirm: a rep can still save a record; the Users list shows real role
-labels rather than `member`; an Admin can change someone's role and the badge
-updates. **No gate can perform this check.**
-
-**Then run `scripts/check-clerk-roles.mjs`** (read-only, untested against a live
+**Run `scripts/check-clerk-roles.mjs` when convenient** (read-only, untested against a live
 Clerk instance) — it names any test account whose Clerk role the new allowlist
 will refuse. There are no live users, so this is a diagnostic, not a migration.
 If a role change from the UI 403s or 400s, that script tells you why.

@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** August 26, 2026 (third batch)  
-**Verified at:** all six gates green · **276 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · **rep path NOT yet re-verified in the browser for this batch** · all 66 functions bundle under esbuild  
+**Verified at:** all six gates green · **276 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · **rep path verified in the browser as a rep, not an Admin** · all 66 functions bundle under esbuild  
 **Batch:** **the role vocabulary was eight lists and only one was enforced** · **`requireWrite` was a BLOCKLIST** — it denied exactly `ReadOnly` and `Technician` by string and permitted every other value, so `readonly`, `Sales Rep` or any typo carried full write access to ~28 endpoints · **role changes had been impossible since the Phase 1 identity split**: `user-role.mjs` used one parameter in two identity spaces, so the UI's app id 404'd at Clerk and a Clerk id would have matched zero mirror rows silently · **the Users UI read a role copy frozen in the profile blob** — `flatten()` spread it last, and nothing ever updated it, which is the whole of §0.40's symptom · the invite screen seeded rows with the display LABEL `'Sales Rep'` and wrote it into Clerk · three role `<select>`s presented **Admin** for any unrecognised value, making a one-click escalation out of a display bug · 262 → 276 tests, 73 → **80** mutations · guide **§18b24**
 **Prior batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
 **Prior batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
@@ -99,7 +99,25 @@ the `schema.ts` comment.
 was live again on the creation path, which is the argument for one exported list
 rather than seven corrected copies.
 
-### 0.45 The test count in the previous header was off by one
+### 0.45 Verified in the browser, as a rep
+
+The three checks no gate can perform, run on dev after deploy:
+
+| Check | What it proves |
+|---|---|
+| a rep can still save a record | the allowlist admits `'User'` — the inversion did not lock out the roles it was meant to keep |
+| the Users list reads Admin / Manager / Sales Rep, not `member` | `flatten()` resolves to the column, and the sync no longer imports Clerk's org vocabulary |
+| an Admin changes a role and the badge updates | `user-role.mjs` reaches Clerk AND the mirror — the path that had been dead since the Phase 1 identity split |
+
+The third is the one with no other evidence behind it. It was failing with a 404
+that read like a legitimate "user not found", and the mirror half would have
+failed silently even once the Clerk half worked, because a drizzle UPDATE that
+matches nothing does not throw.
+
+**Admin skips every `!canSeeAll` branch**, which is why this is done signed in as
+a rep. Repeat it after any change to roles, ownership or visibility.
+
+### 0.46 The test count in the previous header was off by one
 
 §0's header read **261 tests** at the close of the previous batch. Adding this
 batch's 14 gave 275; `npm test` reported **276**. So the real figure was 262 and
@@ -107,7 +125,7 @@ the header had drifted by one — too small to notice, which is the only reason 
 is worth writing down: a count nobody reconciles is a count that can be wrong by
 any amount. Corrected to 276 from observation, not arithmetic.
 
-### 0.46 Also found, not fixed here
+### 0.47 Also found, not fixed here
 
 - **`UserModal`'s role select did nothing on edit.** `users.mjs` PUT deliberately
   preserves the stored role, so the control accepted a choice and discarded it.
