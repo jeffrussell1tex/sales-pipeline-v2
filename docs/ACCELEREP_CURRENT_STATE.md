@@ -1,7 +1,7 @@
 # ACCELEREP — Current State
 **Updated:** August 28, 2026
 **Verified at:** all six gates green · **276 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · build 2,459 kB · **after-counts verified on dev, both roles, 28 Aug** — Karen 144/1533/25/22, exactly matching the predicate applied over the Admin dataset; Admin unchanged at baseline (§0.50)
-**Batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected
+**Batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected · **the client stops re-implementing the boundary** (§0.51)
 **Prior batch:** **the role vocabulary was eight lists and only one was enforced** · **`requireWrite` was a BLOCKLIST** — it denied exactly `ReadOnly` and `Technician` by string and permitted every other value, so `readonly`, `Sales Rep` or any typo carried full write access to ~28 endpoints · **role changes had been impossible since the Phase 1 identity split**: `user-role.mjs` used one parameter in two identity spaces, so the UI's app id 404'd at Clerk and a Clerk id would have matched zero mirror rows silently · **the Users UI read a role copy frozen in the profile blob** — `flatten()` spread it last, and nothing ever updated it, which is the whole of §0.40's symptom · the invite screen seeded rows with the display LABEL `'Sales Rep'` and wrote it into Clerk · three role `<select>`s presented **Admin** for any unrecognised value, making a one-click escalation out of a display bug · 262 → 276 tests, 73 → **80** mutations · guide **§18b24**
 **Prior batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
 **Prior batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
@@ -92,6 +92,38 @@ else — which is why the drops are small, per the unassigned-majority in §0.38
 The GET scoping still lands with no automated rep-role coverage for these four
 endpoints (the §0.33 test debt stands); this browser check is the runtime
 evidence, recorded here.
+
+### 0.51 The client stops re-implementing the boundary (same session)
+
+With the server scoping reads, the client's name-based visibility filters
+changed from redundant to hazardous: a row whose `ownerId` is the rep's but
+whose stale name-string no longer matches would be SENT by the server and
+HIDDEN by the client — §18b22's shape, on the read path. Shipped:
+
+- **`isRepVisible`'s rep branch returns `true`.** The server is the boundary.
+  The Manager branch stays untouched and is LOAD-BEARING: server-side
+  `canSeeAll` hands Managers the whole org on five of six entities, so the
+  client's `managedReps` narrowing is the only Manager scoping that exists
+  (§0.39). Deleting the function wholesale — as the handoff proposed — would
+  have silently widened every Manager's view to org-wide.
+- **TasksTab's Mine/Team control is now Mine/All**, honest at every role: for
+  a rep, All is everything the server grants (own + unassigned). “Team” could
+  never show a rep their teammates' tasks again and read as if it would.
+- **The scope filter keys on `it.ownerId === currentUserId`**, not the display
+  name — the first consumer of `currentUserId` (§0.49 said “consumed in the
+  next commit”; this is that commit). A null `currentUserId` during the
+  `?me=true` load window fails closed, matching `getCallerId`.
+- **Scope persists** to `localStorage` (`tab:tasks:scope`), the sub-tab
+  precedent. Preference only, never data; an unrecognised stored value renders
+  as Mine rather than leaving the control stateless (§16's unmatched-select
+  rule).
+- **The inline activities author filter died** (`TasksTab:1147`) — the same
+  class as the rep branch, able only to hide server-granted rows.
+
+Accounts, Contacts and Pipeline chip rows get the same toggle in follow-up
+batches, one file-read at a time. No new tests — client-only; the six gates
+plus a browser pass as Karen (Mine/All toggles and persists across reload;
+nothing she owns missing on Tasks) are the verification.
 
 ---
 

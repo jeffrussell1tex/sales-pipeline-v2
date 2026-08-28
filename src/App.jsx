@@ -609,7 +609,16 @@ dbFetch('/.netlify/functions/users?me=true')
     const isRepVisible = (repName) => {
         if (isAdmin) return true;
         if (isManager) return managedReps.size === 0 || managedReps.has(repName);
-        return !repName || repName === currentUser;
+        // Rep path: the SERVER is the boundary since the 28 Aug GET-scoping
+        // batch — every entity GET already returns a rep only their own rows
+        // plus unassigned ones, keyed on ownerId. Re-filtering by display name
+        // here could only HIDE rows the server granted (a stale name-string
+        // after a rename, §18b22), so the client passes everything through.
+        // The Manager branch above stays and is LOAD-BEARING: server-side
+        // canSeeAll hands Managers the whole org on five of six entities, so
+        // this managedReps narrowing is the only Manager scoping that exists
+        // (§0.39). Do not delete it with the rep branch.
+        return true;
     };
 
     // Field-level visibility helper

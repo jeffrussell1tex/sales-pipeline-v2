@@ -361,14 +361,19 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
 }
 
 // ── applyFilters — unchanged logic, new signature ───────────────
-function applyFilters(feed, { source, type, range, account, scope, search, currentUser, opportunities, accounts }) {
+function applyFilters(feed, { source, type, range, account, scope, search, currentUserId, opportunities, accounts }) {
     const now = new Date(); now.setHours(0, 0, 0, 0);
     return feed.filter(it => {
         if (source === 'open' && it.source !== 'task-open') return false;
         if (source === 'done' && it.source === 'task-open') return false;
         if (type !== 'all' && (it.type || '').toLowerCase() !== type.toLowerCase()) return false;
         if (scope === 'mine' && it.source === 'task-open') {
-            if (it.assignedTo && it.assignedTo !== currentUser) return false;
+            // Keys on the OWNER ID, never the display name (18b22) — a stale
+            // name-string must not hide a row the server granted. Unassigned
+            // (null `ownerId`) stays visible under Mine, matching the server's
+            // read policy. currentUserId is null until `?me=true` resolves and
+            // fails CLOSED for that window, the same direction as getCallerId.
+            if (it.ownerId && it.ownerId !== currentUserId) return false;
         }
         if (account && account !== 'all') {
             const acctName = resolveAccountName(it, opportunities, accounts);
@@ -1094,7 +1099,7 @@ function VoiceLogView() {
 export default function TasksTab() {
     const {
         tasks, opportunities, contacts, accounts, activities, settings,
-        currentUser, userRole, canSeeAll,
+        currentUser, currentUserId, userRole,
         getStageColor,
         visibleTasks,
         handleCompleteTask, handleSaveTask, setTasks,
@@ -1118,7 +1123,12 @@ export default function TasksTab() {
     const [calDayOffset, setCalDayOffset] = useState(0);
 
     // ── V4 filter state ────────────────────────────────────────
-    const [scope,  setScope]  = useState('mine');
+    // Persisted PREFERENCE only — never data (the localStorage hazards in §18
+    // and §0A000.8 were cached DATA). An unrecognised stored value renders as
+    // Mine rather than leaving the segmented control with no active state
+    // (§16's unmatched-select rule).
+    const [scope,  setScope]  = useState(() => localStorage.getItem('tab:tasks:scope') === 'all' ? 'all' : 'mine');
+    const setScopePersist     = v => { setScope(v); localStorage.setItem('tab:tasks:scope', v); };
     const [range,  setRange]  = useState('week');
     const [search, setSearch] = useState('');
     const [activityOpen, setActivityOpen] = useState(false);
@@ -1144,7 +1154,11 @@ export default function TasksTab() {
         openTasks.forEach(t => items.push({ ...t, source: 'task-open', when: t.dueDate ? t.dueDate + 'T' + (t.dueTime || '12:00') + ':00' : new Date().toISOString() }));
         const completedTasks = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) === 'Completed');
         completedTasks.forEach(t => items.push({ ...t, source: 'task-completed', when: t.completedAt || t.updatedAt || (t.dueDate ? t.dueDate + 'T12:00:00' : new Date().toISOString()) }));
-        const visibleActivities = canSeeAll ? (activities || []) : (activities || []).filter(a => !a.author || a.author === currentUser);
+        // No client-side author filter: the server scopes activities per role
+        // (own + unassigned for a rep) since the 28 Aug GET-scoping batch, and
+        // a name-based filter here could only HIDE rows the server granted
+        // when a stale name-string mismatches (18b22).
+        const visibleActivities = activities || [];
         visibleActivities.forEach(a => items.push({
             ...a,
             source: 'log',
@@ -1154,7 +1168,7 @@ export default function TasksTab() {
             when:    a.date ? a.date + 'T12:00:00' : (a.createdAt || new Date().toISOString()),
         }));
         return items;
-    }, [visibleTasks, activities, canSeeAll, currentUser, opportunities, accounts, contacts]);
+    }, [visibleTasks, activities, opportunities, accounts, contacts]);
 
     // ── Header counts (unfiltered) ─────────────────────────────
     const headerCounts = useMemo(() => ({
@@ -1166,8 +1180,8 @@ export default function TasksTab() {
 
     // ── Apply filters ──────────────────────────────────────────
     const filtered = useMemo(() => applyFilters(allFeedItems, {
-        source: 'all', type: 'all', range, account: 'all', scope, search, currentUser, opportunities, accounts,
-    }), [allFeedItems, range, scope, search, currentUser, opportunities, accounts]);
+        source: 'all', type: 'all', range, account: 'all', scope, search, currentUserId, opportunities, accounts,
+    }), [allFeedItems, range, scope, search, currentUserId, opportunities, accounts]);
 
     // ── Buckets ────────────────────────────────────────────────
     const openItems = filtered.filter(f => f.source === 'task-open');
@@ -1296,10 +1310,10 @@ export default function TasksTab() {
 
                     {/* Scope segmented control */}
                     <div style={{ display: 'inline-flex', border: `1px solid ${T.borderStrong}`, borderRadius: T.rMd, overflow: 'hidden', flexShrink: 0 }}>
-                        {[{ k: 'mine', l: 'Mine' }, { k: 'team', l: 'Team' }].map(s => {
+                        {[{ k: 'mine', l: 'Mine' }, { k: 'all', l: 'All' }].map(s => {
                             const active = scope === s.k;
                             return (
-                                <button key={s.k} onClick={() => setScope(s.k)} style={{ padding: '5px 12px', fontSize: 12, fontWeight: active ? 700 : 500, background: active ? T.ink : 'transparent', color: active ? T.surface : T.inkMid, border: 'none', cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
+                                <button key={s.k} onClick={() => setScopePersist(s.k)} style={{ padding: '5px 12px', fontSize: 12, fontWeight: active ? 700 : 500, background: active ? T.ink : 'transparent', color: active ? T.surface : T.inkMid, border: 'none', cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
                                     {s.l}
                                 </button>
                             );
