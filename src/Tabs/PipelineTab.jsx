@@ -345,12 +345,12 @@ export default function PipelineTab() {
     const {
         opportunities, setOpportunities,
         accounts, contacts, activities, settings,
-        currentUser, userRole, canSeeAll,
+        currentUser, currentUserId, userRole, canSeeAll,
         stages, exportToCSV, exportingCSV,
         showConfirm, softDelete, addAudit,
         getStageColor, getQuarter, getQuarterLabel,
         calculateDealHealth, canViewField,
-        visibleOpportunities, getKpiColor,
+        visibleOpportunities: allVisibleOpportunities, getKpiColor,
         setUndoToast, activePipeline, allPipelines,
         handleDelete, handleSave, completeLostSave,
         viewingRep, viewingTeam, viewingTerritory,
@@ -369,6 +369,18 @@ export default function PipelineTab() {
     const isManager  = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit    = !isReadOnly;
+
+    // ── Mine/All scope (§0.52) ─────────────────────────────
+    // Persisted PREFERENCE only — never data. An unrecognised stored value
+    // renders as Mine (§16's unmatched-select rule). The filter keys on
+    // ownerId, never the display name (§18b22); a null currentUserId during
+    // the ?me=true load window fails closed, matching getCallerId. Unassigned
+    // rows stay visible under Mine, matching the server's read policy.
+    const [scope, setScope] = useState(() => localStorage.getItem('tab:pipeline:scope') === 'all' ? 'all' : 'mine');
+    const setScopePersist   = v => { setScope(v); localStorage.setItem('tab:pipeline:scope', v); };
+    const visibleOpportunities = React.useMemo(() => scope === 'mine'
+        ? allVisibleOpportunities.filter(r => !r.ownerId || r.ownerId === currentUserId)
+        : allVisibleOpportunities, [scope, allVisibleOpportunities, currentUserId]);
 
     // Viewing-as label for banner
     const viewingAsLabel = viewingRep || viewingTeam || viewingTerritory
@@ -825,6 +837,18 @@ export default function PipelineTab() {
                         </button>
                     );
                 })}
+                <div style={{ width: 1, height: 16, background: T.border, margin: '0 10px', flexShrink: 0 }}/>
+                {/* Scope segmented control — §0.52 */}
+                <div style={{ display: 'inline-flex', border: `1px solid ${T.borderStrong}`, borderRadius: T.rMd, overflow: 'hidden', flexShrink: 0 }}>
+                    {[{ k: 'mine', l: 'Mine' }, { k: 'all', l: 'All' }].map(s => {
+                        const active = scope === s.k;
+                        return (
+                            <button key={s.k} onClick={() => setScopePersist(s.k)} style={{ padding: '4px 10px', fontSize: 12, fontWeight: active ? 600 : 400, background: active ? T.ink : 'transparent', color: active ? T.surface : T.inkMid, border: 'none', cursor: 'pointer', fontFamily: T.sans, transition: 'all 100ms' }}>
+                                {s.l}
+                            </button>
+                        );
+                    })}
+                </div>
                 <div style={{ flex: 1 }} />
                 <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans, paddingBottom: 4 }}>
                     {pipelineView === 'kanban'

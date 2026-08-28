@@ -1,7 +1,7 @@
 # ACCELEREP — Current State
 **Updated:** August 28, 2026
 **Verified at:** all six gates green · **276 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · build 2,459 kB · **after-counts verified on dev, both roles, 28 Aug** — Karen 144/1533/25/22, exactly matching the predicate applied over the Admin dataset; Admin unchanged at baseline (§0.50) · **prod rep-path verified, both roles, 28 Aug** (§0.50)
-**Batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected · **the client stops re-implementing the boundary** (§0.51)
+**Batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected · **the client stops re-implementing the boundary** (§0.51) · **Mine/All on Accounts, Contacts and Pipeline** (§0.52)
 **Prior batch:** **the role vocabulary was eight lists and only one was enforced** · **`requireWrite` was a BLOCKLIST** — it denied exactly `ReadOnly` and `Technician` by string and permitted every other value, so `readonly`, `Sales Rep` or any typo carried full write access to ~28 endpoints · **role changes had been impossible since the Phase 1 identity split**: `user-role.mjs` used one parameter in two identity spaces, so the UI's app id 404'd at Clerk and a Clerk id would have matched zero mirror rows silently · **the Users UI read a role copy frozen in the profile blob** — `flatten()` spread it last, and nothing ever updated it, which is the whole of §0.40's symptom · the invite screen seeded rows with the display LABEL `'Sales Rep'` and wrote it into Clerk · three role `<select>`s presented **Admin** for any unrecognised value, making a one-click escalation out of a display bug · 262 → 276 tests, 73 → **80** mutations · guide **§18b24**
 **Prior batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
 **Prior batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
@@ -147,6 +147,33 @@ to hide — the identical property the old Mine/Team control had. The toggle
 is meaningful for Admins and Managers today; making Mine strictly-mine
 (hiding unassigned too) is a one-line product option if reps should get a
 real distinction.
+
+### 0.52 Mine/All on Accounts, Contacts and Pipeline (same session)
+
+The §0.51 pattern, applied to the remaining three tabs. Each tab takes
+`currentUserId` from context, aliases its context list at the destructure
+(`visibleAccounts` / `visibleContacts` / `visibleOpportunities` →
+`allVisible…`) and re-derives the original name scoped:
+
+```js
+const visibleAccounts = useMemo(() => scope === 'mine'
+    ? allVisibleAccounts.filter(r => !r.ownerId || r.ownerId === currentUserId)
+    : allVisibleAccounts, [scope, allVisibleAccounts, currentUserId]);
+```
+
+One edit at the source; every downstream reference — warmth chips and their
+counts, smart presets, saved views, exports, KPI strips — follows the scope
+automatically. The derivation is memoised so the `mine` branch does not mint a
+new array identity per render and defeat every downstream memo. Each tab
+persists to its own key (`tab:accounts:scope`, `tab:contacts:scope`,
+`tab:pipeline:scope`), validated on read like §0.51. Placement: Accounts — the
+chip row, between the view tabs and the warmth chips; Contacts — the header
+button row, before search; Pipeline — the view-switcher row, after the view
+tabs. Unassigned rows remain visible under Mine. Default is Mine everywhere
+(the handoff's recorded design) — note this is the first scoping an Admin sees
+on these tabs, so an Admin’s first load shows own + unassigned until they
+click All once; the choice then persists. No new tests — the six gates plus a
+browser pass per tab are the verification.
 
 ---
 

@@ -580,11 +580,11 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     const {
         accounts, setAccounts,
         opportunities, contacts, activities, tasks, settings,
-        currentUser, userRole, canSeeAll,
+        currentUser, currentUserId, userRole, canSeeAll,
         exportToCSV, exportingCSV,
         showConfirm, softDelete, setUndoToast,
         getSubAccounts, getAccountRollup,
-        visibleAccounts,
+        visibleAccounts: allVisibleAccounts,
         handleDeleteAccount,
         setEditingAccount, setEditingSubAccount, setParentAccountForSub, setShowAccountModal,
         setCsvImportType, setShowCsvImportModal,
@@ -596,6 +596,18 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
 
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit    = !isReadOnly;
+
+    // ── Mine/All scope (§0.52) ─────────────────────────────
+    // Persisted PREFERENCE only — never data. An unrecognised stored value
+    // renders as Mine (§16's unmatched-select rule). The filter keys on
+    // ownerId, never the display name (§18b22); a null currentUserId during
+    // the ?me=true load window fails closed, matching getCallerId. Unassigned
+    // rows stay visible under Mine, matching the server's read policy.
+    const [scope, setScope] = useState(() => localStorage.getItem('tab:accounts:scope') === 'all' ? 'all' : 'mine');
+    const setScopePersist   = v => { setScope(v); localStorage.setItem('tab:accounts:scope', v); };
+    const visibleAccounts = useMemo(() => scope === 'mine'
+        ? allVisibleAccounts.filter(r => !r.ownerId || r.ownerId === currentUserId)
+        : allVisibleAccounts, [scope, allVisibleAccounts, currentUserId]);
 
     // ── View + sort state ─────────────────────────────────────
     const [view, setView]           = useState(() => localStorage.getItem('accounts:view') || 'signal');
@@ -1082,6 +1094,19 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
             })}
 
             {/* Divider */}
+            <div style={{ width: 1, height: 16, background: T.border, margin: '0 10px', flexShrink: 0 }}/>
+
+            {/* Scope segmented control — §0.52 */}
+            <div style={{ display: 'inline-flex', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, overflow: 'hidden', flexShrink: 0, marginBottom: -1 }}>
+                {[{ k: 'mine', l: 'Mine' }, { k: 'all', l: 'All' }].map(s => {
+                    const active = scope === s.k;
+                    return (
+                        <button key={s.k} onClick={() => setScopePersist(s.k)} style={{ padding: '4px 10px', fontSize: 12, fontWeight: active ? 600 : 400, background: active ? T.ink : 'transparent', color: active ? T.surface : T.inkMid, border: 'none', cursor: 'pointer', fontFamily: T.sans, transition: 'all 100ms' }}>
+                            {s.l}
+                        </button>
+                    );
+                })}
+            </div>
             <div style={{ width: 1, height: 16, background: T.border, margin: '0 10px', flexShrink: 0 }}/>
 
             {/* Warmth chips — compact, no border on All */}
