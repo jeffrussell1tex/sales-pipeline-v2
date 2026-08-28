@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** August 28, 2026
-**Verified at:** all six gates green · **276 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · build 2,459 kB · before-counts captured on dev for BOTH roles · **after-counts pending deploy** — the browser check in §0.50 is the only runtime evidence for this batch
+**Verified at:** all six gates green · **276 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · build 2,459 kB · **after-counts verified on dev, both roles, 28 Aug** — Karen 144/1533/25/22, exactly matching the predicate applied over the Admin dataset; Admin unchanged at baseline (§0.50)
 **Batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected
 **Prior batch:** **the role vocabulary was eight lists and only one was enforced** · **`requireWrite` was a BLOCKLIST** — it denied exactly `ReadOnly` and `Technician` by string and permitted every other value, so `readonly`, `Sales Rep` or any typo carried full write access to ~28 endpoints · **role changes had been impossible since the Phase 1 identity split**: `user-role.mjs` used one parameter in two identity spaces, so the UI's app id 404'd at Clerk and a Clerk id would have matched zero mirror rows silently · **the Users UI read a role copy frozen in the profile blob** — `flatten()` spread it last, and nothing ever updated it, which is the whole of §0.40's symptom · the invite screen seeded rows with the display LABEL `'Sales Rep'` and wrote it into Clerk · three role `<select>`s presented **Admin** for any unrecognised value, making a one-click escalation out of a display bug · 262 → 276 tests, 73 → **80** mutations · guide **§18b24**
 **Prior batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
@@ -79,11 +79,19 @@ received the full org: **accounts 144 · contacts 1534 · tasks 28 ·
 activities 23**. Identical numbers for a rep and an Admin is what "no scoping"
 looks like, and is the baseline the after-check compares against.
 
-**NOT yet verified: the after-counts.** Post-deploy, Karen's four counts must
-fall to her own rows plus unassigned ones, and Admin's must stay EXACTLY at the
-numbers above — the control proving `canSeeAll` still bypasses. The GET scoping
-lands with no automated rep-role coverage for these four endpoints (the §0.33
-test debt stands), so the browser check is the only runtime evidence there is.
+**After-counts verified on dev, 28 Aug, deploy `e10e1a1`.** Karen:
+**144 · 1533 · 25 · 22**. Admin: **144 · 1534 · 28 · 23** — the baseline
+exactly, digit for digit, so `canSeeAll` still bypasses. The drops are proven
+to be the RIGHT rows, not merely fewer: applying the predicate client-side over
+the full Admin dataset with Karen's id
+(`!r.ownerId || r.ownerId === ’usr_e7e09733-…’`) yields
+**144 · 1533 · 25 · 22** — identical to her scoped GETs on all four entities.
+Incidentally derivable: every account in the org is unassigned or Karen's
+(144 = 144), and exactly 1 contact, 3 tasks and 1 activity are owned by someone
+else — which is why the drops are small, per the unassigned-majority in §0.38.
+The GET scoping still lands with no automated rep-role coverage for these four
+endpoints (the §0.33 test debt stands); this browser check is the runtime
+evidence, recorded here.
 
 ---
 
