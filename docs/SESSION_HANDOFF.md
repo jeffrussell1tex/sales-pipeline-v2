@@ -1,125 +1,240 @@
 # SESSION_HANDOFF.md
 
-**Session of 26 August 2026 (third batch).** Repo root. Read this first, then
-verify every claim in it against the live repo before acting — **including the
-claims in this file**.
+**Session of 27 August 2026.** Repo root. Read this first, then verify every claim
+in it against the live repo before acting — **including the claims in this file**.
 
-**Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b24**,
-and does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.47**? If not, you are looking
-at a copy that predates this session. Check section numbers, never dates.
+**Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b24**, and
+does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.47**? If not, you are looking at a
+copy that predates the previous session. Check section numbers, never dates.
 
-**State at close:** role vocabulary unified. **Six gates green, 276 tests,
-26 integration tests, 80/80 mutations caught on a proven green baseline** — all
-observed, not predicted.
-
-**The rep path was verified in the browser, signed in as a rep rather than an
-Admin** — a rep can still save; the Users list reads Admin / Manager / Sales Rep
-rather than `member`; an Admin changing a role sticks and the badge follows. That
-last one had been dead since the Phase 1 identity split. Admin skips every branch
-this batch touches, which is how §0.24, §0.30 and §0.36 all shipped green, so the
-check is worth more than the gates.
+**State at close:** SUPERSEDED MID-SESSION, 28 Aug — the §2 patch is applied,
+gated (six gates · 276 tests · 26 integration · 80/80 mutations on a green
+baseline) and committed together with the §4 doc edits. After-counts and the §4
+follow-ons are the live work — see state doc §0.48. Full rewrite at session close.
 
 ---
 
-## 1. What shipped
+## 1. What shipped — commit `77e119c`, on `dev`
 
-One list (`APP_ROLES` in `auth.mjs`), one gate direction (allowlist), one identity
-space per use in `user-role.mjs`, one field answering "what is this user's role"
-(`users.role`, via a `flatten()` spread order).
+**`currentUser` now comes from the roster row, not from Clerk.**
 
-Three defects underneath, each recorded in §0.41–§0.45:
+`App.jsx:95` derived `currentUser` from Clerk's `firstName + lastName`, falling
+through to the **email address** when both were blank. Every ownership column
+stores `users.name`. §0.26 recorded the consequence: a rep with no Clerk profile
+name was called by her email in the browser and by her name on the server, so
+`isRepVisible` showed her only unowned records and `useActivities.js:123` stamped
+an email into `activities.author`.
 
-1. **`requireWrite` was a blocklist.** It denied `ReadOnly` and `Technician` by
-   exact string and permitted everything else, so any unrecognised value — and
-   the invite screen was minting one — carried full write access to ~28
-   endpoints.
-2. **Role changes had been impossible since the Phase 1 identity split.**
-   `user-role.mjs` used `targetUserId` as both a Clerk id and an app id. The UI
-   sent the app id, so every Clerk call 404'd. With a Clerk id the mirror update
-   would have matched zero rows silently, because a drizzle UPDATE that matches
-   nothing does not throw.
-3. **The Users UI read a frozen copy of the role.** `profile.userType` was
-   written once at row creation, never updated by any role change, and `flatten()`
-   spread the blob last so it overrode the column. Badges, both seat counters,
-   the header, the permissions summary and the select all read it.
+Four lines of actual change, in `src/App.jsx` only:
 
-**The ordering mattered.** Fixing (2) without fixing the selects would have armed
-a one-click Admin grant: three `<select>`s presented **Admin** for any unmatched
-value, and the control was live. Both are in this commit for that reason.
+- `:95` — the Clerk derivation is renamed `clerkName` and demoted to a fallback.
+- `:104` — `window.clerkCurrentUser` removed from the role effect.
+- After `} = uiState;` — `currentUser = myProfile?.name || clerkName` and
+  `currentUserId = myProfile?.id || null`, declared there because `myProfile` is
+  destructured from `uiState` immediately above (§18b0), plus a separate effect
+  for the identity globals keyed on the values they mirror.
+- `appContextValue` — `currentUserId` added. **Nothing consumes it yet.**
 
-## 2. Corrections to the previous handoff
+**Verified, not predicted.** Six gates green, 276 tests, build 2,459 kB. In the
+browser on `accelerep.netlify.app`, signed in as Karen (the §0.26 rep):
+`window.clerkCurrentUser` → `'Karen Russell'`, `window.clerkCurrentUserId` →
+`'usr_e7e09733-2646-4aef-a1d3-3f636cebc667'`.
 
-§0.40's headline hypothesis does not hold, and it said so itself ("Not verified
-against `auth.mjs`"). `canSeeAll` **is** case-sensitive, but it reads Clerk
-`publicMetadata.role` while the badge read the mirror's `profile.userType`. They
-disagreed because they were **different fields in different stores**, not because
-either was miscomparing.
+**What it does NOT fix.** Duplicate names. §0.37 found two `Jeff Russell` roster
+rows in one org. `currentUser` is now the right name; if two people share it, it
+is still the wrong identifier. Only ids close that.
 
-The generalisation is in §18b24.5: *"these two disagree" almost never means one of
-them is miscomparing; it usually means they are not the same field.* Find both
-sources before theorising about the comparison.
+---
 
-## 3. Errors made this session, recorded
+## 2. Prepared but NOT applied — rep scoping on four GETs
 
-- **Two patch anchors were written from memory rather than from the file.** The
-  invite screen's default-role `<select>` was assumed to cascade to the rows (it
-  does not), and `UserModal`'s options were assumed to use `&mdash;` (they use a
-  literal em dash). Both failed loudly at the assert, wrote nothing, and cost one
-  round trip each — which is the patch script working as intended (§18b2).
-- **The first source guard was too broad.** It banned the string `'Sales Rep'`
-  anywhere in `UsersDetail.jsx`, which fails on the two places it is correctly a
-  *label*. A guard that fails on legitimate code gets deleted, so it was narrowed
-  to the two seeds. §18b23.2 cuts both ways: guard the class, but the class has
-  to be the actual class.
-- **A session opened by rewriting a labelled hypothesis as a "correction" and
-  proposing a new module, a normalizer layer and a new guide section for what was
-  fifteen lines of bug.** Called out by Jeff, and rightly. The docs' register —
-  every session has an "errors made" section — makes architecture-scale proposals
-  feel proportionate to defect-scale problems. They are not.
+`patch-get-scoping.mjs` (delivered to Jeff, not in the repo). Dry-run by default,
+`--apply` to write, asserts every anchor and re-reads from disk afterward.
 
-## 4. Next — start here
+**The gap it closes.** `accounts.mjs:122`, `contacts.mjs:65`, `tasks.mjs:51` and
+`activities.mjs:76` were each `db.select().from(t).where(eq(t.orgId, orgId))` and
+nothing else — **every row in the org, to every caller.** `opportunities.mjs:188`
+and `leads.mjs` filter; these four were the remainder. The client filter in
+`App.jsx` was the only thing narrowing them, and a client filter is not a
+boundary: a rep calling the endpoint directly received the whole company.
 
-**This batch is closed.** Gates, unit suite, integration suite, mutation harness
-and the rep-path browser check are all done. Nothing here is outstanding.
+The patch adds the identical predicate `opportunities.mjs` uses:
 
-**Run `scripts/check-clerk-roles.mjs` when convenient** (read-only, untested against a live
-Clerk instance) — it names any test account whose Clerk role the new allowlist
-will refuse. There are no live users, so this is a diagnostic, not a migration.
-If a role change from the UI 403s or 400s, that script tells you why.
+```js
+if (!canSeeAll(userRole)) {
+    const callerId = await getCallerId(userId, orgId);
+    results = results.filter(r => !r.ownerId || r.ownerId === callerId);
+}
+```
 
-**`invalidateRoster` is now called** — that item is closed.
+**Unassigned stays visible to everyone** — Jeff's explicit call, and it matches
+the existing write policy (`mayMutate`: unowned records are mutable by any
+writer). Admin and Manager return before the filter, so **only the rep path
+changes**.
+
+Also touched: two import lines gain a word — `canSeeAll` in `tasks.mjs`,
+`getCallerId` in `tasks.mjs` and `activities.mjs`. **`npm test` is load-bearing
+for that**: the function-import graph check lives there and nowhere else, and a
+broken import edge passes the other five gates and fails the Netlify build
+(§0.11).
+
+**No manager branch, deliberately.** Copying `opportunities.mjs:197` would need
+`ownerNameKeyFor(entity)`, and `_ownership.mjs:84` gives `account → accountOwner`
+alone. The Edit Account modal writes `assignedRep`. A manager with `managedReps`
+set would silently lose those accounts. That belongs with the rest of the
+name-based migration (§0.39), not here.
+
+**Verified only as far as a sandbox allows:** all seven anchors matched exactly
+once against the uploaded copies, `node --check` passes on all four, CRLF
+preserved. **Not run against the repo. Not gated. Not committed. Not tested in a
+browser.**
+
+### The browser check that proves it
+
+Run **before and after** deploying, signed in as Karen:
+
+```js
+const t = await window.__getClerkToken();
+for (const e of ['accounts','contacts','tasks','activities']) {
+  const d = await (await fetch(`/.netlify/functions/${e}`, { headers: { Authorization: 'Bearer ' + t } })).json();
+  console.log(e, (d[e] || []).length);
+}
+```
+
+Measured before, as Karen: **accounts 142, tasks 27**. Contacts and activities
+were not counted. Afterwards each should fall to her own rows plus unowned ones.
+Then sign in as Admin and confirm the counts are **unchanged** — that is the
+control proving `canSeeAll` still bypasses.
+
+---
+
+## 3. Decisions taken this session
+
+- **Unassigned records are visible to everyone**, all entities. An earlier
+  per-entity rule (reps hidden from unassigned deals/tasks/activities, shown
+  unassigned accounts/contacts) was specified and then reversed. The reversal is
+  the current instruction.
+- **Security belongs on the server; the client gets a Mine/All toggle.** Agreed
+  shape, not yet built — see §4.
+- **Multi-role is dropped.** Not backlog, dropped.
+- **Leads gets its own session** — the admin toggle for unassigned-lead
+  visibility, the `settings.extra` key, both halves of `settings.mjs` and the
+  filter change land together or not at all (§18b12: a key written and never read
+  is not a feature).
+- **No Python on this machine.** Patch scripts are Node from here on.
+- **Files are delivered as generated**, not batched at session end. This
+  supersedes `ACCELEREP_CURRENT_STATE.md` §10, which still says the opposite.
+
+---
+
+## 4. Next
+
+**Apply and ship the GET scoping.** Run the patch, six gates, `npm test`, deploy,
+run the before/after browser check above as a rep AND as Admin.
+
+**Then: Mine/All toggle per tab.** Jeff's design, and it is the right one. It goes
+in the existing chip row on each tab — the row that already reads
+`All 142 · Hot · Warm · Cool · Needs reach` on Accounts — not a new UI surface.
+Default is **Mine**. Once the server filters, "All" means "everything I am allowed
+to see", which is correct for a rep and for an Admin, and the toggle is purely
+convenience rather than a boundary. Open question: does the choice persist per tab
+to `localStorage`, like sub-tabs do (style guide §10)? Note `TasksTab.jsx:370`
+already has a `scope === 'mine'` branch — check whether a control exists before
+building one.
+
+**Then: delete the client-side visibility filters.** Once the server is the
+boundary, `isRepVisible` (`App.jsx:609`) and its five call sites are redundant.
+`ReportsTab.jsx:23` destructures it and — on a grep — never calls it. Removing
+them ends the two-implementations-of-one-policy problem that produced §0.24,
+§0.26, §0.30 and §0.36.
+
+**Doc edits owed, and they should have ridden with commit 1 (§22):**
+
+1. **Guide §17's ownership bullet is wrong.** It still says ownership is
+   name-based and the `ownerId` migration is "in progress". It shipped. The same
+   bullet lists `createdBy` as a contacts ownership column; `_ownership.mjs:86`
+   says explicitly that column does not exist.
+2. **Guide §17 needs the read-side policy** the GET patch creates: all six entity
+   GETs rep-scoped on `ownerId`, unassigned visible to all, Admin/Manager bypass.
+3. **Guide §14** lists `onConflictDoNothing()` in the POST bulk branch as still
+   open; §0.3 of the bulk-insert batch says it was removed, not replaced.
+4. **Guide §19** says push to `main`; the branches are `dev` and `master`. Same
+   section says "run all six" and then "All five, plus `node --test`".
+5. **State doc §9 Horizon** still lists "centralise the nine remaining ownership
+   checks" — closed by §0.29/§0.34, which also corrected the count to ten.
+6. **State doc §10** still says files are delivered at session end.
+
+---
+
+## 5. Found in passing, not fixed
+
+- **A create can silently produce an unowned record.** An Admin-created task came
+  back `ownerId: null`; two more created minutes later were stamped correctly.
+  Not reproducible. `users.mjs:276–280` documents the mechanism — `callerCache`
+  (`_lib.mjs:95`) caches a **miss** for 30 seconds keyed on
+  `orgId::clerkUserId`, so a create landing in that window stamps null.
+  `invalidateRoster` exists to close it. **First field instance; previously only
+  a comment predicting one.**
+- **`TasksTab.jsx:564`**: `const assignedTo = task.assignedTo || currentUser`.
+  A task with no assignee renders as assigned to **whoever is looking at it**.
+- **`App.jsx:639`** filters on `o.assignedTo`; opportunities has no such column
+  (38 keys, confirmed from the API). That clause has never matched. Same at `:642`
+  and `:646`, and `ModalLayer.jsx:1069`.
+- **`App.jsx:657`** filters accounts on `accountOwner` alone. State doc line 3581
+  says all owner logic must read `accountOwner || assignedRep`.
+- **Two activity visibility rules disagree.** `App.jsx:672` filters on the linked
+  opportunity's `salesRep` and shows every activity with no linked deal to
+  everyone; `TasksTab.jsx:1147` filters on `a.author`. §16: views over the same
+  data must agree.
+- **`ReportsTab.jsx:2513` and `:5811`** send `ownerId: currentUser` — a display
+  name. Harmless: `saved-reports.mjs:67` and `:78` spread `ownerId: userId` after
+  the payload, so the client value is discarded and `assertOwner` compares Clerk
+  id to Clerk id. Dead payload, not a bug. **§0.35's note that `savedReports` is
+  a separate identity space is correct and the registry tripwire holds.**
+- **`addAudit` (`App.jsx:330–332`)** sends `userId`/`userName`/`timestamp` that
+  `audit-log.mjs` derives server-side and ignores (§0PP-a). Dead payload.
+- **A rep sees a settings toast on unrelated tabs.** Karen, on the Accounts tab:
+  *"Settings not saved — You do not have permission to make this change."* The
+  `useSettings` auto-save PUTting to an Admin-only endpoint. Already carried
+  forward as `useSettings.js:223`; it is no longer silent.
+- **Quotes has no `ownerId` column.** `QuotesTab.jsx:1261–1269` filters on
+  `q.createdBy` and `opp.salesRep`, both names. Quotes is not one of the six Tier
+  1 tables, so it cannot move to ids without a schema change.
 
 **Carried forward, unchanged:** `LeadImportModal.jsx:63–76` superseded matcher;
 leads has no overwrite path; no end-to-end test across the six import modules;
-settings auto-save fires for users who can never save (`useSettings.js:223`);
-`tasks.mjs` and contacts GET have no rep scoping; bulk-import lead notification;
-the stray `dupes-jsx-attribute - Copy.jsx` fixture.
+bulk-import lead notification; the stray `dupes-jsx-attribute - Copy.jsx` fixture;
+`scripts/check-clerk-roles.mjs` still never run against a live Clerk instance.
 
 **Test debt, still the highest-value item:** `opportunities.mjs` and `tasks.mjs`
 have **no integration file at all**, and `leads.itest.mjs` has no rep-role
-ownership tests.
+ownership tests. The GET scoping in §2 lands with no automated coverage of any
+kind, which makes the browser check the only evidence there is.
 
-**Commit 3 — finish Phase 2.** Client visibility (`isRepVisible` →
-`currentUserId`, `App.jsx:95`); importer name→id with a real error on ambiguity;
-`managedReps` off display names; collapse `accounts.assignedRep`; decide the fate
-of the name columns.
+---
 
-**Raised, not decided:** `UserModal`'s role select is disabled on edit rather than
-wired to `user-role.mjs`. `sanitize()` still writes `profile.userType` from the
-body — harmless now that `flatten()` prefers the column, and it is what lets the
-blob self-heal, but it is still a second stored answer.
+## 6. The thread
 
-## 5. The thread
+**A client-side filter is not a boundary, and treating one as though it were is
+what produced most of this session.**
 
-Last batch: *every measuring instrument was, at some point, reporting on itself
-rather than on the code.* This one is narrower and older:
+`tasks.mjs`, `contacts.mjs`, `accounts.mjs` and `activities.mjs` sent every row in
+the org to every caller, and the browser hid them. That is not the same as
+protecting them. Every disagreement found today — the two activity rules, the
+`assignedTo` clause that matches nothing, accounts filtering on one of two owner
+fields, §0.24 and §0.26 and §0.30 before them — exists because one policy has two
+implementations and only one of them is enforced.
 
-**A string enum is a schema, and this repo had eight versions of one schema.**
+The end state is the one every mature CRM already has: **the server filters, the
+client renders what it receives, and the client's only filtering job is
+convenience.** Commit 1 gave the client a real identity. §2 makes the server the
+boundary. The toggle in §4 is then a view control rather than a security control,
+and the filters in §4's third item can be deleted rather than corrected.
 
-Not eight bugs — eight copies, each correct on the day it was written. The blocklist
-permitted what nobody had named. The select chose a value nobody picked. The blob
-answered a question the column had already answered. Every one of them was a place
-where **something unnamed was given a default, and the default was permissive**.
-
-The defence is the same as §18b20's: enumerate what you allow, refuse the rest,
-and say out loud which value you refused.
+**A process note worth keeping.** Four claims were asserted this session from
+partial evidence and each was wrong: a Python patching convention that appears
+nowhere in these docs, a commit that "didn't include the doc edits" when it did,
+an ownership bug in `saved-reports.mjs` inferred from three documents that the
+code refutes in two lines, and an unlinked Clerk id that the database shows is
+linked. Every one would have been settled by reading one file. **Ask for the
+file.** Round trips are cheap; a wrong finding stated confidently is not.

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** August 26, 2026 · rules current through **§18b24**.
+**Updated:** August 28, 2026 · rules current through **§18b24**.
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -662,10 +662,11 @@ Rules when editing:
 ### Still open in this area
 
 - Accounts/contacts POST is unbatched (18b8).
-- `onConflictDoNothing()` in the POST bulk branch is **decorative**. The only unique
-  constraint is the `id` primary key and every id is a fresh `crypto.randomUUID()`
-  from `ModalLayer`, so it can never fire. The comment claims it "skips duplicates
-  instead of erroring"; nothing dedupes by name at insert time.
+- ~~`onConflictDoNothing()` in the POST bulk branch~~ — **removed, not replaced**
+  (§0.3 of the bulk-insert batch). It could never fire: the only unique constraint
+  is the `id` primary key and every id is a fresh `crypto.randomUUID()` from
+  `ModalLayer`. Name-based dedupe stays with the smart-merge tooling; nothing
+  dedupes by name at insert time, deliberately.
 - `ModalLayer` calls `setAccounts` / `setContacts` **before** the write. On a 500 the
   UI shows records that were never saved. Violates the no-local-only-state rule in
   12. Note the `res.ok` check is correct -- this is not a swallowed write, it is a
@@ -917,7 +918,8 @@ Before this existed, the Settings role selector wrote only the mirror and change
 - **Every mutating function must have a gate.** As of the SVR-3 sweep: 29 of 29 covered — 28 by role check, plus `dashboard-configs.mjs`, which needs none because its PUT writes a self-scoped id (`'dash_' + userId + '_' + orgId`) and so can only ever touch the caller's own row. Self-scoping by construction is an acceptable substitute for a role gate; org-scoping alone is **not** (that was the `saved-reports` DELETE bug — any member could delete anyone's report).
 - **Dispatch:** any non-ReadOnly role (Admin/Manager/Sales Rep) has full write access to all `dispatch-*` records.
 - **Audit rows are server-derived, never client-supplied.** `audit-log.mjs` POST ignores the client's `userId` / `userName` / `timestamp` and derives them from `auth` + `getCallerName()`. Accepting them from the body let any member forge entries attributing actions to another user — which would make the audit trail worthless as evidence for every other control. GET is Admin/Manager only.
-- **Ownership is name-based** (display names in `salesRep` / `accountOwner` / `createdBy` / `assignedTo` / `repName`), compared against `getCallerName(userId, orgId)` — which **fails closed** (null → caller owns nothing assigned). `orgId` is REQUIRED and throws when absent (§18b20.3); this line read `getCallerName(userId)` until 26 Aug, having been written before the identity split added the parameter. Known limitation: renames/duplicate names. The fix is `ownerId` columns and it is **in progress**, not post-launch — Phase 2, sequenced in SESSION_HANDOFF.md. **No endpoint calls this directly for object-level authorization any more**; they all go through `assertOwnership()` (§18b21).
+- **Ownership keys on `ownerId`** — a `usr_<uuid>` app user id on all six Tier 1 tables (accounts, contacts, opportunities, tasks, leads, activities), stamped server-side on create from the caller's JWT and compared against `getCallerId(userId, orgId)` — which **fails closed** (null → the caller owns nothing assigned; unassigned records stay mutable by any writer). `orgId` is REQUIRED and throws when absent (§18b20.3). The display-name columns (`salesRep` / `accountOwner` / `assignedRep` / `assignedTo` / `author`) are retained for RENDERING AND RESOLUTION ONLY (`OWNER_NAME_COLUMNS` in `_ownership.mjs`); a name can no longer confer ownership, and there is deliberately no name-based policy function. **No endpoint performs object-level authorization directly** — writes go through `assertOwnership()` / `mayMutate()` (§18b21), which assert the identity space and refuse a wrong-space value loudly (§18b22).
+- **Read-side policy (GET scoping):** all six entity GETs are rep-scoped on `ownerId` — a rep receives their own rows plus unassigned ones (`!r.ownerId || r.ownerId === callerId`); Admin and Manager bypass via `canSeeAll` and receive the whole org. `opportunities.mjs` and `leads.mjs` filtered first; `accounts`, `contacts`, `tasks` and `activities` gained the identical predicate on 28 Aug — they previously returned EVERY row in the org to every caller, with only the client filter in `App.jsx` narrowing them, and a client filter is not a boundary. The manager `managedReps` branch exists only in `opportunities.mjs` and is still name-based (state doc §0.39) — deliberately not copied to the other five until that list moves to ids.
 - Manager writes are **org-wide in v1** (team-scoped writes = Phase 2).
 - The 30s `verifyAuth` role cache means role changes take up to 30s to bite on these gates.
 - Not yet swept: `documents.mjs`, `dispatch-*`, `products`, `saved-reports` (backlog).
@@ -1226,7 +1228,7 @@ corrected, per §22.)*
 **Use `npm run build`, not `npx vite build`** -- the latter bypasses the bundle
 guard. `check:inline` should report **0 user-visible**.
 
-All five, plus `node --test`, run in CI on every push and PR via the `gates` job in
+All six run in CI on every push and PR via the `gates` job in
 `.github/workflows/test.yml`. Before that they ran only by hand, so anything pushed
 without remembering them reached Netlify ungated.
 
@@ -1235,11 +1237,11 @@ fifth gate (18b6).
 
 ### Netlify
 
-- **Deploy:** Git push to `main` branch → Netlify auto-deploys
+- **Deploy:** Git push to `dev` → `accelerep.netlify.app`; smoke test, then merge `dev` → `master` → `salespipelinetracker.com` (production). Netlify auto-deploys both. There is no `main` branch.
 - **Environment variables** (set in Netlify UI):
   - `VITE_CLERK_PUBLISHABLE_KEY`
   - `CLERK_SECRET_KEY`
-  - `NEON_DATABASE_URL` (auto-injected by Netlify Neon integration)
+  - `NETLIFY_DATABASE_URL` (auto-injected by Netlify Neon integration; the local `.env` uses the same name — this line said `NEON_DATABASE_URL` until 28 Aug, which was wrong)
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
   - `RESEND_API_KEY`
 - **DB migrations:** `drizzle-kit push` (not `migrate`) — schema changes are pushed directly

@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** August 26, 2026 (third batch)  
-**Verified at:** all six gates green · **276 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · **rep path verified in the browser as a rep, not an Admin** · all 66 functions bundle under esbuild  
-**Batch:** **the role vocabulary was eight lists and only one was enforced** · **`requireWrite` was a BLOCKLIST** — it denied exactly `ReadOnly` and `Technician` by string and permitted every other value, so `readonly`, `Sales Rep` or any typo carried full write access to ~28 endpoints · **role changes had been impossible since the Phase 1 identity split**: `user-role.mjs` used one parameter in two identity spaces, so the UI's app id 404'd at Clerk and a Clerk id would have matched zero mirror rows silently · **the Users UI read a role copy frozen in the profile blob** — `flatten()` spread it last, and nothing ever updated it, which is the whole of §0.40's symptom · the invite screen seeded rows with the display LABEL `'Sales Rep'` and wrote it into Clerk · three role `<select>`s presented **Admin** for any unrecognised value, making a one-click escalation out of a display bug · 262 → 276 tests, 73 → **80** mutations · guide **§18b24**
+**Updated:** August 28, 2026
+**Verified at:** all six gates green · **276 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · build 2,459 kB · before-counts captured on dev for BOTH roles · **after-counts pending deploy** — the browser check in §0.50 is the only runtime evidence for this batch
+**Batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected
+**Prior batch:** **the role vocabulary was eight lists and only one was enforced** · **`requireWrite` was a BLOCKLIST** — it denied exactly `ReadOnly` and `Technician` by string and permitted every other value, so `readonly`, `Sales Rep` or any typo carried full write access to ~28 endpoints · **role changes had been impossible since the Phase 1 identity split**: `user-role.mjs` used one parameter in two identity spaces, so the UI's app id 404'd at Clerk and a Clerk id would have matched zero mirror rows silently · **the Users UI read a role copy frozen in the profile blob** — `flatten()` spread it last, and nothing ever updated it, which is the whole of §0.40's symptom · the invite screen seeded rows with the display LABEL `'Sales Rep'` and wrote it into Clerk · three role `<select>`s presented **Admin** for any unrecognised value, making a one-click escalation out of a display bug · 262 → 276 tests, 73 → **80** mutations · guide **§18b24**
 **Prior batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
 **Prior batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
 **Prior batch:** **the delete gate RAN and passed — first time in four sessions** · **the leads CSV import had never written a single row** (client sent an array, endpoint had no array branch, 400 every time, error rendered on a step the user never sees) · **two ownership columns that do not exist** — `contacts.createdBy` and `activities.repName` — producing four hard 500s on rep paths and one SILENT ORG-WIDE WRITE BYPASS · **object-level authorization centralised** into `_ownership.mjs` with a registry checked against the real schema by `npm test` — the guard found the second bad column on its first run · **the integration suite had been dead at import** since `requireWrite` landed, so every cross-tenant isolation test including the post-wipe `clear=true` guard was dormant · **the test database schema had drifted** and `drizzle-kit push` had never been run against it · **`currentUser` comes from Clerk and disagrees with `users.name`**, so a rep with no Clerk profile name is identified by EMAIL and sees only unowned records · `GET /users` was Admin-only, so every user picker rendered empty for reps · **child promotion runs BEFORE the Admin gate — CONFIRMED: a refused delete still orphans every sub-account, permanently, with no audit record** · 232 → 244 tests, 0 → **26** integration tests (this line read `0 → 21` until 25 Aug; it was written before the five accounts child-promotion tests landed and never updated — §0.24's own text says 26)
@@ -19,7 +20,74 @@
 
 ---
 
-## 0. Latest Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
+## 0. Latest Batch — The Server Becomes The Boundary On Reads
+
+> Four GETs sent every row in the org to every caller, and the browser hid them.
+> That is not the same as protecting them. This batch gives accounts, contacts,
+> tasks and activities the same rep scoping opportunities and leads already had,
+> and back-records the commit that made the client's identity real.
+
+### 0.48 What shipped
+
+- **Rep scoping on the four unscoped GETs.** `accounts.mjs`, `contacts.mjs`,
+  `tasks.mjs` and `activities.mjs` each ran
+  `db.select().from(t).where(eq(t.orgId, orgId))` and nothing else. Each now
+  applies the identical predicate `opportunities.mjs` uses:
+  `!r.ownerId || r.ownerId === callerId`, with `canSeeAll(userRole)` returning
+  before the filter — Admin and Manager are untouched; only the rep path changes.
+- **Unassigned stays visible to everyone** — Jeff's explicit call, matching the
+  write policy (`mayMutate`: unowned records are mutable by any writer). Note the
+  `ZZFX Other Rep` fixture rows carry `ownerId: null` (the name matched no roster
+  row at backfill, §0.38), so they are unassigned-and-visible by policy — an
+  after-count that does not drop as far as intuition expects is not a failure.
+- **A caller that cannot be resolved sees only unassigned rows** — a null
+  `getCallerId` fails closed, the same direction `mayMutate()` takes on writes.
+- **No manager branch, deliberately.** The `managedReps` filter in
+  `opportunities.mjs` is name-based (§0.39); copying it here would need
+  `ownerNameKeyFor(entity)`, and `_ownership.mjs` maps `account → accountOwner`
+  alone while the Edit Account modal writes `assignedRep` — a manager would
+  silently lose those accounts. It moves with the name-based migration, not here.
+- Two import lines gained a word: `canSeeAll` into `tasks.mjs`, `getCallerId`
+  into `tasks.mjs` and `activities.mjs`. The function-import graph check inside
+  `npm test` is the only gate that proves those edges resolve (§0.11).
+
+### 0.49 Commit `77e119c`, recorded — `currentUser` comes from the roster row
+
+Shipped 26 Aug and recorded only in `SESSION_HANDOFF.md` until now — a §22
+violation, owed and paid here. `App.jsx:95` derived `currentUser` from Clerk's
+`firstName + lastName`, falling through to the EMAIL ADDRESS when both were
+blank, while every ownership column stores `users.name` — §0.26's split
+identity. Now: `currentUser = myProfile?.name || clerkName` and
+`currentUserId = myProfile?.id || null`, from the `?me=true` roster row that
+already self-heals drift; the Clerk derivation survives only as the fallback for
+a user with no roster row. `currentUserId` rides `appContextValue` and nothing
+consumes it yet. Verified in the browser as Karen: `window.clerkCurrentUser` →
+`'Karen Russell'`, `window.clerkCurrentUserId` → `'usr_e7e09733-…'`. Does NOT
+fix duplicate names (§0.37) — only ids close that.
+
+### 0.50 Verified — and what still is not
+
+All six gates green · 276 tests · 26 integration tests · **80/80 mutations
+caught on a printed green baseline** · build 2,459 kB. Two greens carry the
+batch: the §18b23 class guard (`callerId` is only ever compared against
+`.ownerId`) passes over the four new filter lines, and the function-import test
+proves the three new edges — the one failure mode that passes every other gate
+and dies at the Netlify deploy.
+
+Before-counts captured on dev, BOTH roles, before deploy — Karen AND Admin each
+received the full org: **accounts 144 · contacts 1534 · tasks 28 ·
+activities 23**. Identical numbers for a rep and an Admin is what "no scoping"
+looks like, and is the baseline the after-check compares against.
+
+**NOT yet verified: the after-counts.** Post-deploy, Karen's four counts must
+fall to her own rows plus unassigned ones, and Admin's must stay EXACTLY at the
+numbers above — the control proving `canSeeAll` still bypasses. The GET scoping
+lands with no automated rep-role coverage for these four endpoints (the §0.33
+test debt stands), so the browser check is the only runtime evidence there is.
+
+---
+
+## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
 > and with each other, and the disagreements were load-bearing.
@@ -3632,14 +3700,13 @@ around it.
 **`currentUser` from the roster, not Clerk.** See §0.26. Highest-value item here:
 it is a live correctness bug for any user without a Clerk profile name.
 
-**Centralise the nine remaining ownership checks** on `assertOwnership`. Not
-broken, but each is an independent chance to name the wrong column.
+~~**Centralise the nine remaining ownership checks**~~ **DONE** — closed by
+§0.29/§0.34, which also corrected the count: it was ten, verified by reading.
 
-**`tasks.mjs` GET has no rep scoping** — it selects by `orgId` alone, unlike
-leads and opportunities, so every rep sees every task in the org (13 distinct
-owners were visible to one rep). Mutation is still gated, so this is visibility,
-not a write hole. Contacts GET is likewise unscoped, plausibly deliberately.
-Decide whether either is intended.
+~~**`tasks.mjs` GET has no rep scoping**~~ **DONE** — decided and closed by the
+GET-scoping batch (§0.48): accounts, contacts, tasks and activities are all
+rep-scoped on `ownerId` now, the same predicate as leads and opportunities.
+Unassigned rows stay visible to everyone — the policy, not a gap.
 
 **Bulk-import notification for leads.** The new bulk branch deliberately fires no
 `lead.created` webhook or automation. If either matters for imported leads, it
@@ -3772,7 +3839,7 @@ it requires something reaching a localhost-bound dev server.
 
 - Jeff uploads current file batches (including state doc, coding guide, style guide) at session start
 - Claude reads state doc before making any changes — impact analysis before implementation for large features
-- All modified files delivered together at session end, not piecemeal
+- Files are delivered as they are generated, not batched at session end (Jeff's standing directive, 26 Aug 2026)
 - Updated `ACCELEREP_CURRENT_STATE.md` delivered for manual replacement
 - Jeff never makes manual code edits — deploys complete output files via git
 - Iterative deploy: dev branch → smoke test → merge to master → production

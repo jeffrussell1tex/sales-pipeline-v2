@@ -3,7 +3,7 @@ import { activities, leads, settings as settingsTable } from '../../db/schema.js
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
 import {
-    serverErrorBody, writeAudit, assertOwnership,
+    serverErrorBody, writeAudit, getCallerId, assertOwnership,
     stampOwnerId, ownerIdForUpdate, ambiguousOwnerResponse,
 } from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
@@ -73,7 +73,22 @@ export const handler = async (event) => {
 
     try {
         if (event.httpMethod === 'GET') {
-            const results = await db.select().from(activities).where(eq(activities.orgId, orgId)).orderBy(asc(activities.date));
+            let results = await db.select().from(activities).where(eq(activities.orgId, orgId)).orderBy(asc(activities.date));
+            if (!canSeeAll(userRole)) {
+                // Rep scoping. This endpoint returned every row in the org to
+                // every caller until now — the client filter in App.jsx was the
+                // only thing narrowing it, and a client filter is not a boundary.
+                //
+                // Same predicate as opportunities.mjs: unassigned is visible to
+                // everyone, owned rows only to their owner. Keys on the OWNER ID,
+                // never the display name — two users sharing a name saw each
+                // other's records, and renaming one detached theirs (18b22).
+                //
+                // A caller that cannot be resolved stays null and sees only
+                // unassigned rows, matching mayMutate()'s direction on writes.
+                const callerId = await getCallerId(userId, orgId);
+                results = results.filter(r => !r.ownerId || r.ownerId === callerId);
+            }
             return { statusCode: 200, headers, body: JSON.stringify({ activities: results }) };
         }
         if (event.httpMethod === 'POST') {
