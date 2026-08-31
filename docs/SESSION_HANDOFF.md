@@ -7,14 +7,19 @@ in it against the live repo before acting — **including the claims in this fil
 does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.53**? If not, you are looking at a
 copy that predates this session. Check section numbers, never dates.
 
-**State at close:** one commit on `dev` carrying the whole Leads-visibility batch —
-code, tests, harness, and these three docs (§22); `netlify.toml` and `index.html`
-are untouched (see the environmental note below). If you are reading this file
-from the repo, that commit happened; if a delivered copy claims more than the
-repo shows, the repo wins. NOT yet merged to `master` — dev deploy smoke test
-comes first (see §4). Untracked patch scripts in the repo root and `scripts/`
-(`add-lead-visibility.mjs`, `patch-guide-053.mjs`, `patch-state-053.mjs`) are
-disposable.
+**State at close (corrected after the fact — the repo won):** the batch went in
+as THREE commits, not the one this file originally claimed. `6721c8a "lead
+visability"` carried eight of the nine code files plus ~1,300 lines of prior
+sessions' disposable patch scripts and a stray copy of the settings catalogue
+misplaced into `netlify/functions/` (inert — a constant export, no handler);
+`9ee89a8 "lead assignment"` touched only `deno.lock`; and both were pushed to
+`master` BEFORE the smoke test. `a626a2d "docs"` on `dev` added the docs, the
+settings-catalogue card line, and the 053 patch scripts. A cleanup commit then
+removed the misplaced function copy and the swept-in disposables and applied
+this correction. `netlify.toml` and `index.html` were never touched. The
+lesson stands larger than intended: **the handoff describes intent; `git log`
+describes reality; when they disagree, correct the handoff in a commit that
+says so.**
 
 ---
 
@@ -101,6 +106,14 @@ tables.
   before the commit. Two lessons: head the line you are ruling on, not the top
   of the headers; and a doc claim about a change is verified the same way as
   the change — against the disk.
+- **The "already placed" catalogue mystery resolved with everyone half-right.**
+  The file HAD been placed — into `netlify/functions/` instead of
+  `src/Tabs/settings/` (a file-dialog miss), where a `find` scoped to `src`
+  could not see it and it quietly shipped to prod inside `6721c8a` as a
+  handler-less function. The belief was true; the directory was wrong; the
+  verification searched everywhere but there. Placement greps should target
+  the DESTINATION PATH, and a `git show --stat` read before push would have
+  caught both this and the swept-in scripts.
 
 ## 3. Observed on local dev, pre-existing, untriaged
 
