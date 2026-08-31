@@ -43,6 +43,17 @@ Neon Postgres (dev and prod SHARE the `main` branch), Clerk Organizations.
 - **Deliver files as generated**, not batched at session end.
 - **Proactively flag** better approaches, cleaner code, or improvements seen
   while working — Jeff decides whether to act.
+- **This is multi-tenant SaaS, sold and licensed to multiple organizations.
+  Treat every coding decision accordingly.** An organization's data must be
+  isolated to that organization: every query, endpoint, cache key, and
+  background job is org-scoped — no read or write path may ever return or
+  touch another org's rows, and no org's configuration (settings, roles,
+  feature toggles, scoring models, templates) may affect another org's
+  behavior. Nothing tenant-visible is global unless deliberately designed as
+  a product-wide default that per-org config overrides. New features are
+  designed org-scoped from the first line, not retrofitted; any test of
+  isolation seeds its own org namespace and proves the other org sees
+  nothing.
 - Dev and prod share one Neon `main` branch: schema changes must be additive
   and nullable; account for both environments in every schema decision.
 
