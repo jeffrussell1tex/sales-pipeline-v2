@@ -1,15 +1,15 @@
 # SESSION_HANDOFF.md
 
 **Session of 31 August 2026 (second session — the roles close-out, the
-overwrite path, and the verification tail).** Repo root. Read this first, then
-verify every claim in it against the live repo before acting — **including the
-claims in this file**.
+overwrite path, and the verification tail), FINAL.** Repo root. Read this
+first, then verify every claim in it against the live repo before acting —
+**including the claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` §0.54 contain
-the **"Post-commit amendment"** block, and does `docs/ACCELEREP_CODING_GUIDE.md`
-§19 carry **"SECOND FACE of the same failure"** in its stale-dist bullet? If
-not, you are looking at a copy that predates this handoff. Check section
-content, never dates.
+the **"Shipping status at close"** block, and does
+`docs/ACCELEREP_CODING_GUIDE.md` §19 carry **"SECOND FACE of the same
+failure"** in its stale-dist bullet? If not, you are looking at a copy that
+predates this handoff. Check section content, never dates.
 
 ---
 
@@ -73,18 +73,23 @@ re-selecting. 13 candidates, all dev-org (ZZFX among them; UKG zero), cleared,
 zero remain. Backfilling ownerId FROM names was rejected: name-equality
 ownership is the hazard the id migration removed.
 
-**Verified — every claim now OBSERVED:** six gates green (143 tdz) ·
-**279 tests** · **33 integration** · **86/86 mutations, printed green
-baseline, zero STALE** · build 2,466 kB · hygiene post-verified · both prod
-role checkers exit clean · **browser pass on local dev as Admin, matched to
-the digit** — All scope 23/3 hot/19 unassigned, chip 19, Distribute 19 with
-Karen's bar at her true 4 and zero ghost names anywhere, James Whitmore
-assigned to Karen → F5 → assignment, CTO title, notes and $310K all intact,
-chip 19→18, bar 4→5 · **dev-deploy smoke on accelerep.netlify.app passed** —
-23/18 (shared DB, post-assignment) with the same lead whole through the
-deployed bundle. `master` fast-forward is READY and not yet confirmed run —
-`git merge --ff-only dev` from master, push, then eyeball UKG's Leads tab on
-prod (its data was always ghost-free; no visible change is the pass).
+**Verified — every claim OBSERVED:** six gates green (143 tdz) · **279 tests**
+· **33 integration** · **86/86 mutations, printed green baseline, zero STALE**
+· build 2,466 kB · hygiene post-verified · both prod role checkers exit clean
+· **browser pass on local dev as Admin, matched to the digit** — All scope
+23/3 hot/19 unassigned, chip 19, Distribute 19 with Karen's bar at her true 4
+and zero ghost names anywhere, James Whitmore assigned to Karen → F5 →
+assignment, CTO title, notes and $310K all intact, chip 19→18, bar 4→5 ·
+**deploy smoke passed** — 23/18 (shared DB, post-assignment) with the same
+lead whole through the deployed bundle.
+
+**Shipping status:** `master` was fast-forwarded to `4df71b6` by Jeff earlier
+in the day, so PROD has been building and serving the `1ec5640` code batch —
+the overwrite fix and ownerId counting are LIVE on
+`salespipelinetracker.com`. Still open at close: a docs-only fast-forward
+(`4f32284` + `9c03db7` — no code delta) and the two-minute UKG Leads-tab
+eyeball on prod (no visible change is the pass; UKG's data was always
+ghost-free).
 
 ## 2. Errors made this session, recorded
 
@@ -92,25 +97,34 @@ prod (its data was always ghost-free; no visible change is the pass).
   Verified-at line claimed the browser pass before it ran; the pass was the
   stated gate and the patches applied anyway. The observations then matched
   to the digit, so the docs happened to be true — verification-after-the-fact,
-  not process. The §0.54 amendment records it; the rule stands: observed,
-  then written, then committed.
+  not process. The rule stands: observed, then written, then committed.
+- **An intervention argued with a disk that had already answered.** A
+  multi-command paste was declared "will fail, run one at a time" — but Git
+  Bash had already executed it line by line, `9c03db7` was already committed
+  and pushed, and the subsequent "nothing to commit" / "Everything
+  up-to-date" were read as SYMPTOMS instead of as the system truthfully
+  reporting DONE. A redundant fix was prescribed and half-chased before three
+  fingerprint reads (`git show HEAD:… | grep -c`, disk grep, `git log`)
+  settled it. The mirror image of the delivered-vs-placed error: absence of
+  pasted output is not absence of execution. Interrogate git's actual state
+  before diagnosing git's messages.
 - **A prod tab nearly hosted the browser pass.** The org switcher showed the
   PROD instance's pair ("Dispatch Demo Group" + UKG) and the test almost ran
   against `salespipelinetracker.com`. Read the URL bar and count the orgs
   before any browser verification — now in guide §19.
-- **A doc-patch anchor was written from memory and refused.** The §0.54
-  closing-paragraph anchor guessed the line wrap instead of reading the file;
-  the count-assert refused before any write, twice (the second time because a
-  shell-inline edit mangled backticks — heredocs with quoted EOF for script
-  edits, never `node -e` with template-adjacent text). Read the destination
-  lines FIRST, then write the anchor.
+- **A doc-patch anchor was written from memory and refused** — twice (the
+  second failure was a shell-inline edit mangling backticks; heredocs with
+  quoted EOF for script edits, never `node -e` around template-adjacent
+  text). Read the destination lines FIRST, then write the anchor.
+- **Gate-count predictions missed FIVE times across the day** (occurrence
+  counts, file placement, the paste above) and were caught every time by
+  running the check against the artifact. The gate number is itself a claim
+  about a file; verify the verifier.
 - **A lowercase rep name was typed into the assign prompt** and cancelled
-  before OK on the case-sensitivity doubt — the free-text prompt invites
-  exactly the ghost class this session cleaned. Finding, not damage.
-- **Delivered-vs-placed, four more times** (v2 mirror script ran as the old
-  file; the members lister never saved anywhere; a placement-gate count
-  predicted wrong and caught by running the gate against the artifact first).
-  The gate number is itself a claim about a file; verify the verifier.
+  before OK on the case-sensitivity doubt. Finding, not damage.
+- **The hygiene apply ran ahead of its stated sequence** (before the code
+  commit/deploy). Every guard held and the ordering happened not to matter —
+  by luck of the specific change, not by process.
 - **Paste truncation, repeatedly**: one command per paste when an output is
   load-bearing.
 
@@ -132,6 +146,10 @@ prod (its data was always ghost-free; no visible change is the pass).
 - The roster "Out of sync with Clerk / Reconcile" button is UNREAD code
   claiming 6-row drift. Do not press before reading.
 - The user profile Security card contradicts the list view on MFA/SSO.
+- The root/docs handoff pair is a standing DUAL-WRITE hazard — missed once,
+  then falsely diagnosed as missed a second time. Candidate fix: a five-line
+  `check:` gate asserting the two copies are identical (the gate scripts'
+  exact kind of job), or demote one copy to a pointer.
 
 **Carried:** dev-org role drift (org_3B8Tg `member` ×2 both locations;
 org_3BDQ `smiller` blob-only, self-heals) — five minutes of warm-procedure UI
@@ -141,24 +159,30 @@ carried list.
 
 ## 4. Next — start here
 
-**`master` fast-forward, if not already done** — then the prod eyeball.
+**Finish shipping:** docs-only `master` fast-forward (`git checkout master &&
+git merge --ff-only dev && git push origin master && git checkout dev`), then
+the UKG prod eyeball.
 
 **Test debt remains the highest-value item**: `opportunities.mjs` and
 `tasks.mjs` have no integration file; the four §0.48 endpoints still have zero
 automated rep-role GET coverage. The leads suite is the template (own org
 namespace per §18b25, own roster seed, `invalidateRoster()` after seeding).
-**Read `opportunities.mjs` PUT for the overwrite shape FIRST** — the guide's
-sanitize-then-upsert check has been cashed twice (users, leads) and found an
-instance both times; opportunities is the explicit third candidate.
+**Read `opportunities.mjs` PUT for the overwrite shape FIRST** — the
+sanitize-then-upsert check is two for two (users, leads); opportunities is the
+explicit third candidate.
 
 **The assignee picker** is a natural small pass: read `resolveOwnerId` (the
 case question), then replace the five `window.prompt` sites with one
-module-scope picker component fed from `reps` — which also retires the
-free-text ghost risk permanently.
+module-scope picker component fed from `reps` — retiring the free-text ghost
+risk permanently.
 
-**Then the SettingsTab cleanup pass**, which now holds: audit actor
-attribution, the autosave flood, Reconcile (read first), the Security card,
-and the original deferred stubs.
+**A handoff-consistency gate** (root vs docs copy identical) is a five-line
+addition to the gate scripts and would have prevented two of this session's
+smaller messes.
+
+**Then the SettingsTab cleanup pass**: audit actor attribution, the autosave
+flood, Reconcile (read first), the Security card, and the original deferred
+stubs.
 
 ## 5. The thread
 
@@ -166,14 +190,17 @@ Two sessions ago the boundary moved to the server; last session it became
 policy; this session the write path joined the boundary — a read policy
 counting `ownerId` honestly is worthless if the write path wipes the row it
 passes through, and the one-line UI item turned out to be gated on an endpoint
-fix nobody had queued. The guide's sanitize-then-upsert check is now two for
-two; it goes in front of every new suite from here.
+fix nobody had queued. The sanitize-then-upsert check is now two for two; it
+goes in front of every new suite from here.
 
-And provenance ran through everything, smallest scale yet: a gate count
-predicted instead of measured, a file believed saved that no filesystem held,
-a silent check-ignore that was a tracked file telling the truth, docs
-committed a few hours ahead of the observations that made them true, and a
-browser pass nearly run against the wrong product entirely. Every one settled
-the same way — read the disk, read the URL bar, run the gate against the
-artifact. The verifiers refused four times this session and were right all
-four. Trust the refusal; verify the verifier.
+And provenance ran through everything, at every scale: a gate count predicted
+instead of measured, a file believed saved that no filesystem held, a silent
+check-ignore that was a tracked file telling the truth, docs committed hours
+ahead of the observations that made them true, a browser pass nearly run
+against the wrong product, and — the session's last lesson, earned by its own
+author — a successful command diagnosed as a failed one because its output
+never made it into the conversation. Every one settled the same way: read the
+disk, read the URL bar, read the log, run the gate against the artifact. The
+verifiers refused five times and were right five times, twice against the
+person prescribing them. Trust the refusal; verify the verifier; and when git
+says "nothing to commit," consider that it might simply be true.
