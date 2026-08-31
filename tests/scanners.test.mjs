@@ -210,6 +210,32 @@ test('scan-dbfetch does not flag a checked Response', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// check-handoff — not a code scanner but a repo-state gate: the root and docs/
+// copies of SESSION_HANDOFF.md must be byte-identical (the pair drifted twice
+// on 31 Aug alone). Fixture mode passes the two paths explicitly so committed
+// fixtures stand in for the real pair.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('check-handoff catches diverging copies and names the first differing line', () => {
+    const r = run('scripts/check-handoff.mjs', [`${FIX}/handoff-differs-root.md`, `${FIX}/handoff-differs-docs.md`]);
+    assert.notEqual(r.code, 0, 'diverging handoff copies passed the gate');
+    assert.match(r.stdout, /DIFFER/);
+    assert.match(r.stdout, /First difference at line/);
+});
+
+test('check-handoff stays quiet on identical copies', () => {
+    const r = run('scripts/check-handoff.mjs', [`${FIX}/handoff-safe-a.md`, `${FIX}/handoff-safe-b.md`]);
+    assert.equal(r.code, 0, `false positive:\n${r.stdout}`);
+    assert.match(r.stdout, /identical/);
+});
+
+test('check-handoff fails when a copy is missing', () => {
+    const r = run('scripts/check-handoff.mjs', [`${FIX}/handoff-safe-a.md`, `${FIX}/handoff-missing-copy.md`]);
+    assert.notEqual(r.code, 0, 'a missing copy passed the gate');
+    assert.match(r.stdout, /MISSING/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Coverage
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -219,7 +245,7 @@ test('every gate script has at least one catch fixture and one safe fixture', ()
     const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
     const gates = Object.keys(pkg.scripts).filter(k => k.startsWith('check:'));
     const fixtures = fs.readdirSync(FIX);
-    const prefixOf = { 'check:tdz': 'tdz', 'check:inline': 'inline', 'check:dupes': 'dupes', 'check:dbfetch': 'dbfetch' };
+    const prefixOf = { 'check:tdz': 'tdz', 'check:inline': 'inline', 'check:dupes': 'dupes', 'check:dbfetch': 'dbfetch', 'check:handoff': 'handoff' };
 
     for (const gate of gates) {
         if (gate === 'check:bundle') continue;          // fixtures are built at run time above

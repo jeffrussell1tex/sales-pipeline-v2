@@ -7,6 +7,7 @@
 //   docs/SESSION_HANDOFF.md
 //
 //   npm run check:handoff
+//   node scripts/check-handoff.mjs FILE_A FILE_B   # fixture mode (tests only)
 //
 // WHY THIS EXISTS
 // ---------------
@@ -57,17 +58,23 @@ Exit 1 on any difference or a missing copy.
     process.exit(0);
 }
 
+// Positional args exist for the fixture tests in tests/scanners.test.mjs —
+// the gate proper always runs against the real pair.
+const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const FILE_A = args[0] || ROOT;
+const FILE_B = args[1] || DOCS;
+
 const read = (p) => {
     try { return fs.readFileSync(p); }
     catch { return null; }
 };
 
-const rootBuf = read(ROOT);
-const docsBuf = read(DOCS);
+const rootBuf = read(FILE_A);
+const docsBuf = read(FILE_B);
 
 if (!rootBuf || !docsBuf) {
-    if (!rootBuf) console.log(`MISSING  ${ROOT}`);
-    if (!docsBuf) console.log(`MISSING  ${DOCS}`);
+    if (!rootBuf) console.log(`MISSING  ${FILE_A}`);
+    if (!docsBuf) console.log(`MISSING  ${FILE_B}`);
     console.log('\nBoth copies must exist. A deleted copy is drift with extra steps.');
     process.exit(1);
 }
@@ -102,8 +109,8 @@ const brief = (l) => l === undefined
     : (l.length > 72 ? l.slice(0, 69) + '…' : l);
 
 console.log(`Handoff copies DIFFER — ${kind}`);
-console.log(`  ${ROOT}: ${rootBuf.length} bytes, ${rootLines.length} lines`);
-console.log(`  ${DOCS}: ${docsBuf.length} bytes, ${docsLines.length} lines`);
+console.log(`  ${FILE_A}: ${rootBuf.length} bytes, ${rootLines.length} lines`);
+console.log(`  ${FILE_B}: ${docsBuf.length} bytes, ${docsLines.length} lines`);
 if (firstDiff >= 0) {
     console.log(`\nFirst difference at line ${firstDiff + 1}:`);
     console.log(`  root: ${brief(rootLines[firstDiff])}`);
