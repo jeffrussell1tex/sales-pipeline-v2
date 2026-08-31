@@ -1,177 +1,159 @@
 # SESSION_HANDOFF.md
 
-**Session of 31 August 2026.** Repo root. Read this first, then verify every claim
-in it against the live repo before acting — **including the claims in this file**.
+**Session of 31 August 2026 (second session — the roles close-out and the
+overwrite path).** Repo root. Read this first, then verify every claim in it
+against the live repo before acting — **including the claims in this file**.
 
-**Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b25**, and
-does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.53**? If not, you are looking at a
-copy that predates this session. Check section numbers, never dates.
-
-**State at close (corrected after the fact — the repo won):** the batch went in
-as THREE commits, not the one this file originally claimed. `6721c8a "lead
-visability"` carried eight of the nine code files plus ~1,300 lines of prior
-sessions' disposable patch scripts and a stray copy of the settings catalogue
-misplaced into `netlify/functions/` (inert — a constant export, no handler);
-`9ee89a8 "lead assignment"` touched only `deno.lock`; and both were pushed to
-`master` BEFORE the smoke test. `a626a2d "docs"` on `dev` added the docs, the
-settings-catalogue card line, and the 053 patch scripts. A cleanup commit then
-removed the misplaced function copy and the swept-in disposables and applied
-this correction. `netlify.toml` and `index.html` were never touched. The
-lesson stands larger than intended: **the handoff describes intent; `git log`
-describes reality; when they disagree, correct the handoff in a commit that
-says so.**
+**Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.54**,
+and does `docs/ACCELEREP_CODING_GUIDE.md` carry the leads-merge addendum in its
+mergeForUpdate section ("found its second instance (31 Aug)")? If not, you are
+looking at a copy that predates this session. Check section content, never dates.
 
 ---
 
-## 1. What shipped — the Leads scoping session, plus what it surfaced
+## 1. What shipped
 
-**The toggle.** `settings.extra.unassignedLeadsVisibleToReps` (default `true`;
-absent key = the standing policy, so the deploy changes nothing for any
-unconfigured org) gates the unassigned half of the rep predicate in `leads.mjs`
-GET — leads only; the other five entities keep the fixed predicate. The strict
-branch is `!!l.ownerId && l.ownerId === callerId`, and the `!!` guard is
-load-bearing: bare `=== callerId` matches `null === null` and hands an
-unresolvable caller exactly the rows the toggle hides (18b22). The config read
-throws to the handler's 500 rather than copying `getLeadScoring`'s
-swallow-and-default — a visibility boundary must not silently pick a fail
-direction. **Write policy deliberately unchanged** (visibility ≠ authorization;
-recorded as a decision). Both `settings.mjs` halves carry the key.
-`LeadVisibilityDetail.jsx` under `settings/salesProcess/`, four-step wiring,
-live badge on the card.
+**Prod roles cleanup: CLOSED, both sides** (morning; commits `92386aa` ignore
+rule, `34a3f94` verifiers). The remembered "five of six mirror rows" split
+cleanly: Clerk held ONE refused value (`"Sales Rep"` on the live.com user — the
+invite label-as-value seed), fixed via the UI, checker re-run clean (7
+memberships, 0 findings). The `member` ×4 were mirror-only (column AND frozen
+`profile.userType` blob), on UKG test accounts whose Clerk role is ABSENT — so
+nobody was 403ing; drift, not breakage. Fixed through the `user-role` UI path
+after a single-subject validation (one row changed, three controls held,
+network capture, row-level re-read); each save healed both locations. One row
+set to Manager was DELIBERATE. Two read-only verifiers now in `scripts/`:
+`check-mirror-roles.mjs` (SELECT-only, both role locations, column-spelling
+tolerant, exit 1 on findings) and `list-clerk-members.mjs` (full membership
+with Clerk identifiers). Finding worth keeping: the roster email and the Clerk
+login DIVERGE on the UKG Admin row — the display-name link fallback attached
+the yahoo Clerk account to a `jeff.russell@ukg.com` roster row. By design of
+the fallback; recorded, not fixed.
 
-**Mine/All on Leads** — the §0.52 pattern; `norm()` gained an `ownerId`
-passthrough because the normalized shape carried only the display name, and the
-scope keys on the id, never the name. Key `tab:leads:scope`, default Mine,
-control on the right of the Triage/Cockpit strip.
+**The `.env.clerk-prod` incident, resolved.** A live `sk_live_` key was
+committed locally (`93571f4`, message "1", sole file) BEFORE the ignore rule
+existed — which is why `check-ignore` stayed silent through a whole red-herring
+chase of the gitignore pattern: **ignore rules do not apply to tracked files**.
+`git ls-files` (prints it) vs `check-ignore --no-index` (matches) split the
+diagnosis in one step. `git reset HEAD~1` dropped the commit; no remote ever
+contained it; the key never left the machine; rotation optional. Named adds
+only while secrets sit ignored — a reflexive `commit -am` is what created this.
 
-**Tests.** Five integration tests — `leads.mjs`'s FIRST rep-role coverage
-(§0.33/§0.50 debt): default, strict, Admin-bypass, stored-true≡absent, and the
-unresolvable-caller-under-strict case asserting exactly zero rows. Two
-permanent unit guards in `ownership-registry.test.mjs`: the null-null-collision
-SHAPE guard scanning all six endpoints, and 18b12-as-a-test for this key.
-Harness: anchor #14 repointed, five new mutations. **Verified: six gates green
-(143 tdz, 278 tests, build 2,465 kB), 31/31 integration, 85/85 mutations on a
-printed green baseline, zero STALE.**
+**The leads overwrite path: CLOSED** (afternoon; this batch). The queued
+"chips to ownerId" item sat on a live bug: `saveLead` sends `{ id, ...patch }`,
+the PUT fed it to a full-row `sanitize()`, and a two-key status change
+REPLACED the row — every absent column nulled, masked on screen by the
+client's optimistic merge, visible only on reload. The carried-forward "leads
+overwrite path" item, located precisely. Fixing the UI first would have armed
+it (an honest 19-row pool feeding Auto-assign through a wiping PUT), so the
+merge went in first: `sanitize({ ...existing, ...data })` — the users.mjs
+mergeForUpdate pattern minus the blob flatten — with `ownerIdForUpdate` still
+fed the RAW body so 18b13's mentioned-assignedTo detection survives. Held
+closed three ways: the integration pair (partial PUT preserves nine fields;
+explicit null still clears), a source-assertion guard in
+`tests/partial-sanitize.test.mjs` (the harness runs UNIT suites only, so the
+rule is pinned where it can see it), and harness mutation #86 (simulated
+caught before delivery, CAUGHT on the real tree).
 
-**Browser-verified on LOCAL dev, both roles, row-level.** Admin 23 in both
-toggle states; badge round-trip; Mine/All persisting. Karen 4 (strict) / 23
-(permissive), reconciled against an authorized fetch: exactly 4 rows carry her
-`usr_…`, 19 are `ownerId: null`, zero foreign owners. Thirteen of the 19 are
-the ZZFX pattern in real data — stale `assignedTo` names on null-owner rows —
-see §4 hygiene.
+**Unassigned-ness keys on `ownerId`** everywhere it is a predicate: both
+chips, both filters, the triage lane, the Distribute pool/count, the subtitle
+(previously `!l.assignee`, undercounting 6 vs 19). Distribute load bars count
+`l.ownerId === id` from a `reps` `{id, name}` roster (settings.users carries
+the usr_ id in every role's read). Assignment payloads stay NAME-keyed on
+purpose — the server resolves and 409s ambiguity. The `!lead.assignee` DISPLAY
+sites were left alone: owner-set/name-null rows exist, and a predicate swap
+there renders an avatar with no name.
 
-**`netlify dev` was broken locally and is fixed — environmental, no code
-change.** Module URLs (`/src/main.jsx`, `/@vite/client`) came back as typeless
-200s with Netlify's own headers; `nosniff` blocked them; React never mounted;
-the static crawler landing in `index.html` stayed on screen. A stale `dist/`
-was present and the documented cleanup (`rm -rf node_modules/.vite dist`,
-restart) fixed it — with the `[dev]` proxy block in place, so the fallback can
-bite even then. A toml-catch-all hypothesis was drafted into a redirect-move
-fix that was NEVER APPLIED (see §2); it is recorded as unproven, and
-`netlify.toml` is untouched. Recognise the symptom: "Rewrote URL to
-/index.html" dev-log lines; `curl -sI` on :8888 vs :5173 separates the CLI
-from Vite. Guide §19 carries the note.
+**Stale-name hygiene: applied.** `scripts/clear-stale-assigned-names.mjs` —
+dry-run default; `--apply` demands `--org` AND `--expect=N`, refuses a moved
+count, detects column spelling from a sample row, post-verifies by
+re-selecting. 13 candidates, all dev-org (ZZFX among them; UKG zero), cleared,
+zero remain. Backfilling ownerId FROM names was rejected: name-equality
+ownership is the hazard the id migration removed.
 
-**The itest namespace collision → guide §18b25.** Seeding
-`(itest_org_A, u_itest_org_A)` collided with the accounts suite's per-test
-re-seed of the identical pair (three concurrent processes, one DB, one unique
-constraint): accounts died on duplicate-key in its hooks; the leads rep tests
-failed on caller resolution nowhere near the cause. The leads suite now owns
-`itest_leads_A/B`. One org prefix per suite that seeds constrained shared
-tables.
+**Verified:** six gates green (143 tdz) · **279 tests** · **33 integration** ·
+**86/86 mutations, printed green baseline, zero STALE** · build 2,466 kB ·
+hygiene post-verified · both prod role checkers exit clean · browser pass as
+Admin on local dev (chip/Distribute 19, owned-only load bars, assignment
+round-trip surviving reload).
 
 ## 2. Errors made this session, recorded
 
-- **Two wrong predictions, both caught by verifiers.** "Expect 1" for a grep
-  that correctly returns 2 (the guard's own name plus its offender message);
-  and a patch-script post-check written as ≥3 for a key that appears twice.
-  Predictions are not evidence; outputs are — the verifiers were right both
-  times.
-- **The delivered-vs-placed gap, three times, one file.** `catalogue.js` was
-  believed placed and wasn't (an honest wrong belief — the repo copy's Aug 12
-  mtime settled it), a `/tmp` heredoc was believed run and wasn't. The rule
-  that ended it: **grep the destination after every placement** — verify the
-  effect, never the memory of the action. Same provenance rule §22 applies to
-  commits, applied to file moves.
-- **A patch script double-converted EOLs** (multi-line anchors built with CRLF,
-  then converted again → `\r\r\n`, zero matches). The refuse-on-zero-match
-  behavior caught it before any write. Keep anchors in `\n` and convert
-  exactly once.
-- **A diagnosis was declared from a truncated curl and the docs briefly outran
-  the disk.** The post-cleanup probe was read through `head -3`, which cut the
-  `Content-Type` line off; the stale-`dist/` cleanup had ALREADY fixed the
-  module serving, but a toml-redirect fix was prescribed anyway, never run —
-  and then documented as shipped. `git add public/_redirects` failing on a
-  file that did not exist is what caught it; all three docs were corrected
-  before the commit. Two lessons: head the line you are ruling on, not the top
-  of the headers; and a doc claim about a change is verified the same way as
-  the change — against the disk.
-- **The "already placed" catalogue mystery resolved with everyone half-right.**
-  The file HAD been placed — into `netlify/functions/` instead of
-  `src/Tabs/settings/` (a file-dialog miss), where a `find` scoped to `src`
-  could not see it and it quietly shipped to prod inside `6721c8a` as a
-  handler-less function. The belief was true; the directory was wrong; the
-  verification searched everywhere but there. Placement greps should target
-  the DESTINATION PATH, and a `git show --stat` read before push would have
-  caught both this and the swept-in scripts.
+- **Delivered-vs-placed, four more times** — the v2 mirror script (ran the old
+  file, caught because the ERROR was the old import), the members lister
+  (never saved anywhere; an empty Downloads settled it), and a wrong
+  occurrence-count prediction in a placement gate CAUGHT BY RUNNING THE GATE
+  AGAINST THE ARTIFACT BEFORE HANDING IT OVER (`getOrganizationMembershipList`
+  appears once, not the predicted twice). The gate number must itself be
+  verified from the file, not predicted.
+- **The gitignore red herring.** Two probes (control match on `.env`, `cat -A`
+  showing the appended line clean) chased a pattern problem that never
+  existed. The file was TRACKED; check-ignore is silent for tracked paths no
+  matter what the pattern says. Probe order lesson: `git ls-files` before
+  byte-level forensics when check-ignore is silent.
+- **A sequencing instruction was skipped** — the data-fix apply ran before the
+  code batch was committed/deployed. Every guard held and the ordering turned
+  out not to matter (clearing names makes even the OLD counting honest), but
+  it worked by luck of the specific change, not by process.
+- **Paste truncation, repeatedly**: multi-command paste blocks dropped the
+  last command's output twice and mangled several. One command per paste when
+  an output is load-bearing.
 
-## 3. Observed on local dev, pre-existing, untriaged
+## 3. Observed, recorded, deliberately untouched
 
-- `documents.mjs` GET returns 500 locally (suspect R2 env vars in `netlify
-  dev`; not investigated — do not diagnose blind).
-- The non-writer settings auto-PUT 403 noise in Karen's console — the known
-  `useSettings` toast debt, now seen live.
-- The static landing in `index.html` works as designed (crawlers see content;
-  React replaces it). Jeff wants humans to never see even the flash —
-  **queued as its own standalone pass**; it touches the bootstrap path and must
-  not ride with policy changes.
+- **Audit misattribution**: `user.updated` events attribute the TARGET as
+  actor; the paired `user.role.changed` events attribute correctly. The bug
+  is in the users.mjs PUT's writeAudit call. Cleanup pass.
+- **The settings autosave flood is audit-visible**: ~9 junk `settings.updated`
+  events across three role saves — the §0.53 useSettings debt now polluting
+  the audit trail, not just consoles. Cleanup pass, priority raised.
+- **The roster "Out of sync with Clerk / Reconcile" button is UNREAD code**
+  claiming 6-row drift (all six rows, including clean ones — it compares more
+  than roles). Do not press it before reading it.
+- **The user profile Security card contradicts the list view** (MFA on/off,
+  SSO configured/not). SettingsTab stub territory.
+- **Dev-org role drift remains**: org_3B8Tg `member` ×2 (both locations),
+  org_3BDQ `smiller` blob-only (self-heals on next write) plus an
+  Admin/Technician blob split on a valid row. Five minutes of UI clicks with
+  the proven procedure; `check-mirror-roles` verifies.
+- Carried unchanged: `documents.mjs` local 500 (do not diagnose blind); the
+  static-landing flash pass; everything in the prior handoff's carried list.
 
 ## 4. Next — start here
 
-**Merge discipline:** smoke-test `accelerep.netlify.app` after the dev deploy
-(Sales process should count 15; the toggle round-trip as Admin; Karen's counts)
-before fast-forwarding `master`. The prod "before" is recorded: Sales process
-14, no card.
+**Test debt remains the highest-value item**: `opportunities.mjs` and
+`tasks.mjs` have no integration file; the four §0.48 endpoints still have zero
+automated rep-role GET coverage. The leads suite is the template (own org
+namespace per §18b25, own roster seed, `invalidateRoster()` after seeding).
+Note: opportunities PUT should be READ for the same overwrite shape before its
+suite is written — the guide addendum says check every sanitize-then-upsert
+endpoint, and only leads and users have been checked.
 
-**Prod roles cleanup, still concretely due** (unchanged): five of six prod
-roster rows carry refused role values (`member` ×4, `Sales Rep` ×1). Run
-`scripts/check-clerk-roles.mjs` against the prod Clerk instance — read-only,
-never yet run live.
+**Dev-org role clicks** (five minutes, procedure warm). Then the SettingsTab
+cleanup pass has four new tenants: audit actor attribution, the autosave
+flood, Reconcile (read first), the Security card.
 
-**Data hygiene, new:** clear stale `assignedTo` strings where `ownerId` is
-null (13 such rows on dev today), and move the name-based Unassigned
-chips/Distribute counts in `LeadsTab.jsx` to `ownerId` — they undercount the
-pool 6 vs 19. Two implementations of one policy, again.
-
-**Test debt, still the highest-value item:** `opportunities.mjs` and
-`tasks.mjs` have no integration file; the four §0.48 endpoints
-(`accounts`/`contacts`/`tasks`/`activities`) still have zero automated
-rep-role GET coverage — the leads pattern from this session (own roster seed,
-own org namespace, `invalidateRoster()` after seeding) is the template.
-
-**Carried forward, unchanged:** SettingsTab deferred cleanup (standalone
-pass); CSV import/export for Pipeline/Contacts/Accounts; Lead Scoring v1.5;
-E2E Layer 3; `LeadImportModal.jsx:63–76` superseded matcher; leads overwrite
-path; six-module import E2E; bulk-import lead notification; the stray dupes
-fixture; `users.mjs` callerCache create window (§0.47); quotes name-based and
-off-registry; `TasksTab.jsx:1129` toISOString; the §0.50 client visibility
-remnants (`App.jsx:672/639/642/646/657`, `ModalLayer.jsx:1069`,
-`TasksTab.jsx:564`).
+**Merge discipline**: dev deploy → smoke on accelerep.netlify.app (Unassigned
+counts at 19 pre-hygiene-parity; assignment round-trip) → fast-forward master.
+The hygiene apply already ran against the shared DB, so dev and prod see
+cleared names immediately regardless of deploy state.
 
 ## 5. The thread
 
-The last handoff closed on: once the server is the boundary, every client-side
-copy of the policy flips from redundant to hazardous. This session adds the
-next clause: **once the boundary exists, it can become configurable** — the
-predicate stopped being a constant and became policy an admin sets, and the
-interesting work was everything that guards a policy: the absent-key default
-that makes the deploy a no-op, the fail direction chosen loudly instead of
-silently, the null-collision the strict branch would have shipped without its
-`!!`, and the guards that now scan every endpoint for the next one.
+Two sessions ago the boundary moved to the server; last session it became
+policy. This session the thread ran underneath both: **the write path is part
+of the boundary too**. A read policy counting `ownerId` honestly is worthless
+if the write path wipes the row it passes through — and the queued one-line UI
+fix turned out to be gated on an endpoint fix nobody had queued. The check the
+guide asked for ("any endpoint that sanitizes-then-upserts") had been cashed
+exactly once, for users.mjs; cashing it for leads.mjs found the second
+instance in the first file read. Opportunities is the third candidate and it
+is explicitly queued this time.
 
-And the session's second thread was provenance, again, at smaller scale than
-ever: a file believed placed, a script believed run, a count believed known.
-Every one settled the same way — read the disk, not the memory. The verifiers
-that refused to write on a zero-match, the post-check that failed its own
-author's prediction, the mtime that outed a copy that never happened: trust
-the refusal; it has been right every time.
+And provenance, again, smaller still: a gate number predicted instead of
+measured, a file believed saved that no filesystem held, a silent check-ignore
+read as a broken pattern when it was a tracked file telling the truth. Every
+one settled by the same move as always — read the disk. The new clause this
+session adds: **verify the verifier** — a placement gate's expected count is
+itself a claim about a file, and it gets checked against the artifact before
+it ships.
