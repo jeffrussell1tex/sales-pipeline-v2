@@ -47,6 +47,11 @@ jobs:
       # `dbfetch-ignore:` comment at the call site.
       - name: Discarded-Response dbFetch scan
         run: npm run check:dbfetch
+      # The handoff lives at root AND docs/; the pair drifted twice on 31 Aug
+      # alone — a FINAL rewrite committed to one copy only. Byte-comparing the
+      # two copies makes the sync a fact instead of a memory item.
+      - name: Handoff dual-copy check
+        run: npm run check:handoff
       - name: Build + bundle guard
         env:
           VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder

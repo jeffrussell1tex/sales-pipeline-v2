@@ -1218,13 +1218,14 @@ When data has to move between stores, prefer a **visible button in the UI** over
 
 ## 19. Deployment
 
-### Gates -- run all six
+### Gates -- run all seven
 
 ```bash
 npm run check:tdz      # reads before declaration
 npm run check:inline   # components declared inline, used as a JSX element type
 npm run check:dupes    # duplicate object keys / JSX attributes
 npm run check:dbfetch  # discarded Response / Response read as JSON (18b1, 18b3)
+npm run check:handoff  # root and docs SESSION_HANDOFF.md byte-identical
 npm run build          # vite build + the bundle guard (18b4)
 npm test               # unit suites INCLUDING the function-import graph (18b11)
 ```
@@ -1246,10 +1247,15 @@ node scripts/mutate-import.mjs         # must print `Baseline: green.` first (18
 sessions after the sixth gate landed — recorded here rather than silently
 corrected, per §22.)*
 
+*(Seventh gate added 31 Aug: `check:handoff` asserts the root and `docs/`
+copies of `SESSION_HANDOFF.md` are byte-identical. The pair drifted twice
+on 31 Aug alone — a FINAL rewrite committed to one copy only, then the
+same drift falsely re-diagnosed during cleanup.)*
+
 **Use `npm run build`, not `npx vite build`** -- the latter bypasses the bundle
 guard. `check:inline` should report **0 user-visible**.
 
-All six run in CI on every push and PR via the `gates` job in
+All seven run in CI on every push and PR via the `gates` job in
 `.github/workflows/test.yml`. Before that they ran only by hand, so anything pushed
 without remembering them reached Netlify ungated.
 
