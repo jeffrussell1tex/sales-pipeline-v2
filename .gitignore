@@ -5,5 +5,5 @@ dist
 
 # Local Netlify folder
 .netlify
-fixtures/
+/fixtures/
 .env.clerk-prod
