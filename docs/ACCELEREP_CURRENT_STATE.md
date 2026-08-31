@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** August 31, 2026
-**Verified at:** all six gates green (143 tdz files) · **279 tests** · **33 integration tests** · **86/86 mutations caught, ON A VERIFIED GREEN BASELINE, zero STALE** · build 2,466 kB · **dev-org hygiene applied and post-verified** — 13 stale `assignedTo` names cleared on `ownerId: null` rows, zero candidates remain · **prod role checks both exit clean** — `check-clerk-roles` 7 memberships / 0 findings, `check-mirror-roles` 14 rows / 0 refused values · **Unassigned counts browser-verified on LOCAL dev as Admin, 31 Aug** — chip and Distribute panel at 19, load bars owned-only, one assignment round-trip surviving reload with every other field intact (§0.54) · **dev-deploy smoke on accelerep.netlify.app passed** — 23 total / 18 unassigned (shared DB, post-assignment state), James Whitmore's assignment, CTO title and $310K intact through the DEPLOYED bundle. §0.53's Karen row-level reconciliation stands for the read policy.
-**Batch:** **the leads PUT overwrite path is closed** — `saveLead` has always sent `{ id, ...patch }` while `sanitize()` rebuilt the whole row, so a two-key status change nulled every other column (the client's local merge masked it until reload); the PUT now sanitizes the payload OVERLAID ON THE STORED ROW (`sanitize({ ...existing, ...data })`, the users.mjs `mergeForUpdate` pattern minus the blob flatten), with `ownerIdForUpdate` still fed the RAW body so 18b13's mentioned-assignedTo detection is untouched · held closed three ways: integration test (partial PUT preserves nine fields; explicit null still clears), a SOURCE-ASSERTION guard in `tests/partial-sanitize.test.mjs` (the harness runs unit suites only), and mutation #86 · **unassigned-ness keys on `ownerId` across LeadsTab** — both chips, both filters, the triage lane, the Distribute pool/count and the subtitle (they undercounted 6 vs 19 by counting names); Distribute load bars count `l.ownerId === id` via a `reps` `{id, name}` roster (settings.users carries the usr_ id for every role); the assignment payload stays NAME-keyed on purpose — the server resolves it and 409s ambiguity · **13 stale `assignedTo` ghosts cleared on dev** via `scripts/clear-stale-assigned-names.mjs` — dry-run reviewed, `--apply --org --expect` pinned, post-verified zero remain · **prod roles cleanup CLOSED both sides** (morning, commits `92386aa`+`34a3f94`): Clerk held ONE refused value (`"Sales Rep"` on the live.com user — the label-as-value seed), fixed via the UI and re-run clean; the mirror's `member` ×4 were UKG rows fixed through the `user-role` path after a single-subject validation with three controls, both locations (column + frozen blob) healing per save; two read-only verifiers added (`check-mirror-roles.mjs`, `list-clerk-members.mjs`) · **a prod `sk_live_` Clerk key was committed locally** (`93571f4`, sole-file commit), caught pre-push by `ls-files`/`check-ignore` disagreeing, reset out — the key never left the machine; `.env.clerk-prod` ignore rule added (§0.54)
+**Verified at:** all SEVEN gates green — `check:handoff` is the seventh (`"identical, 12487 bytes"`) · **282 tests** (was 279; +3 check-handoff behavioral) · build 2,466 kB · **CI all three jobs green on `bd06bb2`** (observed via the Actions API; gates+integration were green all day, the unit job was the §0.55 blind spot until `bd06bb2`) · `test:int` (33) and the mutation harness (86/86) NOT run 31 Aug session 3 — nothing endpoint-side changed; last observed green in §0.54's close · prod untouched since the morning docs fast-forward — everything in §0.55 went to `dev` only. §0.54's browser/smoke observations stand.
+**Batch:** **the SEVENTH GATE ships** — `scripts/check-handoff.mjs` byte-compares the root and `docs/` handoff copies (the pair drifted a third time: the FINAL rewrite was committed to one copy only), classifies EOL/whitespace/content divergence, names the first differing line; wired into `check:handoff`, guide §19 and the CI gates job, proven with 4 committed fixtures + 3 behavioral tests · **CLAUDE.md created at repo root** (132 + 11 lines — standing rules only, no session state; the multi-tenancy isolation hard rule in its own commit) · **the CI unit-job blind spot fixed** — `node --test` ran with no `npm install`, so `scanners.test.mjs`'s babel-dependent gate spawns died ERR_MODULE_NOT_FOUND on every clean runner (suspected red since the scanner suite landed; NOT verified against old runs) · **`.gitignore`'s unanchored `fixtures/` swallowed `tests/fixtures/`** — a fixture commit shipped 3 of 7 files with the refusal hint lost between CRLF warnings; anchored to `/fixtures/` · **the doc-ordering rule** (Jeff's call, guide §22): doc changes applied/verified/committed when known, never end-of-session patch scripts, handoff written LAST — origin: the §0.54 amendment script that had never actually run with `--apply` · **the sanitize-then-upsert audit is now FOUR for four**: `opportunities.mjs` single-record PUT and `tasks.mjs` PUT both run raw `sanitize(data)` (tasks also un-completes via `completed ?? false`); diagnosed, NOT fixed — next session's opening batch (§0.55)
+**Prior batch:** **the leads PUT overwrite path is closed** — `saveLead` has always sent `{ id, ...patch }` while `sanitize()` rebuilt the whole row, so a two-key status change nulled every other column (the client's local merge masked it until reload); the PUT now sanitizes the payload OVERLAID ON THE STORED ROW (`sanitize({ ...existing, ...data })`, the users.mjs `mergeForUpdate` pattern minus the blob flatten), with `ownerIdForUpdate` still fed the RAW body so 18b13's mentioned-assignedTo detection is untouched · held closed three ways: integration test (partial PUT preserves nine fields; explicit null still clears), a SOURCE-ASSERTION guard in `tests/partial-sanitize.test.mjs` (the harness runs unit suites only), and mutation #86 · **unassigned-ness keys on `ownerId` across LeadsTab** — both chips, both filters, the triage lane, the Distribute pool/count and the subtitle (they undercounted 6 vs 19 by counting names); Distribute load bars count `l.ownerId === id` via a `reps` `{id, name}` roster (settings.users carries the usr_ id for every role); the assignment payload stays NAME-keyed on purpose — the server resolves it and 409s ambiguity · **13 stale `assignedTo` ghosts cleared on dev** via `scripts/clear-stale-assigned-names.mjs` — dry-run reviewed, `--apply --org --expect` pinned, post-verified zero remain · **prod roles cleanup CLOSED both sides** (morning, commits `92386aa`+`34a3f94`): Clerk held ONE refused value (`"Sales Rep"` on the live.com user — the label-as-value seed), fixed via the UI and re-run clean; the mirror's `member` ×4 were UKG rows fixed through the `user-role` path after a single-subject validation with three controls, both locations (column + frozen blob) healing per save; two read-only verifiers added (`check-mirror-roles.mjs`, `list-clerk-members.mjs`) · **a prod `sk_live_` Clerk key was committed locally** (`93571f4`, sole-file commit), caught pre-push by `ls-files`/`check-ignore` disagreeing, reset out — the key never left the machine; `.env.clerk-prod` ignore rule added (§0.54)
 **Prior batch:** **the unassigned half of the leads read policy is now an admin toggle** — `settings.extra.unassignedLeadsVisibleToReps` (default true; absent key = standing policy), enforced in `leads.mjs` GET with an explicit `!!l.ownerId` null-collision guard (18b22) · new `LeadVisibilityDetail` panel, four-step wiring, live policy badge · **Mine/All on Leads** keyed on `ownerId` (norm() gains the passthrough; never the display name) · **first rep-role integration coverage for `leads.mjs`** — 5 tests incl. the unresolvable-caller-under-strict-policy case asserting ZERO rows · two permanent unit guards: the null-null-collision SHAPE guard across all six endpoints, and 18b12-as-a-test for this key · the itest **org-namespace collision** found and fixed (guide §18b25) · harness anchor #14 repointed, +5 mutations, **85/85** · **local `netlify dev` failure root-caused to a stale `dist/`** (typeless module responses; the documented cleanup fixed it — guide §19 gains the recognition note; a toml-redirect hypothesis recorded as UNPROVEN, not shipped) · guide **§18b25** (§0.53)
 **Prior batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected · **the client stops re-implementing the boundary** (§0.51) · **Mine/All on Accounts, Contacts and Pipeline** (§0.52)
 **Prior batch:** **the role vocabulary was eight lists and only one was enforced** · **`requireWrite` was a BLOCKLIST** — it denied exactly `ReadOnly` and `Technician` by string and permitted every other value, so `readonly`, `Sales Rep` or any typo carried full write access to ~28 endpoints · **role changes had been impossible since the Phase 1 identity split**: `user-role.mjs` used one parameter in two identity spaces, so the UI's app id 404'd at Clerk and a Clerk id would have matched zero mirror rows silently · **the Users UI read a role copy frozen in the profile blob** — `flatten()` spread it last, and nothing ever updated it, which is the whole of §0.40's symptom · the invite screen seeded rows with the display LABEL `'Sales Rep'` and wrote it into Clerk · three role `<select>`s presented **Admin** for any unrecognised value, making a one-click escalation out of a display bug · 262 → 276 tests, 73 → **80** mutations · guide **§18b24**
@@ -402,6 +403,119 @@ ownerId counting are LIVE. A final docs-only fast-forward (`4f32284` +
 `9c03db7`, no code delta) and the two-minute UKG Leads-tab eyeball on prod
 (no visible change is the pass; UKG's data was always ghost-free) remained
 open at session close.
+
+---
+
+### 0.55 The seventh gate ships, CLAUDE.md lands, the CI blind spot, and the doc-ordering rule (31 Aug, third session — docs and process)
+
+**A docs-and-process session; no endpoint code changed.** Nine commits on
+`dev`, in true order: `695c97a` (FINAL handoff synced to both copies),
+`babdf7f` (§0.54 amendment applied), `06ddbe1` (the seventh gate),
+`b526ade` (CLAUDE.md, +132 lines — the commit message reads just "repo";
+recorded here because the log will never say what it carried), `b9c6764`
+(CLAUDE.md multi-tenancy hard rule, +11), `02c663a` (gate tests, fixtures
+refused — see below), `9c373fb` (fixtures force-added), `4b044a7`
+(`.gitignore` anchored), `bd06bb2` (CI unit-job `npm install`).
+
+**The prior session's tail, closed first.** The UKG prod Leads-tab eyeball
+PASSED — no visible change, which is the pass condition. The docs-only
+`master` fast-forward was found ALREADY DONE: `9c03db7` verified on `master`
+via `git branch -a --contains`, the §0.54 "nothing to commit was TRUE"
+lesson paying out on its first morning.
+
+**The dual-copy drift healed, then gated.** The FINAL handoff rewrite
+existed only in the uncommitted ROOT copy; `docs/` on `master` still carried
+the pre-FINAL draft — the pair's third divergence in two days. Synced
+root→docs and committed, then §0.54's queued candidate fix became THE
+SEVENTH GATE: `scripts/check-handoff.mjs` byte-compares the root and `docs/`
+copies, classifies the divergence (EOL vs whitespace vs content), names the
+first differing line, and accepts two positional paths so fixtures can
+exercise it. Wired end to end: `package.json` `check:handoff`, guide §19
+("run all seven" plus the history note, per §22 style), and a CI gates-job
+step between dbfetch and build. Proven, not just written: four committed
+fixtures, three behavioral tests, meta-test registration — 279 → **282**
+unit tests.
+
+**The §0.54 amendment had never actually run.** `patch-state-054-shipped.mjs`
+existed on disk but had never executed with `--apply` — the state doc lacked
+the "Shipping status at close" block that the FINAL handoff's own staleness
+fingerprint demanded. The staleness check WORKING as designed: docs claimed
+an applied patch the disk did not hold, caught at session start by checking
+section content. Applied, verified from disk (8 insertions), committed.
+This incident is the origin of the doc-ordering rule below.
+
+**CLAUDE.md created at repo root** — the standing-rules layer only: the
+session-start ritual, the hard rules (including the multi-tenancy isolation
+rule added in its own commit), the seven-gate chain, identity/ownership
+invariants, environment facts. Deliberately NO session state — that stays in
+the handoff, which changes every session; CLAUDE.md changes when the rules
+change.
+
+**The CI unit-job blind spot, found and fixed.** The unit job ran
+`node --test` with no `npm install`; `scanners.test.mjs` spawns the gate
+scripts, which import `@babel/parser`, so on a clean runner the job died
+ERR_MODULE_NOT_FOUND in ~8 seconds. Suspected red since the scanner suite
+landed — NOT verified against older runs; recorded as suspected. The gates
+and integration jobs were green throughout (per-job read on `4b044a7`:
+gates ✓, integration ✓, unit ✗), which is exactly how overall-red runs hid:
+the job that mattered to each change kept passing. Fixed in `bd06bb2` —
+and that run was observed ALL THREE JOBS GREEN (run 33445015533, read via
+the Actions API at the start of the doc session, the "check FIRST" item).
+
+**The fixture commit that shipped 3 of 7 files.** git's "ignored by
+.gitignore" hint for the four fixtures scrolled past between CRLF warnings;
+`02c663a` shipped the tests but not the fixtures they load, and CI went red
+on it. Caught by reading the commit STAT, healed by force-add, then
+root-caused: `.gitignore`'s unanchored `fixtures/` (meant for the repo-root
+`fixtures/` directory, which exists) also swallowed `tests/fixtures/`.
+Anchored to `/fixtures/`. Lesson: a refused add is a one-line hint in a
+noisy stream; the commit stat is the artifact that tells the truth.
+
+**The doc-ordering rule (Jeff's call, now guide §22).** Doc changes are
+applied, verified from disk, and committed the moment they are known —
+never queued as end-of-session patch scripts. `SESSION_HANDOFF.md` is
+written LAST, after everything else is applied and committed, so it only
+ever describes observed, committed state.
+
+**Two further errors, recorded.** A spacing fix was prescribed from paste
+evidence; `cat -A` proved the file was already correct — the paste channel
+strips blank lines, so formatting complaints need a disk read, not a paste
+read. The fix script ran, changed nothing, and was deleted. And several
+commands ran with their output never reaching the conversation (the
+gitignore commit, the unit-install apply) — each time git's "nothing to
+commit" was TRUE. Same rule as §0.54's paste incident: interrogate state
+before diagnosing messages.
+
+**Found, diagnosed, NOT fixed — the sanitize-then-upsert audit is now FOUR
+for four** (users, leads fixed; opportunities, tasks diagnosed):
+
+- `opportunities.mjs` single-record PUT (~line 365): `sanitize(data)` raw.
+  A partial PUT nulls `opportunityName`/`account`/`salesRep`/`arr`/`notes`,
+  wipes `stageHistory` and `comments` to `[]`, and resets `pipelineId` to
+  `'default'`. The BULK branch directly above it was already fixed with
+  partialRows; the single path was not.
+- `tasks.mjs` PUT (~line 102): same shape, plus `sanitize()`'s
+  `completed: d.completed ?? false` — a partial PUT UN-COMPLETES the task
+  and nulls `completedDate`.
+
+Fix known, the leads pattern: `sanitize({ ...existing, ...data })`. Both
+endpoints already fetch `existing` and already feed `ownerIdForUpdate` the
+RAW body, so 18b13's mentioned-assignee detection survives unchanged. Hold
+closed the leads way: an integration pair per endpoint (partial PUT
+preserves; explicit null still clears), source-assertion guards extending
+`tests/partial-sanitize.test.mjs`, mutation entries, and the two missing
+integration suites (`opportunities.itest.mjs`, `tasks.itest.mjs` — own org
+namespaces per §18b25, wired into `test:int`). OPEN QUESTION, gating the
+severity claim: whether the client's `saveOpportunity`/`saveTask` send
+partial payloads — read the client save paths before claiming live impact.
+
+**Verified at close:** seven gates green (`check:handoff`: "identical,
+12487 bytes") · build 2,466 kB · **282/282** unit · CI gates+integration
+green throughout the day, all three jobs green on `bd06bb2` · Netlify dev
+deploys green · prod untouched since the morning docs fast-forward —
+everything today went to `dev` only. `test:int` and the mutation harness
+were NOT run today: nothing endpoint-side changed, and they are recorded as
+not-run, not implied.
 
 ---
 
