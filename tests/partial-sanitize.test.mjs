@@ -12,6 +12,7 @@
 // regression test at the bottom is the real opportunities sanitize shape.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { partialRows, partialRow } from '../netlify/functions/_sanitize.mjs';
 
 // The real thing, trimmed to the columns that matter to this bug.
@@ -152,4 +153,24 @@ test('REGRESSION: the unfixed shape writes all fifteen columns', () => {
     assert.deepEqual(unfixed.contactIds, []);
     assert.equal(unfixed.pipelineId, 'default');
     assert.ok(Object.keys(unfixed).length > Object.keys(partialRows([csvOverwrite], sanitizeOpp)[0]).length);
+});
+
+// ── the leads PUT must MERGE, not replace (source assertion) ─────────────────
+// leads.mjs PUT has the same full-row sanitize as the opportunities bulk path
+// above, and its client (saveLead) has always sent { id, ...patch } — two keys
+// for a status change — so a partial PUT REPLACED the row, nulling every
+// absent column. The behavioural catcher is the integration test
+// (tests/integration/leads.itest.mjs, 'a partial PUT updates its fields and
+// preserves the rest'), but the mutation harness runs UNIT suites only, so
+// the rule is pinned here as a source assertion: the PUT sanitizes the
+// payload OVERLAID ON THE STORED ROW, and the bare full-row call is gone.
+// If this fails, either the merge was reverted or leads.mjs was refactored —
+// in the second case move the merge AND this guard together.
+
+test('leads.mjs PUT merges the stored row before sanitize — the overwrite path stays closed', () => {
+    const src = readFileSync(new URL('../netlify/functions/leads.mjs', import.meta.url), 'utf8');
+    const merged = src.split('sanitize({ ...existing, ...data })').length - 1;
+    assert.equal(merged, 1, 'the PUT must sanitize the payload overlaid on the stored row, exactly once');
+    assert.equal(src.includes('const clean = sanitize(data);'), false,
+        'the bare full-row sanitize call must not return — it nulls every column a partial PUT omits');
 });

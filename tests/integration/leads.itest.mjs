@@ -146,6 +146,43 @@ test('cross-tenant write — A cannot overwrite B\'s lead via upsert with B\'s i
     assert.equal(row.orgId, B);
 });
 
+// ── Partial-update merge (the leads overwrite path, closed) ──────────────────
+// saveLead has always sent { id, ...patch } — two keys for a status change —
+// while sanitize() rebuilt the whole row, nulling every absent column. The
+// client's local merge masked it on screen; the wipe showed on reload. These
+// pin the read-then-merge: a key sent is applied, a key omitted keeps its
+// stored value. Org A only; the org-B exact-count test below depends on its
+// fixtures and must not be preceded by owned B rows.
+
+test('REGRESSION — a partial PUT updates its fields and preserves the rest', async () => {
+    await handler(ev(A, 'POST', {
+        id: 'lead_A_merge1', firstName: 'Keep', lastName: 'Me', company: 'Acme',
+        email: 'keep@itest.local', phone: '555-0100', source: 'Referral',
+        status: 'New', estimatedARR: 12000, assignedTo: 'Itest Rep A', notes: 'precious',
+    }));
+    const res = await handler(ev(A, 'PUT', { id: 'lead_A_merge1', status: 'Working' }));
+    assert.equal(res.statusCode, 200);
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_A_merge1'));
+    assert.equal(row.status,     'Working',      'the sent field must be applied');
+    assert.equal(row.firstName,  'Keep',         'an omitted field must survive a partial PUT');
+    assert.equal(row.lastName,   'Me',           'an omitted field must survive a partial PUT');
+    assert.equal(row.company,    'Acme',         'an omitted field must survive a partial PUT');
+    assert.equal(row.email,      'keep@itest.local', 'an omitted field must survive a partial PUT');
+    assert.equal(row.source,     'Referral',     'an omitted field must survive a partial PUT');
+    assert.equal(row.assignedTo, 'Itest Rep A',  'assignment must survive a status-only PUT');
+    assert.equal(row.notes,      'precious',     'notes must survive a status-only PUT');
+    assert.equal(Number(row.estimatedARR), 12000, 'ARR must survive a status-only PUT');
+});
+
+test('an explicit null still clears — field-present semantics, not field-protection', async () => {
+    const res = await handler(ev(A, 'PUT', { id: 'lead_A_merge1', notes: null }));
+    assert.equal(res.statusCode, 200);
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_A_merge1'));
+    assert.equal(row.notes, null,           'a key sent as null must clear the column');
+    assert.equal(row.firstName, 'Keep',     'other fields still survive');
+    assert.equal(row.assignedTo, 'Itest Rep A', 'assignment untouched by an unrelated clear');
+});
+
 // ── Bulk insert (the CSV importer's path) ────────────────────────────────────
 // These cover 0.23. The importer has always POSTed an ARRAY, and this endpoint
 // had no Array.isArray branch, so every leads CSV import returned

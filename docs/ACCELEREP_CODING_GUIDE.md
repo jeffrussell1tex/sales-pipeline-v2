@@ -1794,6 +1794,15 @@ bottom.
 Check any endpoint that sanitizes-then-upserts for this shape before sending it a
 partial payload.
 
+**That check found its second instance (31 Aug): `leads.mjs` PUT.** `saveLead`
+sends `{ id, ...patch }` and the endpoint fed it to a full-row `sanitize()` —
+a two-key status change replaced the row. The fix is the same pattern minus
+the blob flatten (lead rows are flat): `sanitize({ ...existing, ...data })`,
+with `ownerIdForUpdate` still fed the RAW body so 18b13's mentioned-assignedTo
+detection survives the merge. Pinned by a source-assertion guard in
+`tests/partial-sanitize.test.mjs` because the mutation harness runs unit
+suites only — if a refactor moves the merge, move the guard with it.
+
 ---
 
 ### The gates do not bundle the Netlify functions

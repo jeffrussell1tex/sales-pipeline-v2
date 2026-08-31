@@ -169,9 +169,12 @@ const LeadAssignee = ({ name, onClick }) => {
 };
 
 // ── Right rail panels ─────────────────────────────────────────
-const DistributePanel = ({ leads, repNames, onSaveLead }) => {
-    const unassigned = leads.filter(l => !l.assignee).length;
-    const loadByRep = repNames.map(name => ({ name, count: leads.filter(l => l.assignee === name).length }))
+const DistributePanel = ({ leads, reps, onSaveLead }) => {
+    const unassigned = leads.filter(l => !l.ownerId).length;
+    // Load bars key on ownerId, never the display name (§18b22): a stale
+    // assignedTo string on an owner-less row is not load, and two reps sharing
+    // a name must not pool their counts.
+    const loadByRep = reps.map(({ id, name }) => ({ name, count: leads.filter(l => l.ownerId === id).length }))
         .sort((a,b) => a.count - b.count).slice(0, 8);
     const maxLoad = Math.max(...loadByRep.map(r => r.count), 1);
     return (
@@ -191,12 +194,15 @@ const DistributePanel = ({ leads, repNames, onSaveLead }) => {
                 </div>
             ))}
             <button onClick={() => {
-                const unassigned = leads.filter(l => !l.assignee);
-                if (unassigned.length === 0 || repNames.length === 0) return;
+                const unassigned = leads.filter(l => !l.ownerId);
+                if (unassigned.length === 0 || reps.length === 0) return;
                 unassigned.forEach((l, i) => {
-                    const rep = repNames[i % repNames.length];
+                    const rep = reps[i % reps.length];
                     // Auto-assign via parent saveLead passed through props
-                    if (onSaveLead) onSaveLead(l.raw?.id || l.id, { assignedTo: rep, assignee: rep });
+                    // Name-keyed payload on purpose: the server resolves the
+                    // name to an ownerId (ownerIdForUpdate) and refuses ambiguity
+                    // with a 409 rather than guessing.
+                    if (onSaveLead) onSaveLead(l.raw?.id || l.id, { assignedTo: rep.name, assignee: rep.name });
                 });
             }} style={{ marginTop:10, width:'100%', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
                 Auto-assign all
@@ -287,13 +293,13 @@ const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
     );
 };
 
-const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity }) => {
+const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity }) => {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
 
     const hot          = leads.filter(l => l.score >= 70 && l.status !== 'Converted' && l.status !== 'Dead');
-    const newUnassigned = leads.filter(l => l.status === 'New' && !l.assignee);
+    const newUnassigned = leads.filter(l => l.status === 'New' && !l.ownerId);
     const working      = leads.filter(l => l.status === 'Working');
 
     const filters = [
@@ -301,14 +307,14 @@ const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm, saveLe
         { k:'hot',       l:'Hot',        c:leads.filter(l=>l.score>=70).length, dot:SCORE_COLORS.hot },
         { k:'new',       l:'New',        c:leads.filter(l=>l.status==='New').length, dot:STATUS_STYLES.New.dot },
         { k:'working',   l:'Working',    c:leads.filter(l=>l.status==='Working').length, dot:STATUS_STYLES.Working.dot },
-        { k:'unassigned',l:'Unassigned', c:leads.filter(l=>!l.assignee).length, dot:T.goldInk },
+        { k:'unassigned',l:'Unassigned', c:leads.filter(l=>!l.ownerId).length, dot:T.goldInk },
     ];
 
     const matchesFilter = (l) => {
         if (statusFilter === 'hot')       return l.score >= 70;
         if (statusFilter === 'new')       return l.status === 'New';
         if (statusFilter === 'working')   return l.status === 'Working';
-        if (statusFilter === 'unassigned')return !l.assignee;
+        if (statusFilter === 'unassigned')return !l.ownerId;
         return true;
     };
 
@@ -452,7 +458,7 @@ const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm, saveLe
 
                 {/* Right rail */}
                 <div style={{ width:260, flexShrink:0, display:'flex', flexDirection:'column', gap:12, overflow:'auto' }}>
-                    <DistributePanel leads={leads} repNames={repNames} onSaveLead={saveLead}/>
+                    <DistributePanel leads={leads} reps={reps} onSaveLead={saveLead}/>
                     <LeadSourcesPanel leads={leads}/>
                 </div>
             </div>
@@ -620,7 +626,7 @@ const CockpitDetail = ({ lead, saveLead, convertLead, logActivity, showConfirm }
     );
 };
 
-const CockpitView = ({ leads, repNames, saveLead, convertLead, logActivity, showConfirm }) => {
+const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConfirm }) => {
     const sorted = useMemo(() => [...leads].sort((a,b) => b.score - a.score), [leads]);
     const [filter,     setFilter    ] = useState('all');
     const [selectedId, setSelectedId] = useState(() => sorted[0]?.id || null);
@@ -629,13 +635,13 @@ const CockpitView = ({ leads, repNames, saveLead, convertLead, logActivity, show
         { k:'all',       l:'All',        c:leads.length },
         { k:'hot',       l:'Hot',        c:leads.filter(l=>l.score>=70).length, dot:SCORE_COLORS.hot },
         { k:'new',       l:'New',        c:leads.filter(l=>l.status==='New').length, dot:STATUS_STYLES.New.dot },
-        { k:'unassigned',l:'Unassigned', c:leads.filter(l=>!l.assignee).length, dot:T.goldInk },
+        { k:'unassigned',l:'Unassigned', c:leads.filter(l=>!l.ownerId).length, dot:T.goldInk },
     ];
 
     const filtered = sorted.filter(l => {
         if (filter === 'hot')       return l.score >= 70;
         if (filter === 'new')       return l.status === 'New';
-        if (filter === 'unassigned')return !l.assignee;
+        if (filter === 'unassigned')return !l.ownerId;
         return true;
     });
 
@@ -730,8 +736,16 @@ export default function LeadsTab() {
         : allLeads, [scope, allLeads, currentUserId]);
 
     // Rep names from settings for the Distribute panel
-    const repNames = useMemo(() =>
-        (settings?.users || []).filter(u => u.name && u.userType !== 'ReadOnly').map(u => u.name).sort(),
+    // {id, name} pairs — id is the usr_ roster id (settings.users is the
+    // users.mjs flatten() shape; even reps receive the id/name directory).
+    // The Distribute load bars count leads by ownerId === id; names are for
+    // display and the assignment payload, which the server resolves back to
+    // an ownerId itself.
+    const reps = useMemo(() =>
+        (settings?.users || [])
+            .filter(u => u.id && u.name && u.userType !== 'ReadOnly')
+            .map(u => ({ id: u.id, name: u.name }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
     [settings]);
 
     // ── Persist a lead field change to DB + local state ────────
@@ -785,7 +799,7 @@ export default function LeadsTab() {
 
     const totalRev = leads.reduce((s,l) => s + l.rev, 0);
     const hotCount = leads.filter(l => l.score >= 70).length;
-    const unassigned = leads.filter(l => !l.assignee).length;
+    const unassigned = leads.filter(l => !l.ownerId).length;
 
     const subtitle = tab === 'triage'
         ? `${leads.length} leads · ${hotCount} hot · ${unassigned} unassigned · est. pipeline ${fmtRev(totalRev)}`
@@ -838,7 +852,7 @@ export default function LeadsTab() {
                 {tab === 'triage' && (
                     <TriageView
                         leads={leads}
-                        repNames={repNames}
+                        reps={reps}
                         onOpenLead={openInCockpit}
                         setLeads={setLeads}
                         showConfirm={showConfirm}
@@ -850,7 +864,7 @@ export default function LeadsTab() {
                 {tab === 'cockpit' && (
                     <CockpitView
                         leads={leads}
-                        repNames={repNames}
+                        reps={reps}
                         saveLead={saveLead}
                         convertLead={convertLead}
                         logActivity={logActivity}

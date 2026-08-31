@@ -141,6 +141,14 @@ const mutations = [
         "                unassignedLeadsVisibleToReps: 'unassignedLeadsVisibleToReps' in data ? !!data.unassignedLeadsVisibleToReps : existingExtra.unassignedLeadsVisibleToReps ?? true,\n",
         ''],
 
+    // The PUT merge (the leads overwrite path). Behaviour is caught by the
+    // integration suite, which this harness cannot run; the unit catcher is
+    // the source assertion in tests/partial-sanitize.test.mjs.
+    ['leads: the PUT reverts to full-row sanitize — a two-key saveLead wipes the row',
+        'netlify/functions/leads.mjs',
+        'const clean = sanitize({ ...existing, ...data });',
+        'const clean = sanitize(data);'],
+
     ['endpoints: an assertOwnership result is computed and then discarded',
         'netlify/functions/leads.mjs',
         '            if (forbiddenOwn) return forbiddenOwn;',

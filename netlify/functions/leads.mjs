@@ -200,7 +200,25 @@ export const handler = async (event) => {
             if (forbiddenPut) return forbiddenPut;
             const wasConverted = existing?.status === 'Converted';
 
-            const clean = sanitize(data);
+            // ── Partial-update merge (the users.mjs mergeForUpdate pattern, minus
+            // the blob flatten: lead rows are flat). sanitize() below REBUILDS the
+            // whole row from its input and the upsert writes it with
+            // set: { ...updateData } — no column-level merge anywhere. So a PUT
+            // carrying a partial payload did not update those fields, it REPLACED
+            // THE ROW: the client's saveLead sends { id, ...patch } (two keys for
+            // a status change), which sanitized to null for firstName, lastName,
+            // company, email, phone, source, notes, estimatedARR and assignedTo.
+            // Overlaying the payload on the stored row gives field-present
+            // semantics: a key sent is applied (including an explicit null or '',
+            // which is how an assignment is cleared), a key omitted keeps its
+            // stored value. This also fixes scoring on partial PUTs, which was
+            // recomputing from a mostly-null row.
+            //
+            // ownerIdForUpdate below still receives the RAW body on purpose: its
+            // 18b13 change-detection keys on whether the REQUEST mentioned
+            // assignedTo, and merging first would make every PUT look like a
+            // reassignment.
+            const clean = sanitize({ ...existing, ...data });
             // Reassigning a lead re-keys its ownership; a PUT that never
             // mentioned assignedTo leaves it alone (18b13). Applied to `clean`
             // AFTER sanitize, which would otherwise not carry the column.
