@@ -92,6 +92,11 @@ export const handler = async (event) => {
                 commissionPlan:   row.extra?.commissionPlan  || null,
                 aiScoringEnabled: row.extra?.aiScoringEnabled ?? false,
                 leadsEnabled:     row.extra?.leadsEnabled     ?? true,
+                // Read-side policy for leads.mjs GET: may reps see unassigned
+                // leads? Default true = the standing policy. 18b12: this key
+                // exists in BOTH halves — GET here, PUT whitelist below — and
+                // tests/ownership-registry.test.mjs asserts the pair.
+                unassignedLeadsVisibleToReps: row.extra?.unassignedLeadsVisibleToReps ?? true,
                 customerTypes:    row.extra?.customerTypes    || [],
                 companyProfile:   row.extra?.companyProfile   || null,
                 leadConvBenchmarks: row.extra?.leadConvBenchmarks || null,
@@ -243,6 +248,7 @@ export const handler = async (event) => {
                 products:         'products'         in data ? (data.products         || [])   : existingExtra.products         || [],
                 aiScoringEnabled: 'aiScoringEnabled' in data ? !!data.aiScoringEnabled : existingExtra.aiScoringEnabled ?? false,
                 leadsEnabled:     'leadsEnabled'     in data ? !!data.leadsEnabled     : existingExtra.leadsEnabled     ?? true,
+                unassignedLeadsVisibleToReps: 'unassignedLeadsVisibleToReps' in data ? !!data.unassignedLeadsVisibleToReps : existingExtra.unassignedLeadsVisibleToReps ?? true,
                 customerTypes:    'customerTypes'    in data ? (data.customerTypes    || [])   : existingExtra.customerTypes    || [],
                 companyProfile:   'companyProfile'   in data ? (data.companyProfile   || null) : existingExtra.companyProfile   || null,
                 leadConvBenchmarks:   'leadConvBenchmarks'   in data ? (data.leadConvBenchmarks   || null) : existingExtra.leadConvBenchmarks   || null,

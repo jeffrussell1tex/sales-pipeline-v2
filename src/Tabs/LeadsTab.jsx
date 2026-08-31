@@ -45,6 +45,10 @@ const norm = (l) => ({
     score:    parseFloat(l.score || l.leadScore) || 0,
     rev:      parseFloat(l.estimatedARR || l.rev || l.arr) || 0,
     assignee: l.assignedTo || l.assignee    || null,
+    // Ownership id (usr_<uuid>), distinct from the display name above: the
+    // Mine/All scope keys on this, never on `assignee` (§18b22). Null means
+    // UNASSIGNED — visible under Mine, matching the server's read policy.
+    ownerId:  l.ownerId    || null,
     notes:    l.notes      || '',
     createdAt: l.createdAt || l.created_at  || null,
     lastTouch: l.lastActivity || l.lastTouch || null,
@@ -682,7 +686,7 @@ const CockpitView = ({ leads, repNames, saveLead, convertLead, logActivity, show
 export default function LeadsTab() {
     const {
         leads: rawLeads, setLeads,
-        settings, currentUser, userRole,
+        settings, currentUser, currentUserId, userRole,
         showConfirm, exportToCSV,
         setEditingOpp, setShowModal,
         setEditingActivity, setShowActivityModal, setActivityInitialContext,
@@ -701,8 +705,29 @@ export default function LeadsTab() {
         try { localStorage.setItem('tab:leads:subTab', t); } catch {}
     }, []);
 
-    // Normalise real DB leads to design field names
-    const leads = useMemo(() => (rawLeads || []).map(norm), [rawLeads]);
+    // ── Mine/All scope (§0.52) ─────────────────────────────
+    // Persisted PREFERENCE only — never data. An unrecognised stored value
+    // renders as Mine (§16's unmatched-select rule). The filter keys on
+    // ownerId, never the display name (§18b22); a null currentUserId during
+    // the ?me=true load window fails closed, matching getCallerId. Unassigned
+    // rows stay visible under Mine, matching the server's read policy — and
+    // when the org-level Lead visibility setting hides unassigned leads from
+    // reps, the server never sends them, so there is nothing here to hide.
+    const [scope, setScope] = useState(() => {
+        try { return localStorage.getItem('tab:leads:scope') === 'all' ? 'all' : 'mine'; } catch { return 'mine'; }
+    });
+    const setScopePersist = useCallback((v) => {
+        setScope(v);
+        try { localStorage.setItem('tab:leads:scope', v); } catch {}
+    }, []);
+
+    // Normalise real DB leads to design field names, then scope. One edit at
+    // the source: both views, the Distribute panel, the source panel and the
+    // subtitle counts all follow the scope with zero downstream edits.
+    const allLeads = useMemo(() => (rawLeads || []).map(norm), [rawLeads]);
+    const leads = useMemo(() => scope === 'mine'
+        ? allLeads.filter(l => !l.ownerId || l.ownerId === currentUserId)
+        : allLeads, [scope, allLeads, currentUserId]);
 
     // Rep names from settings for the Distribute panel
     const repNames = useMemo(() =>
@@ -794,6 +819,18 @@ export default function LeadsTab() {
                         </button>
                     );
                 })}
+                <div style={{ flex:1 }}/>
+                {/* Scope segmented control — §0.52, same control as Accounts/Contacts/Pipeline */}
+                <div style={{ display:'inline-flex', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, overflow:'hidden', flexShrink:0, marginBottom:8 }}>
+                    {[{ k:'mine', l:'Mine' }, { k:'all', l:'All' }].map(s => {
+                        const active = scope === s.k;
+                        return (
+                            <button key={s.k} onClick={() => setScopePersist(s.k)} style={{ padding:'4px 10px', fontSize:12, fontWeight: active ? 600 : 400, background: active ? T.ink : 'transparent', color: active ? T.surface : T.inkMid, border:'none', cursor:'pointer', fontFamily:T.sans, transition:'all 100ms' }}>
+                                {s.l}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             {/* Tab body */}

@@ -104,10 +104,42 @@ const mutations = [
         "ownerColumn: ownerColumnOf(accounts, 'account'),",
         'ownerColumn: accounts.accountOwner,'],
 
+    // Anchor repointed for the unassigned-visibility toggle: the single filter
+    // line became a two-branch ternary. Same mutation, same catcher (the
+    // callerId-vs-ownerId class guard).
     ['endpoints: the rep GET filter reverts to comparing display names',
         'netlify/functions/leads.mjs',
-        'results = results.filter(l => !l.ownerId || l.ownerId === callerId);',
-        'results = results.filter(l => !l.assignedTo || l.assignedTo === callerId);'],
+        '? results.filter(l => !l.ownerId || l.ownerId === callerId)',
+        '? results.filter(l => !l.assignedTo || l.assignedTo === callerId)'],
+
+    // ── Unassigned-lead visibility toggle ───────────────────────────────────
+    // settings.extra.unassignedLeadsVisibleToReps gates whether a rep's GET
+    // includes unassigned rows. Five ways it can silently stop being a rule:
+
+    ['leads toggle: the strict branch drops its null-guard (18b22 — an unresolvable caller receives the hidden unassigned rows)',
+        'netlify/functions/leads.mjs',
+        ': results.filter(l => !!l.ownerId && l.ownerId === callerId);',
+        ': results.filter(l => l.ownerId === callerId);'],
+
+    ['leads toggle: the absent-key default flips to HIDE (a deploy silently narrows every unconfigured org)',
+        'netlify/functions/leads.mjs',
+        '    return row?.extra?.unassignedLeadsVisibleToReps ?? true;',
+        '    return row?.extra?.unassignedLeadsVisibleToReps ?? false;'],
+
+    ['leads toggle: the helper stops reading settings — the admin control becomes decorative (18b7)',
+        'netlify/functions/leads.mjs',
+        '    return row?.extra?.unassignedLeadsVisibleToReps ?? true;',
+        '    return true;'],
+
+    ['settings: the toggle key drops out of the GET projection (stored but never read back — 18b12)',
+        'netlify/functions/settings.mjs',
+        '                unassignedLeadsVisibleToReps: row.extra?.unassignedLeadsVisibleToReps ?? true,\n',
+        ''],
+
+    ['settings: the toggle key drops out of the PUT whitelist (a 200 that persisted nothing — 18b12)',
+        'netlify/functions/settings.mjs',
+        "                unassignedLeadsVisibleToReps: 'unassignedLeadsVisibleToReps' in data ? !!data.unassignedLeadsVisibleToReps : existingExtra.unassignedLeadsVisibleToReps ?? true,\n",
+        ''],
 
     ['endpoints: an assertOwnership result is computed and then discarded',
         'netlify/functions/leads.mjs',

@@ -273,6 +273,59 @@ test('THE GUARD — callerId is only ever compared against an ownerId', () => {
     assert.deepEqual(offenders, [], `${offenders.join('\n  ')}`);
 });
 
+test('THE GUARD — every ownerId-vs-callerId comparison decides the null-null collision', () => {
+    // A bare `x.ownerId === callerId` matches null === null. getCallerId
+    // returns null for a caller with no roster row, and ownerId is null on
+    // every unassigned record — so the two absences compare EQUAL, and an
+    // unresolvable caller receives exactly the unassigned rows. Under the
+    // permissive read policy that is coincidentally the intended answer, which
+    // is what makes the shape dangerous: the first strict filter written
+    // without a guard ships the 18b22 collision silently.
+    //
+    // So every comparison must decide the collision explicitly, one way or the
+    // other, in the same expression:
+    //
+    //     !x.ownerId  || x.ownerId === callerId    unassigned ALLOWED first
+    //     !!x.ownerId && x.ownerId === callerId    unassigned REFUSED first
+    //
+    // This guards the SHAPE (18b23): it scans every endpoint, so the next
+    // entity that gains a strict branch is covered before it is written.
+    const offenders = [];
+    for (const name of ENDPOINTS) {
+        const code = codeOnly(endpointSrc(name));
+        for (const m of code.matchAll(/([A-Za-z_$][\w$]*)\.ownerId\s*===\s*callerId\b/g)) {
+            const v = m[1];
+            const before = code.slice(Math.max(0, m.index - 80), m.index);
+            const allowsUnassigned  = new RegExp(`!\\s*${v}\\.ownerId\\s*\\|\\|\\s*$`).test(before);
+            const refusesUnassigned = new RegExp(`!!\\s*${v}\\.ownerId\\s*&&\\s*$`).test(before);
+            if (!allowsUnassigned && !refusesUnassigned) {
+                offenders.push(`${name}: '${v}.ownerId === callerId' does not decide the null-null collision — prefix '!${v}.ownerId ||' or '!!${v}.ownerId &&'`);
+            }
+        }
+    }
+    assert.deepEqual(offenders, [], `${offenders.join('\n  ')}`);
+});
+
+test('THE GUARD — unassignedLeadsVisibleToReps exists in BOTH settings.mjs halves and leads.mjs reads it', () => {
+    // 18b12 as a permanent test instead of a manual grep. The PUT rebuilds
+    // `extra` from a whitelist and the GET has its own projection; a key in
+    // one half and not the other is a silent 200 that drops or never returns
+    // the value. This shipped four times before the rule existed — this key
+    // does not get to be the fifth.
+    const settingsSrc = codeOnly(
+        readFileSync(new URL('../netlify/functions/settings.mjs', import.meta.url), 'utf8'));
+    const hits = settingsSrc.match(/unassignedLeadsVisibleToReps:/g) || [];
+    assert.ok(hits.length >= 2,
+        `unassignedLeadsVisibleToReps must appear in the GET projection AND the PUT whitelist of settings.mjs — found ${hits.length} of 2`);
+
+    // And the consumer: leads.mjs must actually read the flag, with the
+    // absent-key default pinned to TRUE — an absent key is "never configured"
+    // and must reproduce the standing policy, so a deploy changes nothing.
+    const leadsSrc = codeOnly(endpointSrc('leads'));
+    assert.ok(/unassignedLeadsVisibleToReps\s*\?\?\s*true/.test(leadsSrc),
+        'leads.mjs must read extra.unassignedLeadsVisibleToReps with `?? true` — the absent-key default is the standing policy');
+});
+
 test('an unregistered entity throws rather than authorizing everyone', () => {
     assert.throws(() => ownerKeyFor('invoice'), /no ownership rule registered/);
 });

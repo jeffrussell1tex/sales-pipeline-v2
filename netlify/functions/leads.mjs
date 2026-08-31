@@ -19,6 +19,21 @@ async function getLeadScoring(orgId) {
     } catch (e) { return DEFAULT_LEAD_SCORING; }
 }
 
+// Read-side policy: may reps see unassigned leads? Admin-set, org-wide,
+// default TRUE — an absent key means "never configured" and must reproduce the
+// standing policy (unassigned visible to everyone), so flipping this on deploy
+// changes nothing for any existing org.
+//
+// Deliberately NOT the getLeadScoring shape. That helper swallows errors and
+// returns a default, which is fine for scoring — a failed read costs a stale
+// score. This flag decides what a rep is SHOWN, so a failed read must not
+// silently pick a fail direction in either sense; it throws to the handler's
+// outer catch and the request 500s instead of guessing.
+async function getUnassignedLeadsVisible(orgId) {
+    const [row] = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+    return row?.extra?.unassignedLeadsVisibleToReps ?? true;
+}
+
 async function scoreColumns(orgId, lead, cfg) {
     let events = [];
     if (lead.id) {
@@ -78,7 +93,19 @@ export const handler = async (event) => {
                 // unassigned rows — the same fail-closed direction mayMutate()
                 // takes on writes.
                 const callerId = await getCallerId(userId, orgId);
-                results = results.filter(l => !l.ownerId || l.ownerId === callerId);
+                // Whether the unassigned rows are visible at all is an admin
+                // policy (settings.extra.unassignedLeadsVisibleToReps). The
+                // strict branch guards the OWNER side with `!!l.ownerId`
+                // because a bare `l.ownerId === callerId` matches null === null:
+                // an unresolvable caller would receive exactly the unassigned
+                // rows the toggle hides — two absences comparing equal in the
+                // permissive direction, the 18b22 shape. With the guard, a null
+                // caller under the strict policy sees NOTHING, which is the
+                // fail-closed reading of both rules at once.
+                const unassignedVisible = await getUnassignedLeadsVisible(orgId);
+                results = unassignedVisible
+                    ? results.filter(l => !l.ownerId || l.ownerId === callerId)
+                    : results.filter(l => !!l.ownerId && l.ownerId === callerId);
             }
             return { statusCode: 200, headers, body: JSON.stringify({ leads: results }) };
         }

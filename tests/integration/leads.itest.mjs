@@ -64,20 +64,63 @@ mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.m
 
 const { handler } = await import('../../netlify/functions/leads.mjs');
 const { db } = await import('../../db/index.js');
-const { leads } = await import('../../db/schema.js');
+const { leads, users, settings: settingsTable } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
+// _lib is NOT mocked — getCallerId runs real against the test DB, which is the
+// point: the rep tests below exercise the true clerkUserId -> users.id
+// resolution rather than a stub of it.
+const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 
-const A = 'itest_org_A', B = 'itest_org_B';
+// ORG NAMESPACE: this file owns 'itest_leads_*', and ONLY this file writes to
+// it. The integration files run as CONCURRENT processes against one shared
+// test database, and this suite seeds the users table — so sharing org ids
+// with another suite means sharing users_org_clerk_uq: this file's seed of
+// (itest_org_A, u_itest_org_A) collided with the identical pair the accounts
+// suite re-seeds per test, killing accounts' hooks with duplicate-key errors
+// and leaving org A's caller resolving to whichever suite's row was standing
+// when the 30s caller cache first filled. Per-file org ids remove every
+// variant of that race. If a new suite ever seeds users, it takes its own
+// prefix too.
+const A = 'itest_leads_A', B = 'itest_leads_B';
+
+// The rep identity. The auth mock above returns userId 'u_' + orgId for every
+// caller in an org, so linking that clerkUserId to a roster row makes org A's
+// caller resolvable (usr_…) while org B's caller — no roster row — resolves
+// null, which is exactly the unresolvable-caller path the toggle tests need.
+const REP_A = 'usr_itest-rep-a-0001';   // org A's caller, once linked below
+const OTHER = 'usr_itest-other-0002';   // a second org A rep; never the caller
+
 const ev = (org, method, body, qs) => ({
     httpMethod: method,
     headers: { 'x-test-org': org, 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
     queryStringParameters: qs || {},
 });
-const get = async (org) => JSON.parse((await handler(ev(org, 'GET'))).body).leads || [];
-const cleanup = async () => { for (const o of [A, B]) await db.delete(leads).where(eq(leads.orgId, o)); };
+const asRep = (e) => ({ ...e, headers: { ...e.headers, 'x-test-role': 'User' } });
+const get      = async (org) => JSON.parse((await handler(ev(org, 'GET'))).body).leads || [];
+const getAsRep = async (org) => JSON.parse((await handler(asRep(ev(org, 'GET')))).body).leads || [];
 
-before(cleanup);
+const cleanup = async () => {
+    for (const o of [A, B]) {
+        await db.delete(leads).where(eq(leads.orgId, o));
+        await db.delete(users).where(eq(users.orgId, o));
+        await db.delete(settingsTable).where(eq(settingsTable.orgId, o));
+    }
+};
+
+before(async () => {
+    await cleanup();
+    await db.insert(users).values([
+        { id: REP_A, clerkUserId: 'u_' + A, name: 'Itest Rep A', email: 'rep-a@itest.local', role: 'User', orgId: A },
+        { id: OTHER, clerkUserId: null,     name: 'Itest Other', email: 'other@itest.local', role: 'User', orgId: A },
+    ]);
+    // BOTH users-table caches, cleared together (see invalidateRoster's
+    // comment in _lib): the caller cache stores a MISS as { id: null } for
+    // 30s, so any resolution racing this seed would leave org A's caller
+    // owning nothing for the rest of the run — every rep test failing closed
+    // with no error anywhere.
+    invalidateRoster();
+});
 after(cleanup);
 
 test('read isolation — A cannot see B leads', async () => {
@@ -163,4 +206,82 @@ test('bulk insert is org-scoped — B cannot see rows A imported', async () => {
     await handler(ev(A, 'POST', [{ id: 'lead_A_bulk6', firstName: 'Scoped', status: 'New' }]));
     const ids = (await get(B)).map(l => l.id);
     assert.ok(!ids.includes('lead_A_bulk6'), 'a bulk-imported row must not leak across orgs');
+});
+
+// ── Rep-role read scoping + the unassigned-visibility toggle ─────────────────
+// The first rep-role coverage this endpoint has ever had (the §0.33/§0.50 test
+// debt): until now the GET scoping's only runtime evidence was a browser check.
+//
+// Rows are seeded with db.insert rather than the handler so ownership is the
+// test's input, not a side effect of stamping. The toggle is written straight
+// into the settings row the same way — this suite tests leads.mjs, not
+// settings.mjs (the both-halves pairing has its own guard in
+// tests/ownership-registry.test.mjs).
+//
+// ORDER MATTERS in this block: the org B test asserts an exact row count and
+// depends on every earlier B row being unassigned (org B has no roster, so
+// nothing can have stamped an owner there). Keep any future owned-B fixtures
+// AFTER it.
+
+const setLeadVisibility = async (org, value) => {
+    await db.delete(settingsTable).where(eq(settingsTable.orgId, org));
+    await db.insert(settingsTable).values({ id: org, orgId: org, extra: { unassignedLeadsVisibleToReps: value } });
+};
+
+test('rep scoping — own + unassigned arrive; another rep\'s lead never does (toggle unset)', async () => {
+    await db.delete(settingsTable).where(eq(settingsTable.orgId, A));   // absent key = the standing policy
+    await db.insert(leads).values([
+        { id: 'lead_vis_mine',  firstName: 'Mine',  status: 'New', ownerId: REP_A, orgId: A },
+        { id: 'lead_vis_other', firstName: 'Other', status: 'New', ownerId: OTHER, orgId: A },
+        { id: 'lead_vis_none',  firstName: 'None',  status: 'New', ownerId: null,  orgId: A },
+    ]);
+    const ids = (await getAsRep(A)).map(l => l.id);
+    assert.ok(ids.includes('lead_vis_mine'),   'a rep must receive their own lead');
+    assert.ok(ids.includes('lead_vis_none'),   'default policy: unassigned is visible to reps');
+    assert.ok(!ids.includes('lead_vis_other'), 'another rep\'s lead must never be sent to a rep');
+});
+
+test('toggle OFF — a rep receives ONLY their own leads; unassigned disappears', async () => {
+    await setLeadVisibility(A, false);
+    const ids = (await getAsRep(A)).map(l => l.id);
+    assert.ok(ids.includes('lead_vis_mine'),   'the rep\'s own lead survives the strict policy');
+    assert.ok(!ids.includes('lead_vis_none'),  'unassigned must be hidden when the toggle is off');
+    assert.ok(!ids.includes('lead_vis_other'), 'another rep\'s lead stays hidden');
+});
+
+test('toggle OFF — Admin is untouched (canSeeAll bypasses before the filter)', async () => {
+    const ids = (await get(A)).map(l => l.id);   // ev() defaults to Admin
+    for (const id of ['lead_vis_mine', 'lead_vis_other', 'lead_vis_none']) {
+        assert.ok(ids.includes(id), `Admin must still receive ${id} with the toggle off`);
+    }
+});
+
+test('toggle OFF + unresolvable caller — NOTHING arrives, not the unassigned rows (18b22)', async () => {
+    // Org B's caller has no roster row, so getCallerId resolves null. A bare
+    // `l.ownerId === callerId` would match null === null and hand this caller
+    // exactly the unassigned rows the toggle exists to hide. The `!!l.ownerId`
+    // guard in the strict branch means they receive nothing: an unknown caller
+    // owns nothing, and a hidden unassigned row stays hidden — both rules
+    // failing closed at once. This test is what catches the guard's removal.
+    await setLeadVisibility(B, false);
+    await db.insert(leads).values([
+        { id: 'lead_vis_b_none',  firstName: 'BNone',  status: 'New', ownerId: null,  orgId: B },
+        { id: 'lead_vis_b_owned', firstName: 'BOwned', status: 'New', ownerId: OTHER, orgId: B },
+    ]);
+    const rows = await getAsRep(B);
+    const ids = rows.map(l => l.id);
+    assert.ok(!ids.includes('lead_vis_b_none'),  'unassigned must be hidden');
+    assert.ok(!ids.includes('lead_vis_b_owned'), 'an owned row must be refused to a null caller');
+    // Every org B row in this suite is unassigned by construction (no roster ->
+    // nothing ever stamped an owner) except lead_vis_b_owned above, so the
+    // strict policy leaves an unresolvable caller with exactly zero rows.
+    assert.equal(rows.length, 0, 'an unresolvable caller under the strict policy sees nothing at all');
+});
+
+test('toggle stored TRUE — identical to the absent-key default', async () => {
+    await setLeadVisibility(A, true);
+    const ids = (await getAsRep(A)).map(l => l.id);
+    assert.ok(ids.includes('lead_vis_mine') && ids.includes('lead_vis_none'),
+        'stored true must reproduce the default policy exactly');
+    assert.ok(!ids.includes('lead_vis_other'), 'another rep\'s lead stays hidden either way');
 });

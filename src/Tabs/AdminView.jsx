@@ -17,6 +17,7 @@ import { PainPointsDetail } from './settings/salesProcess/PainPointsDetail.jsx';
 import { BuyerPersonasDetail } from './settings/salesProcess/BuyerPersonasDetail.jsx';
 import { CustomerTypesDetail } from './settings/salesProcess/CustomerTypesDetail.jsx';
 import { LeadScoringDetail } from './settings/salesProcess/LeadScoringDetail.jsx';
+import { LeadVisibilityDetail } from './settings/salesProcess/LeadVisibilityDetail.jsx';
 import { AccountSegmentsDetail } from './settings/salesProcess/AccountSegmentsDetail.jsx';
 import { IndustriesDetail } from './settings/salesProcess/IndustriesDetail.jsx';
 import { CompetitorsDetail, ReasonsWonDetail, ReasonsLostDetail } from './settings/salesProcess/FlatListDetail.jsx';
@@ -76,6 +77,13 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
     if (item.id === 'roles' && settings?.roles) {
         const count = (settings.roles||[]).length;
         statusDetail = count > 0 ? `${count} role${count!==1?'s':''}` : null;
+    }
+    // Lead visibility — show the policy actually in force, not the static text.
+    // An absent key reads as the default (visible), same as the server.
+    if (item.id === 'lead-visibility') {
+        statusDetail = settings?.unassignedLeadsVisibleToReps === false
+            ? 'Reps see assigned only'
+            : 'Unassigned visible to reps';
     }
 
     // ── Sales process ─────────────────────────────────────────────────────────
@@ -392,6 +400,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         'pain-points':          'pain-points',
         'customer-types':       'customer-types',
         'lead-scoring':         'lead-scoring',
+        'lead-visibility':      'lead-visibility',
         'account-segments':     'account-segments',
         'industries':           'industries',
         'duplicates':           'duplicates',
@@ -565,6 +574,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
         if (id === 'lead-scoring')    return <LeadScoringDetail    settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'lead-visibility') return <LeadVisibilityDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'account-segments') return <AccountSegmentsDetail settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
         if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         // Dispatch detail pages
