@@ -395,6 +395,14 @@ whole through the production bundle. Five findings from the pass, queued:
   and the read-the-URL-bar-first rule (a prod tab nearly hosted this
   session's browser pass).
 
+**Shipping status at close:** `master` was fast-forwarded to `4df71b6`
+earlier in the day (Jeff's move, between messages), so PROD has been
+building and serving the `1ec5640` code batch since — the overwrite fix and
+ownerId counting are LIVE. A final docs-only fast-forward (`4f32284` +
+`9c03db7`, no code delta) and the two-minute UKG Leads-tab eyeball on prod
+(no visible change is the pass; UKG's data was always ghost-free) remained
+open at session close.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
