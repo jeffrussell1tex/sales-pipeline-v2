@@ -1259,6 +1259,28 @@ All seven run in CI on every push and PR via the `gates` job in
 `.github/workflows/test.yml`. Before that they ran only by hand, so anything pushed
 without remembering them reached Netlify ungated.
 
+**The CI `unit` job needs `npm install`** — it did not have one until 31 Aug
+(`bd06bb2`). `node --test` itself needs no dependencies, but
+`scanners.test.mjs` SPAWNS the gate scripts, which import `@babel/parser`,
+so on a clean runner the job died ERR_MODULE_NOT_FOUND in ~8 seconds —
+suspected red since the scanner suite landed (not verified against older
+runs). The blind spot survived because the gates and integration jobs stayed
+green and the per-job split was never read: an overall-red run whose
+relevant job is green looks like noise. When CI is red, read the JOBS, not
+the run badge — and when a job "needs no deps," ask what its tests spawn.
+
+**A refused `git add` is one quiet hint in a noisy stream — read the commit
+stat** (31 Aug). The four check-handoff fixtures were added, git printed
+"ignored by .gitignore" between CRLF warnings, and the commit shipped 3 of
+7 files; CI went red on the partial commit. Root cause: `.gitignore`'s
+unanchored `fixtures/` (meant for the repo-root `fixtures/` directory,
+which exists) also matched `tests/fixtures/`. Anchored to `/fixtures/`.
+Two rules from one incident: gitignore patterns for a specific directory
+are ANCHORED (`/fixtures/`, not `fixtures/`) — an unanchored directory
+pattern matches at every depth; and `git show --stat HEAD` after any
+multi-file commit is how you learn what actually shipped, because git
+already told you and it scrolled past.
+
 `scan-dbfetch.mjs` was a diagnostic until its accuracy was proven; it is now the
 fifth gate (18b6).
 
@@ -2325,6 +2347,29 @@ Consequences to keep:
   fixed for a full session while the vulnerable code was live.
 - `git add .` now sweeps doc edits into whatever commit is open. Stage them
   deliberately.
+
+### Doc changes land when they are known — never as end-of-session patch scripts
+
+Established 31 Aug (third session), Jeff's call. The rule:
+
+1. A doc change is **applied, verified from disk, and committed the moment it
+   is known** — in the same commit as the code it describes when there is
+   code, in its own commit when there is not.
+2. **`SESSION_HANDOFF.md` is written LAST**, after everything else is applied
+   and committed, so it only ever describes observed, committed state — and
+   both copies are written together, `npm run check:handoff` before the
+   commit.
+3. No queued patch scripts. A script that edits a doc "later" is a claim
+   about the future filed as a fact.
+
+Origin: `patch-state-054-shipped.mjs` was delivered at the end of the
+previous session and recorded as the §0.54 amendment — but it had never run
+with `--apply`. The state doc lacked the very block the FINAL handoff's
+staleness fingerprint demanded, and the next session opened by catching the
+gap (the fingerprint check working as designed). The failure class is
+docs-outran-the-disk with a delay fuse: the queue itself is the defect,
+because everything between "known" and "applied" is a window where the
+docs lie.
 
 ### Starting a new conversation
 
