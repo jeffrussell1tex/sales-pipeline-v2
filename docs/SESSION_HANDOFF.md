@@ -1,145 +1,164 @@
 # SESSION_HANDOFF.md
 
-**Session of 28 August 2026.** Repo root. Read this first, then verify every claim
+**Session of 31 August 2026.** Repo root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this file**.
 
-**Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b24**, and
-does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.52**? If not, you are looking at a
+**Fast staleness check:** does `docs/ACCELEREP_CODING_GUIDE.md` have **§18b25**, and
+does `docs/ACCELEREP_CURRENT_STATE.md` have **§0.53**? If not, you are looking at a
 copy that predates this session. Check section numbers, never dates.
 
-**State at close:** five commits on `dev`, all shipped, gated and browser-verified;
-`master` fast-forwarded to the same tip at close and production eyeballed. Nothing
-is half-done. The next session starts from a clean tree plus the untracked patch
-scripts in the repo root, which are disposable.
+**State at close:** one commit on `dev` carrying the whole Leads-visibility batch —
+code, tests, harness, and these three docs (§22); `netlify.toml` and `index.html`
+are untouched (see the environmental note below). If you are reading this file
+from the repo, that commit happened; if a delivered copy claims more than the
+repo shows, the repo wins. NOT yet merged to `master` — dev deploy smoke test
+comes first (see §4). Untracked patch scripts in the repo root and `scripts/`
+(`add-lead-visibility.mjs`, `patch-guide-053.mjs`, `patch-state-053.mjs`) are
+disposable.
 
 ---
 
-## 1. What shipped — `e10e1a1` → `f90634a`, dev and master
+## 1. What shipped — the Leads scoping session, plus what it surfaced
 
-**`e10e1a1` — the server became the boundary on reads.** `accounts.mjs`,
-`contacts.mjs`, `tasks.mjs` and `activities.mjs` GETs gained the rep predicate
-(`!r.ownerId || r.ownerId === callerId`, `canSeeAll` bypasses) that opportunities
-and leads already had. Same commit: the six doc corrections owed since `77e119c`,
-the §22 back-record of that commit (state doc §0.48–0.50), and the handoff
-replacement (see §2). Verified: six gates, 276 tests, 26 integration, **80/80
-mutations on a printed green baseline**.
+**The toggle.** `settings.extra.unassignedLeadsVisibleToReps` (default `true`;
+absent key = the standing policy, so the deploy changes nothing for any
+unconfigured org) gates the unassigned half of the rep predicate in `leads.mjs`
+GET — leads only; the other five entities keep the fixed predicate. The strict
+branch is `!!l.ownerId && l.ownerId === callerId`, and the `!!` guard is
+load-bearing: bare `=== callerId` matches `null === null` and hands an
+unresolvable caller exactly the rows the toggle hides (18b22). The config read
+throws to the handler's 500 rather than copying `getLeadScoring`'s
+swallow-and-default — a visibility boundary must not silently pick a fail
+direction. **Write policy deliberately unchanged** (visibility ≠ authorization;
+recorded as a decision). Both `settings.mjs` halves carry the key.
+`LeadVisibilityDetail.jsx` under `settings/salesProcess/`, four-step wiring,
+live badge on the card.
 
-**`1ceb13c` — dev after-counts recorded.** Karen 144/1533/25/22 against a
-144/1534/28/23 baseline; Admin exactly at baseline; the predicate applied
-client-side over the full Admin dataset reproduced Karen's four numbers exactly —
-right rows, not merely fewer. (§0.50)
+**Mine/All on Leads** — the §0.52 pattern; `norm()` gained an `ownerId`
+passthrough because the normalized shape carried only the display name, and the
+scope keys on the id, never the name. Key `tab:leads:scope`, default Mine,
+control on the right of the Triage/Cockpit strip.
 
-**`521e5d7` — the client stopped re-implementing the boundary (Tasks).** Mine/Team
-became **Mine/All**; the scope filter keys on `it.ownerId === currentUserId` (the
-first consumer of `currentUserId`); scope persists to `tab:tasks:scope` with a
-validated read; the inline activities author filter died; **`isRepVisible`'s rep
-branch returns `true`** — and its **Manager branch was kept deliberately**, see §2.
-(§0.51)
+**Tests.** Five integration tests — `leads.mjs`'s FIRST rep-role coverage
+(§0.33/§0.50 debt): default, strict, Admin-bypass, stored-true≡absent, and the
+unresolvable-caller-under-strict case asserting exactly zero rows. Two
+permanent unit guards in `ownership-registry.test.mjs`: the null-null-collision
+SHAPE guard scanning all six endpoints, and 18b12-as-a-test for this key.
+Harness: anchor #14 repointed, five new mutations. **Verified: six gates green
+(143 tdz, 278 tests, build 2,465 kB), 31/31 integration, 85/85 mutations on a
+printed green baseline, zero STALE.**
 
-**`b7a78aa` — production verified.** Different Clerk instance, org and data.
-Admin control 663/1506/48/30 unchanged; rep (`usr_449739ff-…`) received
-663/61/0/2; the predicate over the Admin dataset reproduced those numbers
-exactly. Prod scoping does visible work: 61 of 1,506 contacts, 0 of 48 tasks.
-(§0.50)
+**Browser-verified on LOCAL dev, both roles, row-level.** Admin 23 in both
+toggle states; badge round-trip; Mine/All persisting. Karen 4 (strict) / 23
+(permissive), reconciled against an authorized fetch: exactly 4 rows carry her
+`usr_…`, 19 are `ownerId: null`, zero foreign owners. Thirteen of the 19 are
+the ZZFX pattern in real data — stale `assignedTo` names on null-owner rows —
+see §4 hygiene.
 
-**`f90634a` — Mine/All on Accounts, Contacts and Pipeline.** One aliased
-destructure + one memoised derivation per tab
-(`visibleX: allVisibleX` → scoped `visibleX`), so chips, counts, presets, saved
-views and exports follow the scope with zero downstream edits. Keys
-`tab:accounts:scope` / `tab:contacts:scope` / `tab:pipeline:scope`. **Default is
-Mine everywhere — Jeff's decision, reaffirmed after seeing it as Admin.** (§0.52)
+**`netlify dev` was broken locally and is fixed — environmental, no code
+change.** Module URLs (`/src/main.jsx`, `/@vite/client`) came back as typeless
+200s with Netlify's own headers; `nosniff` blocked them; React never mounted;
+the static crawler landing in `index.html` stayed on screen. A stale `dist/`
+was present and the documented cleanup (`rm -rf node_modules/.vite dist`,
+restart) fixed it — with the `[dev]` proxy block in place, so the fallback can
+bite even then. A toml-catch-all hypothesis was drafted into a redirect-move
+fix that was NEVER APPLIED (see §2); it is recorded as unproven, and
+`netlify.toml` is untouched. Recognise the symptom: "Rewrote URL to
+/index.html" dev-log lines; `curl -sI` on :8888 vs :5173 separates the CLI
+from Vite. Guide §19 carries the note.
 
-Browser-verified on dev as Karen AND as Admin: all four tabs show Mine/All,
-toggle, persist per tab across reload, nothing owned missing. Merged to `master`
-at close; production eyeballed on all four tabs.
+**The itest namespace collision → guide §18b25.** Seeding
+`(itest_org_A, u_itest_org_A)` collided with the accounts suite's per-test
+re-seed of the identical pair (three concurrent processes, one DB, one unique
+constraint): accounts died on duplicate-key in its hooks; the leads rep tests
+failed on caller resolution nowhere near the cause. The leads suite now owns
+`itest_leads_A/B`. One org prefix per suite that seeds constrained shared
+tables.
 
-**Karen's Mine equals her All, and that is BY CONSTRUCTION** — the server sends a
-rep only own + unassigned, and Mine can only hide rows owned by others. The
-toggle is meaningful for Admins and Managers today. Making Mine strictly-mine
-(hide unassigned too) is a recorded one-line product option, not a defect.
+## 2. Errors made this session, recorded
 
----
+- **Two wrong predictions, both caught by verifiers.** "Expect 1" for a grep
+  that correctly returns 2 (the guard's own name plus its offender message);
+  and a patch-script post-check written as ≥3 for a key that appears twice.
+  Predictions are not evidence; outputs are — the verifiers were right both
+  times.
+- **The delivered-vs-placed gap, three times, one file.** `catalogue.js` was
+  believed placed and wasn't (an honest wrong belief — the repo copy's Aug 12
+  mtime settled it), a `/tmp` heredoc was believed run and wasn't. The rule
+  that ended it: **grep the destination after every placement** — verify the
+  effect, never the memory of the action. Same provenance rule §22 applies to
+  commits, applied to file moves.
+- **A patch script double-converted EOLs** (multi-line anchors built with CRLF,
+  then converted again → `\r\r\n`, zero matches). The refuse-on-zero-match
+  behavior caught it before any write. Keep anchors in `\n` and convert
+  exactly once.
+- **A diagnosis was declared from a truncated curl and the docs briefly outran
+  the disk.** The post-cleanup probe was read through `head -3`, which cut the
+  `Content-Type` line off; the stale-`dist/` cleanup had ALREADY fixed the
+  module serving, but a toml-redirect fix was prescribed anyway, never run —
+  and then documented as shipped. `git add public/_redirects` failing on a
+  file that did not exist is what caught it; all three docs were corrected
+  before the commit. Two lessons: head the line you are ruling on, not the top
+  of the headers; and a doc claim about a change is verified the same way as
+  the change — against the disk.
 
-## 2. Corrections to the previous handoff
+## 3. Observed on local dev, pre-existing, untriaged
 
-- **The repo never had the 27-Aug handoff.** `docs/SESSION_HANDOFF.md` on `dev`
-  was the 26-Aug version; the 27-Aug handoff only ever existed in Jeff's temp
-  folder as a delivery. The doc patch's anchor assert caught it (0 matches, wrote
-  nothing) and the file was replaced wholesale. **Delivered is not committed. The
-  repo's copy is the only committed truth — diff against IT, not against another
-  delivery.**
-- **"Delete `isRepVisible` and its five call sites" was wrong as written.** The
-  rep branch was redundant-and-hazardous (a stale name-string would HIDE rows the
-  server granted) and is gone. But the **Manager branch is load-bearing**:
-  server-side `canSeeAll` hands Managers the whole org on five of six entities,
-  so the client's `managedReps` narrowing is the only Manager scoping that
-  exists (§0.39). Deleting the function wholesale would have silently widened
-  every Manager's view to org-wide. The comment in `App.jsx` now says so.
-
-## 3. Errors made this session, recorded
-
-- **Two temp-folder copies of the handoff were diffed against each other** and
-  declared "identical to the repo." They were identical to each other; neither
-  was the repo's file. Provenance of a comparison matters as much as its result.
-- **A delivered patch briefly carried a stale self-assertion** — the `canSeeAll`
-  destructure edit changed after its `expectPresent` was written. The script's
-  own on-disk verification caught it before it reached Jeff's machine;
-  regenerated. The verifier verifying the generator is the system working.
-- **git autocrlf flipped the state doc to CRLF mid-session**, exactly as its
-  warning promised. Patches since detect EOL at runtime; the hardcoded-EOL ones
-  would have failed loudly. Keep the runtime-detect pattern for every doc patch.
-- A predicted gate number (145 files on tdz) was wrong — the patch edited three
-  files and created none; still 142. Predictions are not evidence; outputs are.
+- `documents.mjs` GET returns 500 locally (suspect R2 env vars in `netlify
+  dev`; not investigated — do not diagnose blind).
+- The non-writer settings auto-PUT 403 noise in Karen's console — the known
+  `useSettings` toast debt, now seen live.
+- The static landing in `index.html` works as designed (crawlers see content;
+  React replaces it). Jeff wants humans to never see even the flash —
+  **queued as its own standalone pass**; it touches the bootstrap path and must
+  not ride with policy changes.
 
 ## 4. Next — start here
 
-**Leads gets its own session** (unchanged from last handoff): the admin toggle
-for unassigned-lead visibility, the `settings.extra` key, both halves of
-`settings.mjs` and the filter change land together or not at all.
+**Merge discipline:** smoke-test `accelerep.netlify.app` after the dev deploy
+(Sales process should count 15; the toggle round-trip as Admin; Karen's counts)
+before fast-forwarding `master`. The prod "before" is recorded: Sales process
+14, no card.
 
-**Prod roles cleanup, now concretely due.** Five of six prod roster rows carry
-refused role values in the mirror (`member` ×4, `Sales Rep` ×1 — invite-era
-values). Those accounts likely cannot write on prod until re-set via the Users
-UI. Run `scripts/check-clerk-roles.mjs` against the prod Clerk instance first —
-still never run against a live instance.
+**Prod roles cleanup, still concretely due** (unchanged): five of six prod
+roster rows carry refused role values (`member` ×4, `Sales Rep` ×1). Run
+`scripts/check-clerk-roles.mjs` against the prod Clerk instance — read-only,
+never yet run live.
 
-**Client visibility remnants, found earlier and still standing:** `App.jsx:672`'s
-activities rule (linked-opp `salesRep`, everything unlinked visible) still
-exists; the dead `assignedTo` clauses at `App.jsx:639/642/646` and
-`ModalLayer.jsx:1069` still match nothing; `App.jsx:657` still filters accounts
-on `accountOwner` alone. All are convenience-layer now, not boundaries, but they
-are still two implementations of one policy. `TasksTab.jsx:564` still renders an
-unassigned task as assigned to whoever is looking.
+**Data hygiene, new:** clear stale `assignedTo` strings where `ownerId` is
+null (13 such rows on dev today), and move the name-based Unassigned
+chips/Distribute counts in `LeadsTab.jsx` to `ownerId` — they undercount the
+pool 6 vs 19. Two implementations of one policy, again.
 
-**Test debt, still the highest-value item:** `opportunities.mjs` and `tasks.mjs`
-have no integration file; `leads.itest.mjs` has no rep-role ownership tests; the
-GET scoping on all four patched endpoints has **zero automated rep-role
-coverage** — the browser checks recorded in §0.50 are the only runtime evidence.
+**Test debt, still the highest-value item:** `opportunities.mjs` and
+`tasks.mjs` have no integration file; the four §0.48 endpoints
+(`accounts`/`contacts`/`tasks`/`activities`) still have zero automated
+rep-role GET coverage — the leads pattern from this session (own roster seed,
+own org namespace, `invalidateRoster()` after seeding) is the template.
 
-**Carried forward, unchanged:** `LeadImportModal.jsx:63–76` superseded matcher;
-leads has no overwrite path; no end-to-end test across the six import modules;
-bulk-import lead notification; the stray `dupes-jsx-attribute - Copy.jsx`
-fixture; the `users.mjs` callerCache create window (§0.47); the `useSettings`
-toast for non-writers; quotes is name-based and off-registry; `TasksTab.jsx:1129`
-`toISOString` (the triaged-24 UTC class).
+**Carried forward, unchanged:** SettingsTab deferred cleanup (standalone
+pass); CSV import/export for Pipeline/Contacts/Accounts; Lead Scoring v1.5;
+E2E Layer 3; `LeadImportModal.jsx:63–76` superseded matcher; leads overwrite
+path; six-module import E2E; bulk-import lead notification; the stray dupes
+fixture; `users.mjs` callerCache create window (§0.47); quotes name-based and
+off-registry; `TasksTab.jsx:1129` toISOString; the §0.50 client visibility
+remnants (`App.jsx:672/639/642/646/657`, `ModalLayer.jsx:1069`,
+`TasksTab.jsx:564`).
 
 ## 5. The thread
 
-Yesterday's close said the end state is the one every mature CRM has: the server
-filters, the client renders what it receives. **That state now exists, on both
-environments, verified from both sides** — no leaks (the rep's rows all pass the
-predicate) and no gaps (the predicate over the Admin dataset reproduces the
-rep's rows exactly).
+The last handoff closed on: once the server is the boundary, every client-side
+copy of the policy flips from redundant to hazardous. This session adds the
+next clause: **once the boundary exists, it can become configurable** — the
+predicate stopped being a constant and became policy an admin sets, and the
+interesting work was everything that guards a policy: the absent-key default
+that makes the deploy a no-op, the fail direction chosen loudly instead of
+silently, the null-collision the strict branch would have shipped without its
+`!!`, and the guards that now scan every endpoint for the next one.
 
-What this session adds: **once the server is the boundary, every client-side
-copy of the policy flips from redundant to hazardous** — a name-based filter can
-no longer protect anything, but it can still HIDE what the server granted. The
-rep-path filters died for that reason; the Manager branch survived because for
-Managers the client filter still IS the policy, which is its own §0.39-shaped
-debt.
-
-And a smaller thread, twice today: **a claim's provenance is part of the claim.**
-A handoff that was delivered but never committed, a diff between two copies of
-the wrong file — both read as "verified" until the anchor assert said otherwise.
-The patch scripts refuse to write on a zero-match for exactly this reason. Trust
+And the session's second thread was provenance, again, at smaller scale than
+ever: a file believed placed, a script believed run, a count believed known.
+Every one settled the same way — read the disk, not the memory. The verifiers
+that refused to write on a zero-match, the post-check that failed its own
+author's prediction, the mtime that outed a copy that never happened: trust
 the refusal; it has been right every time.

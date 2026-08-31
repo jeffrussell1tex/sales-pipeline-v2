@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** August 28, 2026
-**Verified at:** all six gates green · **276 tests** · **26 integration tests** · **80/80 mutations caught, ON A VERIFIED GREEN BASELINE** · build 2,459 kB · **after-counts verified on dev, both roles, 28 Aug** — Karen 144/1533/25/22, exactly matching the predicate applied over the Admin dataset; Admin unchanged at baseline (§0.50) · **prod rep-path verified, both roles, 28 Aug** (§0.50)
-**Batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected · **the client stops re-implementing the boundary** (§0.51) · **Mine/All on Accounts, Contacts and Pipeline** (§0.52)
+**Updated:** August 31, 2026
+**Verified at:** all six gates green (143 tdz files) · **278 tests** · **31 integration tests** · **85/85 mutations caught, ON A VERIFIED GREEN BASELINE, zero STALE** · build 2,465 kB · **toggle browser-verified on LOCAL dev, both roles, 31 Aug** — Karen 4 (strict) / 23 (permissive), reconciled ROW-LEVEL against `ownerId` (4 × her `usr_…`, 19 × null, zero foreign owners); Admin 23 in both states; badge round-trip and Mine/All persistence confirmed (§0.53). The 28-Aug dev/prod after-counts (§0.50) still stand for the fixed predicate.
+**Batch:** **the unassigned half of the leads read policy is now an admin toggle** — `settings.extra.unassignedLeadsVisibleToReps` (default true; absent key = standing policy), enforced in `leads.mjs` GET with an explicit `!!l.ownerId` null-collision guard (18b22) · new `LeadVisibilityDetail` panel, four-step wiring, live policy badge · **Mine/All on Leads** keyed on `ownerId` (norm() gains the passthrough; never the display name) · **first rep-role integration coverage for `leads.mjs`** — 5 tests incl. the unresolvable-caller-under-strict-policy case asserting ZERO rows · two permanent unit guards: the null-null-collision SHAPE guard across all six endpoints, and 18b12-as-a-test for this key · the itest **org-namespace collision** found and fixed (guide §18b25) · harness anchor #14 repointed, +5 mutations, **85/85** · **local `netlify dev` failure root-caused to a stale `dist/`** (typeless module responses; the documented cleanup fixed it — guide §19 gains the recognition note; a toml-redirect hypothesis recorded as UNPROVEN, not shipped) · guide **§18b25** (§0.53)
+**Prior batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected · **the client stops re-implementing the boundary** (§0.51) · **Mine/All on Accounts, Contacts and Pipeline** (§0.52)
 **Prior batch:** **the role vocabulary was eight lists and only one was enforced** · **`requireWrite` was a BLOCKLIST** — it denied exactly `ReadOnly` and `Technician` by string and permitted every other value, so `readonly`, `Sales Rep` or any typo carried full write access to ~28 endpoints · **role changes had been impossible since the Phase 1 identity split**: `user-role.mjs` used one parameter in two identity spaces, so the UI's app id 404'd at Clerk and a Clerk id would have matched zero mirror rows silently · **the Users UI read a role copy frozen in the profile blob** — `flatten()` spread it last, and nothing ever updated it, which is the whole of §0.40's symptom · the invite screen seeded rows with the display LABEL `'Sales Rep'` and wrote it into Clerk · three role `<select>`s presented **Admin** for any unrecognised value, making a one-click escalation out of a display bug · 262 → 276 tests, 73 → **80** mutations · guide **§18b24**
 **Prior batch:** **object-level authorization centralised — the last nine hand-rolled checks are gone** (eight single-record + two bulk `ownerColumn:` literals; earlier docs said "nine", the real count was ten sites — verified by reading, §0.29) · **THREE LIVE DEFECTS FOUND, all one shape: a display name compared to a Clerk id** · **§0.28 shipped with two rep-path GET filters broken — every rep saw only UNASSIGNED opportunities and leads, none of their own**, silently, because the query succeeded and returned no row · `getRepUser()` was unscoped and returns an EMAIL ADDRESS that deal names and ARR are sent to — a cross-tenant delivery path · a self-notification guard compared a name to a Clerk id and so had **never suppressed a single email** · **`tests/ownership-registry.test.mjs` was absent from `SUITES`** — every guard in it had ZERO mutation coverage while the count read 55/55 · 250 → 255 tests, 55 → **65** mutations · guide **§18b21**
 **Prior batch:** **identity split — `users.id` is app-owned and permanent, Clerk's id moved to `clerk_user_id`** (the PK was being OVERWRITTEN at invite acceptance) · **`users.email` was GLOBALLY unique, so one address could exist in exactly ONE organization across every customer** — now unique per org · **`bulkUpsert` failed OPEN for an unidentifiable caller** — `callerName === null` meant both "Admin, skip the check" and "cannot identify", and a unit test asserted the permissive reading was correct · caller lookup now org-scoped and keyed on `clerkUserId` · **name sync from Clerk SUSPENDED** — it detached every record a renamed user owned · 244 → 250 tests, 50 → 55 mutations
@@ -174,6 +175,95 @@ tabs. Unassigned rows remain visible under Mine. Default is Mine everywhere
 on these tabs, so an Admin’s first load shows own + unassigned until they
 click All once; the choice then persists. No new tests — the six gates plus a
 browser pass per tab are the verification.
+
+---
+
+### 0.53 Lead visibility toggle, Mine/All on Leads, and the first rep-role leads tests (31 Aug)
+
+The Leads scoping session the last two handoffs deferred — the admin toggle,
+the `settings.extra` key, both halves of `settings.mjs` and the filter change,
+landed together. Plus everything the session surfaced on the way.
+
+**The toggle.** `settings.extra.unassignedLeadsVisibleToReps`, default `true`,
+absent key = the standing policy so the deploy changes nothing for any
+existing org. `leads.mjs` GET (leads ONLY) branches the rep predicate:
+
+```js
+results = unassignedVisible
+    ? results.filter(l => !l.ownerId || l.ownerId === callerId)
+    : results.filter(l => !!l.ownerId && l.ownerId === callerId);
+```
+
+The `!!l.ownerId` guard is the load-bearing character: bare `=== callerId`
+matches `null === null`, handing an UNRESOLVABLE caller exactly the unassigned
+rows the toggle hides (18b22 — two absences comparing equal in the permissive
+direction). The config read throws to the outer 500 instead of copying
+`getLeadScoring`'s swallow-and-default: a visibility boundary must not
+silently pick a fail direction. **Write policy deliberately unchanged** — an
+unassigned lead stays mutable by any writer who reaches it; visibility ≠
+authorization, recorded as a decision. Panel: `LeadVisibilityDetail.jsx`
+(salesProcess), full four-step wiring, live badge on the card
+("Unassigned visible to reps" / "Reps see assigned only").
+
+**Mine/All on Leads** — the §0.52 pattern with one Leads-specific finding:
+`norm()` carried only the display name (`assignee`), so it gained an
+`ownerId` passthrough and the scope keys on that, never the name. Control on
+the right of the Triage/Cockpit strip, key `tab:leads:scope`, default Mine.
+
+**Tests — the §0.33/§0.50 leads debt starts getting paid.** Five integration
+tests, the endpoint's first rep-role coverage: own+unassigned under the
+default; own-only under strict; Admin identical either way; stored `true` ≡
+absent; and the unresolvable-caller-under-strict case asserting **exactly
+zero rows** — the test that catches the `!!` guard's removal. Roster seeding
+follows the cache discipline (`before()` seeds, then `invalidateRoster()` —
+the caller cache stores a miss as `{id: null}` for 30s). Two permanent unit
+guards in `ownership-registry.test.mjs`: a SHAPE guard requiring every
+`x.ownerId === callerId` in every endpoint to decide the null-null collision
+explicitly, and 18b12-as-a-test (≥2 hits in `settings.mjs`, `?? true` pinned
+in `leads.mjs`). Harness: anchor #14 repointed to the new ternary, five new
+mutations (guard dropped, default flipped, helper decorative, each settings
+half deleted), **85/85 on a printed green baseline, zero STALE**.
+
+**The itest namespace collision (now guide §18b25).** Seeding
+`(itest_org_A, u_itest_org_A)` collided with the accounts suite's per-test
+re-seed of the identical pair — three concurrent processes, one DB, one
+unique constraint. Accounts died on duplicate-key in its hooks; org A's
+caller resolved to whichever row was standing when the 30s cache filled, so
+the leads rep tests failed nowhere near the cause. Fix: the leads suite owns
+`itest_leads_A/B`. Rule: one org prefix per suite that seeds constrained
+shared tables.
+
+**Dev-environment failure, fixed (environmental — no code change rides this
+commit for it).** Local `netlify dev` served Vite module URLs
+(`/src/main.jsx`, `/@vite/client`) as typeless 200s carrying Netlify's own
+headers; `nosniff` blocked them, React never mounted, and the static crawler
+landing in `index.html` stayed on screen. A stale `dist/` from earlier
+builds was present, and the documented stale-build cleanup
+(`rm -rf node_modules/.vite dist` + restart) fixed it — WITH the `[dev]`
+proxy block in place, so the toml comment's "falls back to the stale dist"
+warning understates when the fallback can bite. A toml-catch-all-redirect
+hypothesis was formed and a move-to-`public/_redirects` fix drafted but
+NEVER APPLIED — the cleanup had already fixed it, which was only recognised
+when `git add public/_redirects` found no file (the truncated-curl error,
+handoff §2). Recorded as unproven, not as shipped. Diagnosis chain worth
+keeping: "Rewrote URL to /index.html" dev-log lines pairing with the failed
+modules; `curl -sI` on :8888 vs :5173 separates the CLI from Vite. Guide
+§19 gains the recognition note.
+
+**Browser verification (local dev, 31 Aug).** Admin: 23 leads in BOTH toggle
+states; badge round-trip confirmed; Mine/All present and persisting. Karen:
+**4 under strict, 23 under permissive** — reconciled at the ROW level via an
+authorized fetch: exactly 4 rows carry her `usr_e7e09733-…`, the other 19
+are `ownerId: null`, zero foreign owners. Thirteen of the 19 are the ZZFX
+pattern live in real data — stale `assignedTo` display names on
+`ownerId: null` rows — so the UI shows them "assigned" while policy
+(correctly) treats them as unassigned, and the name-based Unassigned
+chips/Distribute counts undercount the pool (6 shown vs 19 actual).
+**Hygiene item recorded:** clear stale `assignedTo` strings where `ownerId`
+is null, and move the Unassigned chips to `ownerId` (the §0.50 remnants
+list, one more entry). Also observed on local dev, both pre-existing:
+`documents.mjs` 500s locally (likely R2 env, untriaged) and the non-writer
+settings auto-PUT 403 noise (the known `useSettings` toast debt).
 
 ---
 
