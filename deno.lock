@@ -11,6 +11,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@babel/parser@^8.0.4",
         "npm:@clerk/backend@^3.0.1",
         "npm:@clerk/clerk-react@5",
         "npm:@neondatabase/serverless@^1.0.2",
