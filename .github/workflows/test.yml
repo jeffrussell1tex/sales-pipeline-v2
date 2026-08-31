@@ -13,7 +13,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      # Unit + static guard import only pure modules (no DB, no deps).
+      - run: npm install
+      # The unit suite is no longer dep-free: tests/scanners.test.mjs spawns
+      # the gate scripts, and several of them import @babel/parser. Without
+      # the install this job fails with ERR_MODULE_NOT_FOUND on every run.
       - name: Unit tests + org-scoping guard
         run: node --test
 
