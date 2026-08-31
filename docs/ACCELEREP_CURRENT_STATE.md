@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** August 31, 2026
-**Verified at:** all six gates green (143 tdz files) · **279 tests** · **33 integration tests** · **86/86 mutations caught, ON A VERIFIED GREEN BASELINE, zero STALE** · build 2,466 kB · **dev-org hygiene applied and post-verified** — 13 stale `assignedTo` names cleared on `ownerId: null` rows, zero candidates remain · **prod role checks both exit clean** — `check-clerk-roles` 7 memberships / 0 findings, `check-mirror-roles` 14 rows / 0 refused values · **Unassigned counts browser-verified on LOCAL dev as Admin, 31 Aug** — chip and Distribute panel at 19, load bars owned-only, one assignment round-trip surviving reload with every other field intact (§0.54). §0.53's Karen row-level reconciliation stands for the read policy.
+**Verified at:** all six gates green (143 tdz files) · **279 tests** · **33 integration tests** · **86/86 mutations caught, ON A VERIFIED GREEN BASELINE, zero STALE** · build 2,466 kB · **dev-org hygiene applied and post-verified** — 13 stale `assignedTo` names cleared on `ownerId: null` rows, zero candidates remain · **prod role checks both exit clean** — `check-clerk-roles` 7 memberships / 0 findings, `check-mirror-roles` 14 rows / 0 refused values · **Unassigned counts browser-verified on LOCAL dev as Admin, 31 Aug** — chip and Distribute panel at 19, load bars owned-only, one assignment round-trip surviving reload with every other field intact (§0.54) · **dev-deploy smoke on accelerep.netlify.app passed** — 23 total / 18 unassigned (shared DB, post-assignment state), James Whitmore's assignment, CTO title and $310K intact through the DEPLOYED bundle. §0.53's Karen row-level reconciliation stands for the read policy.
 **Batch:** **the leads PUT overwrite path is closed** — `saveLead` has always sent `{ id, ...patch }` while `sanitize()` rebuilt the whole row, so a two-key status change nulled every other column (the client's local merge masked it until reload); the PUT now sanitizes the payload OVERLAID ON THE STORED ROW (`sanitize({ ...existing, ...data })`, the users.mjs `mergeForUpdate` pattern minus the blob flatten), with `ownerIdForUpdate` still fed the RAW body so 18b13's mentioned-assignedTo detection is untouched · held closed three ways: integration test (partial PUT preserves nine fields; explicit null still clears), a SOURCE-ASSERTION guard in `tests/partial-sanitize.test.mjs` (the harness runs unit suites only), and mutation #86 · **unassigned-ness keys on `ownerId` across LeadsTab** — both chips, both filters, the triage lane, the Distribute pool/count and the subtitle (they undercounted 6 vs 19 by counting names); Distribute load bars count `l.ownerId === id` via a `reps` `{id, name}` roster (settings.users carries the usr_ id for every role); the assignment payload stays NAME-keyed on purpose — the server resolves it and 409s ambiguity · **13 stale `assignedTo` ghosts cleared on dev** via `scripts/clear-stale-assigned-names.mjs` — dry-run reviewed, `--apply --org --expect` pinned, post-verified zero remain · **prod roles cleanup CLOSED both sides** (morning, commits `92386aa`+`34a3f94`): Clerk held ONE refused value (`"Sales Rep"` on the live.com user — the label-as-value seed), fixed via the UI and re-run clean; the mirror's `member` ×4 were UKG rows fixed through the `user-role` path after a single-subject validation with three controls, both locations (column + frozen blob) healing per save; two read-only verifiers added (`check-mirror-roles.mjs`, `list-clerk-members.mjs`) · **a prod `sk_live_` Clerk key was committed locally** (`93571f4`, sole-file commit), caught pre-push by `ls-files`/`check-ignore` disagreeing, reset out — the key never left the machine; `.env.clerk-prod` ignore rule added (§0.54)
 **Prior batch:** **the unassigned half of the leads read policy is now an admin toggle** — `settings.extra.unassignedLeadsVisibleToReps` (default true; absent key = standing policy), enforced in `leads.mjs` GET with an explicit `!!l.ownerId` null-collision guard (18b22) · new `LeadVisibilityDetail` panel, four-step wiring, live policy badge · **Mine/All on Leads** keyed on `ownerId` (norm() gains the passthrough; never the display name) · **first rep-role integration coverage for `leads.mjs`** — 5 tests incl. the unresolvable-caller-under-strict-policy case asserting ZERO rows · two permanent unit guards: the null-null-collision SHAPE guard across all six endpoints, and 18b12-as-a-test for this key · the itest **org-namespace collision** found and fixed (guide §18b25) · harness anchor #14 repointed, +5 mutations, **85/85** · **local `netlify dev` failure root-caused to a stale `dist/`** (typeless module responses; the documented cleanup fixed it — guide §19 gains the recognition note; a toml-redirect hypothesis recorded as UNPROVEN, not shipped) · guide **§18b25** (§0.53)
 **Prior batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected · **the client stops re-implementing the boundary** (§0.51) · **Mine/All on Accounts, Contacts and Pipeline** (§0.52)
@@ -365,6 +365,35 @@ profile Security card contradicts the list view on MFA/SSO. Dev-org role
 drift remains: org_3B8Tg `member` ×2 (both locations), org_3BDQ one blob-only
 (`smiller`, self-heals on next write) plus an Admin/Technician blob split on
 a valid row.
+
+**Post-commit amendment (same day).** The browser pass and dev smoke ran
+AFTER commit `1ec5640` — the docs briefly claimed them unobserved (the prior
+session's docs-outran-the-disk error class, repeated; recorded in the
+handoff's errors). Both then matched to the digit: local 23/19/19, Karen's
+bar 4, James Whitmore assigned → F5 → assignment, CTO title, notes and $310K
+all intact, chip 19→18, bar 4→5; deployed smoke 23/18 with the same lead
+whole through the production bundle. Five findings from the pass, queued:
+
+- **The assign control is a raw `window.prompt`** — free text, no rep list,
+  no typeahead, off-style, at FIVE call sites. Free text into name
+  resolution is a ghost factory; replace with a picker fed from the `reps`
+  roster. Until then: type names EXACTLY as the Distribute panel renders
+  them.
+- **`resolveOwnerId` case-sensitivity is UNVERIFIED** — a lowercase name was
+  typed into the prompt during the pass and cancelled before OK on exactly
+  this doubt. Read the resolver before trusting mixed-case input.
+- **"NaNyr ago" in the lead detail Activity timeline** — date formatting
+  bug on lead-created/source events.
+- **The Distribute panel follows the Mine/All scope** — an Admin in Mine
+  sees all-zero load bars (their own leads only). Consistent with §0.53's
+  everything-follows-the-scope choice; questionable for a distribution
+  tool. UX decision queued, not a defect.
+- **The stale-`dist/` failure has a SECOND FACE** — wrong Clerk key in the
+  stale bundle → sign-in lands on the WRONG INSTANCE and redirects to
+  `salespipelinetracker.com`; the org switcher shows the wrong instance's
+  orgs. Same cleanup fixes it; guide §19 now carries the recognition note
+  and the read-the-URL-bar-first rule (a prod tab nearly hosted this
+  session's browser pass).
 
 ---
 

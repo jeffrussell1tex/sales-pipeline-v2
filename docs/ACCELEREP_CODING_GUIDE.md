@@ -1279,6 +1279,15 @@ fifth gate (18b6).
   catch-all also participates under dev was NOT isolated (the cleanup fixed
   it before a redirect-move experiment ran); if the symptom returns on a
   clean tree, that is the next variable to test.
+  SECOND FACE of the same failure (31 Aug, later the same day): a stale
+  `dist/` built with the WRONG Clerk key serves a bundle that signs into
+  the other Clerk instance — the symptom is the login screen at
+  `localhost:8888` REDIRECTING TO `salespipelinetracker.com` after sign-in,
+  and an org switcher showing the wrong instance's orgs. Same cleanup
+  fixes it. Recognition rule: before ANY browser verification, read the
+  URL bar and count the orgs in the switcher — a wrong-surface or
+  wrong-instance session produces observations that are internally
+  consistent and entirely meaningless.
 
 ---
 
