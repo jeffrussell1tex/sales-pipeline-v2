@@ -99,7 +99,18 @@ export const handler = async (event) => {
             if (forbiddenPut) return forbiddenPut;
             const wasCompleted = existing?.completed === true;
 
-            const clean = sanitize(data);
+            // The payload is sanitized OVERLAID ON THE STORED ROW (the
+            // leads/users merge pattern): a key sent is applied — including an
+            // explicit null — a key omitted keeps its stored value. The raw
+            // sanitize(data) that stood here had an extra sting beyond the
+            // column wipe: `completed ?? false` meant a partial PUT
+            // UN-COMPLETED the task and nulled completedDate.
+            //
+            // ownerIdForUpdate below still receives the RAW body on purpose:
+            // its 18b13 change-detection keys on whether the REQUEST mentioned
+            // the assignee, and merging first would make every PUT look like a
+            // reassignment.
+            const clean = sanitize({ ...existing, ...data });
             // Reassigning a task re-keys its ownership; a PUT that never
             // mentioned the assignee leaves it alone (18b13).
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'task', orgId });

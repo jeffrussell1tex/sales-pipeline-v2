@@ -149,6 +149,18 @@ const mutations = [
         'const clean = sanitize({ ...existing, ...data });',
         'const clean = sanitize(data);'],
 
+    // The same merge, same catcher (the source assertions in
+    // tests/partial-sanitize.test.mjs), for the other two faces of the wipe.
+    ['opportunities: the single-record PUT reverts to full-row sanitize — a partial PUT wipes stageHistory/comments/pipelineId',
+        'netlify/functions/opportunities.mjs',
+        'const clean = sanitize({ ...existing, ...data });',
+        'const clean = sanitize(data);'],
+
+    ['tasks: the PUT reverts to full-row sanitize — a partial PUT un-completes the task',
+        'netlify/functions/tasks.mjs',
+        'const clean = sanitize({ ...existing, ...data });',
+        'const clean = sanitize(data);'],
+
     ['endpoints: an assertOwnership result is computed and then discarded',
         'netlify/functions/leads.mjs',
         '            if (forbiddenOwn) return forbiddenOwn;',

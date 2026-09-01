@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** August 31, 2026
-**Verified at:** all SEVEN gates green — `check:handoff` is the seventh (`"identical, 12487 bytes"`) · **282 tests** (was 279; +3 check-handoff behavioral) · build 2,466 kB · **CI all three jobs green on `bd06bb2`** (observed via the Actions API; gates+integration were green all day, the unit job was the §0.55 blind spot until `bd06bb2`) · `test:int` (33) and the mutation harness (86/86) NOT run 31 Aug session 3 — nothing endpoint-side changed; last observed green in §0.54's close · prod untouched since the morning docs fast-forward — everything in §0.55 went to `dev` only. §0.54's browser/smoke observations stand.
-**Batch:** **the SEVENTH GATE ships** — `scripts/check-handoff.mjs` byte-compares the root and `docs/` handoff copies (the pair drifted a third time: the FINAL rewrite was committed to one copy only), classifies EOL/whitespace/content divergence, names the first differing line; wired into `check:handoff`, guide §19 and the CI gates job, proven with 4 committed fixtures + 3 behavioral tests · **CLAUDE.md created at repo root** (132 + 11 lines — standing rules only, no session state; the multi-tenancy isolation hard rule in its own commit) · **the CI unit-job blind spot fixed** — `node --test` ran with no `npm install`, so `scanners.test.mjs`'s babel-dependent gate spawns died ERR_MODULE_NOT_FOUND on every clean runner (suspected red since the scanner suite landed; NOT verified against old runs) · **`.gitignore`'s unanchored `fixtures/` swallowed `tests/fixtures/`** — a fixture commit shipped 3 of 7 files with the refusal hint lost between CRLF warnings; anchored to `/fixtures/` · **the doc-ordering rule** (Jeff's call, guide §22): doc changes applied/verified/committed when known, never end-of-session patch scripts, handoff written LAST — origin: the §0.54 amendment script that had never actually run with `--apply` · **the sanitize-then-upsert audit is now FOUR for four**: `opportunities.mjs` single-record PUT and `tasks.mjs` PUT both run raw `sanitize(data)` (tasks also un-completes via `completed ?? false`); diagnosed, NOT fixed — next session's opening batch (§0.55)
+**Updated:** September 1, 2026
+**Verified at:** all seven gates green · **284 tests** (was 282; +2 source guards) · **43 integration** (was 33; +5 opportunities, +5 tasks — the first coverage either endpoint has had) · **88/88 mutations caught, printed green baseline** (was 86; +2 merge reverts, both CAUGHT) · build 2,466 kB, bundle guard OK · every number above observed locally 1 Sep, same run as the §0.56 batch. §0.54's browser/smoke observations stand; `master` was fast-forwarded to the 31 Aug docs batch (`da538b1`) by Jeff on 31 Aug evening, CI green on BOTH branches — no code delta reached prod.
+**Batch:** **the opportunities and tasks PUT overwrite paths are closed — the sanitize-then-upsert audit's third and fourth faces** — both single-record PUTs now `sanitize({ ...existing, ...data })` (field-present semantics; `ownerIdForUpdate` still fed the RAW body per 18b13); opportunities previously wiped stageHistory/comments and reset pipelineId, tasks additionally UN-COMPLETED itself via `completed ?? false` · **severity settled by reading every sender FIRST: no current client sends a partial PUT** to either endpoint (all spread the full row) — a loaded gun, not a live wipe; external API-key writers remain an UNREAD open question · held closed the leads way ×2: source-assertion guards, mutation entries, and the two first-ever integration suites (`itest_opps_*` / `itest_tasks_*` namespaces per §18b25) · **found while reading, NOT fixed: four TasksTab sites read `data?.task` off a raw Response** — complete/snooze there revert the optimistic update on SUCCESS (UI flicker-back, data saved); `check:dbfetch` misses the shape — scanner false-negative class, fix + fixture queued (§0.56)
+**Prior batch:** **the SEVENTH GATE ships** — `scripts/check-handoff.mjs` byte-compares the root and `docs/` handoff copies (the pair drifted a third time: the FINAL rewrite was committed to one copy only), classifies EOL/whitespace/content divergence, names the first differing line; wired into `check:handoff`, guide §19 and the CI gates job, proven with 4 committed fixtures + 3 behavioral tests · **CLAUDE.md created at repo root** (132 + 11 lines — standing rules only, no session state; the multi-tenancy isolation hard rule in its own commit) · **the CI unit-job blind spot fixed** — `node --test` ran with no `npm install`, so `scanners.test.mjs`'s babel-dependent gate spawns died ERR_MODULE_NOT_FOUND on every clean runner (suspected red since the scanner suite landed; NOT verified against old runs) · **`.gitignore`'s unanchored `fixtures/` swallowed `tests/fixtures/`** — a fixture commit shipped 3 of 7 files with the refusal hint lost between CRLF warnings; anchored to `/fixtures/` · **the doc-ordering rule** (Jeff's call, guide §22): doc changes applied/verified/committed when known, never end-of-session patch scripts, handoff written LAST — origin: the §0.54 amendment script that had never actually run with `--apply` · **the sanitize-then-upsert audit is now FOUR for four**: `opportunities.mjs` single-record PUT and `tasks.mjs` PUT both run raw `sanitize(data)` (tasks also un-completes via `completed ?? false`); diagnosed, NOT fixed — next session's opening batch (§0.55)
 **Prior batch:** **the leads PUT overwrite path is closed** — `saveLead` has always sent `{ id, ...patch }` while `sanitize()` rebuilt the whole row, so a two-key status change nulled every other column (the client's local merge masked it until reload); the PUT now sanitizes the payload OVERLAID ON THE STORED ROW (`sanitize({ ...existing, ...data })`, the users.mjs `mergeForUpdate` pattern minus the blob flatten), with `ownerIdForUpdate` still fed the RAW body so 18b13's mentioned-assignedTo detection is untouched · held closed three ways: integration test (partial PUT preserves nine fields; explicit null still clears), a SOURCE-ASSERTION guard in `tests/partial-sanitize.test.mjs` (the harness runs unit suites only), and mutation #86 · **unassigned-ness keys on `ownerId` across LeadsTab** — both chips, both filters, the triage lane, the Distribute pool/count and the subtitle (they undercounted 6 vs 19 by counting names); Distribute load bars count `l.ownerId === id` via a `reps` `{id, name}` roster (settings.users carries the usr_ id for every role); the assignment payload stays NAME-keyed on purpose — the server resolves it and 409s ambiguity · **13 stale `assignedTo` ghosts cleared on dev** via `scripts/clear-stale-assigned-names.mjs` — dry-run reviewed, `--apply --org --expect` pinned, post-verified zero remain · **prod roles cleanup CLOSED both sides** (morning, commits `92386aa`+`34a3f94`): Clerk held ONE refused value (`"Sales Rep"` on the live.com user — the label-as-value seed), fixed via the UI and re-run clean; the mirror's `member` ×4 were UKG rows fixed through the `user-role` path after a single-subject validation with three controls, both locations (column + frozen blob) healing per save; two read-only verifiers added (`check-mirror-roles.mjs`, `list-clerk-members.mjs`) · **a prod `sk_live_` Clerk key was committed locally** (`93571f4`, sole-file commit), caught pre-push by `ls-files`/`check-ignore` disagreeing, reset out — the key never left the machine; `.env.clerk-prod` ignore rule added (§0.54)
 **Prior batch:** **the unassigned half of the leads read policy is now an admin toggle** — `settings.extra.unassignedLeadsVisibleToReps` (default true; absent key = standing policy), enforced in `leads.mjs` GET with an explicit `!!l.ownerId` null-collision guard (18b22) · new `LeadVisibilityDetail` panel, four-step wiring, live policy badge · **Mine/All on Leads** keyed on `ownerId` (norm() gains the passthrough; never the display name) · **first rep-role integration coverage for `leads.mjs`** — 5 tests incl. the unresolvable-caller-under-strict-policy case asserting ZERO rows · two permanent unit guards: the null-null-collision SHAPE guard across all six endpoints, and 18b12-as-a-test for this key · the itest **org-namespace collision** found and fixed (guide §18b25) · harness anchor #14 repointed, +5 mutations, **85/85** · **local `netlify dev` failure root-caused to a stale `dist/`** (typeless module responses; the documented cleanup fixed it — guide §19 gains the recognition note; a toml-redirect hypothesis recorded as UNPROVEN, not shipped) · guide **§18b25** (§0.53)
 **Prior batch:** **the server is now the boundary on reads** — `accounts`, `contacts`, `tasks` and `activities` GETs were `db.select().where(eq(orgId))` and nothing else, EVERY row in the org to every caller, with only the client filter narrowing them · all four now rep-scoped on `ownerId` (own + unassigned; Admin/Manager bypass), the identical predicate `opportunities.mjs` and `leads.mjs` already used · **commit `77e119c` recorded: `currentUser` comes from the roster row, not Clerk** (§0.26 closed — recorded only in the handoff until now) · the doc corrections owed since that commit · guide §17 rewritten for id-based ownership + the read-side policy · guide §19 branches/env-var corrected · **the client stops re-implementing the boundary** (§0.51) · **Mine/All on Accounts, Contacts and Pipeline** (§0.52)
@@ -516,6 +517,65 @@ deploys green · prod untouched since the morning docs fast-forward —
 everything today went to `dev` only. `test:int` and the mutation harness
 were NOT run today: nothing endpoint-side changed, and they are recorded as
 not-run, not implied.
+
+---
+
+### 0.56 The opportunities and tasks overwrite paths closed — the audit's third and fourth faces (1 Sep)
+
+**The severity question, settled by reading every sender first.** The
+handoff's open question — do the clients send partial payloads? — was
+answered before the fix: **no current client path sends a partial PUT to
+either endpoint.** Every opportunity sender spreads the full row — the edit
+modal initializes `formData` from `{ ...opportunity }`, `completeLostSave`
+builds on that same form, the Kanban drag and both ReportsTab contact
+panels spread `{ ...selectedOpp }`/`{ ...updatedOpp }` from state (and GET
+is an unprojected `db.select()`, so state rows carry every column). Every
+task sender likewise: TaskModal initializes from `{ ...task }`,
+`handleCompleteTask` and all four TasksTab handlers spread the current row.
+So the wipe was a LOADED GUN, not a live bug — precisely the leads posture
+before `saveLead`'s two-key patch armed it, and the reason the endpoint is
+fixed first. Remaining unswept vector: external API-key writers (the
+API-docs snippets are GET-only; whether API keys can reach these PUTs at
+all is UNREAD — open question, not a claim).
+
+**Both PUTs now merge before sanitizing** — the leads/users pattern,
+verbatim: `sanitize({ ...existing, ...data })`, field-present semantics (a
+key sent is applied, including an explicit null; a key omitted keeps its
+stored value), with `ownerIdForUpdate` still fed the RAW body so 18b13's
+mentioned-assignee detection is untouched. `opportunities.mjs` single-record
+PUT: previously nulled name/account/rep/arr/notes, emptied `stageHistory`
+and `comments`, reset `pipelineId` to `'default'` (the bulk branch above it
+was already merged via `partialRows` — the single path was the third face).
+`tasks.mjs` PUT: the same wipe plus the sting — `completed ?? false`
+UN-COMPLETED the task and nulled `completedDate` (the fourth face).
+
+**Held closed the leads way, times two.** Source-assertion guards in
+`tests/partial-sanitize.test.mjs` (merged call exactly once, bare
+`const clean = sanitize(data);` absent — per endpoint); mutation entries
+reverting each merge (86 → **88**, both CAUGHT on the real tree, printed
+green baseline); and the two integration suites this endpoint pair never
+had: `opportunities.itest.mjs` and `tasks.itest.mjs` (own org namespaces
+`itest_opps_*` / `itest_tasks_*` per §18b25, wired into `test:int`,
+33 → **43**). Each suite: read isolation, cross-tenant PUT refusal, the
+partial-PUT-preserves regression (opportunities pins stageHistory,
+comments, pipelineId, contactIds and ownerId through a stage-only PUT;
+tasks pins completed/completedDate through a title-only PUT), the
+explicit-null/explicit-false clear, and PUT-of-unknown-id → 404.
+282 → **284** unit.
+
+**Found while reading the senders, recorded NOT fixed:** four TasksTab call
+sites (snooze ×2, complete, saveContacts — lines ~272/602/619/645) read
+`data?.task` off the raw `dbFetch` Response without `.json()`. That
+property is always `undefined` on a Response, so the complete and snooze
+handlers there fall into their else branch and REVERT the optimistic
+update even when the server saved — the row flips back on screen and
+corrects itself on reload (saveContacts merely never syncs the server
+copy). This is the 18b1/18b3 class, and `check:dbfetch` reports 0 sites —
+a scanner FALSE-NEGATIVE class: `const x = await dbFetch(...)` followed by
+property reads on `x` with no `.json()` anywhere. Two work items queued:
+fix the four sites (route them through `dbWrite` or `.json()`), and teach
+`scan-dbfetch.mjs` the property-read-on-Response shape with fixtures per
+§18b6. Severity: UI-only flicker-back, data IS saved; not a wipe.
 
 ---
 

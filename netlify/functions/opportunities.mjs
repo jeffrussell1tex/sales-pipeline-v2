@@ -362,7 +362,20 @@ export const handler = async (event) => {
             const previousStage    = existing?.stage    || null;
             const previousComments = existing?.comments || [];
 
-            const clean = sanitize(data);
+            // The payload is sanitized OVERLAID ON THE STORED ROW (the
+            // leads/users merge pattern): a key sent is applied — including an
+            // explicit null — a key omitted keeps its stored value. The raw
+            // sanitize(data) that stood here was the fourth face of the same
+            // wipe: a partial PUT nulled every absent column, emptied
+            // stageHistory and comments, and reset pipelineId to 'default'.
+            // The bulk branch above already merges via partialRows; this is the
+            // single-record equivalent.
+            //
+            // ownerIdForUpdate below still receives the RAW body on purpose:
+            // its 18b13 change-detection keys on whether the REQUEST mentioned
+            // salesRep, and merging first would make every PUT look like a
+            // reassignment.
+            const clean = sanitize({ ...existing, ...data });
             // Reassigning a deal re-keys its ownership; a PUT that never
             // mentioned salesRep leaves it alone (18b13).
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'opportunity', orgId });

@@ -174,3 +174,33 @@ test('leads.mjs PUT merges the stored row before sanitize — the overwrite path
     assert.equal(src.includes('const clean = sanitize(data);'), false,
         'the bare full-row sanitize call must not return — it nulls every column a partial PUT omits');
 });
+
+// ── opportunities and tasks: the same rule, pinned the same way ──────────────
+// The sanitize-then-upsert audit went four for four: after users and leads,
+// the opportunities SINGLE-RECORD PUT (the bulk branch above it was already
+// merged via partialRows) and the tasks PUT carried the same raw full-row
+// sanitize. Opportunities: a partial PUT nulled name/account/rep/arr/notes,
+// emptied stageHistory and comments, and reset pipelineId to 'default'.
+// Tasks: the same wipe plus `completed ?? false` — a partial PUT UN-COMPLETED
+// the task and nulled completedDate. No CURRENT client sends a partial PUT to
+// either endpoint (every sender spreads the full row — verified 1 Sep), which
+// is precisely the leads posture before saveLead armed it; the endpoint is
+// fixed first for the same reason. Behaviour is pinned by the integration
+// pairs (opportunities.itest.mjs / tasks.itest.mjs); the harness runs UNIT
+// suites only, so the rule lives here too.
+
+test('opportunities.mjs single-record PUT merges the stored row before sanitize', () => {
+    const src = readFileSync(new URL('../netlify/functions/opportunities.mjs', import.meta.url), 'utf8');
+    const merged = src.split('sanitize({ ...existing, ...data })').length - 1;
+    assert.equal(merged, 1, 'the single-record PUT must sanitize the payload overlaid on the stored row, exactly once');
+    assert.equal(src.includes('const clean = sanitize(data);'), false,
+        'the bare full-row sanitize call must not return — it wipes stageHistory, comments and pipelineId on a partial PUT');
+});
+
+test('tasks.mjs PUT merges the stored row before sanitize — a partial PUT must not un-complete a task', () => {
+    const src = readFileSync(new URL('../netlify/functions/tasks.mjs', import.meta.url), 'utf8');
+    const merged = src.split('sanitize({ ...existing, ...data })').length - 1;
+    assert.equal(merged, 1, 'the PUT must sanitize the payload overlaid on the stored row, exactly once');
+    assert.equal(src.includes('const clean = sanitize(data);'), false,
+        'the bare full-row sanitize call must not return — `completed ?? false` un-completes the task it omits');
+});
