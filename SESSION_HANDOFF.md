@@ -1,168 +1,153 @@
 # SESSION_HANDOFF.md
 
-**Session of 31 August 2026 (third session — the seventh gate, CLAUDE.md,
-the CI blind spot, and the doc-ordering rule), FINAL.** Repo root. Read this
-first, then verify every claim in it against the live repo before acting —
-**including the claims in this file**.
+**Session of 1 September 2026 (the overwrite audit closes, the scanner's
+third class, the assignee picker, Mine goes strict, and the first rep-path
+pass ever), FINAL.** Repo root. Read this first, then verify every claim in
+it against the live repo before acting — **including the claims in this
+file**.
 
-**Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain a
-`### 0.55` section whose overwrite audit reads **"FOUR for four"**, and does
-`docs/ACCELEREP_CODING_GUIDE.md` §22 carry the subsection **"Doc changes
-land when they are known"**? If not, you are looking at a copy that predates
-this handoff. Check section content, never dates.
+**Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
+`### 0.57` with a THIRD addendum reading **"Auto-assign all" was exposed to
+reps**, and does `docs/ACCELEREP_CODING_GUIDE.md` §19 carry **"THE TRAP IS
+SELF-ARMING"**? If not, you are looking at a copy that predates this
+handoff. Check section content, never dates.
 
 ---
 
-## 1. What shipped
+## 1. What shipped — eight commits, `cdc54fa` → `5551b20`, all on `dev`
 
-**A docs-and-process session; no endpoint code changed.** Eleven commits on
-`dev` at write time — nine from the working session (`695c97a` → `bd06bb2`)
-plus the two doc commits this handoff follows (`887a595` state §0.55,
-`679974b` guide entries; this file's own commit lands after both copies are
-verified identical).
+**The sanitize-then-upsert audit CLOSED, four for four** (`cdc54fa`,
+§0.56). Severity settled FIRST by reading every sender: **no current client
+sends a partial PUT** to opportunities or tasks — every sender spreads the
+full row — so the wipe was a loaded gun, not a live bug (the leads posture
+before `saveLead` armed it). Both PUTs now
+`sanitize({ ...existing, ...data })` with `ownerIdForUpdate` still fed the
+RAW body (18b13 intact). Held closed the leads way ×2: source-assertion
+guards, harness mutations, and the first-ever integration suites for both
+endpoints (`itest_opps_*` / `itest_tasks_*` namespaces, 33 → 43). Open
+question recorded, not chased: whether API keys can reach these PUTs at all.
 
-**The prior session's tail, closed first.** The UKG prod Leads-tab eyeball
-PASSED (no visible change — the pass condition). The docs-only `master`
-fast-forward was found ALREADY DONE: `9c03db7` verified on `master` via
-`git branch -a --contains`. The previous session's closing lesson ("when git
-says nothing to commit, consider that it might simply be true") paid out on
-its first morning.
+**`scan-dbfetch` gained a third class and it PAID ON ITS FIRST RUN**
+(`1b52f2d`, §0.57). A Response captured in a VARIABLE and read as JSON
+(`const data = await dbFetch(...)` → `data?.task`) is neither an
+ExpressionStatement nor a `.then()` callback — the gate read 0 while four
+TasksTab handlers REVERTED their optimistic update on every successful
+save. Built scanner-first: the new class found those four AND two unknown
+ReportsTab sites (report saves showing "Saved" on a rejected write, `res.ok`
+never checked). All six fixed with the canonical
+`res.ok → res.json() → adopt server row` shape; scanner 6 → 0; fixture +
+safe-fixture + meta-test pin the class.
 
-**THE SEVENTH GATE, end to end** (`06ddbe1`, completed by `02c663a` /
-`9c373fb` / `4b044a7`). The handoff dual-copy pair had drifted a THIRD time
-— the FINAL rewrite existed only in the uncommitted root copy while `docs/`
-on `master` carried the pre-FINAL draft. Synced and committed (`695c97a`),
-then the queued candidate fix became real: `scripts/check-handoff.mjs`
-byte-compares the root and `docs/` copies, classifies EOL vs whitespace vs
-content divergence, names the first differing line, and takes two positional
-paths for fixture mode. Wired: `package.json` `check:handoff`, guide §19
-("run all seven" + history note), CI gates-job step between dbfetch and
-build. Proven: four committed fixtures, three behavioral tests, meta-test
-registration — 279 → **282** unit tests.
+**The assignee picker retired all five free-text assign prompts**
+(`1b52f2d`). `RepPickerPopover` — module-scope, `getBoundingClientRect` +
+`position:fixed`, roster-fed, filter input — wired into the bulk Assign,
+the row `+ Assign`, and the detail rail's three controls. Payloads stay
+NAME-keyed; the server remains the resolver and 409s ambiguity. **The §0.54
+case question is answered:** `resolveOwnerId` lowercases both sides —
+spelling was the real risk, and the picker removes it. **Jeff's design
+call, queued:** this picker format is the house pattern for EVERY
+person-in-the-org selection; replicate as surfaces get touched.
 
-**The §0.54 amendment had never actually run.** `patch-state-054-shipped.mjs`
-existed but had never executed with `--apply`; the state doc lacked the
-"Shipping status at close" block the FINAL handoff's staleness fingerprint
-demanded — the fingerprint check catching exactly what it was built to
-catch. Applied, verified from disk (8 insertions), committed (`babdf7f`).
+**The §19 dev-serving trap fired mid-session and is now understood as
+SELF-ARMING** (`677a932`). The verification chain's own `npm run build`
+writes `dist/` — POPULATED was always the condition, not stale — so
+`localhost:8888` served the static crawler landing, whose "Customer sign
+in" link was an absolute prod URL that teleported Jeff onto
+`salespipelinetracker.com` in one click. Fixed: the link is relative (`/`),
+and the chain now ends every local gate build with `rm -rf dist` (Netlify
+builds remotely; local `dist/` exists only for the bundle guard to read).
+Rule in guide §19 and CLAUDE.md.
 
-**CLAUDE.md created at repo root** (`b526ade` +132 — commit message reads
-just "repo"; `b9c6764` +11, the multi-tenancy isolation hard rule).
-Standing-rules layer only: session-start ritual, hard rules, the seven-gate
-chain, identity/ownership invariants, environment facts. No session state,
-deliberately — that lives here, and changes every session.
+**Mine went STRICT** (`171aafc`, Jeff's call on the first rep-path pass).
+Mine previously folded unassigned rows in — correct per §0.52's documented
+design, but it made Mine = All in an org where no other rep owns anything,
+and not the semantics Jeff wants. Now
+`!!l.ownerId && l.ownerId === currentUserId` — the `!!` is the 18b22
+null-collision guard (a null `currentUserId` during the ?me=true window
+must own NOTHING, not every unassigned row). Unassigned lives under All,
+the chip, and the triage lane; a rep in Mine sees those empty — accepted
+with the semantics. Pinned by `tests/leads-scope.test.mjs` (source
+assertions, hand-registered in SUITES — nothing guards that registration)
+plus two harness mutations.
 
-**The CI unit-job blind spot, FOUND AND FIXED** (`bd06bb2`). The unit job
-ran `node --test` with no `npm install`; `scanners.test.mjs` spawns gate
-scripts that import `@babel/parser`, so the job died ERR_MODULE_NOT_FOUND
-in ~8s on every clean runner — suspected red since the scanner suite landed
-(NOT verified against older runs; recorded as suspected). Per-job read on
-`4b044a7`: gates ✓, integration ✓, unit ✗ — the green jobs are how the red
-runs hid. **`bd06bb2`'s run is OBSERVED all three jobs green** (run
-33445015533, read via the Actions API at the start of the doc session —
-last session's "check FIRST" item, now fact).
+**"Auto-assign all" was exposed to reps — role-gated** (`5551b20`, the
+pass's last find). Not cosmetic: the server honors each individual PUT the
+button fires (reps may edit UNASSIGNED rows — that is how claiming works),
+so one rep click legitimately scatters the whole unassigned pool. Because
+every constituent write is individually authorized, the gate is necessarily
+CLIENT-side: the button renders only under `canSeeAll` (the context's
+shared Admin/Manager predicate). Pinned by a source assertion + a harness
+mutation.
 
-**NEW PROCESS RULE (Jeff's call), now guide §22:** doc changes are applied,
-verified from disk, and committed the moment they are known — never queued
-as end-of-session patch scripts. The handoff is written LAST, after
-everything else is committed, both copies together, `check:handoff` before
-the commit. This session's docs were produced under the rule: state doc
-committed, guide committed, then this file.
+**The rep-path browser pass ran COMPLETE, as Karen, on localhost** — the
+first in the product's history (`f6f00a8`, `e75582d`). URL bar and orgs
+read first. Observed: picker renders/anchors/lists the roster · All 23 /
+Mine 5, the predicted 5-owned + 18-unassigned split to the digit · one
+lead assigned through the picker, Mine 5 → 6, **holding after a HARD
+refresh**. The picker entry points not individually clicked share the one
+component and handler with the proven one.
 
-## 2. Errors made this session, recorded
+## 2. Errors and notes, recorded
 
-- **The docs claimed a patch had run that never ran** — the §0.54 amendment,
-  delivered as an end-of-session script and recorded as applied. The exact
-  docs-outran-the-disk class, this time with a delay fuse; caught by the
-  staleness fingerprint working. Origin of the doc-ordering rule.
-- **A spacing fix was prescribed from paste evidence**; `cat -A` proved the
-  file was already correct — the paste channel strips blank lines. The fix
-  script ran, changed nothing, was deleted. Formatting complaints need a
-  disk read, not a paste read.
-- **The fixture commit shipped 3 of 7 files.** git's "ignored by .gitignore"
-  hint scrolled past between CRLF warnings; CI went red on `02c663a`.
-  Caught by reading the commit STAT, healed next commit. Root cause: the
-  unanchored `fixtures/` rule (meant for the repo-root `fixtures/` dir,
-  which exists) also swallowed `tests/fixtures/`. Anchored to `/fixtures/`
-  (`4b044a7`); lesson in guide §19.
-- **Several commands ran with output never reaching the conversation** (the
-  gitignore commit, the unit-install apply) — each time git's "nothing to
-  commit" was TRUE. Interrogate state before diagnosing messages.
-- **The session brief's commit list had the order wrong** — it placed the
-  CLAUDE.md commits before the seventh-gate commit; `git log` has the gate
-  first (`06ddbe1` → `b526ade` → `b9c6764`). Caught by the verify-the-brief
-  pass; the repo won, the discrepancy was flagged, and §0.55 cites true
-  order.
+- **A designed behavior was reported as an introduced bug** — Mine showing
+  23 — and reading the code (not the diff) showed it pre-existing and
+  documented; the report became a product decision instead of a fix-hunt.
+  §0.54's Admin-only pass is WHY it was never seen before today.
+- **The previous handoff's "prod untouched" was superseded within hours** —
+  Jeff fast-forwarded `master` to `da538b1` on 31 Aug evening (docs/tooling
+  only, no code delta; CI green on both branches, per-job verified). A
+  handoff describes write-time state; read it with its timestamp.
+- The known §0.53 non-writer settings 403 toast and the "NaNyr ago" date
+  bug both appeared during the pass — already queued, unchanged; sightings
+  noted so they are not re-diagnosed.
+- No wrong-surface incidents after the cleanup.
 
-## 3. Found, diagnosed, NOT FIXED — next session's opening batch
+## 3. Verified state at close (all observed 1 Sep)
 
-**The sanitize-then-upsert audit is now FOUR for four** (users and leads
-fixed; opportunities and tasks diagnosed, detail in §0.55):
+Seven gates green — the dbfetch gate carries THREE classes, 0 across `src/`
+· **289/289 unit** · **43/43 integration** (run with the §0.56 batch;
+endpoints untouched since) · **91/91 mutations, printed green baseline** ·
+build 2,468 kB, bundle guard OK, `dist/` cleared after every local gate
+build · rep-path browser pass COMPLETE (above) · **NOTHING from 1 Sep is
+pushed** — `origin/dev` and `master` both sit at `da538b1` (31 Aug docs);
+today's eight commits are local only.
 
-- `opportunities.mjs` single-record PUT (~line 365): raw `sanitize(data)` —
-  a partial PUT nulls `opportunityName`/`account`/`salesRep`/`arr`/`notes`,
-  wipes `stageHistory` and `comments` to `[]`, resets `pipelineId` to
-  `'default'`. The bulk branch above it already uses partialRows; the
-  single path does not.
-- `tasks.mjs` PUT (~line 102): same shape, plus `completed: d.completed ??
-  false` — a partial PUT UN-COMPLETES the task and nulls `completedDate`.
+## 4. Next — start here
 
-Fix known — the leads pattern: `sanitize({ ...existing, ...data })`. Both
-endpoints already fetch `existing` and already feed `ownerIdForUpdate` the
-RAW body, so 18b13 survives unchanged. Hold closed the leads way: an
-integration pair per endpoint (partial-PUT-preserves + explicit-null-still-
-clears), source-assertion guards extending `tests/partial-sanitize.test.mjs`,
-mutation entries, and the two missing integration suites
-(`opportunities.itest.mjs`, `tasks.itest.mjs` — own org namespaces per
-§18b25, wired into `test:int`). **OPEN QUESTION gating severity:** do the
-client's `saveOpportunity`/`saveTask` send partial payloads? Read the client
-save paths before claiming live impact.
+1. **Ritual:** this file, `check:handoff`, `git status`. Expect a clean
+   tree at `5551b20` (or later doc commits).
+2. **Push `dev` and read the Actions run PER-JOB** (gates/unit/integration
+   — the run badge alone lied for days, §0.55). Then the dev smoke on
+   `accelerep.netlify.app`.
+3. **`master` fast-forward when Jeff calls it** — today's batch includes
+   endpoint fixes, client fixes, the picker, Mine-strict, and the
+   Auto-assign gate; it deserves the dev smoke first.
+4. **Two queued product decisions for Jeff**, no code until called:
+   whether a rep may assign an unassigned lead to ANOTHER rep through the
+   picker (the server currently permits it — same rule that lets reps
+   claim), and the Distribute-in-Mine UX question (strict Mine zeroes its
+   pool).
+5. **The SettingsTab cleanup pass** is the top queued code item: the
+   non-writer autosave 403 toast (seen twice today), audit actor
+   attribution, the UNREAD Reconcile button, the Security card.
+6. Then: the "NaNyr ago" date bug · picker-format replication to other
+   person-selects (as surfaces get touched, per Jeff's call) · API-key PUT
+   reachability (read the API auth path before claiming) · rep-role GET
+   coverage for the four §0.48 endpoints · carried: `documents.mjs` local
+   500, dev-org role drift, static-landing flash.
 
-**Carried, unchanged from last session:** the assignee picker (read
-`resolveOwnerId` for the case question first; five `window.prompt` sites →
-one module-scope picker fed from `reps`); the SettingsTab cleanup pass
-(audit actor attribution, autosave flood, the UNREAD Reconcile button, the
-Security card); "NaNyr ago" in the lead Activity timeline; the
-Distribute-follows-Mine/All UX question; dev-org role drift (org_3B8Tg
-`member` ×2, org_3BDQ `smiller` blob-only); `documents.mjs` local 500 (do
-not diagnose blind); the static-landing flash; zero automated rep-role GET
-coverage on the four §0.48 endpoints.
+## 5. The thread
 
-## 4. Verified state at close
-
-Seven gates green (`check:handoff`: "identical" — byte count is of the
-PREVIOUS handoff; this file changes it) · build 2,466 kB, bundle guard OK ·
-**282/282 unit** (re-run before each doc commit today) · CI: gates +
-integration green all day, **all three jobs green on `bd06bb2`** (observed)
-· Netlify dev deploys green · prod untouched since the morning docs
-fast-forward — everything today went to `dev` only.
-
-**NOT run today, recorded as such, not implied:** `npm run test:int` (last
-observed 33/33, §0.54 close) and the mutation harness (last observed 86/86,
-green baseline) — nothing endpoint-side changed. The next session that
-touches an endpoint runs both.
-
-## 5. Next — start here
-
-1. **Session ritual:** this file, `check:handoff`, `git status`. Then check
-   the Actions run for the handoff commit itself.
-2. **The overwrite batch** (§3 above) — read the client save paths FIRST to
-   settle the severity question, then fix opportunities and tasks the leads
-   way, then the hold-closed set. This was the highest-value item two
-   sessions running; it is now fully diagnosed and has nowhere left to hide.
-3. The assignee picker rides naturally behind it (same files, same roster).
-
-## 6. The thread
-
-Last session the write path joined the boundary; this session the DOCS
-joined the verification chain. The handoff pair had drifted three times in
-two days on memory and good intentions — now a gate byte-compares it, CI
-runs the gate, fixtures prove the gate, and a meta-test proves the fixtures
-are registered. The same day exposed the inverse hole: the unit job in CI
-had likely been red for days and nobody read past the run badge, because a
-blind spot in the checker looks exactly like noise in the checked. And the
-doc-ordering rule closes the loop the §0.54 amendment opened — a doc queued
-is a doc lying about the future. The system's shape at close: every claim
-either has a gate, or is labeled with the date it was last observed. The
-two endpoints still wiping rows on partial PUTs are diagnosed, not fixed —
-and the diagnosis is committed, which is the only place a diagnosis counts.
+The audit that started as "check this endpoint's PUT" two sessions ago
+closed today at four-for-four — pattern, hold-closed set, and test
+namespaces all reused, which is what a rule becoming infrastructure looks
+like. The scanner told the same story in miniature: taught one new shape,
+it immediately surfaced two defects nobody suspected — a checker's blind
+spot reads as a clean bill until the checker learns the shape, the seventh
+gate's lesson again. And the first rep-path pass in the product's history
+did what first passes do: it found a designed behavior nobody had examined
+from the rep's chair and turned it into a product decision within minutes,
+then found a management-only button offered to a rep — the class of thing
+no gate sees, because it is not a defect in any line, only in who is
+standing in front of it. Observed, then written, then committed, all day,
+in that order.
