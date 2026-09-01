@@ -129,7 +129,9 @@ One commit per verified batch; doc patch in the same commit.
 - DB env var is `NETLIFY_DATABASE_URL`; integration tests use
   `DATABASE_URL_TEST`.
 - Stale local build: stop `netlify dev`, `rm -rf node_modules/.vite dist`,
-  restart, hard-refresh — suspect this before diagnosing code.
+  restart, hard-refresh — suspect this before diagnosing code. The gate
+  chain's own `npm run build` writes `dist/` and re-arms this every run:
+  `rm -rf dist` after any local gate build, before any browser pass.
 - Dev: `accelerep.netlify.app` (branch `dev`, Clerk `pk_test_`). Prod:
   `salespipelinetracker.com` (branch `master`). No `main` branch.
 - Integration suites that seed `users` use their own org namespace prefix

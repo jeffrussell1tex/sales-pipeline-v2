@@ -637,6 +637,20 @@ and the rep-path browser check (as Karen, per §19 — URL bar read, org count)
 has NOT run; it is the outstanding gate before this batch deploys, and this
 doc will not claim it until it is observed.
 
+**Same-day addendum: the §19 dev-serving trap fired before the browser pass
+could run — and turned out to be SELF-ARMING.** Jeff opened
+`localhost:8888` and got the static crawler landing; its "Customer sign in"
+link put him on `salespipelinetracker.com` in one click. Root causes, both
+read not guessed: the verification chain's own `npm run build` writes
+`dist/` (so every gate run re-creates the "stale dist" serving condition —
+populated was the point, not stale), and the landing's sign-in anchor was an
+absolute prod URL. Fixed: the link is now relative (`/`, identical behavior
+on prod, no cross-surface teleport anywhere), the documented cleanup was
+applied, and the chain now ends its local build with `rm -rf dist` (Netlify
+builds remotely; the local `dist/` exists only for the bundle guard to
+read). Guide §19 and CLAUDE.md carry the rule. The picker browser pass
+remains outstanding — now on a clean surface.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

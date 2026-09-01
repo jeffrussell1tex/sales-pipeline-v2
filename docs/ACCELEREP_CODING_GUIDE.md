@@ -1316,6 +1316,16 @@ fifth gate (18b6).
   URL bar and count the orgs in the switcher — a wrong-surface or
   wrong-instance session produces observations that are internally
   consistent and entirely meaningless.
+  THE TRAP IS SELF-ARMING (1 Sep): the verification chain's own
+  `npm run build` writes `dist/`, so every gate run re-creates the exact
+  condition — "stale" was never the point, POPULATED was. `localhost:8888`
+  then serves the static crawler landing (it lives inline in `index.html`)
+  instead of the mounted app. Two consequences now standing: `rm -rf dist`
+  belongs immediately after any LOCAL gate build (Netlify builds remotely;
+  the local `dist/` exists only for the bundle guard to read), and the
+  landing's "Customer sign in" link is RELATIVE (`/`) — it was an absolute
+  `https://salespipelinetracker.com/`, which teleported a localhost session
+  onto prod with one click.
 
 ---
 
