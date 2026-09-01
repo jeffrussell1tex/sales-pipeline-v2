@@ -274,8 +274,14 @@ const ScoreRing = ({ score, band, bandColor, contributors }) => (
 // ── Main modal ─────────────────────────────────────────────────
 const BLANK = { firstName:'', lastName:'', company:'', email:'', phone:'', title:'', source:'', rev:'', notes:'' };
 
+// Sentinel for the manager's deliberate "Leave unassigned" pick (§0.58): the
+// server treats an assignedTo key that is PRESENT and blank as an explicit
+// pool seed, so this must survive the `manualAssignee || routing` fallback
+// chain — null means "no manual choice", this means "chose unassigned".
+const UNASSIGNED = '__unassigned__';
+
 export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
-    const { leads, contacts, settings, showConfirm } = useApp();
+    const { leads, contacts, settings, showConfirm, canSeeAll, currentUser } = useApp();
 
     const repNames = useMemo(() =>
         (settings?.users || []).filter(u => u.name && u.role !== 'ReadOnly').map(u => u.name).sort()
@@ -301,8 +307,16 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
     const scoreResult = useMemo(() => computeScore(form), [form.title, form.rev, form.email, form.source, form.company]);
 
     // ── Routing ─────────────────────────────────────────────────
-    const routing = useMemo(() => computeRouting(form, repNames, leads?.map ? leads.map(l => l) : []), [repNames, leads, form.company]);
-    const assignee = manualAssignee || routing?.assignee || null;
+    // Assignment is Manager/Admin-only (§0.58): round-robin routing runs for
+    // canSeeAll only — a rep's round-robin used to hand their new lead to
+    // whichever COLLEAGUE had the fewest, which the server now 403s. A rep's
+    // new lead is simply theirs (the server's caller-owns-what-they-create
+    // rule); a manager can reassign it later.
+    const routing = useMemo(() => canSeeAll ? computeRouting(form, repNames, leads?.map ? leads.map(l => l) : []) : null, [canSeeAll, repNames, leads, form.company]);
+    const assignee = canSeeAll
+        ? (manualAssignee === UNASSIGNED ? null : (manualAssignee || routing?.assignee || null))
+        : (currentUser || null);
+    const choseUnassigned = canSeeAll && manualAssignee === UNASSIGNED;
 
     // ── Duplicate detection ─────────────────────────────────────
     const duplicate = useMemo(() => {
@@ -380,6 +394,10 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
             notes:       form.notes.trim(),
             status:      'New',
             score:       scoreResult.score,
+            // Key always PRESENT on purpose: for a canSeeAll caller a blank
+            // here is the server's explicit "leave unassigned" (§0.58 pool
+            // seed); for a rep it means caller-owned. Either way the server
+            // resolves — the client never decides ownership.
             assignedTo:  assignee || '',
             createdAt:   new Date().toISOString(),
         };
@@ -534,12 +552,23 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
                             />
                         </SmartPanel>
 
-                        {/* Routing */}
+                        {/* Routing — canSeeAll picks (or leaves unassigned, §0.58);
+                            a rep's new lead is simply their own. */}
                         <SmartPanel label="Routing" accent={T.gold}>
-                            {assignee ? (
+                            {!canSeeAll ? (
                                 <>
                                     <div style={{ fontSize:13, color:T.ink, marginBottom:6, fontFamily:T.sans, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-                                        <strong>{assignee}</strong>
+                                        <strong>{currentUser || 'You'}</strong>
+                                        <span style={{ fontSize:9.5, fontWeight:700, padding:'1px 6px', background:'rgba(58,90,122,0.12)', color:T.info, borderRadius:8, textTransform:'uppercase', letterSpacing:0.4 }}>You</span>
+                                    </div>
+                                    <div style={{ fontSize:11, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>
+                                        New leads you create are yours. A manager can reassign later.
+                                    </div>
+                                </>
+                            ) : (assignee || choseUnassigned) ? (
+                                <>
+                                    <div style={{ fontSize:13, color:T.ink, marginBottom:6, fontFamily:T.sans, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                                        <strong>{choseUnassigned ? 'Unassigned' : assignee}</strong>
                                         {!manualAssignee && (
                                             <span style={{ fontSize:9.5, fontWeight:700, padding:'1px 6px', background:'rgba(58,90,122,0.12)', color:T.info, borderRadius:8, textTransform:'uppercase', letterSpacing:0.4 }}>Auto</span>
                                         )}
@@ -547,6 +576,11 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
                                             <span style={{ fontSize:9.5, fontWeight:700, padding:'1px 6px', background:'rgba(122,90,60,0.12)', color:T.goldInk, borderRadius:8, textTransform:'uppercase', letterSpacing:0.4 }}>Manual</span>
                                         )}
                                     </div>
+                                    {choseUnassigned && (
+                                        <div style={{ fontSize:11, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>
+                                            Goes to the unassigned pool — reps can request it, or distribute it later.
+                                        </div>
+                                    )}
                                     {routing && !manualAssignee && (
                                         <div style={{ fontSize:11, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>
                                             {routing.rule} · position {routing.rrPos}/{routing.total} · {routing.load} active lead{routing.load !== 1 ? 's' : ''}
@@ -566,6 +600,12 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
                                                         {r}
                                                     </div>
                                                 ))}
+                                                <div onClick={() => { setManualAssignee(UNASSIGNED); setShowAssigneePicker(false); }}
+                                                    style={{ padding:'7px 10px', fontSize:12, color:T.goldInk, cursor:'pointer', fontFamily:T.sans, fontWeight: choseUnassigned ? 700 : 500, borderTop:`1px solid ${T.border}` }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                    ◌ Leave unassigned
+                                                </div>
                                                 {manualAssignee && (
                                                     <div onClick={() => { setManualAssignee(null); setShowAssigneePicker(false); }}
                                                         style={{ padding:'7px 10px', fontSize:11, color:T.inkMuted, cursor:'pointer', fontFamily:T.sans, borderTop:`1px solid ${T.border}` }}
@@ -579,9 +619,14 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
                                     </div>
                                 </>
                             ) : (
-                                <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans, lineHeight:1.5 }}>
-                                    No reps configured. Add team members in Settings → People & Teams.
-                                </div>
+                                <>
+                                    <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans, lineHeight:1.5, marginBottom:6 }}>
+                                        No reps configured — this lead will be created unassigned.
+                                    </div>
+                                    <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                                        Add team members in Settings → People &amp; Teams.
+                                    </div>
+                                </>
                             )}
                         </SmartPanel>
 

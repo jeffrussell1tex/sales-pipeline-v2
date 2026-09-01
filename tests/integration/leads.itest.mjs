@@ -389,3 +389,47 @@ test('Admin assignment still works — the gate is role-scoped, not global', asy
     const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_mg_claim'));
     assert.equal(row.ownerId, REP_A, 'the resolved owner id must be stamped');
 });
+
+// ── §0.58 on CREATE — naming someone else is assigning ───────────────────────
+// The single POST path only; the bulk/import branch is deliberately ungated
+// (recorded open question). A rep creates blank (→ caller-owned, the standing
+// ownerIdForWrite rule) or names themselves; a canSeeAll caller gains the
+// explicit-blank pool seed, while an ABSENT key keeps caller-owns.
+
+test('rep POST naming a colleague is refused — creating is not assigning', async () => {
+    const res = await handler(asRep(ev(A, 'POST', { id: 'lead_post_colleague', firstName: 'Given', status: 'New', assignedTo: 'Itest Other' })));
+    assert.equal(res.statusCode, 403);
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_post_colleague'));
+    assert.ok(!row, 'the refused create must write nothing');
+});
+
+test('rep POST naming THEMSELVES is allowed and self-owned', async () => {
+    const res = await handler(asRep(ev(A, 'POST', { id: 'lead_post_self', firstName: 'Mine', status: 'New', assignedTo: 'Itest Rep A' })));
+    assert.equal(res.statusCode, 201);
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_post_self'));
+    assert.equal(row.ownerId, REP_A);
+});
+
+test('rep POST with a blank assignment stays caller-owned — the standing create rule', async () => {
+    const res = await handler(asRep(ev(A, 'POST', { id: 'lead_post_blank', firstName: 'Blank', status: 'New', assignedTo: '' })));
+    assert.equal(res.statusCode, 201);
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_post_blank'));
+    assert.equal(row.ownerId, REP_A, 'a rep\'s blank create is theirs, never unassigned');
+});
+
+test('Admin POST with an EXPLICIT blank creates an UNASSIGNED pool lead', async () => {
+    const res = await handler(ev(A, 'POST', { id: 'lead_post_pool', firstName: 'Pool', status: 'New', assignedTo: '' }));
+    assert.equal(res.statusCode, 201);
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_post_pool'));
+    assert.equal(row.ownerId, null,    'an explicit blank from canSeeAll seeds the pool');
+    assert.equal(row.assignedTo, null, 'no display name either — the §0.58 spoof shape in reverse');
+});
+
+test('Admin POST with the key ABSENT keeps caller-owns-what-they-create', async () => {
+    const res = await handler(ev(A, 'POST', { id: 'lead_post_absent', firstName: 'Absent', status: 'New' }));
+    assert.equal(res.statusCode, 201);
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_post_absent'));
+    // The suite's Admin caller shares REP_A's clerkUserId, so caller-owned
+    // resolves to REP_A here — the point is it is NOT null.
+    assert.equal(row.ownerId, REP_A, 'an absent key must not become the pool seed — API callers are unchanged');
+});

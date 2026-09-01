@@ -187,7 +187,10 @@ const LeadAssignee = ({ name, onClick, label = '+ Assign', title }) => {
 //
 // Anchored with getBoundingClientRect + position:fixed (the house popover
 // pattern). `anchor` is the trigger's DOMRect; null renders nothing.
-const RepPickerPopover = ({ reps, anchor, onPick, onClose }) => {
+// `onClear` (optional) renders an "Unassign" row — the §0.58 pool needs a way
+// BACK in: only canSeeAll surfaces ever mount this picker, and an explicit
+// blank assignedTo is the server's clear-the-owner (18b13).
+const RepPickerPopover = ({ reps, anchor, onPick, onClose, onClear }) => {
     const [query, setQuery] = useState('');
     const ref = useRef(null);
     useEffect(() => {
@@ -223,6 +226,14 @@ const RepPickerPopover = ({ reps, anchor, onPick, onClose }) => {
                     <span style={{ fontSize:12.5, color:T.ink, fontWeight:500 }}>{r.name}</span>
                 </div>
             ))}
+            {onClear && (
+                <div onClick={onClear}
+                    style={{ padding:'7px 10px', fontSize:12, color:T.goldInk, fontWeight:500, cursor:'pointer', borderTop:`1px solid ${T.border}`, position:'sticky', bottom:0, background:T.surface }}
+                    onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                    onMouseLeave={e => e.currentTarget.style.background=T.surface}>
+                    ◌ Unassign — return to pool
+                </div>
+            )}
         </div>
     );
 };
@@ -438,6 +449,21 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
         setRepPick(null);
     };
 
+    // Explicit blank = clear the owner (18b13); ownerId nulled locally so the
+    // scope/pool recompute without a refetch. canSeeAll-only by construction —
+    // the picker never mounts for a rep.
+    const handleRepClear = () => {
+        if (!repPick) return;
+        const clear = { assignedTo: '', assignee: null, ownerId: null };
+        if (repPick.mode === 'bulk') {
+            Object.keys(selected).filter(id => selected[id]).forEach(id => saveLead(id, clear));
+            setSelected({});
+        } else if (repPick.leadId) {
+            saveLead(repPick.leadId, clear);
+        }
+        setRepPick(null);
+    };
+
     const hot          = leads.filter(l => l.score >= 70 && l.status !== 'Converted' && l.status !== 'Dead');
     const newUnassigned = leads.filter(l => l.status === 'New' && !l.ownerId);
     const working      = leads.filter(l => l.status === 'Working');
@@ -613,7 +639,7 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                     <LeadSourcesPanel leads={leads}/>
                 </div>
             </div>
-            {repPick && <RepPickerPopover reps={reps} anchor={repPick.rect} onPick={handleRepPick} onClose={() => setRepPick(null)}/>}
+            {repPick && <RepPickerPopover reps={reps} anchor={repPick.rect} onPick={handleRepPick} onClear={handleRepClear} onClose={() => setRepPick(null)}/>}
         </div>
     );
 };
@@ -798,7 +824,10 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
             {repPick && <RepPickerPopover reps={reps || []} anchor={repPick} onPick={rep => {
                 if (saveLead) saveLead(lead.id, { assignedTo: rep.name, assignee: rep.name });
                 setRepPick(null);
-            }} onClose={() => setRepPick(null)}/>}
+            }} onClear={lead.assignee ? () => {
+                if (saveLead) saveLead(lead.id, { assignedTo: '', assignee: null, ownerId: null });
+                setRepPick(null);
+            } : undefined} onClose={() => setRepPick(null)}/>}
         </div>
     );
 };

@@ -70,3 +70,13 @@ test('the server gate compares BOTH halves — owner id and display-name string'
     assert.equal(leadsSrc.includes('if (!sameOwner || !sameName)'), true,
         'dropping the string half re-opens the display-name spoof on unassigned rows (null === null on the id side)');
 });
+
+test('the CREATE gate exists — a rep may not name someone else on POST', () => {
+    const gate = leadsSrc.split('if (!canSeeAll(userRole) && suppliedNamePost)').length - 1;
+    assert.equal(gate, 1, 'the single POST must refuse a non-canSeeAll caller naming anyone but themselves');
+});
+
+test('the explicit-blank pool seed is canSeeAll-only and mention-keyed', () => {
+    assert.equal(leadsSrc.includes("canSeeAll(userRole) && ('assignedTo' in data)"), true,
+        'an ABSENT key must keep caller-owns-what-they-create; only a canSeeAll caller\'s PRESENT-and-blank key seeds the pool');
+});

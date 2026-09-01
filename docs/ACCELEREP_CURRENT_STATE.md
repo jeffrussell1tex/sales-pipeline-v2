@@ -881,6 +881,40 @@ an error. One comprehensive two-chair pass (Karen requests → Admin
 approves → Mine grows, holding over a hard refresh) is the queued
 verification, after the DDL.
 
+**Batch 5 shipped — the pool gets a way IN (Jeff's find, mid-pass).**
+Setting up the two-chair pass, Jeff hit the gap: the org had no
+unassigned leads and NO WAY TO MAKE ONE — LeadModal round-robins every
+new lead to a rep with no unassigned option, and even a blank
+`assignedTo` becomes caller-owned on the server (`ownerIdForWrite`'s
+caller-owns-what-they-create). Worse, that round-robin ran for REPS,
+auto-assigning their new leads to whichever COLLEAGUE had the fewest —
+the create-side twin of the §0.58 hole. Four changes, one batch:
+**(1) server CREATE gate** — a non-canSeeAll single POST naming anyone
+but themselves is 403 (blank stays caller-owned; self-naming allowed);
+closes the recorded rep-POSTs-pre-assigned question for the single path
+(the bulk/import branch stays ungated, still recorded).
+**(2) explicit-blank pool seed** — a canSeeAll POST whose payload
+MENTIONS `assignedTo` and leaves it blank creates `ownerId` AND
+`assignedTo` null (mention detection mirrors 18b13); an ABSENT key keeps
+caller-owns, so API callers never change behavior. Side effect accepted
+and preferred: a manager saving with zero reps configured now seeds the
+pool instead of silently self-owning. **(3) LeadModal by chair** —
+canSeeAll keeps round-robin plus a "◌ Leave unassigned" pick (sentinel
+`__unassigned__`, surviving the `manualAssignee || routing` fallback
+chain); a rep sees "New leads you create are yours — a manager can
+reassign later", no routing, no picker, payload naming themselves.
+**(4) RepPickerPopover gains optional `onClear`** — "◌ Unassign — return
+to pool" on the row/bulk/Reassign pickers (canSeeAll-only by
+construction; explicit blank is the server's 18b13 clear; local patch
+nulls `ownerId` so scope and pool recompute without a refetch). Pinned
+by FIVE new integration tests (refused colleague-naming, allowed
+self-naming, rep blank caller-owned, admin explicit-blank pool seed,
+admin absent-key caller-owned), two source assertions, one harness
+mutation (CREATE gate dropped). Verified: gates green, build 2,476 kB +
+`dist/` cleared, **296/296 unit**, **67/67 integration**, **96/96
+mutations, printed green baseline**. The two-chair browser pass is now
+actually RUNNABLE and remains the queued verification.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

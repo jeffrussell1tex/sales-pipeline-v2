@@ -6,7 +6,7 @@ import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkInsert, assertOwnership,
-    stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, resolveOwnerId, ambiguousOwnerResponse,
 } from './_lib.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
@@ -155,10 +155,36 @@ export const handler = async (event) => {
 
             // Single insert
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+
+            // §0.58 on CREATE. Creating is not assigning — but NAMING someone
+            // else on create is. A non-canSeeAll caller may create leads that
+            // are blank (→ caller-owned, the standing ownerIdForWrite rule) or
+            // that name THEMSELVES; any other name is refused, closing the
+            // rep-POSTs-a-lead-pre-assigned-to-a-colleague hole the §0.58
+            // entry recorded as open. (The bulk/import branch above is NOT
+            // gated — reps importing rosters with owner columns is a separate
+            // recorded question.)
+            const suppliedNamePost = String(data.assignedTo ?? '').trim();
+            if (!canSeeAll(userRole) && suppliedNamePost) {
+                const selfId = await getCallerId(userId, orgId);
+                const suppliedId = await resolveOwnerId(suppliedNamePost, orgId);
+                if (!selfId || suppliedId !== selfId) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only managers and admins can assign leads to someone else. Leave the assignment blank to own the lead yourself.' }) };
+                }
+            }
+            // A canSeeAll caller whose payload MENTIONS assignedTo and leaves
+            // it blank means deliberately UNASSIGNED — the request-flow pool
+            // seed. An ABSENT key keeps caller-owns-what-they-create, so API
+            // callers that never mention assignment are unchanged. Mention
+            // detection mirrors 18b13's rule on the update path.
+            const explicitlyUnassigned = canSeeAll(userRole) && ('assignedTo' in data) && !suppliedNamePost;
+
             const cleanPost = sanitize(data);
             const cfgPost = await getLeadScoring(orgId);
             const scoredPost = await scoreColumns(orgId, { ...cleanPost, createdAt: new Date().toISOString() }, cfgPost);
-            const newRow = await stampOwnerId({ ...cleanPost, ...scoredPost }, 'lead', { clerkUserId: userId, orgId });
+            const newRow = explicitlyUnassigned
+                ? { ...cleanPost, ...scoredPost, assignedTo: null, ownerId: null }
+                : await stampOwnerId({ ...cleanPost, ...scoredPost }, 'lead', { clerkUserId: userId, orgId });
             const [inserted] = await db.insert(leads).values({ ...newRow, orgId }).returning();
 
             // Webhook: lead.created

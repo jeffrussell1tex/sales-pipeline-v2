@@ -197,6 +197,11 @@ const mutations = [
 
     // ── The §0.58 request flow (lead-requests.mjs) ──────────────────────────
     // Caught by the source assertions in tests/lead-requests.test.mjs.
+    ['leads: the CREATE gate drops — a rep POSTs a lead pre-assigned to a colleague again',
+        'netlify/functions/leads.mjs',
+        'if (!canSeeAll(userRole) && suppliedNamePost) {',
+        'if (false) {'],
+
     ['lead-requests: the approve/deny role gate is computed and discarded — a rep approves their own request',
         'netlify/functions/lead-requests.mjs',
         'if (forbiddenRole) return forbiddenRole;',
