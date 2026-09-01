@@ -591,6 +591,28 @@ const mutations = [
         'src/components/modals/UserModal.jsx',
         "                                    {!KNOWN_ROLES.includes(formData.userType || 'User') && (",
         '                                    {false && ('],
+
+    // ── The read side of the date contract (0.60) ────────────────────────────
+    ['date: parseLocalDate appends noon to a full timestamp again (the NaNyr bug)',
+        'src/utils/dateLocal.js',
+        "    const d = /^\\d{4}-\\d{2}-\\d{2}$/.test(s) ? new Date(s + 'T12:00:00') : new Date(s);",
+        "    const d = new Date(s + 'T12:00:00');"],
+    ['date: parseLocalDate reads a bare day at UTC midnight',
+        'src/utils/dateLocal.js',
+        "? new Date(s + 'T12:00:00') : new Date(s);",
+        '? new Date(s) : new Date(s);'],
+    ['date: toLocalDay lets an impossible US date roll into the next month',
+        'src/utils/dateLocal.js',
+        'return validDay(+m[3], +m[1], +m[2]);',
+        'return isoLocal(new Date(+m[3], +m[1] - 1, +m[2], 12));'],
+    ['date: toLocalDay hands a bare run of digits to the engine parser (year 46000)',
+        'src/utils/dateLocal.js',
+        "    if (!s || /^\\d+$/.test(s)) return null;",
+        '    if (!s) return null;'],
+    ['import: the date cells go back to passing through as written',
+        'src/utils/importRows.js',
+        '    forecastedCloseDate:csvDay,',
+        "    forecastedCloseDate:(v) => v || '',"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

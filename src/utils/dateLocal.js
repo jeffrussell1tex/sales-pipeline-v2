@@ -44,3 +44,53 @@ export function isoLocal(d) {
 export function todayLocal() {
     return isoLocal(new Date());
 }
+
+// ── THE READ SIDE ────────────────────────────────────────────
+// The rule above has a mirror. A yyyy-mm-dd string stands for a day on a wall
+// calendar and must be read at LOCAL noon: `new Date('2026-09-01')` is UTC
+// midnight, which renders as the previous evening everywhere west of Greenwich
+// (TaskItem showed every due date a day early). A string that carries a time --
+// createdAt, updatedAt, an audit timestamp -- is an instant and parses as-is;
+// appending noon to one of those builds an Invalid Date, and every age computed
+// from it renders "NaN" (LeadsTab's "NaNyr ago", 0.59). The audit that followed
+// counted the `+ 'T12:00:00'` shape at ~140 sites, not the ~20 recorded: all but
+// a handful feed date-only columns and are correct, but nothing guarded the
+// assumption. This does. It never returns an Invalid Date -- null instead, so a
+// caller can branch on it rather than propagate NaN.
+export function parseLocalDate(v) {
+    if (v == null || v === '') return null;
+    if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+    const s = String(v).trim();
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T12:00:00') : new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// A day as a CSV cell might carry it, normalised to yyyy-mm-dd -- or null when
+// nothing recognisable is there. The importer passed Close Date and Created Date
+// through untouched, so "9/15/2026" or Excel's "2026-09-15 00:00:00" landed in a
+// varchar(20) as written, and every consumer's noon-append then produced an
+// Invalid Date for that deal: days-in-stage NaN, the stale flag permanently false
+// (the never-stale bug arriving through the importer), the quarter bucket
+// "undated". Order matters: ISO and US numeric forms are decoded by hand so a
+// date-time suffix keeps the day the FILE says rather than the day UTC says, and
+// an impossible date (2/30) is refused rather than rolled into March the way
+// `new Date` would. Anything else goes through the engine's parser as a last
+// resort; a bare run of digits does not, because `new Date('46000')` is the
+// year 46000, not an Excel serial.
+export function toLocalDay(v) {
+    if (v == null) return null;
+    const s = String(v).trim();
+    if (!s || /^\d+$/.test(s)) return null;
+    let m;
+    if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/.exec(s))) return validDay(+m[1], +m[2], +m[3]);
+    if ((m = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:[T ].*)?$/.exec(s))) return validDay(+m[3], +m[1], +m[2]);
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : isoLocal(d);
+}
+
+// The parts must survive a round trip through a real Date unchanged; 2026-02-30
+// comes back as March 2nd, and that difference is the rejection.
+function validDay(y, mo, d) {
+    const dt = new Date(y, mo - 1, d, 12);
+    return (dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d) ? isoLocal(dt) : null;
+}

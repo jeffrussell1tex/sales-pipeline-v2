@@ -139,3 +139,38 @@ test('an empty record produces an empty overwrite body beyond the id', () => {
     const row = buildOpportunityRow({}, { ...opts, existingId: 'opp_1' });
     assert.deepEqual(Object.keys(row), ['id']);
 });
+
+// ── date cells (0.60) ────────────────────────────────────────────────────────
+
+test('a Close Date in US form is normalised to yyyy-mm-dd', () => {
+    // Passed through as written before this: "9/15/2026" landed in the column and
+    // every `+ "T12:00:00"` consumer produced an Invalid Date for that deal, so it
+    // could never read as stale and sorted into the undated quarter.
+    const out = coerceCsvColumns({ forecastedCloseDate: '9/15/2026', createdDate: '2026-09-01 00:00:00' });
+    assert.equal(out.forecastedCloseDate, '2026-09-15');
+    assert.equal(out.createdDate, '2026-09-01');
+});
+
+test('an ISO day is left exactly as it was', () => {
+    const out = coerceCsvColumns({ forecastedCloseDate: '2026-11-30' });
+    assert.equal(out.forecastedCloseDate, '2026-11-30');
+});
+
+test('an unrecognisable date cell passes through UNCHANGED rather than being blanked', () => {
+    // Blanking it would erase a real date on overwrite with nothing in the receipt
+    // to say so. Refusing it at Preview is the open question; until then the cell
+    // travels as written, which is what it did before.
+    const out = coerceCsvColumns({ forecastedCloseDate: 'TBD' });
+    assert.equal(out.forecastedCloseDate, 'TBD');
+});
+
+test('an empty date cell is still supplied as empty (mapped means asserted)', () => {
+    const out = coerceCsvColumns({ forecastedCloseDate: '' });
+    assert.ok('forecastedCloseDate' in out);
+    assert.equal(out.forecastedCloseDate, '');
+});
+
+test('a created deal keeps a normalised createdDate from the file', () => {
+    const row = buildOpportunityRow({ ...csvRecord, createdDate: '1/5/2026' }, opts);
+    assert.equal(row.createdDate, '2026-01-05');
+});

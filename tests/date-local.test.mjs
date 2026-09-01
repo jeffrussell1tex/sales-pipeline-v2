@@ -22,7 +22,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { isoLocal, todayLocal } from '../src/utils/dateLocal.js';
+import { isoLocal, todayLocal, parseLocalDate, toLocalDay } from '../src/utils/dateLocal.js';
 
 const MODULE_URL = new URL('../src/utils/dateLocal.js', import.meta.url).href;
 
@@ -157,5 +157,69 @@ test('the output is always exactly ten characters, so string comparison is safe'
         new Date(2026, 11, 31, 12),
     ]) {
         assert.equal(isoLocal(d).length, 10);
+    }
+});
+
+// ── THE READ SIDE (0.60) ─────────────────────────────────────
+
+test('a bare day is read at LOCAL noon, never UTC midnight', () => {
+    const d = parseLocalDate('2026-09-01');
+    assert.equal(d.getFullYear(), 2026);
+    assert.equal(d.getMonth(), 8);
+    assert.equal(d.getDate(), 1);
+    assert.equal(d.getHours(), 12, 'UTC midnight reads as the previous evening west of Greenwich');
+});
+
+test('REGRESSION: a full timestamp is read as-is, not noon-appended into NaN', () => {
+    // createdAt arrives as an ISO instant. `+ "T12:00:00"` on it built an Invalid
+    // Date and every age rendered "NaNyr" (0.59). The audit counted the shape at
+    // ~140 sites; this is the one function that must never repeat it.
+    const d = parseLocalDate('2026-08-18T14:30:00.000Z');
+    assert.ok(d instanceof Date);
+    assert.equal(d.getTime(), Date.UTC(2026, 7, 18, 14, 30));
+});
+
+test('parseLocalDate returns null, never an Invalid Date', () => {
+    for (const v of [null, undefined, '', '   ', 'not a date', 'NaNyr']) {
+        assert.equal(parseLocalDate(v), null, `${JSON.stringify(v)} must be null`);
+    }
+    assert.equal(parseLocalDate(new Date('garbage')), null);
+});
+
+test('a valid Date instance passes through unchanged', () => {
+    const d = new Date(2026, 7, 18, 9, 0);
+    assert.equal(parseLocalDate(d), d);
+});
+
+test('toLocalDay keeps an ISO day and strips a date-time suffix on the FILE\'s day', () => {
+    assert.equal(toLocalDay('2026-09-15'), '2026-09-15');
+    assert.equal(toLocalDay('2026-9-5'), '2026-09-05');
+    assert.equal(toLocalDay('2026-09-15 00:00:00'), '2026-09-15', 'Excel datetime export');
+    // Decoded by hand, so the day is the one written, whatever zone the runner is in.
+    assert.equal(toLocalDay('2026-09-15T23:30:00Z'), '2026-09-15');
+});
+
+test('toLocalDay reads a US numeric date', () => {
+    assert.equal(toLocalDay('9/15/2026'), '2026-09-15');
+    assert.equal(toLocalDay('09/15/2026'), '2026-09-15');
+    assert.equal(toLocalDay('9-15-2026'), '2026-09-15');
+    assert.equal(toLocalDay('9/15/2026 0:00'), '2026-09-15', 'Excel m/d/yyyy h:mm');
+});
+
+test('REGRESSION: an impossible date is refused, not rolled into the next month', () => {
+    // `new Date('2/30/2026')` is March 2nd. A CSV typo must not become a real day.
+    assert.equal(toLocalDay('2/30/2026'), null);
+    assert.equal(toLocalDay('2026-02-30'), null);
+    assert.equal(toLocalDay('13/01/2026'), null, 'd/m/yyyy is not a US date; refused rather than guessed');
+});
+
+test('toLocalDay falls back to the engine parser for written-out dates', () => {
+    assert.equal(toLocalDay('September 15, 2026'), '2026-09-15');
+    assert.equal(toLocalDay('15 Sep 2026'), '2026-09-15');
+});
+
+test('toLocalDay refuses what is not a date', () => {
+    for (const v of [null, undefined, '', '   ', 'TBD', 'Q3', '46000']) {
+        assert.equal(toLocalDay(v), null, `${JSON.stringify(v)} must be null`);
     }
 });

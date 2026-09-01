@@ -2,6 +2,7 @@ import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch, dbWrite } from '../../utils/storage';
 import { makeBulkClient } from '../../utils/bulkClient';
+import { todayLocal } from '../../utils/dateLocal';
 import { buildOpportunityRow } from '../../utils/importRows';
 import {
     mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError,
@@ -545,7 +546,9 @@ export default function ModalLayer() {
                         return settle(mergeReceipts(...phases), 'account');
                     }}
                     onImportOpportunities={async (newOpps, overwrites = []) => {
-                        const today = new Date().toISOString().split('T')[0];
+                        // Stored on every imported deal (createdDate, stageChangedDate),
+                        // so it must be the day the user is looking at (dateLocal.js).
+                        const today = todayLocal();
                         const activePipelineId = allPipelines?.[0]?.id || 'default';
                         const totalProgress = newOpps.length + overwrites.length;
 

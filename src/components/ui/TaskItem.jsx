@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { parseLocalDate, todayLocal } from '../../utils/dateLocal';
 
 export default function TaskItem({ task, opportunities, contacts, accounts, onEdit, onComplete, onDelete, onView, onPrep, rowIndex }) {
     const relatedOpp = task.opportunityId ? (opportunities || []).find(o => o.id === task.opportunityId) : null;
@@ -6,7 +7,10 @@ export default function TaskItem({ task, opportunities, contacts, accounts, onEd
     const relatedAccount = task.accountId ? (accounts || []).find(a => a.id === task.accountId) : null;
     
     const status = task.status || (task.completed ? 'Completed' : 'Open');
-    const isOverdue = status !== 'Completed' && task.dueDate && new Date(task.dueDate) < new Date(new Date().toISOString().split('T')[0]);
+    // Both sides are yyyy-mm-dd, so the string compare is the day compare. The
+    // Date form read dueDate at UTC midnight against a "today" built via
+    // toISOString, which rolled over at 7pm Central (dateLocal.js).
+    const isOverdue = status !== 'Completed' && !!task.dueDate && task.dueDate < todayLocal();
     const statusColors = { 'Open': { bg: '#dbeafe', color: '#1e40af' }, 'In-Process': { bg: '#fef3c7', color: '#92400e' }, 'Completed': { bg: '#dcfce7', color: '#166534' } };
     const sc = statusColors[status] || statusColors['Open'];
     
@@ -70,7 +74,7 @@ export default function TaskItem({ task, opportunities, contacts, accounts, onEd
                         <p style={{ color: '#64748b', fontSize: '0.8125rem', margin: '0 0 0.25rem 0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.4' }}>{task.description}</p>
                     )}
                     <div style={{ fontSize: '0.8125rem', color: '#64748b', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                        <span>Due: {new Date(task.dueDate).toLocaleDateString()} {task.dueTime && 'at ' + task.dueTime}</span>
+                        <span>Due: {parseLocalDate(task.dueDate)?.toLocaleDateString() || '—'} {task.dueTime && 'at ' + task.dueTime}</span>
                         {relatedOpp && <span>Opp: <strong>{relatedOpp.opportunityName || relatedOpp.account}</strong></span>}
                         {relatedContact && <span>Contact: <strong>{relatedContact.firstName} {relatedContact.lastName}</strong></span>}
                         {relatedAccount && <span>Account: <strong>{relatedAccount.name}</strong></span>}

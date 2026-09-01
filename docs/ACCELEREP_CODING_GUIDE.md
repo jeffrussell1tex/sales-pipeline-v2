@@ -2865,3 +2865,34 @@ own lead" with no error anywhere near the actual cause.
   concurrent runs QUEUE. Recognition rule: an integration-only CI failure
   on a docs-only commit, seconds after another push, is this — check the
   two jobs' start times before reading a single test.
+
+## 18b26. A Date Is Read The Way It Was Written (hard rule)
+
+`dateLocal.js` settled the WRITE side: a wall-calendar day is formatted from
+local fields, never via `toISOString`. This is the READ side, and it is the
+same distinction. **A `yyyy-mm-dd` string is a day and is read at LOCAL noon; a
+string carrying a time is an instant and is read as-is.** Mixing the two fails
+silently in both directions: `new Date('2026-09-01')` is UTC midnight and
+renders as the previous evening across the Americas (TaskItem's `Due:`), and
+`createdAt + 'T12:00:00'` is an Invalid Date whose every derived age is NaN
+(LeadsTab's "NaNyr", the deal timeline's sort). Both were live in §0.60.
+
+- Read a date field through `parseLocalDate()`. It returns null, never an
+  Invalid Date — branch on it. Do not write `new Date(x + 'T12:00:00')` in new
+  code: it is correct only while `x` is guaranteed date-only, and the ~140
+  existing sites have that guarantee from the schema, not from the code.
+- A fallback chain must not mix kinds. `t.dueDate || t.createdAt` hands an
+  instant to a day-reader. Check the schema for every name in the chain:
+  `completedAt` was not a tasks column; `changedAt` was never written by
+  anything.
+- Anything entering a date-only column from OUTSIDE an `<input type="date">` —
+  a CSV cell, a pasted value, an API body — goes through `toLocalDay()` first.
+  `varchar(20)` accepts `9/15/2026` as readily as `2026-09-15`, and nothing
+  on the server validates the shape.
+- Count before you queue. "~20 other call sites" was an estimate written into
+  a queue item; the audit found ~140. A grep costs nothing, and the number
+  decides whether the item is a sweep or a rule.
+- A triage list lives in the state doc or a test, never only in the handoff.
+  The isoLocal batch's 24-site list was written into a handoff that the next
+  session overwrote; the two sites it named as worst stayed live for the
+  weeks nobody could see the list.

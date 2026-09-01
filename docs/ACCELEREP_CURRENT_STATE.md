@@ -1,7 +1,9 @@
 # ACCELEREP — Current State
 **Updated:** September 1, 2026
-**Verified at:** all seven gates green — the dbfetch gate now carries THREE classes and reads 0 across `src/` · **289 tests** (+1 scanner meta-test, +3 Mine-scope source guards, +1 Auto-assign gate guard) · **43 integration** (observed this morning with §0.56; not re-run since — no endpoint changed) · **91/91 mutations, printed green baseline** (+2 Mine-scope reverts, +1 Auto-assign gate drop) · build **2,468 kB**, bundle guard OK, local `dist/` cleared after every gate build (the §19 self-arming rule) · **rep-path browser pass COMPLETE** (Karen, localhost, 1 Sep): picker renders/anchors/lists the roster; Mine-strict OBSERVED — All 23 / Mine 5, the predicted 5-owned + 18-unassigned split to the digit; one lead assigned through the picker, Mine 5 → 6, and the assignment HOLDS AFTER A HARD REFRESH. The picker's save path is proven end-to-end on the detail-rail entry point; the other four share the same component and handler. `master` sits at the 31 Aug docs batch; nothing from 1 Sep has been pushed anywhere yet.
-**Batch:** **the dbfetch scanner's third class (a Response captured in a VARIABLE and read as JSON) built scanner-FIRST, and its first run found SIX live sites, not the four known** — the TasksTab complete/snooze/saveContacts handlers that REVERTED their optimistic update on every successful save, plus two ReportsTab report-saves that showed "Saved" on a rejected write without ever checking `res.ok`; all six fixed with the canonical `res.ok` → `res.json()` → adopt-server-row shape, scanner 6 → 0 · pinned by a new catch fixture, two safe-fixture additions, and a scanners.test.mjs case · **the assignee picker retires all five free-text `window.prompt` assign sites in LeadsTab** (`RepPickerPopover`, module-scope, `getBoundingClientRect` + `position:fixed`, name-keyed payloads — the server stays the resolver) · **the §0.54 case question ANSWERED**: `resolveOwnerId` lowercases both sides — spelling was the risk, not case (§0.57)
+**Verified at:** five gates green · **315 tests** (+9 date-local read side, +5 import-rows date cells — §0.60) · **79 integration** (observed with §0.59; not re-run since — no endpoint changed) · **104/104 mutations, printed green baseline** (+5, §0.60) · build **2,481 kB JS**, bundle guard OK, local `dist/` cleared after every gate build (the §19 self-arming rule) · **rep-path browser pass COMPLETE** (Karen, localhost, 1 Sep): picker renders/anchors/lists the roster; Mine-strict OBSERVED — All 23 / Mine 5, the predicted 5-owned + 18-unassigned split to the digit; one lead assigned through the picker, Mine 5 → 6, and the assignment HOLDS AFTER A HARD REFRESH. The picker's save path is proven end-to-end on the detail-rail entry point; the other four share the same component and handler. `master` and prod run the §0.58+§0.59 set (`d5254b8`, both deploys marker-verified); §0.60 is LOCAL until Jeff pushes.
+**Batch:** **the date-pattern audit** — the `+'T12:00:00'` shape counted at ~140 sites, not the ~20 queued; four live-or-unguarded NaN sites fixed (deal-timeline task sort, speed-to-lead/velocity on the varchar(30) lead dates, avgDaysForStage's never-written `changedAt` fallback, TaskItem's UTC-midnight `Due:` and 7pm-Central overdue) · `parseLocalDate`/`toLocalDay` — the READ side of the date contract, guide **§18b26** · **the CSV importer normalises Close/Created Date** (both passed through as written: "9/15/2026" made an Invalid Date of that deal everywhere downstream — never-stale, undated quarter) · **the isoLocal queue was LOST with an overwritten handoff** — 43 UTC-truncated day sites remain and the two the batch named worst are still live; the sweep is the next batch, pinned by a source scan (§0.60)
+**Prior batch:** **the request flow shipped end to end** (§0.58) and **the SettingsTab cleanup + honest Security surfaces** (§0.59); both on prod, deploy-verified. Their headers say "2 Sep"; git carries every one of their commits at 1 Sep -0500 — flagged in §0.60, not rewritten
+**Prior batch:** **the dbfetch scanner's third class (a Response captured in a VARIABLE and read as JSON) built scanner-FIRST, and its first run found SIX live sites, not the four known** — the TasksTab complete/snooze/saveContacts handlers that REVERTED their optimistic update on every successful save, plus two ReportsTab report-saves that showed "Saved" on a rejected write without ever checking `res.ok`; all six fixed with the canonical `res.ok` → `res.json()` → adopt-server-row shape, scanner 6 → 0 · pinned by a new catch fixture, two safe-fixture additions, and a scanners.test.mjs case · **the assignee picker retires all five free-text `window.prompt` assign sites in LeadsTab** (`RepPickerPopover`, module-scope, `getBoundingClientRect` + `position:fixed`, name-keyed payloads — the server stays the resolver) · **the §0.54 case question ANSWERED**: `resolveOwnerId` lowercases both sides — spelling was the risk, not case (§0.57)
 **Prior batch:** **the opportunities and tasks PUT overwrite paths are closed — the sanitize-then-upsert audit's third and fourth faces** — both single-record PUTs now `sanitize({ ...existing, ...data })` (field-present semantics; `ownerIdForUpdate` still fed the RAW body per 18b13); opportunities previously wiped stageHistory/comments and reset pipelineId, tasks additionally UN-COMPLETED itself via `completed ?? false` · **severity settled by reading every sender FIRST: no current client sends a partial PUT** to either endpoint (all spread the full row) — a loaded gun, not a live wipe; external API-key writers remain an UNREAD open question · held closed the leads way ×2: source-assertion guards, mutation entries, and the two first-ever integration suites (`itest_opps_*` / `itest_tasks_*` namespaces per §18b25) · **found while reading, NOT fixed: four TasksTab sites read `data?.task` off a raw Response** — complete/snooze there revert the optimistic update on SUCCESS (UI flicker-back, data saved); `check:dbfetch` misses the shape — scanner false-negative class, fix + fixture queued (§0.56)
 **Prior batch:** **the SEVENTH GATE ships** — `scripts/check-handoff.mjs` byte-compares the root and `docs/` handoff copies (the pair drifted a third time: the FINAL rewrite was committed to one copy only), classifies EOL/whitespace/content divergence, names the first differing line; wired into `check:handoff`, guide §19 and the CI gates job, proven with 4 committed fixtures + 3 behavioral tests · **CLAUDE.md created at repo root** (132 + 11 lines — standing rules only, no session state; the multi-tenancy isolation hard rule in its own commit) · **the CI unit-job blind spot fixed** — `node --test` ran with no `npm install`, so `scanners.test.mjs`'s babel-dependent gate spawns died ERR_MODULE_NOT_FOUND on every clean runner (suspected red since the scanner suite landed; NOT verified against old runs) · **`.gitignore`'s unanchored `fixtures/` swallowed `tests/fixtures/`** — a fixture commit shipped 3 of 7 files with the refusal hint lost between CRLF warnings; anchored to `/fixtures/` · **the doc-ordering rule** (Jeff's call, guide §22): doc changes applied/verified/committed when known, never end-of-session patch scripts, handoff written LAST — origin: the §0.54 amendment script that had never actually run with `--apply` · **the sanitize-then-upsert audit is now FOUR for four**: `opportunities.mjs` single-record PUT and `tasks.mjs` PUT both run raw `sanitize(data)` (tasks also un-completes via `completed ?? false`); diagnosed, NOT fixed — next session's opening batch (§0.55)
 **Prior batch:** **the leads PUT overwrite path is closed** — `saveLead` has always sent `{ id, ...patch }` while `sanitize()` rebuilt the whole row, so a two-key status change nulled every other column (the client's local merge masked it until reload); the PUT now sanitizes the payload OVERLAID ON THE STORED ROW (`sanitize({ ...existing, ...data })`, the users.mjs `mergeForUpdate` pattern minus the blob flatten), with `ownerIdForUpdate` still fed the RAW body so 18b13's mentioned-assignedTo detection is untouched · held closed three ways: integration test (partial PUT preserves nine fields; explicit null still clears), a SOURCE-ASSERTION guard in `tests/partial-sanitize.test.mjs` (the harness runs unit suites only), and mutation #86 · **unassigned-ness keys on `ownerId` across LeadsTab** — both chips, both filters, the triage lane, the Distribute pool/count and the subtitle (they undercounted 6 vs 19 by counting names); Distribute load bars count `l.ownerId === id` via a `reps` `{id, name}` roster (settings.users carries the usr_ id for every role); the assignment payload stays NAME-keyed on purpose — the server resolves it and 409s ambiguity · **13 stale `assignedTo` ghosts cleared on dev** via `scripts/clear-stale-assigned-names.mjs` — dry-run reviewed, `--apply --org --expect` pinned, post-verified zero remain · **prod roles cleanup CLOSED both sides** (morning, commits `92386aa`+`34a3f94`): Clerk held ONE refused value (`"Sales Rep"` on the live.com user — the label-as-value seed), fixed via the UI and re-run clean; the mirror's `member` ×4 were UKG rows fixed through the `user-role` path after a single-subject validation with three controls, both locations (column + frozen blob) healing per save; two read-only verifiers added (`check-mirror-roles.mjs`, `list-clerk-members.mjs`) · **a prod `sk_live_` Clerk key was committed locally** (`93571f4`, sole-file commit), caught pre-push by `ls-files`/`check-ignore` disagreeing, reset out — the key never left the machine; `.env.clerk-prod` ignore rule added (§0.54)
@@ -1080,7 +1082,7 @@ actually carries built an invalid date and every timeline age rendered
 NaN. Now: strings already carrying a `T` parse as-is, date-only strings
 keep the noon anchor (timezone-roll protection), and an unparseable
 input returns null instead of NaN-ing downstream. The same
-`+'T12:00:00'` shape exists at ~20 other call sites (App.jsx,
+`+'T12:00:00'` shape exists at ~20 other call sites [§0.60 counted: ~140] (App.jsx,
 AccountsTab, FunnelView, …) — those feed DATE-ONLY columns today and are
 correct, but nothing guards the assumption; `quarters.js` carries the
 defensive `slice(0,10)` variant. Queued as a background sweep, not
@@ -1227,6 +1229,100 @@ sat in the broken-shim state, which is also what proved the honest
 label works. Known-ON (green ●) is the one state without a live
 sighting: no dev-instance account is enrolled to produce it; the
 integration path is identical to known-off (same map, same lists).
+
+### 0.60 The date-pattern audit — ~140 sites, not ~20; the read side of the date contract; CSV dates normalised; the lost isoLocal queue found (1 Sep, third session)
+
+**A note on the day.** §0.58, §0.59 and the handoff they closed with say
+"2 Sep". Every commit in them — `775bb92` at 11:44 through `d5254b8` at 16:07
+— carries a 1 Sep -0500 timestamp, the same calendar day as §0.56/§0.57. The
+labels are wrong by one day; this entry uses the day git records and leaves
+theirs as written (flagged, not silently corrected — Jeff's call whether to
+rename the headers). The handoff's own advice stands: check content, never
+dates.
+
+**The audit §0.59 queued, run by reading every site.** The `+'T12:00:00'`
+shape sits at ~140 call sites across `src/` and `netlify/functions/`, not the
+~20 recorded (OpportunityModal 15, ReportsTab ~50, TasksTab 12, FunnelView 8,
+App.jsx 6, KanbanView 4, five server functions 9, the rest spread over the
+rails, panels and tabs). The schema settles which are safe: every column they
+read is a `varchar(20)` date-only string written by an `<input type="date">`
+or a server-side `today` — EXCEPT `leads.convertedAt`/`firstTouchDate`
+(`varchar(30)`; the server writes a bare day, `sanitize()` passes a client
+value through unvalidated) and the fallback chains that mix a date-only field
+with a `createdAt` timestamp. Four sites were live or unguarded, all fixed:
+
+- **The deal timeline** (`OpportunityModal`): a task with no due date fell to
+  `t.createdAt` — a timestamp — which the sort noon-appended into an Invalid
+  Date, a NaN comparator, and an unspecified order. `completedAt` in that chain
+  is not a tasks column (`completedDate` is); the chain now reads
+  `dueDate || completedDate || createdAt` through `parseLocalDate`.
+- **Speed-to-lead and lead→opp velocity** (`ReportsTab`) on the two
+  `varchar(30)` fields: read through `parseLocalDate`, unparseable rows
+  contribute no sample. Safe today (the server writes `today`), unguarded
+  before.
+- **`avgDaysForStage`** read `stageHistory[].date || changedAt`. Nothing has
+  ever written `changedAt` — `useOpportunities`, `KanbanView` and
+  `_stage.mjs` all write `date` — so a dateless entry became
+  `'' + 'T12:00:00'`. The dead fallback is gone; a dateless entry contributes
+  no sample rather than a NaN one. The print report's `closeDate` cell read
+  `new Date(closeDate)` — UTC midnight.
+- **`TaskItem`** rendered `Due:` from `new Date(dueDate)` — UTC midnight, the
+  previous evening everywhere west of Greenwich — and compared overdue against
+  a `toISOString` "today" that rolls at 7pm Central. Both were named in the
+  `dateLocal.js` header as observed damage; neither had been fixed. Now a
+  `yyyy-mm-dd` string compare against `todayLocal()` and a
+  `parseLocalDate` render.
+
+**The read side of the date contract has a home.** `dateLocal.js` gains
+`parseLocalDate(v)` — a bare day reads at LOCAL noon, anything carrying a time
+reads as-is, and it returns null rather than ever an Invalid Date, so callers
+branch instead of propagating NaN — and `toLocalDay(v)`, a day as a CSV cell
+might carry it normalised to `yyyy-mm-dd` or null: ISO and US numeric forms
+are decoded by hand so a date-time suffix keeps the FILE's day rather than
+UTC's, an impossible date (2/30) is refused rather than rolled into March the
+way `new Date` would, and a bare run of digits is refused because
+`new Date('46000')` is the year 46000, not an Excel serial. The ~130 correct
+`+'T12:00:00'` sites are NOT churned — they feed date-only columns and are
+right; guide **§18b26** is the rule for new code and for any fallback chain.
+
+**The CSV importer passed dates through as written.** `mapCsvRows` →
+`coerceCsvColumns` (`(v) => v || ''`) → `sanitize()` (`|| null`): no
+normalisation on either side, so `9/15/2026` or Excel's
+`2026-09-15 00:00:00` landed in `forecastedCloseDate`/`createdDate` verbatim
+(both fit `varchar(20)`), and every consumer's noon-append made an Invalid
+Date of that deal — days-in-stage NaN, `stale = NaN > 14` permanently false
+(the never-stale bug arriving through the importer's front door, the exact
+shape `_stage.mjs` was written to prevent), the quarter bucket "undated",
+every `cd < today` string compare wrong. `importRows.js` now normalises both
+cells through `toLocalDay`; an UNRECOGNISABLE cell still passes through
+unchanged, because blanking it would erase a real date on overwrite with
+nothing in the receipt to say so. **Open question:** refuse or flag it at
+Preview (18b16 — a value the importer cannot use should be reported, not
+carried). The import's own `today` — stamped on every created deal's
+`createdDate` and `stageChangedDate` — was `toISOString`-built; now
+`todayLocal()`.
+
+**The lost queue.** The isoLocal batch fixed 4 of 29 `toISOString` local-day
+sites and "triaged 24 into the handoff" — a handoff since overwritten, so the
+list vanished and nothing carried it. 43 sites remain today. Storing wrong
+dates: `SalesManagerTab` coaching notes (tomorrow's date after 7pm Central —
+the batch's own worst example), `QuickLogFab` follow-up due dates,
+`OutlookImportModal` activity dates, the CSV import's `today` (fixed above).
+Comparing on wrong days: `TasksTab`'s calendar strings (`setHours(0)` then
+`toISOString` — the previous day ALL DAY east of UTC, not just evenings),
+`PipelineTab` quarter and week keys, `ListView`'s current quarter, `App.jsx`
+reminder popups, `useCalendarState`, nine `ReportsTab` cutoffs. Correct as
+they are: five export filenames (an instant is fine) and `stageClock.backdate`
+(a deliberate UTC round trip on a UTC-parsed day). The sweep is the next
+batch, pinned by a source scan in `date-local.test.mjs` so the list cannot be
+lost a second time.
+
+Verified: five gates green · **315/315 unit** (+9 date-local read side, +5
+import-rows date cells) · **104/104 mutations, printed green baseline** (+5:
+the NaNyr revert, the UTC-midnight read, the 2/30 roll-over, the digit-run
+passthrough, the importer passthrough) · build 2,481 kB JS, guard OK, `dist/`
+cleared · integration not re-run (no endpoint changed) · a browser pass for
+the timeline sort and TaskItem's `Due:` rides the sweep's pass.
 
 ---
 

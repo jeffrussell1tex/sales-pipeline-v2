@@ -33,11 +33,20 @@
 // Pure and dependency-free so the split is pinned by tests/import-rows.test.mjs.
 
 import { parseDaysInStage, backdate } from './stageClock.js';
+import { toLocalDay } from './dateLocal.js';
 
 // Coercions, keyed by column. Applied ONLY to keys the caller actually supplied —
 // `mapCsvRows` omits unmapped fields, and that omission has to survive this step
 // or it was pointless. The two halves of the contract are here and in
 // src/utils/csvMapping.js; neither works alone.
+// A date cell is normalised to yyyy-mm-dd when it is recognisable ("9/15/2026",
+// Excel's "2026-09-15 00:00:00"); the column is varchar(20) and every reader
+// appends noon to it, so a cell passed through as written made an Invalid Date
+// of that deal downstream (0.60). An UNRECOGNISABLE value still passes through
+// unchanged: blanking it would erase a real date on overwrite with nothing in
+// the receipt to say so. Refusing it at Preview is the open question.
+const csvDay = (v) => toLocalDay(v) ?? (v || '');
+
 const CSV_COLUMNS = {
     opportunityName:    (v) => v || '',
     account:            (v) => v || '',
@@ -45,14 +54,14 @@ const CSV_COLUMNS = {
     stage:              (v) => v || '',
     arr:                (v) => parseFloat(v) || 0,
     implementationCost: (v) => parseFloat(v) || 0,
-    forecastedCloseDate:(v) => v || '',
+    forecastedCloseDate:csvDay,
     products:           (v) => v || '',
     notes:              (v) => v || '',
     nextSteps:          (v) => v || '',
     territory:          (v) => v || '',
     vertical:           (v) => v || '',
     probability:        (v) => parseInt(v, 10) || null,
-    createdDate:        (v) => v || '',
+    createdDate:        csvDay,
     // Transport only. On an OVERWRITE it is passed through for the server to
     // resolve against the deal's prior stage. On a CREATE there is no prior
     // stage, so it is applied here and never sent as a column.

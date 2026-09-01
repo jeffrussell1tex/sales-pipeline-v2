@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
+import { parseLocalDate } from '../../utils/dateLocal';
 import { dbFetch } from '../../utils/storage';
 import { useApp } from '../../AppContext';
 import AccountPicker from '../rails/AccountPicker';
@@ -300,11 +301,11 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
             id: t.id, kind: 'task',
             icon: '✓',
             label: t.completed ? 'Task · done' : 'Task',
-            date: t.dueDate || t.completedAt || t.createdAt || '',
+            date: t.dueDate || t.completedDate || t.createdAt || '',
             notes: t.title || t.description || '',
             onDelete: null,
         })),
-    ].sort((a, b) => new Date((b.date || '1900-01-01') + 'T12:00:00') - new Date((a.date || '1900-01-01') + 'T12:00:00'));
+    ].sort((a, b) => (parseLocalDate(b.date)?.getTime() ?? 0) - (parseLocalDate(a.date)?.getTime() ?? 0));
 
     const [tooltip, setTooltip] = React.useState(null);
 

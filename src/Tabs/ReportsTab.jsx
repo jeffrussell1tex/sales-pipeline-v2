@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
+import { parseLocalDate } from '../utils/dateLocal';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import AnalyticsDashboard from '../components/ui/AnalyticsDashboard';
 import { dbFetch, dbWrite } from '../utils/storage';
@@ -509,7 +510,7 @@ ${bodyHtml}
                             <td style="text-align:right;">${o.arr ? '$'+o.arr.toLocaleString() : '—'}</td>
                             <td style="text-align:right;">${o.implementationCost ? '$'+o.implementationCost.toLocaleString() : '—'}</td>
                             <td style="text-align:right;font-weight:700;">$${((o.arr||0)+(o.implementationCost||0)).toLocaleString()}</td>
-                            <td>${o.closeDate ? new Date(o.closeDate).toLocaleDateString() : '—'}</td>
+                            <td>${parseLocalDate(o.closeDate)?.toLocaleDateString() || '—'}</td>
                             <td>${o.assignedTo || o.accountOwner || '—'}</td>
                         </tr>`).join('');
 
@@ -2117,11 +2118,17 @@ ${bodyHtml}
                                 const stale = open.filter(isStaleL).length;
 
                                 // Avg speed-to-lead: median days createdAt → firstTouchDate
+                                // firstTouchDate/convertedAt are varchar(30): the server writes a
+                                // bare day, but nothing validates a client value, so read them
+                                // through parseLocalDate and drop what does not parse (0.60).
+                                const daysFromCreated = (later, l) => {
+                                    const a = parseLocalDate(later), b = parseLocalDate(l.createdAt);
+                                    return (a && b) ? Math.max(0, Math.floor((a - b) / 86400000)) : null;
+                                };
                                 const speedSamples = allLeads
                                     .filter(l => l.firstTouchDate && l.createdAt)
-                                    .map(l => Math.max(0, Math.floor(
-                                        (new Date(l.firstTouchDate+'T12:00:00') - new Date(l.createdAt)) / 86400000
-                                    )));
+                                    .map(l => daysFromCreated(l.firstTouchDate, l))
+                                    .filter(d => d !== null);
                                 const avgSpeedToLead = speedSamples.length > 0
                                     ? speedSamples.sort((a,b)=>a-b)[Math.floor(speedSamples.length/2)]
                                     : null;
@@ -2129,9 +2136,8 @@ ${bodyHtml}
                                 // Lead → opp velocity: median days createdAt → convertedAt
                                 const velocitySamples = allLeads
                                     .filter(l => l.status === 'Converted' && l.convertedAt && l.createdAt)
-                                    .map(l => Math.max(0, Math.floor(
-                                        (new Date(l.convertedAt+'T12:00:00') - new Date(l.createdAt)) / 86400000
-                                    )));
+                                    .map(l => daysFromCreated(l.convertedAt, l))
+                                    .filter(d => d !== null);
                                 const avgVelocity = velocitySamples.length > 0
                                     ? velocitySamples.sort((a,b)=>a-b)[Math.floor(velocitySamples.length/2)]
                                     : null;
@@ -2920,8 +2926,12 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                 if (!o.stageHistory || o.stageHistory.length < 2) return;
                 o.stageHistory.forEach((h, i) => {
                     if (h.stage === stageName && i + 1 < o.stageHistory.length) {
-                        const enter = new Date((h.date||h.changedAt||'')+'T12:00:00');
-                        const exit  = new Date((o.stageHistory[i+1].date||o.stageHistory[i+1].changedAt||'')+'T12:00:00');
+                        // Entries carry `date` (yyyy-mm-dd); `changedAt` was a fallback
+                        // nothing has ever written. An entry without a date contributes
+                        // no sample rather than a NaN one (0.60).
+                        const enter = parseLocalDate(h.date);
+                        const exit  = parseLocalDate(o.stageHistory[i+1].date);
+                        if (!enter || !exit) return;
                         const d = Math.floor((exit-enter)/86400000);
                         if (d >= 0 && d < 365) samples.push(d);
                     }
