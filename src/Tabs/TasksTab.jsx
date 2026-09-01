@@ -1196,13 +1196,17 @@ export default function TasksTab() {
     // ── Buckets ────────────────────────────────────────────────
     const openItems = filtered.filter(f => f.source === 'task-open');
 
-    const { nowItems, upcomingItems } = useMemo(() => {
+    const { nowItems, upcomingItems, undatedItems } = useMemo(() => {
         const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
         const sortByDT = (a, b) => ((a.dueDate || '') + (a.dueTime || '')).localeCompare((b.dueDate || '') + (b.dueTime || ''));
         const overdue  = openItems.filter(t => t.dueDate && new Date(t.dueDate + 'T12:00:00') < today).sort(sortByDT);
         const todayOpen = openItems.filter(t => t.dueDate === todayStr).sort((a, b) => (a.dueTime || '').localeCompare(b.dueTime || ''));
         const upcoming  = openItems.filter(t => t.dueDate && new Date(t.dueDate + 'T12:00:00') >= tomorrow).sort(sortByDT);
-        return { nowItems: [...overdue, ...todayOpen], upcomingItems: upcoming };
+        // A task saved without a due date matched none of the three buckets above
+        // and was rendered NOWHERE on this tab while still showing on its deal (0.62).
+        // Oldest first: the longer it has sat undated, the more it needs a date.
+        const undated   = openItems.filter(t => !t.dueDate).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+        return { nowItems: [...overdue, ...todayOpen], upcomingItems: upcoming, undatedItems: undated };
     }, [openItems, today, todayStr]);
 
     // Completed + logged for activity accordion
@@ -1434,6 +1438,37 @@ export default function TasksTab() {
                                                 {account && <span style={{ color: T.inkMuted, fontWeight: 400 }}> · {account}</span>}
                                             </div>
                                             <div style={{ fontSize: 11, color: T.inkMuted, fontVariantNumeric: 'tabular-nums' }}>{fmtTime(t.dueTime)}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── No due date ── */}
+                    {undatedItems.length > 0 && (
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '0 4px 8px' }}>
+                                <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>No due date</div>
+                                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{undatedItems.length} open · pick a date to schedule</div>
+                            </div>
+                            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                {undatedItems.map((t, i) => {
+                                    const meta = getTypeMeta(t.type);
+                                    const account = resolveAccountName(t, opportunities, accounts) || '';
+                                    return (
+                                        <div key={t.id}
+                                            onClick={() => setViewingTask(t)}
+                                            style={{ display: 'grid', gridTemplateColumns: '70px 18px 1fr auto', gap: 12, padding: '9px 14px', borderBottom: i < undatedItems.length - 1 ? `1px solid ${T.border}` : 'none', alignItems: 'center', fontSize: 12.5, fontFamily: T.sans, cursor: 'pointer', transition: 'background 0.12s' }}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.06)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6 }}>—</div>
+                                            <span style={{ color: meta.color, display: 'flex', alignItems: 'center' }}>{meta.icon}</span>
+                                            <div style={{ color: T.ink, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {t.title}
+                                                {account && <span style={{ color: T.inkMuted, fontWeight: 400 }}> · {account}</span>}
+                                            </div>
+                                            <div style={{ fontSize: 11, color: T.inkMuted }}>no date</div>
                                         </div>
                                     );
                                 })}

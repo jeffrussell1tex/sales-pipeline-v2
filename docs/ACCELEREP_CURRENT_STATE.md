@@ -1440,6 +1440,16 @@ without a due date, so the state is reachable. **Product decision, Jeff's:**
 a "No due date" section in the list (the natural fix), or require a due date
 on the form. Recorded, not changed.
 
+**Jeff: "do option 1."** The list view gains a "No due date" section below
+Coming up: `undatedItems` (open tasks with no `dueDate`, oldest first — the
+longer one has sat undated, the more it needs a date), rendered in the same
+grid as Coming up with "—" in the day column and "no date" where the time
+would be, and a header hint "pick a date to schedule". Nothing else moves; the
+three dated buckets are untouched. Gates green, **317/317**, **105/105, printed
+green baseline**, build guard OK (2,482 kB). Browser: Jeff verifies on his own
+account after the push — the dateless task is his, and the pane is signed in as
+Karen, whose rep scope cannot see it.
+
 **Also reported by Jeff, pre-existing:** the profile panel's header row
 overflows its 420px width when the Clerk org switcher renders a long org
 name for a two-org account ("Dispatch Demo Group"), pushing Sign out off the
