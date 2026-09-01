@@ -1,179 +1,151 @@
 # SESSION_HANDOFF.md
 
-**Session of 1 September 2026 (the overwrite audit closes, the scanner's
-third class, the assignee picker, Mine goes strict, and the first rep-path
-pass ever), FINAL.** Repo root. Read this first, then verify every claim in
-it against the live repo before acting — **including the claims in this
-file**.
+**Session of 2 September 2026 (the request flow ships end to end, the
+Settings cleanup closes, the drift heals, and four open questions die),
+FINAL.** Repo root. Read this first, then verify every claim in it against
+the live repo before acting — **including the claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.57` with a THIRD addendum reading **"Auto-assign all" was exposed to
-reps**, and does `docs/ACCELEREP_CODING_GUIDE.md` §19 carry **"THE TRAP IS
-SELF-ARMING"**? If not, you are looking at a copy that predates this
-handoff. Check section content, never dates.
+`### 0.59` with a paragraph beginning **"The two carried small items are
+CLOSED"**, and does `docs/ACCELEREP_CODING_GUIDE.md` §19 carry **"trigger
+WIDENED"**? If not, you are looking at a copy that predates this handoff.
+Check section content, never dates.
 
 ---
 
-## 1. What shipped — eight commits, `cdc54fa` → `5551b20`, all on `dev`
+## 1. What shipped — two pushed batches plus eight local commits
 
-**The sanitize-then-upsert audit CLOSED, four for four** (`cdc54fa`,
-§0.56). Severity settled FIRST by reading every sender: **no current client
-sends a partial PUT** to opportunities or tasks — every sender spreads the
-full row — so the wipe was a loaded gun, not a live bug (the leads posture
-before `saveLead` armed it). Both PUTs now
-`sanitize({ ...existing, ...data })` with `ownerIdForUpdate` still fed the
-RAW body (18b13 intact). Held closed the leads way ×2: source-assertion
-guards, harness mutations, and the first-ever integration suites for both
-endpoints (`itest_opps_*` / `itest_tasks_*` namespaces, 33 → 43). Open
-question recorded, not chased: whether API keys can reach these PUTs at all.
+**The §0.58 set (Batches 1–7, pushed, deployed, and OBSERVED).** Jeff's
+three morning calls became the claim-request flow: the Distribute panel
+reads the ORG-WIDE pool (strict Mine had zeroed it — the "Auto-assign all
+does nothing" report, diagnosed by reading); lead assignment is
+Manager/Admin-only ON THE SERVER (leads.mjs PUT refuses any ownership
+CHANGE from a non-canSeeAll caller, both halves compared — id AND
+display-name string); `lead_claim_requests` + `lead-requests.mjs` (request
+→ approve assigns to the requester and denies siblings / deny / cancel;
+requester STAMPED from the caller; approve idempotent across its own
+partial failure); UI for both chairs (Request/✓ Requested toggle,
+RequestsPanel with Approve/Deny/Review); the pool's ways IN (managers'
+"Leave unassigned" on create + "Unassign — return to pool" in the picker;
+rep round-robin-to-colleagues retired, rep POST naming a colleague 403s);
+the phantom row delete fixed (was setLeads-only, rendered for roles the
+server refuses — now Admin-only and server-first); the status picker
+retires the bulk window.prompt; Cockpit finally honors the clicked lead.
+**The two-chair pass ran COMPLETE and Jeff re-ran it after every UX
+batch:** Karen requested, Jeff reviewed and approved, the lead moved and
+HELD. The DDL was applied by Jeff (classifier correctly blocked Claude's
+write to the shared Neon main); `db/apply-lead-claim-requests.mjs` is the
+committed record. Shipped: CI green, deploy marker-verified.
 
-**`scan-dbfetch` gained a third class and it PAID ON ITS FIRST RUN**
-(`1b52f2d`, §0.57). A Response captured in a VARIABLE and read as JSON
-(`const data = await dbFetch(...)` → `data?.task`) is neither an
-ExpressionStatement nor a `.then()` callback — the gate read 0 while four
-TasksTab handlers REVERTED their optimistic update on every successful
-save. Built scanner-first: the new class found those four AND two unknown
-ReportsTab sites (report saves showing "Saved" on a rejected write, `res.ok`
-never checked). All six fixed with the canonical
-`res.ok → res.json() → adopt server row` shape; scanner 6 → 0; fixture +
-safe-fixture + meta-test pin the class.
+**The §0.59 set (pushed, deployed).** The SettingsTab cleanup, all four
+queued items: audit rows name the CALLER as actor (users.mjs passed the
+TARGET at all four writeAudit sites); the settings autosave diffs a
+serialized SERVER BASELINE before PUTting (kills the junk
+settings.updated audits AND the §0.53 non-writer 403 toast at the root);
+the Reconcile button READ and verified working (its 6-row claim was the
+real §0.54 drift); **the Security surfaces stopped inventing** —
+smsNotifications-as-MFA replaced everywhere by ONE tri-state map from
+`clerk-mfa-status` (which now returns `enrolledUsers`; unknown renders as
+unknown, NEVER guessed), hardcoded SSO/session/password/audit
+fabrications removed, SEVEN dead controls deleted. Plus: "NaNyr ago"
+fixed (relAge now parses full ISO timestamps), and Settings alphabetized
+(tabs A→Z with All pinned; cards by name; render-time sort, catalogue
+stays category-grouped). Shipped: CI green on `28a001c`,
+accelerep.netlify.app serving `index-CfSKnvfz.js`, markers verified.
 
-**The assignee picker retired all five free-text assign prompts**
-(`1b52f2d`). `RepPickerPopover` — module-scope, `getBoundingClientRect` +
-`position:fixed`, roster-fed, filter input — wired into the bulk Assign,
-the row `+ Assign`, and the detail rail's three controls. Payloads stay
-NAME-keyed; the server remains the resolver and 409s ambiguity. **The §0.54
-case question is answered:** `resolveOwnerId` lowercases both sides —
-spelling was the real risk, and the picker removes it. **Jeff's design
-call, queued:** this picker format is the house pattern for EVERY
-person-in-the-org selection; replicate as surfaces get touched.
+**Eight commits LOCAL and UNPUSHED at write time** (`6a059c2` →
+this handoff; push decision is Jeff's): the MFA rail label made
+tri-state-aware (Jeff caught "0/4 · all enrolled" live); guide §19's
+functions trap WIDENED (below); the dev-org role drift CLOSED; the MFA
+tri-state browser-observed; **rep-role GET coverage for the §0.48 four**
+(12 tests: own+unassigned/never-a-colleague, Admin-all, null-caller
+fail-closed; tasks suite gained its FIRST user seed, appended last);
+**the §0.56 API-key question CLOSED SAFE and pinned**
+(`tests/api-surface.test.mjs`: public-api 405s non-GET BEFORE key
+parsing, verifyAuth has no key branch, nothing else consults apiKeys —
+a future consumer fails the directory scan); and the two carried small
+items (below).
 
-**The §19 dev-serving trap fired mid-session and is now understood as
-SELF-ARMING** (`677a932`). The verification chain's own `npm run build`
-writes `dist/` — POPULATED was always the condition, not stale — so
-`localhost:8888` served the static crawler landing, whose "Customer sign
-in" link was an absolute prod URL that teleported Jeff onto
-`salespipelinetracker.com` in one click. Fixed: the link is relative (`/`),
-and the chain now ends every local gate build with `rm -rf dist` (Netlify
-builds remotely; local `dist/` exists only for the bundle guard to read).
-Rule in guide §19 and CLAUDE.md.
+## 2. The lesson that paid four times: probe before diagnosing
 
-**Mine went STRICT** (`171aafc`, Jeff's call on the first rep-path pass).
-Mine previously folded unassigned rows in — correct per §0.52's documented
-design, but it made Mine = All in an org where no other rep owns anything,
-and not the semantics Jeff wants. Now
-`!!l.ownerId && l.ownerId === currentUserId` — the `!!` is the 18b22
-null-collision guard (a null `currentUserId` during the ?me=true window
-must own NOTHING, not every unassigned row). Unassigned lives under All,
-the chip, and the triage lane; a rep in Mine sees those empty — accepted
-with the semantics. Pinned by `tests/leads-scope.test.mjs` (source
-assertions, hand-registered in SUITES — nothing guards that registration)
-plus two harness mutations.
+Guide §19's functions-side twin, written mid-session and WIDENED the same
+day: under a long-running `netlify dev`, individual functions land in a
+broken serve state (CJS shim parsed as ESM under `"type":"module"`),
+NONDETERMINISTICALLY — the observed broken set was a NEW function
+(lead-requests), a MODIFIED one (clerk-mfa-status), and an UNTOUCHED one
+(`user-role`, which silently ATE JEFF'S FIRST TWO ROLE SAVES), while
+equally-modified siblings served fine. Cache-dir deletion does not
+recover (dead registration, ENOENT); the fix is a RESTART, full stop.
+Recognition: probe the URL FIRST — 401 JSON = loaded and gated, ESM/
+ENOENT 500 = stale serve; user-role's 405 (= parsed and ran) was the
+proof that unblocked the drift fix. The same probe closed the untriaged
+`documents.mjs` local 500 in ONE REQUEST: `@aws-sdk/client-s3` was never
+installed — prod worked only because AWS Lambda's Node 18+ runtime ships
+SDK v3 unpinned. Both R2 packages are now pinned dependencies
+(^3.1124.0); the local re-probe rides the next dev-server restart.
 
-**"Auto-assign all" was exposed to reps — role-gated** (`5551b20`, the
-pass's last find). Not cosmetic: the server honors each individual PUT the
-button fires (reps may edit UNASSIGNED rows — that is how claiming works),
-so one rep click legitimately scatters the whole unassigned pool. Because
-every constituent write is individually authorized, the gate is necessarily
-CLIENT-side: the button renders only under `canSeeAll` (the context's
-shared Admin/Manager predicate). Pinned by a source assertion + a harness
-mutation, and OBSERVED: the button is gone for Karen after a hard refresh.
+## 3. Also closed at the end
 
-**The rep-path browser pass ran COMPLETE, as Karen, on localhost** — the
-first in the product's history (`f6f00a8`, `e75582d`). URL bar and orgs
-read first. Observed: picker renders/anchors/lists the roster · All 23 /
-Mine 5, the predicted 5-owned + 18-unassigned split to the digit · one
-lead assigned through the picker, Mine 5 → 6, **holding after a HARD
-refresh**. The picker entry points not individually clicked share the one
-component and handler with the proven one.
+**The dev-org role drift**: 5 refused values → column drift ZERO across
+all three orgs. Reconcile was correctly silent (Clerk held NO role for
+the `member` rows — nothing for a dry run to count); the §0.54 per-row
+role-save path healed Clerk + column + blob together, verified by
+`check-mirror-roles` re-run. One cosmetic blob residue remains
+(smiller@test.com, plus Jeff's Admin/Technician blob split) — self-heals
+on those rows' next real write; nothing authorizes on the blob.
+**The static-landing flash**: a parser-blocking inline script hides the
+crawler landing before FIRST PAINT for JS browsers and shows a
+`#boot-splash` wordmark (both inside `#root`, replaced on mount); no-JS
+crawlers never run it and keep the full page. Verified live AND in the
+built `dist/index.html` before the §19 `rm -rf dist`.
 
-## 2. Errors and notes, recorded
+## 4. Verified state at close (all observed 2 Sep)
 
-- **A designed behavior was reported as an introduced bug** — Mine showing
-  23 — and reading the code (not the diff) showed it pre-existing and
-  documented; the report became a product decision instead of a fix-hunt.
-  §0.54's Admin-only pass is WHY it was never seen before today.
-- **The previous handoff's "prod untouched" was superseded within hours** —
-  Jeff fast-forwarded `master` to `da538b1` on 31 Aug evening (docs/tooling
-  only, no code delta; CI green on both branches, per-job verified). A
-  handoff describes write-time state; read it with its timestamp.
-- The known §0.53 non-writer settings 403 toast and the "NaNyr ago" date
-  bug both appeared during the pass — already queued, unchanged; sightings
-  noted so they are not re-diagnosed.
-- No wrong-surface incidents after the cleanup.
+Gates green · **301/301 unit** · **79/79 integration** · **99/99
+mutations, printed green baseline** · build 2,476+ kB, bundle guard OK,
+`dist/` cleared after every local gate build · MFA tri-state observed in
+all three states (known-off dots + "0/4 · 4 off" real from Clerk;
+unknown during the outage; known-ON has no dev-instance account to
+produce it) · `dev` deployed and verified through `d8665b3`
+(`index-CfSKnvfz.js`); **`master`/prod deliberately holds pre-§0.58
+code** — prod still has direct rep claiming until Jeff moves it.
 
-## 3. Verified state at close (all observed 1 Sep)
+## 5. Next — start here
 
-Seven gates green — the dbfetch gate carries THREE classes, 0 across `src/`
-· **289/289 unit** · **43/43 integration** (run with the §0.56 batch;
-endpoints untouched since) · **91/91 mutations, printed green baseline** ·
-build 2,468 kB, bundle guard OK, `dist/` cleared after every local gate
-build · rep-path browser pass COMPLETE (above) · **SHIPPED end of session
-(Jeff's "do it all")**: `dev` pushed, CI three-jobs green on `860acfd`;
-`master` fast-forwarded `da538b1` → `860acfd` and pushed, CI run green;
-BOTH deploys verified serving today's head (new bundle hash, the picker's
-"No reps in the roster" marker, relative sign-in link) on
-accelerep.netlify.app AND salespipelinetracker.com. The two-minute signed-in
-prod eyeball was NOT performed — queued, not implied.
-**Then the ship itself found a CI race:** the docs-only `cf35f51` pair
-(dev push + master FF seconds apart) went red on the INTEGRATION job only —
-the two jobs started 2s apart against the one shared test DB, whose fixed
-org namespaces isolate suites within a run but not runs from each other
-(§18b25's corollary, now in the guide). The job logs are auth-gated, so the
-first failing assertion is UNOBSERVED — the concurrency is the observed
-fact. Fixed: the integration job carries a repo-wide `concurrency` group
-(queue, never cancel the running one). **The live test PASSED, observed:
-both `e43c261` runs (dev 33532029205, master 33532033169) completed
-SUCCESS under the exact push pattern that broke `cf35f51`.** The final
-docs-only commit recording this rides the now-proven serialization; the
-next session's ritual reads its runs as a formality.
+1. **Ritual:** this file, `check:handoff`, `git status`. Expect the
+   local-vs-origin/dev gap unless Jeff pushed after this was written.
+2. **Push the local batch** (Jeff's call), then CI + deploy markers —
+   the pattern is proven twice this session.
+3. **The prod ship decision**: `master` fast-forward when Jeff has lived
+   with the request flow on dev. Remember prod REPS LOSE DIRECT
+   CLAIMING the moment it lands — that is the designed behavior.
+4. **The two-minute signed-in prod eyeball** — carried from 1 Sep,
+   unchanged (prod has not moved).
+5. After the next `netlify dev` restart: re-probe `documents` (expect
+   401) — the last unverified inch of the R2 dependency fix.
+6. Smaller carried: the `+'T12:00:00'` date-pattern audit (a spawned
+   background-task chip exists); the Security health PAGE click-through
+   as Admin (list dots and rail are observed; the page itself renders
+   from the same map); rep-role — the opportunities Manager
+   `managedReps` branch stays name-based by documented intent (Phase-2
+   id migration); picker-format replication as surfaces get touched.
+7. Session quirks worth knowing: PowerShell 5.1 mangled a here-string
+   commit message containing double quotes (use multiple `-m`);
+   `mutate-import` must never be invoked twice in one command nor piped
+   through `Select-Object -First` (it kills the harness mid-mutation —
+   leftover mutations in the tree, twice, both caught by `git status`).
 
-## 4. Next — start here
+## 6. The thread
 
-1. **Ritual:** this file, `check:handoff`, `git status`. Expect a clean
-   tree with `dev` and `master` both at the shipped batch.
-2. **The two-minute signed-in PROD eyeball** — the only unshipped
-   verification: Leads tab as the UKG/prod perspective, Mine/All counts
-   sane, no visible regression. (Both deploys are already
-   marker-verified as serving today's head; this is the human pass.)
-3. *(Shipped at session close: dev push, per-job CI, master FF, prod
-   deploy verification — see §3.)*
-4. **Reported at close, NOT diagnosed: "Auto-assign all doesn't seem to
-   work"** (no repro details captured; the button is Admin/Manager-only as
-   of `5551b20`, so the report is about that path). Read the click path
-   before diagnosing. FIRST RULE-OUT — an open question, not a cause: the
-   pool follows the Mine/All scope, and strict Mine EMPTIES the unassigned
-   pool by construction, so `unassigned.length === 0` hits the silent
-   early return and the click does nothing with no feedback. If that is
-   the whole story it merges into the Distribute-in-Mine UX decision; if
-   not, read `l.raw?.id || l.id` and the per-lead `saveLead` fan-out.
-   Detail in §0.57's third addendum.
-5. **Two queued product decisions for Jeff**, no code until called:
-   whether a rep may assign an unassigned lead to ANOTHER rep through the
-   picker (the server currently permits it — same rule that lets reps
-   claim), and the Distribute-in-Mine UX question (strict Mine zeroes its
-   pool — sharpened by item 4).
-6. **The SettingsTab cleanup pass** is the top queued code item: the
-   non-writer autosave 403 toast (seen twice today), audit actor
-   attribution, the UNREAD Reconcile button, the Security card.
-7. Then: the "NaNyr ago" date bug · picker-format replication to other
-   person-selects (as surfaces get touched, per Jeff's call) · API-key PUT
-   reachability (read the API auth path before claiming) · rep-role GET
-   coverage for the four §0.48 endpoints · carried: `documents.mjs` local
-   500, dev-org role drift, static-landing flash.
-
-## 5. The thread
-
-The audit that started as "check this endpoint's PUT" two sessions ago
-closed today at four-for-four — pattern, hold-closed set, and test
-namespaces all reused, which is what a rule becoming infrastructure looks
-like. The scanner told the same story in miniature: taught one new shape,
-it immediately surfaced two defects nobody suspected — a checker's blind
-spot reads as a clean bill until the checker learns the shape, the seventh
-gate's lesson again. And the first rep-path pass in the product's history
-did what first passes do: it found a designed behavior nobody had examined
-from the rep's chair and turned it into a product decision within minutes,
-then found a management-only button offered to a rep — the class of thing
-no gate sees, because it is not a defect in any line, only in who is
-standing in front of it. Observed, then written, then committed, all day,
-in that order.
+A session that started as "continue the queue" turned into the request
+flow shipping whole: seven batches, each one verified before the next,
+with Jeff running the two-chair pass after every UX change and finding
+something real each time — the pool with no way in, the phantom delete,
+the stretched button, the dead function eating his clicks. The pattern
+that held all day: read before writing, probe before diagnosing, pin
+every closed question with a test that would catch its reopening. Four
+long-standing open questions died today — the §0.53 toast, the §0.54
+audit actor, the §0.56 API keys, the dev-org drift — and none of them
+died by assumption: each closure names the evidence, and three of them
+now have suites that fail if the answer ever changes. Observed, then
+written, then committed, all day, in that order.
