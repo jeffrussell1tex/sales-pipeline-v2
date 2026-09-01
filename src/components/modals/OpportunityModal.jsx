@@ -190,7 +190,7 @@ const RailLabel = ({ children, color, action, onAction }) => (
 );
 
 // Band date for the closed-deal outcome strip
-const fmtBandDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+const fmtBandDate = (d) => parseLocalDate(d)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '';
 
 // Chevron stage ribbon
 const StageRibbon = ({ allStages, current, onStage }) => {
@@ -255,11 +255,11 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
         opportunity.createdDate,
         ...oppActivities.map(a => a.date),
         ...stageHistory.map(h => h.date),
-    ].filter(Boolean).map(d => new Date(d + 'T12:00:00').getTime());
+    ].map(d => parseLocalDate(d)?.getTime()).filter(t => t != null);
     const minTs = allDates.length ? Math.min(...allDates) : Date.now();
     const maxTs = allDates.length ? Math.max(...allDates) : Date.now() + 86400000;
     const tspan = maxTs - minTs || 1;
-    const pct = (dateStr) => Math.max(2, Math.min(96, ((new Date(dateStr + 'T12:00:00').getTime() - minTs) / tspan) * 96 + 2));
+    const pct = (dateStr) => Math.max(2, Math.min(96, (((parseLocalDate(dateStr)?.getTime() ?? minTs) - minTs) / tspan) * 96 + 2));
 
     const byType = { Call: [], Email: [], Meeting: [], Demo: [], 'Proposal Sent': [], 'Follow-up': [], Other: [] };
     oppActivities.forEach(a => { const k = byType[a.type] ? a.type : 'Other'; byType[k].push(a); });
@@ -286,7 +286,9 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
     const oppContactNames = (opportunity.contacts || '').split(', ').filter(Boolean).map(c => c.split(' (')[0]);
     oppContactNames.forEach(n => { if (!contactEngagement[n]) contactEngagement[n] = { calls: 0, emails: 0, meetings: 0, last: null }; });
 
-    const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    // Timeline items fall back to a task's createdAt (an instant) when it has no due
+    // date; parseLocalDate reads both kinds and never yields "Invalid Date" (0.62).
+    const fmtDate = (d) => parseLocalDate(d)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) || '';
 
     // Merge activities + tasks into one history feed (newest first). Tasks linked to
     // this opp count alongside activities, matching the account/contact rollups.
@@ -515,7 +517,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
 // ─────────────────────────────────────────────────────────────
 function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, onUpdate, saving,
     selectedContacts, selectedContactIds, setSelectedContacts, setSelectedContactIds, handleChange }) {
-    const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+    const fmtDate = (d) => parseLocalDate(d)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '—';
     const [ctSearch, setCtSearch] = useState('');
     const [showCtSuggestions, setShowCtSuggestions] = useState(false);
 
@@ -904,7 +906,7 @@ function RightRail({ opportunity, oppActivities, contacts, settings, onOpenActiv
     const actIconMap = { Call: 'phone', Email: 'mail', Meeting: 'meeting', Demo: 'meeting', 'Proposal Sent': 'doc', 'Follow-up': 'phone', Other: 'doc', stage: 'layers' };
     const actColorMap = { Call: T.info, Email: T.inkMid, Meeting: T.ok, Demo: T.ok, 'Proposal Sent': T.goldInk, 'Follow-up': T.info, Other: T.inkMuted, stage: T.goldInk };
 
-    const fmtDateShort = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    const fmtDateShort = (d) => parseLocalDate(d)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) || '';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>

@@ -1412,6 +1412,41 @@ and the CSV import with a `9/15/2026` close date (Admin, needs a file upload
 the pane cannot do). The pass ran on the post-deletion tree: the app booted
 with the ten components gone.
 
+### 0.62 Jeff's verification finds the label beside the sort, and a task no list can show (1 Sep, third session, continued)
+
+**Jeff ran check (a) on dev:** a task with no due date on ZZTest Alpha
+Renewal, then the History tab. The timeline SORTED — and the label beside the
+task read **"Invalid Date"**. Batch 1 fixed the sort at the bottom of the
+timeline builder and not the `fmtDate` helper twenty lines above it, which
+still appended noon to whatever the item carried; for a dateless task that is
+`createdAt`, an instant. The exact defect class §18b26 describes, one helper
+away from the fix that named it. Now every date-label helper in
+`OpportunityModal` (`fmtBandDate`, both `fmtDate`s, `fmtDateShort`) and the
+timeline band (`allDates`, `pct`) read through `parseLocalDate`; the other
+three helpers only ever received activity dates and were safe, but unguarded.
+Nine `+'T12:00:00'` sites remain in the file, all on date-only columns
+(`createdDate`, `stageChangedDate`, activity dates). Gates green, **317/317**,
+**105/105, printed green baseline**, build guard OK. Lesson for the guide, not
+yet written: when a fix names a fallback chain, grep the FILE for every other
+reader of the same value before calling it fixed.
+
+**Found by the same check: a task with no due date is invisible on the Tasks
+tab.** The list view buckets open tasks into overdue / today / upcoming, all
+keyed on `dueDate`; a dateless task matches none and is rendered nowhere
+("Caught up. Nothing due." while the task exists and shows on the deal). The
+Calendar view has an "Unscheduled" rail, but that is for tasks without a TIME,
+not without a date. Pre-existing, not a regression; the form allows saving
+without a due date, so the state is reachable. **Product decision, Jeff's:**
+a "No due date" section in the list (the natural fix), or require a due date
+on the form. Recorded, not changed.
+
+**Also reported by Jeff, pre-existing:** the profile panel's header row
+overflows its 420px width when the Clerk org switcher renders a long org
+name for a two-org account ("Dispatch Demo Group"), pushing Sign out off the
+right edge behind a horizontal scrollbar. `AppHeader.jsx`, untouched since the
+email-signature commit. Fix designed (let the header row wrap; `minWidth: 0` on
+the identity block), applied when Jeff says go.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
