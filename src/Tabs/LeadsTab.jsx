@@ -220,8 +220,14 @@ const RepPickerPopover = ({ reps, anchor, onPick, onClose }) => {
 };
 
 // ── Right rail panels ─────────────────────────────────────────
+// `leads` here is the ORG-WIDE list (allLeads), never the scope-filtered one.
+// The panel is a management surface: strict Mine contains no unassigned rows by
+// construction, so feeding it the scoped list made "Auto-assign all" a silent
+// no-op in Mine — the reported "does nothing" of 1 Sep. Jeff's call: the pool,
+// the count, and the load bars ignore the Mine/All toggle.
 const DistributePanel = ({ leads, reps, onSaveLead, canDistribute }) => {
-    const unassigned = leads.filter(l => !l.ownerId).length;
+    const pool = leads.filter(l => !l.ownerId);
+    const unassigned = pool.length;
     // Load bars key on ownerId, never the display name (§18b22): a stale
     // assignedTo string on an owner-less row is not load, and two reps sharing
     // a name must not pool their counts.
@@ -249,11 +255,15 @@ const DistributePanel = ({ leads, reps, onSaveLead, canDistribute }) => {
                 that is how claiming works), which is exactly why the button
                 must not exist for them: one click scatters the whole pool.
                 Found by Karen's rep-path pass, 1 Sep. */}
-            {canDistribute && (
-            <button onClick={() => {
-                const unassigned = leads.filter(l => !l.ownerId);
-                if (unassigned.length === 0 || reps.length === 0) return;
-                unassigned.forEach((l, i) => {
+            {canDistribute && (() => {
+                // Disabled with a visible reason instead of the old silent early
+                // return — a dead-looking button with no feedback is how the
+                // "Auto-assign all does nothing" report happened.
+                const empty = pool.length === 0 || reps.length === 0;
+                return (<>
+            <button disabled={empty} onClick={() => {
+                if (pool.length === 0 || reps.length === 0) return;
+                pool.forEach((l, i) => {
                     const rep = reps[i % reps.length];
                     // Auto-assign via parent saveLead passed through props
                     // Name-keyed payload on purpose: the server resolves the
@@ -261,10 +271,16 @@ const DistributePanel = ({ leads, reps, onSaveLead, canDistribute }) => {
                     // with a 409 rather than guessing.
                     if (onSaveLead) onSaveLead(l.raw?.id || l.id, { assignedTo: rep.name, assignee: rep.name });
                 });
-            }} style={{ marginTop:10, width:'100%', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+            }} style={{ marginTop:10, width:'100%', background: empty ? T.surface2 : T.ink, color: empty ? T.inkMuted : T.surface, border: empty ? `1px solid ${T.border}` : 'none', borderRadius:T.r, padding:'7px 12px', fontSize:12, fontWeight:600, cursor: empty ? 'default' : 'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
                 Auto-assign all
             </button>
+            {empty && (
+                <div style={{ marginTop:6, fontSize:11, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans, textAlign:'center' }}>
+                    {reps.length === 0 ? 'No reps in the roster.' : 'No unassigned leads in the organization.'}
+                </div>
             )}
+                </>);
+            })()}
         </div>
     );
 };
@@ -351,7 +367,7 @@ const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
     );
 };
 
-const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute }) => {
+const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute }) => {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
@@ -526,7 +542,8 @@ const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, 
 
                 {/* Right rail */}
                 <div style={{ width:260, flexShrink:0, display:'flex', flexDirection:'column', gap:12, overflow:'auto' }}>
-                    <DistributePanel leads={leads} reps={reps} onSaveLead={saveLead} canDistribute={canDistribute}/>
+                    {/* Org-wide list on purpose — see the comment on DistributePanel. */}
+                    <DistributePanel leads={allLeads} reps={reps} onSaveLead={saveLead} canDistribute={canDistribute}/>
                     <LeadSourcesPanel leads={leads}/>
                 </div>
             </div>
@@ -805,8 +822,11 @@ export default function LeadsTab() {
     }, []);
 
     // Normalise real DB leads to design field names, then scope. One edit at
-    // the source: both views, the Distribute panel, the source panel and the
-    // subtitle counts all follow the scope with zero downstream edits.
+    // the source: both views, the source panel and the subtitle counts all
+    // follow the scope with zero downstream edits. The Distribute panel is the
+    // deliberate EXCEPTION — it receives allLeads (see its comment): strict
+    // Mine zeroes the unassigned pool by construction, which made Auto-assign
+    // all a silent no-op in Mine (Jeff's call, 1 Sep).
     const allLeads = useMemo(() => (rawLeads || []).map(norm), [rawLeads]);
     const leads = useMemo(() => scope === 'mine'
         ? allLeads.filter(l => !!l.ownerId && l.ownerId === currentUserId)
@@ -929,6 +949,7 @@ export default function LeadsTab() {
                 {tab === 'triage' && (
                     <TriageView
                         leads={leads}
+                        allLeads={allLeads}
                         reps={reps}
                         onOpenLead={openInCockpit}
                         setLeads={setLeads}

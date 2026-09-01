@@ -732,6 +732,55 @@ question, now with teeth. If it is NOT the story, the candidates in the
 click path are `l.raw?.id || l.id` (the scoped rows are norm()-mapped) and
 the per-lead `saveLead` fan-out — read, do not guess.
 
+### 0.58 The Distribute panel goes org-wide, and assignment becomes a managed action (2 Sep)
+
+**The "Auto-assign all does nothing" report is DIAGNOSED, by reading — the
+§0.57 rule-out was the whole story.** The click path has exactly one silent
+exit: `unassigned.length === 0 || reps.length === 0` returns with no
+feedback, and the panel received the SCOPE-FILTERED list, whose Mine branch
+is `!!l.ownerId && l.ownerId === currentUserId` — an unassigned pool empty
+BY CONSTRUCTION. The two named suspects were ruled out in the same reading:
+`norm()` keeps `id` and `raw` pointing at the same DB row, so
+`l.raw?.id || l.id` cannot diverge, and the `saveLead` fan-out reverts WITH
+a visible error toast on any rejected write — in All scope there is no
+silent path at all. Scope persistence (`tab:leads:scope` in localStorage)
+is what armed it: an Admin who last left the tab in Mine keeps a
+dead-looking button across sessions.
+
+**Jeff's three calls (2 Sep, start of session):**
+
+1. **The Distribute panel is a management surface and ignores the Mine/All
+   toggle.** It now receives `allLeads` (the un-scoped list) — pool count,
+   load bars, and Auto-assign all are org-wide regardless of scope. The
+   scoped-list comment at the `leads` memo names the panel as the
+   deliberate exception. The button also DISABLES with a visible reason
+   ("No unassigned leads in the organization." / "No reps in the roster.")
+   when the pool or roster is genuinely empty — the silent early return
+   stays as a belt-and-braces guard but can no longer be reached by a
+   normal click, and a dead button now says why it is dead.
+2. **Lead assignment is Manager/Admin-only — reps do not assign at all,
+   not even to themselves.** The §0.57 standing question is answered in the
+   stricter direction: the rep-claims-by-editing-unassigned-rows rule is
+   retired for the OWNERSHIP field specifically (reps may still edit
+   unassigned rows otherwise, and still see them per the §0.53 policy
+   toggle). In its place, a REQUEST flow: a rep requests an unassigned
+   lead; a Manager/Admin approves (assigning the lead to the requester) or
+   denies. Server enforcement plus schema/endpoint/UI land in the batches
+   after this one — this entry records the decision.
+3. The two-minute signed-in prod eyeball: Jeff runs it himself; result to
+   be recorded when reported.
+
+**Batch 1 shipped (this entry):** `DistributePanel` reads `allLeads`
+(threaded as a new prop through TriageView), computes the pool once, and
+renders the disabled-with-reason state. Client-only; no schema change; no
+endpoint change. The `{canDistribute && (` gate and its §0.57 pins are
+untouched (the source assertion still matches exactly once). Verified:
+five static gates green, build 2,468 kB with bundle guard OK and `dist/`
+cleared after (§19), **289/289 unit**, **43/43 integration**, **91/91
+mutations, printed green baseline**. Browser pass for the batch is queued
+with the rest of this session's UI work — one rep-path pass as Karen after
+the request-flow UI lands, covering all of it.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
