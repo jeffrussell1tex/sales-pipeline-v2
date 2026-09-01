@@ -108,20 +108,24 @@ Seven gates green — the dbfetch gate carries THREE classes, 0 across `src/`
 · **289/289 unit** · **43/43 integration** (run with the §0.56 batch;
 endpoints untouched since) · **91/91 mutations, printed green baseline** ·
 build 2,468 kB, bundle guard OK, `dist/` cleared after every local gate
-build · rep-path browser pass COMPLETE (above) · **NOTHING from 1 Sep is
-pushed** — `origin/dev` and `master` both sit at `da538b1` (31 Aug docs);
-today's eight commits are local only.
+build · rep-path browser pass COMPLETE (above) · **SHIPPED end of session
+(Jeff's "do it all")**: `dev` pushed, CI three-jobs green on `860acfd`;
+`master` fast-forwarded `da538b1` → `860acfd` and pushed, CI run green;
+BOTH deploys verified serving today's head (new bundle hash, the picker's
+"No reps in the roster" marker, relative sign-in link) on
+accelerep.netlify.app AND salespipelinetracker.com. The two-minute signed-in
+prod eyeball was NOT performed — queued, not implied.
 
 ## 4. Next — start here
 
 1. **Ritual:** this file, `check:handoff`, `git status`. Expect a clean
-   tree at `5551b20` (or later doc commits).
-2. **Push `dev` and read the Actions run PER-JOB** (gates/unit/integration
-   — the run badge alone lied for days, §0.55). Then the dev smoke on
-   `accelerep.netlify.app`.
-3. **`master` fast-forward when Jeff calls it** — today's batch includes
-   endpoint fixes, client fixes, the picker, Mine-strict, and the
-   Auto-assign gate; it deserves the dev smoke first.
+   tree with `dev` and `master` both at the shipped batch.
+2. **The two-minute signed-in PROD eyeball** — the only unshipped
+   verification: Leads tab as the UKG/prod perspective, Mine/All counts
+   sane, no visible regression. (Both deploys are already
+   marker-verified as serving today's head; this is the human pass.)
+3. *(Shipped at session close: dev push, per-job CI, master FF, prod
+   deploy verification — see §3.)*
 4. **Reported at close, NOT diagnosed: "Auto-assign all doesn't seem to
    work"** (no repro details captured; the button is Admin/Manager-only as
    of `5551b20`, so the report is about that path). Read the click path
