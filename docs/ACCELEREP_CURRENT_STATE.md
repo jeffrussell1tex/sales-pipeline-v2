@@ -1390,6 +1390,28 @@ token"}`** — loaded, parsed, gated — where the previous server had thrown
 `Cannot find module '@aws-sdk/client-s3'`. Sibling `leads` 401 as the
 control. The §0.59 R2 dependency fix is verified on both sides now.
 
+**Browser pass, Karen on localhost (pane-driven, 17:13 CDT — UTC still Sep 1,
+so the 7pm rollover the sweep targets was NOT active; the zone edge is held by
+the Chicago/Tokyo child processes in `date-local.test.mjs`, the pass verifies
+rendering).** OBSERVED: Home "Tuesday, Sep 1"; Tasks header "TODAY IS TUE, SEP
+1" and the calendar week strip Sun 30 → Sat 5 with Tue 1 as today (the swept
+`isoLocal` day keys); Pipeline list quarter groups "Q4 2026 · CURRENT · Jul 1 –
+Sep 30" (`todayLocal` → `quarterOf`); the deal modal "DEAL AGE 106d · IN STAGE
+11d"; Reports → Leads **"AVG SPEED-TO-LEAD 157d · create → first touch"** — the
+§0.60 `parseLocalDate` path over `firstTouchDate`, a number where the varchar(30)
+read was unguarded — and "LEAD → OPP VELOCITY —" as the honest no-conversions
+empty state; Reports → Performance "SALES CYCLE 167d"; zero `NaN`, zero `Invalid
+Date`, zero console errors across Home, Tasks, Pipeline, Reports (the only
+console errors were the pre-sign-in 401s). NOT OBSERVED, handed to Jeff on his
+own screen: the deal modal's History timeline (the modal is wider than the
+Browser pane and its tab row sits off-canvas; clicks at the computed position
+did not switch tabs — a pane-width limitation, not a product defect; no task
+without a due date exists in either Karen org, so the fixed sort branch needs
+one created first), the coaching-note date (SalesManagerTab, Admin/Manager),
+and the CSV import with a `9/15/2026` close date (Admin, needs a file upload
+the pane cannot do). The pass ran on the post-deletion tree: the app booted
+with the ten components gone.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
