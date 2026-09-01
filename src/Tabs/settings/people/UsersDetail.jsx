@@ -390,7 +390,7 @@ const UsersImportPage = ({ settings, onBack, onUsers }) => {
     );
 };
 
-const UsersExportPage = ({ settings, onBack, onUsers }) => {
+const UsersExportPage = ({ settings, onBack, onUsers, mfaByEmail }) => {
     const users = settings.users || [];
     const [format, setFormat] = useState('CSV');
     const [statusFilter, setStatusFilter] = useState('All');
@@ -422,7 +422,9 @@ const UsersExportPage = ({ settings, onBack, onUsers }) => {
                 if (f === 'Manager') return `"${u.manager||''}"`;
                 if (f === 'Territory') return `"${u.territory||''}"`;
                 if (f === 'Status') return '"Active"';
-                if (f === 'MFA') return `"${u.smsNotifications?.enabled ? 'On' : 'Off'}"`;
+                // Live from Clerk (§0.59) — was smsNotifications.enabled, a
+                // notification preference exported as a security fact.
+                if (f === 'MFA') { const v = mfaByEmail?.get((u.email || '').toLowerCase()); return `"${v === true ? 'On' : v === false ? 'Off' : 'Unknown'}"`; }
                 return '""';
             }).join(','));
             const csv = [header, ...rows].join('\n');
@@ -768,63 +770,83 @@ const UsersSeatPage = ({ settings, onBack, onUsers }) => {
     );
 };
 
-const UsersSecurityPage = ({ settings, onBack, onUsers }) => {
-    const users = settings.users || [];
-    const active = users.filter(u => u.name);
+const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData }) => {
+    // Everything on this page is REAL or says it is unknown (§0.59). The
+    // first version derived "MFA" from smsNotifications.enabled — a
+    // notification preference standing in for a security fact — hardcoded
+    // SSO/session-policy/stale tiles, rendered four fabricated audit events
+    // with demo names, and offered four buttons wired to nothing. A security
+    // page whose signals are invented is worse than no page: it certifies.
+    const loading     = mfaData === null;
+    const enrolled    = mfaData?.enrolled ?? 0;
+    const total       = mfaData?.total ?? 0;
+    const notEnrolled = mfaData?.notEnrolled ?? [];
+    const score       = total > 0 ? Math.round(enrolled / total * 100) : null;
+    const scoreColor  = score === null ? T.border : score >= 80 ? T.ok : score >= 60 ? T.warn : T.danger;
 
-    // Derive security signals from available user data
-    const noMfa  = active.filter(u => u.smsNotifications && !u.smsNotifications.enabled);
-    const stale  = active.filter(u => {
-        if (!u.lastLoginAt) return false;
-        const days = (Date.now() - new Date(u.lastLoginAt).getTime()) / 86400000;
-        return days > 30;
-    });
-
-    const mfaOn  = active.length - noMfa.length;
-    const score  = Math.round(70 + (mfaOn / Math.max(active.length, 1)) * 20 + (stale.length === 0 ? 10 : 0));
-    const scoreColor = score >= 80 ? T.ok : score >= 60 ? T.warn : T.danger;
-
-    const recentEvents = [
-        { when:'2h ago',    actor:'System',        event:'MFA enforcement reminder sent to 4 users',         severity:'info' },
-        { when:'Yesterday', actor:'Morgan Reyes',  event:'New user invited — Anika Bose',                    severity:'info' },
-        { when:'2 days ago',actor:'System',        event:'Session policy enforced — 3 sessions expired',     severity:'low'  },
-        { when:'4 days ago',actor:'Morgan Reyes',  event:'Role changed: Ravi Bhatt → Customer Success',      severity:'info' },
-    ];
-    const sevColor = { info:T.info, low:T.ok, medium:T.warn, high:T.danger };
+    // Real security-relevant audit entries — the same trail AuditDetail
+    // renders, narrowed to identity/config actions.
+    const [events, setEvents] = React.useState(null);
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await dbFetch('/.netlify/functions/audit-log');
+                if (!res.ok) return;               // section shows its empty state
+                const d = await res.json();
+                if (cancelled) return;
+                setEvents((d.entries || [])
+                    .filter(e => /^user\.|^settings\.|apikey/.test(e.action || ''))
+                    .slice(0, 8));
+            } catch (e) { /* empty state */ }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+    const relWhen = (ts) => {
+        if (!ts) return '—';
+        const mins = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+        if (mins < 60)   return mins <= 1 ? 'just now' : `${mins}m ago`;
+        if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
+        return `${Math.floor(mins / 1440)}d ago`;
+    };
 
     return (
         <div style={{ fontFamily:T.sans }}>
             <PeopleCrumb onBack={onBack} onUsers={onUsers} leaf="Security health" />
             <PeoplePageHeader
                 title="Security health"
-                subtitle="Workspace security posture across MFA, sessions, and access."
-                statusDetail={`Score: ${score} · ${score >= 80 ? 'Good' : score >= 60 ? 'Fair' : 'Needs attention'}`}
-                rightActions={<>
-                    <PeopleSecBtn>Run audit now</PeopleSecBtn>
-                    <PeoplePriBtn onClick={() => {}}>Enforce MFA</PeoplePriBtn>
-                </>}
+                subtitle="MFA enrollment live from Clerk · events from the audit log."
+                statusDetail={loading ? 'Loading…' : `MFA ${enrolled}/${total} enrolled${score !== null ? ` · ${score}%` : ''}`}
+                rightActions={
+                    <PeopleSecBtn onClick={() => window.open('https://dashboard.clerk.com', '_blank', 'noopener')}>
+                        MFA policy — managed in Clerk ↗
+                    </PeopleSecBtn>
+                }
             />
 
-            <SectionCard title="Security score" description="Weighted across enrollment, session policy, and recent incidents.">
+            <SectionCard title="MFA enrollment" description="Second-factor enrollment across the workspace, live from Clerk.">
                 <div style={{ display:'grid', gridTemplateColumns:'140px 1fr', gap:24, alignItems:'center' }}>
-                    {/* Score ring */}
+                    {/* Enrollment ring */}
                     <div style={{ position:'relative', width:120, height:120, margin:'0 auto' }}>
                         <svg viewBox="0 0 100 100" style={{ width:'100%', height:'100%', transform:'rotate(-90deg)' }}>
                             <circle cx="50" cy="50" r="42" fill="none" stroke={T.border} strokeWidth="10"/>
                             <circle cx="50" cy="50" r="42" fill="none" stroke={scoreColor} strokeWidth="10"
-                                strokeDasharray={`${(score/100)*264} 264`} strokeLinecap="round"/>
+                                strokeDasharray={`${((score ?? 0)/100)*264} 264`} strokeLinecap="round"/>
                         </svg>
                         <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column' }}>
-                            <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:32, color:T.ink, lineHeight:1 }}>{score}</span>
-                            <span style={{ fontSize:10, color:scoreColor, fontWeight:700, marginTop:2 }}>{score >= 80 ? 'GOOD' : score >= 60 ? 'FAIR' : 'POOR'}</span>
+                            <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:32, color:T.ink, lineHeight:1 }}>{score === null ? '—' : `${score}%`}</span>
+                            <span style={{ fontSize:10, color:scoreColor, fontWeight:700, marginTop:2 }}>{score === null ? (loading ? 'LOADING' : 'UNKNOWN') : 'ENROLLED'}</span>
                         </div>
                     </div>
+                    {/* Only what Clerk actually tells us. SSO state, session
+                        policy and password ages live in the Clerk dashboard —
+                        the old tiles hardcoded them ("Okta configured", "12h")
+                        for every org. */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                         {[
-                            { label:'MFA Enrollment', value:`${mfaOn}/${active.length}`, sub:`${active.length - mfaOn} off`, color: noMfa.length > 0 ? T.warn : T.ok },
-                            { label:'SSO',            value:'On',  sub:'Okta configured', color:T.ok },
-                            { label:'Session policy', value:'12h', sub:'matches recommended', color:T.ok },
-                            { label:'Stale sessions', value:`${stale.length}`, sub:'> 30d', color: stale.length > 0 ? T.warn : T.ok },
+                            { label:'MFA enrolled',     value: loading ? '…' : `${enrolled}/${total}`, sub:'live from Clerk', color: notEnrolled.length > 0 ? T.warn : T.ok },
+                            { label:'Not enrolled',     value: loading ? '…' : `${notEnrolled.length}`, sub: notEnrolled.length > 0 ? 'listed below' : 'nobody', color: notEnrolled.length > 0 ? T.warn : T.ok },
+                            { label:'SSO · sessions',   value:'Clerk', sub:'managed in the Clerk dashboard', color:T.inkMuted },
                         ].map((m,i) => (
                             <div key={i} style={{ padding:'10px 12px', background:T.bg, border:`1px solid ${T.border}`, borderLeft:`3px solid ${m.color}`, borderRadius:T.r }}>
                                 <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5, marginBottom:2 }}>{m.label}</div>
@@ -836,16 +858,15 @@ const UsersSecurityPage = ({ settings, onBack, onUsers }) => {
                 </div>
             </SectionCard>
 
-            {noMfa.length > 0 && (
-                <SectionCard title={`MFA not enabled (${noMfa.length})`} description="These active users haven't enrolled in MFA."
-                    headAction={<PeoplePriBtn onClick={() => {}}>Enforce on all</PeoplePriBtn>}>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 120px 120px 80px', gap:8, padding:'0 0 8px', borderBottom:`1px solid ${T.border}`, marginBottom:4 }}>
-                        {['USER','TEAM','LAST ACTIVE','',''].map((h,i) => (
+            {!loading && notEnrolled.length > 0 && (
+                <SectionCard title={`MFA not enabled (${notEnrolled.length})`} description="Clerk members without a second factor. Enrollment and enforcement happen in Clerk.">
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 140px 110px', gap:8, padding:'0 0 8px', borderBottom:`1px solid ${T.border}`, marginBottom:4 }}>
+                        {['USER','ROLE',''].map((h,i) => (
                             <div key={i} style={{ ...eb(T.inkMuted), fontSize:9.5 }}>{h}</div>
                         ))}
                     </div>
-                    {noMfa.map((u,i) => (
-                        <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 120px 120px 120px 80px', gap:8, alignItems:'center', padding:'9px 0', borderBottom: i<noMfa.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                    {notEnrolled.map((u,i) => (
+                        <div key={u.userId || i} style={{ display:'grid', gridTemplateColumns:'1fr 140px 110px', gap:8, alignItems:'center', padding:'9px 0', borderBottom: i<notEnrolled.length-1 ? `1px solid ${T.border}` : 'none' }}>
                             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                 <UserAvatar name={u.name} size={24}/>
                                 <div>
@@ -853,38 +874,42 @@ const UsersSecurityPage = ({ settings, onBack, onUsers }) => {
                                     <div style={{ fontSize:10.5, color:T.inkMuted }}>{u.email}</div>
                                 </div>
                             </div>
-                            <span style={{ fontSize:12, color:T.inkMid }}>{u.team || '—'}</span>
-                            <span style={{ fontSize:12, color:T.inkMid }}>—</span>
+                            <span style={{ fontSize:12, color:T.inkMid }}>{u.role || '—'}</span>
                             <span style={{ fontSize:11, color:T.warn }}>○ MFA off</span>
-                            <PeopleSecBtn onClick={() => {}}>Nudge</PeopleSecBtn>
                         </div>
                     ))}
-                    {noMfa.length === 0 && (
-                        <div style={{ padding:'24px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>All active users have MFA enabled. 🎉</div>
-                    )}
+                </SectionCard>
+            )}
+            {!loading && notEnrolled.length === 0 && total > 0 && (
+                <SectionCard title="MFA not enabled (0)" description="Clerk members without a second factor.">
+                    <div style={{ padding:'24px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Every Clerk member has MFA enabled.</div>
                 </SectionCard>
             )}
 
-            <SectionCard title="Recent security events" description="Audit-logged events from the last 30 days.">
-                <div style={{ display:'grid', gridTemplateColumns:'80px 120px 1fr 60px', gap:8, padding:'0 0 8px', borderBottom:`1px solid ${T.border}`, marginBottom:4 }}>
-                    {['WHEN','ACTOR','EVENT','SEV'].map((h,i) => (
+            <SectionCard title="Recent security events" description="Identity and configuration actions from the org's audit log.">
+                <div style={{ display:'grid', gridTemplateColumns:'80px 140px 1fr', gap:8, padding:'0 0 8px', borderBottom:`1px solid ${T.border}`, marginBottom:4 }}>
+                    {['WHEN','ACTOR','EVENT'].map((h,i) => (
                         <div key={i} style={{ ...eb(T.inkMuted), fontSize:9.5 }}>{h}</div>
                     ))}
                 </div>
-                {recentEvents.map((e,i) => (
-                    <div key={i} style={{ display:'grid', gridTemplateColumns:'80px 120px 1fr 60px', gap:8, alignItems:'center', padding:'9px 0', borderBottom: i<recentEvents.length-1 ? `1px solid ${T.border}` : 'none' }}>
-                        <span style={{ fontSize:11.5, color:T.inkMuted }}>{e.when}</span>
-                        <span style={{ fontSize:12, color:T.inkMid, fontWeight:600 }}>{e.actor}</span>
-                        <span style={{ fontSize:12.5, color:T.ink }}>{e.event}</span>
-                        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:T.r, fontSize:10.5, fontWeight:700, background:`${sevColor[e.severity]}18`, color:sevColor[e.severity] }}>● {e.severity}</span>
+                {(events || []).map((e,i) => (
+                    <div key={e.id || i} style={{ display:'grid', gridTemplateColumns:'80px 140px 1fr', gap:8, alignItems:'center', padding:'9px 0', borderBottom: i<events.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                        <span style={{ fontSize:11.5, color:T.inkMuted }}>{relWhen(e.timestamp)}</span>
+                        <span style={{ fontSize:12, color:T.inkMid, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.userName || e.userId || 'System'}</span>
+                        <span style={{ fontSize:12.5, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.action}{e.entityName ? ` — ${e.entityName}` : ''}</span>
                     </div>
                 ))}
+                {(!events || events.length === 0) && (
+                    <div style={{ padding:'18px', textAlign:'center', color:T.inkMuted, fontSize:12.5, fontStyle:'italic' }}>
+                        {events === null ? 'Loading…' : 'No identity or configuration events in the last 500 audit entries.'}
+                    </div>
+                )}
             </SectionCard>
         </div>
     );
 };
 
-const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
+const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     const { setSettings, showConfirm } = useApp();
     const [form, setForm]     = useState({ ...user });
     const [saving, setSaving] = useState(false);
@@ -1135,30 +1160,33 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
                         </div>
                     </SectionCard>
 
-                    {/* Security */}
-                    <SectionCard title="Security" description="Auth methods and active sessions.">
+                    {/* Security — real MFA from Clerk; everything the app
+                        cannot see says so. The first version hardcoded
+                        "MFA ● On", "SSO Okta Workforce", "Last password change
+                        3 months ago" and "2 sessions — macOS, iPhone" for
+                        EVERY user (§0.59). */}
+                    <SectionCard title="Security" description="MFA live from Clerk. Sessions, SSO and passwords are managed there.">
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                            {(() => {
+                                const v = mfaByEmail ? (mfaByEmail.get((user.email || '').toLowerCase()) ?? null) : null;
+                                return (
+                                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px', background:T.bg, borderRadius:T.r, border:`1px solid ${T.border}` }}>
+                                        <div>
+                                            <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>MFA</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted }}>{v === null ? 'Not linked in Clerk, or still loading' : 'Second factor'}</div>
+                                        </div>
+                                        {v === true  ? <span style={{ fontSize:11, fontWeight:700, color:T.ok }}>● On</span>
+                                        : v === false ? <span style={{ fontSize:11, fontWeight:700, color:T.warn }}>○ Off</span>
+                                        : <span style={{ fontSize:11, fontWeight:700, color:T.inkMuted }}>—</span>}
+                                    </div>
+                                );
+                            })()}
                             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px', background:T.bg, borderRadius:T.r, border:`1px solid ${T.border}` }}>
                                 <div>
-                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>MFA</div>
-                                    <div style={{ fontSize:11, color:T.inkMuted }}>Authenticator app</div>
+                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Sessions · SSO · password</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted }}>Managed in the Clerk dashboard</div>
                                 </div>
-                                <span style={{ fontSize:11, fontWeight:700, color:T.ok }}>● On</span>
-                            </div>
-                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px', background:T.bg, borderRadius:T.r, border:`1px solid ${T.border}` }}>
-                                <div>
-                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>SSO</div>
-                                    <div style={{ fontSize:11, color:T.inkMuted }}>Okta Workforce</div>
-                                </div>
-                                <span style={{ fontSize:11, fontWeight:700, color:T.ok }}>● On</span>
-                            </div>
-                            <div style={{ padding:'10px 12px', background:T.bg, borderRadius:T.r, border:`1px solid ${T.border}` }}>
-                                <div style={{ fontSize:11, color:T.inkMuted, marginBottom:2 }}>Last password change</div>
-                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>3 months ago</div>
-                            </div>
-                            <div style={{ padding:'10px 12px', background:T.bg, borderRadius:T.r, border:`1px solid ${T.border}` }}>
-                                <div style={{ fontSize:11, color:T.inkMuted, marginBottom:2 }}>Active sessions</div>
-                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>2 — macOS, iPhone</div>
+                                <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" style={{ fontSize:11, fontWeight:700, color:T.info, textDecoration:'none' }}>Open ↗</a>
                             </div>
                         </div>
                     </SectionCard>
@@ -1250,6 +1278,35 @@ export const UsersDetail = ({ settings, onBack }) => {
     const [drift,   setDrift]     = useState(null);   // { created, updated, dbOnly }
     const [userActionError, setUserActionError] = useState('');
 
+    // Real MFA enrollment from Clerk (§0.59). Every surface below used to
+    // derive "MFA" from smsNotifications.enabled — a notification PREFERENCE
+    // standing in for a security fact. One fetch here feeds the list dots,
+    // the chips, the seats rail, the export column, the Security page and the
+    // profile card. null = unknown (still loading, or the fetch failed) and
+    // renders as unknown — never guessed in either direction.
+    const [mfaData, setMfaData] = useState(null);
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await dbFetch('/.netlify/functions/clerk-mfa-status');
+                if (!res.ok) return;               // stays unknown
+                const d = await res.json();
+                if (!cancelled) setMfaData(d);
+            } catch (e) { /* stays unknown */ }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+    // Map(lower-cased email → true/false). An email in NEITHER list is not a
+    // Clerk member (e.g. a pending invite) — absent from the map, i.e. unknown.
+    const mfaByEmail = React.useMemo(() => {
+        if (!mfaData) return null;
+        const m = new Map();
+        (mfaData.enrolledUsers || []).forEach(u => { if (u.email) m.set(u.email.toLowerCase(), true); });
+        (mfaData.notEnrolled   || []).forEach(u => { if (u.email) m.set(u.email.toLowerCase(), false); });
+        return m;
+    }, [mfaData]);
+
     // Drift check on load. Clerk is authoritative for identity and role; this
     // table is a mirror, and they diverge quietly (an invite that never
     // completed, a role changed in the Clerk dashboard, a user removed there).
@@ -1296,11 +1353,11 @@ export const UsersDetail = ({ settings, onBack }) => {
     // Sub-page router
     if (peopleView === 'invite')   return <UsersInvitePage   settings={settings} onBack={onBack} onUsers={onUsers}/>;
     if (peopleView === 'import')   return <UsersImportPage   settings={settings} onBack={onBack} onUsers={onUsers}/>;
-    if (peopleView === 'export')   return <UsersExportPage   settings={settings} onBack={onBack} onUsers={onUsers}/>;
+    if (peopleView === 'export')   return <UsersExportPage   settings={settings} onBack={onBack} onUsers={onUsers} mfaByEmail={mfaByEmail}/>;
     if (peopleView === 'pending')  return <UsersPendingPage  settings={settings} onBack={onBack} onUsers={onUsers}/>;
     if (peopleView === 'seats')    return <UsersSeatPage     settings={settings} onBack={onBack} onUsers={onUsers}/>;
-    if (peopleView === 'security') return <UsersSecurityPage settings={settings} onBack={onBack} onUsers={onUsers}/>;
-    if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers}/>;
+    if (peopleView === 'security') return <UsersSecurityPage settings={settings} onBack={onBack} onUsers={onUsers} mfaData={mfaData}/>;
+    if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers} mfaByEmail={mfaByEmail}/>;
 
     // Map settings.users into the table display format
     const realUsers = (settings.users || []).filter(u => u.name && !u.id?.startsWith('pending_')).map(u => {
@@ -1316,7 +1373,9 @@ export const UsersDetail = ({ settings, onBack }) => {
             team: u.team || null,
             manager: u.manager || null,
             lastActive: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
-            mfa: !!(u.smsNotifications?.enabled),
+            // Tri-state from Clerk: true/false when known, null when unknown
+            // (fetch pending/failed, or not a Clerk member yet).
+            mfa: mfaByEmail ? (mfaByEmail.get((u.email || '').toLowerCase()) ?? null) : null,
             status,
             _raw: u,
         };
@@ -1341,13 +1400,13 @@ export const UsersDetail = ({ settings, onBack }) => {
         { key:'Active',     label:`Active · ${displayUsers.filter(u=>u.status==='Active').length}` },
         { key:'Invited',    label:`Pending · ${displayUsers.filter(u=>u.status==='Invited').length}` },
         { key:'Deactivated',label:`Deactivated · ${displayUsers.filter(u=>u.status==='Deactivated').length}` },
-        { key:'MFA off',    label:`MFA off · ${displayUsers.filter(u=>!u.mfa && u.status==='Active').length}` },
+        { key:'MFA off',    label:`MFA off · ${displayUsers.filter(u=>u.mfa === false && u.status==='Active').length}` },
     ];
 
     const visible = displayUsers.filter(u => {
         if (filter === 'Active'     && u.status !== 'Active')  return false;
         if (filter === 'Invited'    && u.status !== 'Invited') return false;
-        if (filter === 'MFA off'    && u.mfa)                  return false;
+        if (filter === 'MFA off'    && u.mfa !== false)        return false;   // unknown is not "off"
         if (filter === 'Deactivated'&& u.status !== 'Deactivated') return false;
         const q = search.toLowerCase();
         return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.team||'').toLowerCase().includes(q);
@@ -1491,10 +1550,12 @@ export const UsersDetail = ({ settings, onBack }) => {
                                 <div style={{ fontSize:12.5, color:T.inkMid }}>{u.manager || '—'}</div>
                                 {/* Last active */}
                                 <div style={{ fontSize:12, color: isStale(u.lastActive) ? T.warn : T.inkMid }}>{u.lastActive || '—'}</div>
-                                {/* MFA */}
+                                {/* MFA — live from Clerk; dim dash = unknown */}
                                 <div style={{ textAlign:'center' }}>
                                     {u.status === 'Active'
-                                        ? u.mfa ? <span style={{ color:T.ok, fontSize:14 }}>●</span> : <span style={{ color:T.border, fontSize:14 }}>○</span>
+                                        ? u.mfa === true  ? <span title="MFA enrolled" style={{ color:T.ok, fontSize:14 }}>●</span>
+                                        : u.mfa === false ? <span title="MFA not enrolled" style={{ color:T.warn, fontSize:14 }}>○</span>
+                                        : <span title="Unknown — loading, or not linked in Clerk" style={{ color:T.border, fontSize:12 }}>—</span>
                                         : <span style={{ color:T.border, fontSize:12 }}>—</span>}
                                 </div>
                                 {/* Status */}
@@ -1516,9 +1577,11 @@ export const UsersDetail = ({ settings, onBack }) => {
                                             style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>
                                             {[
                                                 { label:'View profile', action: () => { setViewingUser(u._raw || u); setPeopleView('profile'); setOpenUserKebab(null); } },
-                                                { label:'Reset password', action: () => { setOpenUserKebab(null); /* Clerk handles via email */ } },
-                                                u.status === 'Active' && { label:'Enforce MFA', action: () => { setOpenUserKebab(null); } },
-                                                u.status === 'Invited' && { label:'Resend invite', action: () => { setOpenUserKebab(null); } },
+                                                // 'Reset password', 'Enforce MFA' and 'Resend invite' were
+                                                // close-only no-ops — controls that promise an action and do
+                                                // nothing (§0.59, the dead-control sweep). Passwords, MFA
+                                                // policy and invite emails are Clerk's; restore these only
+                                                // wired to real Clerk Backend calls.
                                                 // Deactivate = reversible; keeps the row and its history.
                                                 u.active !== false && { label:'Deactivate', action: () => {
                                                     setOpenUserKebab(null);
@@ -1578,10 +1641,9 @@ export const UsersDetail = ({ settings, onBack }) => {
                     const adminCount   = displayUsers.filter(u => u.status==='Active' && u.role==='Admin').length;
                     const pendingCount = invitedCount.length;
 
-                    // MFA — real users: derived from smsNotifications.enabled as proxy;
-                    // for real Clerk MFA, this field would come from the /users endpoint
-                    const mfaOn  = displayUsers.filter(u => u.status==='Active' && u.mfa).length;
-                    const mfaOff = activeCount - mfaOn;
+                    // MFA — live from Clerk (tri-state; unknown counts neither way)
+                    const mfaOn  = displayUsers.filter(u => u.status==='Active' && u.mfa === true).length;
+                    const mfaOff = displayUsers.filter(u => u.status==='Active' && u.mfa === false).length;
 
                     return (
                         <div style={{ display:'flex', flexDirection:'column', gap:14, position:'sticky', top:0 }}>

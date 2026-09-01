@@ -1040,6 +1040,40 @@ gates green, build + `dist/` cleared, **298/298 unit**, **67/67
 integration**, **98/98 mutations, printed green baseline**. Still queued
 from §0.54: the Security surfaces are DEMO-WARE — next entry.
 
+**The Security surfaces are de-fabricated.** What the §0.54 "profile
+Security card contradicts the list view" note turned out to cover: the
+People surfaces derived "MFA" from `smsNotifications.enabled` — a
+notification PREFERENCE exported, filtered, and scored as a security
+fact — while the profile card hardcoded `MFA ● On`, `SSO Okta
+Workforce ● On`, "Last password change 3 months ago" and "2 sessions —
+macOS, iPhone" for EVERY user, the Security page rendered four
+fabricated audit events with demo names ("Morgan Reyes") and a score
+formula seeded at 70, and SEVEN controls did nothing (Run audit now,
+Enforce MFA ×2, Nudge, and the kebab's Reset password / Enforce MFA /
+Resend invite). Meanwhile `clerk-mfa-status.mjs` — real, Admin-gated,
+live Clerk enrollment — was consumed by exactly one surface (the
+security section's MfaDetail, which is the honest model this batch
+copies). Now: the endpoint additionally returns `enrolledUsers`
+(additive) so absence from BOTH lists is distinguishable as
+not-a-Clerk-member; `UsersDetail` fetches it ONCE and derives a
+tri-state `mfaByEmail` map (true/false/null-unknown) feeding the list
+dots (●/○/dim-dash with titles), the "MFA off" chip and filter (unknown
+is NOT "off"), the seats-rail counts, the CSV export column
+(On/Off/Unknown), the profile card (real per-user MFA + one
+"managed in Clerk" link tile replacing the three fabrications), and the
+rebuilt Security page — enrollment ring (percentage or —/UNKNOWN),
+three honest tiles, the not-enrolled list from Clerk's own records, and
+recent events fetched from the REAL audit log (identity/config actions:
+`user.*`, `settings.*`, apikey). Every dead control is REMOVED with a
+comment naming the rule: a control that promises an action and does
+nothing certifies. Verified: gates green (inline-component check clean —
+the new closures render, they don't own controls), build + `dist/`
+cleared, **298/298 unit**, **98/98 mutations, printed green baseline**
+(client + one additive endpoint field; integration stands 67/67).
+Browser pass for the People surfaces queued: as Admin, the list dots
+and Security page against the known dev-org enrollment; the §0.53
+non-writer toast's absence rides the same pass.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

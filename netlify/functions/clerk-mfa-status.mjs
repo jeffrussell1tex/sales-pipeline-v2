@@ -116,6 +116,11 @@ export const handler = async (event) => {
                 enrolled:     enrolledCount,
                 total,
                 notEnrolled:  notEnrolled.map(u => ({ userId: u.userId, email: u.email, name: u.name, role: u.role })),
+                // Per-user enrollment for the roster surfaces (§0.59): an email
+                // absent from BOTH lists is genuinely unknown (not a Clerk
+                // member — e.g. a pending invite), and clients render it as
+                // such rather than guessing a direction.
+                enrolledUsers: enrolled.map(u => ({ userId: u.userId, email: u.email, name: u.name, role: u.role })),
                 byRole,
             }),
         };
