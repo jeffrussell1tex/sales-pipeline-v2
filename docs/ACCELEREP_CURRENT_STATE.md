@@ -1074,6 +1074,18 @@ Browser pass for the People surfaces queued: as Admin, the list dots
 and Security page against the known dev-org enrollment; the §0.53
 non-writer toast's absence rides the same pass.
 
+**And the "NaNyr ago" bug is dead** — `relAge` in LeadsTab appended
+`'T12:00:00'` unconditionally, so the FULL ISO timestamps `createdAt`
+actually carries built an invalid date and every timeline age rendered
+NaN. Now: strings already carrying a `T` parse as-is, date-only strings
+keep the noon anchor (timezone-roll protection), and an unparseable
+input returns null instead of NaN-ing downstream. The same
+`+'T12:00:00'` shape exists at ~20 other call sites (App.jsx,
+AccountsTab, FunnelView, …) — those feed DATE-ONLY columns today and are
+correct, but nothing guards the assumption; `quarters.js` carries the
+defensive `slice(0,10)` variant. Queued as a background sweep, not
+chased now. Gates + 298 unit + 98 mutations green on the fix.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

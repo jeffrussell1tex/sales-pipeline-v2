@@ -64,7 +64,13 @@ const fmtRev = (n) => n >= 1000000 ? '$'+(n/1000000).toFixed(1)+'M' : n >= 1000 
 
 const relAge = (iso) => {
     if (!iso) return null;
-    const d = Math.floor((Date.now() - new Date(iso+'T12:00:00').getTime()) / 86400000);
+    // createdAt arrives as a FULL ISO timestamp from the DB; the unconditional
+    // +'T12:00:00' built an invalid date from it and every age rendered as
+    // "NaNyr" (the queued §0.54 timeline bug). Date-only strings still get the
+    // noon anchor so timezones cannot roll them a day.
+    const t = new Date(String(iso).includes('T') ? iso : iso + 'T12:00:00').getTime();
+    if (Number.isNaN(t)) return null;
+    const d = Math.floor((Date.now() - t) / 86400000);
     if (d === 0) return 'today';
     if (d === 1) return '1d';
     if (d < 30)  return d + 'd';
