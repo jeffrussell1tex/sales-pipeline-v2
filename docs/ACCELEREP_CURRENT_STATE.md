@@ -969,6 +969,18 @@ when absent or not visible. Verified: gates green, build + `dist/`
 cleared, **296/296 unit**, **96/96 mutations, printed green baseline**
 (client-only; integration stands 67/67).
 
+**THE TWO-CHAIR PASS IS COMPLETE — observed by Jeff, 2 Sep.** "Everything
+works as designed and the retest works as well": the Batch 7 controls
+verified (pool row, status picker, Review), and the full loop run
+end-to-end — Karen requested the pool lead, Jeff approved from the
+Admin rail, and the assignment "all processed correctly." That closes
+the queued verification for the ENTIRE §0.58 set (Batches 1–7): the
+Distribute fix, the server assignment gate, the request table/endpoint,
+both chairs of the UI, the pool's ways in, and the pass's own findings.
+Every §0.58 code change is now both suite-pinned AND browser-observed.
+NOT yet done: the ship itself (eight commits local on `dev`, unpushed —
+Jeff's call) and the prod signed-in eyeball carried from 1 Sep.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
