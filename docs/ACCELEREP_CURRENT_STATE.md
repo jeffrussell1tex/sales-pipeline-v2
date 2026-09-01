@@ -1426,8 +1426,8 @@ timeline band (`allDates`, `pct`) read through `parseLocalDate`; the other
 three helpers only ever received activity dates and were safe, but unguarded.
 Nine `+'T12:00:00'` sites remain in the file, all on date-only columns
 (`createdDate`, `stageChangedDate`, activity dates). Gates green, **317/317**,
-**105/105, printed green baseline**, build guard OK. Lesson for the guide, not
-yet written: when a fix names a fallback chain, grep the FILE for every other
+**105/105, printed green baseline**, build guard OK. Lesson for the guide (written
+into §18b26 the fourth session): when a fix names a fallback chain, grep the FILE for every other
 reader of the same value before calling it fixed.
 
 **Found by the same check: a task with no due date is invisible on the Tasks

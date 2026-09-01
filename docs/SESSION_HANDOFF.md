@@ -88,8 +88,9 @@ pane with an injected 220px chip (Sign out y 102 → 164, no overflow).
 3. **Still unobserved:** as Admin after 7pm Central, a coaching note carries
    today's date; as Admin, a CSV with a `9/15/2026` close date imports as
    `2026-09-15`. Both hold by unit test; neither has been seen live.
-4. **Guide bullet owed** (§3 above): "grep the file for every other reader
-   of the value" — write it into §18b26 next session, small doc commit.
+4. **DONE (fourth session, 1 Sep):** the guide bullet owed from §3 — "grep
+   the FILE for every other reader of the value" — is now the closing bullet
+   of §18b26; state doc §0.62 no longer says "not yet written".
 5. **Open question from the importer:** an unrecognisable date cell passes
    through as written; 18b16 says report it — refuse or flag at Preview.
 6. Cosmetic: App.jsx still carries stale default imports for components
@@ -105,7 +106,15 @@ pane with an injected 220px chip (Sign out y 102 → 164, no overflow).
    root, run, delete (tree checked clean after); `mutate-import` runs alone
    and never while the Browser pane is being read (it rewrites source under
    HMR); the pane is ~620px wide and the deal modal's tab row is off-canvas
-   there — Jeff verifies modal tabs on his own screen.
+   there — Jeff verifies modal tabs on his own screen. Line endings: the
+   worktree is CRLF only because `core.autocrlf=true` — every index blob is
+   LF (`git ls-files --eol`), App.jsx included. An edit script must match
+   the worktree's CRLF and git normalises on commit; MSYS grep strips CR on
+   output, so count endings with Node. Two traps cost this session three
+   round trips: a replacement string holding dollar-quote made
+   String.replace splice the rest of the file in after the match (use a
+   function replacer), and a heredoc turned a doubled backslash into a bare
+   CR byte that made git treat the handoff as `-text` and diff it whole.
 
 ## 6. The thread
 

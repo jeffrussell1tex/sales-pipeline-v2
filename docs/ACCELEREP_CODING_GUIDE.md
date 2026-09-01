@@ -2901,3 +2901,11 @@ renders as the previous evening across the Americas (TaskItem's `Due:`), and
   `TaskItem` was fixed as live in §0.60 and renders nowhere; ten components
   imported by App.jsx are in that state, and it was the bundle hash — unchanged
   across an edit to two of them — that said so, not a reading of the code.
+- When a fix names a value, grep the FILE for every other reader of that
+  value before calling it fixed. §0.62's batch 1 repaired the timeline sort
+  at the bottom of the builder and left the `fmtDate` helper twenty lines
+  above it still appending noon to the same `dueDate || createdAt` chain;
+  Jeff's screenshot showed the timeline sorted and the label beside it
+  reading "Invalid Date". The defect follows the value, not the line that
+  was reported — a fallback chain has as many readers as the file gives it,
+  and each one is a separate bug until it has been checked.
