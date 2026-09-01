@@ -1189,7 +1189,20 @@ BUILT `dist/index.html` (Vite passes the inline script through — checked
 before the §19 `rm -rf dist`). Picker-format replication stays a
 standing as-surfaces-get-touched rule, not a queue item.
 
-**The §0.59 MFA tri-state is BROWSER-OBSERVED in all three states**
+**FULL SHIP, post-handoff (Jeff: "lets get dev committed and then
+commit master").** `dev` pushed `d8665b3` → `d5254b8` (the eight
+close-out commits), CI SUCCESS; `master` fast-forwarded `d44a45b` →
+`d5254b8` and pushed, CI SUCCESS — the serialized integration group
+carried the near-simultaneous pair exactly as designed. BOTH deploys
+content-verified: accelerep.netlify.app on `index-W-KRcHo9.js`,
+salespipelinetracker.com on `index-uH-tB994.js` with the request-flow,
+Security, and pool markers, the boot-splash landing, and `pk_live_`
+inlined (the §19 second-face check). **PROD NOW RUNS THE ENTIRE §0.58 +
+§0.59 SET: reps no longer claim directly — assignment goes through
+managers, by design.** The two-minute signed-in prod eyeball is now the
+live verification that matters: Leads tab from the prod org's
+perspective, Request/Distribute behavior sane, Settings People surfaces
+honest.
 (Jeff's screenshots, same session): amber ○ known-off dots in every MFA
 cell of the test org's list, chip "MFA off · 4", rail "MFA on 0/4 ·
 4 off" — real Clerk truth (nobody on the dev pk_test instance has a
