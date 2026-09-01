@@ -1708,10 +1708,16 @@ export const UsersDetail = ({ settings, onBack }) => {
                                 <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Last 30 days.</div>
                                 {[
                                     {
+                                        // Tri-state aware: with no Clerk data the old ternary
+                                        // rendered "0/4 · all enrolled" — a contradiction born
+                                        // of unknown counting as neither on nor off (§0.59).
                                         label: 'MFA on',
-                                        value: `${mfaOn}/${activeCount}`,
-                                        sub:   mfaOff > 0 ? `${mfaOff} off` : 'all enrolled',
-                                        color: mfaOff > 0 ? T.warn : T.ok,
+                                        value: mfaByEmail ? `${mfaOn}/${activeCount}` : '—',
+                                        sub:   !mfaByEmail ? 'unknown — Clerk not reachable'
+                                             : mfaOff > 0  ? `${mfaOff} off`
+                                             : mfaOn > 0   ? 'all enrolled'
+                                             : 'no Clerk-linked members',
+                                        color: !mfaByEmail ? T.inkMuted : mfaOff > 0 ? T.warn : mfaOn > 0 ? T.ok : T.inkMuted,
                                     },
                                     {
                                         label: 'SSO',
