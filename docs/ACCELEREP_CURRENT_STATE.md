@@ -851,6 +851,36 @@ it). Verified: gates green, build 2,468 kB + `dist/` cleared, **294/294
 unit**, **62/62 integration**, **95/95 mutations, printed green
 baseline**.
 
+**Batch 4 shipped — the request flow's UI, both chairs.** All in
+`LeadsTab.jsx`. Main component: `leadRequests` state fetched on mount
+(canonical `res.ok → res.json() → adopt`; a failed list read leaves an
+empty panel, nothing to revert) plus three server-first actions —
+`requestLead` (`lcr_` + crypto.randomUUID, the house mint), 
+`cancelRequest`, and `resolveRequest`, which on approve mirrors the
+server's three writes locally (lead owner+name, the approved row, sibling
+pendings flipped denied). **Rep chair:** the row assignee cell shows
+"Request" / "✓ Requested" (toggle cancels) on unassigned leads instead of
+"+ Assign"; the bulk-bar Assign entry point is not rendered; CockpitDetail
+offers "Request assignment" / "Cancel request", its recommended-next-action
+becomes "Request this lead" with a matching button label, and "Reassign"
+on an owned lead is gone — a control the server would 403 is not offered
+(the §0.57 gate lesson generalized). A rep needs no client-side identity
+to find "their" pending request: their GET returns only their own, so any
+pending row for the lead is theirs. **Manager chair:** new module-scope
+`RequestsPanel` in the triage right rail (canSeeAll only, org-wide like
+DistributePanel, hidden when nothing is pending) — requester avatar+name,
+lead label, optional note, Approve/Deny. `canAssign={canSeeAll}` is
+passed alongside `canDistribute` (same value; the pinned
+`canDistribute={canSeeAll}` assertion stays untouched). Verified: gates
+green, build 2,474 kB + `dist/` cleared, **294/294 unit**, **95/95
+mutations, printed green baseline**. **The browser pass for the whole
+§0.58 set is BLOCKED behind the app-DB DDL** (the shared Neon main has no
+`lead_claim_requests` yet — Jeff's queued step): on localhost today the
+panel GET would 500 into an empty panel and a Request click would toast
+an error. One comprehensive two-chair pass (Karen requests → Admin
+approves → Mine grows, holding over a hard refresh) is the queued
+verification, after the DDL.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

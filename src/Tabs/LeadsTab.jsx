@@ -155,12 +155,20 @@ const LeadSourceChip = ({ source }) => (
     </div>
 );
 
-const LeadAssignee = ({ name, onClick }) => {
-    if (!name) return (
-        <button onClick={e => { e.stopPropagation(); onClick && onClick(e); }} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', background:T.surface, border:`1px dashed ${T.borderStrong}`, color:T.goldInk, fontSize:11, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
-            + Assign
-        </button>
-    );
+// `label`/`title` cover the rep-side request flow (§0.58): a rep sees
+// "Request" / "✓ Requested" here instead of "+ Assign", because assignment is
+// Manager/Admin-only and the server 403s a rep's ownership write. No onClick
+// on an unassigned row renders a plain em-dash — a control the caller may not
+// use is not rendered disabled, it is not rendered at all.
+const LeadAssignee = ({ name, onClick, label = '+ Assign', title }) => {
+    if (!name) {
+        if (!onClick) return <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>—</span>;
+        return (
+            <button title={title} onClick={e => { e.stopPropagation(); onClick(e); }} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', background:T.surface, border:`1px dashed ${T.borderStrong}`, color:T.goldInk, fontSize:11, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                {label}
+            </button>
+        );
+    }
     return (
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <Av name={name} size={22}/>
@@ -285,6 +293,47 @@ const DistributePanel = ({ leads, reps, onSaveLead, canDistribute }) => {
     );
 };
 
+// ── Assignment requests panel (§0.58) — renders for canSeeAll only ───────────
+// Pending claim requests, org-wide like DistributePanel above it. Approve
+// assigns the lead to the requester ON THE SERVER (which also denies sibling
+// requests for the same lead); the caller mirrors the result locally. Hidden
+// entirely when nothing is pending — an empty approvals queue is not
+// information worth a panel.
+const RequestsPanel = ({ requests, leads, reps, onResolve }) => {
+    const pending = requests.filter(r => r.status === 'pending');
+    if (pending.length === 0) return null;
+    const nameOf = (id) => reps.find(r => r.id === id)?.name || 'Unknown rep';
+    const leadLabel = (id) => {
+        const lead = leads.find(l => l.id === id);
+        if (!lead) return 'a lead no longer visible';
+        return `${lead.first} ${lead.last}`.trim() || lead.company || id;
+    };
+    return (
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderLeft:`3px solid ${T.goldInk}`, borderRadius:T.r, padding:'12px 14px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans }}>Assignment Requests</div>
+                <span style={{ fontSize:10, color:T.inkMuted, fontWeight:600, fontFamily:T.sans }}>{pending.length} pending</span>
+            </div>
+            {pending.map((r, i) => (
+                <div key={r.id} style={{ padding:'8px 0', borderTop: i === 0 ? 'none' : `1px solid ${T.border}` }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <Av name={nameOf(r.requesterId)} size={22}/>
+                        <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:12, fontWeight:600, color:T.ink, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{nameOf(r.requesterId)}</div>
+                            <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>wants {leadLabel(r.leadId)}</div>
+                        </div>
+                    </div>
+                    {r.note && <div style={{ fontSize:11, color:T.inkMid, fontStyle:'italic', fontFamily:T.sans, margin:'4px 0 0 30px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>“{r.note}”</div>}
+                    <div style={{ display:'flex', gap:6, margin:'6px 0 0 30px' }}>
+                        <button onClick={() => onResolve(r.id, 'approve')} style={{ padding:'3px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Approve</button>
+                        <button onClick={() => onResolve(r.id, 'deny')} style={{ padding:'3px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:T.sans }}>Deny</button>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
 const LeadSourcesPanel = ({ leads }) => {
     const sourceMap = {};
     leads.forEach(l => { if (l.source) sourceMap[l.source] = (sourceMap[l.source]||0) + 1; });
@@ -367,7 +416,7 @@ const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
     );
 };
 
-const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute }) => {
+const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute, leadRequests, requestLead, cancelRequest, resolveRequest }) => {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
@@ -472,10 +521,13 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                         {selCount > 0 && (
                             <div style={{ marginBottom:8, padding:'8px 14px', background:T.ink, color:T.surface, borderRadius:T.r, display:'flex', alignItems:'center', gap:12, fontSize:12, fontFamily:T.sans }}>
                                 <span style={{ fontWeight:600 }}>{selCount} selected</span>
+                                {/* Bulk assign is a managed action (§0.58) — reps get no entry point. */}
+                                {canDistribute && <>
                                 <span style={{ opacity:0.5 }}>·</span>
                                 <span style={{ cursor:'pointer' }} onClick={e => {
                                     setRepPick({ rect: e.currentTarget.getBoundingClientRect(), mode: 'bulk' });
                                 }}>Assign</span>
+                                </>}
                                 <span style={{ opacity:0.5 }}>·</span>
                                 <span style={{ cursor:'pointer' }} onClick={() => {
                                     const status = window.prompt('New status (New / Contacted / Working / Qualified / Converted / Dead):');
@@ -525,9 +577,22 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                                         </div>
                                         <LeadSourceChip source={l.source}/>
                                         <LeadStatusPill status={l.status}/>
-                                        <LeadAssignee name={l.assignee} onClick={e => {
-                                            setRepPick({ rect: e.currentTarget.getBoundingClientRect(), leadId: l.id });
-                                        }}/>
+                                        {/* Managers pick a rep; a rep REQUESTS an unassigned
+                                            lead (§0.58) — the button toggles their pending
+                                            request. An owned row renders display-only. */}
+                                        {canDistribute ? (
+                                            <LeadAssignee name={l.assignee} onClick={e => {
+                                                setRepPick({ rect: e.currentTarget.getBoundingClientRect(), leadId: l.id });
+                                            }}/>
+                                        ) : (() => {
+                                            const myPending = (leadRequests || []).find(r => r.leadId === l.id && r.status === 'pending');
+                                            return (
+                                                <LeadAssignee name={l.assignee}
+                                                    label={myPending ? '✓ Requested' : 'Request'}
+                                                    title={myPending ? 'Click to cancel your request' : 'Ask a manager to assign this lead to you'}
+                                                    onClick={() => myPending ? cancelRequest(myPending.id) : requestLead(l.id)}/>
+                                            );
+                                        })()}
                                         <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{fmtRev(l.rev)}</div>
                                         <div style={{ display:'flex', gap:4, justifyContent:'flex-end' }}>
                                             <button onClick={e => { e.stopPropagation(); convertLead(l); }} title="Convert to opportunity" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, fontSize:11 }}>↗</button>
@@ -542,7 +607,8 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
 
                 {/* Right rail */}
                 <div style={{ width:260, flexShrink:0, display:'flex', flexDirection:'column', gap:12, overflow:'auto' }}>
-                    {/* Org-wide list on purpose — see the comment on DistributePanel. */}
+                    {/* Org-wide lists on purpose — see the comment on DistributePanel. */}
+                    {canDistribute && <RequestsPanel requests={leadRequests || []} leads={allLeads} reps={reps} onResolve={resolveRequest}/>}
                     <DistributePanel leads={allLeads} reps={reps} onSaveLead={saveLead} canDistribute={canDistribute}/>
                     <LeadSourcesPanel leads={leads}/>
                 </div>
@@ -569,7 +635,7 @@ const CockpitListRow = ({ lead, active, onClick }) => (
     </div>
 );
 
-const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showConfirm }) => {
+const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showConfirm, canAssign, leadRequests, requestLead, cancelRequest }) => {
     // Assignee picker anchor (DOMRect); null = closed. Declared before the
     // empty-state return — hooks must run on every render path.
     const [repPick, setRepPick] = useState(null);
@@ -579,7 +645,11 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
         </div>
     );
 
-    const nextAction = lead.status === 'New' && !lead.assignee ? 'Assign to a rep'
+    // A rep's GET returns only their own requests, so any pending request for
+    // this lead in the list is theirs — no identity needed client-side.
+    const myPending = !canAssign && (leadRequests || []).find(r => r.leadId === lead.id && r.status === 'pending');
+
+    const nextAction = lead.status === 'New' && !lead.assignee ? (canAssign ? 'Assign to a rep' : myPending ? 'Requested — awaiting approval' : 'Request this lead')
         : lead.status === 'New'       ? 'Send first-touch email'
         : lead.status === 'Contacted' ? 'Schedule qualification call'
         : lead.status === 'Working'   ? 'Check in — keep the ball moving'
@@ -644,7 +714,11 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                     <button onClick={e => {
                         if (!lead) return;
                         if (lead.status === 'New' && !lead.assignee) {
-                            setRepPick(e.currentTarget.getBoundingClientRect());
+                            // Managers pick a rep; a rep files/cancels a claim
+                            // request (§0.58) — the server 403s their direct write.
+                            if (canAssign) setRepPick(e.currentTarget.getBoundingClientRect());
+                            else if (myPending) cancelRequest && cancelRequest(myPending.id);
+                            else requestLead && requestLead(lead.id);
                         } else if (lead.status === 'New' || lead.status === 'Contacted') {
                             if (logActivity) logActivity(lead, 'Email');
                         } else if (lead.status === 'Working') {
@@ -652,13 +726,18 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                         } else if (lead.status === 'Qualified') {
                             if (convertLead) convertLead(lead);
                         }
-                    }} style={{ background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Do it</button>
+                    }} style={{ background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        {lead.status === 'New' && !lead.assignee && !canAssign ? (myPending ? 'Cancel' : 'Request') : 'Do it'}
+                    </button>
                 </div>
             </div>
 
             {/* Assignee */}
             <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}` }}>
                 <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans }}>Assigned to</div>
+                {/* Reassign/Assign are managed actions (§0.58): managers get the
+                    picker, a rep gets Request/Cancel on an unassigned lead and
+                    display-only on an owned one. */}
                 {lead.assignee ? (
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                         <Av name={lead.assignee} size={32}/>
@@ -666,17 +745,25 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                             <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{lead.assignee}</div>
                             <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>AE · owner{lead.createdAt ? ' since '+relAge(lead.createdAt)+' ago' : ''}</div>
                         </div>
-                        <button onClick={e => {
+                        {canAssign && <button onClick={e => {
                             setRepPick(e.currentTarget.getBoundingClientRect());
-                        }} style={{ padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Reassign</button>
+                        }} style={{ padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Reassign</button>}
                     </div>
                 ) : (
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                         <div style={{ width:32, height:32, borderRadius:'50%', border:`1px dashed ${T.borderStrong}`, color:T.goldInk, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>+</div>
-                        <div style={{ flex:1, fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Not yet assigned</div>
-                        <button onClick={e => {
-                            setRepPick(e.currentTarget.getBoundingClientRect());
-                        }} style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Assign now</button>
+                        <div style={{ flex:1, fontSize:13, color:T.inkMid, fontFamily:T.sans }}>
+                            {canAssign ? 'Not yet assigned' : myPending ? 'Requested — awaiting a manager\'s approval' : 'Not yet assigned'}
+                        </div>
+                        {canAssign ? (
+                            <button onClick={e => {
+                                setRepPick(e.currentTarget.getBoundingClientRect());
+                            }} style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Assign now</button>
+                        ) : myPending ? (
+                            <button onClick={() => cancelRequest && cancelRequest(myPending.id)} style={{ padding:'6px 12px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Cancel request</button>
+                        ) : (
+                            <button onClick={() => requestLead && requestLead(lead.id)} style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Request assignment</button>
+                        )}
                     </div>
                 )}
             </div>
@@ -716,7 +803,7 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
     );
 };
 
-const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConfirm }) => {
+const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConfirm, canAssign, leadRequests, requestLead, cancelRequest }) => {
     const sorted = useMemo(() => [...leads].sort((a,b) => b.score - a.score), [leads]);
     const [filter,     setFilter    ] = useState('all');
     const [selectedId, setSelectedId] = useState(() => sorted[0]?.id || null);
@@ -770,7 +857,8 @@ const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConf
 
             {/* Detail pane */}
             <div style={{ flex:1, minWidth:0 }}>
-                <CockpitDetail lead={selected} reps={reps} saveLead={saveLead} convertLead={convertLead} logActivity={logActivity} showConfirm={showConfirm}/>
+                <CockpitDetail lead={selected} reps={reps} saveLead={saveLead} convertLead={convertLead} logActivity={logActivity} showConfirm={showConfirm}
+                    canAssign={canAssign} leadRequests={leadRequests} requestLead={requestLead} cancelRequest={cancelRequest}/>
             </div>
         </div>
     );
@@ -860,6 +948,80 @@ export default function LeadsTab() {
             setUndoToast({ error: `Lead not saved — ${r.error}` });
         }
     }, [setLeads]);
+
+    // ── Lead claim requests (§0.58) ────────────────────────────
+    // Assignment is Manager/Admin-only on the server; a rep REQUESTS an
+    // unassigned lead here and an approver assigns it. Server-first, then
+    // local state — the server is the resolver, and every read follows the
+    // canonical res.ok → res.json() → adopt shape (§0.57's scanner class).
+    const [leadRequests, setLeadRequests] = useState([]);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const res = await dbFetch('/.netlify/functions/lead-requests');
+            if (!res.ok) return;   // a failed list read leaves an empty panel; nothing to revert
+            const data = await res.json();
+            if (!cancelled) setLeadRequests(data?.leadRequests || []);
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const requestLead = useCallback(async (leadId, note) => {
+        const id = 'lcr_' + crypto.randomUUID();
+        const res = await dbFetch('/.netlify/functions/lead-requests', {
+            method: 'POST',
+            body: JSON.stringify({ id, leadId, note: note || null }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data?.leadRequest) setLeadRequests(prev => [data.leadRequest, ...prev]);
+        } else {
+            let error = 'Request not sent.';
+            try { const b = await res.json(); if (b?.error) error = b.error; } catch { /* non-JSON body */ }
+            setUndoToast({ error });
+        }
+    }, [setUndoToast]);
+
+    const cancelRequest = useCallback(async (id) => {
+        const res = await dbFetch(`/.netlify/functions/lead-requests?id=${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            setLeadRequests(prev => prev.filter(r => r.id !== id));
+        } else {
+            let error = 'Request not cancelled.';
+            try { const b = await res.json(); if (b?.error) error = b.error; } catch { /* non-JSON body */ }
+            setUndoToast({ error });
+        }
+    }, [setUndoToast]);
+
+    const resolveRequest = useCallback(async (id, action) => {
+        const res = await dbFetch('/.netlify/functions/lead-requests', {
+            method: 'PUT',
+            body: JSON.stringify({ id, action }),
+        });
+        if (!res.ok) {
+            let error = 'Request not resolved.';
+            try { const b = await res.json(); if (b?.error) error = b.error; } catch { /* non-JSON body */ }
+            setUndoToast({ error });
+            return;
+        }
+        const data = await res.json();
+        const resolved = data?.leadRequest;
+        if (!resolved) return;
+        if (action === 'approve') {
+            // The server assigned the lead and denied the sibling pending
+            // requests in the same stroke — mirror all three locally.
+            const requester = reps.find(r => r.id === resolved.requesterId);
+            setLeads(prev => prev.map(l => l.id === resolved.leadId
+                ? { ...l, ownerId: resolved.requesterId, assignedTo: requester?.name || l.assignedTo }
+                : l));
+            setLeadRequests(prev => prev.map(r =>
+                r.id === resolved.id ? resolved
+                : (r.leadId === resolved.leadId && r.status === 'pending') ? { ...r, status: 'denied' }
+                : r));
+        } else {
+            setLeadRequests(prev => prev.map(r => r.id === resolved.id ? resolved : r));
+        }
+    }, [reps, setLeads, setUndoToast]);
 
     // ── Convert a lead to an opportunity ─────────────────────
     const convertLead = useCallback((lead) => {
@@ -958,6 +1120,10 @@ export default function LeadsTab() {
                         convertLead={convertLead}
                         logActivity={logActivity}
                         canDistribute={canSeeAll}
+                        leadRequests={leadRequests}
+                        requestLead={requestLead}
+                        cancelRequest={cancelRequest}
+                        resolveRequest={resolveRequest}
                     />
                 )}
                 {tab === 'cockpit' && (
@@ -968,6 +1134,10 @@ export default function LeadsTab() {
                         convertLead={convertLead}
                         logActivity={logActivity}
                         showConfirm={showConfirm}
+                        canAssign={canSeeAll}
+                        leadRequests={leadRequests}
+                        requestLead={requestLead}
+                        cancelRequest={cancelRequest}
                     />
                 )}
             </div>
