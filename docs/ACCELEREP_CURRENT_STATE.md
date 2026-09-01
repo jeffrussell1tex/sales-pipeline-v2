@@ -940,6 +940,35 @@ resumes. Verified: gates green, build + `dist/` cleared, **296/296
 unit**, **96/96 mutations, printed green baseline** (endpoints untouched
 this batch; integration stands at 67/67 from Batch 5).
 
+**OBSERVED, both chairs (Jeff, mid-session):** after the dev-server
+restart the flow WORKS — Karen's Request landed, and Jeff's Admin rail
+showed "Karen Russell wants James Whitmore" with Approve/Deny live. The
+two screenshots cross-check the org math exactly: Admin sees 24 leads,
+Karen sees 11 = her 10 + 1 unassigned — the rep GET filter doing its job
+in production posture.
+
+**Batch 7 shipped — three UX calls from Jeff, same session.** (1) The
+Distribute panel gains a POOL ROW — dashed ◌ avatar, "Unassigned", count
+— visible to reps (strict Mine hides pool leads by design, so this is
+the signpost that they exist); clicking it jumps to All scope + the
+Unassigned chip, where Request lives (`onShowUnassigned` →
+`setStatusFilter` + `showAllScope` from the main component's
+`setScopePersist`). (2) The bulk bar's Change status `window.prompt` is
+RETIRED for `StatusPickerPopover` — the RepPickerPopover format applied
+to `Object.keys(STATUS_STYLES)`, type-ahead filter, status dots; free
+text into a status column was the same ghost factory as free text into
+name resolution. Jeff's §0.57 house-pattern call now explicitly covers
+enumerated choices, not only people. (3) RequestsPanel gains REVIEW —
+opens the requested lead in Cockpit, request stays pending — which
+surfaced and fixed a dormant bug: `openInCockpit(id)` had always
+IGNORED its id (Cockpit opened on the top-scored lead no matter which
+row was clicked). The id now rides `tab:leads:cockpitLead` — the exact
+key ModalLayer's save-and-open path has been writing into the void —
+and CockpitView consumes it once on mount, falling back to top-scored
+when absent or not visible. Verified: gates green, build + `dist/`
+cleared, **296/296 unit**, **96/96 mutations, printed green baseline**
+(client-only; integration stands 67/67).
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

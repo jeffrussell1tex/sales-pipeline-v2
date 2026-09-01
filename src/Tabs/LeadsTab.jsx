@@ -177,6 +177,50 @@ const LeadAssignee = ({ name, onClick, label = '+ Assign', title }) => {
     );
 };
 
+// ── Status picker — the RepPickerPopover format applied to statuses ──────────
+// Retires the bulk bar's window.prompt (Jeff's call, 2 Sep: the type-ahead
+// picker format is the house pattern for enumerated choices, not only people).
+// Free text into a status column was the same ghost factory as free text into
+// name resolution: a typo writes a status nothing filters on.
+const LEAD_STATUSES = Object.keys(STATUS_STYLES);
+const StatusPickerPopover = ({ anchor, onPick, onClose }) => {
+    const [query, setQuery] = useState('');
+    const ref = useRef(null);
+    useEffect(() => {
+        const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        const onKey  = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+    }, [onClose]);
+    if (!anchor) return null;
+    const q = query.trim().toLowerCase();
+    const shown = q ? LEAD_STATUSES.filter(s => s.toLowerCase().includes(q)) : LEAD_STATUSES;
+    const W = 200, MAXH = 260;
+    const left = Math.max(12, Math.min(anchor.left, window.innerWidth - W - 12));
+    const top  = Math.max(12, Math.min(anchor.bottom + 6, window.innerHeight - MAXH - 12));
+    return (
+        <div ref={ref} onClick={e => e.stopPropagation()}
+            style={{ position:'fixed', top, left, width:W, maxHeight:MAXH, overflowY:'auto', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, boxShadow:'0 8px 24px rgba(42,38,34,0.16)', zIndex:1000, fontFamily:T.sans }}>
+            <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}`, position:'sticky', top:0, background:T.surface }}>
+                <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Set status…"
+                    style={{ width:'100%', border:`1px solid ${T.border}`, borderRadius:T.r, padding:'5px 8px', fontSize:12, fontFamily:T.sans, background:T.surface2, color:T.ink, outline:'none', boxSizing:'border-box' }}/>
+            </div>
+            {shown.length === 0 ? (
+                <div style={{ padding:'12px 10px', fontSize:12, color:T.inkMuted, fontStyle:'italic' }}>No status matches.</div>
+            ) : shown.map(s => (
+                <div key={s} onClick={() => onPick(s)}
+                    style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', cursor:'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.12)'}
+                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                    <div style={{ width:6, height:6, borderRadius:'50%', background:STATUS_STYLES[s].dot }}/>
+                    <span style={{ fontSize:12.5, color:T.ink, fontWeight:500 }}>{s}</span>
+                </div>
+            ))}
+        </div>
+    );
+};
+
 // ── Assignee picker ───────────────────────────────────────────
 // Replaces the five free-text window.prompt assign controls. Free text into
 // name resolution was a ghost factory: a misspelling resolves to no ownerId
@@ -244,7 +288,7 @@ const RepPickerPopover = ({ reps, anchor, onPick, onClose, onClear }) => {
 // construction, so feeding it the scoped list made "Auto-assign all" a silent
 // no-op in Mine — the reported "does nothing" of 1 Sep. Jeff's call: the pool,
 // the count, and the load bars ignore the Mine/All toggle.
-const DistributePanel = ({ leads, reps, onSaveLead, canDistribute }) => {
+const DistributePanel = ({ leads, reps, onSaveLead, canDistribute, onShowUnassigned }) => {
     const pool = leads.filter(l => !l.ownerId);
     const unassigned = pool.length;
     // Load bars key on ownerId, never the display name (§18b22): a stale
@@ -269,6 +313,17 @@ const DistributePanel = ({ leads, reps, onSaveLead, canDistribute }) => {
                     <div style={{ fontSize:11, color:T.inkMid, fontWeight:600, width:12, textAlign:'right', fontFamily:T.sans }}>{r.count}</div>
                 </div>
             ))}
+            {/* The pool row (Jeff's call, 2 Sep): reps see from anywhere that
+                unassigned leads EXIST — strict Mine hides them by design, so
+                this is the signpost — and clicking jumps to All → Unassigned,
+                where the Request button lives. */}
+            <div onClick={unassigned > 0 && onShowUnassigned ? onShowUnassigned : undefined}
+                title={unassigned > 0 ? 'Show the unassigned leads' : undefined}
+                style={{ display:'flex', alignItems:'center', gap:8, marginTop:6, paddingTop:8, borderTop:`1px solid ${T.border}`, cursor: unassigned > 0 && onShowUnassigned ? 'pointer' : 'default' }}>
+                <div style={{ width:22, height:22, borderRadius:'50%', border:`1px dashed ${T.borderStrong}`, color:T.goldInk, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, flexShrink:0 }}>◌</div>
+                <div style={{ fontSize:11.5, color: unassigned > 0 ? T.goldInk : T.inkMuted, flex:1, fontWeight:600, fontFamily:T.sans }}>Unassigned</div>
+                <div style={{ fontSize:11, color: unassigned > 0 ? T.goldInk : T.inkMid, fontWeight:700, fontFamily:T.sans }}>{unassigned}{unassigned > 0 ? ' →' : ''}</div>
+            </div>
             {/* Mass distribution is a management action. Found rendering for a
                 rep by Karen's rep-path pass (1 Sep), when this client gate was
                 the ONLY gate. Since §0.58 the server also 403s any rep
@@ -310,7 +365,7 @@ const DistributePanel = ({ leads, reps, onSaveLead, canDistribute }) => {
 // requests for the same lead); the caller mirrors the result locally. Hidden
 // entirely when nothing is pending — an empty approvals queue is not
 // information worth a panel.
-const RequestsPanel = ({ requests, leads, reps, onResolve }) => {
+const RequestsPanel = ({ requests, leads, reps, onResolve, onReview }) => {
     const pending = requests.filter(r => r.status === 'pending');
     if (pending.length === 0) return null;
     const nameOf = (id) => reps.find(r => r.id === id)?.name || 'Unknown rep';
@@ -338,6 +393,9 @@ const RequestsPanel = ({ requests, leads, reps, onResolve }) => {
                     <div style={{ display:'flex', gap:6, margin:'6px 0 0 30px' }}>
                         <button onClick={() => onResolve(r.id, 'approve')} style={{ padding:'3px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Approve</button>
                         <button onClick={() => onResolve(r.id, 'deny')} style={{ padding:'3px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:T.sans }}>Deny</button>
+                        {/* Review before deciding (Jeff's call, 2 Sep): opens the
+                            requested lead in Cockpit, request stays pending. */}
+                        {onReview && <button onClick={() => onReview(r.leadId)} style={{ padding:'3px 10px', background:'transparent', color:T.goldInk, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontWeight:500, cursor:'pointer', fontFamily:T.sans }}>Review</button>}
                     </div>
                 </div>
             ))}
@@ -427,13 +485,15 @@ const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
     );
 };
 
-const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute, canDelete, deleteLead, leadRequests, requestLead, cancelRequest, resolveRequest }) => {
+const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute, canDelete, deleteLead, leadRequests, requestLead, cancelRequest, resolveRequest, showAllScope }) => {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
     // Assignee picker state: { rect, mode:'bulk' } for the selection bar,
     // { rect, leadId } for a single row. Null = closed.
     const [repPick, setRepPick] = useState(null);
+    // Status picker anchor (DOMRect) for the bulk bar; null = closed.
+    const [statusPick, setStatusPick] = useState(null);
 
     const handleRepPick = (rep) => {
         if (!repPick) return;
@@ -555,11 +615,8 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                                 }}>Assign</span>
                                 </>}
                                 <span style={{ opacity:0.5 }}>·</span>
-                                <span style={{ cursor:'pointer' }} onClick={() => {
-                                    const status = window.prompt('New status (New / Contacted / Working / Qualified / Converted / Dead):');
-                                    if (!status) return;
-                                    Object.keys(selected).filter(id => selected[id]).forEach(id => saveLead(id, { status }));
-                                    setSelected({});
+                                <span style={{ cursor:'pointer' }} onClick={e => {
+                                    setStatusPick(e.currentTarget.getBoundingClientRect());
                                 }}>Change status</span>
                                 <span style={{ opacity:0.5 }}>·</span>
                                 <span style={{ cursor:'pointer' }} onClick={() => {
@@ -637,12 +694,18 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                 {/* Right rail */}
                 <div style={{ width:260, flexShrink:0, display:'flex', flexDirection:'column', gap:12, overflow:'auto' }}>
                     {/* Org-wide lists on purpose — see the comment on DistributePanel. */}
-                    {canDistribute && <RequestsPanel requests={leadRequests || []} leads={allLeads} reps={reps} onResolve={resolveRequest}/>}
-                    <DistributePanel leads={allLeads} reps={reps} onSaveLead={saveLead} canDistribute={canDistribute}/>
+                    {canDistribute && <RequestsPanel requests={leadRequests || []} leads={allLeads} reps={reps} onResolve={resolveRequest} onReview={onOpenLead}/>}
+                    <DistributePanel leads={allLeads} reps={reps} onSaveLead={saveLead} canDistribute={canDistribute}
+                        onShowUnassigned={() => { setStatusFilter('unassigned'); if (showAllScope) showAllScope(); }}/>
                     <LeadSourcesPanel leads={leads}/>
                 </div>
             </div>
             {repPick && <RepPickerPopover reps={reps} anchor={repPick.rect} onPick={handleRepPick} onClear={handleRepClear} onClose={() => setRepPick(null)}/>}
+            {statusPick && <StatusPickerPopover anchor={statusPick} onPick={(status) => {
+                Object.keys(selected).filter(id => selected[id]).forEach(id => saveLead(id, { status }));
+                setSelected({});
+                setStatusPick(null);
+            }} onClose={() => setStatusPick(null)}/>}
         </div>
     );
 };
@@ -838,7 +901,15 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
 const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConfirm, canAssign, leadRequests, requestLead, cancelRequest }) => {
     const sorted = useMemo(() => [...leads].sort((a,b) => b.score - a.score), [leads]);
     const [filter,     setFilter    ] = useState('all');
-    const [selectedId, setSelectedId] = useState(() => sorted[0]?.id || null);
+    // A deep-link id (row click, request Review, save-and-open) wins over the
+    // top-scored default. Consumed once — a later manual visit starts fresh.
+    const [selectedId, setSelectedId] = useState(() => {
+        try {
+            const id = localStorage.getItem('tab:leads:cockpitLead');
+            if (id) { localStorage.removeItem('tab:leads:cockpitLead'); return id; }
+        } catch { /* storage unavailable */ }
+        return sorted[0]?.id || null;
+    });
 
     const filterDefs = [
         { k:'all',       l:'All',        c:leads.length },
@@ -1095,7 +1166,12 @@ export default function LeadsTab() {
         setShowActivityModal(true);
     }, [setActivityInitialContext, setEditingActivity, setShowActivityModal]);
 
+    // The id has always been accepted here and always ignored — Cockpit opened
+    // on the TOP-SCORED lead no matter which row was clicked. It rides the
+    // same localStorage key ModalLayer's save-and-open path has been writing
+    // (dormant until now); CockpitView consumes it once on mount.
     const openInCockpit = useCallback((id) => {
+        try { if (id) localStorage.setItem('tab:leads:cockpitLead', id); } catch {}
         setTabPersist('cockpit');
     }, [setTabPersist]);
 
@@ -1165,6 +1241,7 @@ export default function LeadsTab() {
                         canDistribute={canSeeAll}
                         canDelete={userRole === 'Admin'}
                         deleteLead={deleteLead}
+                        showAllScope={() => setScopePersist('all')}
                         leadRequests={leadRequests}
                         requestLead={requestLead}
                         cancelRequest={cancelRequest}
