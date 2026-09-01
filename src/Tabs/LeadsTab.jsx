@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch, dbWrite } from '../utils/storage';
 
@@ -156,7 +156,7 @@ const LeadSourceChip = ({ source }) => (
 
 const LeadAssignee = ({ name, onClick }) => {
     if (!name) return (
-        <button onClick={e => { e.stopPropagation(); onClick && onClick(); }} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', background:T.surface, border:`1px dashed ${T.borderStrong}`, color:T.goldInk, fontSize:11, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+        <button onClick={e => { e.stopPropagation(); onClick && onClick(e); }} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', background:T.surface, border:`1px dashed ${T.borderStrong}`, color:T.goldInk, fontSize:11, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
             + Assign
         </button>
     );
@@ -164,6 +164,56 @@ const LeadAssignee = ({ name, onClick }) => {
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <Av name={name} size={22}/>
             <span style={{ fontSize:12, color:T.inkMid, fontWeight:500 }}>{name.split(' ')[0]}</span>
+        </div>
+    );
+};
+
+// ── Assignee picker ───────────────────────────────────────────
+// Replaces the five free-text window.prompt assign controls. Free text into
+// name resolution was a ghost factory: a misspelling resolves to no ownerId
+// and writes a name-only assignment. The picker offers exactly the roster the
+// server can resolve; the payload stays NAME-keyed on purpose — the server
+// remains the resolver and still 409s ambiguity (resolveOwnerId trims and
+// lowercases both sides, so case was never the risk; spelling was).
+//
+// Anchored with getBoundingClientRect + position:fixed (the house popover
+// pattern). `anchor` is the trigger's DOMRect; null renders nothing.
+const RepPickerPopover = ({ reps, anchor, onPick, onClose }) => {
+    const [query, setQuery] = useState('');
+    const ref = useRef(null);
+    useEffect(() => {
+        const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        const onKey  = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+    }, [onClose]);
+    if (!anchor) return null;
+    const q = query.trim().toLowerCase();
+    const shown = q ? reps.filter(r => (r.name || '').toLowerCase().includes(q)) : reps;
+    const W = 224, MAXH = 288;
+    const left = Math.max(12, Math.min(anchor.left, window.innerWidth - W - 12));
+    const top  = Math.max(12, Math.min(anchor.bottom + 6, window.innerHeight - MAXH - 12));
+    return (
+        <div ref={ref} onClick={e => e.stopPropagation()}
+            style={{ position:'fixed', top, left, width:W, maxHeight:MAXH, overflowY:'auto', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, boxShadow:'0 8px 24px rgba(42,38,34,0.16)', zIndex:1000, fontFamily:T.sans }}>
+            <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}`, position:'sticky', top:0, background:T.surface }}>
+                <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Assign to…"
+                    style={{ width:'100%', border:`1px solid ${T.border}`, borderRadius:T.r, padding:'5px 8px', fontSize:12, fontFamily:T.sans, background:T.surface2, color:T.ink, outline:'none', boxSizing:'border-box' }}/>
+            </div>
+            {shown.length === 0 ? (
+                <div style={{ padding:'12px 10px', fontSize:12, color:T.inkMuted, fontStyle:'italic' }}>
+                    {reps.length === 0 ? 'No reps in the roster.' : 'No reps match.'}
+                </div>
+            ) : shown.map(r => (
+                <div key={r.id} onClick={() => onPick(r)}
+                    style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', cursor:'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.12)'}
+                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                    <Av name={r.name} size={22}/>
+                    <span style={{ fontSize:12.5, color:T.ink, fontWeight:500 }}>{r.name}</span>
+                </div>
+            ))}
         </div>
     );
 };
@@ -297,6 +347,23 @@ const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, 
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
+    // Assignee picker state: { rect, mode:'bulk' } for the selection bar,
+    // { rect, leadId } for a single row. Null = closed.
+    const [repPick, setRepPick] = useState(null);
+
+    const handleRepPick = (rep) => {
+        if (!repPick) return;
+        if (repPick.mode === 'bulk') {
+            Object.keys(selected).filter(id => selected[id]).forEach(id => {
+                const lead = leads.find(l => l.id === id);
+                if (lead) saveLead(id, { assignedTo: rep.name, assignee: rep.name });
+            });
+            setSelected({});
+        } else if (repPick.leadId) {
+            saveLead(repPick.leadId, { assignedTo: rep.name, assignee: rep.name });
+        }
+        setRepPick(null);
+    };
 
     const hot          = leads.filter(l => l.score >= 70 && l.status !== 'Converted' && l.status !== 'Dead');
     const newUnassigned = leads.filter(l => l.status === 'New' && !l.ownerId);
@@ -382,14 +449,8 @@ const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, 
                             <div style={{ marginBottom:8, padding:'8px 14px', background:T.ink, color:T.surface, borderRadius:T.r, display:'flex', alignItems:'center', gap:12, fontSize:12, fontFamily:T.sans }}>
                                 <span style={{ fontWeight:600 }}>{selCount} selected</span>
                                 <span style={{ opacity:0.5 }}>·</span>
-                                <span style={{ cursor:'pointer' }} onClick={() => {
-                                    const rep = window.prompt('Assign to rep (enter name):');
-                                    if (!rep) return;
-                                    Object.keys(selected).filter(id => selected[id]).forEach(id => {
-                                        const lead = leads.find(l => l.id === id);
-                                        if (lead) saveLead(id, { assignedTo: rep, assignee: rep });
-                                    });
-                                    setSelected({});
+                                <span style={{ cursor:'pointer' }} onClick={e => {
+                                    setRepPick({ rect: e.currentTarget.getBoundingClientRect(), mode: 'bulk' });
                                 }}>Assign</span>
                                 <span style={{ opacity:0.5 }}>·</span>
                                 <span style={{ cursor:'pointer' }} onClick={() => {
@@ -440,9 +501,8 @@ const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, 
                                         </div>
                                         <LeadSourceChip source={l.source}/>
                                         <LeadStatusPill status={l.status}/>
-                                        <LeadAssignee name={l.assignee} onClick={() => {
-                                            const rep = window.prompt('Assign to rep (enter name):');
-                                            if (rep) saveLead(l.id, { assignedTo: rep, assignee: rep });
+                                        <LeadAssignee name={l.assignee} onClick={e => {
+                                            setRepPick({ rect: e.currentTarget.getBoundingClientRect(), leadId: l.id });
                                         }}/>
                                         <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{fmtRev(l.rev)}</div>
                                         <div style={{ display:'flex', gap:4, justifyContent:'flex-end' }}>
@@ -462,6 +522,7 @@ const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, 
                     <LeadSourcesPanel leads={leads}/>
                 </div>
             </div>
+            {repPick && <RepPickerPopover reps={reps} anchor={repPick.rect} onPick={handleRepPick} onClose={() => setRepPick(null)}/>}
         </div>
     );
 };
@@ -483,7 +544,10 @@ const CockpitListRow = ({ lead, active, onClick }) => (
     </div>
 );
 
-const CockpitDetail = ({ lead, saveLead, convertLead, logActivity, showConfirm }) => {
+const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showConfirm }) => {
+    // Assignee picker anchor (DOMRect); null = closed. Declared before the
+    // empty-state return — hooks must run on every render path.
+    const [repPick, setRepPick] = useState(null);
     if (!lead) return (
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
             Select a lead from the list
@@ -552,11 +616,10 @@ const CockpitDetail = ({ lead, saveLead, convertLead, logActivity, showConfirm }
                 <div style={{ fontSize:11, fontWeight:700, color:T.goldInk, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans }}>Recommended next action</div>
                 <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(200,185,154,0.15)', border:`1px solid ${T.gold}`, borderRadius:T.r }}>
                     <div style={{ flex:1, fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{nextAction}</div>
-                    <button onClick={() => {
+                    <button onClick={e => {
                         if (!lead) return;
                         if (lead.status === 'New' && !lead.assignee) {
-                            const rep = window.prompt('Assign to rep (enter name):');
-                            if (rep && saveLead) saveLead(lead.id, { assignedTo: rep, assignee: rep });
+                            setRepPick(e.currentTarget.getBoundingClientRect());
                         } else if (lead.status === 'New' || lead.status === 'Contacted') {
                             if (logActivity) logActivity(lead, 'Email');
                         } else if (lead.status === 'Working') {
@@ -578,18 +641,16 @@ const CockpitDetail = ({ lead, saveLead, convertLead, logActivity, showConfirm }
                             <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{lead.assignee}</div>
                             <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>AE · owner{lead.createdAt ? ' since '+relAge(lead.createdAt)+' ago' : ''}</div>
                         </div>
-                        <button onClick={() => {
-                            const rep = window.prompt('Reassign to (enter name):');
-                            if (rep && saveLead) saveLead(lead.id, { assignedTo: rep, assignee: rep });
+                        <button onClick={e => {
+                            setRepPick(e.currentTarget.getBoundingClientRect());
                         }} style={{ padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Reassign</button>
                     </div>
                 ) : (
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                         <div style={{ width:32, height:32, borderRadius:'50%', border:`1px dashed ${T.borderStrong}`, color:T.goldInk, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>+</div>
                         <div style={{ flex:1, fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Not yet assigned</div>
-                        <button onClick={() => {
-                            const rep = window.prompt('Assign to rep (enter name):');
-                            if (rep && saveLead) saveLead(lead.id, { assignedTo: rep, assignee: rep });
+                        <button onClick={e => {
+                            setRepPick(e.currentTarget.getBoundingClientRect());
                         }} style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Assign now</button>
                     </div>
                 )}
@@ -622,6 +683,10 @@ const CockpitDetail = ({ lead, saveLead, convertLead, logActivity, showConfirm }
                     {timeline.length === 0 && <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No activity yet.</div>}
                 </div>
             </div>
+            {repPick && <RepPickerPopover reps={reps || []} anchor={repPick} onPick={rep => {
+                if (saveLead) saveLead(lead.id, { assignedTo: rep.name, assignee: rep.name });
+                setRepPick(null);
+            }} onClose={() => setRepPick(null)}/>}
         </div>
     );
 };
@@ -680,7 +745,7 @@ const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConf
 
             {/* Detail pane */}
             <div style={{ flex:1, minWidth:0 }}>
-                <CockpitDetail lead={selected} saveLead={saveLead} convertLead={convertLead} logActivity={logActivity} showConfirm={showConfirm}/>
+                <CockpitDetail lead={selected} reps={reps} saveLead={saveLead} convertLead={convertLead} logActivity={logActivity} showConfirm={showConfirm}/>
             </div>
         </div>
     );

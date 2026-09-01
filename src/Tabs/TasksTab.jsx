@@ -268,13 +268,14 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
         if (!canEdit) return;
         const updated = { ...task, dueDate: newDate, status: 'Open', completed: false };
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+        // dbFetch returns a Response — check ok, then parse. This used to read
+        // `data?.task` straight off the Response (always undefined), so the
+        // else branch reverted the snooze even when the server had saved it.
         try {
-            const data = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-            if (data?.task) {
-                setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
-            } else {
-                setTasks(prev => prev.map(t => t.id === task.id ? task : t));
-            }
+            const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            setTasks(prev => prev.map(t => t.id === task.id ? (data.task || updated) : t));
         } catch {
             setTasks(prev => prev.map(t => t.id === task.id ? task : t));
         }
@@ -598,13 +599,14 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
         const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
         const updated = { ...task, status: 'Completed', completed: true, completedDate: today };
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+        // dbFetch returns a Response — check ok, then parse. This used to read
+        // `data?.task` straight off the Response (always undefined), so the
+        // else branch un-ticked the checkbox even when the server had saved it.
         try {
-            const data = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-            if (data?.task) {
-                setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
-            } else {
-                setTasks(prev => prev.map(t => t.id === task.id ? task : t));
-            }
+            const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            setTasks(prev => prev.map(t => t.id === task.id ? (data.task || updated) : t));
         } catch {
             setTasks(prev => prev.map(t => t.id === task.id ? task : t));
         } finally { setCompleting(false); }
@@ -615,13 +617,14 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
         if (!canEdit) return;
         const updated = { ...task, dueDate: newDate, status: 'Open', completed: false };
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+        // dbFetch returns a Response — check ok, then parse. This used to read
+        // `data?.task` straight off the Response (always undefined), so the
+        // else branch reverted the snooze even when the server had saved it.
         try {
-            const data = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-            if (data?.task) {
-                setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
-            } else {
-                setTasks(prev => prev.map(t => t.id === task.id ? task : t));
-            }
+            const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            setTasks(prev => prev.map(t => t.id === task.id ? (data.task || updated) : t));
         } catch {
             setTasks(prev => prev.map(t => t.id === task.id ? task : t));
         }
@@ -641,15 +644,21 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
         setLocalContacts(newContacts);
         const updated = { ...task, contacts: newContacts };
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+        // dbFetch returns a Response — check ok, then parse. This used to read
+        // `data?.task` off the Response (always undefined), so the server row
+        // never synced — and a REJECTED save kept the optimistic contacts on
+        // screen forever, corrected only on reload.
         try {
-            const data = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-            if (data?.task) {
-                setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
-                // Do NOT clear localContacts — viewingTask still points to the old
-                // task object so the rail would flash back to the pre-add state.
-            }
+            const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            setTasks(prev => prev.map(t => t.id === task.id ? (data.task || updated) : t));
+            // Do NOT clear localContacts — viewingTask still points to the old
+            // task object so the rail would flash back to the pre-add state.
         } catch {
-            // keep optimistic state on network error
+            // Roll back BOTH copies so local state cannot drift from the DB.
+            setLocalContacts(task.contacts || []);
+            setTasks(prev => prev.map(t => t.id === task.id ? task : t));
         }
     };
 

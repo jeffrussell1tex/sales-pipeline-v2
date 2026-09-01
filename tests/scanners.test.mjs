@@ -201,6 +201,19 @@ test('scan-dbfetch resolves aliases and concise arrow bodies', () => {
     assert.match(r.stdout, /lines 11, 18, 24/);
 });
 
+test('scan-dbfetch catches a Response captured in a variable and read as JSON', () => {
+    // The third class. Live in TasksTab (four sites) and ReportsTab (two): a
+    // VariableDeclarator is not an ExpressionStatement and not a .then()
+    // callback, so both earlier classes walked past `const data = await
+    // dbFetch(...)` followed by `data?.task` — and the complete/snooze
+    // handlers reverted their optimistic update on every SUCCESSFUL save.
+    const r = run('scripts/scan-dbfetch.mjs', [`${FIX}/dbfetch-var-response-as-json.jsx`]);
+    assert.match(r.stdout, /reads \.task on a Response/);
+    assert.match(r.stdout, /reads \.report on a Response/);
+    assert.match(r.stdout, /2 site\(s\)/);
+    assert.notEqual(r.code, 0, 'the variable-captured Response class must fail the gate');
+});
+
 test('scan-dbfetch does not flag a checked Response', () => {
     // THE false-positive class. `.then(r => { if (!r.ok) throw })` fully checks the
     // Response; the scanner used to unwrap straight past it to the dbFetch beneath.

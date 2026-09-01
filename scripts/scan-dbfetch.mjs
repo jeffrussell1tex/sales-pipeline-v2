@@ -144,6 +144,94 @@ const responseUsedAsJson = (node) => {
   return [];
 };
 
+// Third finding class: the Response landed in a VARIABLE and was read as JSON.
+//
+// Found live in TasksTab (Sep 2026) — four handlers shaped
+//
+//     const data = await dbFetch(url, { method: 'PUT', ... });
+//     if (data?.task) { adopt server row } else { revert }
+//
+// `data` is a Response, `data?.task` is undefined forever, and the else branch
+// REVERTED the optimistic update on every SUCCESSFUL save. Neither existing
+// class saw it: the discarded/misuse classes walk ExpressionStatements and
+// .then() callbacks, and a VariableDeclarator is neither — which is how the
+// gate reported 0 while the defect sat in four places.
+//
+// The rule is a provable lower bound, like the others: flag a variable whose
+// initializer unwraps to a bare dbFetch (await/.catch()/.finally() only — a
+// .then() may transform the value, so it bails), wherever that variable's
+// properties are read and the property is not a Response member. Declarators
+// are collected per enclosing function scope; reads are sought through the
+// whole subtree because closures legitimately read the outer variable. A
+// nested redeclaration of the same name would misattribute — the deliberate
+// safe direction: a false positive is visible and gets triaged.
+const FUNCTION_TYPES = new Set([
+  'FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression', 'ObjectMethod', 'ClassMethod',
+]);
+
+const initIsUnparsedDbFetch = (init) => {
+  let n = init;
+  for (let i = 0; i < 12 && n; i++) {
+    if (n.type === 'AwaitExpression') { n = n.argument; continue; }
+    if (n.type === 'CallExpression' && n.callee?.type === 'MemberExpression' &&
+        ['catch', 'finally'].includes(n.callee.property?.name)) {
+      n = n.callee.object; continue;
+    }
+    if (isDbFetchCall(n)) return true;
+    return false;
+  }
+  return false;
+};
+
+const varResponseMisuse = (root) => {
+  const findings = [];
+  const scopes = [root];
+  // Collect every function scope first (Program included via root).
+  const collectScopes = (n) => {
+    if (!n || typeof n !== 'object') return;
+    if (Array.isArray(n)) return n.forEach(collectScopes);
+    if (FUNCTION_TYPES.has(n.type)) scopes.push(n);
+    for (const k of Object.keys(n)) if (!['loc', 'start', 'end'].includes(k)) collectScopes(n[k]);
+  };
+  collectScopes(root);
+
+  for (const scope of scopes) {
+    // Declarators DIRECT in this scope — stop at nested function boundaries so
+    // each declarator is attributed to the scope that owns it.
+    const decls = [];
+    const findDecls = (n) => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(findDecls);
+      if (n !== scope && FUNCTION_TYPES.has(n.type)) return;
+      if (n.type === 'VariableDeclarator' && n.id?.type === 'Identifier' &&
+          n.init && initIsUnparsedDbFetch(n.init)) {
+        decls.push(n);
+      }
+      for (const k of Object.keys(n)) if (!['loc', 'start', 'end'].includes(k)) findDecls(n[k]);
+    };
+    findDecls(scope.body ?? scope);
+    if (!decls.length) continue;
+
+    for (const d of decls) {
+      const name = d.id.name;
+      const props = [];
+      const findReads = (n) => {
+        if (!n || typeof n !== 'object') return;
+        if (Array.isArray(n)) return n.forEach(findReads);
+        if ((n.type === 'MemberExpression' || n.type === 'OptionalMemberExpression') &&
+            n.object?.type === 'Identifier' && n.object.name === name &&
+            n.property?.type === 'Identifier' && !RESPONSE_MEMBERS.has(n.property.name)) {
+          props.push(n.property.name);
+        }
+        for (const k of Object.keys(n)) if (!['loc', 'start', 'end'].includes(k)) findReads(n[k]);
+      };
+      findReads(scope.body ?? scope);
+      if (props.length) findings.push({ line: d.loc.start.line, props: [...new Set(props)] });
+    }
+  }
+  return findings;
+};
+
 // unwrap await / .catch() / .then() chains to see if a dbFetch sits underneath
 // AND whether the Response is consumed anywhere along the way.
 //
@@ -326,6 +414,15 @@ for (const f of files) {
     if (props.length && !seenMisuse.has(e.loc.start.line)) {
       seenMisuse.add(e.loc.start.line);
       jsonMisuse.push({ file: f, line: e.loc.start.line, props });
+    }
+  }
+
+  // Third class: the Response assigned to a variable and read as JSON. Reported
+  // at the DECLARATOR line — the fix belongs where the Response was captured.
+  for (const v of varResponseMisuse(ast.program)) {
+    if (!seenMisuse.has(v.line) && !skip.has(v.line)) {
+      seenMisuse.add(v.line);
+      jsonMisuse.push({ file: f, line: v.line, props: v.props });
     }
   }
 }

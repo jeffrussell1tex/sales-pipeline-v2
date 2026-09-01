@@ -2512,11 +2512,16 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         const id = 'rpt_' + crypto.randomUUID();
         const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, ownerId: currentUser, ownerName: currentUser };
         try {
-            const data = await dbFetch('/.netlify/functions/saved-reports', {
+            // dbFetch returns a Response — check ok, then parse. This used to
+            // read `data?.report` off the Response AND never checked ok, so a
+            // rejected save showed "Saved" while the report never persisted.
+            const res = await dbFetch('/.netlify/functions/saved-reports', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
             setSavedReportsList(prev => [data?.report || payload, ...prev]);
             setSaveState('saved');
             setTimeout(() => setSaveState('idle'), 3000);
@@ -5811,11 +5816,16 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             ownerId: currentUser, ownerName: currentUser,
         };
         try {
-            const data = await dbFetch('/.netlify/functions/saved-reports', {
+            // dbFetch returns a Response — check ok, then parse. This used to
+            // read `data?.report` off the Response AND never checked ok, so a
+            // rejected save showed "Saved" while the report never persisted.
+            const res = await dbFetch('/.netlify/functions/saved-reports', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
             // Update shared savedReportsList in parent so it shows in Saved Reports tab immediately
             if (onSaveReport) onSaveReport(data?.report || payload);
             setSaveReportState('saved');

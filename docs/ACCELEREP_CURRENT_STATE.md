@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 1, 2026
-**Verified at:** all seven gates green · **284 tests** (was 282; +2 source guards) · **43 integration** (was 33; +5 opportunities, +5 tasks — the first coverage either endpoint has had) · **88/88 mutations caught, printed green baseline** (was 86; +2 merge reverts, both CAUGHT) · build 2,466 kB, bundle guard OK · every number above observed locally 1 Sep, same run as the §0.56 batch. §0.54's browser/smoke observations stand; `master` was fast-forwarded to the 31 Aug docs batch (`da538b1`) by Jeff on 31 Aug evening, CI green on BOTH branches — no code delta reached prod.
-**Batch:** **the opportunities and tasks PUT overwrite paths are closed — the sanitize-then-upsert audit's third and fourth faces** — both single-record PUTs now `sanitize({ ...existing, ...data })` (field-present semantics; `ownerIdForUpdate` still fed the RAW body per 18b13); opportunities previously wiped stageHistory/comments and reset pipelineId, tasks additionally UN-COMPLETED itself via `completed ?? false` · **severity settled by reading every sender FIRST: no current client sends a partial PUT** to either endpoint (all spread the full row) — a loaded gun, not a live wipe; external API-key writers remain an UNREAD open question · held closed the leads way ×2: source-assertion guards, mutation entries, and the two first-ever integration suites (`itest_opps_*` / `itest_tasks_*` namespaces per §18b25) · **found while reading, NOT fixed: four TasksTab sites read `data?.task` off a raw Response** — complete/snooze there revert the optimistic update on SUCCESS (UI flicker-back, data saved); `check:dbfetch` misses the shape — scanner false-negative class, fix + fixture queued (§0.56)
+**Verified at:** all seven gates green — the dbfetch gate now carries THREE classes and reads 0 across `src/` · **285 tests** (284 → +1 scanner meta-test) · **43 integration** (observed this morning with §0.56; not re-run for §0.57 — no endpoint changed) · **88/88 mutations, printed green baseline** · build **2,468 kB** (+2 kB, the picker), bundle guard OK · **OUTSTANDING: the §0.57 browser pass** — the picker has NOT been eyeballed; rep-path check as Karen (URL bar, org count, §19) is the gate before this deploys. `master` sits at the 31 Aug docs batch; nothing from 1 Sep has been pushed anywhere yet.
+**Batch:** **the dbfetch scanner's third class (a Response captured in a VARIABLE and read as JSON) built scanner-FIRST, and its first run found SIX live sites, not the four known** — the TasksTab complete/snooze/saveContacts handlers that REVERTED their optimistic update on every successful save, plus two ReportsTab report-saves that showed "Saved" on a rejected write without ever checking `res.ok`; all six fixed with the canonical `res.ok` → `res.json()` → adopt-server-row shape, scanner 6 → 0 · pinned by a new catch fixture, two safe-fixture additions, and a scanners.test.mjs case · **the assignee picker retires all five free-text `window.prompt` assign sites in LeadsTab** (`RepPickerPopover`, module-scope, `getBoundingClientRect` + `position:fixed`, name-keyed payloads — the server stays the resolver) · **the §0.54 case question ANSWERED**: `resolveOwnerId` lowercases both sides — spelling was the risk, not case (§0.57)
+**Prior batch:** **the opportunities and tasks PUT overwrite paths are closed — the sanitize-then-upsert audit's third and fourth faces** — both single-record PUTs now `sanitize({ ...existing, ...data })` (field-present semantics; `ownerIdForUpdate` still fed the RAW body per 18b13); opportunities previously wiped stageHistory/comments and reset pipelineId, tasks additionally UN-COMPLETED itself via `completed ?? false` · **severity settled by reading every sender FIRST: no current client sends a partial PUT** to either endpoint (all spread the full row) — a loaded gun, not a live wipe; external API-key writers remain an UNREAD open question · held closed the leads way ×2: source-assertion guards, mutation entries, and the two first-ever integration suites (`itest_opps_*` / `itest_tasks_*` namespaces per §18b25) · **found while reading, NOT fixed: four TasksTab sites read `data?.task` off a raw Response** — complete/snooze there revert the optimistic update on SUCCESS (UI flicker-back, data saved); `check:dbfetch` misses the shape — scanner false-negative class, fix + fixture queued (§0.56)
 **Prior batch:** **the SEVENTH GATE ships** — `scripts/check-handoff.mjs` byte-compares the root and `docs/` handoff copies (the pair drifted a third time: the FINAL rewrite was committed to one copy only), classifies EOL/whitespace/content divergence, names the first differing line; wired into `check:handoff`, guide §19 and the CI gates job, proven with 4 committed fixtures + 3 behavioral tests · **CLAUDE.md created at repo root** (132 + 11 lines — standing rules only, no session state; the multi-tenancy isolation hard rule in its own commit) · **the CI unit-job blind spot fixed** — `node --test` ran with no `npm install`, so `scanners.test.mjs`'s babel-dependent gate spawns died ERR_MODULE_NOT_FOUND on every clean runner (suspected red since the scanner suite landed; NOT verified against old runs) · **`.gitignore`'s unanchored `fixtures/` swallowed `tests/fixtures/`** — a fixture commit shipped 3 of 7 files with the refusal hint lost between CRLF warnings; anchored to `/fixtures/` · **the doc-ordering rule** (Jeff's call, guide §22): doc changes applied/verified/committed when known, never end-of-session patch scripts, handoff written LAST — origin: the §0.54 amendment script that had never actually run with `--apply` · **the sanitize-then-upsert audit is now FOUR for four**: `opportunities.mjs` single-record PUT and `tasks.mjs` PUT both run raw `sanitize(data)` (tasks also un-completes via `completed ?? false`); diagnosed, NOT fixed — next session's opening batch (§0.55)
 **Prior batch:** **the leads PUT overwrite path is closed** — `saveLead` has always sent `{ id, ...patch }` while `sanitize()` rebuilt the whole row, so a two-key status change nulled every other column (the client's local merge masked it until reload); the PUT now sanitizes the payload OVERLAID ON THE STORED ROW (`sanitize({ ...existing, ...data })`, the users.mjs `mergeForUpdate` pattern minus the blob flatten), with `ownerIdForUpdate` still fed the RAW body so 18b13's mentioned-assignedTo detection is untouched · held closed three ways: integration test (partial PUT preserves nine fields; explicit null still clears), a SOURCE-ASSERTION guard in `tests/partial-sanitize.test.mjs` (the harness runs unit suites only), and mutation #86 · **unassigned-ness keys on `ownerId` across LeadsTab** — both chips, both filters, the triage lane, the Distribute pool/count and the subtitle (they undercounted 6 vs 19 by counting names); Distribute load bars count `l.ownerId === id` via a `reps` `{id, name}` roster (settings.users carries the usr_ id for every role); the assignment payload stays NAME-keyed on purpose — the server resolves it and 409s ambiguity · **13 stale `assignedTo` ghosts cleared on dev** via `scripts/clear-stale-assigned-names.mjs` — dry-run reviewed, `--apply --org --expect` pinned, post-verified zero remain · **prod roles cleanup CLOSED both sides** (morning, commits `92386aa`+`34a3f94`): Clerk held ONE refused value (`"Sales Rep"` on the live.com user — the label-as-value seed), fixed via the UI and re-run clean; the mirror's `member` ×4 were UKG rows fixed through the `user-role` path after a single-subject validation with three controls, both locations (column + frozen blob) healing per save; two read-only verifiers added (`check-mirror-roles.mjs`, `list-clerk-members.mjs`) · **a prod `sk_live_` Clerk key was committed locally** (`93571f4`, sole-file commit), caught pre-push by `ls-files`/`check-ignore` disagreeing, reset out — the key never left the machine; `.env.clerk-prod` ignore rule added (§0.54)
 **Prior batch:** **the unassigned half of the leads read policy is now an admin toggle** — `settings.extra.unassignedLeadsVisibleToReps` (default true; absent key = standing policy), enforced in `leads.mjs` GET with an explicit `!!l.ownerId` null-collision guard (18b22) · new `LeadVisibilityDetail` panel, four-step wiring, live policy badge · **Mine/All on Leads** keyed on `ownerId` (norm() gains the passthrough; never the display name) · **first rep-role integration coverage for `leads.mjs`** — 5 tests incl. the unresolvable-caller-under-strict-policy case asserting ZERO rows · two permanent unit guards: the null-null-collision SHAPE guard across all six endpoints, and 18b12-as-a-test for this key · the itest **org-namespace collision** found and fixed (guide §18b25) · harness anchor #14 repointed, +5 mutations, **85/85** · **local `netlify dev` failure root-caused to a stale `dist/`** (typeless module responses; the documented cleanup fixed it — guide §19 gains the recognition note; a toml-redirect hypothesis recorded as UNPROVEN, not shipped) · guide **§18b25** (§0.53)
@@ -576,6 +577,65 @@ property reads on `x` with no `.json()` anywhere. Two work items queued:
 fix the four sites (route them through `dbWrite` or `.json()`), and teach
 `scan-dbfetch.mjs` the property-read-on-Response shape with fixtures per
 §18b6. Severity: UI-only flicker-back, data IS saved; not a wipe.
+
+---
+
+### 0.57 The scanner's third class pays on its first run, and the assignee picker retires the prompts (1 Sep, second batch)
+
+**`scan-dbfetch` gains a third finding class: the Response captured in a
+VARIABLE and read as JSON.** The §0.56 queue item, done scanner-first to
+prove the fix instead of assuming it. `const data = await dbFetch(...)`
+followed by `data?.task` is a VariableDeclarator — not an
+ExpressionStatement, not a `.then()` callback — so both existing classes
+walked past it and the gate reported 0 while the defect sat in four places.
+The class is a provable lower bound like the others: the initializer must
+unwrap to a bare dbFetch (await/`.catch()`/`.finally()` only — a `.then()`
+may transform the value, so it bails), declarators are collected per
+enclosing function scope, reads are sought through the whole subtree
+(closures legitimately read the outer variable), and only non-Response-member
+properties are findings, reported at the declarator line. Pinned by
+`dbfetch-var-response-as-json.jsx` (both live shapes) plus two MUST-NOT-CATCH
+additions to `dbfetch-safe.jsx` (the canonical `res`/`res.json()` var
+pattern, and a `.then(r => r.json())` init), and a scanners.test.mjs case —
+284 → **285** unit.
+
+**First run of the new class found SIX sites, not four.** The four known
+TasksTab handlers (snooze ×2, complete, saveContacts) — where the else
+branch REVERTED the optimistic update on every successful save — plus two
+unknown in ReportsTab (`handleSaveReport`, `handleSaveAsReport`): both read
+`data?.report` off the Response AND never checked `res.ok`, so a rejected
+save showed "Saved" while the report never persisted and the fallback
+`|| payload` masked the whole thing. All six fixed with the canonical shape
+(`res.ok` check → `res.json()` → adopt server row, revert on failure);
+saveContacts additionally rolls back BOTH state copies on a rejected save
+where it previously kept optimistic contacts forever. Scanner over `src/`:
+6 findings before the fix, 0 after.
+
+**The assignee picker retires the five free-text prompts.** `RepPickerPopover`
+— module-scope (the §16-class rule), anchored via
+`getBoundingClientRect` + `position: fixed` (the house popover pattern),
+warm-stone styled, with a filter input and avatar rows — replaces all five
+`window.prompt('Assign to rep…')` sites in LeadsTab: the bulk-selection
+Assign, the table-row `+ Assign`, and CockpitDetail's "Do it"/Reassign/
+"Assign now" (CockpitDetail gains a `reps` prop from CockpitView; its picker
+state is declared BEFORE the empty-state return — hooks on every render
+path). The payload stays NAME-keyed on purpose — the server remains the
+resolver and still 409s ambiguity. **The §0.54 case question is ANSWERED by
+reading the resolver:** `resolveOwnerId` trims and lowercases BOTH sides, so
+case was never a risk — misspelling was, and the picker removes it. Out of
+scope, still prompts: the bulk status change (a vocabulary, not a roster)
+and RolesDetail's rename. No unassign affordance was added — the endpoint
+supports explicit-null clears but the UI never offered one; queued as a
+product question, not snuck in.
+
+**Verified:** seven gates green (the enhanced dbfetch gate at 0 across
+`src/`) · build **2,468 kB** (+2 kB for the picker), bundle guard OK ·
+**285/285** unit · **88/88** mutations, printed green baseline · `test:int`
+not re-run this batch (no endpoint changed; 43/43 observed earlier today,
+§0.56). **NOT yet verified: the browser pass.** The picker is a UI change
+and the rep-path browser check (as Karen, per §19 — URL bar read, org count)
+has NOT run; it is the outstanding gate before this batch deploys, and this
+doc will not claim it until it is observed.
 
 ---
 
