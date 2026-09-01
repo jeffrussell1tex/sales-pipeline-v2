@@ -77,7 +77,7 @@ so one rep click legitimately scatters the whole unassigned pool. Because
 every constituent write is individually authorized, the gate is necessarily
 CLIENT-side: the button renders only under `canSeeAll` (the context's
 shared Admin/Manager predicate). Pinned by a source assertion + a harness
-mutation.
+mutation, and OBSERVED: the button is gone for Karen after a hard refresh.
 
 **The rep-path browser pass ran COMPLETE, as Karen, on localhost** — the
 first in the product's history (`f6f00a8`, `e75582d`). URL bar and orgs
@@ -122,15 +122,25 @@ today's eight commits are local only.
 3. **`master` fast-forward when Jeff calls it** — today's batch includes
    endpoint fixes, client fixes, the picker, Mine-strict, and the
    Auto-assign gate; it deserves the dev smoke first.
-4. **Two queued product decisions for Jeff**, no code until called:
+4. **Reported at close, NOT diagnosed: "Auto-assign all doesn't seem to
+   work"** (no repro details captured; the button is Admin/Manager-only as
+   of `5551b20`, so the report is about that path). Read the click path
+   before diagnosing. FIRST RULE-OUT — an open question, not a cause: the
+   pool follows the Mine/All scope, and strict Mine EMPTIES the unassigned
+   pool by construction, so `unassigned.length === 0` hits the silent
+   early return and the click does nothing with no feedback. If that is
+   the whole story it merges into the Distribute-in-Mine UX decision; if
+   not, read `l.raw?.id || l.id` and the per-lead `saveLead` fan-out.
+   Detail in §0.57's third addendum.
+5. **Two queued product decisions for Jeff**, no code until called:
    whether a rep may assign an unassigned lead to ANOTHER rep through the
    picker (the server currently permits it — same rule that lets reps
    claim), and the Distribute-in-Mine UX question (strict Mine zeroes its
-   pool).
-5. **The SettingsTab cleanup pass** is the top queued code item: the
+   pool — sharpened by item 4).
+6. **The SettingsTab cleanup pass** is the top queued code item: the
    non-writer autosave 403 toast (seen twice today), audit actor
    attribution, the UNREAD Reconcile button, the Security card.
-6. Then: the "NaNyr ago" date bug · picker-format replication to other
+7. Then: the "NaNyr ago" date bug · picker-format replication to other
    person-selects (as surfaces get touched, per Jeff's call) · API-key PUT
    reachability (read the API auth path before claiming) · rep-role GET
    coverage for the four §0.48 endpoints · carried: `documents.mjs` local

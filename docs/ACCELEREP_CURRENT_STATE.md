@@ -694,11 +694,25 @@ renders only when `canSeeAll` (the context's shared Admin/Manager predicate,
 source assertion in `tests/leads-scope.test.mjs` (gate present exactly once,
 keyed on the SHARED predicate, not a re-derived role check) and a harness
 mutation (`{canDistribute && (` → `{true && (`). 288 → **289** unit,
-90 → **91/91** mutations, green baseline. STANDING PRODUCT QUESTION, not
+90 → **91/91** mutations, green baseline. **OBSERVED: the button is gone
+for Karen after a hard refresh** (Jeff, same session). STANDING PRODUCT QUESTION, not
 changed today: a rep can still assign an unassigned lead to ANOTHER rep
 one-at-a-time through the picker — the server permits it by the same
 unassigned-rows-are-editable rule. Whether claiming should be self-only for
 reps is a policy decision for Jeff, queued.
+
+**Reported at close, NOT diagnosed: "Auto-assign all doesn't seem to
+work"** (Jeff, 1 Sep, end of session — no repro details captured). Read the
+click path before diagnosing anything. FIRST THING TO RULE OUT (an open
+question, not a cause): the button's pool follows the Mine/All scope, and
+under the new strict Mine the unassigned pool is empty BY CONSTRUCTION —
+`unassigned.length === 0` hits the silent early return and the click does
+nothing, with no feedback. If that is the whole story, the fix is a UX
+decision (feed Distribute the unscoped list, disable the button with a
+count of zero, or surface the early return) — the queued Distribute-in-Mine
+question, now with teeth. If it is NOT the story, the candidates in the
+click path are `l.raw?.id || l.id` (the scoped rows are norm()-mapped) and
+the per-lead `saveLead` fan-out — read, do not guess.
 
 ---
 
