@@ -613,6 +613,10 @@ const mutations = [
         'src/utils/importRows.js',
         '    forecastedCloseDate:csvDay,',
         "    forecastedCloseDate:(v) => v || '',"],
+    ['date: the coaching note stores a UTC day again (the sweep scan)',
+        'src/Tabs/SalesManagerTab.jsx',
+        'date:todayLocal(), author:currentUser }];',
+        "date:new Date().toISOString().split('T')[0], author:currentUser }];"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

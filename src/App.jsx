@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken } from './utils/storage';
+import { isoLocal } from './utils/dateLocal';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import CsvImportModal from './components/modals/CsvImportModal';
 import { useSettings } from './hooks/useSettings';
@@ -1177,7 +1178,7 @@ dbFetch('/.netlify/functions/users?me=true')
     useEffect(() => {
         const checkReminders = () => {
             const now = new Date();
-            const nowDate = now.toISOString().split('T')[0];
+            const nowDate = isoLocal(now);
             const nowHour = now.getHours();
             const nowMin = now.getMinutes();
             

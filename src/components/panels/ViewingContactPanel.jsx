@@ -1,4 +1,5 @@
 import { dbFetch, dbWrite } from '../../utils/storage';
+import { todayLocal } from '../../utils/dateLocal';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useApp } from '../../AppContext';
@@ -178,7 +179,7 @@ export default function ViewingContactPanel({
                     </button>
                     {ctOpps.length > 0 && (
                         <button
-                            onClick={() => { setMeetingPrepEvent({ summary: ctFullName, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(ctOpps[0].id); setMeetingPrepOpen(true); }}
+                            onClick={() => { setMeetingPrepEvent({ summary: ctFullName, start: { date: todayLocal() }, attendeeCount: 0 }); setMeetingPrepOppId(ctOpps[0].id); setMeetingPrepOpen(true); }}
                             style={{ height: '32px', padding: '0 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#f5f1eb', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}
                             title="Meeting prep"
                         >

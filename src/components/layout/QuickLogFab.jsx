@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch, dbWrite } from '../../utils/storage';
+import { isoLocal } from '../../utils/dateLocal';
 
 export default function QuickLogFab() {
     const {
@@ -190,7 +191,7 @@ export default function QuickLogFab() {
                             Skip
                         </button>
                         <button onClick={() => {
-                            setEditingTask({ relatedTo: followUpPrompt.opportunityId, opportunityId: followUpPrompt.opportunityId, type: 'Follow-up', dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0] });
+                            setEditingTask({ relatedTo: followUpPrompt.opportunityId, opportunityId: followUpPrompt.opportunityId, type: 'Follow-up', dueDate: isoLocal(new Date(Date.now() + 86400000)) });
                             setTaskRailId('new');
                             setTaskRailMode('new');
                             setFollowUpPrompt(null);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
+import { isoLocal } from '../../utils/dateLocal';
 
 export default function OutlookImportModal({ contacts, opportunities, activities, onClose, onImport }) {
     const [step, setStep] = useState('upload'); // upload, preview, results
@@ -146,7 +147,7 @@ export default function OutlookImportModal({ contacts, opportunities, activities
             if (dateRaw) {
                 const parsed = new Date(dateRaw);
                 if (!isNaN(parsed.getTime())) {
-                    date = parsed.toISOString().split('T')[0];
+                    date = isoLocal(parsed);
                 } else {
                     date = dateRaw;
                 }

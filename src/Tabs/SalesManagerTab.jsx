@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
+import { isoLocal, todayLocal } from '../utils/dateLocal';
 
 // ── V1 Design tokens ──────────────────────────────────────────
 const T = {
@@ -43,7 +44,7 @@ const Avatar = ({ name, size=28 }) => {
 // ── Per-rep stats computation ─────────────────────────────────
 function buildRepStats(rep, opportunities, activities, tasks) {
     const today    = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = isoLocal(today);
 
     const allRepOpps  = (opportunities||[]).filter(o => o.salesRep === rep.name || o.assignedTo === rep.name);
     const activeOpps  = allRepOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
@@ -834,7 +835,7 @@ export default function SalesManagerTab() {
                         onClick={() => {
                             const note = prompt('Add coaching note (rep name: note text):');
                             if (note) {
-                                const notes = [...(settings.coachingNotes||[]), { id:'cn_'+Date.now(), text:note, date:new Date().toISOString().split('T')[0], author:currentUser }];
+                                const notes = [...(settings.coachingNotes||[]), { id:'cn_'+Date.now(), text:note, date:todayLocal(), author:currentUser }];
                                 setSettings(prev => ({...prev, coachingNotes:notes}));
                             }
                         }}>

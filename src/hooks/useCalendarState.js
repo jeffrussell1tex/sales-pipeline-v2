@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isoLocal, todayLocal } from '../utils/dateLocal';
 
 export function useCalendarState() {
     // Calendar strip
@@ -21,11 +22,9 @@ export function useCalendarState() {
     // Log from Calendar
     const [logFromCalOpen, setLogFromCalOpen] = useState(false);
     const [logFromCalDateFrom, setLogFromCalDateFrom] = useState(() => {
-        const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0];
+        const d = new Date(); d.setDate(d.getDate() - 7); return isoLocal(d);
     });
-    const [logFromCalDateTo, setLogFromCalDateTo] = useState(() =>
-        [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-')
-    );
+    const [logFromCalDateTo, setLogFromCalDateTo] = useState(() => todayLocal());
     const [logFromCalEvents, setLogFromCalEvents] = useState([]);
     const [logFromCalLoading, setLogFromCalLoading] = useState(false);
     const [logFromCalError, setLogFromCalError] = useState(null);

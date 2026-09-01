@@ -1,7 +1,7 @@
 # ACCELEREP — Current State
 **Updated:** September 1, 2026
-**Verified at:** five gates green · **315 tests** (+9 date-local read side, +5 import-rows date cells — §0.60) · **79 integration** (observed with §0.59; not re-run since — no endpoint changed) · **104/104 mutations, printed green baseline** (+5, §0.60) · build **2,481 kB JS**, bundle guard OK, local `dist/` cleared after every gate build (the §19 self-arming rule) · **rep-path browser pass COMPLETE** (Karen, localhost, 1 Sep): picker renders/anchors/lists the roster; Mine-strict OBSERVED — All 23 / Mine 5, the predicted 5-owned + 18-unassigned split to the digit; one lead assigned through the picker, Mine 5 → 6, and the assignment HOLDS AFTER A HARD REFRESH. The picker's save path is proven end-to-end on the detail-rail entry point; the other four share the same component and handler. `master` and prod run the §0.58+§0.59 set (`d5254b8`, both deploys marker-verified); §0.60 is LOCAL until Jeff pushes.
-**Batch:** **the date-pattern audit** — the `+'T12:00:00'` shape counted at ~140 sites, not the ~20 queued; four live-or-unguarded NaN sites fixed (deal-timeline task sort, speed-to-lead/velocity on the varchar(30) lead dates, avgDaysForStage's never-written `changedAt` fallback, TaskItem's UTC-midnight `Due:` and 7pm-Central overdue) · `parseLocalDate`/`toLocalDay` — the READ side of the date contract, guide **§18b26** · **the CSV importer normalises Close/Created Date** (both passed through as written: "9/15/2026" made an Invalid Date of that deal everywhere downstream — never-stale, undated quarter) · **the isoLocal queue was LOST with an overwritten handoff** — 43 UTC-truncated day sites remain and the two the batch named worst are still live; the sweep is the next batch, pinned by a source scan (§0.60)
+**Verified at:** five gates green · **317 tests** (+9 date-local read side, +5 import-rows date cells, +2 the sweep scan and its self-check — §0.60) · **79 integration** (observed with §0.59; not re-run since — no endpoint changed) · **105/105 mutations, printed green baseline** (+6, §0.60) · build **2,480 kB JS**, bundle guard OK, local `dist/` cleared after every gate build (the §19 self-arming rule) · **rep-path browser pass COMPLETE** (Karen, localhost, 1 Sep): picker renders/anchors/lists the roster; Mine-strict OBSERVED — All 23 / Mine 5, the predicted 5-owned + 18-unassigned split to the digit; one lead assigned through the picker, Mine 5 → 6, and the assignment HOLDS AFTER A HARD REFRESH. The picker's save path is proven end-to-end on the detail-rail entry point; the other four share the same component and handler. `master` and prod run the §0.58+§0.59 set (`d5254b8`, both deploys marker-verified); §0.60 is LOCAL until Jeff pushes.
+**Batch:** **the date-pattern audit** — the `+'T12:00:00'` shape counted at ~140 sites, not the ~20 queued; four live-or-unguarded NaN sites fixed (deal-timeline task sort, speed-to-lead/velocity on the varchar(30) lead dates, avgDaysForStage's never-written `changedAt` fallback, TaskItem's UTC-midnight `Due:` and 7pm-Central overdue — and TaskItem turned out to be UNMOUNTED, so three live, not four) · `parseLocalDate`/`toLocalDay` — the READ side of the date contract, guide **§18b26** · **the CSV importer normalises Close/Created Date** (both passed through as written: "9/15/2026" made an Invalid Date of that deal everywhere downstream — never-stale, undated quarter) · **the isoLocal queue was LOST with an overwritten handoff — found and SWEPT the same session**: 45 UTC-truncated day sites (43 hand-counted; the pinning scan found two more on its first run), 37 rewritten to `isoLocal`/`todayLocal` across 12 files, 8 named exceptions, and the scan in `date-local.test.mjs` is the list that cannot be lost · **ten component files are imported by App.jsx and rendered NOWHERE** (4,160 lines — the three Viewing panels, Account/Task/Activity modals, TaskItem, AnalyticsDashboard, PipelinesSettingsPanel, LeadForm), proven by the bundle being byte-identical with and without an edit to two of them; deletion is Jeff's call, chip spawned (§0.60)
 **Prior batch:** **the request flow shipped end to end** (§0.58) and **the SettingsTab cleanup + honest Security surfaces** (§0.59); both on prod, deploy-verified. Their headers say "2 Sep"; git carries every one of their commits at 1 Sep -0500 — flagged in §0.60, not rewritten
 **Prior batch:** **the dbfetch scanner's third class (a Response captured in a VARIABLE and read as JSON) built scanner-FIRST, and its first run found SIX live sites, not the four known** — the TasksTab complete/snooze/saveContacts handlers that REVERTED their optimistic update on every successful save, plus two ReportsTab report-saves that showed "Saved" on a rejected write without ever checking `res.ok`; all six fixed with the canonical `res.ok` → `res.json()` → adopt-server-row shape, scanner 6 → 0 · pinned by a new catch fixture, two safe-fixture additions, and a scanners.test.mjs case · **the assignee picker retires all five free-text `window.prompt` assign sites in LeadsTab** (`RepPickerPopover`, module-scope, `getBoundingClientRect` + `position:fixed`, name-keyed payloads — the server stays the resolver) · **the §0.54 case question ANSWERED**: `resolveOwnerId` lowercases both sides — spelling was the risk, not case (§0.57)
 **Prior batch:** **the opportunities and tasks PUT overwrite paths are closed — the sanitize-then-upsert audit's third and fourth faces** — both single-record PUTs now `sanitize({ ...existing, ...data })` (field-present semantics; `ownerIdForUpdate` still fed the RAW body per 18b13); opportunities previously wiped stageHistory/comments and reset pipelineId, tasks additionally UN-COMPLETED itself via `completed ?? false` · **severity settled by reading every sender FIRST: no current client sends a partial PUT** to either endpoint (all spread the full row) — a loaded gun, not a live wipe; external API-key writers remain an UNREAD open question · held closed the leads way ×2: source-assertion guards, mutation entries, and the two first-ever integration suites (`itest_opps_*` / `itest_tasks_*` namespaces per §18b25) · **found while reading, NOT fixed: four TasksTab sites read `data?.task` off a raw Response** — complete/snooze there revert the optimistic update on SUCCESS (UI flicker-back, data saved); `check:dbfetch` misses the shape — scanner false-negative class, fix + fixture queued (§0.56)
@@ -1271,7 +1271,10 @@ with a `createdAt` timestamp. Four sites were live or unguarded, all fixed:
   a `toISOString` "today" that rolls at 7pm Central. Both were named in the
   `dateLocal.js` header as observed damage; neither had been fixed. Now a
   `yyyy-mm-dd` string compare against `todayLocal()` and a
-  `parseLocalDate` render.
+  `parseLocalDate` render. **Corrected in batch 2: `TaskItem` is imported by
+  App.jsx and rendered NOWHERE** — the fix is real, no screen shows it, and
+  "live" was written before checking the component was mounted (the dead-code
+  finding below). Three live sites in this list, not four.
 
 **The read side of the date contract has a home.** `dateLocal.js` gains
 `parseLocalDate(v)` — a bare day reads at LOCAL noon, anything carrying a time
@@ -1313,16 +1316,48 @@ Comparing on wrong days: `TasksTab`'s calendar strings (`setHours(0)` then
 `PipelineTab` quarter and week keys, `ListView`'s current quarter, `App.jsx`
 reminder popups, `useCalendarState`, nine `ReportsTab` cutoffs. Correct as
 they are: five export filenames (an instant is fine) and `stageClock.backdate`
-(a deliberate UTC round trip on a UTC-parsed day). The sweep is the next
-batch, pinned by a source scan in `date-local.test.mjs` so the list cannot be
-lost a second time.
+(a deliberate UTC round trip on a UTC-parsed day).
 
-Verified: five gates green · **315/315 unit** (+9 date-local read side, +5
-import-rows date cells) · **104/104 mutations, printed green baseline** (+5:
-the NaNyr revert, the UTC-midnight read, the 2/30 roll-over, the digit-run
-passthrough, the importer passthrough) · build 2,481 kB JS, guard OK, `dist/`
-cleared · integration not re-run (no endpoint changed) · a browser pass for
-the timeline sort and TaskItem's `Due:` rides the sweep's pass.
+**The sweep ran in the same session (batch 2).** 37 sites rewritten across 12
+files — `SalesManagerTab` (the coaching-note STORE and its `todayStr`),
+`QuickLogFab`, `OutlookImportModal`, `App.jsx`, `TasksTab` ×4, `PipelineTab`
+×7, `ListView`, `useCalendarState` ×2, `ReportsTab` ×13, and the meeting-prep
+"today" in `ViewingAccountPanel`/`ViewingContactPanel` — the last two found
+by the pinning scan on its FIRST run, not by the hand count: 45 sites, not
+43, which is the whole argument for a scan over a list. Eight remain by name
+(five export filenames, `stageClock.backdate`, the `dateLocal.js` header)
+and a self-check asserts the scan still matches the shape it guards.
+Mutation: the coaching note reverting to a UTC day is caught by the scan.
+
+**Found by the hash, not by reading: ten component files are imported by
+App.jsx and rendered nowhere.** The build after the two panel edits carried
+the SAME chunk hash and byte-identical content — md5 `e55b7734bcff` with the
+edit stashed and with it applied — and a content hash cannot do that unless
+the edited code is not in the bundle. It is not: `<ViewingAccountPanel`
+appears in no JSX anywhere, and the same check on every default import in
+App.jsx finds ten components no file renders — `ViewingContactPanel`,
+`ViewingAccountPanel`, `ViewingTaskPanel`, `AccountModal`, `TaskModal`,
+`ActivityModal` (rendered only inside the dead contact panel), `TaskItem`,
+`AnalyticsDashboard`, `PipelinesSettingsPanel`, `LeadForm` — 4,160 lines,
+each with a "replaced by …Rail" comment in ModalLayer or no reference at all.
+Rollup tree-shakes them, so no user ever saw them; the gates still scan them
+(`check:inline` counts them among its 114 files, the new scan among its
+candidates), and this session "fixed" TaskItem before checking it was
+mounted. The edits stand — the scan covers every file on disk, and a dead
+file with the wrong shape would fail it — but the honest count above is
+three live sites. Deleting the ten is Jeff's call (a background-task chip
+exists); guide §18b26 gains the rule that came out of it.
+
+Verified (both batches): five gates green · **317/317 unit** (+9 date-local
+read side, +5 import-rows date cells, +2 the sweep scan and its self-check) ·
+**105/105 mutations, printed green baseline** (+6: the NaNyr revert, the
+UTC-midnight read, the 2/30 roll-over, the digit-run passthrough, the importer
+passthrough, the coaching-note UTC revert) · build 2,480 kB JS, guard OK,
+`dist/` and `node_modules/.vite` cleared · integration not re-run (no
+endpoint changed) · a browser pass for the deal-timeline sort, the
+coaching-note date and the Tasks calendar day keys is QUEUED (Karen and
+Admin, after the next `netlify dev` restart, alongside the `documents`
+re-probe).
 
 ---
 

@@ -2896,3 +2896,8 @@ renders as the previous evening across the Americas (TaskItem's `Due:`), and
   The isoLocal batch's 24-site list was written into a handoff that the next
   session overwrote; the two sites it named as worst stayed live for the
   weeks nobody could see the list.
+- A bug is live only in a component that is MOUNTED. Before recording a fix
+  as live, grep for `<Name` somewhere other than the component's own file.
+  `TaskItem` was fixed as live in §0.60 and renders nowhere; ten components
+  imported by App.jsx are in that state, and it was the bundle hash — unchanged
+  across an edit to two of them — that said so, not a reading of the code.

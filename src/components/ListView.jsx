@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { quarterOf, quarterRange, groupByQuarter } from '../utils/quarters';
+import { todayLocal } from '../utils/dateLocal';
 
 // ── Tokens — exact match to PipelineTab ──────────────────────
 const T = {
@@ -357,7 +358,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit }) {
     const groups = groupByQuarter(openOpps, fiscalStart);
 
     // Determine current calendar quarter key
-    const todayIso  = new Date().toISOString().split('T')[0];
+    const todayIso  = todayLocal();
     const currentQk = quarterOf(todayIso, fiscalStart);
     const currentKey = currentQk ? currentQk.key : null;
 

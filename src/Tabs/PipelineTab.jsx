@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
+import { isoLocal } from '../utils/dateLocal';
 import KanbanView from '../components/KanbanView';
 import FunnelView from '../components/FunnelView';
 import ListView from '../components/ListView';
@@ -87,12 +88,12 @@ function FilterPanel({
     if (!open) return null;
 
     const today    = new Date();
-    const currentQ = getQuarter(today.toISOString().split('T')[0]);
-    const currentQL = getQuarterLabel(currentQ, today.toISOString().split('T')[0]);
+    const currentQ = getQuarter(isoLocal(today));
+    const currentQL = getQuarterLabel(currentQ, isoLocal(today));
     const qNum     = parseInt(currentQ.replace('Q', ''));
     const nextQNum = qNum < 4 ? qNum + 1 : 1;
     const nextQDate = new Date(today); nextQDate.setMonth(today.getMonth() + 3);
-    const nextQL   = getQuarterLabel('Q' + nextQNum, nextQDate.toISOString().split('T')[0]);
+    const nextQL   = getQuarterLabel('Q' + nextQNum, isoLocal(nextQDate));
 
     const timeWindows = [
         { key: 'thisQuarter', label: 'This quarter' },
@@ -485,12 +486,12 @@ export default function PipelineTab() {
 
     // ── Filter options ────────────────────────────────────────
     const todayDate  = new Date();
-    const currentQ2  = getQuarter(todayDate.toISOString().split('T')[0]);
-    const currentQL2 = getQuarterLabel(currentQ2, todayDate.toISOString().split('T')[0]);
+    const currentQ2  = getQuarter(isoLocal(todayDate));
+    const currentQL2 = getQuarterLabel(currentQ2, isoLocal(todayDate));
     const qNum2      = parseInt(currentQ2.replace('Q', ''));
     const nextQ2     = 'Q' + (qNum2 < 4 ? qNum2 + 1 : 1);
     const nextMonth2 = new Date(todayDate); nextMonth2.setMonth(todayDate.getMonth() + 3);
-    const nextQL2    = getQuarterLabel(nextQ2, nextMonth2.toISOString().split('T')[0]);
+    const nextQL2    = getQuarterLabel(nextQ2, isoLocal(nextMonth2));
 
     const timeFilterOpts = [
         { key: 'thisQuarter', label: 'This quarter', match: o => o.forecastedCloseDate && getQuarterLabel(getQuarter(o.forecastedCloseDate), o.forecastedCloseDate) === currentQL2 },
@@ -956,7 +957,7 @@ export default function PipelineTab() {
                     const forecastTotalARR = smartFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
 
                     const weekStart    = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0,0,0,0);
-                    const weekStartStr = weekStart.toISOString().split('T')[0];
+                    const weekStartStr = isoLocal(weekStart);
                     const dealsAdvanced = visibleOpportunities.filter(o => o.stageChangedDate >= weekStartStr && !['Closed Won','Closed Lost'].includes(o.stage)).length;
                     const dealsSlipped  = visibleOpportunities.filter(o => {
                         if (!o.forecastedCloseDate) return false;

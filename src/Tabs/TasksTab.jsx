@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
+import { isoLocal } from '../utils/dateLocal';
 
 // ── Design tokens ──────────────────────────────────────────────
 const T = {
@@ -213,7 +214,7 @@ function SnoozePicker({ onSnooze, onClose, anchorRect }) {
     const left = Math.min(anchorRect.right - POPOVER_W, window.innerWidth - POPOVER_W - MARGIN);
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const addDays = n => { const d = new Date(today); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
+    const addDays = n => { const d = new Date(today); d.setDate(d.getDate() + n); return isoLocal(d); };
     const options = [
         { label: 'Tomorrow', sublabel: new Date(addDays(1) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }), days: 1 },
         { label: '2 Days',   sublabel: new Date(addDays(2) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }), days: 2 },
@@ -1145,9 +1146,9 @@ export default function TasksTab() {
 
     // ── Dates ──────────────────────────────────────────────────
     const today    = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
-    const todayStr = useMemo(() => today.toISOString().split('T')[0], [today]);
+    const todayStr = useMemo(() => isoLocal(today), [today]);
     const calDay   = useMemo(() => { const d = new Date(today); d.setDate(d.getDate() + calDayOffset); return d; }, [today, calDayOffset]);
-    const calDayStr = useMemo(() => calDay.toISOString().split('T')[0], [calDay]);
+    const calDayStr = useMemo(() => isoLocal(calDay), [calDay]);
     const dayNames   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -1217,7 +1218,7 @@ export default function TasksTab() {
     }).sort((a, b) => (a.start?.dateTime || '').localeCompare(b.start?.dateTime || '')), [calendarEvents, calDayStr]);
     const weekSummary   = useMemo(() => Array.from({ length: 7 }, (_, i) => {
         const d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
-        const ds = d.toISOString().split('T')[0];
+        const ds = isoLocal(d);
         return { d, ds, dayTasks: allOpenTasks.filter(t => t.dueDate === ds).length, dayMeetings: (calendarEvents || []).filter(ev => { const evd = ev.start?.date || ev.start?.dateTime?.split('T')[0]; return evd === ds; }).length };
     }), [weekStart, allOpenTasks, calendarEvents]);
 

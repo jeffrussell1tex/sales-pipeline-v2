@@ -20,7 +20,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { isoLocal, todayLocal, parseLocalDate, toLocalDay } from '../src/utils/dateLocal.js';
 
@@ -222,4 +224,50 @@ test('toLocalDay refuses what is not a date', () => {
     for (const v of [null, undefined, '', '   ', 'TBD', 'Q3', '46000']) {
         assert.equal(toLocalDay(v), null, `${JSON.stringify(v)} must be null`);
     }
+});
+
+// ── THE SWEEP IS PINNED (0.60) ───────────────────────────────
+// The isoLocal batch fixed 4 of 29 sites and listed the other 24 in a handoff
+// that was later overwritten; the list was lost and the two sites it named as
+// worst stayed live for weeks. This scan is the list that cannot be lost: every
+// remaining `toISOString().split('T')[0]` / `.slice(0,10)` under src/ must be
+// one of the named exceptions -- an instant, not a wall-calendar day.
+const UTC_DAY = /toISOString\(\)\s*\.\s*(?:split\('T'\)\[0\]|slice\(0,\s*10\))/;
+const ALLOWED_FILES = [
+    /[\\/]stageClock\.js$/,   // backdate(): a deliberate UTC round trip on a UTC-parsed day
+    /[\\/]dateLocal\.js$/,    // the header quotes the shape it replaces
+];
+const ALLOWED_LINES = [
+    /a\.download\s*=/,                // an export filename: the instant of export is fine
+    /exportToCSV\(`[a-z]+-\$\{/,     // same
+];
+const walk = (dir, out = []) => {
+    for (const name of readdirSync(dir)) {
+        const p = join(dir, name);
+        if (statSync(p).isDirectory()) walk(p, out);
+        else if (/\.(jsx?|mjs)$/.test(name)) out.push(p);
+    }
+    return out;
+};
+
+test('every remaining UTC-truncated day in src/ is a named exception', () => {
+    const srcDir = fileURLToPath(new URL('../src/', import.meta.url));
+    const offenders = [];
+    for (const file of walk(srcDir)) {
+        if (ALLOWED_FILES.some(re => re.test(file))) continue;
+        readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, i) => {
+            if (UTC_DAY.test(line) && !ALLOWED_LINES.some(re => re.test(line))) {
+                offenders.push(`${file.slice(srcDir.length)}:${i + 1}`);
+            }
+        });
+    }
+    assert.deepEqual(offenders, [],
+        'a wall-calendar day built via UTC -- use isoLocal/todayLocal (dateLocal.js):\n  ' + offenders.join('\n  '));
+});
+
+test('the scan still sees the shape it guards (a scan that matches nothing proves nothing)', () => {
+    assert.ok(UTC_DAY.test("const today = new Date().toISOString().split('T')[0];"));
+    assert.ok(UTC_DAY.test("priorFrom = prior.toISOString().slice(0,10);"));
+    assert.ok(UTC_DAY.test("d.toISOString().slice(0, 10)"));
+    assert.ok(!UTC_DAY.test("createdAt: new Date().toISOString()"), 'an instant is not the shape');
 });

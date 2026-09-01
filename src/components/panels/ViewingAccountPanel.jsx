@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../../AppContext';
+import { todayLocal } from '../../utils/dateLocal';
 import { dbFetch } from '../../utils/storage';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
@@ -214,7 +215,7 @@ export default function ViewingAccountPanel({
                     </button>
                     {openOpps.length > 0 && (
                         <button
-                            onClick={() => { setMeetingPrepEvent({ summary: acc.name, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(openOpps[0].id); setMeetingPrepOpen(true); }}
+                            onClick={() => { setMeetingPrepEvent({ summary: acc.name, start: { date: todayLocal() }, attendeeCount: 0 }); setMeetingPrepOppId(openOpps[0].id); setMeetingPrepOpen(true); }}
                             style={{ height: '32px', padding: '0 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#f5f1eb', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}
                             title="Meeting prep"
                         >

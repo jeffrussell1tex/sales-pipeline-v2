@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
-import { parseLocalDate } from '../utils/dateLocal';
+import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import AnalyticsDashboard from '../components/ui/AnalyticsDashboard';
 import { dbFetch, dbWrite } from '../utils/storage';
@@ -337,8 +337,8 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             // 'all' or custom — compare to prior 90 days
                             const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 90);
                             const prior = new Date(cutoff); prior.setDate(prior.getDate() - 90);
-                            priorFrom = prior.toISOString().slice(0,10);
-                            priorTo   = cutoff.toISOString().slice(0,10);
+                            priorFrom = isoLocal(prior);
+                            priorTo   = isoLocal(cutoff);
                         }
                     } else if (reportCompareTo === 'previous_year') {
                         if (['Q1','Q2','Q3','Q4'].includes(reportTimePeriod)) {
@@ -349,8 +349,8 @@ export default function ReportsTab({ leadsEnabled = true }) {
                         } else {
                             const cutoff = new Date(now); cutoff.setFullYear(cutoff.getFullYear()-1);
                             const prior  = new Date(cutoff); prior.setDate(prior.getDate() - 90);
-                            priorFrom = prior.toISOString().slice(0,10);
-                            priorTo   = cutoff.toISOString().slice(0,10);
+                            priorFrom = isoLocal(prior);
+                            priorTo   = isoLocal(cutoff);
                         }
                     }
 
@@ -922,9 +922,9 @@ ${bodyHtml}
                             const coverage    = gapToQuota > 0 ? (totalPipelineValue / gapToQuota) : null;
 
                             // Pipeline movement (last 7 days)
-                            const cutoff7 = new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+                            const cutoff7 = isoLocal(new Date(Date.now()-7*86400000));
                             const addedOpps2  = reportsOpps.filter(o=>o.createdDate>=cutoff7 && !['Closed Won','Closed Lost'].includes(o.stage));
-                            const slippedOpps2= reportsOpps.filter(o=>{ const cd=o.forecastedCloseDate||o.closeDate; return cd && cd<new Date().toISOString().slice(0,10) && !['Closed Won','Closed Lost'].includes(o.stage); });
+                            const slippedOpps2= reportsOpps.filter(o=>{ const cd=o.forecastedCloseDate||o.closeDate; return cd && cd<todayLocal() && !['Closed Won','Closed Lost'].includes(o.stage); });
                             const added2  = addedOpps2.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                             const slipped2= slippedOpps2.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                             const startPipe = Math.max(totalPipelineValue + slipped2 - added2, 0);
@@ -1004,7 +1004,7 @@ ${bodyHtml}
                             const maxEntered = Math.max(...stageFunnelData.map(s => s.entered), 1);
 
                             // Deals at risk
-                            const today2iso = new Date().toISOString().slice(0,10);
+                            const today2iso = todayLocal();
                             const dealsRisk = openOpps.map(o=>{
                               const flags=[];
                               const lastAct=(activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
@@ -1769,7 +1769,7 @@ ${bodyHtml}
                             // ── 14-day heatmap — build real per-rep × per-day grid
                             const heatDays = Array.from({length:14},(_,i)=>{
                               const d = new Date(now); d.setDate(d.getDate()-(13-i));
-                              return { date:d.toISOString().slice(0,10), dow:d.getDay(), short:d.toLocaleDateString('en-US',{weekday:'narrow'}), label:d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) };
+                              return { date:isoLocal(d), dow:d.getDay(), short:d.toLocaleDateString('en-US',{weekday:'narrow'}), label:d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) };
                             });
                             const heatColorFor = (v) => {
                               if(v===0)return T3.surface2;
@@ -2599,7 +2599,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const closedWonRev = allWon.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
     const attainPctS   = totalQ>0 ? Math.round(closedWonRev/totalQ*100) : 0;
     const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
-    const sevenISO = sevenDaysAgo.toISOString().slice(0,10);
+    const sevenISO = isoLocal(sevenDaysAgo);
     const addedRecent = allOpen.filter(o=>o.createdDate&&o.createdDate>=sevenISO).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
     const stuckDeals = allOpen.filter(o=>{
         const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
@@ -2608,7 +2608,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     });
     const stuckARR = stuckDeals.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
     const now30 = new Date(); now30.setDate(now30.getDate()+30);
-    const closingMonth = allOpen.filter(o=>{ const cd=o.forecastedCloseDate||o.closeDate||''; return cd&&cd<=now30.toISOString().slice(0,10); });
+    const closingMonth = allOpen.filter(o=>{ const cd=o.forecastedCloseDate||o.closeDate||''; return cd&&cd<=isoLocal(now30); });
     const closingARR = closingMonth.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
 
     const pinnedCards = [
@@ -2722,7 +2722,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         );
 
         const now7 = new Date(); now7.setDate(now7.getDate()-7);
-        const iso7 = now7.toISOString().slice(0,10);
+        const iso7 = isoLocal(now7);
 
         const commitOpps = allOpen.filter(o =>
             o.forecastCategory === 'commit' ||
@@ -3679,7 +3679,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
 
         // Recent wins/losses (30 days)
         const cutoff30=new Date(); cutoff30.setDate(cutoff30.getDate()-30);
-        const iso30=cutoff30.toISOString().slice(0,10);
+        const iso30=isoLocal(cutoff30);
         const recentWins  = repWon.filter(o=>(o.forecastedCloseDate||o.closeDate)>=iso30).sort((a,b)=>(b.forecastedCloseDate||b.closeDate||'').localeCompare(a.forecastedCloseDate||a.closeDate||'')).slice(0,4);
         const recentLosses= repLost.filter(o=>(o.forecastedCloseDate||o.closeDate)>=iso30).sort((a,b)=>(b.forecastedCloseDate||b.closeDate||'').localeCompare(a.forecastedCloseDate||a.closeDate||'')).slice(0,3);
 
@@ -4366,7 +4366,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
             // Stuck deals computed from real data for the preview
             const stuckReps = {};
             const now14 = new Date(); now14.setDate(now14.getDate()-14);
-            const iso14 = now14.toISOString().slice(0,10);
+            const iso14 = isoLocal(now14);
             (reportsOpps||[]).filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost').forEach(o=>{
                 const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
                 if (!lastAct?.date || lastAct.date <= iso14) {
