@@ -166,3 +166,44 @@ test('a PUT for an unknown id is a 404, not an insert', async () => {
     assert.equal(res.statusCode, 404, 'PUT is strictly an update');
     assert.ok(!(await rowOf('opp_A_ghost')), 'nothing may be created by a PUT');
 });
+
+// ── Rep-role GET scoping — the §0.48 read-side debt, closed (2 Sep) ──────────
+// Permissive policy, ownerId-keyed (18b22): unassigned visible to everyone,
+// owned rows only to their owner, a null caller fails closed to
+// unassigned-only. The Manager managedReps branch is name-based by documented
+// intent and NOT covered here — it is a visibility filter tracked for the
+// Phase-2 id migration, and these tests run as User/Admin only. Rows seeded
+// with db.insert (pipelineId and stage are NOT NULL) so ownership is the
+// test's input.
+
+const asRepRole = (e) => ({ ...e, headers: { ...e.headers, 'x-test-role': 'User' } });
+
+test('rep GET — own + unassigned arrive; another rep\'s deal never does', async () => {
+    await db.insert(opportunities).values([
+        { id: 'opp_repget_mine',  opportunityName: 'Repget Mine',  pipelineId: 'default', stage: 'Discovery', ownerId: REP_A,                    orgId: A },
+        { id: 'opp_repget_other', opportunityName: 'Repget Other', pipelineId: 'default', stage: 'Discovery', ownerId: 'usr_itest-opps-other-1', orgId: A },
+        { id: 'opp_repget_none',  opportunityName: 'Repget None',  pipelineId: 'default', stage: 'Discovery', ownerId: null,                     orgId: A },
+    ]);
+    const ids = JSON.parse((await handler(asRepRole(ev(A, 'GET')))).body).opportunities.map(o => o.id);
+    assert.ok(ids.includes('opp_repget_mine'),   'a rep must receive their own deal');
+    assert.ok(ids.includes('opp_repget_none'),   'unassigned is visible to everyone');
+    assert.ok(!ids.includes('opp_repget_other'), 'another rep\'s deal must never be sent to a rep');
+});
+
+test('Admin GET — all three scoping rows arrive (canSeeAll bypasses the filter)', async () => {
+    const ids = (await get(A)).map(o => o.id);
+    for (const id of ['opp_repget_mine', 'opp_repget_other', 'opp_repget_none']) {
+        assert.ok(ids.includes(id), `Admin must still receive ${id}`);
+    }
+});
+
+test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 direction)', async () => {
+    // Org B has no roster rows, so the stub caller resolves null.
+    await db.insert(opportunities).values([
+        { id: 'opp_repget_b_none',  opportunityName: 'Repget B None',  pipelineId: 'default', stage: 'Discovery', ownerId: null,                     orgId: B },
+        { id: 'opp_repget_b_owned', opportunityName: 'Repget B Owned', pipelineId: 'default', stage: 'Discovery', ownerId: 'usr_itest-opps-other-1', orgId: B },
+    ]);
+    const ids = JSON.parse((await handler(asRepRole(ev(B, 'GET')))).body).opportunities.map(o => o.id);
+    assert.ok(ids.includes('opp_repget_b_none'),   'unassigned stays visible to a null caller under the permissive policy');
+    assert.ok(!ids.includes('opp_repget_b_owned'), 'an owned row must be refused to a null caller — null === null must not match');
+});

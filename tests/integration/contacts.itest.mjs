@@ -219,3 +219,39 @@ test('clear=true stays Admin-only for a rep', async () => {
     assert.match(JSON.parse(res.body).error, /insufficient role/);
     assert.ok(await rowOf('ct_clear_guard'), 'nothing may be cleared by a rep');
 });
+
+// ── Rep-role GET scoping — the §0.48 read-side debt, closed (2 Sep) ──────────
+// Permissive policy, ownerId-keyed (18b22): unassigned visible to everyone,
+// owned rows only to their owner, a null caller fails closed to
+// unassigned-only. This suite is single-org, so the null caller is a GHOST
+// x-test-user with no roster row rather than a second org. Rows seeded with
+// db.insert so ownership is the test's input; the owned-by-other row carries
+// a usr_-shaped id that has no roster row on purpose — the filter compares
+// ids, it does not resolve them.
+
+test('rep GET — own + unassigned arrive; another rep\'s contact never does', async () => {
+    await db.insert(contacts).values([
+        { id: 'ct_repget_mine',  firstName: 'Repget', lastName: 'Mine',  ownerId: 'usr_itest_contacts_rep',    orgId: ORG },
+        { id: 'ct_repget_other', firstName: 'Repget', lastName: 'Other', ownerId: 'usr_itest-contacts-other-1', orgId: ORG },
+        { id: 'ct_repget_none',  firstName: 'Repget', lastName: 'None',  ownerId: null,                        orgId: ORG },
+    ]);
+    const ids = JSON.parse((await handler(asRep('GET'))).body).contacts.map(c => c.id);
+    assert.ok(ids.includes('ct_repget_mine'),   'a rep must receive their own contact');
+    assert.ok(ids.includes('ct_repget_none'),   'unassigned is visible to everyone');
+    assert.ok(!ids.includes('ct_repget_other'), 'another rep\'s contact must never be sent to a rep');
+});
+
+test('Admin GET — all three scoping rows arrive (canSeeAll bypasses the filter)', async () => {
+    const ids = JSON.parse((await handler(ev('GET'))).body).contacts.map(c => c.id);
+    for (const id of ['ct_repget_mine', 'ct_repget_other', 'ct_repget_none']) {
+        assert.ok(ids.includes(id), `Admin must still receive ${id}`);
+    }
+});
+
+test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 direction)', async () => {
+    const res = await handler(ev('GET', null, null, { role: 'User', userId: 'u_itest_ghost' }));
+    const ids = JSON.parse(res.body).contacts.map(c => c.id);
+    assert.ok(ids.includes('ct_repget_none'),   'unassigned stays visible to a null caller under the permissive policy');
+    assert.ok(!ids.includes('ct_repget_mine'),  'an owned row must be refused to a null caller — null === null must not match');
+    assert.ok(!ids.includes('ct_repget_other'), 'another rep\'s row stays hidden from a null caller too');
+});

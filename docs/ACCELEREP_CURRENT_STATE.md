@@ -1126,6 +1126,24 @@ serving problem, diagnosed by probing the URL before reading any code
 the restart all seven relevant endpoints probed clean (user-role's 405
 = parsed and executed) and the saves held through a hard refresh.
 
+**Rep-role GET coverage for the §0.48 four — the read-side test debt is
+CLOSED.** Twelve new integration tests, three per endpoint (accounts,
+contacts, opportunities, tasks — leads got its block earlier this
+session): rep sees own + unassigned and NEVER another rep's row; Admin
+receives all three seeded rows; an unresolvable caller receives ONLY
+unassigned (the 18b22 fail-closed direction — an owned row must not
+match null === null). All ownerId-keyed, rows seeded with db.insert so
+ownership is the test's input. Suite-specific shapes: contacts is
+single-org, so its null caller is a GHOST x-test-user instead of an
+org-B caller; tasks gained its FIRST user seed — appended last so every
+earlier test still runs with the unresolvable caller it was written
+for, `invalidateRoster()` clearing the 30s null-caller cache those
+tests fill, and its cleanup now covers `users`; opportunities' Manager
+`managedReps` branch is name-based by documented intent and stays
+UNCOVERED here (visibility filter, tracked for the Phase-2 id
+migration). 67 → **79/79 integration**; gates, **298/298 unit**,
+**98/98 mutations, printed green baseline** all green.
+
 **The §0.59 MFA tri-state is BROWSER-OBSERVED in all three states**
 (Jeff's screenshots, same session): amber ○ known-off dots in every MFA
 cell of the test org's list, chip "MFA off · 4", rail "MFA on 0/4 ·

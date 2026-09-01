@@ -268,3 +268,41 @@ test('promotion is org-scoped — deleting A\'s parent cannot touch B\'s childre
 
     assert.equal(await parentOf('b_scope_child'), 'acc_scope_parent', 'org B\'s row must be untouched');
 });
+
+// ── Rep-role GET scoping — the §0.48 read-side debt, closed (2 Sep) ──────────
+// The write paths have carried rep coverage since §0.44; the GET filter's only
+// runtime evidence was browser checks. Permissive policy, ownerId-keyed
+// (18b22): unassigned visible to everyone, owned rows only to their owner, a
+// null caller fails closed to unassigned-only. Rows seeded with db.insert so
+// ownership is the test's input, per the leads suite's pattern.
+
+test('rep GET — own + unassigned arrive; another rep\'s account never does', async () => {
+    await db.insert(accounts).values([
+        { id: 'acc_repget_mine',  name: 'Repget Mine',  ownerId: 'usr_itest_accounts_rep',   orgId: A },
+        { id: 'acc_repget_other', name: 'Repget Other', ownerId: 'usr_itest_accounts_other', orgId: A },
+        { id: 'acc_repget_none',  name: 'Repget None',  ownerId: null,                       orgId: A },
+    ]);
+    const ids = JSON.parse((await handler(asRep(A, 'GET'))).body).accounts.map(a => a.id);
+    assert.ok(ids.includes('acc_repget_mine'),   'a rep must receive their own account');
+    assert.ok(ids.includes('acc_repget_none'),   'unassigned is visible to everyone');
+    assert.ok(!ids.includes('acc_repget_other'), 'another rep\'s account must never be sent to a rep');
+});
+
+test('Admin GET — all three scoping rows arrive (canSeeAll bypasses the filter)', async () => {
+    const ids = JSON.parse((await handler(ev(A, 'GET'))).body).accounts.map(a => a.id);
+    for (const id of ['acc_repget_mine', 'acc_repget_other', 'acc_repget_none']) {
+        assert.ok(ids.includes(id), `Admin must still receive ${id}`);
+    }
+});
+
+test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 direction)', async () => {
+    // Org B has no roster row for the stub caller, so getCallerId resolves
+    // null; an owned B row must be refused while unassigned stays visible.
+    await db.insert(accounts).values([
+        { id: 'acc_repget_b_none',  name: 'Repget B None',  ownerId: null,                       orgId: B },
+        { id: 'acc_repget_b_owned', name: 'Repget B Owned', ownerId: 'usr_itest_accounts_other', orgId: B },
+    ]);
+    const ids = JSON.parse((await handler(asRep(B, 'GET'))).body).accounts.map(a => a.id);
+    assert.ok(ids.includes('acc_repget_b_none'),   'unassigned stays visible to a null caller under the permissive policy');
+    assert.ok(!ids.includes('acc_repget_b_owned'), 'an owned row must be refused to a null caller — null === null must not match');
+});

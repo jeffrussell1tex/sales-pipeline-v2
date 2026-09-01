@@ -53,11 +53,16 @@ mock.module(new URL('../../netlify/functions/webhooks.mjs', import.meta.url).hre
 
 const { handler } = await import('../../netlify/functions/tasks.mjs');
 const { db } = await import('../../db/index.js');
-const { tasks } = await import('../../db/schema.js');
+const { tasks, users } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
+const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 
 // ORG NAMESPACE: this file owns 'itest_tasks_*', and ONLY this file writes to
-// it (guide §18b25). No users are seeded — ownership resolution is not under
+// it (guide §18b25). The rep-GET block at the bottom now seeds ONE user in
+// org A (per-file namespace keeps §18b25 satisfied); the original suites
+// below still run with no resolution under test — the caller resolves null
+// for them only until that seed lands, and they never depended on it.
+// Original note: no users were seeded — ownership resolution was not under
 // test here, and an unseeded roster keeps every row unowned by construction.
 const A = 'itest_tasks_A', B = 'itest_tasks_B';
 
@@ -73,6 +78,7 @@ const rowOf = async (id) => (await db.select().from(tasks).where(eq(tasks.id, id
 const cleanup = async () => {
     for (const o of [A, B]) {
         await db.delete(tasks).where(eq(tasks.orgId, o));
+        await db.delete(users).where(eq(users.orgId, o));
     }
 };
 
@@ -145,4 +151,49 @@ test('a PUT for an unknown id is a 404, not an insert', async () => {
     const res = await handler(ev(A, 'PUT', { id: 'task_A_ghost', title: 'Ghost' }));
     assert.equal(res.statusCode, 404, 'PUT is strictly an update');
     assert.ok(!(await rowOf('task_A_ghost')), 'nothing may be created by a PUT');
+});
+
+// ── Rep-role GET scoping — the §0.48 read-side debt, closed (2 Sep) ──────────
+// Permissive policy, ownerId-keyed (18b22): unassigned visible to everyone,
+// owned rows only to their owner, a null caller fails closed to
+// unassigned-only. This block is the suite's FIRST user seed — appended last
+// so every earlier test still runs with the unresolvable caller it was
+// written for; invalidateRoster() clears the 30s null-caller cache those
+// tests will have filled.
+
+const asRepRole = (e) => ({ ...e, headers: { ...e.headers, 'x-test-role': 'User' } });
+const TASK_REP = 'usr_itest-tasks-rep-01';
+
+test('rep GET — own + unassigned arrive; another rep\'s task never does', async () => {
+    await db.insert(users).values({
+        id: TASK_REP, clerkUserId: 'u_' + A, name: 'Itest Task Rep', email: 'task-rep@itest.local', role: 'User', orgId: A,
+    });
+    invalidateRoster();
+    await db.insert(tasks).values([
+        { id: 'task_repget_mine',  title: 'Repget Mine',  ownerId: TASK_REP,                  orgId: A },
+        { id: 'task_repget_other', title: 'Repget Other', ownerId: 'usr_itest-tasks-other-1', orgId: A },
+        { id: 'task_repget_none',  title: 'Repget None',  ownerId: null,                      orgId: A },
+    ]);
+    const ids = JSON.parse((await handler(asRepRole(ev(A, 'GET')))).body).tasks.map(t => t.id);
+    assert.ok(ids.includes('task_repget_mine'),   'a rep must receive their own task');
+    assert.ok(ids.includes('task_repget_none'),   'unassigned is visible to everyone');
+    assert.ok(!ids.includes('task_repget_other'), 'another rep\'s task must never be sent to a rep');
+});
+
+test('Admin GET — all three scoping rows arrive (canSeeAll bypasses the filter)', async () => {
+    const ids = (await get(A)).map(t => t.id);
+    for (const id of ['task_repget_mine', 'task_repget_other', 'task_repget_none']) {
+        assert.ok(ids.includes(id), `Admin must still receive ${id}`);
+    }
+});
+
+test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 direction)', async () => {
+    // Org B has no roster rows, so the stub caller resolves null there.
+    await db.insert(tasks).values([
+        { id: 'task_repget_b_none',  title: 'Repget B None',  ownerId: null,                      orgId: B },
+        { id: 'task_repget_b_owned', title: 'Repget B Owned', ownerId: 'usr_itest-tasks-other-1', orgId: B },
+    ]);
+    const ids = JSON.parse((await handler(asRepRole(ev(B, 'GET')))).body).tasks.map(t => t.id);
+    assert.ok(ids.includes('task_repget_b_none'),   'unassigned stays visible to a null caller under the permissive policy');
+    assert.ok(!ids.includes('task_repget_b_owned'), 'an owned row must be refused to a null caller — null === null must not match');
 });
