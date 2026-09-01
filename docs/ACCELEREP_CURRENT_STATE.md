@@ -1126,6 +1126,18 @@ serving problem, diagnosed by probing the URL before reading any code
 the restart all seven relevant endpoints probed clean (user-role's 405
 = parsed and executed) and the saves held through a hard refresh.
 
+**The §0.59 MFA tri-state is BROWSER-OBSERVED in all three states**
+(Jeff's screenshots, same session): amber ○ known-off dots in every MFA
+cell of the test org's list, chip "MFA off · 4", rail "MFA on 0/4 ·
+4 off" — real Clerk truth (nobody on the dev pk_test instance has a
+second factor; the yahoo account's prod-instance MFA does not carry
+over). The unknown state was observed earlier the same hour — dim
+dashes and "unknown — Clerk not reachable" — while `clerk-mfa-status`
+sat in the broken-shim state, which is also what proved the honest
+label works. Known-ON (green ●) is the one state without a live
+sighting: no dev-instance account is enrolled to produce it; the
+integration path is identical to known-off (same map, same lists).
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
