@@ -1199,10 +1199,24 @@ salespipelinetracker.com on `index-uH-tB994.js` with the request-flow,
 Security, and pool markers, the boot-splash landing, and `pk_live_`
 inlined (the §19 second-face check). **PROD NOW RUNS THE ENTIRE §0.58 +
 §0.59 SET: reps no longer claim directly — assignment goes through
-managers, by design.** The two-minute signed-in prod eyeball is now the
-live verification that matters: Leads tab from the prod org's
-perspective, Request/Distribute behavior sane, Settings People surfaces
-honest.
+managers, by design.**
+
+**THE PROD EYEBALL IS DONE — carried since 1 Sep, retired (Jeff, signed
+in as jeffrussell1@yahoo.com, UKG org, same session as the ship).**
+URL bar and org switcher read first (§19): salespipelinetracker.com,
+two orgs (UKG + Dispatch Demo Group), UKG chosen per the original
+queue. Leads: Mine 0 / All 0 / unassigned 0, panel all zeros —
+VERIFIED CORRECT by a read-only count (UKG holds 0 lead rows and 15
+opportunities; the zeros are truthful emptiness, not a regression).
+Settings → Security health, screenshot reviewed: the §0.59 rebuild live
+on prod with REAL data — 0/6 enrolled ring, six real members with real
+roles (no `member` residue, matching the verifier's clean read of this
+org), amber ○ known-off dots throughout, "MFA policy — managed in
+Clerk" chip, and Recent security events showing the org's ACTUAL audit
+log ("1d ago · Jeff Russell · settings.updated") where the fabricated
+demo names used to be. The green known-ON dot remains the one unsighted
+tri-state everywhere — no account on either Clerk instance has a second
+factor enrolled; Jeff enrolling one would light it.
 (Jeff's screenshots, same session): amber ○ known-off dots in every MFA
 cell of the test org's list, chip "MFA off · 4", rail "MFA on 0/4 ·
 4 off" — real Clerk truth (nobody on the dev pk_test instance has a
