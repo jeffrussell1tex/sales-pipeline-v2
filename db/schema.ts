@@ -422,6 +422,31 @@ export const leads = pgTable('leads', {
     index('leads_org_id_bucket_idx').on(t.orgId, t.leadScoreBucket),
     index('leads_org_id_fit_idx').on(t.orgId, t.leadScoreFit),
 ]);
+// ── LEAD CLAIM REQUESTS ───────────────────────────────────────────────────────
+// The §0.58 request flow: assignment is Manager/Admin-only, so a rep who wants
+// an unassigned lead REQUESTS it and a manager approves (assigning the lead to
+// the requester) or denies. Approval history is kept — rows are resolved, not
+// deleted (a rep may cancel their own PENDING request; that one hard-deletes).
+//
+// requesterId and resolvedBy are users.id (usr_<uuid>), the app-owned id —
+// requesterId is stamped SERVER-side from the caller (getCallerId), never
+// accepted from the payload; the same rule that keeps ownerId honest.
+// Additive and self-contained: no column on `leads` changes, dev and prod
+// share the Neon main branch (applied as CREATE TABLE IF NOT EXISTS).
+export const leadClaimRequests = pgTable('lead_claim_requests', {
+    id:          text('id').primaryKey(),                                       // lcr_<uuid>, client-minted like every other id
+    orgId:       text('org_id').notNull(),
+    leadId:      text('lead_id').notNull(),
+    requesterId: text('requester_id').notNull(),                                // users.id — server-stamped from the caller
+    status:      varchar('status', { length: 20 }).notNull().default('pending'),// pending | approved | denied
+    note:        text('note'),                                                  // optional rep message to the approver
+    resolvedBy:  text('resolved_by'),                                           // users.id of the Admin/Manager who resolved
+    resolvedAt:  timestamp('resolved_at'),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+    index('lead_claim_requests_org_id_idx').on(t.orgId),
+]);
 // ── DASHBOARD CONFIGS ─────────────────────────────────────────────────────────
 export const dashboardConfigs = pgTable('dashboard_configs', {
     id:        text('id').primaryKey(),

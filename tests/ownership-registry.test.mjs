@@ -152,7 +152,10 @@ test('REGRESSION — no endpoint reaches for contacts.createdBy in code again', 
 // would strand these checks in test:int, a suite that needs a database and had
 // itself been broken at import for a fortnight without anyone noticing.
 
-const ENDPOINTS = ['accounts', 'opportunities', 'leads', 'tasks', 'contacts', 'activities'];
+// lead-requests joined the scan set with the §0.58 request flow — it compares
+// caller identity on its own (requesterId, a usr_-space column) and must stay
+// inside these guards rather than beside them.
+const ENDPOINTS = ['accounts', 'opportunities', 'leads', 'tasks', 'contacts', 'activities', 'lead-requests'];
 
 const endpointSrc = (name) =>
     readFileSync(new URL(`../netlify/functions/${name}.mjs`, import.meta.url), 'utf8');
@@ -265,7 +268,12 @@ test('THE GUARD — callerId is only ever compared against an ownerId', () => {
         const code = codeOnly(endpointSrc(name));
         for (const m of code.matchAll(/([A-Za-z_$][\w$.?\[\]'"]*)\s*===\s*callerId\b/g)) {
             const lhs = m[1];
-            if (!/\.ownerId$/.test(lhs)) {
+            // .requesterId is allowlisted with .ownerId: lead_claim_requests
+            // stores the requester as users.id (usr_<uuid>, server-stamped in
+            // lead-requests.mjs), so both sides of that comparison are the
+            // same identity space. A display-name column must still never
+            // appear here — that is the defect this guard exists for.
+            if (!/\.(ownerId|requesterId)$/.test(lhs)) {
                 offenders.push(`${name}: '${lhs} === callerId' compares a non-ownerId value against a user id`);
             }
         }

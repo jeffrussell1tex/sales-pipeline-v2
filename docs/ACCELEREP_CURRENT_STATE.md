@@ -811,6 +811,46 @@ harness mutations (gate dropped, string half dropped). Verified: gates
 green, build 2,468 kB + `dist/` cleared, **291/291 unit**, **50/50
 integration**, **93/93 mutations, printed green baseline**.
 
+**Batch 3 shipped — the request flow's table and endpoint.**
+`lead_claim_requests` (schema.ts, after `leads`): `lcr_`-id PK, `orgId`,
+`leadId`, `requesterId` (users.id, NOT NULL), `status`
+pending|approved|denied, `note`, `resolvedBy`, `resolvedAt`, timestamps,
+org index — additive and self-contained, no column on `leads` changes.
+`lead-requests.mjs`: GET (reps their own via `requesterId === callerId` —
+NOT NULL vs possibly-null caller can never match, fail closed; canSeeAll
+the org's), POST (rep requests an UNASSIGNED lead: requester stamped from
+`getCallerId`, NEVER the payload; 409 on owned lead or duplicate pending;
+null caller 403), PUT approve/deny (requireRole Admin/Manager; approve
+loads the requester row and stamps `ownerId` + `assignedTo` together,
+denies sibling pending requests in the same stroke; owned-by-ANOTHER 409s
+so the manager denies by hand; owned-by-the-REQUESTER proceeds — approve
+is IDEMPOTENT across its own partial failure because the Neon HTTP driver
+has no transaction across the two writes, and the lead is assigned FIRST
+so a retry finishes the resolve instead of stranding), DELETE (a rep
+cancels their OWN pending request; resolved rows are history). Audit
+actions `lead.claim_requested` / `approved` / `denied`. The
+ownership-registry scans now COVER the new endpoint (`lead-requests` added
+to ENDPOINTS) and the `=== callerId` guard allowlists `.requesterId`
+alongside `.ownerId` — both sides usr_-space, with the comment saying so.
+Pinned by a TWELVE-test integration suite (`itest_lreq_*` namespace, its
+own per-§18b25 prefix; registered in `test:int`), THREE source assertions
+in `tests/lead-requests.test.mjs` (registered in SUITES by hand — nothing
+guards that registration), and two harness mutations (role gate
+discarded; requester taken from the payload — the second is caught by the
+requesterId-never-read-from-payload assertion, which during development
+caught its own trailing comment, working as designed). **Schema
+application is SPLIT:** the DDL (idempotent `CREATE TABLE IF NOT EXISTS`
++ `CREATE INDEX IF NOT EXISTS`, mirroring schema.ts exactly — chosen over
+`drizzle-kit push` to keep the shared-main drift surface at zero) is
+APPLIED AND COLUMN-VERIFIED on the TEST database, but the APP database
+(the shared dev+prod Neon main) write was BLOCKED by the session's
+permission classifier — correctly treated as Jeff's action, queued: run
+the same script (or paste the SQL into the Neon editor) BEFORE any deploy
+of this code (§18c: schema per environment before the code that reads
+it). Verified: gates green, build 2,468 kB + `dist/` cleared, **294/294
+unit**, **62/62 integration**, **95/95 mutations, printed green
+baseline**.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

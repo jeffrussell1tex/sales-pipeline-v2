@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -194,6 +194,18 @@ const mutations = [
         'netlify/functions/leads.mjs',
         'if (!sameOwner || !sameName) {',
         'if (!sameOwner) {'],
+
+    // ── The §0.58 request flow (lead-requests.mjs) ──────────────────────────
+    // Caught by the source assertions in tests/lead-requests.test.mjs.
+    ['lead-requests: the approve/deny role gate is computed and discarded — a rep approves their own request',
+        'netlify/functions/lead-requests.mjs',
+        'if (forbiddenRole) return forbiddenRole;',
+        'if (false) return forbiddenRole;'],
+
+    ['lead-requests: the requester comes from the payload — one rep files requests as another',
+        'netlify/functions/lead-requests.mjs',
+        'requesterId: callerId,',
+        'requesterId: data.requesterId || callerId,'],
 
     ['endpoints: the users.id-vs-Clerk-id filter returns (every rep loses their own records)',
         'netlify/functions/leads.mjs',
