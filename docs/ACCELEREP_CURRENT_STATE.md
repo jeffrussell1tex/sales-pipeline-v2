@@ -1095,6 +1095,14 @@ grouped by category for editing (its header now says so), and a new
 item lands in the right display position without hand-ordering. Gates +
 298 unit + 98 mutations green.
 
+**SHIPPED (Jeff: "push"):** `dev` pushed `b61f65a` → `28a001c` (the
+§0.59 set: audit actor, autosave baseline, Security de-fabrication,
+NaNyr fix, alphabetization). CI completed SUCCESS on `28a001c`
+(watched via the public runs API); accelerep.netlify.app verified on a
+NEW bundle hash (`index-CfSKnvfz.js`) carrying this batch's markers
+("managed in the Clerk dashboard") alongside the request-flow set's.
+`master`/prod still deliberately held at the pre-§0.58 code.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
