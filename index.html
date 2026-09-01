@@ -21,7 +21,7 @@
          Crawlers and categorization engines (which typically do not run JavaScript)
          see a legitimate business-software page instead of a blank app shell. -->
     <div id="root">
-      <div style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#f0ece4;color:#2a2622;min-height:100vh;margin:0;padding:48px 24px;box-sizing:border-box;">
+      <div id="static-landing" style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#f0ece4;color:#2a2622;min-height:100vh;margin:0;padding:48px 24px;box-sizing:border-box;">
         <main style="max-width:720px;margin:0 auto;">
           <header>
             <p style="font-weight:700;letter-spacing:0.08em;font-size:14px;margin:0 0 24px;">ACCELEREP</p>
@@ -50,7 +50,23 @@
           </footer>
         </main>
       </div>
+      <!-- Boot splash: shown ONLY when the inline script below hides the
+           static landing (i.e. a JS-running browser about to mount the app).
+           Lives inside #root so the mount replaces it like everything else. -->
+      <div id="boot-splash" style="display:none;font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#f0ece4;min-height:100vh;margin:0;align-items:center;justify-content:center;">
+        <p style="font-weight:700;letter-spacing:0.08em;font-size:14px;color:#8a8378;">ACCELEREP</p>
+      </div>
     </div>
+    <script>
+      // Parser-blocking classic script ON PURPOSE: it runs before first paint
+      // and long before the module bundle parses, so a JS-running browser
+      // never paints the crawler landing (the carried "static-landing flash").
+      // No-JS crawlers and categorization engines never execute this and keep
+      // the full readable page - display toggles, nothing is removed, and
+      // React replaces all of #root on mount either way.
+      document.getElementById('static-landing').style.display = 'none';
+      document.getElementById('boot-splash').style.display = 'flex';
+    </script>
     <noscript>
       <p style="font-family:system-ui,sans-serif;padding:16px;">Accelerep is CRM and crew-dispatching software for field-service businesses. The application requires JavaScript to sign in.</p>
     </noscript>

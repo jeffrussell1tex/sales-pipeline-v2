@@ -1163,6 +1163,32 @@ fails the suite and forces a deliberate decision) plus one harness
 mutation (method gate dropped). 298 → **301/301 unit**, **99/99
 mutations, printed green baseline**.
 
+**The two carried small items are CLOSED (session close-out).**
+*documents.mjs local 500 — one probe, one install.* The §19-twin probe
+rule found it instantly: `Cannot find module '@aws-sdk/client-s3'`. The
+file's own header says to install the two R2 client packages; they
+never were. Production worked ANYWAY because AWS Lambda's Node 18+
+runtime ships SDK v3 — meaning prod rode an unpinned runtime SDK whose
+checksum-default change is exactly the breakage the file's R2 NOTES
+warn about. Both packages are now real pinned dependencies (^3.1124.0):
+local resolves, prod becomes deterministic. Local re-probe rides the
+next `netlify dev` restart (the running server's resolution is cached);
+metadata CRUD never touches R2, and the r2() client is lazy, so absent
+local R2_* env only gates the presign paths.
+*The static-landing flash is gone.* The crawler landing lives inside
+`#root` and stayed painted until 2.5 MB of bundle mounted. Now the
+landing div carries `id="static-landing"`, a PARSER-BLOCKING classic
+inline script right after `#root` hides it and shows a minimal
+`#boot-splash` (warm-stone wordmark, also inside `#root` so the mount
+replaces it) — it runs before first paint, so a JS browser never paints
+the landing at all, while no-JS crawlers and categorization engines
+never execute it and keep the full readable page. Nothing is removed
+from the DOM; display toggles only. VERIFIED live on localhost
+(landing/splash both replaced by the mounted login page) and in the
+BUILT `dist/index.html` (Vite passes the inline script through — checked
+before the §19 `rm -rf dist`). Picker-format replication stays a
+standing as-surfaces-get-touched rule, not a queue item.
+
 **The §0.59 MFA tri-state is BROWSER-OBSERVED in all three states**
 (Jeff's screenshots, same session): amber ○ known-off dots in every MFA
 cell of the test org's list, chip "MFA off · 4", rail "MFA on 0/4 ·
