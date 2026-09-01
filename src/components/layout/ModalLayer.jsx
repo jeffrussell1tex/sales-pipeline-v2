@@ -11,7 +11,6 @@ import OpportunityModal from '../modals/OpportunityModal';
 import ContactRail from '../rails/ContactRail';
 import AccountRail from '../rails/AccountRail';
 import TaskRail from '../rails/TaskRail';
-import TaskModal from '../modals/TaskModal'; // kept for legacy inline usage
 import UserModal from '../modals/UserModal';
 import ActivityRail from '../rails/ActivityRail';
 import DocumentRail from '../documents/DocumentRail';

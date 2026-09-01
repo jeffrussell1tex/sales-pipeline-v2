@@ -4,6 +4,14 @@
     {
       "name": "netlify-dev-attach",
       "url": "http://localhost:8888"
+    },
+    {
+      "name": "netlify-dev",
+      "runtimeExecutable": "netlify",
+      "runtimeArgs": [
+        "dev"
+      ],
+      "port": 8888
     }
   ]
 }

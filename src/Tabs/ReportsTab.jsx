@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
-import AnalyticsDashboard from '../components/ui/AnalyticsDashboard';
 import { dbFetch, dbWrite } from '../utils/storage';
 
 export default function ReportsTab({ leadsEnabled = true }) {
