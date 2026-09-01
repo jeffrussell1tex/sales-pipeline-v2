@@ -105,9 +105,27 @@ const DEFAULT_SETTINGS = {
     },
 };
 
+// The exact bytes the autosave would PUT for a given settings state. One
+// serializer used by BOTH the autosave and the load-time baseline below, so
+// they can never disagree about what "unchanged" means.
+const serializeForSave = (settings) => {
+    const { users: _stripUsers, fiscalYearStart: _stripFiscal, ...rest } = settings;
+    const { value } = stripKeyMaterial(rest);
+    return JSON.stringify(value);
+};
+
 export function useSettings() {
     const settingsReady = useRef(false);
     const orgIdRef = useRef(null); // track current org for cache key scoping
+    // Serialized form of the last state KNOWN to the server — set on load and
+    // after each accepted PUT. The autosave diffs against this and skips
+    // no-change writes. Without it the effect fired on every settings OBJECT
+    // identity change (the load's own mirror-back, users/roster refreshes,
+    // role saves), which PUT unchanged payloads on every cycle: ~3 junk
+    // `settings.updated` audit rows per load for admins, and a naked 403
+    // toast for every non-writer who changed nothing (§0.53's useSettings
+    // debt, closed here).
+    const lastSavedRef = useRef(null);
 
     const getStorageKey = () => orgIdRef.current
         ? `salesSettings_${orgIdRef.current}`
@@ -175,15 +193,25 @@ export function useSettings() {
             .then(data => {
                 if (data.settings) {
                     const { users: _stripUsers, ...settingsFromDb } = data.settings;
-                    setSettings(prev => ({
-                        ...DEFAULT_SETTINGS,
-                        ...settingsFromDb,
-                        users: prev.users,
-                        taskTypes: settingsFromDb.taskTypes?.length ? settingsFromDb.taskTypes : DEFAULT_SETTINGS.taskTypes,
-                        funnelStages: settingsFromDb.funnelStages?.length ? settingsFromDb.funnelStages : DEFAULT_SETTINGS.funnelStages,
-                    }));
+                    setSettings(prev => {
+                        const next = {
+                            ...DEFAULT_SETTINGS,
+                            ...settingsFromDb,
+                            users: prev.users,
+                            taskTypes: settingsFromDb.taskTypes?.length ? settingsFromDb.taskTypes : DEFAULT_SETTINGS.taskTypes,
+                            funnelStages: settingsFromDb.funnelStages?.length ? settingsFromDb.funnelStages : DEFAULT_SETTINGS.funnelStages,
+                        };
+                        // What just arrived IS the server's state — adopt it as
+                        // the autosave baseline so the mirror-back never PUTs.
+                        lastSavedRef.current = serializeForSave(next);
+                        return next;
+                    });
                 } else {
-                    setSettings(prev => ({ ...DEFAULT_SETTINGS, users: prev.users }));
+                    setSettings(prev => {
+                        const next = { ...DEFAULT_SETTINGS, users: prev.users };
+                        lastSavedRef.current = serializeForSave(next);
+                        return next;
+                    });
                 }
             })
             .catch(err => { console.error('Failed to load settings:', err); });
@@ -226,6 +254,11 @@ export function useSettings() {
         // Never mirror key material to disk or echo it back to the server. The
         // key is written only by the AI settings panel, via an explicit PUT.
         const { value: settingsToSave } = stripKeyMaterial(rest);
+        // No-change guard: users/roster refreshes and the load's own
+        // mirror-back produce new OBJECTS with identical payloads — skip them.
+        // Only a payload that differs from the server's last-known state PUTs.
+        const json = JSON.stringify(settingsToSave);
+        if (json === lastSavedRef.current) return;
         // DB FIRST, cache second. This used to write localStorage BEFORE the PUT
         // and then discard the Response — dbFetch resolves for ANY status (guide
         // 18b1), so a non-admin's 403 on this Admin-only endpoint left the change
@@ -243,6 +276,7 @@ export function useSettings() {
                 return;                       // do NOT cache what the server rejected
             }
             setSaveError('');
+            lastSavedRef.current = json;      // the server now holds this state
             try {
                 // Scope by orgId so switching orgs never reads another org's cached settings
                 safeStorage.setItem(getStorageKey(), JSON.stringify(settingsToSave));

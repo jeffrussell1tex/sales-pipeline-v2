@@ -981,6 +981,65 @@ Every §0.58 code change is now both suite-pinned AND browser-observed.
 NOT yet done: the ship itself (eight commits local on `dev`, unpushed —
 Jeff's call) and the prod signed-in eyeball carried from 1 Sep.
 
+**SHIPPED, dev only (Jeff's call: "push dev only").** `dev` pushed at
+`b61f65a`; the Tests workflow completed SUCCESS (checked via the public
+runs API — no `gh` on this machine); accelerep.netlify.app verified
+serving the new bundle by three content markers ("Assignment Requests",
+"Leave unassigned", "return to pool") in `index-BzyfVzLl.js`. `master`
+deliberately held back — prod keeps the old claiming behavior until Jeff
+has lived with the request flow on dev. The prod signed-in eyeball stays
+carried.
+
+---
+
+### 0.59 The SettingsTab cleanup pass begins — the audit actor, the autosave baseline, and the Reconcile read (2 Sep)
+
+**The §0.54 queue, worked in order.**
+
+**Audit actor attribution FIXED.** `users.mjs`'s local positional
+`writeAudit` was fed `result.name` — the TARGET — as the actor name at
+every call site (`user.created`, `user.updated`, `user.deleted`; `.cleared`
+passed null), so every roster edit read as the subject acting on
+themselves. The paired `user.role.changed` rows were always right because
+`user-role.mjs` resolves `getCallerName(userId, orgId)` — all four sites
+now do the same. Historical rows are left as they are: the log is
+evidence, not something to rewrite.
+
+**The autosave baseline CLOSES the §0.53 useSettings debt.** The autosave
+effect fired on every settings OBJECT identity change — the load's own
+mirror-back, roster refreshes, role saves — PUTting byte-identical
+payloads: ~3 junk `settings.updated` audit rows per admin load (the ~9
+across three role saves §0.54 observed) and a naked 403 toast for every
+non-writer who changed nothing. Now one serializer (`serializeForSave`:
+strip users + fiscalYearStart, strip key material, stringify) is used by
+BOTH the autosave and a `lastSavedRef` baseline: both load paths adopt
+what arrived as the baseline inside their setSettings updaters, the
+effect skips when the serialized payload matches, and an accepted PUT
+advances the baseline. A non-writer's 403 toast now fires only when they
+genuinely edited something org-wide — at which point it is correct
+feedback, not noise. (Known edge, accepted: a FAILED settings GET leaves
+a null baseline, so the first edit PUTs the full local bootstrap state —
+exactly the pre-guard behavior, no regression.)
+
+**The Reconcile button is READ — no defect.** The §0.54 "UNREAD code
+claiming 6-row drift": the on-load check POSTs `users-sync?check=true`
+(the documented dry run, writes nothing), non-admins' 403 silently shows
+no banner, and the banner renders only when created+updated+dbOnly > 0.
+The claimed drift is REAL drift — §0.54's recorded dev-org role drift
+(org_3B8Tg `member` ×2, the blob-only rows) is exactly what a dry-run
+reconcile counts. Clicking Reconcile (or the rows' next writes) heals
+it; the tool works as designed. Closed as read-and-verified, no code
+change.
+
+Pinned by `tests/settings-hygiene.test.mjs` (four resolved-caller sites
+and the target-as-actor shape banned; the no-change guard, BOTH baseline
+adoptions — losing one swallows the first post-load edit as baseline —
+and the baseline advance), registered in SUITES by hand, plus two
+harness mutations (actor reverts to target; guard dropped). Verified:
+gates green, build + `dist/` cleared, **298/298 unit**, **67/67
+integration**, **98/98 mutations, printed green baseline**. Still queued
+from §0.54: the Security surfaces are DEMO-WARE — next entry.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

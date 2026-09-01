@@ -3,7 +3,7 @@ import { users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
-import { serverErrorBody, resolveCaller, invalidateRoster } from './_lib.mjs';
+import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName } from './_lib.mjs';
 import { randomUUID } from 'crypto';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
@@ -574,7 +574,12 @@ export const handler = async (event) => {
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
                 }
-                await writeAudit(orgId, 'user.created', result.id, result.name, userId, result.name);
+                // Actor name is the CALLER's, resolved — not the target's.
+                // These three calls passed result.name as the actor for as
+                // long as they existed, so every user.created/updated/deleted
+                // row read as the subject acting on themselves (§0.54's queued
+                // finding; the paired user.role.changed rows were always right).
+                await writeAudit(orgId, 'user.created', result.id, result.name, userId, await getCallerName(userId, orgId));
                 return { statusCode: 201, headers, body: JSON.stringify({ user: flatten(result) }) };
             } catch (err) {
                 if (err.code === 'EMAIL_DUPLICATE') {
@@ -599,7 +604,7 @@ export const handler = async (event) => {
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };
                 }
-                await writeAudit(orgId, 'user.updated', result.id, result.name, userId, result.name);
+                await writeAudit(orgId, 'user.updated', result.id, result.name, userId, await getCallerName(userId, orgId));
                 return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(result) }) };
             } catch (err) {
                 if (err.code === 'EMAIL_DUPLICATE') {
@@ -620,7 +625,7 @@ export const handler = async (event) => {
                 if (forbidden) return forbidden;
                 const deleted = await db.delete(users).where(eq(users.orgId, orgId)).returning({ id: users.id });
                 invalidateRoster(orgId);
-                await writeAudit(orgId, 'user.cleared', 'ALL', `All users (${deleted.length})`, userId, null);
+                await writeAudit(orgId, 'user.cleared', 'ALL', `All users (${deleted.length})`, userId, await getCallerName(userId, orgId));
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
             }
             const id = event.queryStringParameters?.id;
@@ -630,7 +635,7 @@ export const handler = async (event) => {
             const [deletedRow] = await db.select().from(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
             await db.delete(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
             invalidateRoster(orgId);
-            await writeAudit(orgId, 'user.deleted', id, deletedRow?.name || id, userId, deletedRow?.name || id);
+            await writeAudit(orgId, 'user.deleted', id, deletedRow?.name || id, userId, await getCallerName(userId, orgId));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
 
