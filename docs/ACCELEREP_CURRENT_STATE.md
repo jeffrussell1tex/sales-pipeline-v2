@@ -1103,6 +1103,29 @@ NEW bundle hash (`index-CfSKnvfz.js`) carrying this batch's markers
 ("managed in the Clerk dashboard") alongside the request-flow set's.
 `master`/prod still deliberately held at the pre-§0.58 code.
 
+**The dev-org role drift is CLOSED (Jeff + verifier, same session).**
+`check-mirror-roles` before: 5 refused values across 3 orgs — the §0.54
+residue. The Reconcile banner correctly showed NOTHING for the two
+`member` COLUMN rows (`accelerep@yahoo.com`, `jeff.russell@ukg.com` in
+org_3B8Tg): Clerk held no role at all for them, so the sync's dry run
+had nothing to compare — Reconcile was never going to fix those, and
+knowing why is the finding. The validated §0.54 path did: Jeff set both
+to Sales Rep through the profile role select; `user-role.mjs` healed
+Clerk publicMetadata + mirror column + blob together, VERIFIED by
+re-running the read-only checker — 14 rows, **column drift ZERO**, one
+finding left: `smiller@test.com`'s frozen blob copy (plus Jeff's
+unflagged Admin/Technician blob split), both COSMETIC — nothing
+authorizes on the blob (the flatten tests pin column-wins) and both
+self-heal on those rows' next real write. Opening a profile and closing
+it does NOT heal them (Save renders only when dirty — by design).
+**The first two role saves were EATEN by the widened §19 functions
+trap:** `user-role` — untouched all session — was serving the broken
+ESM shim and 500'd both PUTs; "I saved and nothing changed" was a
+serving problem, diagnosed by probing the URL before reading any code
+(the guide rule, applied and then widened by this very case). After
+the restart all seven relevant endpoints probed clean (user-role's 405
+= parsed and executed) and the saves held through a hard refresh.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
