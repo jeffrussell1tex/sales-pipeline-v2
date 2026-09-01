@@ -1086,6 +1086,15 @@ correct, but nothing guards the assumption; `quarters.js` carries the
 defensive `slice(0,10)` variant. Queued as a background sweep, not
 chased now. Gates + 298 unit + 98 mutations green on the fix.
 
+**Settings alphabetized (Jeff's call, closing the pass).** The tab row
+sorts A→Z with 'All' pinned first (Dispatch, when enabled, sorts into
+place instead of being spliced at position 5), and the cards inside
+every tab — and search results — sort by name. The sort lives in
+AdminView at RENDER time, not in catalogue.js: the catalogue stays
+grouped by category for editing (its header now says so), and a new
+item lands in the right display position without hand-ordering. Gates +
+298 unit + 98 mutations green.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

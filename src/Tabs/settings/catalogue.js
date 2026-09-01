@@ -1,4 +1,9 @@
 // settings/catalogue.js
+//
+// DISPLAY ORDER IS NOT THIS FILE'S ORDER. AdminView alphabetizes the tab row
+// (with 'All' pinned first) and the cards within every tab at render time
+// (Jeff's call, 2 Sep) — keep this file grouped by category for editing and
+// add new items to their category block; they sort themselves on screen.
 
 export const SETTINGS_ITEMS = [
     // Personal

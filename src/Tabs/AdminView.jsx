@@ -627,14 +627,20 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         );
     }
 
-    const WORKSPACE_TABS = [...WORKSPACE_TABS_BASE.slice(0, 5), ...(settings?.dispatchEnabled ? ['Dispatch'] : []), ...WORKSPACE_TABS_BASE.slice(5)];
+    // Alphabetical throughout (Jeff's call, 2 Sep): tabs sort A→Z with 'All'
+    // pinned first, and the cards inside every tab (and search results) sort
+    // by name. The sort lives HERE, not in catalogue.js — the catalogue stays
+    // grouped by category for editing, and a new item lands in the right
+    // display position without anyone hand-ordering it.
+    const WORKSPACE_TABS = ['All', ...[...WORKSPACE_TABS_BASE.slice(1), ...(settings?.dispatchEnabled ? ['Dispatch'] : [])].sort((a, b) => a.localeCompare(b))];
     const tabs = WORKSPACE_TABS;
     const scopeItems = SETTINGS_ITEMS.filter(i => i.scope === 'workspace');
     const filteredByTab = (tab === 'All' ? scopeItems : scopeItems.filter(i => i.category === tab))
         .filter(i => i.category !== 'Dispatch' || settings?.dispatchEnabled);
-    const items = search.trim()
+    const items = (search.trim()
         ? scopeItems.filter(i => (i.name + ' ' + i.desc + ' ' + i.category).toLowerCase().includes(search.toLowerCase()))
-        : filteredByTab;
+        : filteredByTab)
+        .slice().sort((a, b) => a.name.localeCompare(b.name));
 
     // Workspace health — from real data + static checks
     const users = settings?.users || [];
