@@ -37,8 +37,10 @@ header wraps instead of overflowing. accelerep.netlify.app serves
 `index-Bo6oAQ7_.js`; Jeff's own screenshots of `80db3bf` on dev: "landed
 perfect" — the dateless tasks listed, the History label a real date.
 
-**`master`/prod unchanged all session** — still the §0.58+§0.59 set. The
-fast-forward is the next decision.
+**`master`/prod SHIPPED after the handoff was first written** (Jeff: "Lets
+push these"): fast-forwarded `d5254b8` → `13f9ffe`, CI SUCCESS,
+salespipelinetracker.com serving `index-NO9RJhjS.js` — `pk_live_` inlined,
+every marker present, byte-size identical to dev's bundle.
 
 ## 2. The lesson: the hash said what reading did not
 
@@ -69,15 +71,16 @@ Five gates green on 133 files · **317/317 unit** · **105/105 mutations,
 printed green baseline** (run alone after every source change) · build
 **2,482 kB JS**, guard OK, `dist/` and `node_modules/.vite` cleared · **79
 integration not re-run** (no endpoint changed all session) · `dev` ==
-`origin/dev` at `d60fa10` plus this handoff · panel wrap observed in the
+`origin/dev`; `master` == `13f9ffe` (one docs commit behind dev after this
+ship note) · panel wrap observed in the
 pane with an injected 220px chip (Sign out y 102 → 164, no overflow).
 
 ## 5. Next — start here
 
 1. **Ritual:** this file, `check:handoff`, `git status`. Expect `dev` and
    `origin/dev` to agree at the handoff commit.
-2. **The `master` fast-forward** when Jeff has lived with the set on dev.
-   User-visible on prod: Tasks calendar keys, quarter tabs and report
+2. **DONE — prod runs `13f9ffe`.** Jeff's own eyeball on prod is the one
+   thing left: the profile panel on the two-org account. User-visible on prod: Tasks calendar keys, quarter tabs and report
    cutoffs follow the user's clock; imported US-format close dates become
    real dates; dateless tasks appear in "No due date"; the deal timeline
    labels never read "Invalid Date"; the profile panel fits a two-org
