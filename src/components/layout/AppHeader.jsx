@@ -465,9 +465,14 @@ export default function AppHeader({
                         <div className="spt-profile-panel" style={{ position: isMobile ? 'fixed' : 'fixed', top: isMobile ? 0 : 56, right: isMobile ? 0 : 16, left: isMobile ? 0 : 'auto', bottom: isMobile ? 0 : 'auto', width: isMobile ? '100%' : 420, background: T.surface, borderRadius: isMobile ? 0 : 6, border: `1px solid ${T.border}`, boxShadow: '0 12px 40px rgba(42,38,34,0.18)', zIndex: 1100, overflow: 'auto', fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
 
                             {/* Panel header */}
-                            <div style={{ background: T.surfaceInk, padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: 12 }}>
+                            {/* flexWrap: with two orgs the Clerk switcher renders the full org
+                                name, and one chip wider than the space beside the identity block
+                                overflowed the 420px panel — Sign out scrolled off behind a
+                                horizontal scrollbar (Jeff, prod, "Dispatch Demo Group"). Now the
+                                action group drops to its own line when it does not fit (0.62). */}
+                            <div style={{ background: T.surfaceInk, padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                                 <div style={{ width: 44, height: 44, borderRadius: '50%', background: _avatarBg(currentUser), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{userInitials}</div>
-                                <div>
+                                <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                                     <div style={{ color: T.surfaceInkFg, fontWeight: 700, fontSize: 15, fontFamily: T.sans }}>{currentUser}</div>
                                     <div style={{ color: T.inkMuted, fontSize: 12, marginTop: 2, fontFamily: T.sans }}>{clerkUser?.emailAddresses?.[0]?.emailAddress}</div>
                                     <div style={{ marginTop: 4 }}>

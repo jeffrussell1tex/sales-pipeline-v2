@@ -1454,8 +1454,21 @@ Karen, whose rep scope cannot see it.
 overflows its 420px width when the Clerk org switcher renders a long org
 name for a two-org account ("Dispatch Demo Group"), pushing Sign out off the
 right edge behind a horizontal scrollbar. `AppHeader.jsx`, untouched since the
-email-signature commit. Fix designed (let the header row wrap; `minWidth: 0` on
-the identity block), applied when Jeff says go.
+email-signature commit. **FIXED (Jeff: "lets fix right after I do these
+verifications"):** the header row gets `flexWrap: 'wrap'` and the identity block
+`minWidth: 0` + `overflowWrap: 'anywhere'`, so the action group (Log · org
+switcher · Sign out) drops to its own line when it does not fit beside the
+identity. Verified in the pane on localhost as Karen: no org switcher renders
+for her (one Clerk membership on the dev instance), so a 220px chip was injected
+into the action group by script — the group wrapped below the identity (Sign out
+y 102 → 164), everything inside the panel, `scrollWidth === clientWidth`, then
+the chip was removed. Gates green, **317/317**, **105/105**, build guard OK.
+
+**Dev landing, observed by Jeff (`80db3bf`, `index-Bo6TV6SC.js`): "landed
+perfect."** Both screenshots: the "No due date" section listing his dateless
+tasks (3 in one org, 1 in the other), and the profile panel fitting for the
+short-named "Accelerep Test" org — the same panel that overflowed on prod for
+"Dispatch Demo Group", which is the whole bug in two pictures.
 
 ---
 
