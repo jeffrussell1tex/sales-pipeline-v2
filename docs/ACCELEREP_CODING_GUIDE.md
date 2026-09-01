@@ -1326,6 +1326,18 @@ fifth gate (18b6).
   landing's "Customer sign in" link is RELATIVE (`/`) — it was an absolute
   `https://salespipelinetracker.com/`, which teleported a localhost session
   onto prod with one click.
+  THE FUNCTIONS-SIDE TWIN (2 Sep): a Netlify function ADDED while
+  `netlify dev` is running does not load — the CLI's
+  `.netlify/functions-serve/` cache holds a half-built bundle whose CJS
+  shim is parsed as ESM under the project's `"type": "module"`
+  (`ReferenceError: module is not defined`), and the client shows only
+  its generic failure toast. Deleting that function's cache directory
+  does NOT recover it: the running server keeps a dead registration and
+  500s ENOENT instead. The fix is a dev-server RESTART, full stop.
+  Recognition rule: a brand-new endpoint "failing" under `netlify dev`
+  that predates the file is a serving problem, not a code problem — probe
+  the function URL directly (401 JSON = loaded and gated; ESM/ENOENT
+  500 = stale serve) before reading a single line of its source.
 
 ---
 

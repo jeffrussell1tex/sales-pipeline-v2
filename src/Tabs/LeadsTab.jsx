@@ -164,7 +164,7 @@ const LeadAssignee = ({ name, onClick, label = '+ Assign', title }) => {
     if (!name) {
         if (!onClick) return <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>—</span>;
         return (
-            <button title={title} onClick={e => { e.stopPropagation(); onClick(e); }} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', background:T.surface, border:`1px dashed ${T.borderStrong}`, color:T.goldInk, fontSize:11, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+            <button title={title} onClick={e => { e.stopPropagation(); onClick(e); }} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', background:T.surface, border:`1px dashed ${T.borderStrong}`, color:T.goldInk, fontSize:11, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, justifySelf:'start', width:'fit-content' }}>
                 {label}
             </button>
         );
@@ -427,7 +427,7 @@ const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
     );
 };
 
-const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute, leadRequests, requestLead, cancelRequest, resolveRequest }) => {
+const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute, canDelete, deleteLead, leadRequests, requestLead, cancelRequest, resolveRequest }) => {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
@@ -622,7 +622,10 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                                         <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{fmtRev(l.rev)}</div>
                                         <div style={{ display:'flex', gap:4, justifyContent:'flex-end' }}>
                                             <button onClick={e => { e.stopPropagation(); convertLead(l); }} title="Convert to opportunity" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, fontSize:11 }}>↗</button>
-                                            <button onClick={e => { e.stopPropagation(); showConfirm(`Delete lead "${l.first} ${l.last}"?`, () => setLeads(prev => prev.filter(x => x.id !== l.id))); }} title="Delete" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer' }}>🗑</button>
+                                            {/* Admin-only: the server's DELETE is requireRole(Admin) —
+                                                reps and Managers were offered a button whose click was
+                                                also never sent to the server at all (setLeads-only). */}
+                                            {canDelete && <button onClick={e => { e.stopPropagation(); showConfirm(`Delete lead "${l.first} ${l.last}"?`, () => deleteLead(l.id)); }} title="Delete" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer' }}>🗑</button>}
                                         </div>
                                     </div>
                                 );
@@ -995,6 +998,17 @@ export default function LeadsTab() {
         return () => { cancelled = true; };
     }, []);
 
+    // ── Delete a lead — server FIRST, then local state ─────────
+    // The row's delete used to be setLeads-only: the lead vanished until the
+    // next refresh and the database never heard about it (the persistent-data
+    // rule, violated in place). Server-side delete is Admin-only (leads.mjs
+    // DELETE requireRole), so the button is offered to Admins alone.
+    const deleteLead = useCallback(async (id) => {
+        const r = await dbWrite(`/.netlify/functions/leads?id=${id}`, { method: 'DELETE' });
+        if (r.ok) setLeads(prev => prev.filter(l => l.id !== id));
+        else setUndoToast({ error: `Lead not deleted — ${r.error}` });
+    }, [setLeads, setUndoToast]);
+
     const requestLead = useCallback(async (leadId, note) => {
         const id = 'lcr_' + crypto.randomUUID();
         const res = await dbFetch('/.netlify/functions/lead-requests', {
@@ -1149,6 +1163,8 @@ export default function LeadsTab() {
                         convertLead={convertLead}
                         logActivity={logActivity}
                         canDistribute={canSeeAll}
+                        canDelete={userRole === 'Admin'}
+                        deleteLead={deleteLead}
                         leadRequests={leadRequests}
                         requestLead={requestLead}
                         cancelRequest={cancelRequest}

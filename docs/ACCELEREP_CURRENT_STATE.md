@@ -915,6 +915,31 @@ mutation (CREATE gate dropped). Verified: gates green, build 2,476 kB +
 mutations, printed green baseline**. The two-chair browser pass is now
 actually RUNNABLE and remains the queued verification.
 
+**Batch 6 shipped — what the pass found before it finished (Jeff, from
+Karen's chair).** Three findings from the first minutes of the two-chair
+pass, all fixed: **(1) THE ROW DELETE WAS A PHANTOM** — TriageView's 🗑
+called `setLeads(filter)` and NOTHING ELSE: no server call, lead back on
+refresh, the persistent-data rule violated in place, pre-existing and
+invisible until someone watched a refresh. And it rendered for everyone
+while the server's DELETE is `requireRole(Admin)` — reps and Managers
+were offered a button whose real answer is 403. Now: Admin-only render,
+and a `deleteLead` action that goes server-first (`dbWrite` DELETE → ok:
+drop locally; fail: toast). **(2)** the rep's "Request" button stretched
+across the whole Assignee grid column (grid children stretch by
+default) — `justifySelf:'start'` pins it to content width. **(3) the
+"Request not sent." toast was a DEAD FUNCTION, not a policy refusal** —
+Jeff's `netlify dev` predated `lead-requests.mjs`, and the CLI's
+functions-serve cache held a half-built bundle (CJS shim parsed as ESM
+under `"type":"module"`; deleting the cache dir alone does NOT recover —
+the running server keeps a dead registration and 500s ENOENT). Rule for
+the guide: **a function added while `netlify dev` runs needs a dev-server
+RESTART**, the §19 stale-serve trap's functions-side twin. Also noted:
+Jeff's exploratory ↗ click converted the James Whitmore pool lead
+(status Converted) — flip back via Change status when the pool test
+resumes. Verified: gates green, build + `dist/` cleared, **296/296
+unit**, **96/96 mutations, printed green baseline** (endpoints untouched
+this batch; integration stands at 67/67 from Batch 5).
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
