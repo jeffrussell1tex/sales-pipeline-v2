@@ -79,8 +79,8 @@ pane with an injected 220px chip (Sign out y 102 → 164, no overflow).
 
 1. **Ritual:** this file, `check:handoff`, `git status`. Expect `dev` and
    `origin/dev` to agree at the handoff commit.
-2. **DONE — prod runs `13f9ffe`.** Jeff's own eyeball on prod is the one
-   thing left: the profile panel on the two-org account. User-visible on prod: Tasks calendar keys, quarter tabs and report
+2. **DONE — prod runs `13f9ffe`, and Jeff observed the profile panel fit on
+   the Dispatch Demo Group account** ("the dispatch demo fits"). User-visible on prod: Tasks calendar keys, quarter tabs and report
    cutoffs follow the user's clock; imported US-format close dates become
    real dates; dateless tasks appear in "No due date"; the deal timeline
    labels never read "Invalid Date"; the profile panel fits a two-org

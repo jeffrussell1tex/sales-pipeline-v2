@@ -1480,6 +1480,8 @@ trace of the deleted components, and the same byte size as dev's
 quarter tabs on their own clock, dateless tasks in "No due date", timeline
 labels that never read "Invalid Date", US-format CSV close dates as real
 dates, and — for Jeff's two-org account — a profile panel that fits.
+**Jeff, on prod, the Dispatch Demo Group account: "the dispatch demo fits."**
+The bug he reported this morning is observed closed where he reported it.
 
 ---
 
