@@ -1326,18 +1326,24 @@ fifth gate (18b6).
   landing's "Customer sign in" link is RELATIVE (`/`) — it was an absolute
   `https://salespipelinetracker.com/`, which teleported a localhost session
   onto prod with one click.
-  THE FUNCTIONS-SIDE TWIN (2 Sep): a Netlify function ADDED while
-  `netlify dev` is running does not load — the CLI's
-  `.netlify/functions-serve/` cache holds a half-built bundle whose CJS
-  shim is parsed as ESM under the project's `"type": "module"`
-  (`ReferenceError: module is not defined`), and the client shows only
-  its generic failure toast. Deleting that function's cache directory
-  does NOT recover it: the running server keeps a dead registration and
-  500s ENOENT instead. The fix is a dev-server RESTART, full stop.
-  Recognition rule: a brand-new endpoint "failing" under `netlify dev`
-  that predates the file is a serving problem, not a code problem — probe
-  the function URL directly (401 JSON = loaded and gated; ESM/ENOENT
-  500 = stale serve) before reading a single line of its source.
+  THE FUNCTIONS-SIDE TWIN (2 Sep, trigger WIDENED same day): under a
+  long-running `netlify dev`, individual functions land in a broken
+  serve state — the `.netlify/functions-serve/` cache's CJS shim parses
+  as ESM under the project's `"type": "module"`
+  (`ReferenceError: module is not defined`) — and the client shows only
+  its generic failure toast. The trigger is NOT just "function added
+  while running": in one session the broken set was a NEW function
+  (lead-requests), a MODIFIED one (clerk-mfa-status), and an UNTOUCHED
+  one (user-role, which silently ate two role saves), while equally
+  modified siblings (users, leads) served fine. Treat it as
+  nondeterministic. Deleting a function's cache directory does NOT
+  recover it — the running server keeps a dead registration and 500s
+  ENOENT. The fix is a dev-server RESTART, full stop. Recognition rule:
+  ANY function 500ing under `netlify dev` gets its URL probed FIRST
+  (401 JSON = loaded and gated; ESM/ENOENT 500 = stale serve) before a
+  single line of its source is read — and after a functions-side editing
+  session, probe the endpoints you are about to exercise in the browser,
+  because a broken one presents as "my change didn't save".
 
 ---
 
