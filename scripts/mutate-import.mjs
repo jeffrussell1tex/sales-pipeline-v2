@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -160,6 +160,18 @@ const mutations = [
         'netlify/functions/tasks.mjs',
         'const clean = sanitize({ ...existing, ...data });',
         'const clean = sanitize(data);'],
+
+    // ── Leads Mine scope (client) ───────────────────────────────────────────
+    // Caught by the source assertions in tests/leads-scope.test.mjs.
+    ['leads scope: Mine folds unassigned back in (the pre-1-Sep shape — Mine equals All in a one-owner org)',
+        'src/Tabs/LeadsTab.jsx',
+        '.filter(l => !!l.ownerId && l.ownerId === currentUserId)',
+        '.filter(l => !l.ownerId || l.ownerId === currentUserId)'],
+
+    ['leads scope: the 18b22 null-guard drops — a null currentUserId claims every unassigned row via null === null',
+        'src/Tabs/LeadsTab.jsx',
+        '.filter(l => !!l.ownerId && l.ownerId === currentUserId)',
+        '.filter(l => l.ownerId === currentUserId)'],
 
     ['endpoints: an assertOwnership result is computed and then discarded',
         'netlify/functions/leads.mjs',

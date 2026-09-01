@@ -47,7 +47,8 @@ const norm = (l) => ({
     assignee: l.assignedTo || l.assignee    || null,
     // Ownership id (usr_<uuid>), distinct from the display name above: the
     // Mine/All scope keys on this, never on `assignee` (§18b22). Null means
-    // UNASSIGNED — visible under Mine, matching the server's read policy.
+    // UNASSIGNED — visible under All only; Mine is strictly owned-by-me
+    // (Jeff's call, 1 Sep, from the first rep-path browser pass).
     ownerId:  l.ownerId    || null,
     notes:    l.notes      || '',
     createdAt: l.createdAt || l.created_at  || null,
@@ -779,11 +780,15 @@ export default function LeadsTab() {
     // ── Mine/All scope (§0.52) ─────────────────────────────
     // Persisted PREFERENCE only — never data. An unrecognised stored value
     // renders as Mine (§16's unmatched-select rule). The filter keys on
-    // ownerId, never the display name (§18b22); a null currentUserId during
-    // the ?me=true load window fails closed, matching getCallerId. Unassigned
-    // rows stay visible under Mine, matching the server's read policy — and
-    // when the org-level Lead visibility setting hides unassigned leads from
-    // reps, the server never sends them, so there is nothing here to hide.
+    // ownerId, never the display name (§18b22).
+    //
+    // Mine is STRICTLY owned-by-me (Jeff's call, 1 Sep, on the first rep-path
+    // browser pass — it previously included unassigned rows, which made Mine
+    // and All identical in an org with no other owners). The `!!l.ownerId`
+    // guard is the 18b22 null-collision rule: during the ?me=true load window
+    // currentUserId is null, and without the guard every UNASSIGNED row would
+    // match null === null and render under Mine. Unassigned leads live under
+    // All, the Unassigned chip, and the triage lane.
     const [scope, setScope] = useState(() => {
         try { return localStorage.getItem('tab:leads:scope') === 'all' ? 'all' : 'mine'; } catch { return 'mine'; }
     });
@@ -797,7 +802,7 @@ export default function LeadsTab() {
     // subtitle counts all follow the scope with zero downstream edits.
     const allLeads = useMemo(() => (rawLeads || []).map(norm), [rawLeads]);
     const leads = useMemo(() => scope === 'mine'
-        ? allLeads.filter(l => !l.ownerId || l.ownerId === currentUserId)
+        ? allLeads.filter(l => !!l.ownerId && l.ownerId === currentUserId)
         : allLeads, [scope, allLeads, currentUserId]);
 
     // Rep names from settings for the Distribute panel

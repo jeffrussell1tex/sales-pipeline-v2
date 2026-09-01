@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** September 1, 2026
-**Verified at:** all seven gates green — the dbfetch gate now carries THREE classes and reads 0 across `src/` · **285 tests** (284 → +1 scanner meta-test) · **43 integration** (observed this morning with §0.56; not re-run for §0.57 — no endpoint changed) · **88/88 mutations, printed green baseline** · build **2,468 kB** (+2 kB, the picker), bundle guard OK · **OUTSTANDING: the §0.57 browser pass** — the picker has NOT been eyeballed; rep-path check as Karen (URL bar, org count, §19) is the gate before this deploys. `master` sits at the 31 Aug docs batch; nothing from 1 Sep has been pushed anywhere yet.
+**Verified at:** all seven gates green — the dbfetch gate now carries THREE classes and reads 0 across `src/` · **288 tests** (+1 scanner meta-test, +3 Mine-scope source guards) · **43 integration** (observed this morning with §0.56; not re-run since — no endpoint changed) · **90/90 mutations, printed green baseline** (+2 Mine-scope reverts) · build **2,468 kB**, bundle guard OK, local `dist/` cleared after every gate build (the §19 self-arming rule) · **rep-path browser pass PARTIALLY observed** (Karen, localhost, 1 Sep): picker renders/anchors/lists the roster; Mine-strict shipped from its finding; assign-and-survive-F5 still pending. `master` sits at the 31 Aug docs batch; nothing from 1 Sep has been pushed anywhere yet.
 **Batch:** **the dbfetch scanner's third class (a Response captured in a VARIABLE and read as JSON) built scanner-FIRST, and its first run found SIX live sites, not the four known** — the TasksTab complete/snooze/saveContacts handlers that REVERTED their optimistic update on every successful save, plus two ReportsTab report-saves that showed "Saved" on a rejected write without ever checking `res.ok`; all six fixed with the canonical `res.ok` → `res.json()` → adopt-server-row shape, scanner 6 → 0 · pinned by a new catch fixture, two safe-fixture additions, and a scanners.test.mjs case · **the assignee picker retires all five free-text `window.prompt` assign sites in LeadsTab** (`RepPickerPopover`, module-scope, `getBoundingClientRect` + `position:fixed`, name-keyed payloads — the server stays the resolver) · **the §0.54 case question ANSWERED**: `resolveOwnerId` lowercases both sides — spelling was the risk, not case (§0.57)
 **Prior batch:** **the opportunities and tasks PUT overwrite paths are closed — the sanitize-then-upsert audit's third and fourth faces** — both single-record PUTs now `sanitize({ ...existing, ...data })` (field-present semantics; `ownerIdForUpdate` still fed the RAW body per 18b13); opportunities previously wiped stageHistory/comments and reset pipelineId, tasks additionally UN-COMPLETED itself via `completed ?? false` · **severity settled by reading every sender FIRST: no current client sends a partial PUT** to either endpoint (all spread the full row) — a loaded gun, not a live wipe; external API-key writers remain an UNREAD open question · held closed the leads way ×2: source-assertion guards, mutation entries, and the two first-ever integration suites (`itest_opps_*` / `itest_tasks_*` namespaces per §18b25) · **found while reading, NOT fixed: four TasksTab sites read `data?.task` off a raw Response** — complete/snooze there revert the optimistic update on SUCCESS (UI flicker-back, data saved); `check:dbfetch` misses the shape — scanner false-negative class, fix + fixture queued (§0.56)
 **Prior batch:** **the SEVENTH GATE ships** — `scripts/check-handoff.mjs` byte-compares the root and `docs/` handoff copies (the pair drifted a third time: the FINAL rewrite was committed to one copy only), classifies EOL/whitespace/content divergence, names the first differing line; wired into `check:handoff`, guide §19 and the CI gates job, proven with 4 committed fixtures + 3 behavioral tests · **CLAUDE.md created at repo root** (132 + 11 lines — standing rules only, no session state; the multi-tenancy isolation hard rule in its own commit) · **the CI unit-job blind spot fixed** — `node --test` ran with no `npm install`, so `scanners.test.mjs`'s babel-dependent gate spawns died ERR_MODULE_NOT_FOUND on every clean runner (suspected red since the scanner suite landed; NOT verified against old runs) · **`.gitignore`'s unanchored `fixtures/` swallowed `tests/fixtures/`** — a fixture commit shipped 3 of 7 files with the refusal hint lost between CRLF warnings; anchored to `/fixtures/` · **the doc-ordering rule** (Jeff's call, guide §22): doc changes applied/verified/committed when known, never end-of-session patch scripts, handoff written LAST — origin: the §0.54 amendment script that had never actually run with `--apply` · **the sanitize-then-upsert audit is now FOUR for four**: `opportunities.mjs` single-record PUT and `tasks.mjs` PUT both run raw `sanitize(data)` (tasks also un-completes via `completed ?? false`); diagnosed, NOT fixed — next session's opening batch (§0.55)
@@ -650,6 +650,32 @@ applied, and the chain now ends its local build with `rm -rf dist` (Netlify
 builds remotely; the local `dist/` exists only for the bundle guard to
 read). Guide §19 and CLAUDE.md carry the rule. The picker browser pass
 remains outstanding — now on a clean surface.
+
+**Second addendum: the first rep-path pass ran, and Mine went STRICT.**
+Jeff's pass as Karen surfaced that Mine and All both showed 23 — correct
+under the §0.52 design (Mine = mine + unassigned) in an org where no other
+rep owns anything, but not the semantics Jeff wants. His call: **Mine is
+strictly owned-by-me.** The filter is now
+`!!l.ownerId && l.ownerId === currentUserId` — the `!!` guard is the 18b22
+null-collision rule (during the ?me=true load window `currentUserId` is
+null, and without the guard every unassigned row would match
+`null === null` and render under Mine). Unassigned leads live under All,
+the Unassigned chip, and the triage lane. Pinned by
+`tests/leads-scope.test.mjs` (three source assertions, registered in
+SUITES — no meta-test guards that registration, per the §18b23 lesson it
+was added by hand) and two harness mutations (the permissive revert and the
+dropped null-guard), 285 → **288** unit, 88 → **90/90** mutations, green
+baseline. Consequence accepted with the semantics: a rep in Mine sees an
+empty "Needs first touch" lane and a zeroed Unassigned chip — the working
+set is All. First-pass observations otherwise: the picker rendered,
+anchored, and listed the roster correctly as a rep; the known §0.53
+non-writer settings 403 toast and the "NaNyr ago" date bug both showed
+(already queued, unchanged). **Jeff's design call, queued:** the
+RepPickerPopover format becomes the house pattern for EVERY
+person-in-the-org selection control — replicate it wherever a person is
+picked (task assignee, opportunity rep, etc.) as those surfaces get
+touched. The assign-and-survive-F5 confirmation is still pending Karen's
+completed pass.
 
 ---
 
