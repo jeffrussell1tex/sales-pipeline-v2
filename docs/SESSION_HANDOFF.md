@@ -122,9 +122,11 @@ org namespaces isolate suites within a run but not runs from each other
 (§18b25's corollary, now in the guide). The job logs are auth-gated, so the
 first failing assertion is UNOBSERVED — the concurrency is the observed
 fact. Fixed: the integration job carries a repo-wide `concurrency` group
-(queue, never cancel the running one); the fix's own dev+master push pair
-is its live test — CHECK BOTH RUNS' VERDICTS at next session start if this
-handoff does not already record them.
+(queue, never cancel the running one). **The live test PASSED, observed:
+both `e43c261` runs (dev 33532029205, master 33532033169) completed
+SUCCESS under the exact push pattern that broke `cf35f51`.** The final
+docs-only commit recording this rides the now-proven serialization; the
+next session's ritual reads its runs as a formality.
 
 ## 4. Next — start here
 
