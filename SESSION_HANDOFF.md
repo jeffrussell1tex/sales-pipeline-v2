@@ -20,7 +20,7 @@ their headers is Jeff's call, not done.
 
 ---
 
-## 1. What shipped — two commits, LOCAL and UNPUSHED
+## 1. What shipped — three commits, PUSHED to dev and deploy-verified
 
 **`c435ee4` — the read side of the date contract.** The §0.59 audit item
 ("~20 other call sites") was run by reading every site: the `+'T12:00:00'`
@@ -92,14 +92,14 @@ on first run) · build **2,480 kB JS**, guard OK, `dist/` AND
 re-run** — no endpoint changed (`importRows.js` is client-side; the server
 `sanitize()` paths are untouched) · no browser pass this session (no dev
 server was running; Jeff signs in) · `dev` is **ahead of origin by 2**;
-nothing pushed.
+then PUSHED after the handoff was written: CI SUCCESS on `7a84aeb`, accelerep.netlify.app serving `index-Ba_0HcTB.js`, byte-identical to the local gate build (md5 `e55b7734bcff`).
 
 ## 5. Next — start here
 
-1. **Ritual:** this file, `check:handoff`, `git status`. Expect `dev` ahead
-   of `origin/dev` by the two commits above unless Jeff pushed.
-2. **Push `dev`** (Jeff's call), CI + deploy markers; then the `master`
-   fast-forward when he has lived with it. The behavioural changes users can
+1. **Ritual:** this file, `check:handoff`, `git status`. `dev` and
+   `origin/dev` should agree at the ship-note docs commit.
+2. **The `master` fast-forward** when Jeff has lived with it on dev (prod
+   still runs the pre-§0.60 set). The behavioural changes users can
    notice: the Tasks calendar day keys, quarter tabs and report cutoffs now
    follow the user's clock rather than UTC; imported US-format close dates
    become real dates.
