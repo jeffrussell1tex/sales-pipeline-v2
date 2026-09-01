@@ -2835,3 +2835,15 @@ own lead" with no error anywhere near the actual cause.
 - Cross-file collisions present as HOOK failures in the OTHER suite —
   duplicate keys in a file you did not edit after adding seeding to one you
   did is this rule being violated, not that suite's bug.
+- **Namespaces isolate suites WITHIN a run, never runs from each other**
+  (1 Sep): a dev push and a master fast-forward seconds apart ran the CI
+  integration job CONCURRENTLY against the one shared test database — each
+  run's cleanup deleted the other's seeds and the identical `(org,
+  clerkUserId)` pairs collided, on a docs-only diff whose code had been
+  green an hour earlier when the runs happened to be sequential. Fixed
+  structurally, not by re-namespacing: the integration job carries a
+  repo-wide `concurrency` group (`integration-shared-test-db`,
+  `cancel-in-progress: false`) in `.github/workflows/test.yml`, so
+  concurrent runs QUEUE. Recognition rule: an integration-only CI failure
+  on a docs-only commit, seconds after another push, is this — check the
+  two jobs' start times before reading a single test.

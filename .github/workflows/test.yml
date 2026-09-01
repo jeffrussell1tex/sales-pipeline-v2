@@ -62,6 +62,18 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    # ONE integration job at a time, repo-wide. The suites share a single test
+    # database and use FIXED org namespaces — safe across suites in one run
+    # (§18b25), not across runs: a dev push and a master fast-forward seconds
+    # apart ran this job concurrently (1 Sep), and each run's cleanup/seed
+    # deleted and collided with the other's rows. The group serializes them;
+    # cancel-in-progress stays false so a queued run WAITS instead of killing
+    # the running one. (GitHub keeps only the newest PENDING job per group —
+    # with 3+ rapid pushes the middle run is cancelled, which reads as a
+    # cancelled run, not a red one.)
+    concurrency:
+      group: integration-shared-test-db
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

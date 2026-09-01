@@ -701,6 +701,24 @@ one-at-a-time through the picker — the server permits it by the same
 unassigned-rows-are-editable rule. Whether claiming should be self-only for
 reps is a policy decision for Jeff, queued.
 
+**Fourth addendum: the shipping itself found a CI race.** The end-of-day
+ship ("do it all") pushed `dev` and fast-forwarded `master` seconds apart —
+and BOTH `cf35f51` runs went red on their integration job while gates and
+unit stayed green, on a DOCS-ONLY diff whose code was green an hour
+earlier. Observed: the two integration jobs started 2 seconds apart against
+the one shared test database; the dev job died in 21 seconds; the job logs
+are auth-gated (the exact first failing assertion is UNOBSERVED — recorded
+as such). The mechanism is structural regardless: fixed org namespaces
+isolate suites within a run, not two runs of the SAME suites from each
+other — cross-run cleanup deletes the other run's seeds and identical
+`(org, clerkUserId)` pairs collide (§18b25, one level up). Fix: the
+integration job now carries a repo-wide `concurrency` group
+(`integration-shared-test-db`, `cancel-in-progress: false`) so concurrent
+runs queue; guide §18b25 gains the corollary and the recognition rule. The
+fix's own shipping (another near-simultaneous dev+master push pair) is its
+live test. Netlify deploys were never affected — both were content-verified
+before this was found.
+
 **Reported at close, NOT diagnosed: "Auto-assign all doesn't seem to
 work"** (Jeff, 1 Sep, end of session — no repro details captured). Read the
 click path before diagnosing anything. FIRST THING TO RULE OUT (an open

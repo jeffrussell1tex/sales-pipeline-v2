@@ -115,6 +115,16 @@ BOTH deploys verified serving today's head (new bundle hash, the picker's
 "No reps in the roster" marker, relative sign-in link) on
 accelerep.netlify.app AND salespipelinetracker.com. The two-minute signed-in
 prod eyeball was NOT performed — queued, not implied.
+**Then the ship itself found a CI race:** the docs-only `cf35f51` pair
+(dev push + master FF seconds apart) went red on the INTEGRATION job only —
+the two jobs started 2s apart against the one shared test DB, whose fixed
+org namespaces isolate suites within a run but not runs from each other
+(§18b25's corollary, now in the guide). The job logs are auth-gated, so the
+first failing assertion is UNOBSERVED — the concurrency is the observed
+fact. Fixed: the integration job carries a repo-wide `concurrency` group
+(queue, never cancel the running one); the fix's own dev+master push pair
+is its live test — CHECK BOTH RUNS' VERDICTS at next session start if this
+handoff does not already record them.
 
 ## 4. Next — start here
 
