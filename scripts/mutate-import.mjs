@@ -173,6 +173,11 @@ const mutations = [
         '.filter(l => !!l.ownerId && l.ownerId === currentUserId)',
         '.filter(l => l.ownerId === currentUserId)'],
 
+    ['leads: Auto-assign all loses its role gate — a rep scatters the whole unassigned pool in one click',
+        'src/Tabs/LeadsTab.jsx',
+        '{canDistribute && (',
+        '{true && ('],
+
     ['endpoints: an assertOwnership result is computed and then discarded',
         'netlify/functions/leads.mjs',
         '            if (forbiddenOwn) return forbiddenOwn;',

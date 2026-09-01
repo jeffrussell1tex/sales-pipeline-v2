@@ -32,3 +32,17 @@ test('the Mine filter never keys on the display name (§18b22)', () => {
     assert.equal(src.includes('l.assignee === currentUser'), false,
         'scope must key on ownerId, never on assignee — two users sharing a name must not share a scope');
 });
+
+// ── Auto-assign all is role-gated ────────────────────────────────────────────
+// Found by Karen's rep-path pass (1 Sep): the button rendered for a rep, and
+// the SERVER would have honored every individual PUT it fires — reps may edit
+// unassigned rows, that is how claiming works — so one rep click scatters the
+// whole unassigned pool. The gate is client-side by necessity (each PUT is
+// individually legitimate), which is exactly why it is pinned here.
+
+test('the Auto-assign all button is gated on canDistribute, exactly once', () => {
+    const gated = src.split('{canDistribute && (').length - 1;
+    assert.equal(gated, 1, 'mass distribution renders only for Admin/Manager (canSeeAll)');
+    assert.equal(src.includes('canDistribute={canSeeAll}'), true,
+        'the gate must key on the shared canSeeAll predicate, not a re-derived role check');
+});

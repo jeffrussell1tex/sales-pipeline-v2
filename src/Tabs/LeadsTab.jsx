@@ -220,7 +220,7 @@ const RepPickerPopover = ({ reps, anchor, onPick, onClose }) => {
 };
 
 // ── Right rail panels ─────────────────────────────────────────
-const DistributePanel = ({ leads, reps, onSaveLead }) => {
+const DistributePanel = ({ leads, reps, onSaveLead, canDistribute }) => {
     const unassigned = leads.filter(l => !l.ownerId).length;
     // Load bars key on ownerId, never the display name (§18b22): a stale
     // assignedTo string on an owner-less row is not load, and two reps sharing
@@ -244,6 +244,12 @@ const DistributePanel = ({ leads, reps, onSaveLead }) => {
                     <div style={{ fontSize:11, color:T.inkMid, fontWeight:600, width:12, textAlign:'right', fontFamily:T.sans }}>{r.count}</div>
                 </div>
             ))}
+            {/* Mass distribution is a management action. The server would honor
+                a rep's individual PUTs here (reps may edit unassigned rows —
+                that is how claiming works), which is exactly why the button
+                must not exist for them: one click scatters the whole pool.
+                Found by Karen's rep-path pass, 1 Sep. */}
+            {canDistribute && (
             <button onClick={() => {
                 const unassigned = leads.filter(l => !l.ownerId);
                 if (unassigned.length === 0 || reps.length === 0) return;
@@ -258,6 +264,7 @@ const DistributePanel = ({ leads, reps, onSaveLead }) => {
             }} style={{ marginTop:10, width:'100%', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
                 Auto-assign all
             </button>
+            )}
         </div>
     );
 };
@@ -344,7 +351,7 @@ const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
     );
 };
 
-const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity }) => {
+const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute }) => {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
@@ -519,7 +526,7 @@ const TriageView = ({ leads, reps, onOpenLead, setLeads, showConfirm, saveLead, 
 
                 {/* Right rail */}
                 <div style={{ width:260, flexShrink:0, display:'flex', flexDirection:'column', gap:12, overflow:'auto' }}>
-                    <DistributePanel leads={leads} reps={reps} onSaveLead={saveLead}/>
+                    <DistributePanel leads={leads} reps={reps} onSaveLead={saveLead} canDistribute={canDistribute}/>
                     <LeadSourcesPanel leads={leads}/>
                 </div>
             </div>
@@ -758,7 +765,7 @@ const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConf
 export default function LeadsTab() {
     const {
         leads: rawLeads, setLeads,
-        settings, currentUser, currentUserId, userRole,
+        settings, currentUser, currentUserId, userRole, canSeeAll,
         showConfirm, exportToCSV,
         setEditingOpp, setShowModal,
         setEditingActivity, setShowActivityModal, setActivityInitialContext,
@@ -929,6 +936,7 @@ export default function LeadsTab() {
                         saveLead={saveLead}
                         convertLead={convertLead}
                         logActivity={logActivity}
+                        canDistribute={canSeeAll}
                     />
                 )}
                 {tab === 'cockpit' && (
