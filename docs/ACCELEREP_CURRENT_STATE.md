@@ -781,6 +781,36 @@ mutations, printed green baseline**. Browser pass for the batch is queued
 with the rest of this session's UI work — one rep-path pass as Karen after
 the request-flow UI lands, covering all of it.
 
+**Batch 2 shipped — the server gate.** `leads.mjs` PUT now refuses any
+ownership CHANGE from a non-`canSeeAll` caller: between `ownerIdForUpdate`
+and the merge, when the payload mentions `assignedTo`, BOTH halves are
+compared — the resolved owner id against `existing.ownerId` AND the
+trimmed display-name string against `existing.assignedTo` — and either
+differing is a 403. Two halves because they can disagree exactly once: a
+name resolving to NOBODY on an unassigned row is `null === null` on the id
+side while writing a label that makes the lead LOOK assigned (the spoof
+the string half closes). Denied only on an actual change — LeadForm
+spreads the stored row, so a rep's ordinary edit carrying an unchanged
+`assignedTo` keeps working, as does any partial PUT that never mentions
+the key (`change: false`). `assertOwnership` is untouched: it still
+governs which ROWS a rep may edit; the gate governs one FIELD on them. The
+row-level "unassigned is mutable by any writer" rule is now carved out for
+the leads OWNERSHIP field only — noted at `leads.ownerId` in `schema.ts`;
+tasks and the other tables are unchanged. POST is deliberately untouched
+(a rep creating a lead still owns it via `ownerIdForWrite` — creating is
+not assigning); open question recorded: a rep could POST a lead
+pre-assigned to a colleague by name, same class as the §0.56 API-key
+question. `public-api.mjs` read-checked: leads are GET-only there, no
+bypass. Pinned by SEVEN new integration tests (`itest_leads_*`: refused
+self-claim, refused assign-to-other, refused spoof label, refused
+give-away/clear by the owner, allowed unchanged-spread edit, allowed
+no-mention partial, Admin still assigns), two source assertions in
+`tests/leads-scope.test.mjs` (whose stale "client-side by necessity"
+rationale is rewritten — the client gate is now the UX half), and two
+harness mutations (gate dropped, string half dropped). Verified: gates
+green, build 2,468 kB + `dist/` cleared, **291/291 unit**, **50/50
+integration**, **93/93 mutations, printed green baseline**.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

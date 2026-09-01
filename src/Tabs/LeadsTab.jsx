@@ -250,11 +250,11 @@ const DistributePanel = ({ leads, reps, onSaveLead, canDistribute }) => {
                     <div style={{ fontSize:11, color:T.inkMid, fontWeight:600, width:12, textAlign:'right', fontFamily:T.sans }}>{r.count}</div>
                 </div>
             ))}
-            {/* Mass distribution is a management action. The server would honor
-                a rep's individual PUTs here (reps may edit unassigned rows —
-                that is how claiming works), which is exactly why the button
-                must not exist for them: one click scatters the whole pool.
-                Found by Karen's rep-path pass, 1 Sep. */}
+            {/* Mass distribution is a management action. Found rendering for a
+                rep by Karen's rep-path pass (1 Sep), when this client gate was
+                the ONLY gate. Since §0.58 the server also 403s any rep
+                ownership write — this gate remains as the UX half: never offer
+                a control whose every click the server refuses. */}
             {canDistribute && (() => {
                 // Disabled with a visible reason instead of the old silent early
                 // return — a dead-looking button with no feedback is how the

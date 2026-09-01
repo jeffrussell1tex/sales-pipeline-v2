@@ -34,15 +34,39 @@ test('the Mine filter never keys on the display name (§18b22)', () => {
 });
 
 // ── Auto-assign all is role-gated ────────────────────────────────────────────
-// Found by Karen's rep-path pass (1 Sep): the button rendered for a rep, and
-// the SERVER would have honored every individual PUT it fires — reps may edit
-// unassigned rows, that is how claiming works — so one rep click scatters the
-// whole unassigned pool. The gate is client-side by necessity (each PUT is
-// individually legitimate), which is exactly why it is pinned here.
+// Found by Karen's rep-path pass (1 Sep): the button rendered for a rep. When
+// this gate landed the server still honored each individual PUT (reps could
+// edit unassigned rows — claiming), so the client gate was the ONLY gate.
+// Since §0.58 the server refuses rep ownership writes too (below); this button
+// gate remains as the UX half — a rep must not be offered a control whose
+// every click the server will now 403.
 
 test('the Auto-assign all button is gated on canDistribute, exactly once', () => {
     const gated = src.split('{canDistribute && (').length - 1;
     assert.equal(gated, 1, 'mass distribution renders only for Admin/Manager (canSeeAll)');
     assert.equal(src.includes('canDistribute={canSeeAll}'), true,
         'the gate must key on the shared canSeeAll predicate, not a re-derived role check');
+});
+
+// ── Assignment is a MANAGED action on the SERVER (§0.58, 2 Sep) ──────────────
+// Jeff's call: only Admin/Manager change lead ownership — reps do not assign,
+// not even to themselves; claiming goes through the request flow. The gate
+// lives in leads.mjs PUT between ownerIdForUpdate and the merge, and it denies
+// on EITHER half changing: the resolved owner id, or the display-name string
+// (the string half is what catches a label that resolves to nobody on an
+// unassigned row — null === null on the id side while the lead is made to
+// LOOK assigned). Behavior is proven by seven tests in
+// tests/integration/leads.itest.mjs; these source assertions exist so the
+// mutation harness (unit suites only) sees the gate too.
+
+const leadsSrc = readFileSync(new URL('../netlify/functions/leads.mjs', import.meta.url), 'utf8');
+
+test('the server assignment gate exists, role-scoped, exactly once', () => {
+    const gate = leadsSrc.split('if (ownPut.change && !canSeeAll(userRole))').length - 1;
+    assert.equal(gate, 1, 'leads.mjs PUT must refuse ownership changes from non-canSeeAll callers');
+});
+
+test('the server gate compares BOTH halves — owner id and display-name string', () => {
+    assert.equal(leadsSrc.includes('if (!sameOwner || !sameName)'), true,
+        'dropping the string half re-opens the display-name spoof on unassigned rows (null === null on the id side)');
 });

@@ -223,6 +223,28 @@ export const handler = async (event) => {
             // mentioned assignedTo leaves it alone (18b13). Applied to `clean`
             // AFTER sanitize, which would otherwise not carry the column.
             const ownPut = await ownerIdForUpdate({ payload: data, entity: 'lead', orgId });
+            // Assignment is a MANAGED action (§0.58, Jeff's call 2 Sep): only
+            // Admin/Manager may change who owns a lead. Reps claim through the
+            // request flow (lead-requests.mjs), never by writing the owner —
+            // this retires the reps-claim-by-editing-unassigned-rows rule for
+            // the ownership field specifically. assertOwnership above still
+            // governs which ROWS a rep may edit; this governs one FIELD on them.
+            //
+            // Denied only on an actual CHANGE, not on any mention of the key:
+            // LeadForm spreads the stored row, so a rep's ordinary edit carries
+            // an UNCHANGED assignedTo and must keep working. Both halves are
+            // compared — the resolved owner id AND the display-name string —
+            // because they can disagree exactly once: a name that resolves to
+            // nobody on an unassigned row is null === null on the id side while
+            // writing a label that makes the lead LOOK assigned. Fail closed on
+            // either differing.
+            if (ownPut.change && !canSeeAll(userRole)) {
+                const sameOwner = (ownPut.ownerId ?? null) === (existing.ownerId ?? null);
+                const sameName  = String(data.assignedTo ?? '').trim() === String(existing.assignedTo ?? '').trim();
+                if (!sameOwner || !sameName) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only managers and admins can change lead assignment. You can request an unassigned lead instead.' }) };
+                }
+            }
             if (ownPut.change) clean.ownerId = ownPut.ownerId;
             const today = new Date().toISOString().slice(0, 10);
 

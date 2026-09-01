@@ -322,3 +322,70 @@ test('toggle stored TRUE — identical to the absent-key default', async () => {
         'stored true must reproduce the default policy exactly');
     assert.ok(!ids.includes('lead_vis_other'), 'another rep\'s lead stays hidden either way');
 });
+
+// ── Assignment is a MANAGED action (§0.58, 2 Sep) ────────────────────────────
+// Only Admin/Manager may change a lead's owner. This retired the
+// reps-claim-by-editing-unassigned-rows rule for the OWNERSHIP field: a rep's
+// PUT may still edit an unassigned row (assertOwnership is unchanged), but any
+// payload whose assignedTo would CHANGE the resolved owner id OR the stored
+// display-name string is 403'd before the merge. Rows are seeded with
+// db.insert so ownership is the test's input, per this suite's pattern.
+
+test('rep cannot claim an unassigned lead by writing assignedTo', async () => {
+    await db.insert(leads).values({ id: 'lead_mg_claim', firstName: 'Pool', status: 'New', ownerId: null, orgId: A });
+    const res = await handler(asRep(ev(A, 'PUT', { id: 'lead_mg_claim', assignedTo: 'Itest Rep A', assignee: 'Itest Rep A' })));
+    assert.equal(res.statusCode, 403, 'self-claim by direct write must be refused');
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_mg_claim'));
+    assert.equal(row.ownerId, null,    'the pool row must remain unassigned');
+    assert.equal(row.assignedTo, null, 'no display name may be written by a refused claim');
+});
+
+test('rep cannot assign an unassigned lead to another rep', async () => {
+    const res = await handler(asRep(ev(A, 'PUT', { id: 'lead_mg_claim', assignedTo: 'Itest Other' })));
+    assert.equal(res.statusCode, 403, 'assigning to a colleague is a managed action');
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_mg_claim'));
+    assert.equal(row.ownerId, null, 'the row must remain unassigned');
+});
+
+test('rep cannot spoof the display name — an unresolvable assignedTo on an unassigned row is refused', async () => {
+    // Owner-id comparison alone passes here (null === null): the name resolves
+    // to nobody, so only the string half of the gate can catch the label that
+    // makes a lead LOOK assigned while ownerId stays null.
+    const res = await handler(asRep(ev(A, 'PUT', { id: 'lead_mg_claim', assignedTo: 'Nobody Real' })));
+    assert.equal(res.statusCode, 403, 'writing a label that resolves to nobody must be refused');
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_mg_claim'));
+    assert.equal(row.assignedTo, null, 'the spoof label must not be written');
+});
+
+test('rep cannot give away or clear their OWN lead', async () => {
+    await db.insert(leads).values({ id: 'lead_mg_own', firstName: 'Held', status: 'Working', ownerId: REP_A, assignedTo: 'Itest Rep A', orgId: A });
+    const cleared = await handler(asRep(ev(A, 'PUT', { id: 'lead_mg_own', assignedTo: '' })));
+    assert.equal(cleared.statusCode, 403, 'clearing an assignment is a managed action even for the owner');
+    const given = await handler(asRep(ev(A, 'PUT', { id: 'lead_mg_own', assignedTo: 'Itest Other' })));
+    assert.equal(given.statusCode, 403, 'handing a lead to a colleague is a managed action');
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_mg_own'));
+    assert.equal(row.ownerId, REP_A, 'ownership must be untouched by refused writes');
+});
+
+test('rep edit that spreads an UNCHANGED assignedTo still works — LeadForm\'s shape', async () => {
+    const res = await handler(asRep(ev(A, 'PUT', { id: 'lead_mg_own', status: 'Qualified', assignedTo: 'Itest Rep A' })));
+    assert.equal(res.statusCode, 200, 'an unchanged assignment must not block an ordinary edit');
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_mg_own'));
+    assert.equal(row.status, 'Qualified', 'the edit must be applied');
+    assert.equal(row.ownerId, REP_A,      'ownership unchanged');
+});
+
+test('rep partial PUT that never mentions assignedTo is untouched by the gate', async () => {
+    const res = await handler(asRep(ev(A, 'PUT', { id: 'lead_mg_own', notes: 'called twice' })));
+    assert.equal(res.statusCode, 200);
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_mg_own'));
+    assert.equal(row.notes, 'called twice');
+    assert.equal(row.ownerId, REP_A);
+});
+
+test('Admin assignment still works — the gate is role-scoped, not global', async () => {
+    const res = await handler(ev(A, 'PUT', { id: 'lead_mg_claim', assignedTo: 'Itest Rep A' }));
+    assert.equal(res.statusCode, 200, 'Admin must still assign');
+    const [row] = await db.select().from(leads).where(eq(leads.id, 'lead_mg_claim'));
+    assert.equal(row.ownerId, REP_A, 'the resolved owner id must be stamped');
+});

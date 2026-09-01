@@ -183,6 +183,18 @@ const mutations = [
         '            if (forbiddenOwn) return forbiddenOwn;',
         '            if (false) return forbiddenOwn;'],
 
+    // ── The §0.58 managed-assignment gate (server) ──────────────────────────
+    // Caught by the source assertions in tests/leads-scope.test.mjs.
+    ['leads: the managed-assignment gate drops — a rep claims or reassigns by writing assignedTo again',
+        'netlify/functions/leads.mjs',
+        'if (ownPut.change && !canSeeAll(userRole)) {',
+        'if (false) {'],
+
+    ['leads: the gate loses its string half — a name resolving to NOBODY spoofs the label on an unassigned row',
+        'netlify/functions/leads.mjs',
+        'if (!sameOwner || !sameName) {',
+        'if (!sameOwner) {'],
+
     ['endpoints: the users.id-vs-Clerk-id filter returns (every rep loses their own records)',
         'netlify/functions/leads.mjs',
         '                const callerId = await getCallerId(userId, orgId);',

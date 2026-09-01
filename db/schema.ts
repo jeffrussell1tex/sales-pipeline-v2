@@ -391,6 +391,11 @@ export const leads = pgTable('leads', {
     convertedAt:      varchar('converted_at', { length: 30 }),
     firstTouchDate:   varchar('first_touch_date', { length: 30 }),
     // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.
+    // §0.58 CARVE-OUT (2 Sep): for LEADS, "mutable by any writer" applies to
+    // the row's other fields only — WRITING the owner (this column via
+    // assignedTo) is Admin/Manager-only, enforced in leads.mjs PUT. Reps claim
+    // through lead-requests, never by writing the owner. The row-level rule
+    // below is unchanged for every other table.
     // Nullable: null means UNASSIGNED, and an unassigned record is mutable by
     // any writer -- that is how a rep picks up unowned work. It does NOT mean
     // "unknown owner"; see mayMutate() in netlify/functions/_ownership.mjs,
