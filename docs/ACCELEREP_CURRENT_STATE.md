@@ -1144,6 +1144,25 @@ UNCOVERED here (visibility filter, tracked for the Phase-2 id
 migration). 67 → **79/79 integration**; gates, **298/298 unit**,
 **98/98 mutations, printed green baseline** all green.
 
+**The §0.56 API-key question is CLOSED, in the safe direction, and
+PINNED.** Read, not guessed: workspace API keys CANNOT reach any
+mutating endpoint. Three facts compose it — (1) `public-api.mjs`, the
+only key-authenticated surface, 405s every method but GET BEFORE the
+key is even parsed (`spt_live_` + 64 hex, sha256 lookup, revocation
+check, rate limit, org from the key row); (2) `verifyAuth` accepts
+ONLY Clerk JWTs — no key branch, no fallback, so a key at any Tier-1
+endpoint 401s out of `verifyToken`; (3) nothing else consults the
+`apiKeys` table. So the overwrite-audit closures and the §0.58
+assignment gates face Clerk-authenticated callers only. Pinned by
+`tests/api-surface.test.mjs` (method gate strict AND positioned above
+key extraction — anchored on the extraction CODE after the JSDoc
+header's `spt_live_` mention false-failed the first run; verifyAuth
+carries no key/keyHash reference; a directory scan proves only
+api-keys.mjs and public-api.mjs touch the table, so a future consumer
+fails the suite and forces a deliberate decision) plus one harness
+mutation (method gate dropped). 298 → **301/301 unit**, **99/99
+mutations, printed green baseline**.
+
 **The §0.59 MFA tri-state is BROWSER-OBSERVED in all three states**
 (Jeff's screenshots, same session): amber ○ known-off dots in every MFA
 cell of the test org's list, chip "MFA off · 4", rail "MFA on 0/4 ·
