@@ -124,6 +124,13 @@ cards on real numbers. 3 tests, 5 mutants. `33e521b`, **deploy-verified:**
 accelerep.netlify.app serves `index-BtwmtTXu.js`, the local gate build's
 hash.
 
+**Batch 5a, the commit this handoff rides in (state §0.74):** every
+hardcoded stage list on a live path replaced by the org's funnel settings
+(else the app defaults) through `src/utils/stageOrder.js`; both funnels
+rank a lost deal by the stage it left; the history track reads a won deal
+as all stages visited. 5 tests, 5 mutants. Deploy check recorded in §4 by
+a follow-up docs commit.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -166,13 +173,15 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 138 files · **411/411 unit** (17 in
-`pipeline-report.test.mjs`, 9 in `opp-text.test.mjs`, 13 in
-`report-period.test.mjs`, 15 in `report-scope.test.mjs`, 15 in
-`loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **158/158
-mutations, printed green baseline** (45 new this session; run alone) · build
-**2,479 kB JS**, `index-BtwmtTXu.js` (audit batch 4b; dev deploy observed
-serving it for `33e521b`), guard OK, `dist/` cleared · **79 integration not
+Five gates green on 139 files · **416/416 unit** (5 in
+`stage-order.test.mjs`, 17 in `pipeline-report.test.mjs`, 9 in
+`opp-text.test.mjs`, 13 in `report-period.test.mjs`, 15 in
+`report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
+`session-status.test.mjs`) · **163/163 mutations, printed green baseline**
+(50 new this session; run alone) · build
+**2,478 kB JS**, `index-BBGjcEEV.js` (audit batch 5a; deploy check pending
+at the time this was written; `index-BtwmtTXu.js` observed for `33e521b`),
+guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -258,15 +267,17 @@ cleared at close.
    §0.71. Batch 4a (the Pipeline & Forecast constants + the Performance
    quota basis, items 3, 4, 7, 8, and item 6's nextStep) is DONE — state
    §0.72. Batch 4b (the last constants, item 9, the "+3%", item 12, the
-   orphan captions) is DONE — state §0.73.** Next: batch 5 — stage lists
-   from `settings.funnelStages` with `defaultStages` fallback everywhere a
-   hardcoded list remains (item 5: the Pipeline tab's `stageOrder` and
-   `stageColors2`, the funnel deep-dive fallback, the history track
-   fallback, `stageColorMap`, the commit fallback lists), and cycle time /
-   quarter bucketing from the real close day (`closeDayOf`, already in
-   pipelineReport.js) instead of the forecast date. §0.68's line numbers
-   have shifted; grep, don't trust them. Span edits: print the span from
-   git first and list every `const` in it (§0.72's slip).
+   orphan captions) is DONE — state §0.73. Batch 5a (stage lists from the
+   org's settings, item 5) is DONE — state §0.74.** Next: batch 5b — cycle
+   time and quarter bucketing from the real close day (`closeDayOf` in
+   pipelineReport.js: `wonDate` / `lostDate`, else the stage-change day)
+   instead of the forecast date, at every `forecastedCloseDate||o.closeDate`
+   read on a CLOSED deal (Performance cycle and sparkline, win/loss cycleD,
+   scorecard cycles / attainment-by-quarter / recent wins and losses,
+   forecast-vs-actual quarters); plus writing `wonDate` on Closed Won in
+   `useOpportunities` so the explicit day exists. §0.68's line numbers have
+   shifted; grep, don't trust them. Span edits: print the span from git
+   first and list every `const` in it (§0.72's slip).
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.

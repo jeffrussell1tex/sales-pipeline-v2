@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -846,6 +846,28 @@ const mutations = [
         'src/Tabs/ReportsTab.jsx',
         "c.v===0).length>=5).map(r=>r.rep);",
         "c.v===0).length>=3).map(r=>r.rep);"],
+
+    // ── Stage lists from the org's settings (0.68 batch 5a) ─────────────────
+    ['stages: the funnel settings are ignored (defaults always)',
+        'src/utils/stageOrder.js',
+        "    if (fromSettings.length) return [...new Set(fromSettings)];",
+        "    if (false) return [...new Set(fromSettings)];"],
+    ['stages: the closes get no colour',
+        'src/utils/stageOrder.js',
+        "    out['Closed Won'] = WON_COLOR;\n    out['Closed Lost'] = LOST_COLOR;",
+        ""],
+    ['stages: the commit fallback is only the last stage',
+        'src/utils/stageOrder.js',
+        "export const commitFallbackStages = (openStages) => (openStages || []).slice(-2);",
+        "export const commitFallbackStages = (openStages) => (openStages || []).slice(-1);"],
+    ['reports: the Pipeline funnel ranks a lost deal as the first stage again',
+        'src/Tabs/ReportsTab.jsx',
+        "                              const cur = o.stage === 'Closed Lost' ? stageRank(exitStageOf(o)) : stageRank(o.stage);",
+        "                              const cur = stageRank(o.stage) >= 0 ? stageRank(o.stage) : 0;"],
+    ['reports: the history track shows a won deal as 0 of N again',
+        'src/Tabs/ReportsTab.jsx',
+        "                    : selectedOpp.stage === 'Closed Won' ? funnelStages.length",
+        "                    : selectedOpp.stage === 'Closed Won' ? -1"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

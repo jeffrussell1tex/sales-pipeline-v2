@@ -2228,6 +2228,41 @@ ramps.
 **Dev landing (`33e521b`):** accelerep.netlify.app serves `index-BtwmtTXu.js`,
 the local gate build's hash, 41 seconds after the push.
 
+### 0.74 Audit batch 5a — stage lists from the org's settings; lost deals ranked by the stage they left (2 Sep, fourth session)
+
+§0.68 item 5 and the funnel half of tier 2. `src/utils/stageOrder.js`, pure:
+`openStagesOf(settings)` (the org's `funnelStages` names minus the closes,
+else the app's `constants.stages` minus the closes — never a made-up list),
+`stagePalette(order)` (a colour per stage by position, plus the two closes,
+so a renamed or added stage is still coloured), `commitFallbackStages` (the
+last two open stages) and `bestCaseFallbackStages` (the one before). In
+ReportsTab, every hardcoded stage list that drove a live number is gone:
+the Pipeline tab's `stageOrder` / `stageColors2` (which named Prospecting,
+Negotiation and Closing and bucketed Evaluation (Demo), Negotiation/Review,
+Contracts and every lost deal as "Prospecting"), the three commit fallback
+lists and the best-case one (Pipeline, Performance, Deal review), the
+funnel deep-dive's fallback, the three colour maps, and the history track's
+fallback. The one remaining `'Prospecting'` literal is the dead print block
+at the top of the file (batch 6). Both funnels now rank a lost deal by the
+stage it LEFT (`exitStageOf`, the §0.66 helper) and skip a stage outside the
+order instead of counting it as the first — the deep-dive's max-stage was
+the §0.66 defect one panel over. The history track reads a won deal as
+every stage visited and a lost deal at its exit stage; both read −1
+("Stages completed 0 of 6"), and the count is clamped to the stage count.
+
+`tests/stage-order.test.mjs` (5: the default order is the real stages, the
+org's settings win with closes stripped, colours for every stage including
+a renamed one, the fallbacks are the last stages whatever they are called,
+and the wiring scan — no hardcoded list left on a live path, both funnels
+on `exitStageOf`). Gates green on 139 files, **416/416**, **163/163
+mutations, printed green baseline** (five new: settings ignored, closes
+uncoloured, the commit fallback one stage, a lost deal ranked first again,
+a won deal 0 of N again), build guard OK (2,478 kB, `index-BBGjcEEV.js`).
+Not browser-checked here; Jeff eyeballs after the deploy: Reports →
+Pipeline & Forecast → Stage conversion lists Qualification through Contracts
+and no Prospecting; Activity History → a Closed Won deal reads "Stages
+completed 6 of 6".
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

@@ -10,6 +10,7 @@ import { sliceActivities, sliceLeads, visibleReps, repsInScopeOf, activityRepOf 
 import { periodRange, priorRange, inRange, dayOf, currentFiscalYear } from '../utils/reportPeriod';
 import { productsListOf, contactNamesText } from '../utils/oppText';
 import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep } from '../utils/pipelineReport';
+import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStages } from '../utils/stageOrder';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
 
@@ -780,10 +781,14 @@ ${bodyHtml}
                             // fields nothing writes (0.68 item 3). 0 means no quota is set, and the
                             // ring says so instead of measuring against an invented number.
                             const quota = teamQuotaFor(settings.users, reportTimePeriod, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory });
-                            // Commit = won + deals where rep marked commit (falls back to Closing/Negotiation stage if no forecastCategory set)
-                            const commitOpps  = openOpps.filter(o=> o.forecastCategory === 'commit' || (!o.forecastCategory && ['Closing','Negotiation/Review','Contracts'].includes(o.stage)));
+                            // The org's open stages, in order (settings.funnelStages, else the app
+                            // defaults). Every stage list on this tab derives from it: six hardcoded
+                            // lists named stages no deal can be in and omitted real ones (0.68 item 5).
+                            const openStageOrder = openStagesOf(settings);
+                            // Commit = won + deals the rep marked commit (with no forecast category, the last two stages count)
+                            const commitOpps  = openOpps.filter(o=> o.forecastCategory === 'commit' || (!o.forecastCategory && commitFallbackStages(openStageOrder).includes(o.stage)));
                             // Best case = commit + deals marked best_case (falls back to Proposal stage)
-                            const bestCaseOpps= openOpps.filter(o=> o.forecastCategory === 'best_case' || (!o.forecastCategory && ['Proposal'].includes(o.stage)));
+                            const bestCaseOpps= openOpps.filter(o=> o.forecastCategory === 'best_case' || (!o.forecastCategory && bestCaseFallbackStages(openStageOrder).includes(o.stage)));
                             // Omitted deals are excluded from all calculations
                             const commitVal   = wonOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0) + commitOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                             const bestCaseVal = commitVal + bestCaseOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
@@ -808,25 +813,24 @@ ${bodyHtml}
                             // or beyond. Conversion = advanced / entered.
                             // Example: 100 in Discovery, 80 reached Proposal = 80% conv rate.
                             // Then 80 in Proposal, 40 reached Negotiation = 50% conv rate.
-                            const stageOrder = ['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing','Closed Won'];
-                            const stageColors2 = {
-                              'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55',
-                              'Proposal':'#b87333','Negotiation':'#7a5a3c','Closing':'#4d6b3d','Closed Won':'#3a5530',
-                            };
+                            const stageOrder = [...openStageOrder, 'Closed Won'];
+                            const stageColors2 = stagePalette(openStageOrder);
                             // All opps in scope (open + closed, so the funnel includes terminal outcomes)
                             const allScopeOpps = reportsOpps;
                             const stageRank = (stage) => stageOrder.indexOf(stage);
 
                             // For each opp, determine the highest stage it has reached.
                             // Use stageHistory if present, otherwise fall back to current stage.
+                            // A deal's farthest stage: the highest-ranked stage in its history
+                            // (each entry records the move INTO a stage), its current stage, or —
+                            // for a lost deal — the stage it LEFT (exitStageOf). A stage outside the
+                            // order is skipped, not counted as the first stage.
                             const oppMaxStage = allScopeOpps.map(o => {
-                              if (o.stageHistory && o.stageHistory.length > 0) {
-                                const ranks = o.stageHistory.map(h => stageRank(h.stage)).filter(r => r >= 0);
-                                const currentRank = stageRank(o.stage);
-                                return Math.max(...ranks, currentRank >= 0 ? currentRank : 0);
-                              }
-                              return stageRank(o.stage) >= 0 ? stageRank(o.stage) : 0;
-                            });
+                              const ranks = (o.stageHistory || []).map(h => stageRank(h.stage)).filter(r => r >= 0);
+                              const cur = o.stage === 'Closed Lost' ? stageRank(exitStageOf(o)) : stageRank(o.stage);
+                              const all = cur >= 0 ? [...ranks, cur] : ranks;
+                              return all.length ? Math.max(...all) : null;
+                            }).filter(r => r !== null);
 
                             // Build funnel — exclude Closed Won from the displayed rows
                             // (it appears as the denominator for Closing's conversion)
@@ -840,7 +844,7 @@ ${bodyHtml}
                                 ? oppMaxStage.filter(r => r >= myRank + 1).length
                                 : null; // Closing → Closed Won
                               // For the last visible stage (Closing), advanced = Closed Won count
-                              const advancedFinal = st === 'Closing'
+                              const advancedFinal = st === openStageOrder[openStageOrder.length - 1]
                                 ? oppMaxStage.filter(r => r >= stageRank('Closed Won')).length
                                 : advanced;
                               return {
@@ -1188,7 +1192,7 @@ ${bodyHtml}
                               const rLost = lostOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
                               const rOpen = openOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
                               const closed = rWon.reduce((s,o)=>s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0),0);
-                              const commit = rOpen.filter(o=> o.forecastCategory === 'commit' || (!o.forecastCategory && ['Closing','Negotiation/Review','Contracts'].includes(o.stage))).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                              const commit = rOpen.filter(o=> o.forecastCategory === 'commit' || (!o.forecastCategory && commitFallbackStages(openStagesOf(settings)).includes(o.stage))).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                               const attain = quota>0?closed/quota:0;
                               const commitPct = quota>0?commit/quota:0;
                               const winRate2 = (rWon.length+rLost.length)>0?rWon.length/(rWon.length+rLost.length):0;
@@ -2529,7 +2533,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
         const serif = T.serif;
         const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
-        const stageColors = { 'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation/Review':'#7a5a3c','Negotiation':'#7a5a3c','Contracts':'#4d6b3d','Closing':'#4d6b3d','Closed Won':'#3a5530','Closed Lost':'#9c3a2e' };
+        const stageColors = stagePalette(openStagesOf(settings));
 
         const PanelD = ({ children, padding='18px 20px', style:s }) => (
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
@@ -2562,7 +2566,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
 
         const commitOpps = allOpen.filter(o =>
             o.forecastCategory === 'commit' ||
-            (!o.forecastCategory && ['Closing','Negotiation/Review','Contracts','Negotiation'].includes(o.stage))
+            (!o.forecastCategory && commitFallbackStages(openStagesOf(settings)).includes(o.stage))
         );
         const atRiskOpps = allOpen.filter(o => {
             const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
@@ -2715,7 +2719,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
         const T = TS;
         const serif = T.serif;
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
-        const stageColorMap = { 'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation/Review':'#7a5a3c','Negotiation':'#7a5a3c','Contracts':'#4d6b3d','Closing':'#4d6b3d','Closed Won':'#3a5530','Closed Lost':'#9c3a2e' };
+        const stageColorMap = stagePalette(openStagesOf(settings));
         const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
 
         const PanelD = ({ children, padding='18px 20px', style:s }) => (
@@ -2732,27 +2736,25 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
         );
 
         // ── Build funnel from real data (same cohort logic as Pipeline tab)
-        const stageOrderD = (settings.funnelStages||[]).filter(s=>s.name).map(s=>s.name)
-            .filter(s=>s!=='Closed Won'&&s!=='Closed Lost');
-        // Fall back to defaults if no funnel stages configured
-        const stageSeq = stageOrderD.length > 0 ? stageOrderD
-            : ['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing'];
+        // The org's open stages (settings.funnelStages, else the app defaults) —
+        // the fallback here named "Prospecting" and "Closing" (0.68 item 5).
+        const stageSeq = openStagesOf(settings);
 
         const stageRankD = s => stageSeq.indexOf(s);
         const allScopeD  = reportsOpps || [];
 
         // Max stage reached per opp (using stageHistory if available)
+        // Farthest stage per deal: history ranks, the current stage, or for a lost
+        // deal the stage it LEFT (exitStageOf); a stage outside the order is skipped,
+        // not counted as the first stage (the §0.66 defect, one panel over).
         const oppMaxD = allScopeD.map(o => {
             const wonRank = stageSeq.length; // Closed Won = beyond last visible stage
             if (o.stage === 'Closed Won') return wonRank;
-            if (o.stageHistory && o.stageHistory.length > 0) {
-                const ranks = o.stageHistory.map(h => stageRankD(h.stage)).filter(r => r >= 0);
-                const cur = stageRankD(o.stage);
-                return Math.max(...ranks, cur >= 0 ? cur : 0);
-            }
-            const r = stageRankD(o.stage);
-            return r >= 0 ? r : 0;
-        });
+            const ranks = (o.stageHistory || []).map(h => stageRankD(h.stage)).filter(r => r >= 0);
+            const cur = o.stage === 'Closed Lost' ? stageRankD(exitStageOf(o)) : stageRankD(o.stage);
+            const all = cur >= 0 ? [...ranks, cur] : ranks;
+            return all.length ? Math.max(...all) : null;
+        }).filter(r => r !== null);
 
         // Avg days per stage from stageHistory consecutive timestamps
         const avgDaysForStage = stageName => {
@@ -3236,7 +3238,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
             const pct = max>0 ? Math.min(100,Math.max(0,(value/max)*100)) : 0;
             return <div style={{ height, background:T.surface2, borderRadius:height/2, overflow:'hidden', flex:1 }}><div style={{ height:'100%', width:pct+'%', background:color, borderRadius:height/2 }}/></div>;
         };
-        const stageColorMap = {'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation/Review':'#7a5a3c','Negotiation':'#7a5a3c','Contracts':'#4d6b3d','Closing':'#4d6b3d'};
+        const stageColorMap = stagePalette(openStagesOf(settings));
 
         // ── Compute from real data
         const wonOppsD  = (reportsOpps||[]).filter(o=>o.stage==='Closed Won');
@@ -5908,15 +5910,15 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                 const selectedAccount = selectedOpp ? (accounts||[]).find(a => (a.name||'').toLowerCase() === (selectedOpp.account||'').toLowerCase()) : null;
 
                 // Stage journey from opportunity data
-                const funnelStages = (settings?.funnelStages || [
-                    { name:'Prospecting' }, { name:'Qualification' }, { name:'Discovery' },
-                    { name:'Proposal' }, { name:'Negotiation' }, { name:'Closing' },
-                    { name:'Closed Won' }, { name:'Closed Lost' },
-                ]).filter(s => s.name !== 'Closed Won' && s.name !== 'Closed Lost');
+                const funnelStages = (settings?.funnelStages?.length ? settings.funnelStages : openStagesOf(settings).map(name => ({ name })))
+                    .filter(s => s.name !== 'Closed Won' && s.name !== 'Closed Lost');
 
-                const currentStageIdx = selectedOpp
-                    ? funnelStages.findIndex(s => s.name === selectedOpp.stage)
-                    : -1;
+                // A won deal has visited every stage; a lost deal sits at the stage it
+                // left (exitStageOf). Both used to read −1 — "Stages completed 0 of 6".
+                const currentStageIdx = !selectedOpp ? -1
+                    : selectedOpp.stage === 'Closed Won' ? funnelStages.length
+                    : selectedOpp.stage === 'Closed Lost' ? funnelStages.findIndex(s => s.name === exitStageOf(selectedOpp))
+                    : funnelStages.findIndex(s => s.name === selectedOpp.stage);
 
                 // Events: merge activities + tasks for this opp
                 const oppActivities = (activities||[]).filter(a => a.opportunityId === selectedOppId);
@@ -6511,7 +6513,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         {/* Summary line */}
                                         <div style={{ display:'flex', alignItems:'center', gap:16, padding:'9px 14px',
                                             background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, marginBottom:20 }}>
-                                            <span style={{ color:T.inkMid }}>Stages completed <b style={{ color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{currentStageIdx >= 0 ? currentStageIdx+1 : 0} of {funnelStages.length}</b></span>
+                                            <span style={{ color:T.inkMid }}>Stages completed <b style={{ color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{currentStageIdx >= 0 ? Math.min(currentStageIdx+1, funnelStages.length) : 0} of {funnelStages.length}</b></span>
                                             <span style={{ width:1, height:14, background:T.border }}/>
                                             <span style={{ color:T.inkMid }}>Current stage: <b style={{ color:T.ink }}>{selectedOpp.stage}</b></span>
                                         </div>
