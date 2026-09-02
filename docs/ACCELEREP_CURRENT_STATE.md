@@ -2314,6 +2314,60 @@ and a deal just marked Closed Won appears under Recent wins dated today.
 **Dev landing (`7dbfd6e`):** accelerep.netlify.app serves `index-DZcl2imu.js`,
 the local gate build's hash, 41 seconds after the push.
 
+### 0.76 Audit batch 6 — dead controls wired or removed; the unreachable print path gone (2 Sep, fourth session)
+
+§0.68 tier 2's class H (controls that promised an action and did nothing)
+plus the dead code the audit found around them. Removed from
+`ReportsTab.jsx` (6,544 → 6,188 lines): the print path no button could
+reach — `handlePrintReport` / `generateReport` / `ReportBtn` /
+`printSection` and the eight feeders that ran on every render
+(`revenueByQuarter`, `byStage`, `topAccounts`, `monthlyData`, …), plus
+the hardcoded `stages` / `stageColors` at the top of the component (the
+last `'Prospecting'` in the file — the org's own stage list has been the
+source since §0.74); the dead `getRepQuarterQuota`; and every inert
+control — two "⛶ Fullscreen" buttons, "See all →", the "··· Export"
+menu, "View all rows", the Refine / "Regenerate" row under the AI
+builder, and the "Recent reports" strip that listed four invented views
+"last viewed today". Wired: the six **"+ Save as my report"** template
+buttons now call `handleSaveReport` with the template's name, source and
+`config:{ templateId }` (the button reads Saving… / ✓ Saved / Error —
+retry, and `handleSaveReport` passes `config` through to the endpoint,
+which already accepted it); a saved card in the library **opens** its
+template on click (a builder-made card carries a title saying opening is
+not wired yet); **Duplicate** lists the real saved reports (owner, local
+day of the last update) and saves a real "(copy)" instead of opening a
+blank canvas; **Email to owner** resolves the rep's address from the
+roster (`settings.users`) and alerts when there is none — it mailed the
+display name; and the Actions sub-tab gets the nav entry it never had (the
+export label map now names every real sub-tab and no imaginary one).
+
+`tests/reports-controls.test.mjs` (5 scans: the dead identifiers absent,
+every sub-tab in nav and label map, no inert control text, the six wired
+Save buttons naming t1–t6 exactly once each, the card opener, Duplicate
+and mailto). `pipeline-report.test.mjs`'s forecast-date count drops 4 → 2
+(the print block's two reads went with it). Gates green on 139 files,
+**427/427**, **174/174 mutations, printed green baseline** (five new:
+`config` dropped from the save payload, the card opener a no-op,
+Duplicate back to a blank canvas, mailto of the name, the Duplicate row
+dated by a UTC slice), build guard OK (2,475 kB, `index-BorndMdE.js`).
+The big span edit (316 lines) printed every `const` it held and was
+asserted to contain no hook and none of the live neighbours before it
+was cut (§0.72's rule).
+
+**Observed (local, Karen):** Reports renders under the new bundle with
+the Actions entry; "See all →" and the recent strip are gone; Rep
+scorecard → Save posts `201 Created` and the button reads "✓ Saved"; the
+library shows the card, and clicking it opens the scorecard (Attainment
+history on screen); + Create report → Duplicate lists that one real
+report and Duplicate → posts a second `201`. **Found live and fixed
+before commit:** the Duplicate row read "updated 2026-09-03" at 7pm on
+2 Sep — the row date was `String(createdAt).slice(0,10)`, the UTC slice
+of an instant §18b26 forbids; it now reads `dayOf(...)`. **Test data
+left in Karen's library on dev:** two saved reports, "Rep scorecard" and
+"Rep scorecard (copy)" — delete from the library or keep; Jeff's call.
+Not re-checked in the browser: Email to owner (a `mailto:` navigation;
+reasoned from code and pinned by scan and mutant).
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

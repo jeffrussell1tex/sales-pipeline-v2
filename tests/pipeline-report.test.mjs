@@ -246,9 +246,9 @@ test('lastQuarters: the current quarter last, six deep, inclusive day bounds, un
 test('ReportsTab: closed deals are measured and bucketed by the close day; Closed Won writes wonDate', () => {
     const src = readFileSync(new URL('../src/Tabs/ReportsTab.jsx', import.meta.url), 'utf8');
     // The forecast date remains the right field only for OPEN deals: deals at risk,
-    // closing-next-30-days, and the dead print block's two reads.
+    // closing-next-30-days (the print block's two reads went with it in batch 6).
     const reads = (src.match(/forecastedCloseDate\s*\|\|\s*o\.closeDate/g) || []).length;
-    assert.equal(reads, 4, `forecast-date reads left: ${reads} (deals-at-risk, closingMonth, two in the dead print block)`);
+    assert.equal(reads, 2, `forecast-date reads left: ${reads} (deals-at-risk, closingMonth)`);
     assert.doesNotMatch(src, /fmtDate\(o\.forecastedCloseDate/, 'recent wins/losses show the close day');
     assert.match(src, /const recentWins\s+= repWon\.filter\(o=>closeDayInRange\(o, iso30, todayLocal\(\)\)\)/, 'an upper bound: a future forecast is not a recent win');
     assert.match(src, /const quarters = lastQuarters\(fiscalStart, \{ count: 6 \}\)/);

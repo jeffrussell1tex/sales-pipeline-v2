@@ -82,12 +82,6 @@ export default function ReportsTab({ leadsEnabled = true }) {
     }, []);
 
 
-                const currentYear = new Date().getFullYear();
-                const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
-                const quarterMonths = { Q1: [0,1,2], Q2: [3,4,5], Q3: [6,7,8], Q4: [9,10,11] };
-                const stages = ['Prospecting','Qualified','Demo','Proposal','Negotiation','Closed Won','Closed Lost'];
-                const stageColors = { 'Prospecting':'#5a4a7a','Qualified':'#5a4a7a','Demo':'#5a7a8a','Proposal':'#b87333','Negotiation':'#b87333','Closed Won':'#4d6b3d','Closed Lost':'#9c3a2e' };
-
                 // ── Role-based data visibility ─────────────────────────────────────────
                 // Admin  → sees all data across all reps
                 // Manager → sees their own data + their direct team's data
@@ -245,321 +239,6 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const avgDealSize = wonOpps.length > 0 ? totalWonRevenue / wonOpps.length : 0;
                 const winRate = (wonOpps.length + lostOpps.length) > 0 ? (wonOpps.length / (wonOpps.length + lostOpps.length) * 100) : 0;
 
-                // Revenue by quarter
-                const revenueByQuarter = quarters.map(q => {
-                    const months = quarterMonths[q];
-                    const rev = wonOpps.filter(o => {
-                        const dateStr = o.forecastedCloseDate || o.closeDate;
-                        if (!dateStr) return false;
-                        const d = new Date(dateStr);
-                        return d.getFullYear() === currentYear && months.includes(d.getMonth());
-                    }).reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
-                    return { q, rev };
-                });
-                const maxQRev = Math.max(...revenueByQuarter.map(r => r.rev), 1);
-
-                // Pipeline by stage
-                const byStage = stages.map(st => ({
-                    stage: st,
-                    count: reportsOpps.filter(o => o.stage === st).length,
-                    value: reportsOpps.filter(o => o.stage === st).reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0)
-                })).filter(s => s.count > 0);
-                const maxStageVal = Math.max(...byStage.map(s => s.value), 1);
-
-                // Top accounts by revenue — with parent/child rollup
-                // Build a map from account name → parent account name using the accounts list
-                const accountNameToParent = {};
-                (accounts || []).forEach(a => {
-                    if (a.parentAccountId) {
-                        const parent = (accounts || []).find(p => p.id === a.parentAccountId);
-                        if (parent) accountNameToParent[a.name.toLowerCase()] = parent.name;
-                    }
-                });
-                const accountRevMap = {};
-                wonOpps.forEach(o => {
-                    const rawKey = o.account || 'Unknown';
-                    // Roll child account revenue up to the parent if one exists
-                    const key = accountNameToParent[rawKey.toLowerCase()] || rawKey;
-                    accountRevMap[key] = (accountRevMap[key] || 0) + (o.arr||0) + (o.implementationCost||0);
-                });
-                const topAccounts = Object.entries(accountRevMap).sort((a,b) => b[1]-a[1]).slice(0, 8);
-
-                // Monthly trend (last 6 months)
-                const now = new Date();
-                const monthlyData = Array.from({length: 6}, (_, i) => {
-                    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-                    const monthOpps = wonOpps.filter(o => {
-                        const dateStr = o.forecastedCloseDate || o.closeDate;
-                        if (!dateStr) return false;
-                        const od = new Date(dateStr);
-                        return od.getFullYear() === d.getFullYear() && od.getMonth() === d.getMonth();
-                    });
-                    return {
-                        label: d.toLocaleString('default', { month: 'short' }),
-                        rev: monthOpps.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0),
-                        count: monthOpps.length
-                    };
-                });
-                const maxMonthRev = Math.max(...monthlyData.map(m => m.rev), 1);
-
-                const cardStyle = { background: '#fbf8f3', borderRadius: '4px', padding: '1.25rem', border: '1px solid #e6ddd0' };
-                const labelStyle = { fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.6', marginBottom: '0.25rem', fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' };
-                const valueStyle = { fontSize: '1.5rem', fontWeight: '700', color: '#2a2622', fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' };
-                const printBtnStyle = { background: '#fbf8f3', border: '1px solid #e6ddd0', borderRadius: '6px', padding: '0.3rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', color: '#2a2622', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' };
-
-                const printSection = (title, bodyHtml) => {
-                    const d = new Date();
-                    const meta = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                    const win = window.open('', '_blank', 'width=820,height=600');
-                    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
-<style>
-  @page { margin: 0.75in; size: letter; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #2a2622; }
-  .hdr { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 12px; border-bottom: 3px solid #3a5a7a; margin-bottom: 20px; }
-  .hdr h1 { font-size: 18px; font-weight: 800; }
-  .hdr .accent { display: inline-block; width: 4px; height: 18px; background: linear-gradient(to bottom,#3a5a7a,#5a4a7a); border-radius: 2px; margin-right: 8px; vertical-align: middle; }
-  .meta { font-size: 9px; color: #8a8378; text-align: right; line-height: 1.7; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  thead th { background: #fbf8f3; color: #8a8378; font-weight: 700; padding: 6px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e6ddd0; text-align: left; white-space: nowrap; }
-  tbody td { padding: 6px 8px; border-bottom: 1px solid #f5efe3; vertical-align: middle; }
-  .footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #e6ddd0; display: flex; justify-content: space-between; font-size: 9px; color: #8a8378; }
-  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-</style></head><body>
-<div class="hdr"><div><span class="accent"></span><h1>${title}</h1></div><div class="meta">Generated ${meta}<br>Sales Pipeline Tracker &nbsp;·&nbsp; Confidential</div></div>
-${bodyHtml}
-<div class="footer"><span>Sales Pipeline Tracker &nbsp;·&nbsp; Confidential</span><span>Generated ${meta}</span></div>
-</body></html>`);
-                    win.document.close();
-                    setTimeout(() => win.print(), 500);
-                };
-
-                const handlePrintReport = () => {
-                    const printDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-                    const printTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-
-                    // Build bar chart using pure HTML/CSS (no canvas needed for print)
-                    const buildBarChart = (data, labelKey, valueKey, colorFn) => {
-                        const maxVal = Math.max(...data.map(d => d[valueKey]), 1);
-                        return data.map(d => `
-                            <div style="margin-bottom:10px;">
-                                <div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:11px;">
-                                    <span style="color:#5a544c;font-weight:600;">${d[labelKey]}</span>
-                                    <span style="color:#2a2622;font-weight:700;">$${(d[valueKey]||0).toLocaleString()}</span>
-                                </div>
-                                <div style="height:10px;background:#f5efe3;border-radius:5px;overflow:hidden;">
-                                    <div style="height:100%;width:${Math.round((d[valueKey]||0)/maxVal*100)}%;background:linear-gradient(to right,#3a5a7a,#5a4a7a);border-radius:5px;"></div>
-                                </div>
-                            </div>`).join('');
-                    };
-
-                    const stageRows = byStage.map((s, i) => `
-                        <tr style="background:${i%2===0?'#fff':'#fbf8f3'}">
-                            <td>${s.stage}</td>
-                            <td style="text-align:center;">${s.count}</td>
-                            <td style="text-align:right;">$${s.value.toLocaleString()}</td>
-                            <td style="text-align:right;">${maxStageVal > 0 ? Math.round(s.value/maxStageVal*100) : 0}%</td>
-                        </tr>`).join('');
-
-                    const accountRows = topAccounts.map(([name, rev], i) => `
-                        <tr style="background:${i%2===0?'#fff':'#fbf8f3'}">
-                            <td style="text-align:center;font-weight:700;color:${i===0?'#b87333':i===1?'#8a8378':i===2?'#b87333':'#5a544c'}">#${i+1}</td>
-                            <td>${name}</td>
-                            <td style="text-align:right;font-weight:700;color:#4d6b3d;">$${rev.toLocaleString()}</td>
-                        </tr>`).join('');
-
-                    const oppRows = reportsOpps.map((o, i) => `
-                        <tr style="background:${i%2===0?'#fff':'#fbf8f3'}">
-                            <td>${o.opportunityName || o.account || '—'}</td>
-                            <td>${o.account || '—'}</td>
-                            <td>${o.stage || '—'}</td>
-                            <td style="text-align:right;">${o.arr ? '$'+o.arr.toLocaleString() : '—'}</td>
-                            <td style="text-align:right;">${o.implementationCost ? '$'+o.implementationCost.toLocaleString() : '—'}</td>
-                            <td style="text-align:right;font-weight:700;">$${((o.arr||0)+(o.implementationCost||0)).toLocaleString()}</td>
-                            <td>${parseLocalDate(o.closeDate)?.toLocaleDateString() || '—'}</td>
-                            <td>${o.assignedTo || o.accountOwner || '—'}</td>
-                        </tr>`).join('');
-
-                    const monthlyBars = monthlyData.map(m => {
-                        const pct = Math.round((m.rev||0)/maxMonthRev*100);
-                        return `
-                            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
-                                <div style="font-size:9px;color:#5a544c;font-weight:700;">${m.rev > 0 ? '$'+Math.round(m.rev/1000)+'K' : ''}</div>
-                                <div style="width:100%;background:#f5efe3;border-radius:4px;height:80px;display:flex;align-items:flex-end;">
-                                    <div style="width:100%;height:${Math.max(pct,m.rev>0?4:1)}%;background:linear-gradient(to top,#3a5a7a,#5a4a7a);border-radius:4px 4px 0 0;"></div>
-                                </div>
-                                <div style="font-size:9px;color:#8a8378;">${m.label}</div>
-                            </div>`;
-                    }).join('');
-
-                    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Sales Pipeline Report — ${printDate}</title>
-<style>
-  @page { margin: 0.75in; size: letter; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #2a2622; background: #fff; }
-  
-  .report-header { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 14px; border-bottom: 3px solid #3a5a7a; margin-bottom: 24px; }
-  .report-header h1 { font-size: 22px; font-weight: 800; color: #2a2622; }
-  .report-header .meta { font-size: 10px; color: #8a8378; text-align: right; line-height: 1.6; }
-  .report-header .accent { display: inline-block; width: 4px; height: 22px; background: linear-gradient(to bottom, #3a5a7a, #5a4a7a); border-radius: 2px; margin-right: 8px; vertical-align: middle; }
-
-  .section { margin-bottom: 28px; page-break-inside: avoid; }
-  .section-title { font-size: 9px; font-weight: 700; color: #8a8378; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e6ddd0; }
-
-  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 0; }
-  .kpi-card { background: #fff; border: 1px solid #e6ddd0; border-radius: 8px; padding: 12px 14px; }
-  .kpi-label { font-size: 9px; font-weight: 700; color: #8a8378; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
-  .kpi-value { font-size: 20px; font-weight: 800; color: #2a2622; line-height: 1.1; }
-  .kpi-sub { font-size: 9px; color: #8a8378; margin-top: 3px; }
-
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .card { background: #fff; border: 1px solid #e6ddd0; border-radius: 8px; padding: 14px; }
-
-  .monthly-chart { display: flex; align-items: flex-end; gap: 6px; height: 90px; margin-top: 8px; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-  thead th { background: #fbf8f3; color: #8a8378; font-weight: 700; text-align: left; padding: 6px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e6ddd0; white-space: nowrap; }
-  tbody td { padding: 6px 8px; border-bottom: 1px solid #f5efe3; vertical-align: middle; }
-  tbody tr:last-child td { border-bottom: none; }
-
-  .footer { margin-top: 32px; padding-top: 10px; border-top: 1px solid #e6ddd0; display: flex; justify-content: space-between; font-size: 9px; color: #8a8378; }
-
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .no-print { display: none !important; }
-    .section { page-break-inside: avoid; }
-    .opps-table { page-break-before: always; }
-  }
-</style>
-</head>
-<body>
-
-  <div class="report-header">
-    <div>
-      <div style="display:flex;align-items:center;">
-<span class="accent"></span>
-<h1>Sales Pipeline Report</h1>
-      </div>
-      <div style="font-size:11px;color:#8a8378;margin-top:4px;">Pipeline performance and revenue insights</div>
-    </div>
-    <div class="meta">
-      Generated ${printDate} at ${printTime}<br>
-      Sales Pipeline Tracker &nbsp;·&nbsp; Confidential
-    </div>
-  </div>
-
-  <!-- KPIs -->
-  <div class="section">
-    <div class="section-title">Key Performance Indicators</div>
-    <div class="kpi-grid">
-      <div class="kpi-card">
-<div class="kpi-label">Won Revenue</div>
-<div class="kpi-value">$${totalWonRevenue.toLocaleString()}</div>
-<div class="kpi-sub">${wonOpps.length} deals closed won</div>
-      </div>
-      <div class="kpi-card">
-<div class="kpi-label">Pipeline Value</div>
-<div class="kpi-value">$${totalPipelineValue.toLocaleString()}</div>
-<div class="kpi-sub">${openOpps.length} open opportunities</div>
-      </div>
-      <div class="kpi-card">
-<div class="kpi-label">Win Rate</div>
-<div class="kpi-value">${winRate.toFixed(1)}%</div>
-<div class="kpi-sub">${wonOpps.length} won / ${lostOpps.length} lost</div>
-      </div>
-      <div class="kpi-card">
-<div class="kpi-label">Avg Deal Size</div>
-<div class="kpi-value">$${Math.round(avgDealSize).toLocaleString()}</div>
-<div class="kpi-sub">closed won</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Revenue by Quarter + Monthly Trend -->
-  <div class="section two-col">
-    <div class="card">
-      <div class="section-title">Won Revenue by Quarter (${currentYear})</div>
-      ${buildBarChart(revenueByQuarter, 'q', 'rev', () => '#3a5a7a')}
-    </div>
-    <div class="card">
-      <div class="section-title">Monthly Won Revenue — Last 6 Months</div>
-      <div class="monthly-chart">${monthlyBars}</div>
-    </div>
-  </div>
-
-  <!-- Pipeline by Stage + Top Accounts -->
-  <div class="section two-col">
-    <div class="card">
-      <div class="section-title">Opportunities by Stage</div>
-      ${byStage.length === 0 ? '<p style="color:#8a8378;font-size:11px;">No opportunity data.</p>' : `
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-<table>
-<thead><tr><th>Stage</th><th style="text-align:center;">Count</th><th style="text-align:right;">Value</th><th style="text-align:right;">Share</th></tr></thead>
-<tbody>${stageRows}</tbody>
-      </table>
-</div>`}
-    </div>
-    <div class="card">
-      <div class="section-title">Top Accounts by Won Revenue</div>
-      ${topAccounts.length === 0 ? '<p style="color:#8a8378;font-size:11px;">No closed won data yet.</p>' : `
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-<table>
-<thead><tr><th style="text-align:center;">#</th><th>Account</th><th style="text-align:right;">Won Revenue</th></tr></thead>
-<tbody>${accountRows}</tbody>
-      </table>
-</div>`}
-    </div>
-  </div>
-
-  <!-- All Opportunities -->
-  <div class="section opps-table">
-    <div class="section-title">All Opportunities Summary (${reportsOpps.length} total)</div>
-    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-<table>
-      <thead>
-<tr>
-  <th>Opportunity</th><th>Account</th><th>Stage</th>
-  <th style="text-align:right;">Revenue</th><th style="text-align:right;">Impl. Cost</th>
-  <th style="text-align:right;">Total Value</th><th>Close Date</th><th>Owner</th>
-</tr>
-      </thead>
-      <tbody>${oppRows || '<tr><td colspan="8" style="text-align:center;color:#8a8378;padding:16px;">No opportunities found.</td></tr>'}</tbody>
-    </table>
-</div>
-  </div>
-
-  <div class="footer">
-    <span>Sales Pipeline Tracker &nbsp;·&nbsp; Confidential</span>
-    <span>Generated ${printDate} at ${printTime}</span>
-  </div>
-
-</body>
-</html>`;
-
-                    const win = window.open('', '_blank', 'width=900,height=700');
-                    win.document.write(html);
-                    win.document.close();
-                    setTimeout(() => win.print(), 600);
-                };
-
-                const generateReport = (title, contentFn) => {
-                    const d = new Date();
-                    const meta = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                    const win2 = window.open('', '_blank', 'width=820,height=600');
-                    win2.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#2a2622}h1{font-size:1.125rem;font-weight:800;margin-bottom:0.25rem}.meta{font-size:0.75rem;color:#8a8378;margin-bottom:1.5rem}table{width:100%;border-collapse:collapse;font-size:0.875rem}th{background:#fbf8f3;color:#8a8378;font-weight:700;padding:6px 10px;font-size:0.75rem;text-transform:uppercase;border-bottom:2px solid #e6ddd0;text-align:left}td{padding:6px 10px;border-bottom:1px solid #f5efe3}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><h1>${title}</h1><div class="meta">Generated ${meta} · Sales Pipeline Tracker</div>${contentFn()}</body></html>`);
-                    win2.document.close();
-                    setTimeout(() => win2.print(), 500);
-                };
-
-                const ReportBtn = ({ title, contentFn }) => (
-                    <button onClick={() => generateReport(title, contentFn)}
-                        style={{ display:'inline-flex', alignItems:'center', gap:'0.3rem', background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'6px', padding:'0.3rem 0.875rem', fontSize:'0.75rem', fontWeight:'500', color:'#2a2622', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>↗ Export</button>
-                );
-
                 return (
                     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -579,6 +258,7 @@ ${bodyHtml}
                               { key:'activity',    label:'Activity',             sub:'What are reps doing?' },
                               { key:'history',     label:'Activity History',      sub:'Account & contact timelines' },
                               ...(leadsEnabled ? [{ key:'leads', label:'Leads', sub:'Top of funnel' }] : []),
+                              { key:'actions',     label:'Actions',              sub:'Recommendation follow-through' },
                               { key:'custom',      label:'Saved reports',        sub:'Your custom views' },
                             ].map(({ key, label, sub }) => (
                               <button key={key} onClick={() => setReportSubTabPersisted(key)} style={{
@@ -738,7 +418,7 @@ ${bodyHtml}
                             <button className=""
                               style={{ display:'inline-flex', alignItems:'center', gap:'0.3rem', background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'6px', padding:'0.3rem 0.875rem', fontSize:'0.75rem', fontWeight:'500', color:'#2a2622', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}
                               onClick={()=>{
-                                const lbl={pipeline:'Pipeline & Forecast',performance:'Performance',revenue:'Revenue',activity:'Activity',leads:'Leads',actions:'Actions'}[reportSubTab]||'Report';
+                                const lbl={pipeline:'Pipeline & Forecast',performance:'Performance',activity:'Activity',history:'Activity History',leads:'Leads',actions:'Actions',custom:'Saved reports'}[reportSubTab]||'Report';
                                 const win=window.open('','_blank','width=900,height=700');
                                 if(!win){alert('Allow popups to export PDF');return;}
                                 const el=document.querySelector('[data-rpt]');
@@ -2335,7 +2015,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
     const [createMode, setCreateMode] = React.useState('picker');
     const [aiPrompt, setAiPrompt] = React.useState('');
     const [aiGenerated, setAiGenerated] = React.useState(false);
-    const [aiRefine, setAiRefine] = React.useState('');
     const [builderTab, setBuilderTab] = React.useState('Data');
     const [builderDirty, setBuilderDirty] = React.useState(true);
     const [builderRendered, setBuilderRendered] = React.useState(false);
@@ -2352,11 +2031,11 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
     const [saveError, setSaveError] = React.useState(null);
 
     // Save report handler — used by both blank and AI builder Save to library buttons
-    const handleSaveReport = React.useCallback(async ({ name, source, dims, metrics, chartType, description }) => {
+    const handleSaveReport = React.useCallback(async ({ name, source, dims, metrics, chartType, description, config = null }) => {
         setSaveState('saving');
         setSaveError(null);
         const id = 'rpt_' + crypto.randomUUID();
-        const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, ownerId: currentUser, ownerName: currentUser };
+        const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, config, ownerId: currentUser, ownerName: currentUser };
         try {
             // dbFetch returns a Response — check ok, then parse. This used to
             // read `data?.report` off the Response AND never checked ok, so a
@@ -2520,7 +2199,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     </div>
                     {subtitle && <div style={{ fontSize:11.5, color:TS.inkMuted, marginTop:3, fontFamily:TS.sans }}>{subtitle}</div>}
                 </div>
-                <div style={{ fontSize:11.5, color:TS.inkMid, cursor:'pointer', fontWeight:500, fontFamily:TS.sans }}>See all →</div>
             </div>
             {children}
         </div>
@@ -2604,7 +2282,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                        <button onClick={()=>handleSaveReport({ name:'Deal review — weekly', source:'Pipeline & Forecast', dims:[], metrics:[], chartType:'template', description:'Saved from the Deal review — weekly template', config:{ templateId:'t1' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -2826,7 +2504,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                        <button onClick={()=>handleSaveReport({ name:'Stage conversion deep-dive', source:'Pipeline & Forecast', dims:[], metrics:[], chartType:'template', description:'Saved from the Stage conversion deep-dive template', config:{ templateId:'t5' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -3006,17 +2684,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
             return { q, fyEnd, label:`Q${q} FY${String(fyEnd).slice(2)}` };
         };
 
-        // Per-rep quarterly quota — split annual evenly across 4 quarters
-        const getRepQuarterQuota = (user) => {
-            if (!user) return 0;
-            const qMode = user.quotaType||'annual';
-            if (qMode === 'quarterly') {
-                // Return per-quarter average (we don't know which quarter we're asking about without more context)
-                return ((user.q1Quota||0)+(user.q2Quota||0)+(user.q3Quota||0)+(user.q4Quota||0))/4;
-            }
-            return (user.annualQuota||0)/4;
-        };
-
         // Visible reps
         const repsD = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager');
 
@@ -3073,7 +2740,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                        <button onClick={()=>handleSaveReport({ name:'Forecast vs actual', source:'Pipeline & Forecast', dims:[], metrics:[], chartType:'template', description:'Saved from the Forecast vs actual template', config:{ templateId:'t6' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -3154,7 +2821,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                         <SecHdrD
                             title="Accuracy by rep"
                             subtitle="Per-quarter · lower = under-called, higher = over-called"
-                            right={<button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>··· Export</button>}
+                            right={null}
                         />
                         {/* Column headers */}
                         <div style={{ display:'grid', gridTemplateColumns:`160px repeat(${quarters.length},1fr) 70px`, gap:8, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T.border}` }}>
@@ -3285,7 +2952,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                        <button onClick={()=>handleSaveReport({ name:'Win / loss analysis', source:'Performance', dims:[], metrics:[], chartType:'template', description:'Saved from the Win / loss analysis template', config:{ templateId:'t2' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -3492,7 +3159,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                        <button onClick={()=>handleSaveReport({ name:'Rep scorecard', source:'Performance', dims:[], metrics:[], chartType:'template', description:'Saved from the Rep scorecard template', config:{ templateId:'t3' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -3776,7 +3443,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
-                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                        <button onClick={()=>handleSaveReport({ name:'Territory coverage', source:'Activity', dims:[], metrics:[], chartType:'template', description:'Saved from the Territory coverage template', config:{ templateId:'t4' } })} disabled={saveState==='saving'} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans, opacity:saveState==='saving'?0.6:1 }}>{saveState==='saving'?'Saving…':saveState==='saved'?'✓ Saved':saveState==='error'?'Error — retry':'+ Save as my report'}</button>
                     </div>
                 </div>
 
@@ -4049,26 +3716,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                         ))}
                     </div>
 
-                    {/* Recent reports strip */}
-                    <div style={{ maxWidth:860, margin:'0 auto' }}>
-                        <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom:10 }}>
-                            <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', color:T.ink }}>Recent reports</div>
-                            <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Things you looked at this week — clone from any</div>
-                            <div style={{ flex:1 }}/>
-                            <button onClick={closeCreate} style={{ fontSize:11.5, color:T.inkMid, background:'transparent', border:'none', cursor:'pointer', fontFamily:T.sans }}>Browse library →</button>
-                        </div>
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
-                            {['Quota pacing','Pipeline added this week','Stuck deals (14d+)','Closing next 30 days'].map(n=>(
-                                <div key={n} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'10px 12px', cursor:'pointer' }}
-                                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
-                                    onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                                    <div style={{ ...ebD(T.inkMuted), fontSize:9, marginBottom:3 }}>Clone</div>
-                                    <div style={{ fontSize:12.5, color:T.ink, fontWeight:500 }}>{n}</div>
-                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>From pinned · last viewed today</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
                 </div>
             );
         }
@@ -4119,7 +3766,9 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
 
         // ── DUPLICATE list ───────────────────────────────────────────
         if (createMode === 'duplicate') {
-            const DUPES = pinnedCards.map(r=>({ name:r.name, owner:currentUser||'Me', updated:'Today' }));
+            // The real saved reports (this listed the four pinned cards as "by you ·
+            // updated Today" and Duplicate opened an empty canvas — 0.68 tier 2 E1).
+            const DUPES = (savedReportsList||[]).map(r=>({ id:r.id, name:r.name, owner:r.ownerName||'—', updated:dayOf(r.updatedAt||r.createdAt)||'—', src:r }));
             return (
                 <div style={{ fontFamily:T.sans, color:T.ink }}>
                     <div style={{ marginBottom:16, paddingBottom:12, borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
@@ -4135,13 +3784,13 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     </div>
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1 }}>
                         {DUPES.map((r,i)=>(
-                            <div key={r.name} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderBottom:i<DUPES.length-1?`1px solid ${T.border}`:'none' }}>
+                            <div key={r.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderBottom:i<DUPES.length-1?`1px solid ${T.border}`:'none' }}>
                                 <span style={{ fontSize:15, color:T.inkMuted }}>📄</span>
                                 <div style={{ flex:1 }}>
                                     <div style={{ fontSize:12.5, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{r.name}</div>
                                     <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>by {r.owner} · updated {r.updated}</div>
                                 </div>
-                                <button onClick={()=>setCreateMode('blank')}
+                                <button onClick={()=>handleSaveReport({ name: r.src.name + ' (copy)', source:r.src.source, dims:r.src.dims||[], metrics:r.src.metrics||[], chartType:r.src.chartType, description:r.src.description, config:r.src.config||null })}
                                     style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
                                     Duplicate →
                                 </button>
@@ -4206,13 +3855,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                                 <button onClick={()=>setCreateMode('picker')} style={{ background:'transparent', color:T.ink, border:`1px solid ${T.borderStrong}`, padding:'6px 12px', fontSize:11, fontWeight:500, borderRadius:2, cursor:'pointer', fontFamily:T.sans }}>Try another</button>
                             </div>
                         </div>
-                        {/* Refine row */}
-                        <div style={{ marginTop:10, paddingTop:10, borderTop:`1px dashed ${T.gold}`, display:'flex', alignItems:'center', gap:8 }}>
-                            <span style={{ ...ebD(T.goldInk), fontSize:9.5 }}>Refine</span>
-                            <input value={aiRefine} onChange={e=>setAiRefine(e.target.value)} placeholder="e.g. only deals $50K+, or split by territory…"
-                                style={{ flex:1, padding:'6px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, fontFamily:T.sans, color:T.ink, outline:'none' }}/>
-                            <button style={{ background:T.surface, border:`1px solid ${T.gold}`, color:T.goldInk, padding:'5px 12px', fontSize:11, fontWeight:600, borderRadius:2, cursor:'pointer', fontFamily:T.sans }}>Regenerate</button>
-                        </div>
                     </div>
 
                     {/* Page header */}
@@ -4227,7 +3869,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                                 <UpdateBtn/>
                                 <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Up to date · {stuckRows.length} rows · generated just now</span>
                                 <div style={{ flex:1 }}/>
-                                <GhostBtnD onClick={()=>{}}>⛶ Fullscreen</GhostBtnD>
+                                
                             </div>
                             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 22px', display:'flex', flexDirection:'column', gap:12 }}>
                                 <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
@@ -4270,7 +3912,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                                 ))}
                                 <div style={{ paddingTop:10, borderTop:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
                                     <span>Total: <strong style={{ color:T.ink }}>{totalStuck} stuck deals</strong> · <strong style={{ color:T.ink }}>{fmtShort(totalArrStuck)}</strong> at risk across {stuckRows.length} rep{stuckRows.length!==1?'s':''}</span>
-                                    <button style={{ background:'transparent', border:'none', fontSize:11, color:T.inkMid, cursor:'pointer', padding:0, fontFamily:T.sans }}>View all rows →</button>
                                 </div>
                             </div>
                         </div>
@@ -4372,7 +4013,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                                 <span style={{ fontSize:11, color:builderDirty?T.warn:T.inkMuted, fontFamily:T.sans }}>
                                     {builderDirty?'· Unsaved changes — click to render':'· Up to date'}
                                 </span>
-                                <div style={{ flex:1 }}/><GhostBtnD onClick={()=>{}}>⛶ Fullscreen</GhostBtnD>
+                                <div style={{ flex:1 }}/>
                             </div>
                             {builderRendered ? (
                                 <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'20px 24px', minHeight:320, display:'flex', flexDirection:'column', gap:14 }}>
@@ -4545,7 +4186,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                 <SectionS title="Your reports" subtitle="Reports you've created and saved to your library" count={`${filteredSaved.length} report${filteredSaved.length!==1?'s':''}`}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
                         {filteredSaved.map(r=>(
-                            <div key={r.id} style={{ background:TS.surface, border:`1px solid ${TS.border}`, borderRadius:TS.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, cursor:'pointer', minHeight:100 }}
+                            <div key={r.id} onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); }} title={r.config?.templateId ? 'Open this report' : 'Built in the report builder — opening it is not wired yet'} style={{ background:TS.surface, border:`1px solid ${TS.border}`, borderRadius:TS.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, cursor:'pointer', minHeight:100 }}
                                 onMouseEnter={e=>e.currentTarget.style.borderColor=TS.borderStrong}
                                 onMouseLeave={e=>e.currentTarget.style.borderColor=TS.border}>
                                 <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:TS.inkMuted, fontFamily:TS.sans }}>{r.source||'Opportunities'}</div>
@@ -6060,9 +5701,12 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                 onClick={() => {
                                     if (!selectedOpp) return;
                                     const owner = selectedOpp.salesRep || '';
+                                    // salesRep is a display name; the address is on the roster.
+                                    const ownerEmail = (settings?.users||[]).find(u => u.name === owner)?.email || '';
+                                    if (!ownerEmail) { alert(`No email on file for ${owner || 'the owner'} — add one under Settings → People.`); return; }
                                     const subject = encodeURIComponent(`Opportunity history: ${selectedOpp.opportunityName || selectedOpp.account}`);
                                     const body = encodeURIComponent(`Hi ${owner},\n\nPlease find the opportunity history report for ${selectedOpp.opportunityName || selectedOpp.account} attached.\n\nDeal: ${selectedOpp.opportunityName || ''}\nAccount: ${selectedOpp.account || ''}\nStage: ${selectedOpp.stage || ''}\nAmount: $${(parseFloat(selectedOpp.arr||0)/1000).toFixed(1)}k\nClose date: ${selectedOpp.forecastedCloseDate || selectedOpp.closeDate || '—'}\n`);
-                                    window.location.href = `mailto:${owner}?subject=${subject}&body=${body}`;
+                                    window.location.href = `mailto:${ownerEmail}?subject=${subject}&body=${body}`;
                                 }}
                                 style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
                                 Email to owner

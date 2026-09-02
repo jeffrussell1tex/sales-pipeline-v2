@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -894,6 +894,28 @@ const mutations = [
         'src/hooks/useOpportunities.js',
         "            wonDate:      formData.stage === 'Closed Won'",
         "            wonDate:      false"],
+
+    // ── Dead controls wired or removed (0.68 batch 6) ───────────────────────
+    ['reports: handleSaveReport drops the template id from the payload (a saved card that opens nothing)',
+        'src/Tabs/ReportsTab.jsx',
+        "chartType, description, config, ownerId: currentUser",
+        "chartType, description, ownerId: currentUser"],
+    ['reports: a saved card no longer opens its template',
+        'src/Tabs/ReportsTab.jsx',
+        "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); }}",
+        "onClick={()=>{}}"],
+    ['reports: Duplicate opens a blank canvas again instead of copying',
+        'src/Tabs/ReportsTab.jsx',
+        "name: r.src.name + ' (copy)'",
+        "name: 'Untitled report'"],
+    ['reports: the Duplicate row dates a report by the UTC slice of its instant (tomorrow after 7pm)',
+        'src/Tabs/ReportsTab.jsx',
+        "updated:dayOf(r.updatedAt||r.createdAt)||'—'",
+        "updated:String(r.updatedAt||r.createdAt||'').slice(0,10)||'—'"],
+    ['reports: Email to owner mails the display name again',
+        'src/Tabs/ReportsTab.jsx',
+        "window.location.href = `mailto:${ownerEmail}?subject=${subject}&body=${body}`;",
+        "window.location.href = `mailto:${owner}?subject=${subject}&body=${body}`;"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
