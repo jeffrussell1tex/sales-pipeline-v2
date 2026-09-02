@@ -3,7 +3,8 @@
 **Session of 1–2 September 2026, fourth session (the owed §18b26 bullet
 written, the nine stale App.jsx imports dropped, the importer's 9/15/2026
 check observed live, unreadable date cells REFUSED at Preview and the
-engine's year-2001 default gated — all on dev), FINAL.** Repo root. Read this first, then verify every claim
+engine's year-2001 default gated — all on dev, then SHIPPED to prod), FINAL.**
+Repo root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
@@ -31,9 +32,11 @@ App.jsx, state §0.63; deploy-verified, accelerep.netlify.app served
 and the commit this handoff rides in — **unreadable date cells refused at
 Preview and the engine's year-2001 default gated** (state §0.64, guide
 §18b26's last bullet) — `51202b4`, **deploy-verified:** accelerep.netlify.app
-serves `index-Bpb-wphy.js`, the local gate build's hash. `master` is unchanged
-at `13f9ffe`, eight commits behind dev (two code, six docs). The session
-began the evening of 1 Sep and finished 2 Sep.
+serves `index-Bpb-wphy.js`, the local gate build's hash. **PROD SHIPPED
+(Jeff):** `master` fast-forwarded `13f9ffe` → `d078c8f`;
+salespipelinetracker.com serves `index-DvbBtbWW.js`, `pk_live_` inlined,
+refusal string and year gate present, same byte size as dev's bundle (state
+§0.64). The session began the evening of 1 Sep and finished 2 Sep.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -83,8 +86,9 @@ opened) · build **2,483 kB JS**, `index-Bpb-wphy.js`, guard OK, `dist/` and
 `node_modules/.vite` cleared · **79 integration not re-run** (no endpoint
 changed all session) · **browser pass as Karen on localhost:** the refusal
 banner observed at Preview with the rows and cells named, nothing imported
-(state §0.64) · `master` == `13f9ffe` · dev deploy observed serving
-`index-Bpb-wphy.js` for `51202b4` (see §1).
+(state §0.64) · dev deploy observed serving `index-Bpb-wphy.js` for
+`51202b4` · `master` == `d078c8f` == dev, prod serving
+`index-DvbBtbWW.js` (see §1).
 
 ## 5. Next — start here
 

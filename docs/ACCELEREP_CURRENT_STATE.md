@@ -1568,6 +1568,18 @@ page was reloaded at Preview. Jeff, watching the pane: "see it."
 **Dev landing (`51202b4`):** accelerep.netlify.app serves `index-Bpb-wphy.js`, the
 local gate build's hash.
 
+**PROD SHIP (Jeff: "shipped to prod").** `master` fast-forwarded `13f9ffe` →
+`d078c8f` (the whole fourth session: §0.63, §0.64 and their docs);
+salespipelinetracker.com serves `index-DvbBtbWW.js` — the inlined key is
+`pk_live_` where dev's is `pk_test_` (the §19 second-face check; each
+bundle also carries Clerk's own `pk_live_`/`pk_test_` prefix constants once,
+which is the one `pk_test_` a grep of prod finds), the refusal banner string
+and the four-digit-year gate both present,
+and the same byte size as dev's `index-Bpb-wphy.js` (2,542,302). Reps on
+prod now see: a CSV row with an unreadable Close or Created Date refused at
+Preview by row, field and cell; "Sept 15" no longer imports as 2001; Excel's
+"9/15/26" still imports as 2026.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
