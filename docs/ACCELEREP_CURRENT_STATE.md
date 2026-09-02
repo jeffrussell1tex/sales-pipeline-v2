@@ -2263,6 +2263,9 @@ Pipeline & Forecast → Stage conversion lists Qualification through Contracts
 and no Prospecting; Activity History → a Closed Won deal reads "Stages
 completed 6 of 6".
 
+**Dev landing (`090da10`):** accelerep.netlify.app serves `index-BBGjcEEV.js`,
+the local gate build's hash, 41 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

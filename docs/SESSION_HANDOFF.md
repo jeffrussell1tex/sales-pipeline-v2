@@ -128,8 +128,9 @@ hash.
 hardcoded stage list on a live path replaced by the org's funnel settings
 (else the app defaults) through `src/utils/stageOrder.js`; both funnels
 rank a lost deal by the stage it left; the history track reads a won deal
-as all stages visited. 5 tests, 5 mutants. Deploy check recorded in §4 by
-a follow-up docs commit.
+as all stages visited. 5 tests, 5 mutants. `090da10`, **deploy-verified:**
+accelerep.netlify.app serves `index-BBGjcEEV.js`, the local gate build's
+hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -179,9 +180,8 @@ Five gates green on 139 files · **416/416 unit** (5 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
 `session-status.test.mjs`) · **163/163 mutations, printed green baseline**
 (50 new this session; run alone) · build
-**2,478 kB JS**, `index-BBGjcEEV.js` (audit batch 5a; deploy check pending
-at the time this was written; `index-BtwmtTXu.js` observed for `33e521b`),
-guard OK, `dist/` cleared · **79 integration not
+**2,478 kB JS**, `index-BBGjcEEV.js` (audit batch 5a; dev deploy observed
+serving it for `090da10`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
