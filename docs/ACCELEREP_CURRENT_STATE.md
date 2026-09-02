@@ -1580,7 +1580,7 @@ prod now see: a CSV row with an unreadable Close or Created Date refused at
 Preview by row, field and cell; "Sept 15" no longer imports as 2001; Excel's
 "9/15/26" still imports as 2026.
 
-### 0.65 FOUND, NOT FIXED: the app ignores Clerk's pending session state, so "Require MFA" would not lock sign-in (2 Sep, fourth session)
+### 0.65 OBSERVED, NOT FIXED: the app ignores Clerk's pending session state, so "Require MFA" does not lock sign-in (2 Sep, fourth session)
 
 **Jeff: "i enabled MFA on the UKG instance. It is still letting me log in
 without it."** His screenshot of the Clerk Dashboard (Sales Pipeline Tracker →
@@ -1621,6 +1621,21 @@ mounted while pending; refuse `payload.sts === 'pending'` in `verifyAuth`
 with a mutant; fix the MfaDetail copy and remove its dead controls. To
 observe the bug first: flip Require on the Development instance, sign in
 fresh as Karen in the pane, read `Clerk.session.status`.
+
+**OBSERVED (same hour).** Jeff turned on Authenticator application and
+**Require multi-factor authentication** for the Development instance (second
+screenshot: SMS on, Authenticator on, Backup codes off, Require ON). Karen
+was signed out in the pane; the external `netlify dev` had died meanwhile,
+so one was started from the launch config and served the current source. Jeff
+signed in fresh as Karen: **"loaded straight through."** Read from the page
+immediately after: `Clerk.session.status` **"pending"**, `currentTask`
+**{ key: "setup-mfa" }**, `twoFactorEnabled` false, a v2 token WAS issued
+with `sts: "pending"` and the org claim present, the app shell fully rendered
+(nav, Home), and a direct `GET /.netlify/functions/opportunities` with that
+token returned **200**. Both halves confirmed: the `useUser` gate lets the
+pending session render the app, and `verifyAuth` serves it. Clerk did its
+part — the task is there — and the app walked past it. Fix queued above,
+Jeff's call.
 
 ---
 
