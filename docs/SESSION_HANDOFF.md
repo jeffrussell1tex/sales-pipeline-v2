@@ -193,10 +193,22 @@ cleared at close.
    the Activity report honours the Rep / Team / Territory slice (state
    §0.67). **Jeff eyeballs after the deploy, as Admin, Reports → Activity:**
    Total activities must change as the rep changes and "All" restore it.
-10. Smaller carried: the
+10. **THE REPORTS AUDIT — nothing fixed yet, Jeff's order to set (state
+   §0.68, the triage list).** Six read-only passes over ReportsTab found,
+   verified from source: fiscal-period math a year off under the default
+   January start and a comparison helper on the opposite convention;
+   `comparedOpps` unsliced; a literal $175,000 quota; a forecast-accuracy
+   chart that is always 100%; fabricated stage lists that bucket real
+   stages as "Prospecting"; the leads tab never sliced; two crashes
+   (`products.map` on a text column, toolbar buttons above the null
+   guard); a contacts array written into a text column; the Actions report
+   storing a Response as data; six "Save as my report" buttons with no
+   handler; a report-builder preview made of constants. Recommended order
+   is in §0.68. Do not start on it without reading §0.68 first.
+11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
-11. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
+12. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
    regexes — write scripts with the Write tool and run the file; a
    scratchpad script cannot resolve the repo's packages — copy into the repo
    root, run, delete (tree checked clean after); `mutate-import` runs alone

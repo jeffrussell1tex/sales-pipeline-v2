@@ -1836,6 +1836,156 @@ the rep changes, and "All" restores the full count.
 **Dev landing (`e39c57d`):** accelerep.netlify.app serves `index-Dv_RGDzl.js`,
 the local gate build's hash, 41 seconds after the push.
 
+### 0.68 The Reports tab audit — the triage list, nothing fixed yet (2 Sep, fourth session)
+
+**Jeff: "would you go through the reports tab and see if you can identify any
+other errors."** Six read-only passes over `ReportsTab.jsx` (6,755 lines,
+split by range), each briefed with the bug classes §0.66/§0.67 had just
+shown (a field read that is never written, a dataset that skips the slice or
+the period, a fabricated constant, a hardcoded stage list, a day/instant mix,
+a control with no handler). Every item marked **V** below was re-read from
+the source by the session before being written here; items marked **R** are
+reader findings whose class was confirmed but whose lines were not re-read.
+Line numbers are as of `e39c57d`. **This is the list that must not be lost**
+(§18b26): fix in the order below, each batch its own commit.
+
+**Tier 1 — the numbers are wrong for everyone, or it crashes / corrupts.**
+1. **V** Fiscal period math. `getFiscalQRanges` (L181–198) puts every
+   quarter in `baseYear − 1` whenever `startMonth >= fiscalStart`; with the
+   app default `fiscalYearStart: 1` that is every quarter, so "FY 2026" and
+   Q1–Q4 return **2025** data. The comparison helper `getFQR` (L319–333)
+   uses the opposite convention (year of start), so "vs previous quarter /
+   year" compares mismatched years and often an empty range. `src/utils/
+   quarters.js` (`quarterRange`, `quarterOf`) already implements the house
+   convention and is not used here. Fix: one helper, from quarters.js.
+2. **V** `comparedOpps` (L370) starts from `roleFilteredOpps`, never the
+   slice — every "vs previous" delta on every tab compares one rep's period
+   against the whole team's prior period.
+3. **V** Pipeline & Forecast quota is the literal **$175,000** (L924):
+   `settings.quotaData.quarterlyQuota` is never written, `u.quota` is never
+   sent by any UI. Attainment ring, "gap to quota" and "coverage" all follow.
+4. **V** "Forecast accuracy" is fabricated: `fc: actual, ac: actual, att: 1.0`
+   (L1050) — the two lines coincide and every point reads 100%; the windows
+   are rolling 3-month spans labelled as quarters (L1037–1049) and drawn from
+   the period-filtered set, so a quarter filter erases the history.
+5. **V** Stage conversion funnel's `stageOrder` (L974) is
+   `['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing','Closed Won']`
+   — three names that do not exist, three real stages missing; a deal in
+   Evaluation (Demo), Negotiation/Review, Contracts or Closed Lost ranks −1
+   and is bucketed as "Prospecting" (L985–992). Same class: L84 (`stages`,
+   dead print path), L2914 (funnel fallback), L6083 (history track fallback),
+   L2708 (`stageColorMap`), L926/928/1377/2741 (commit fallback lists).
+6. **V** Deals at risk (L1020–1029): `o.nextStep` is never written (column
+   is `nextSteps`) so every open deal is flagged "No next step"; staleness
+   reads raw `activities`, bypassing role gate and slice.
+7. **V** Pipeline movement, last 7 days: "Lost" is the literal `value:0`
+   (L1113); "Slipped" is every past-due open deal ever (L939); "Won" and
+   "Carried over" use all-time won revenue (L1106–1112).
+8. **V** Performance: annual quota divided into period revenue (L1362–1365;
+   a quarter shows ~¼ attainment); activity ratio is all-time activities over
+   period-scoped open deals, and a rep with no open deals shows the raw count
+   as "340.00×" (L1576–1578); reps with only Q2–Q4 quotas drop (L1359).
+9. **V** Activity tab: prior-period activities are `totalActs * 0.91`
+   (L1849) — every delta reads ≈ +9.9%; "Per rep" divides by reps who logged
+   something (L1776); the heatmap is period-clipped to the last 14 calendar
+   days (a past quarter shows all zeros and flags every rep, L1933); the
+   coaching flag fires on three zero weekdays and can never name a rep with
+   no activity at all (L1794/1933).
+10. **V** Leads tab never receives the slice (L268) — the exact §0.67 bug,
+    still present for leads; score bands: code buckets Cold <30 / Cool
+    30–49 (L2110–2113) while labels read "Cold (0–39)" / "Cool (40–49)"
+    (L2333–2336).
+11. **V** Saved reports (`SavedReportsTab`) get `reportsOpps` and raw
+    `activities` (L2484–2486): no period filter anywhere in six templates,
+    and the activity reads bypass the role gate and slice (a User can pick
+    any rep in the scorecard and see their activity mix, L3605/3615).
+    Win/loss "+3% vs prev period" is a literal (L3497). The competitor parse
+    creates the map entry only when `comp.length < 40` but increments it
+    whenever `comp` is truthy (L3463–3465) — a long "lost to …" note throws
+    and blanks the report. Quota pacing divides gated revenue by the whole
+    org's quota (L2607–2612). Quarter buckets end at 00:00 on the last day
+    while deals sit at noon, so quarter-end closes fall in no quarter
+    (L3220/L3231). "Closing next 30 days" has no lower bound and counts
+    every overdue deal (L2623). The funnel's max-stage ignores `prevStage`
+    (L2921–2931) — the §0.66 defect, one panel over from where it was fixed.
+    All six "+ Save as my report" buttons have no `onClick` (L2779, 3003,
+    3273, 3490, 3707, 3991).
+12. **V** Create report: the blank builder's preview is
+    `[85,72,64,51,38]` bars labelled `$850K…` against real user names
+    (L4589–4596); the entry button sets `builderTab('data')` where the tabs
+    compare `'Data'` (L4745 vs L4643) so the rail opens blank; "Duplicate"
+    lists the four pinned cards as "by {viewer} · updated Today" (L4334);
+    the stuck-deals total sums only the top 8 rows (L4383–4387); a rep with
+    no open deals renders "NaN%" (L3647–3650).
+13. **V** Activity History: `selectedOpp.products.map` on a text column —
+    **TypeError for any deal with products** (L6434); the three toolbar
+    buttons dereference `selectedOpp` above the `!selectedOpp` guard
+    (L6256–6274 vs L6292); "Add contact" PUTs `contacts: mergedNames` — an
+    **array into the text column** every other reader splits on commas
+    (L6496–6500); won/lost events are dated by `updatedAt` because
+    `closedAt`/`closeDate` do not exist (L5416); every activity is "by
+    Rep" because `createdBy`/`rep` do not exist and `author` is not read
+    (L6100); account linkage compares name fields activities and tasks do
+    not have (L5376/5395), so activities logged on an account with no deal
+    never appear; the tab receives raw `opportunities`/`activities`/`tasks`
+    (L2465–2476).
+14. **V** Actions report: `const json = await dbFetch(...); setData(json)`
+    (L4817) stores the Response object; `data.summary` is always undefined,
+    so it reads "No actions logged yet" forever. The twin of the bug fixed
+    at L69–76 of the same file; `check:dbfetch` does not catch an assigned
+    Response.
+
+**Tier 2 — misleading labels, fabricated trims, dead controls (R unless
+marked).** Pinned-card "LIVE" sparklines are the headline × fixed
+coefficients (L2627–2630). "vs previous period" captions with no comparison
+(L3018, L3282). Quarterly quotas flattened to annual/4 (L3190, L3677).
+"Forecast" in Forecast-vs-actual is the quota (L3226). Cycle time everywhere
+is `forecastedCloseDate − createdDate` — the forecast, not the close;
+`lostDate` exists and `wonDate` has a column but no client writer (L1381,
+1410, 3428, 3631). Territory coverage: "avg per territory" over all deals
+while the heatmap counts mapped ones (L3938); `settings.__accountsRef` is
+written nowhere (L3944); `o.territory` is shadowed by the rep's territory
+(L3898). AI builder: every prompt yields the stuck-deals chart with an
+invented interpretation (L4370–4407); Regenerate/Refine inert (L4424).
+History: PDF export interpolates notes unescaped into `document.write`
+(L5859–5881); "Email to owner" mails a display name (L6265); "Showing N of N"
+(L5683); "/ mo avg" divides all-time by 12 (L5979); hardcoded "Active
+customer" / "warm" / "Active" status values (L6340, L6610, L5716);
+`t.completedAt`/`t.notes` do not exist (L5399/5401). Actions report and
+Opportunity picker let a Manager see the whole org (L4807, L6068). Rep list
+`repsListSC` unsorted, undeduped, includes ReadOnly (L3605). `.slice(0,8)` /
+`.slice(0,10)` / `.slice(0,12)` truncations with no "of N" (L1794, L2428,
+L6226). "Team" slice button is a no-op for Managers (L809). Export label
+map names sub-tabs that no longer exist (L886). `actPeriod` /
+`commissionReportFilter` state nothing reads (L62–63). Lines 451–707 (the
+print report) are unreachable: `handlePrintReport` and `ReportBtn` have no
+caller; `byStage`, `revenueByQuarter`, `monthlyData`, `topAccounts` feed
+only that path.
+
+**Fields read in this file that no writer sets anywhere** (grep of `src/`
+and `netlify/`): on opportunities `closeDate`, `closedAt`, `revenue`,
+`competitor`, `assignedTo`, `accountOwner`, `name`, `rep`, `nextStep`,
+`nextStepDate`, `verticalMarket`; on activities `rep`, `assignedTo`,
+`createdBy`, `companyName`, `accountName`, `contact`, `contactName`
+(`salesRep` is set client-side by QuickLogFab and dropped by
+`activities.mjs`); on tasks `completedAt`, `notes`, `owner`, `salesRep`;
+on leads `salesRep`; on accounts `warmthStatus`, `status`, `employees`,
+`csm`; on contacts `lastTouch`, `activities`, `engagement`,
+`opportunityId`; `settings.quotaData.quarterlyQuota`,
+`settings.__accountsRef`, `u.quota`. Reading these is what made every
+categorised loss "Other" in §0.66; the same reads are why "by Rep", "No next
+step", "Active customer" and "last touch —" are on screen now.
+
+**Recommended order:** (1) period + comparison math via quarters.js, with
+tests under two `fiscalYearStart` values; (2) the two crashes, the contacts
+array write, the Actions fetch; (3) scoping — `comparedOpps`, leads, both
+sub-tabs' raw arrays, the scorecard rep list; (4) every fabricated constant
+removed or replaced (175000, 0.91, +3%, att 1.0, builder bars, sparklines,
+0.28); (5) stage lists from `settings.funnelStages` with `defaultStages`
+fallback, and cycle time from `lostDate` / the closing history entry, with
+`wonDate` written on Closed Won; (6) dead controls wired or removed. Each
+batch pure-helper + tests + mutants, as §0.66/§0.67 were done.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
