@@ -1833,6 +1833,9 @@ here:** the slice selectors are Admin/Manager-only and the pane's Karen is a
 rep; Jeff eyeballs after the deploy — expected: Total activities changes as
 the rep changes, and "All" restores the full count.
 
+**Dev landing (`e39c57d`):** accelerep.netlify.app serves `index-Dv_RGDzl.js`,
+the local gate build's hash, 41 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

@@ -74,7 +74,9 @@ it — ship dev to prod when Jeff has eyeballed the report.
 the Rep / Team / Territory slice was applied to opportunities and never to
 activities, so "Total activities" read 23 for every rep. `reportsActivities`
 now comes from `sliceActivities` in `src/utils/reportScope.js`; ten tests,
-four mutants. Deploy check recorded in §4 by a follow-up docs commit.
+four mutants. `e39c57d`, **deploy-verified:** accelerep.netlify.app serves
+`index-Dv_RGDzl.js`, the local gate build's hash. `master` has neither
+report fix — ship dev to prod once Jeff has eyeballed both.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -122,8 +124,8 @@ Five gates green on 135 files · **367/367 unit** (10 new in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
 `session-status.test.mjs`) · **129/129 mutations, printed green baseline**
 (15 new this session; run alone) · build **2,480 kB JS**,
-`index-Dv_RGDzl.js` (the slice fix; deploy check pending at the time this
-was written; `index-CzGO2ggA.js` observed for `7c6a432`), guard OK, `dist/` cleared · **79 integration not
+`index-Dv_RGDzl.js` (the slice fix; dev deploy observed serving it for
+`e39c57d`; `index-CzGO2ggA.js` before it for `7c6a432`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
