@@ -32,7 +32,7 @@ and the commit this handoff rides in — **unreadable date cells refused at
 Preview and the engine's year-2001 default gated** (state §0.64, guide
 §18b26's last bullet) — `51202b4`, **deploy-verified:** accelerep.netlify.app
 serves `index-Bpb-wphy.js`, the local gate build's hash. `master` is unchanged
-at `13f9ffe`, five commits behind dev (two code, three docs). The session
+at `13f9ffe`, eight commits behind dev (two code, six docs). The session
 began the evening of 1 Sep and finished 2 Sep.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
