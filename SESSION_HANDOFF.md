@@ -47,9 +47,11 @@ token's `sts`. Now the app trusts the user only while `useAuth().isSignedIn`,
 and `pendingSessionRefusal` 401s any non-active `sts` before the user lookup
 and the cache. Observed on the same pending session: Clerk's "Set up two-step
 verification" card where the app used to render, and 401 from three endpoints
-where one had answered 200. MfaDetail rewritten honest. Deploy check for this
-commit is recorded in §4 by a follow-up docs commit. **`master` does NOT have
-it** — ship dev to prod again when Jeff is ready.
+where one had answered 200. MfaDetail rewritten honest. `ded3271`,
+**deploy-verified:** accelerep.netlify.app serves `index-Cy6ZeOFD.js`, the local
+gate build's hash, refusal string present. **`master` does NOT have it** —
+ship dev to prod again when Jeff is ready; only then turn Require on for
+Production.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -102,8 +104,8 @@ pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
 earlier the same session, the CSV refusal banner (state §0.64) · prod
 serves `index-DvbBtbWW.js` for `d078c8f`; **`master` is behind dev by
-the MFA fix and its docs** · deploy check for the fix pending at the time
-this was written (see §1).
+the MFA fix and its docs** · dev deploy observed serving `index-Cy6ZeOFD.js` for
+`ded3271` (see §1).
 
 ## 5. Next — start here
 
@@ -131,10 +133,10 @@ this was written (see §1).
    removed (state §0.63).
 7. **DONE — the pending-session bypass is FIXED (state §0.65, guide
    §18b27)** and observed on Development with Require ON. Left for Jeff:
-   (a) **Karen's pane session is pending** — enrol a factor for her (the
-   authenticator app is on) or turn Require off on Development, or the
-   pane stays at the MFA card; enrolling her also lights the never-sighted
-   green known-ON dot. (b) Eyeball the rewritten MFA panel as Admin
+   (a) DONE while committing — Jeff enrolled Karen's authenticator; her MFA
+   dot is green ● (1/4), **the known-ON state sighted at last**; the pane
+   needs a fresh Karen sign-in (with her second factor) to be useful again.
+   (b) Eyeball the rewritten MFA panel as Admin
    (Settings → Security → Multi-factor auth): no Enforce modal, no Send
    reminders, no factor tiles. (c) `catalogue.js`'s MFA entry still
    hardcodes "Optional · not all enrolled" / "3 months ago". (d) Ship dev

@@ -1681,6 +1681,11 @@ her authenticator, and **the known-ON state, unsighted since §0.59, is
 observed.** Karen's pane session is therefore no longer pending; the pane is
 usable again after a fresh sign-in.
 
+**Dev landing (`ded3271`):** accelerep.netlify.app serves `index-Cy6ZeOFD.js`, the
+local gate build's hash, with the pending refusal string in it. From here a
+pending sign-in on the deployed dev site is held at Clerk's task card and its
+token is refused by the API.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
