@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite } from '../utils/storage';
 
 export function useActivities(deps) {
@@ -10,7 +11,7 @@ export function useActivities(deps) {
 
     const loadActivities = (setDbOffline) => {
         dbFetch('/.netlify/functions/activities')
-            .then(r => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r.json(); })
+            .then(r => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => setActivities(data.activities || []))
             .catch(err => console.error('Failed to load activities:', err));
     };

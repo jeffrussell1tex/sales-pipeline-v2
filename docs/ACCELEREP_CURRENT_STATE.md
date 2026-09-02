@@ -2459,6 +2459,48 @@ noted that deleting a saved report asks through the browser's native
 `confirm()` rather than the app's own confirmation modal — carried in the
 handoff (§5 item 13).
 
+### 0.78 A 401 is a sign-in problem, not an outage; the MFA catalogue card reads Clerk (2 Sep, fourth session)
+
+Two carried items, Jeff: "fix them both please". **The banner.** Every
+loader — the five promise-chain hooks, `useDocuments`, `useQuotes` and
+App.jsx's `checkOk` — called `setDbOffline(true)` on ANY non-ok response,
+so a 401 (a pending or expired session) or a 403 (a revoked role) lit the
+red "Database connection lost" banner: an auth refusal reported as a
+database outage, the wrong layer (18b22). The pending case stopped
+happening when the client gate landed (§0.65), but the mapping was intact.
+New `src/utils/fetchStatus.js`: `dbStatusOf(res)` → `false` (ok),
+`'auth'` (401/403), `true` (any other non-ok); `bannerCopyOf(state)` —
+the auth state reads "Your sign-in is no longer valid — refresh the page
+and sign in again. Changes are not being saved." in amber, the outage
+state keeps the red sentence. `dbOffline` is now `false | 'auth' | true`
+(every existing truthy check still works); all eight callers report
+through `dbStatusOf`, none sets the flag bare. **The card.** Settings →
+Security's "Multi-factor auth" tile was hand-typed in `catalogue.js`:
+status "partial", "Optional · not all enrolled", "Edited 3 months ago by
+Admin", attention and new flags — none read from anywhere (the detail
+panel behind it has been live from Clerk since §0.65). AdminView's
+mount-time live-counts fetch now includes `clerk-mfa-status` (Admin-only;
+a 403 leaves the card blank, never the old text); `mfaCardOf({ enrolled,
+total })` gives the chip (`ok` when everyone is enrolled, `partial`
+otherwise), the detail "2/4 enrolled · 50%", and the attention flag only
+while someone is unenrolled. The card's status chip and "Needs attention"
+read the computed values, and a card with `managedIn:'Clerk'` shows
+"Managed in Clerk" in place of an invented edit history. The catalogue row
+keeps only what is deterministic.
+
+`tests/fetch-status.test.mjs` (3 unit + 2 scans: every loader through
+`dbStatusOf`, no bare `setDbOffline(true)`, the banner copy from state,
+the catalogue row free of hand-typed text, AdminView fetching and reading
+the live card). Gates green on 141 files, **439/439**, **188/188
+mutations, printed green baseline** (six new: 401 as outage, auth banner
+with the outage sentence, card complete with anyone unenrolled, attention
+never, `checkOk` bare again, the card ignoring live data), build guard OK
+(2,477 kB, `index-CSnSB6MZ.js`). **Not observed in the browser:** the
+Security list is Admin-only and the pane is signed in as Karen (User); the
+auth banner needs a revoked or expired session to fire. Jeff eyeballs on
+dev: Settings → Security → the Multi-factor auth tile reads "2/4 enrolled ·
+50%" with "Managed in Clerk" and "Needs attention", matching the panel.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

@@ -10,6 +10,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import { useState, useCallback } from 'react';
+import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, waitForToken } from '../utils/storage';
 import {
     uploadNewDocument,
@@ -32,8 +33,8 @@ export function useDocuments(_deps = {}) {
         try {
             await waitForToken();
             const r = await dbFetch(DOCS_FN);
-            if (!r.ok) { if (setDbOffline) setDbOffline(true); throw new Error('HTTP ' + r.status); }
-            if (setDbOffline) setDbOffline(false);
+            if (setDbOffline) setDbOffline(dbStatusOf(r));
+            if (!r.ok) throw new Error('HTTP ' + r.status);
             const data = await r.json();
             setDocuments(Array.isArray(data.documents) ? data.documents : []);
         } catch (e) {

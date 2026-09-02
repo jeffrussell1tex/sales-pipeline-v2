@@ -7,14 +7,14 @@ engine's year-2001 default gated — all on dev, then SHIPPED to prod; after the
 ship, Clerk's pending-session bypass found, observed and FIXED on dev, then
 shipped; the Win / loss report made to read the category it was never
 reading; the Activity report made to honour the rep slice; the Reports
-audit's §0.68 list fixed through batch 7, then SHIPPED to prod), FINAL.**
-Repo
+audit's §0.68 list fixed through batch 7, then SHIPPED to prod; the 401
+banner and the MFA catalogue card made honest), FINAL.** Repo
 root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.77` with a paragraph beginning **"Not fixed, by design or deferred:"**, and
+`### 0.78` with a paragraph beginning **"Two carried items, Jeff:"**, and
 does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b27`** with a bullet
 beginning **"Client: gate on"**? If not,
 you are looking at a copy that predates this handoff. Check section content,
@@ -175,6 +175,16 @@ batch 6 and 7 strings present (state §0.77). `master` == `1163eec`; dev
 is ahead only by the docs commits. **Jeff eyeballed the Reports tab on
 prod: "eyeball work is all confirmed correct."**
 
+**After the ship, the commit this handoff rides in (state §0.78; Jeff:
+"fix them both please"):** a 401/403 is no longer reported as a database
+outage — `dbStatusOf` in new `src/utils/fetchStatus.js` maps it to an
+amber "sign in again" banner, all eight loaders report through it — and
+the Settings → Security "Multi-factor auth" tile reads live Clerk
+enrolment through AdminView's live-counts fetch instead of hand-typed
+"Optional · not all enrolled · 3 months ago". 5 tests, 6 mutants. Not
+browser-observed (Admin-only list; the pane is Karen). Deploy check
+recorded in §4 by a follow-up docs commit.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -217,15 +227,16 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 140 files · **434/434 unit** (7 in
-`history-feed.test.mjs`, 5 in `reports-controls.test.mjs`, 5 in
+Five gates green on 141 files · **439/439 unit** (5 in
+`fetch-status.test.mjs`, 7 in `history-feed.test.mjs`, 5 in `reports-controls.test.mjs`, 5 in
 `stage-order.test.mjs`, 23 in `pipeline-report.test.mjs`, 9 in
 `opp-text.test.mjs`, 13 in `report-period.test.mjs`, 15 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
-`session-status.test.mjs`) · **182/182 mutations, printed green baseline**
-(69 new this session; run alone) · build
-**2,476 kB JS**, `index-AW6mOo3m.js` (audit batch 7; dev deploy observed
-serving it for `e2adc83`), guard OK, `dist/` cleared · **79 integration not
+`session-status.test.mjs`) · **188/188 mutations, printed green baseline**
+(75 new this session; run alone) · build
+**2,477 kB JS**, `index-CSnSB6MZ.js` (state §0.78; deploy check pending at
+the time this was written; `index-AW6mOo3m.js` observed for `e2adc83`),
+guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -273,8 +284,9 @@ cleared at close.
    deployed dev site and eyeballed the rewritten panel as Admin: 2/4
    enrolled, real per-role rows, no Enforce modal, no Send reminders, no
    factor tiles (state §0.65). The stale `#/tasks/setup-mfa` hash Clerk
-   leaves in the URL is inert; noted. (c) `catalogue.js`'s MFA entry still
-   hardcodes "Optional · not all enrolled" / "3 months ago". (d) DONE — shipped, and Require is ON for Production (Jeff: "worked in
+   leaves in the URL is inert; noted. (c) DONE — state §0.78: the
+   `catalogue.js` MFA entry's hand-typed "Optional · not all enrolled" /
+   "3 months ago" is gone; the card reads live Clerk enrolment. (d) DONE — shipped, and Require is ON for Production (Jeff: "worked in
    production"). (e) Integration suites
    mock `verifyAuth`, so the `sts` refusal is covered by unit + mutation
    only; the live 401 was observed in the pane AND on the deployed dev site
@@ -287,7 +299,9 @@ cleared at close.
    API while a session is pending, so the 401 that lit the banner no
    longer happens; `checkOk` (App.jsx line ~399) is unchanged and still
    maps ANY non-ok status to `dbOffline`, so an expired session or a
-   revoked user would light it again. Stays carried as latent.
+   revoked user would light it again. **DONE (Jeff: "fix them both
+   please") — state §0.78:** `dbStatusOf` maps 401/403 to an amber
+   sign-in banner; the red outage banner is for everything else.
 8. **DONE (Jeff: "why we lost is important…"):** the Win / loss report
    reads `lostCategory` and the exit stage's `prevStage` (state §0.66).
    **Jeff eyeballs after the deploy, as Admin, Reports → Win / loss
@@ -324,8 +338,12 @@ cleared at close.
    is DONE — state §0.76. Batch 7 (the History tab on real columns, PDF
    escaping, honest labels) is DONE — state §0.77; §0.77 lists what was
    left by design. SHIPPED to prod as `1163eec` (§1).** The §0.68 list is
-   closed; Jeff eyeballed the Reports tab on prod and confirmed it. Next:
-   Jeff's items in §5.
+   closed; Jeff eyeballed the Reports tab on prod and confirmed it. The
+   401 banner (item 7f) and the MFA card (item 7c) are DONE — state §0.78.
+   Next: Jeff eyeballs the Security → Multi-factor auth tile on dev as
+   Admin, then ship dev → prod again (prod is at `1163eec`, without §0.78);
+   the report-delete confirm (item 13) and the after-7pm coaching note
+   (item 3) remain.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.

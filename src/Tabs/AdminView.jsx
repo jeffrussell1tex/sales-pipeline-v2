@@ -50,6 +50,7 @@ import { DispatchJobTemplatesDetail } from './settings/dispatch/DispatchJobTempl
 import { DispatchServicePlansDetail } from './settings/dispatch/DispatchServicePlansDetail.jsx';
 import { DispatchPropertyTypesDetail } from './settings/dispatch/DispatchPropertyTypesDetail.jsx';
 import { SETTINGS_ITEMS, WORKSPACE_TABS_BASE } from './settings/catalogue.js';
+import { mfaCardOf } from '../utils/fetchStatus';
 
 const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
     const [hov, setHov] = useState(false);
@@ -59,6 +60,8 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
     // when the value is genuinely deterministic from settings (not counts of things
     // we don't track). Never show made-up numbers.
     let statusDetail = item.statusDetail;
+    let status = item.status;
+    let attention = !!item.attention;
 
     // ── People & Teams — from settings.users / settings.pipelines etc ─────────
     if (item.id === 'users' && settings?.users) {
@@ -134,7 +137,14 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
 
     // ── Security — only show what we actually know ────────────────────────────
     if (item.id === 'sso')     statusDetail = null; // no SSO config tracked yet
-    if (item.id === 'mfa')     statusDetail = null; // no per-user MFA enrollment in DB
+    if (item.id === 'mfa') {
+        // Live from Clerk (the same fetch the detail panel makes); nothing when
+        // the numbers are unknown — never the old hand-typed status text.
+        const card = mfaCardOf(liveCounts.mfa);
+        statusDetail = card?.detail ?? null;
+        status = card?.status ?? 'none';
+        attention = !!card?.attention;
+    }
     if (item.id === 'session') statusDetail = null; // policy stored but no meaningful summary
 
     // ── Integrations — from liveCounts fetched on mount ──────────────────────
@@ -205,11 +215,11 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
                 </div>
             </div>
             <div style={{ padding:'8px 10px', background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r, marginBottom:10, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                <StatusChip status={item.status} detail={statusDetail} small/>
-                {item.attention && <span style={{ fontSize:10, color:T.danger, fontWeight:700, fontFamily:T.sans }}>Needs attention</span>}
+                <StatusChip status={status} detail={statusDetail} small/>
+                {attention && <span style={{ fontSize:10, color:T.danger, fontWeight:700, fontFamily:T.sans }}>Needs attention</span>}
             </div>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>
-                <span>{item.updatedBy === '—' ? 'Never changed' : `Edited ${item.updatedAt} by ${(item.updatedBy||'').split(' ')[0]}`}</span>
+                <span>{item.managedIn ? `Managed in ${item.managedIn}` : item.updatedBy === '—' ? 'Never changed' : `Edited ${item.updatedAt} by ${(item.updatedBy||'').split(' ')[0]}`}</span>
                 <span style={{ color:T.info, fontWeight:600 }}>{item.link ? 'Open in Quotes →' : 'Open →'}</span>
             </div>
         </div>
@@ -428,12 +438,13 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         let cancelled = false;
         const fetchCounts = async () => {
             try {
-                const [keysRes, webhooksRes, autosRes, auditRes, backupRes] = await Promise.allSettled([
+                const [keysRes, webhooksRes, autosRes, auditRes, backupRes, mfaRes] = await Promise.allSettled([
                     dbFetch('/.netlify/functions/api-keys'),
                     dbFetch('/.netlify/functions/webhooks'),
                     dbFetch('/.netlify/functions/automations'),
                     dbFetch('/.netlify/functions/audit-log'),
                     dbFetch('/.netlify/functions/backup'),
+                    dbFetch('/.netlify/functions/clerk-mfa-status'),
                 ]);
                 if (cancelled) return;
                 const counts = {};
@@ -469,6 +480,11 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
                         counts.backupLastLabel = diffH < 1 ? 'just now' : diffH < 24 ? diffH + 'h ago' : Math.round(diffH/24) + 'd ago';
                         counts.backupFreq = d.schedule?.frequency || 'Daily';
                     }
+                }
+                // Admin-only endpoint: a 403 leaves counts.mfa unset and the card blank.
+                if (mfaRes.status === 'fulfilled' && mfaRes.value.ok) {
+                    const d = await mfaRes.value.json().catch(() => ({}));
+                    if (typeof d.total === 'number') counts.mfa = { enrolled: d.enrolled, total: d.total };
                 }
                 setLiveCounts(counts);
             } catch (e) { /* silent — badges just stay empty */ }

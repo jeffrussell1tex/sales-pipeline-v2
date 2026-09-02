@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { dbStatusOf, bannerCopyOf } from './utils/fetchStatus';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken } from './utils/storage';
 import { isoLocal } from './utils/dateLocal';
@@ -396,7 +397,7 @@ function App() {
       useEffect(() => {
     if (!clerkUser || !organization?.id) return; // Don't load until authenticated + org active
     const loadData = async () => {
-        const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
+        const checkOk = (r) => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r; };
 
         // Wait for Clerk token to be available before firing any DB calls
         await waitForToken();
@@ -1658,12 +1659,12 @@ dbFetch('/.netlify/functions/users?me=true')
                 setDbOffline={setDbOffline}
             />
 
-            {/* ── DB OFFLINE BANNER ── */}
+            {/* ── DB OFFLINE / SIGN-IN BANNER — dbOffline is false | 'auth' | true (fetchStatus.js) ── */}
             {dbOffline && (
-                <div style={{ background:'#dc2626', color:'#fff', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'0.8125rem', fontWeight:'600', zIndex:9999 }}>
+                <div style={{ background: dbOffline === 'auth' ? '#b45309' : '#dc2626', color:'#fff', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'0.8125rem', fontWeight:'600', zIndex:9999 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'0.625rem' }}>
                         <span style={{ fontSize:'1rem' }}>⚠️</span>
-                        <span>Database connection lost — changes may not be saving. Check your connection and refresh.</span>
+                        <span>{bannerCopyOf(dbOffline).text}</span>
                     </div>
                     <button onClick={() => setDbOffline(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:'4px', padding:'2px 8px', cursor:'pointer', fontSize:'0.75rem', fontWeight:'700', fontFamily:'inherit' }}>✕</button>
                 </div>

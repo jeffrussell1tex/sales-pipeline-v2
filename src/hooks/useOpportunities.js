@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite } from '../utils/storage';
 
 // Fire-and-forget SMS for deal assignments and stage changes.
@@ -26,7 +27,7 @@ export function useOpportunities(deps) {
 
     const loadOpportunities = (setDbOffline) => {
         dbFetch('/.netlify/functions/opportunities')
-            .then(r => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r.json(); })
+            .then(r => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => {
                 const loadedOpps = data.opportunities || [];
                 const updatedOpps = loadedOpps.map(opp => {

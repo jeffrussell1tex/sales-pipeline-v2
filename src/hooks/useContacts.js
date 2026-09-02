@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite } from '../utils/storage';
 
 export function useContacts(deps) {
@@ -11,7 +12,7 @@ export function useContacts(deps) {
 
     const loadContacts = (setDbOffline) => {
         dbFetch('/.netlify/functions/contacts')
-            .then(r => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r.json(); })
+            .then(r => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => setContacts(data.contacts || []))
             .catch(err => console.error('Failed to load contacts:', err));
     };

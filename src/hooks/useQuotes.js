@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, waitForToken } from '../utils/storage';
 
 /**
@@ -34,10 +35,10 @@ export function useQuotes() {
         try {
             await waitForToken();
             const res = await dbFetch('/.netlify/functions/quotes');
-            if (!res.ok) { if (setDbOffline) setDbOffline(true); return; }
+            if (setDbOffline) setDbOffline(dbStatusOf(res));
+            if (!res.ok) return;
             const data = await res.json();
             setQuotes(data.quotes || []);
-            if (setDbOffline) setDbOffline(false);
         } catch (err) {
             console.error('Failed to load quotes:', err.message);
         }
