@@ -142,7 +142,11 @@ the MFA fix and its docs** · dev deploy observed serving `index-Cy6ZeOFD.js` fo
    hardcodes "Optional · not all enrolled" / "3 months ago". (d) Ship dev
    to prod, then Require can go on for Production. (e) Integration suites
    mock `verifyAuth`, so the `sts` refusal is covered by unit + mutation
-   only; the live 401 was observed in the pane.
+   only; the live 401 was observed in the pane AND on the deployed dev site
+   (Jeff's un-refreshed Admin tab showed the server message verbatim).
+   (f) **Carried:** `checkOk` in App.jsx sets `dbOffline` on any non-ok
+   response, so that 401 rendered as "Database connection lost" — an auth
+   refusal reported as a database outage (state §0.65, last paragraph).
 8. Smaller carried: the MFA known-ON green dot (still unsighted); the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.

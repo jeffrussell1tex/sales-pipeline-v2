@@ -1686,6 +1686,22 @@ local gate build's hash, with the pending refusal string in it. From here a
 pending sign-in on the deployed dev site is held at Clerk's task card and its
 token is refused by the API.
 
+**Jeff's next screenshot — the half-deployed state, and it is evidence.**
+accelerep.netlify.app at `#/tasks/setup-mfa`, his still-pending Admin
+session, the tab NOT refreshed since the deploy: the OLD client bundle (Send
+reminders, factor tiles, the app rendered over a pending session) against the
+NEW functions. The MFA panel's error line reads, verbatim, **"Unauthorized:
+session pending — finish sign-in (multi-factor setup) first"** — the server
+refusal observed on the deployed dev site for a pending Admin. A refresh
+loads `index-Cy6ZeOFD.js` and the client gate holds him at the task card.
+
+**Found by the same screenshot, carried:** the red banner **"Database
+connection lost — changes may not be saving"** over a 401. `App.jsx`'s
+`checkOk` sets `dbOffline` on ANY non-ok response, so an auth refusal is
+reported as a database outage — the wrong layer (18b22). Reachable only by
+an old client against a new server, or a session that goes pending mid-use;
+still a misdiagnosis on the user's screen. Not changed this session.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
