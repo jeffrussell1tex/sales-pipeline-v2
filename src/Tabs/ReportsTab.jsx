@@ -8,6 +8,7 @@ import { lossBucketOf, exitStageOf, previousStageOf, lostByStageRowsOf } from '.
 import { stages as defaultStages } from '../utils/constants';
 import { sliceActivities, sliceLeads, visibleReps, repsInScopeOf, activityRepOf } from '../utils/reportScope';
 import { periodRange, priorRange, inRange, dayOf, currentFiscalYear } from '../utils/reportPeriod';
+import { escapeHtml as esc, taskDay, linkedToAccount, linkedToContact, contactTouch, monthsSpanned } from '../utils/historyFeed';
 import { productsListOf, contactNamesText } from '../utils/oppText';
 import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep, closeDayOf, cycleDaysOf, medianOf, closeDayInRange, lastQuarters } from '../utils/pipelineReport';
 import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStages } from '../utils/stageOrder';
@@ -63,8 +64,6 @@ export default function ReportsTab({ leadsEnabled = true }) {
     const [reportsRep, setReportsRep] = useState(null);
     const [reportsTeam, setReportsTeam] = useState(null);
     const [reportsTerritory, setReportsTerritory] = useState(null);
-    const [actPeriod, setActPeriod] = useState('Last 30 Days');
-    const [commissionReportFilter, setCommissionReportFilter] = useState('Annual');
     const [savedReportsList, setSavedReportsList] = useState([]);
 
     // Load saved reports once at ReportsTab level so ActivityHistory saves are visible in Saved tab
@@ -1988,6 +1987,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             ════════════════════════════════════════════ */}
                         {reportSubTab === 'custom' && (
                             <SavedReportsTab
+                                accounts={accounts}
                                 reportsOpps={reportsOpps}
                                 reportsTimedActivities={reportsTimedActivities}
                                 activities={reportsActivities}
@@ -2007,7 +2007,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
 // ─────────────────────────────────────────────────────────────
 //  Saved Reports Tab — proper React component (hooks-safe)
 // ─────────────────────────────────────────────────────────────
-function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp }) {
+function SavedReportsTab({ accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp }) {
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
     const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
@@ -2736,7 +2736,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     <div style={{ flex:1 }}>
                         <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Pipeline &amp; Forecast</div>
                         <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Forecast vs actual</div>
-                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Quarterly forecast accuracy trend with per-rep roll-up. Find the sandbaggers and the over-promisers.</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Closed-won against quota, by quarter, with a per-rep roll-up. The "forecast" line is each quarter's quota.</div>
                     </div>
                     <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
                         <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
@@ -2751,19 +2751,19 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                         <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{avgAccuracy!=null?Math.round(avgAccuracy*100)+'%':'—'}</div>
                     </div>
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
-                        <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Current quarter forecast</div>
+                        <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Current quarter quota</div>
                         <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(currentQ.forecast)}</div>
                         <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{currentQ.label} team quota</div>
                     </div>
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
                         <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Booked so far</div>
                         <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(currentQ.actual)}</div>
-                        {currentQ.forecast>0&&<div style={{ fontSize:11, color:T.ok, marginTop:5, fontFamily:T.sans }}>{Math.round(currentQ.actual/currentQ.forecast*100)}% of forecast · {currentQ.wonCount} deals</div>}
+                        {currentQ.forecast>0&&<div style={{ fontSize:11, color:T.ok, marginTop:5, fontFamily:T.sans }}>{Math.round(currentQ.actual/currentQ.forecast*100)}% of quota · {currentQ.wonCount} deals</div>}
                     </div>
                     <div style={{ background:'rgba(156,58,46,0.04)', border:'1px solid rgba(156,58,46,0.2)', borderRadius:T.r+1, padding:'14px 18px' }}>
                         <div style={{ ...ebD(T.danger), marginBottom:4 }}>At-risk gap</div>
                         <div style={{ fontSize:28, fontWeight:700, color:T.danger, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(Math.max(0,currentQ.forecast-currentQ.actual))}</div>
-                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>to hit forecast · {currentQ.label}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>to hit quota · {currentQ.label}</div>
                     </div>
                 </div>
 
@@ -3352,7 +3352,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
         // Assign each opp to a territory via its salesRep
         const oppWithTerr = openOppsT.map(o => ({
             ...o,
-            territory: repToTerr[o.salesRep||o.assignedTo] || null,
+            territory: o.territory || repToTerr[o.salesRep||o.assignedTo] || null,
             arr: parseFloat(o.arr)||0,
         })).filter(o => o.territory);
 
@@ -3398,11 +3398,11 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
 
         // ── Industry mix from open opps via account lookup
         const industryMap = {};
+        // The deal's own vertical, else its account's. The old lookup read a
+        // settings key no writer set, so every deal was "Other".
+        const acctByName = new Map((accounts||[]).map(a => [(a.name||'').toLowerCase(), a]));
         openOppsT.forEach(o => {
-            const acct = (reportsTimedActivities&&false)||null; // activities not needed
-            // Look up account verticalMarket from the accounts list via o.account name
-            const accObj = (settings.__accountsRef||[]).find?.(a=>(a.name||'').toLowerCase()===(o.account||'').toLowerCase());
-            const ind = o.vertical || o.verticalMarket || accObj?.verticalMarket || accObj?.industry || 'Other';
+            const ind = o.vertical || acctByName.get((o.account||'').toLowerCase())?.verticalMarket || 'Other';
             industryMap[ind] = (industryMap[ind]||0)+1;
         });
         const industryRows = Object.entries(industryMap)
@@ -3838,7 +3838,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                                     <button onClick={()=>setCreateMode('picker')} style={{ background:'transparent', border:'none', padding:0, fontSize:11, color:T.goldInk, fontWeight:600, cursor:'pointer', fontFamily:T.sans, textDecoration:'underline' }}>Edit prompt</button>
                                 </div>
                                 <div style={{ fontSize:12, color:T.ink, marginBottom:8, fontFamily:T.sans }}>
-                                    I built a <strong>horizontal bar chart</strong> from <strong>Opportunities</strong> where <strong>last activity &gt; 14 days ago</strong>, grouped by <strong>owner</strong>, sorted by count. Showing {stuckRows.length} reps with stuck deals.
+                                    The report builder does not interpret prompts yet. This is the built-in <strong>stuck deals by rep</strong> view — open deals with <strong>no activity in 14+ days</strong>, grouped by owner — computed from your data; your prompt becomes the report's name. {stuckRows.length} reps have stuck deals.
                                 </div>
                                 <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                                     {[['Source','Opportunities'],['Filter','No activity >14d'],['Filter','Stage open'],['Group','Owner'],['Measure','# deals'],['Measure','ARR at risk'],['Chart','Horizontal bar']].map(([l,v],i)=>(
@@ -4808,8 +4808,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         // Activities linked via opportunityId → account, or directly by companyName (no opp)
         (activities || []).forEach(a => {
             const linkedByOpp = a.opportunityId && accOppIds.has(a.opportunityId);
-            const linkedByName = (a.companyName || a.account || a.accountName || '').toLowerCase() === accName;
-            if (!linkedByOpp && !linkedByName) return;
+            if (!linkedToAccount(a, selectedAccount, accOppIds)) return;
             const opp = linkedByOpp ? accOppsAll.find(o => o.id === a.opportunityId) : null;
             events.push({
                 id: 'act_' + a.id,
@@ -4817,27 +4816,25 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                 created: a.createdAt || '',
                 type: 'activity',
                 actType: a.type || 'Activity',
-                label: a.subject || a.description || a.type || 'Activity',
+                label: a.subject || a.type || 'Activity',
                 sub: a.notes || a.outcome || (opp ? opp.opportunityName || opp.name : '') || '',
-                rep: a.rep || a.salesRep || a.assignedTo || a.author || '',
+                rep: a.author || '',
                 amount: null,
             });
         });
 
         // Tasks linked via opportunityId → account, or directly by account name
         (tasks || []).forEach(t => {
-            const linkedByOpp = t.opportunityId && accOppIds.has(t.opportunityId);
-            const linkedByName = (t.companyName || t.account || t.accountName || '').toLowerCase() === accName;
-            if (!linkedByOpp && !linkedByName) return;
+            if (!linkedToAccount(t, selectedAccount, accOppIds)) return;
             events.push({
                 id: 'task_' + t.id,
-                date: t.completedAt || t.dueDate || t.createdAt || '',
+                date: taskDay(t),
                 created: t.createdAt || '',
                 type: 'task',
                 actType: t.completed ? 'Task Done' : 'Task',
                 label: t.title || t.subject || 'Task',
-                sub: t.notes || '',
-                rep: t.assignedTo || t.salesRep || '',
+                sub: t.description || '',
+                rep: t.assignedTo || '',
                 amount: null,
                 done: !!t.completed,
             });
@@ -4883,7 +4880,6 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     // ── Build event feed for selected contact ─────────────────
     const contactEvents = React.useMemo(() => {
         if (!selectedContact) return [];
-        const cName = ((selectedContact.firstName||'')+' '+(selectedContact.lastName||'')).trim().toLowerCase();
         const cId = selectedContact.id;
         const events = [];
 
@@ -4897,35 +4893,30 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         // Activities: linked via opportunityId on a contact opp, or directly by contactId/name/contactSearch
         (activities || []).forEach(a => {
             const linkedByOpp  = a.opportunityId && conOppIds.has(a.opportunityId);
-            const linkedDirect = (a.contactId === cId) ||
-                (a.contact||a.contactName||a.contactSearch||'').toLowerCase() === cName;
-            if (!linkedByOpp && !linkedDirect) return;
+            if (!linkedToContact(a, cId, conOppIds)) return;
             const opp = linkedByOpp ? conOppsAll.find(o => o.id === a.opportunityId) : null;
             events.push({
                 id: 'act_' + a.id,
                 date: a.date || a.createdAt || '',
                 created: a.createdAt || '',
                 type: 'activity', actType: a.type || 'Activity',
-                label: a.subject || a.description || a.type || 'Activity',
+                label: a.subject || a.type || 'Activity',
                 sub: a.notes || a.outcome || (opp ? opp.opportunityName || opp.name : '') || '',
-                rep: a.rep || a.salesRep || a.assignedTo || a.author || '',
+                rep: a.author || '',
                 amount: null,
             });
         });
 
         // Tasks: linked via opportunityId on a contact opp, or directly
         (tasks || []).forEach(t => {
-            const linkedByOpp  = t.opportunityId && conOppIds.has(t.opportunityId);
-            const linkedDirect = (t.contactId === cId) ||
-                (t.contact||t.contactName||t.contactSearch||'').toLowerCase() === cName;
-            if (!linkedByOpp && !linkedDirect) return;
+            if (!linkedToContact(t, cId, conOppIds)) return;
             events.push({
                 id: 'task_' + t.id,
-                date: t.completedAt || t.dueDate || t.createdAt || '',
+                date: taskDay(t),
                 created: t.createdAt || '',
                 type: 'task', actType: t.completed ? 'Task Done' : 'Task',
                 label: t.title || t.subject || 'Task',
-                sub: t.notes || '',
+                sub: t.description || '',
                 rep: t.assignedTo || '',
                 amount: null, done: !!t.completed,
             });
@@ -5108,14 +5099,14 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     );
 
     // ── Show filter bar ────────────────────────────────────────
-    const FilterBar = ({ totalCount }) => (
+    const FilterBar = ({ shown, total }) => (
         <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:12, flexWrap:'wrap' }}>
             {[{v:'all',l:'All'},{v:'activities',l:'Activities'},{v:'tasks',l:'Tasks'},{v:'deals',l:'Deals'},{v:'notes',l:'Notes'}].map(f => (
                 <button key={f.v} onClick={() => setShowFilter(f.v)} style={{ padding:'4px 12px', border:`1px solid ${showFilter===f.v ? T.ink : T.border}`, borderRadius:T.r, background: showFilter===f.v ? T.ink : T.surface, color: showFilter===f.v ? T.surface : T.inkMid, fontSize:11.5, fontWeight:500, cursor:'pointer', fontFamily:T.sans }}>
                     {f.l}
                 </button>
             ))}
-            <span style={{ marginLeft:'auto', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Showing {totalCount} of {totalCount} events</span>
+            <span style={{ marginLeft:'auto', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Showing {shown} of {total} events</span>
         </div>
     );
 
@@ -5124,13 +5115,17 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         const filtered = filterEvents(events);
         const grouped = groupByDate(filtered);
         if (filtered.length === 0) return (
-            <div style={{ textAlign:'center', padding:'3rem', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
-                No events in this period.
+            <div>
+                {/* The bar stays: with it gone there was no way back to "All". */}
+                <FilterBar shown={0} total={events.length}/>
+                <div style={{ textAlign:'center', padding:'3rem', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                    {events.length === 0 ? 'No events in this period.' : `No ${showFilter} in this period — ${events.length} under All.`}
+                </div>
             </div>
         );
         return (
             <div>
-                <FilterBar totalCount={filtered.length}/>
+                <FilterBar shown={filtered.length} total={events.length}/>
                 {grouped.map(g => (
                     <div key={g.bucket} style={{ marginBottom:20 }}>
                         <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans, display:'flex', alignItems:'center', gap:8 }}>
@@ -5148,16 +5143,14 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const AccountGlance = ({ account, kpis, mix }) => {
         if (!account) return null;
         const owner = account.accountOwner || account.assignedRep || '—';
-        const status = account.warmthStatus || account.status || 'Active';
-        const statusColor = status === 'Active customer' || status === 'Active' ? T.ok : T.inkMuted;
         return (
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                 <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'14px 16px' }}>
                     <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:10, fontFamily:T.sans }}>Account at a glance</div>
                     <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.sans, marginBottom:2 }}>{account.name}</div>
-                    {account.industry && <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans, marginBottom:10 }}>{account.industry}{account.employees ? ` · ${account.employees} employees` : ''}</div>}
+                    {account.industry && <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans, marginBottom:10 }}>{account.industry}{account.totalEmployees ? ` · ${Number(account.totalEmployees).toLocaleString()} employees` : ''}</div>}
                     {[
-                        { label:'Status', value: <span style={{ background:'rgba(77,107,61,0.12)', color:statusColor, fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:999 }}>{status}</span> },
+                        { label:'Segment', value: account.accountSegment || account.accountTier || '—' },
                         { label:'Owner', value: owner },
                         { label:'Lifetime value', value: fmtMoney(kpis.wonVal), bold:true },
                         { label:'Open pipeline', value: fmtMoney(kpis.openVal), color:T.warn },
@@ -5295,9 +5288,9 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             const lbl = typeLabelsP[e.actType] || (e.actType||'').toUpperCase().slice(0,10);
             const date = e.date ? new Date(e.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
             const amt = e.amount > 0 ? '$' + (e.amount >= 1e6 ? (e.amount/1e6).toFixed(1)+'M' : e.amount >= 1e3 ? Math.round(e.amount/1e3)+'K' : Math.round(e.amount)) : '';
-            return `<tr><td>${date}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;letter-spacing:0.5px">${lbl}</span></td><td>${e.label||'—'}</td><td style="color:#8a8378;font-size:11px">${e.sub||''}</td><td style="color:#8a8378">${e.rep||''}</td><td style="text-align:right;font-weight:${e.amount>0?700:400};color:${e.type==='won'?'#4d6b3d':e.type==='lost'?'#9c3a2e':'#2a2622'}">${amt}</td></tr>`;
+            return `<tr><td>${date}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;letter-spacing:0.5px">${lbl}</span></td><td>${esc(e.label||'—')}</td><td style="color:#8a8378;font-size:11px">${esc(e.sub||'')}</td><td style="color:#8a8378">${esc(e.rep||'')}</td><td style="text-align:right;font-weight:${e.amount>0?700:400};color:${e.type==='won'?'#4d6b3d':e.type==='lost'?'#9c3a2e':'#2a2622'}">${amt}</td></tr>`;
         }).join('');
-        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #7a6a48;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0;text-align:left}td{padding:6px 10px;border-bottom:1px solid #f5efe3}.footer{margin-top:20px;font-size:9px;color:#8a8378;border-top:1px solid #e6ddd0;padding-top:8px;display:flex;justify-content:space-between}</style></head><body><div class="hdr"><h1>${title}</h1><div class="meta">Generated ${printDate}<br>Accelerep · Confidential</div></div><table><thead><tr><th>Date</th><th>Type</th><th>Event</th><th>Detail</th><th>Rep</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rowsHtml}</tbody></table><div class="footer"><span>Accelerep · Confidential</span><span>Generated ${printDate}</span></div><script>window.onload=function(){window.print()}<\/script></body></html>`);
+        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #7a6a48;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0;text-align:left}td{padding:6px 10px;border-bottom:1px solid #f5efe3}.footer{margin-top:20px;font-size:9px;color:#8a8378;border-top:1px solid #e6ddd0;padding-top:8px;display:flex;justify-content:space-between}</style></head><body><div class="hdr"><h1>${esc(title)}</h1><div class="meta">Generated ${printDate}<br>Accelerep · Confidential</div></div><table><thead><tr><th>Date</th><th>Type</th><th>Event</th><th>Detail</th><th>Rep</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rowsHtml}</tbody></table><div class="footer"><span>Accelerep · Confidential</span><span>Generated ${printDate}</span></div><script>window.onload=function(){window.print()}<\/script></body></html>`);
         win.document.close();
     }, []);
 
@@ -5305,16 +5298,16 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         const win = window.open('', '_blank', 'width=1100,height=800');
         if (!win) return;
         const printDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
-        const title = `Opportunity History — ${opp.account} · ${opp.opportunityName || opp.name || ''}`;
+        const title = `Opportunity History — ${opp.account} · ${opp.opportunityName || ''}`;
         const amt = parseFloat(opp.arr||0);
         const amtFmt = amt >= 1000 ? `$${(amt/1000).toFixed(1)}k` : `$${Math.round(amt)}`;
         const closeDate = (opp.forecastedCloseDate||opp.closeDate) ? new Date((opp.forecastedCloseDate||opp.closeDate)+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
         const rowsHtml = events.map(e => {
             const tone = { call:'CALL', email:'EMAIL', meeting:'MEETING', task:'TASK', note:'NOTE', quote:'QUOTE', stage:'STAGE', amount:'AMOUNT', prob:'PROB', slip:'SLIP', open:'CREATED' };
             const lbl = tone[e.type] || (e.type||'').toUpperCase().slice(0,10);
-            return `<tr><td style="white-space:nowrap">${e.ts||'—'}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px">${lbl}</span></td><td style="font-weight:600">${e.title||'—'}</td><td style="color:#8a8378;font-size:11px">${e.sub||''}</td><td style="color:#8a8378">${e.who||''}</td></tr>`;
+            return `<tr><td style="white-space:nowrap">${esc(e.ts||'—')}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px">${lbl}</span></td><td style="font-weight:600">${esc(e.title||'—')}</td><td style="color:#8a8378;font-size:11px">${esc(e.sub||'')}</td><td style="color:#8a8378">${esc(e.who||'')}</td></tr>`;
         }).join('');
-        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>
+        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title><style>
 @page { margin: 0.625in; size: landscape; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, sans-serif; font-size: 12px; color: #2a2622; }
@@ -5330,13 +5323,13 @@ th { background: #fbf8f3; padding: 6px 10px; font-size: 9px; font-weight: 700; t
 td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
 .footer { margin-top: 16px; font-size: 9px; color: #8a8378; border-top: 1px solid #e6ddd0; padding-top: 8px; display: flex; justify-content: space-between; }
 </style></head><body>
-<div class="hdr"><h1>${title}</h1><div class="meta">Generated ${printDate}<br>Accelerep · Confidential</div></div>
+<div class="hdr"><h1>${esc(title)}</h1><div class="meta">Generated ${printDate}<br>Accelerep · Confidential</div></div>
 <div class="kpi">
   <div class="kpi-tile"><div class="kpi-label">Amount</div><div class="kpi-val">${amtFmt}</div></div>
-  <div class="kpi-tile"><div class="kpi-label">Stage</div><div class="kpi-val">${opp.stage||'—'}</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Stage</div><div class="kpi-val">${esc(opp.stage||'—')}</div></div>
   <div class="kpi-tile"><div class="kpi-label">Probability</div><div class="kpi-val">${opp.probability||0}%</div></div>
   <div class="kpi-tile"><div class="kpi-label">Close date</div><div class="kpi-val">${closeDate}</div></div>
-  <div class="kpi-tile"><div class="kpi-label">Forecast</div><div class="kpi-val">${opp.forecastCategory||'—'}</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Forecast</div><div class="kpi-val">${esc(opp.forecastCategory||'—')}</div></div>
 </div>
 <table><thead><tr><th>Date</th><th>Type</th><th>Event</th><th>Detail</th><th>Rep</th></tr></thead><tbody>${rowsHtml}</tbody></table>
 <div class="footer"><span>Accelerep · Confidential</span><span>Generated ${printDate}</span></div>
@@ -5411,8 +5404,8 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
 
                             {/* KPI strip */}
                             <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
-                                <KpiCard label="Activities" value={accKpis.acts} sub={`${Math.round(accKpis.acts/Math.max((period==='1month'?1:period==='6months'?6:period==='1year'?12:12),1))} / mo avg`}/>
-                                <KpiCard label="Tasks Done" value={accKpis.tasksDone} sub={accKpis.tasksDone > 0 ? 'still open' : ''}/>
+                                <KpiCard label="Activities" value={accKpis.acts} sub={`${Math.round(accKpis.acts/monthsSpanned(accountEvents, period))} / mo avg over ${monthsSpanned(accountEvents, period)} mo`}/>
+                                <KpiCard label="Tasks Done" value={accKpis.tasksDone}/>
                                 <KpiCard label="Deals Won" value={accKpis.won} sub={accKpis.wonVal > 0 ? fmtMoney(accKpis.wonVal)+' closed' : ''}/>
                                 <KpiCard label="Deals Lost" value={accKpis.lost} sub={accKpis.lostVal > 0 ? fmtMoney(accKpis.lostVal)+' value' : ''} danger={accKpis.lost > 0}/>
                                 <KpiCard label="Open Deals" value={accKpis.open} sub={accKpis.openVal > 0 ? fmtMoney(accKpis.openVal)+' pipeline' : ''}/>
@@ -5776,7 +5769,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                             {[
                                                 { l:'Industry',  v: selectedAccount?.verticalMarket || selectedAccount?.vertical || selectedAccount?.industry || '—' },
                                                 { l:'Employees', v: (() => { const n = selectedAccount?.totalEmployees ?? selectedAccount?.employeeCount ?? selectedAccount?.employees; return (n != null && n !== '') ? Number(n).toLocaleString() : '—'; })() },
-                                                { l:'Status',    v: <span style={{ padding:'2px 7px', fontSize:11, fontWeight:700, borderRadius:3, background:`${T.ok}14`, color:T.ok }}>Active customer</span> },
+                                                { l:'Segment',   v: selectedAccount?.accountSegment || selectedAccount?.accountTier || '—' },
                                                 { l:'Owner',     v: selectedOpp.salesRep || selectedOpp.rep || '—' },
                                             ].map((r,i) => (
                                                 <div key={i} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6, fontSize:12 }}>
@@ -5969,6 +5962,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                 </thead>
                                                 <tbody>
                                                 {oppContacts.map((c,i) => {
+                                                    const touch = contactTouch(activities, c.id);
                                                     const personaId = localPersonaMap[c.id] ?? c.buyerPersona ?? c.persona ?? '';
                                                     const persona = (settings?.buyerPersonas||[]).find(p => p.id === personaId || p.name === personaId);
                                                     const personaColor = persona?.color || T.inkMuted;
@@ -6016,7 +6010,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                                     <div>
                                                                         <div style={{ fontWeight:700, color:T.ink, fontSize:12.5 }}>{fullName}</div>
                                                                         <div style={{ fontSize:10.5, color:T.inkMuted }}>
-                                                                            last touch {c.lastTouch || '—'} · {c.activities || 0} activities
+                                                                            last touch {touch.lastTouch || '—'} · {touch.count} activities
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -6041,11 +6035,11 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                             </td>
                                                             <td style={{ padding:'12px 16px' }}>
                                                                 {(() => {
-                                                                    const eng = c.engagement || 'warm';
-                                                                    const ec = eng==='hot' ? T.danger : eng==='cool' ? T.info : eng==='stale' ? T.inkMuted : T.warn;
+                                                                    const eng = touch.tier;
+                                                                    const ec = eng==='hot' ? T.danger : eng==='cool' ? T.info : (eng==='stale'||eng==='none') ? T.inkMuted : T.warn;
                                                                     return <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
                                                                         <span style={{ width:7, height:7, borderRadius:'50%', background:ec, flexShrink:0 }}/>
-                                                                        <span style={{ fontSize:11.5, color:T.inkMid, textTransform:'capitalize' }}>{eng}</span>
+                                                                        <span style={{ fontSize:11.5, color:T.inkMid, textTransform:'capitalize' }}>{eng==='none' ? 'no touches' : eng}</span>
                                                                     </span>;
                                                                 })()}
                                                             </td>

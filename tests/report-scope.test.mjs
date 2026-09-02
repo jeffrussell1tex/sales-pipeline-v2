@@ -131,7 +131,7 @@ test('ReportsTab: leads sliced, the sub-tabs handed the gated sets, rep lists sc
     // Deals at risk reads the sliced activities, not the raw array.
     assert.match(src, /const lastAct=reportsActivities\.filter\(a=>a\.opportunityId===o\.id\)/);
     // SavedReportsTab and ActivityHistoryTab get the gated sets.
-    assert.match(src, /<SavedReportsTab\s+reportsOpps=\{reportsOpps\}\s+reportsTimedActivities=\{reportsTimedActivities\}\s+activities=\{reportsActivities\}\s+scopedRepNames=\{scopedRepNames\}/);
+    assert.match(src, /<SavedReportsTab\s+accounts=\{accounts\}\s+reportsOpps=\{reportsOpps\}\s+reportsTimedActivities=\{reportsTimedActivities\}\s+activities=\{reportsActivities\}\s+scopedRepNames=\{scopedRepNames\}/);
     assert.match(src, /<ActivityHistoryTab\s+accounts=\{accounts\}\s+contacts=\{contacts\}\s+activities=\{reportsActivities\}\s+opportunities=\{roleFilteredOpps\}\s+tasks=\{roleFilteredTasks\}/);
     assert.doesNotMatch(src, /activities=\{activities\}/, 'no sub-tab may receive the raw activities array');
     assert.doesNotMatch(src, /opportunities=\{opportunities\}/);

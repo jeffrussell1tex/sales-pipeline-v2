@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -916,6 +916,40 @@ const mutations = [
         'src/Tabs/ReportsTab.jsx',
         "window.location.href = `mailto:${ownerEmail}?subject=${subject}&body=${body}`;",
         "window.location.href = `mailto:${owner}?subject=${subject}&body=${body}`;"],
+
+    // ── History feed reads real columns (0.68 batch 7) ──────────────────────
+    ['history: escapeHtml leaves < alone (a note can inject markup into the PDF)',
+        'src/utils/historyFeed.js',
+        "        .replace(/</g, '&lt;')\n",
+        ""],
+    ['history: taskDay reads completedAt again (not a column — done tasks fall to their due day)',
+        'src/utils/historyFeed.js',
+        "    return t?.completedDate || t?.dueDate || t?.createdAt || '';",
+        "    return t?.completedAt || t?.dueDate || t?.createdAt || '';"],
+    ['history: an activity logged on the account with no deal never appears',
+        'src/utils/historyFeed.js',
+        "    return !!account?.id && row.accountId === account.id;",
+        "    return false;"],
+    ['history: a task linked through its contacts list does not count',
+        'src/utils/historyFeed.js',
+        "    if (Array.isArray(row.contacts) && row.contacts.some(c => c === contactId || c?.id === contactId)) return true;",
+        ""],
+    ['history: a contact touched yesterday is only warm',
+        'src/utils/historyFeed.js',
+        "since <= 7 ? 'hot' : since <= 30 ? 'warm'",
+        "since <= 0 ? 'hot' : since <= 30 ? 'warm'"],
+    ['history: all-time monthly average divides by 12 again',
+        'src/utils/historyFeed.js',
+        "    const days = (events || []).map(e => dayOf(e.date)).filter(Boolean).sort();",
+        "    return 12; const days = (events || []).map(e => dayOf(e.date)).filter(Boolean).sort();"],
+    ['history: an empty filter hides the filter bar again (no way back to All)',
+        'src/Tabs/ReportsTab.jsx',
+        "                <FilterBar shown={0} total={events.length}/>\n",
+        ""],
+    ['history: the PDF row interpolates the event label raw',
+        'src/Tabs/ReportsTab.jsx',
+        "<td>${esc(e.label||'—')}</td>",
+        "<td>${e.label||'—'}</td>"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

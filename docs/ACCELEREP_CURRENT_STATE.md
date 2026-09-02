@@ -2371,6 +2371,74 @@ reasoned from code and pinned by scan and mutant).
 **Dev landing (`9be3fe8`):** accelerep.netlify.app serves `index-BorndMdE.js`,
 the local gate build's hash, 31 seconds after the push.
 
+### 0.77 Audit batch 7 — the History tab reads real columns; PDF export escapes; honest labels (2 Sep, fourth session)
+
+The §0.68 tier 2 remainder. **Activity History** read fields no writer
+sets — `t.completedAt` (the column is `completedDate`), `t.notes`
+(`description`), `a.rep` / `a.salesRep` / `a.assignedTo` (`author`),
+`c.engagement` / `c.lastTouch` / `c.activities` (nothing), `account.status` /
+`warmthStatus` / `employees` (nothing; `totalEmployees`) — and linked
+activities and tasks to an account or contact by name fields those rows do
+not have (`companyName`, `accountName`, `contactName`, `contactSearch`),
+so anything logged on an account with no deal never appeared, every done
+task sat on its due day, every activity was "by Rep", every contact was
+"warm" with "last touch —", and every account was an "Active customer".
+New `src/utils/historyFeed.js`: `taskDay`, `linkedToAccount` (a deal of
+the account, or the row's own `accountId`), `linkedToContact` (a deal,
+`contactId`, `contactIds`, or a task's `contacts` list of `{id}`),
+`contactTouch` (last activity day, count, and a recency tier hot ≤ 7 d /
+warm ≤ 30 / cool ≤ 90 / stale / none), `monthsSpanned` (the "/ mo avg"
+divisor — the period's length, or for all time the span from the earliest
+event to today; it divided all-time by 12), and `escapeHtml`. Both PDF
+writers now escape every interpolated user value (title, event label,
+detail, rep, stage, forecast category — a note containing markup was
+written raw into `document.write`). "Showing N of N events" shows the
+filtered count of the total. The account glance shows Segment (tier as
+fallback) instead of the invented status; the "Tasks Done" card loses its
+"still open" caption. **Territory coverage:** a deal's own `territory`
+column (CSV import writes it) wins over its rep's, and industry comes from
+the deal's `vertical` then the account's `verticalMarket` via a new
+`accounts` prop on SavedReportsTab — `settings.__accountsRef` was read and
+written nowhere, so every deal was "Other". **Forecast vs actual** says
+"quota" where it reads quota. **The AI builder** stops claiming it
+interpreted the prompt: the banner says the builder does not interpret
+prompts yet and names the built-in stuck-deals view it always shows. The
+dead `actPeriod` / `commissionReportFilter` state is gone.
+
+`tests/history-feed.test.mjs` (6 unit + the wiring scan: no phantom
+field, both PDF row builders escape every event value, the territory and
+industry reads, the quota labels, the honest AI banner, the helper wiring).
+`report-scope.test.mjs`'s SavedReportsTab scan admits the `accounts`
+prop. Gates green on 140 files, **434/434**, **182/182 mutations, printed
+green baseline** (eight new: `<` unescaped, `completedAt` read again,
+account-only activity dropped, task contacts list ignored, a
+yesterday touch only warm, all-time ÷ 12, the PDF label raw, the empty
+filter's bar removed), build guard OK (2,476 kB, `index-AW6mOo3m.js`).
+
+**Observed (local, Karen):** Activity History → Account history → ZZFX
+Beacon Metals: "Showing 2 of 2 events", the Activities KPI reads "0 / mo
+avg over 6 mo", the glance shows a Segment row and no "Active" anywhere;
+**found live and fixed before commit:** choosing the "Activities" filter
+with nothing matching removed the filter bar itself — no way back to
+"All" — under a message claiming "No events in this period" while two
+deals sat under All; the bar now stays and the message names the filter
+(one more scan assertion, one more mutant: eight new, **182/182**);
+no console error from the app (the HMR 500s in the log are the gate
+build's `rm -rf node_modules/.vite` racing the dev server, CLAUDE.md's
+stale-build note). Not browser-checked: the PDF writers (a `window.open`
+print page — pinned by scan and mutant), the contacts tier column (needs a
+deal with contacts and activities on them), the territory template
+(Karen's org has no territories).
+
+**Not fixed, by design or deferred:** the Actions report and the
+Opportunity picker show a Manager the whole org — CLAUDE.md: server-side
+`canSeeAll` hands Managers the org; client `managedReps` narrowing is the
+only Manager scoping. `compareLabel3` ("vs previous period") is gated on a
+real comparison since §0.69. The "Team" slice button for Managers sets the
+manager's own team (the only one they have) — a one-option control, not a
+no-op. The blank builder's preview bars (§0.68 item 12) were replaced in
+batch 4.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

@@ -7,13 +7,13 @@ engine's year-2001 default gated — all on dev, then SHIPPED to prod; after the
 ship, Clerk's pending-session bypass found, observed and FIXED on dev, then
 shipped; the Win / loss report made to read the category it was never
 reading; the Activity report made to honour the rep slice; the Reports
-audit's §0.68 list fixed through batch 6), FINAL.** Repo
+audit's §0.68 list fixed through batch 7), FINAL.** Repo
 root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.76` with a paragraph beginning **"Observed (local, Karen):"**, and
+`### 0.77` with a paragraph beginning **"Not fixed, by design or deferred:"**, and
 does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b27`** with a bullet
 beginning **"Client: gate on"**? If not,
 you are looking at a copy that predates this handoff. Check section content,
@@ -142,7 +142,7 @@ writes `wonDate`. 6 tests, 6 mutants. `7dbfd6e`, **deploy-verified:**
 accelerep.netlify.app serves `index-DZcl2imu.js`, the local gate build's
 hash.
 
-**Batch 6, the commit this handoff rides in (state §0.76):** the
+**Batch 6 (state §0.76):** the
 unreachable print path and its feeders, the hardcoded stage list, the
 dead `getRepQuarterQuota` and every inert control removed (356 lines);
 the six "Save as my report" buttons save a real report carrying its
@@ -152,6 +152,19 @@ a nav entry. 5 tests, 5 mutants. Observed locally as Karen (Save → 201,
 card opens, Duplicate → 201); two test saved reports left in her dev
 library. `9be3fe8`, **deploy-verified:** accelerep.netlify.app serves
 `index-BorndMdE.js`, the local gate build's hash.
+
+**Batch 7, the commit this handoff rides in (state §0.77):** the History
+tab reads the columns that exist (`completedDate`, `description`,
+`author`, `accountId` / `contactId` / `contactIds` / task `contacts`)
+and links rows by id, contacts get a derived last touch and recency tier,
+"/ mo avg" divides by the real span, "Showing N of N" is the filtered
+count, the account glance shows Segment instead of an invented status,
+both PDF writers escape user text, territory coverage honours a deal's own
+territory and reads industry from the accounts prop, forecast-vs-actual
+says quota, the AI builder banner is honest, dead state gone. New
+`src/utils/historyFeed.js`, 7 tests, 8 mutants. Observed locally as
+Karen on the Beacon Metals account. Deploy check recorded in §4 by a
+follow-up docs commit.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -195,15 +208,16 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 139 files · **427/427 unit** (5 in
-`reports-controls.test.mjs`, 5 in
+Five gates green on 140 files · **434/434 unit** (7 in
+`history-feed.test.mjs`, 5 in `reports-controls.test.mjs`, 5 in
 `stage-order.test.mjs`, 23 in `pipeline-report.test.mjs`, 9 in
 `opp-text.test.mjs`, 13 in `report-period.test.mjs`, 15 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
-`session-status.test.mjs`) · **174/174 mutations, printed green baseline**
-(61 new this session; run alone) · build
-**2,475 kB JS**, `index-BorndMdE.js` (audit batch 6; dev deploy observed
-serving it for `9be3fe8`), guard OK, `dist/` cleared · **79 integration not
+`session-status.test.mjs`) · **182/182 mutations, printed green baseline**
+(69 new this session; run alone) · build
+**2,476 kB JS**, `index-AW6mOo3m.js` (audit batch 7; deploy check pending
+at the time this was written; `index-BorndMdE.js` observed for `9be3fe8`),
+guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -293,12 +307,13 @@ cleared at close.
    org's settings, item 5) is DONE — state §0.74. Batch 5b (close day
    for cycle time and quarters; `wonDate` written) is DONE — state
    §0.75. Batch 6 (dead controls wired or removed, the print path gone)
-   is DONE — state §0.76.** Next: the tier 2 remainder in §0.68 — labels
-   and captions that name a period the figure does not use, the 12-of-N
-   truncations without a count, and whatever the ground-truth pass left
-   unticked; then ship dev → prod (prod is at `abb239a`, before every
-   report fix — Jeff eyeballs the reports on dev first). §0.68's line
-   numbers have shifted; grep, don't trust them.
+   is DONE — state §0.76. Batch 7 (the History tab on real columns, PDF
+   escaping, honest labels) is DONE — state §0.77; §0.77 lists what was
+   left by design.** The §0.68 list is closed. Next: ship dev → prod
+   (prod is at `abb239a`, before every report fix — Jeff eyeballs the
+   reports on dev first, especially Win / loss, Activity by rep, Saved
+   reports → Rep scorecard, and Activity History on an account with
+   logged activities). Then Jeff's items in §5.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
