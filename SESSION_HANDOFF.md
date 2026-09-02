@@ -53,8 +53,10 @@ gate build's hash, refusal string present. **PROD SHIPPED (Jeff: "lets ship
 dev to prod"):** `master` fast-forwarded `d078c8f` → `abb239a`,
 salespipelinetracker.com serves `index-kU7R9Yoq.js`, `pk_live_` inlined, panel
 copy present, same byte size as dev (state §0.65). The server refusal was
-not probed on prod (needs a pending prod token). Require may now go on for
-Production — Jeff's call; the first un-enrolled prod sign-in is the proof.
+not probed on prod (needs a pending prod token). **Require multi-factor
+authentication is now ON for Production too** (Jeff: "worked in
+production"). Every prod user without a second factor is held at Clerk's
+setup card on their next sign-in — expected, and the point.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -144,7 +146,8 @@ the MFA fix and its docs** · dev deploy observed serving `index-Cy6ZeOFD.js` fo
    enrolled, real per-role rows, no Enforce modal, no Send reminders, no
    factor tiles (state §0.65). The stale `#/tasks/setup-mfa` hash Clerk
    leaves in the URL is inert; noted. (c) `catalogue.js`'s MFA entry still
-   hardcodes "Optional · not all enrolled" / "3 months ago". (d) DONE — shipped; Require can go on for Production when Jeff wants. (e) Integration suites
+   hardcodes "Optional · not all enrolled" / "3 months ago". (d) DONE — shipped, and Require is ON for Production (Jeff: "worked in
+   production"). (e) Integration suites
    mock `verifyAuth`, so the `sts` refusal is covered by unit + mutation
    only; the live 401 was observed in the pane AND on the deployed dev site
    (Jeff's un-refreshed Admin tab showed the server message verbatim).

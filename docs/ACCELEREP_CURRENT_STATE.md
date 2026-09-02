@@ -1726,7 +1726,10 @@ The client gate is in that bundle; the server refusal ships in the same
 commit's functions and was NOT probed on prod (it needs a pending prod
 token, and Require is off there). Require can go on for the Production
 instance — Jeff's call; the first un-enrolled prod sign-in after that is the
-live proof.
+live proof. **Jeff turned Require on for Production and signed in: "worked in
+production."** The Require path is observed on both instances; the server
+refusal on prod is implied by the sign-in being held (the app cannot render
+without an active session now), not separately probed.
 
 ---
 
