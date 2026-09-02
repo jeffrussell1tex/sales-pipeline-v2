@@ -2034,6 +2034,9 @@ Jeff eyeballs after the deploy: Reports → Pipeline & Forecast with FY 2026
 and Q3 selected should show this year's deals, and "All Time" should show no
 delta chips.
 
+**Dev landing (`939f7a2`):** accelerep.netlify.app serves `index-CprJulHE.js`,
+the local gate build's hash, 41 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

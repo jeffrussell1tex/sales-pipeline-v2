@@ -83,8 +83,9 @@ commit this handoff rides in (state §0.69):** the four hand-rolled fiscal
 builders replaced by `src/utils/reportPeriod.js` on top of `quarters.js`;
 FY/Q1–Q4 now the right year under a January start, the comparison baseline
 the right year AND the sliced set, "All time" with no fake baseline, instants
-read on the local clock. 13 tests under two fiscal starts, 7 mutants. Deploy
-check recorded in §4 by a follow-up docs commit.
+read on the local clock. 13 tests under two fiscal starts, 7 mutants.
+`939f7a2`, **deploy-verified:** accelerep.netlify.app serves
+`index-CprJulHE.js`, the local gate build's hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -132,9 +133,8 @@ Five gates green on 136 files · **380/380 unit** (13 new in
 `report-period.test.mjs`, 10 in `report-scope.test.mjs`, 15 in
 `loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **135/135
 mutations, printed green baseline** (22 new this session; run alone) · build
-**2,478 kB JS**, `index-CprJulHE.js` (audit batch 1; deploy check pending
-at the time this was written; `index-Dv_RGDzl.js` observed for
-`e39c57d`), guard OK, `dist/` cleared · **79 integration not
+**2,478 kB JS**, `index-CprJulHE.js` (audit batch 1; dev deploy observed serving it for
+`939f7a2`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
