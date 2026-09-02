@@ -65,8 +65,9 @@ and the report said "Other · 5 · 100%" and "No stage history data": it read
 the free-text notes instead of `lostCategory`, and the closing history
 entry's own stage instead of its `prevStage`. Eight readers in ReportsTab now
 go through `src/utils/lossAnalysis.js`; 15 tests on the five real rows, six
-mutants. Deploy check recorded in §4 by a follow-up docs commit. `master`
-does NOT have it.
+mutants. `7c6a432`, **deploy-verified:** accelerep.netlify.app serves
+`index-CzGO2ggA.js`, the local gate build's hash. `master` does NOT have
+it — ship dev to prod when Jeff has eyeballed the report.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -113,8 +114,8 @@ none) — now the "No due date" section, oldest first.
 Five gates green on 134 files · **357/357 unit** (15 new in
 `loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **125/125
 mutations, printed green baseline** (11 new this session; run alone) · build
-**2,479 kB JS**, `index-CzGO2ggA.js` (the report fix; deploy check pending
-at the time this was written), guard OK, `dist/` cleared · **79 integration not
+**2,479 kB JS**, `index-CzGO2ggA.js` (the report fix; dev deploy observed
+serving it for `7c6a432`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);

@@ -1798,6 +1798,10 @@ Performance tab's "Stage conversion", and the funnel deep-dive falls back to
 `settings.funnelStages` when set; the Performance tab never does. Not
 changed this session.
 
+**Dev landing (`7c6a432`):** accelerep.netlify.app serves `index-CzGO2ggA.js`,
+the local gate build's hash, 55 seconds after the push. Jeff's eyeball as
+Admin is the observation.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
