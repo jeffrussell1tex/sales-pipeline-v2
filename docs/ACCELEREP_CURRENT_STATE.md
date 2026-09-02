@@ -2454,7 +2454,10 @@ probed on prod beyond the served bundle by the session; **Jeff eyeballed
 the Reports tab on prod afterwards: "eyeball work is all confirmed
 correct."** Dev and prod share the Neon `main` branch, so the two test saved
 reports in Karen's dev library (§0.76) are the same rows prod would show
-her.
+her. Jeff deleted them, and the ZZTest deals, after the prod eyeball, and
+noted that deleting a saved report asks through the browser's native
+`confirm()` rather than the app's own confirmation modal — carried in the
+handoff (§5 item 13).
 
 ---
 

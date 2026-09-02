@@ -338,6 +338,18 @@ cleared at close.
    String.replace splice the rest of the file in after the match (use a
    function replacer), and a heredoc turned a doubled backslash into a bare
    CR byte that made git treat the handoff as `-text` and diff it whole.
+13. **Carried (Jeff, after the prod eyeball): the saved-report delete asks
+   through the browser's native `confirm('Delete this report?')`**
+   (`ReportsTab.jsx`, the saved-card ✕ handler) — "just gives the windows
+   confirmation, not an application look and feel process". The app has a
+   house confirmation modal already: `confirmModal` / `setConfirmModal` in
+   `useModalState.js`, rendered by `ModalLayer.jsx` with the ⚠ tile and
+   `danger` styling, reached through `showConfirm` in the app context.
+   Route the report delete through it; ReportsTab reads the context
+   already. The same native `confirm()` survives in DocumentRail.jsx,
+   DocumentsTab.jsx, EditBrandModal.jsx and PriceBookDetail.jsx (three) —
+   same fix, same batch, if Jeff wants the sweep. Jeff deleted the ZZTest
+   deals and the two test saved reports himself after the prod eyeball.
 
 ## 6. The thread
 
