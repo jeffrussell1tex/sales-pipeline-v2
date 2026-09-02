@@ -2368,6 +2368,9 @@ left in Karen's library on dev:** two saved reports, "Rep scorecard" and
 Not re-checked in the browser: Email to owner (a `mailto:` navigation;
 reasoned from code and pinned by scan and mutant).
 
+**Dev landing (`9be3fe8`):** accelerep.netlify.app serves `index-BorndMdE.js`,
+the local gate build's hash, 31 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

@@ -150,7 +150,8 @@ the six "Save as my report" buttons save a real report carrying its
 report, Email to owner mails the roster address, the Actions sub-tab has
 a nav entry. 5 tests, 5 mutants. Observed locally as Karen (Save → 201,
 card opens, Duplicate → 201); two test saved reports left in her dev
-library. Deploy check recorded in §4 by a follow-up docs commit.
+library. `9be3fe8`, **deploy-verified:** accelerep.netlify.app serves
+`index-BorndMdE.js`, the local gate build's hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -201,9 +202,8 @@ Five gates green on 139 files · **427/427 unit** (5 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
 `session-status.test.mjs`) · **174/174 mutations, printed green baseline**
 (61 new this session; run alone) · build
-**2,475 kB JS**, `index-BorndMdE.js` (audit batch 6; deploy check pending
-at the time this was written; `index-DZcl2imu.js` observed for `7dbfd6e`),
-guard OK, `dist/` cleared · **79 integration not
+**2,475 kB JS**, `index-BorndMdE.js` (audit batch 6; dev deploy observed
+serving it for `9be3fe8`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
