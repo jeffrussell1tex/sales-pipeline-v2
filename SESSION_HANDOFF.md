@@ -120,8 +120,9 @@ constants — the Activity tab's 0.91 prior period replaced by real
 prior-period activities, "Per rep" and the rhythm grid on the roster in
 scope with a five-zero-weekday flag, the win/loss "+3%" and two orphan
 "vs previous period" captions removed, the builder preview and the pinned
-cards on real numbers. 3 tests, 5 mutants. Deploy check recorded in §4 by
-a follow-up docs commit.
+cards on real numbers. 3 tests, 5 mutants. `33e521b`, **deploy-verified:**
+accelerep.netlify.app serves `index-BtwmtTXu.js`, the local gate build's
+hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -170,9 +171,8 @@ Five gates green on 138 files · **411/411 unit** (17 in
 `report-period.test.mjs`, 15 in `report-scope.test.mjs`, 15 in
 `loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **158/158
 mutations, printed green baseline** (45 new this session; run alone) · build
-**2,479 kB JS**, `index-BtwmtTXu.js` (audit batch 4b; deploy check pending
-at the time this was written; `index-CLXLmsDb.js` observed for `d25b894`),
-guard OK, `dist/` cleared · **79 integration not
+**2,479 kB JS**, `index-BtwmtTXu.js` (audit batch 4b; dev deploy observed
+serving it for `33e521b`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);

@@ -2225,6 +2225,9 @@ with a period selected and "vs previous period" on — the deltas are real or
 absent, never +10%; Saved reports → the four pinned cards show numbers, not
 ramps.
 
+**Dev landing (`33e521b`):** accelerep.netlify.app serves `index-BtwmtTXu.js`,
+the local gate build's hash, 41 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
