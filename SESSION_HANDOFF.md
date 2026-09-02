@@ -111,8 +111,9 @@ leaderboard's quota basis made period-scoped), the fabricated
 forecast-accuracy chart replaced by closed-won by completed fiscal quarter,
 the 7-day movement built from real won / lost / added / slipped flows, and
 the "No next step" flag reading the real column. `src/utils/
-pipelineReport.js`, 14 tests, 8 mutants. Deploy check recorded in §4 by a
-follow-up docs commit.
+pipelineReport.js`, 14 tests, 8 mutants. `d25b894`, **deploy-verified:**
+accelerep.netlify.app serves `index-CLXLmsDb.js`, the local gate build's
+hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -161,9 +162,8 @@ Five gates green on 138 files · **408/408 unit** (14 in
 `report-period.test.mjs`, 15 in `report-scope.test.mjs`, 15 in
 `loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **153/153
 mutations, printed green baseline** (40 new this session; run alone) · build
-**2,478 kB JS**, `index-CLXLmsDb.js` (audit batch 4a; deploy check pending
-at the time this was written; `index-D0ibE8V3.js` observed for `f40b2c1`),
-guard OK, `dist/` cleared · **79 integration not
+**2,478 kB JS**, `index-CLXLmsDb.js` (audit batch 4a; dev deploy observed
+serving it for `d25b894`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);

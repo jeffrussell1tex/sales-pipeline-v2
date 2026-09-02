@@ -2180,6 +2180,9 @@ deploy: Reports → Pipeline & Forecast — the ring reads "no quota" or the
 real attainment, the movement legend has a Lost figure, and the quarter
 panel is titled "Closed-won by quarter".
 
+**Dev landing (`d25b894`):** accelerep.netlify.app serves `index-CLXLmsDb.js`,
+the local gate build's hash, 41 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
