@@ -226,6 +226,30 @@ test('toLocalDay refuses what is not a date', () => {
     }
 });
 
+test('REGRESSION: a cell with no year is refused, not filled in as 2001', () => {
+    // The engine parser answers "Sept 15" with 2001-09-15 -- a real-looking day
+    // that is wrong by a quarter century. Found while making the importer refuse
+    // unreadable cells (0.64): these would have sailed past the refusal.
+    for (const v of ['Sept 15', 'Sep 15', 'Oct 1', '9/15', 'September 15']) {
+        assert.equal(toLocalDay(v), null, `${JSON.stringify(v)} carries no year`);
+    }
+});
+
+test('a written-out date with a four-digit year still reads', () => {
+    assert.equal(toLocalDay('Sept 15, 2026'), '2026-09-15');
+    assert.equal(toLocalDay('15-Sep-2026'), '2026-09-15');
+    assert.equal(toLocalDay('2026/09/15'), '2026-09-15');
+});
+
+test('a two-digit US year is this century, decoded by hand', () => {
+    // Excel's default short date is m/d/yy. The engine read it as 2026 too, but
+    // the engine is now behind a four-digit-year gate, so the shape is decoded
+    // explicitly and pinned.
+    assert.equal(toLocalDay('9/15/26'), '2026-09-15');
+    assert.equal(toLocalDay('09/15/26 0:00'), '2026-09-15');
+    assert.equal(toLocalDay('2/30/26'), null, 'impossible day is still impossible');
+});
+
 // ── THE SWEEP IS PINNED (0.60) ───────────────────────────────
 // The isoLocal batch fixed 4 of 29 sites and listed the other 24 in a handoff
 // that was later overwritten; the list was lost and the two sites it named as

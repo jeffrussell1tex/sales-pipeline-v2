@@ -42,9 +42,11 @@ import { toLocalDay } from './dateLocal.js';
 // A date cell is normalised to yyyy-mm-dd when it is recognisable ("9/15/2026",
 // Excel's "2026-09-15 00:00:00"); the column is varchar(20) and every reader
 // appends noon to it, so a cell passed through as written made an Invalid Date
-// of that deal downstream (0.60). An UNRECOGNISABLE value still passes through
-// unchanged: blanking it would erase a real date on overwrite with nothing in
-// the receipt to say so. Refusing it at Preview is the open question.
+// of that deal downstream (0.60). An UNRECOGNISABLE value cannot arrive here
+// from the importer any more: mapCsvRows refuses the row at Preview (0.64,
+// Jeff: refuse). The pass-through below stays as the fallback for any other
+// caller, because blanking would erase a real date on overwrite with nothing
+// in the receipt to say so.
 const csvDay = (v) => toLocalDay(v) ?? (v || '');
 
 const CSV_COLUMNS = {

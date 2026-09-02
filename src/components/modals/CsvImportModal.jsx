@@ -162,14 +162,16 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         { key: 'stage',           label: 'Stage' },
         { key: 'arr',             label: 'ARR ($)' },
         { key: 'implementationCost', label: 'Implementation Cost ($)' },
-        { key: 'forecastedCloseDate', label: 'Close Date' },
+        // type 'day': a cell toLocalDay cannot read refuses the row at Preview
+        // (csvMapping.js, 0.64). A blank cell is fine.
+        { key: 'forecastedCloseDate', label: 'Close Date', type: 'day' },
         { key: 'products',        label: 'Products' },
         { key: 'notes',           label: 'Notes' },
         { key: 'nextSteps',       label: 'Next Steps' },
         { key: 'territory',       label: 'Territory' },
         { key: 'vertical',        label: 'Vertical' },
         { key: 'probability',     label: 'Probability (%)' },
-        { key: 'createdDate',     label: 'Created Date' },
+        { key: 'createdDate',     label: 'Created Date', type: 'day' },
         // Transport only — not a column. The server turns it into
         // stageChangedDate (importDate − days); see netlify/functions/_stage.mjs.
         { key: 'daysInStage',     label: 'Days in Stage' },

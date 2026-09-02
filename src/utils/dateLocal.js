@@ -84,6 +84,14 @@ export function toLocalDay(v) {
     let m;
     if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/.exec(s))) return validDay(+m[1], +m[2], +m[3]);
     if ((m = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:[T ].*)?$/.exec(s))) return validDay(+m[3], +m[1], +m[2]);
+    // A two-digit US year is this century: "9/15/26" is 2026 in a CRM that
+    // exists in 2026, and the engine used to say the same before it was gated.
+    if ((m = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2})(?:[T ].*)?$/.exec(s))) return validDay(2000 + +m[3], +m[1], +m[2]);
+    // The engine fills in a MISSING year as 2001: "Sept 15", "Oct 1" and "9/15"
+    // all came back as real 2001 days (0.64) -- worse than a refusal, because
+    // it looks like a date. A written-out date must carry a four-digit year to
+    // reach the engine at all.
+    if (!/\d{4}/.test(s)) return null;
     const d = new Date(s);
     return Number.isNaN(d.getTime()) ? null : isoLocal(d);
 }

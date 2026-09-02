@@ -20,6 +20,24 @@
 // silent drop would otherwise be as untestable as the drop was. Same reasoning as
 // csvAutoMap.js, which this runs immediately after.
 
+import { toLocalDay } from './dateLocal.js';
+
+// A field declared `type: 'day'` (Close Date, Created Date) REFUSES its row when
+// the cell holds something toLocalDay cannot read. The importer used to pass
+// such a cell through as written: "Sept 15" landed in a varchar(20), every
+// reader appended noon to it, and that deal was an Invalid Date everywhere
+// downstream (0.60). Blanking it instead would erase a real date on an
+// overwrite with nothing on the receipt to say so. So the row is refused HERE,
+// at the step where the user can still fix the file, and the banner names the
+// row, the field and the cell (0.64, Jeff: refuse). A blank cell is not a bad
+// date; it is silence, and silence is allowed. Only the first bad cell in a row
+// is named — one is enough to send the user back to the file.
+const unreadableDay = (fields, fieldMapping, record) =>
+    fields.filter(f => f.type === 'day'
+        && isMapped(fieldMapping?.[f.key])
+        && (record[f.key] || '').trim() !== ''
+        && toLocalDay(record[f.key]) === null);
+
 // A row survives if ANY required field carries a value.
 //
 // DELIBERATELY PRESERVED, not tidied. `.some` (not `.every`) means a contact with
@@ -74,7 +92,22 @@ export function mapCsvRows(csvRows, appFields, fieldMapping) {
         }
 
         if (rowHasAnyRequired(record, required)) {
-            records.push(record);
+            const bad = unreadableDay(fields, fieldMapping, record);
+            if (bad.length === 0) {
+                records.push(record);
+            } else {
+                // Same row numbering and sample as a required-field drop, plus
+                // what was wrong: the field and the cell, verbatim, so the user
+                // can find it in the file. `reason` separates the two classes
+                // for the banner; a drop without one is a required-field drop.
+                dropped.push({
+                    sample: (row || []).filter(Boolean).slice(0, 3).join(', ').slice(0, 60),
+                    reason: 'date',
+                    field:  bad[0].label,
+                    value:  (record[bad[0].key] || '').trim(),
+                    rowNumber: idx + 2
+                });
+            }
         } else {
             dropped.push({
                 // +2, not +1: row 1 of the file is the header, so this is the
@@ -99,19 +132,41 @@ export function mapCsvRows(csvRows, appFields, fieldMapping) {
 /**
  * One line for the preview banner. Returns null when there is nothing to say, so
  * the caller can render conditionally without duplicating the logic.
+ *
+ * Two classes of drop, two sentences. The required-field wording is unchanged
+ * from before date refusals existed and is pinned by test; the refusal sentence
+ * names each row with its cell so the user can find it, and says what shape
+ * to write instead.
  */
 export function describeDropped({ records, dropped, unmappedRequired }, totalRows) {
     if (!dropped.length) return null;
+
+    const byRequired = dropped.filter(d => d.reason !== 'date');
+    const byDate     = dropped.filter(d => d.reason === 'date');
 
     const cause = unmappedRequired.length
         ? ` No column is mapped to ${unmappedRequired.join(' or ')}.`
         : '';
 
-    if (records.length === 0) {
-        return `None of the ${totalRows} rows in this file can be imported — every row is missing all of its required fields.${cause} Go back and check the column mapping.`;
+    const parts = [];
+
+    if (byRequired.length) {
+        if (records.length === 0 && byDate.length === 0) {
+            return `None of the ${totalRows} rows in this file can be imported — every row is missing all of its required fields.${cause} Go back and check the column mapping.`;
+        }
+        const which = byRequired.slice(0, 5).map(d => d.rowNumber).join(', ');
+        const more = byRequired.length > 5 ? `, +${byRequired.length - 5} more` : '';
+        parts.push(`${byRequired.length} of ${totalRows} rows will be skipped — required fields are empty (rows ${which}${more}).${cause}`);
     }
 
-    const which = dropped.slice(0, 5).map(d => d.rowNumber).join(', ');
-    const more = dropped.length > 5 ? `, +${dropped.length - 5} more` : '';
-    return `${dropped.length} of ${totalRows} rows will be skipped — required fields are empty (rows ${which}${more}).${cause}`;
+    if (byDate.length) {
+        const shown = byDate.slice(0, 5).map(d => `row ${d.rowNumber}: "${d.value}" in ${d.field}`).join('; ');
+        const more = byDate.length > 5 ? `; +${byDate.length - 5} more` : '';
+        const lead = records.length === 0 && byRequired.length === 0
+            ? `None of the ${totalRows} rows in this file can be imported — every row has a date that cannot be read`
+            : `${byDate.length} of ${totalRows} rows will be refused — a date cannot be read`;
+        parts.push(`${lead} (${shown}${more}). Write dates as m/d/yyyy or yyyy-mm-dd and try again.`);
+    }
+
+    return parts.join(' ');
 }

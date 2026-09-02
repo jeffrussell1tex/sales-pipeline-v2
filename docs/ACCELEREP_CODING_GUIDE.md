@@ -2909,3 +2909,9 @@ renders as the previous evening across the Americas (TaskItem's `Due:`), and
   reading "Invalid Date". The defect follows the value, not the line that
   was reported — a fallback chain has as many readers as the file gives it,
   and each one is a separate bug until it has been checked.
+- A written-out date must carry a four-digit year before it may reach
+  `new Date(s)`. The engine fills a missing year as 2001: "Sept 15" and
+  "9/15" are both 2001-09-15, and both look like dates. `toLocalDay` gates
+  its fallback on a four-digit run and decodes the two-digit US shape by hand
+  (0.64). A refusal that fires on null cannot catch a confident wrong answer;
+  probe the parser with the cells a real file would carry before trusting it.

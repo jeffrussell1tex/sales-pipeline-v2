@@ -1524,6 +1524,48 @@ the file, carry `2026-09-02`, the import day on the local clock. Stage,
 account and sales rep (Jeff, the importer) as sent. The importer half of the
 "still unobserved" pair is closed; the after-7pm coaching note remains.
 
+### 0.64 Unreadable date cells are refused at Preview, and the engine's year 2001 (2 Sep, fourth session)
+
+**Jeff: "lets do 1" — "refuse option."** The importer's open question from
+§0.60 is closed. `mapCsvRows` refuses a row whose `type: 'day'` cell (Close
+Date, Created Date — declared on the real field list in `CsvImportModal`,
+pinned by a text-scan test because the suites cannot import React) is one
+`toLocalDay` cannot read. The row is dropped with `reason: 'date'`, the field
+label and the cell verbatim; the Preview banner gains a second sentence naming
+each refused row ("row 3: "Sept 15" in Close Date") and the shapes to write
+instead; the required-field sentence is byte-identical to before and pinned.
+Refused rows reach the receipt as "not sent" through the existing `dropped`
+count. The required check runs first, a blank cell is silence and not a bad
+date, and only the first bad cell in a row is named. `csvDay`'s pass-through
+in `importRows.js` stays as the fallback for any other caller.
+
+**Found on the way, and worse than the open question:** the engine fallback in
+`toLocalDay` fills a MISSING year as 2001. "Sept 15", "Oct 1" and "9/15" all
+came back as real days in 2001 — plausible-looking, wrong by a quarter century,
+and invisible to a refusal that only fires on null. The fallback is now behind
+a four-digit-year gate, and the two-digit US shape ("9/15/26", Excel's default
+short date, which the engine had been reading as 2026) is decoded by hand to
+this century and pinned. Guide §18b26 gains the bullet.
+
+**Verified:** gates green on 133 files, **336/336** (19 new: fifteen for the
+mapping and banner, including the ZZTest-file-plus-"Sept 15" regression and
+the field-list scan; three for the year gate and the two-digit year),
+**114/114 mutations, printed green baseline** (nine new: the pass-through
+re-opened, a blank cell refused, every field date-checked, the reason lost,
+the cell unnamed, 0-based rows, Close Date no longer a day field, the year
+2001 back, the two-digit year refused), build guard OK (2,483 kB,
+`index-Bpb-wphy.js`), `dist/` and `.vite` cleared. **Browser, as Karen on
+localhost** (the pane attached to the already-running `netlify dev`, which
+served the edited source — checked by fetching `csvMapping.js` from it
+first): a four-row CSV injected into the file input — Close Dates
+`9/15/2026`, `Sept 15`, `9/15/26`, and `2026-10-01` with Created Date
+`last week` — auto-mapped and reached Preview reading "2 of 4 rows ready to
+import" above the banner **"⚠️ 2 of 4 rows will be refused — a date cannot be
+read (row 3: "Sept 15" in Close Date; row 5: "last week" in Created Date).
+Write dates as m/d/yyyy or yyyy-mm-dd and try again."**, the two survivors in
+the sample table with the `9/15/26` row among them. Nothing was imported; the
+page was reloaded at Preview. Jeff, watching the pane: "see it."
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

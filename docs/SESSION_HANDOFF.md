@@ -1,17 +1,17 @@
 # SESSION_HANDOFF.md
 
 **Session of 1–2 September 2026, fourth session (the owed §18b26 bullet
-written, the nine stale App.jsx imports dropped, a test CSV delivered for
-the importer's unobserved 9/15/2026 check — small, all on dev, deploy
-check recorded below), FINAL.** Repo root. Read this first, then verify every claim
+written, the nine stale App.jsx imports dropped, the importer's 9/15/2026
+check observed live, unreadable date cells REFUSED at Preview and the
+engine's year-2001 default gated — all on dev), FINAL.** Repo root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.63` with a paragraph beginning **"Test CSV for the unobserved
-importer check"**, and does `docs/ACCELEREP_CODING_GUIDE.md` carry
-**`## 18b26`** with a closing bullet beginning **"When a fix names a value,
-grep the FILE"**? If not,
+`### 0.64` with a paragraph beginning **"Found on the way, and worse than
+the open question"**, and does `docs/ACCELEREP_CODING_GUIDE.md` carry
+**`## 18b26`** with a closing bullet beginning **"A written-out date must
+carry a four-digit year"**? If not,
 you are looking at a copy that predates this handoff. Check section content,
 never dates.
 
@@ -25,12 +25,14 @@ their headers is Jeff's call, not done.
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
 
 **Fourth session, on top of everything below:** `410095e` (the owed guide
-bullet, docs only) and the commit this handoff rides in (nine unused
-default imports removed from App.jsx, state §0.63). **Deploy-verified:**
-accelerep.netlify.app serves `index-wHucaxGK.js`, the local gate build's hash.
-`master` is unchanged at `13f9ffe`; nothing user-visible changed. The
-session began the evening of 1 Sep and finished the morning of 2 Sep; git
-carries `410095e` at 1 Sep 18:03 and `7f14eb3` at 2 Sep 10:49 (-0500).
+bullet, docs only); `7f14eb3` (nine unused default imports removed from
+App.jsx, state §0.63; deploy-verified, accelerep.netlify.app served
+`index-wHucaxGK.js`); `aa82d21` (the 9/15/2026 CSV check observed live);
+and the commit this handoff rides in — **unreadable date cells refused at
+Preview and the engine's year-2001 default gated** (state §0.64, guide
+§18b26's last bullet). Its deploy check is recorded in §4 by a follow-up
+docs commit once CI has run. `master` is unchanged at `13f9ffe`. The
+session began the evening of 1 Sep and finished 2 Sep.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -74,13 +76,14 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 133 files · **317/317 unit** · **105/105 mutations,
-printed green baseline** (run alone, after the App.jsx edit) · build
-**2,482 kB JS**, `index-wHucaxGK.js`, guard OK, `dist/` and
+Five gates green on 133 files · **336/336 unit** (19 new) · **114/114
+mutations, printed green baseline** (9 new; run alone, before the pane was
+opened) · build **2,483 kB JS**, `index-Bpb-wphy.js`, guard OK, `dist/` and
 `node_modules/.vite` cleared · **79 integration not re-run** (no endpoint
-changed) · `master` == `13f9ffe`, three docs commits and one code commit
-behind dev · no browser pass: no rendered component changed · dev deploy
-observed serving `index-wHucaxGK.js` (see §1).
+changed all session) · **browser pass as Karen on localhost:** the refusal
+banner observed at Preview with the rows and cells named, nothing imported
+(state §0.64) · `master` == `13f9ffe` · **deploy check pending** for the
+refuse commit at the time this was written (see §1).
 
 ## 5. Next — start here
 
@@ -101,8 +104,9 @@ observed serving `index-wHucaxGK.js` (see §1).
 4. **DONE (fourth session, 1 Sep evening):** the guide bullet owed from §3 — "grep
    the FILE for every other reader of the value" — is now the closing bullet
    of §18b26; state doc §0.62 no longer says "not yet written".
-5. **Open question from the importer:** an unrecognisable date cell passes
-   through as written; 18b16 says report it — refuse or flag at Preview.
+5. **DONE (fourth session, Jeff: "refuse option"):** an unrecognisable date
+   cell now refuses its row at Preview with the cell named; and the engine's
+   year-2001 default for a yearless cell is gated (state §0.64).
 6. **DONE (fourth session):** the nine stale App.jsx default imports are
    removed (state §0.63).
 7. Smaller carried: the MFA known-ON green dot (still unsighted); the
