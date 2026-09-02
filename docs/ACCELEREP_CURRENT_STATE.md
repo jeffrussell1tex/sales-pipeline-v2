@@ -1483,6 +1483,36 @@ dates, and — for Jeff's two-org account — a profile panel that fits.
 **Jeff, on prod, the Dispatch Demo Group account: "the dispatch demo fits."**
 The bug he reported this morning is observed closed where he reported it.
 
+### 0.63 The nine stale App.jsx imports dropped, and a test CSV for the importer (1 Sep, fourth session)
+
+**The owed §18b26 bullet landed first** (`410095e`, docs only): grep the FILE
+for every other reader of a value before calling a fix live. Writing it taught
+what handoff §5.8 now carries — the worktree is CRLF only by
+`core.autocrlf=true`, the index is LF throughout (App.jsx included), and two
+scripting traps (a dollar-quote inside a String.replace replacement string; a
+heredoc eating doubled backslashes) each corrupted the handoff once before the
+re-read from disk caught it.
+
+**Jeff: drop the stale App.jsx imports.** The nine default imports §0.60 left
+in `App.jsx` for components that render elsewhere (CsvImportModal,
+LeadImportModal, OutlookImportModal, LostReasonModal, OpportunityModal,
+UserModal, FunnelView, KanbanView, QuotaRepCard) are removed — nine deletions
+and nothing else. The script asserted each import line exactly once and the
+identifier ABSENT from the file after removal, so a use hiding in a comment or
+a JSX tag would have aborted it; the first version counted the binding and the
+path on the same line and read two, which is not proof of anything. Gates
+green on 133 files, **317/317**, **105/105, printed green baseline**, build
+guard OK (2,482 kB, `index-wHucaxGK.js`), `dist/` and `.vite` cleared. No
+rendered component changed, so the deploy is the check, not a browser pass.
+
+**Test CSV for the unobserved importer check** delivered to Jeff
+(`zztest-close-dates.csv`, not tracked): three ZZTest deals under "ZZTest
+Import Co" with Close Dates `9/15/2026`, `2026-10-01` and
+`2026-11-20 00:00:00`, row 1 also carrying `8/15/2026` as Created Date.
+Expected after import: `2026-09-15`, `2026-10-01`, `2026-11-20`, and
+created `2026-08-15`. Jeff imports as Admin on his own account; the result is
+to be recorded here.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

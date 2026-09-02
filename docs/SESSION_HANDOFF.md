@@ -1,18 +1,17 @@
 # SESSION_HANDOFF.md
 
-**Session of 1 September 2026, third session (the date-pattern audit becomes
-the read side of the date contract, the lost isoLocal queue is found and
-swept, the bundle hash exposes ten unmounted components and they are
-deleted, Jeff's verification finds the label beside the sort and a task no
-list could show, the profile panel stops overflowing — all shipped to dev
-and observed), FINAL.** Repo root. Read this first, then verify every claim
+**Session of 1 September 2026, fourth session (the owed §18b26 bullet
+written, the nine stale App.jsx imports dropped, a test CSV delivered for
+the importer's unobserved 9/15/2026 check — small, all on dev, deploy
+check recorded below), FINAL.** Repo root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.62` with a paragraph beginning **"Dev landing, observed by Jeff"**,
-and does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b26`** with a bullet
-beginning **"A bug is live only in a component that is MOUNTED"**? If not,
+`### 0.63` with a paragraph beginning **"Test CSV for the unobserved
+importer check"**, and does `docs/ACCELEREP_CODING_GUIDE.md` carry
+**`## 18b26`** with a closing bullet beginning **"When a fix names a value,
+grep the FILE"**? If not,
 you are looking at a copy that predates this handoff. Check section content,
 never dates.
 
@@ -24,6 +23,12 @@ their headers is Jeff's call, not done.
 ---
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
+
+**Fourth session, on top of everything below:** `410095e` (the owed guide
+bullet, docs only) and the commit this handoff rides in (nine unused
+default imports removed from App.jsx, state §0.63). Deploy check for the
+second is recorded in §4 by a follow-up docs commit once CI has run.
+`master` is unchanged at `13f9ffe`; nothing user-visible changed.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -65,15 +70,15 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (all observed 1 Sep, third session)
+## 4. Verified state at close (all observed 1 Sep, fourth session)
 
 Five gates green on 133 files · **317/317 unit** · **105/105 mutations,
-printed green baseline** (run alone after every source change) · build
-**2,482 kB JS**, guard OK, `dist/` and `node_modules/.vite` cleared · **79
-integration not re-run** (no endpoint changed all session) · `dev` ==
-`origin/dev`; `master` == `13f9ffe` (one docs commit behind dev after this
-ship note) · panel wrap observed in the
-pane with an injected 220px chip (Sign out y 102 → 164, no overflow).
+printed green baseline** (run alone, after the App.jsx edit) · build
+**2,482 kB JS**, `index-wHucaxGK.js`, guard OK, `dist/` and
+`node_modules/.vite` cleared · **79 integration not re-run** (no endpoint
+changed) · `master` == `13f9ffe`, three docs commits and one code commit
+behind dev · no browser pass: no rendered component changed · **deploy check
+pending** at the time this was written (see §1).
 
 ## 5. Next — start here
 
@@ -86,17 +91,18 @@ pane with an injected 220px chip (Sign out y 102 → 164, no overflow).
    labels never read "Invalid Date"; the profile panel fits a two-org
    account with a long org name (Jeff's original prod report).
 3. **Still unobserved:** as Admin after 7pm Central, a coaching note carries
-   today's date; as Admin, a CSV with a `9/15/2026` close date imports as
-   `2026-09-15`. Both hold by unit test; neither has been seen live.
+   today's date (Jeff: "I will have to check the time tonight"); as Admin,
+   a CSV with a `9/15/2026` close date imports as `2026-09-15`. Both hold
+   by unit test; neither has been seen live. The CSV is delivered
+   (`zztest-close-dates.csv`, state §0.63 lists the expected values);
+   record Jeff's result in §0.63 when it comes.
 4. **DONE (fourth session, 1 Sep):** the guide bullet owed from §3 — "grep
    the FILE for every other reader of the value" — is now the closing bullet
    of §18b26; state doc §0.62 no longer says "not yet written".
 5. **Open question from the importer:** an unrecognisable date cell passes
    through as written; 18b16 says report it — refuse or flag at Preview.
-6. Cosmetic: App.jsx still carries stale default imports for components
-   that ARE rendered elsewhere (CsvImportModal, LeadImportModal,
-   OutlookImportModal, LostReasonModal, OpportunityModal, UserModal,
-   FunnelView, KanbanView, QuotaRepCard).
+6. **DONE (fourth session):** the nine stale App.jsx default imports are
+   removed (state §0.63).
 7. Smaller carried: the MFA known-ON green dot (still unsighted); the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
