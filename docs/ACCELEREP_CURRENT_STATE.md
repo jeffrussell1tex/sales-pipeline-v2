@@ -1565,6 +1565,8 @@ read (row 3: "Sept 15" in Close Date; row 5: "last week" in Created Date).
 Write dates as m/d/yyyy or yyyy-mm-dd and try again."**, the two survivors in
 the sample table with the `9/15/26` row among them. Nothing was imported; the
 page was reloaded at Preview. Jeff, watching the pane: "see it."
+**Dev landing (`51202b4`):** accelerep.netlify.app serves `index-Bpb-wphy.js`, the
+local gate build's hash.
 
 ---
 
