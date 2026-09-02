@@ -1717,6 +1717,17 @@ reminders, no factor tiles. The URL still reads `#/tasks/setup-mfa`: Clerk's
 hash router leaves the task path in place after the task completes; the app
 has no hash routing of its own, so it is inert — noted, not changed.
 
+**PROD SHIP (Jeff: "lets ship dev to prod").** `master` fast-forwarded
+`d078c8f` → `abb239a` by `git push origin dev:master` (no branch switch;
+ancestor check first); salespipelinetracker.com serves `index-kU7R9Yoq.js` —
+the inlined key `pk_live_` (dev's is `pk_test_`), the rewritten panel's
+copy present, 2,538,098 bytes — the same size as dev's `index-Cy6ZeOFD.js`.
+The client gate is in that bundle; the server refusal ships in the same
+commit's functions and was NOT probed on prod (it needs a pending prod
+token, and Require is off there). Require can go on for the Production
+instance — Jeff's call; the first un-enrolled prod sign-in after that is the
+live proof.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

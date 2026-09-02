@@ -49,9 +49,12 @@ and the cache. Observed on the same pending session: Clerk's "Set up two-step
 verification" card where the app used to render, and 401 from three endpoints
 where one had answered 200. MfaDetail rewritten honest. `ded3271`,
 **deploy-verified:** accelerep.netlify.app serves `index-Cy6ZeOFD.js`, the local
-gate build's hash, refusal string present. **`master` does NOT have it** —
-ship dev to prod again when Jeff is ready; only then turn Require on for
-Production.
+gate build's hash, refusal string present. **PROD SHIPPED (Jeff: "lets ship
+dev to prod"):** `master` fast-forwarded `d078c8f` → `abb239a`,
+salespipelinetracker.com serves `index-kU7R9Yoq.js`, `pk_live_` inlined, panel
+copy present, same byte size as dev (state §0.65). The server refusal was
+not probed on prod (needs a pending prod token). Require may now go on for
+Production — Jeff's call; the first un-enrolled prod sign-in is the proof.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -105,7 +108,7 @@ held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
 earlier the same session, the CSV refusal banner (state §0.64) · prod
 serves `index-DvbBtbWW.js` for `d078c8f`; **`master` is behind dev by
 the MFA fix and its docs** · dev deploy observed serving `index-Cy6ZeOFD.js` for
-`ded3271` (see §1).
+`ded3271` · `master` == `abb239a`, prod serving `index-kU7R9Yoq.js` (see §1).
 
 ## 5. Next — start here
 
@@ -141,8 +144,7 @@ the MFA fix and its docs** · dev deploy observed serving `index-Cy6ZeOFD.js` fo
    enrolled, real per-role rows, no Enforce modal, no Send reminders, no
    factor tiles (state §0.65). The stale `#/tasks/setup-mfa` hash Clerk
    leaves in the URL is inert; noted. (c) `catalogue.js`'s MFA entry still
-   hardcodes "Optional · not all enrolled" / "3 months ago". (d) Ship dev
-   to prod, then Require can go on for Production. (e) Integration suites
+   hardcodes "Optional · not all enrolled" / "3 months ago". (d) DONE — shipped; Require can go on for Production when Jeff wants. (e) Integration suites
    mock `verifyAuth`, so the `sts` refusal is covered by unit + mutation
    only; the live 401 was observed in the pane AND on the deployed dev site
    (Jeff's un-refreshed Admin tab showed the server message verbatim).
