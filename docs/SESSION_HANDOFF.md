@@ -107,16 +107,19 @@ Five gates green on 133 files · **342/342 unit** (6 new in
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
-earlier the same session, the CSV refusal banner (state §0.64) · prod
-serves `index-DvbBtbWW.js` for `d078c8f`; **`master` is behind dev by
-the MFA fix and its docs** · dev deploy observed serving `index-Cy6ZeOFD.js` for
-`ded3271` · `master` == `abb239a`, prod serving `index-kU7R9Yoq.js` (see §1).
+earlier the same session, the CSV refusal banner (state §0.64) · dev deploy
+observed serving `index-Cy6ZeOFD.js` for `ded3271` · `master` ==
+`abb239a`, prod serving `index-kU7R9Yoq.js`, Require MFA ON on both Clerk
+instances (see §1) · dev is two docs commits ahead of master, no code
+difference · the session's `netlify dev` stopped and `node_modules/.vite`
+cleared at close.
 
 ## 5. Next — start here
 
 1. **Ritual:** this file, `check:handoff`, `git status`. Expect `dev` and
    `origin/dev` to agree at the handoff commit.
-2. **DONE — prod runs `13f9ffe`, and Jeff observed the profile panel fit on
+2. **DONE — prod ran `13f9ffe` from the morning ship (now `abb239a`, §1),
+   and Jeff observed the profile panel fit on
    the Dispatch Demo Group account** ("the dispatch demo fits"). User-visible on prod: Tasks calendar keys, quarter tabs and report
    cutoffs follow the user's clock; imported US-format close dates become
    real dates; dateless tasks appear in "No due date"; the deal timeline
@@ -154,7 +157,7 @@ the MFA fix and its docs** · dev deploy observed serving `index-Cy6ZeOFD.js` fo
    (f) **Carried:** `checkOk` in App.jsx sets `dbOffline` on any non-ok
    response, so that 401 rendered as "Database connection lost" — an auth
    refusal reported as a database outage (state §0.65, last paragraph).
-8. Smaller carried: the MFA known-ON green dot (still unsighted); the
+8. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
 9. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
@@ -175,11 +178,14 @@ the MFA fix and its docs** · dev deploy observed serving `index-Cy6ZeOFD.js` fo
 
 ## 6. The thread
 
-A one-line queue item — "~20 sites" — was off sevenfold, and counting it
-turned an audit into two rules, a rewrite of the importer, a sweep a lost
-list had been waiting on for weeks, and four thousand lines of code no user
-had seen. Then Jeff ran the checks and found the label beside the sort in
-one screenshot and a task no list could show in the next; both fixed and
-shipped within the hour, and the panel he reported on prod fixed with them.
-Observed, then written, then committed, in that order, including the
-corrections — three of them this time.
+A session that began by writing one owed sentence into the guide ended with
+multi-factor authentication enforced in production. Between: the importer
+stopped passing unreadable dates through, and the probe written to prove it
+found the engine turning "Sept 15" into a day in 2001; a screenshot of a
+Clerk toggle led to the app walking past a pending session on both the
+client and the API; Jeff flipped Require on Development, signed in, watched
+the bypass, and an hour later watched the fix hold him at the task card —
+then did it again on prod. Two prod ships, each verified by bundle hash. The
+handoff was corrupted twice by edit scripts and restored from git both times
+before anything was committed. Observed, then written, then committed, and
+re-read from disk between every step.
