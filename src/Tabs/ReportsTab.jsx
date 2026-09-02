@@ -7,6 +7,7 @@ import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
 import { lossBucketOf, exitStageOf, previousStageOf, lostByStageRowsOf } from '../utils/lossAnalysis';
 import { stages as defaultStages } from '../utils/constants';
 import { sliceActivities } from '../utils/reportScope';
+import { periodRange, priorRange, inRange, dayOf, currentFiscalYear } from '../utils/reportPeriod';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
 
@@ -173,46 +174,20 @@ export default function ReportsTab({ leadsEnabled = true }) {
                     return roleFilteredOpps;
                 })();
 
-                // Apply time period filter to reportsOpps for pipeline/performance/revenue tabs
-                const reportsTimedOpps = (() => {
-                    if (reportTimePeriod === 'all') return reportsOpps;
-                    const now = new Date();
-                    const fy = now.getFullYear();
-                    const fiscalStart = settings.fiscalYearStart || 10;
-                    const getFiscalQRanges = (baseYear) => {
-                        // baseYear = the fiscal year NUMBER (e.g. 2026 for FY2026)
-                        // Q1 starts at fiscalStart month; each Q is 3 months
-                        const qs = {};
-                        ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
-                            const startMonthOffset = (fiscalStart - 1 + qi * 3);
-                            const startMonth = (startMonthOffset % 12) + 1;
-                            // Calendar year of Q start: if fiscalStart <= 1 then same as baseYear-1 for Q1
-                            // Months before fiscalStart belong to baseYear, months >= fiscalStart belong to baseYear-1 calendar year
-                            const calYear = startMonth >= fiscalStart ? baseYear - 1 : baseYear;
-                            const endRaw = new Date(calYear, startMonth - 1 + 3, 0);
-                            qs[q] = [`${calYear}-${String(startMonth).padStart(2,'0')}-01`,
-                                     `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`];
-                        });
-                        qs['FY'] = [qs['Q1'][0], qs['Q4'][1]];
-                        return qs;
-                    };
-                    const qRanges = getFiscalQRanges(fy);
-                    if (reportTimePeriod === 'custom') {
-                        return reportsOpps.filter(o => {
-                            const d = o.forecastedCloseDate || o.createdDate || '';
-                            if (!d) return false;
-                            if (reportDateFrom && d < reportDateFrom) return false;
-                            if (reportDateTo && d > reportDateTo) return false;
-                            return true;
-                        });
-                    }
-                    const [from, to] = qRanges[reportTimePeriod] || [];
-                    if (!from) return reportsOpps;
-                    return reportsOpps.filter(o => {
-                        const d = o.forecastedCloseDate || o.createdDate || '';
-                        return d >= from && d <= to;
-                    });
-                })();
+                // ── Period and comparison windows ──────────────────────────────
+                // One module, built on src/utils/quarters.js (fiscal year = the
+                // calendar year it ENDS in). Four hand-rolled copies used to live
+                // here; the three period ones put every quarter a year back under
+                // a January start and the comparison one used the opposite
+                // convention (0.68). Days are read as days and instants on the
+                // local clock (dayOf); the comparison baseline starts from the
+                // SLICED set so a rep's period is compared with that rep's prior
+                // period, and "All time" has no previous period.
+                const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
+                const reportRange = periodRange(reportTimePeriod, fiscalStart, { from: reportDateFrom, to: reportDateTo });
+                const reportsTimedOpps = reportRange
+                    ? reportsOpps.filter(o => inRange(dayOf(o.forecastedCloseDate || o.createdDate), reportRange))
+                    : reportsOpps;
 
                 // The Rep / Team / Territory slice, applied to activities the way
                 // reportsOpps applies it to deals. It never was: the Activity tab's
@@ -222,156 +197,21 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const reportsActivities = sliceActivities(roleFilteredActivities, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory }, settings.users);
 
                 // Apply period filter to activities (by date field)
-                const reportsTimedActivities = (() => {
-                    const allActs = reportsActivities;
-                    if (reportTimePeriod === 'all') return allActs;
-                    const now = new Date();
-                    const fy = now.getFullYear();
-                    const fiscalStart = settings.fiscalYearStart || 10;
-                    const getFiscalQRanges = (baseYear) => {
-                        // baseYear = the fiscal year NUMBER (e.g. 2026 for FY2026)
-                        // Q1 starts at fiscalStart month; each Q is 3 months
-                        const qs = {};
-                        ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
-                            const startMonthOffset = (fiscalStart - 1 + qi * 3);
-                            const startMonth = (startMonthOffset % 12) + 1;
-                            // Calendar year of Q start: if fiscalStart <= 1 then same as baseYear-1 for Q1
-                            // Months before fiscalStart belong to baseYear, months >= fiscalStart belong to baseYear-1 calendar year
-                            const calYear = startMonth >= fiscalStart ? baseYear - 1 : baseYear;
-                            const endRaw = new Date(calYear, startMonth - 1 + 3, 0);
-                            qs[q] = [`${calYear}-${String(startMonth).padStart(2,'0')}-01`,
-                                     `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`];
-                        });
-                        qs['FY'] = [qs['Q1'][0], qs['Q4'][1]];
-                        return qs;
-                    };
-                    const qRanges = getFiscalQRanges(fy);
-                    if (reportTimePeriod === 'custom') {
-                        return allActs.filter(a => {
-                            const d = (a.date || a.createdAt || '').slice(0, 10);
-                            if (!d) return false;
-                            if (reportDateFrom && d < reportDateFrom) return false;
-                            if (reportDateTo && d > reportDateTo) return false;
-                            return true;
-                        });
-                    }
-                    const [from, to] = qRanges[reportTimePeriod] || [];
-                    if (!from) return allActs;
-                    return allActs.filter(a => {
-                        const d = (a.date || a.createdAt || '').slice(0, 10);
-                        return d >= from && d <= to;
-                    });
-                })();
+                const reportsTimedActivities = reportRange
+                    ? reportsActivities.filter(a => inRange(dayOf(a.date || a.createdAt), reportRange))
+                    : reportsActivities;
 
                 // Apply period filter to leads (by createdAt)
-                const reportsTimedLeads = (() => {
-                    const allL = roleFilteredLeads;
-                    if (reportTimePeriod === 'all') return allL;
-                    const now = new Date();
-                    const fy = now.getFullYear();
-                    const fiscalStart = settings.fiscalYearStart || 10;
-                    const getFiscalQRanges = (baseYear) => {
-                        // baseYear = the fiscal year NUMBER (e.g. 2026 for FY2026)
-                        // Q1 starts at fiscalStart month; each Q is 3 months
-                        const qs = {};
-                        ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
-                            const startMonthOffset = (fiscalStart - 1 + qi * 3);
-                            const startMonth = (startMonthOffset % 12) + 1;
-                            // Calendar year of Q start: if fiscalStart <= 1 then same as baseYear-1 for Q1
-                            // Months before fiscalStart belong to baseYear, months >= fiscalStart belong to baseYear-1 calendar year
-                            const calYear = startMonth >= fiscalStart ? baseYear - 1 : baseYear;
-                            const endRaw = new Date(calYear, startMonth - 1 + 3, 0);
-                            qs[q] = [`${calYear}-${String(startMonth).padStart(2,'0')}-01`,
-                                     `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`];
-                        });
-                        qs['FY'] = [qs['Q1'][0], qs['Q4'][1]];
-                        return qs;
-                    };
-                    const qRanges = getFiscalQRanges(fy);
-                    if (reportTimePeriod === 'custom') {
-                        return allL.filter(l => {
-                            const d = (l.createdAt || '').slice(0, 10);
-                            if (!d) return false;
-                            if (reportDateFrom && d < reportDateFrom) return false;
-                            if (reportDateTo && d > reportDateTo) return false;
-                            return true;
-                        });
-                    }
-                    const [from, to] = qRanges[reportTimePeriod] || [];
-                    if (!from) return allL;
-                    return allL.filter(l => {
-                        const d = (l.createdAt || '').slice(0, 10);
-                        return d >= from && d <= to;
-                    });
-                })();
+                const reportsTimedLeads = reportRange
+                    ? roleFilteredLeads.filter(l => inRange(dayOf(l.createdAt), reportRange))
+                    : roleFilteredLeads;
 
-                // ── Comparison period data ─────────────────────────────────────────────
-                // Computes a parallel set of opps for the prior period so the UI can
-                // show deltas (e.g. pipeline value vs previous quarter).
+                // ── Comparison period data ─────────────────────────────────────
+                // The prior window for the selected period (see reportPeriod.js),
+                // applied to the same sliced set the current figures come from.
                 // reportCompareTo: 'previous_quarter' | 'previous_year' | 'none'
-                const comparedOpps = (() => {
-                    if (reportCompareTo === 'none') return null;
-                    const now = new Date();
-                    const fy = now.getFullYear();
-                    const fiscalStart = settings.fiscalYearStart || 10;
-
-                    // Build fiscal quarter ranges for a given base year
-                    const getFQR = (baseYear) => {
-                        const qs = {};
-                        ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
-                            const rawMonth = fiscalStart - 1 + qi * 3;
-                            const sm = (rawMonth % 12) + 1;
-                            const sy = rawMonth >= 12 ? baseYear + 1 : baseYear;
-                            const endRaw = new Date(sy, sm - 1 + 3, 0);
-                            qs[q] = {
-                                from: `${sy}-${String(sm).padStart(2,'0')}-01`,
-                                to:   `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`,
-                            };
-                        });
-                        qs['FY'] = { from: qs['Q1'].from, to: qs['Q4'].to };
-                        return qs;
-                    };
-
-                    // Determine what the "prior" date range is based on current period + compare mode
-                    let priorFrom = null, priorTo = null;
-                    const thisQRanges = getFQR(fy);
-                    const lastQRanges = getFQR(fy - 1);
-
-                    if (reportCompareTo === 'previous_quarter') {
-                        if (['Q1','Q2','Q3','Q4'].includes(reportTimePeriod)) {
-                            const qKeys = ['Q1','Q2','Q3','Q4'];
-                            const idx = qKeys.indexOf(reportTimePeriod);
-                            if (idx === 0) { priorFrom = lastQRanges['Q4'].from; priorTo = lastQRanges['Q4'].to; }
-                            else           { priorFrom = thisQRanges[qKeys[idx-1]].from; priorTo = thisQRanges[qKeys[idx-1]].to; }
-                        } else if (reportTimePeriod === 'FY') {
-                            priorFrom = lastQRanges['FY'].from; priorTo = lastQRanges['FY'].to;
-                        } else {
-                            // 'all' or custom — compare to prior 90 days
-                            const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 90);
-                            const prior = new Date(cutoff); prior.setDate(prior.getDate() - 90);
-                            priorFrom = isoLocal(prior);
-                            priorTo   = isoLocal(cutoff);
-                        }
-                    } else if (reportCompareTo === 'previous_year') {
-                        if (['Q1','Q2','Q3','Q4'].includes(reportTimePeriod)) {
-                            priorFrom = lastQRanges[reportTimePeriod].from;
-                            priorTo   = lastQRanges[reportTimePeriod].to;
-                        } else if (reportTimePeriod === 'FY') {
-                            priorFrom = lastQRanges['FY'].from; priorTo = lastQRanges['FY'].to;
-                        } else {
-                            const cutoff = new Date(now); cutoff.setFullYear(cutoff.getFullYear()-1);
-                            const prior  = new Date(cutoff); prior.setDate(prior.getDate() - 90);
-                            priorFrom = isoLocal(prior);
-                            priorTo   = isoLocal(cutoff);
-                        }
-                    }
-
-                    if (!priorFrom) return null;
-                    return roleFilteredOpps.filter(o => {
-                        const d = o.forecastedCloseDate || o.closeDate || o.createdDate || '';
-                        return d >= priorFrom && d <= priorTo;
-                    });
-                })();
+                const priorRangeR = priorRange(reportTimePeriod, reportCompareTo, fiscalStart, { from: reportDateFrom, to: reportDateTo });
+                const comparedOpps = priorRangeR ? reportsOpps.filter(o => inRange(dayOf(o.forecastedCloseDate || o.createdDate), priorRangeR)) : null;
 
                 // Helper: compute a delta label vs comparison period, or null if no comparison
                 const cmpDelta = (currentVal, cmpOppsFilter) => {
@@ -771,8 +611,9 @@ ${bodyHtml}
 
                         {/* ── Filter bar: Grouped By segmented control + Period dropdown + Compare to + Export ── */}
                         {(() => {
-                          const now = new Date();
-                          const fy = now.getFullYear();
+                          // The FY label names the fiscal year by the house convention
+                          // (the calendar year it ends in), not the calendar year.
+                          const fy = currentFiscalYear(fiscalStart);
                           const periodOptions = [
                             { value:'all',    label:'All Time' },
                             { value:'FY',     label:`FY ${fy}` },

@@ -78,6 +78,14 @@ four mutants. `e39c57d`, **deploy-verified:** accelerep.netlify.app serves
 `index-Dv_RGDzl.js`, the local gate build's hash. `master` has neither
 report fix — ship dev to prod once Jeff has eyeballed both.
 
+**Then the audit, top down (Jeff: "please proceed top down") — batch 1, the
+commit this handoff rides in (state §0.69):** the four hand-rolled fiscal
+builders replaced by `src/utils/reportPeriod.js` on top of `quarters.js`;
+FY/Q1–Q4 now the right year under a January start, the comparison baseline
+the right year AND the sliced set, "All time" with no fake baseline, instants
+read on the local clock. 13 tests under two fiscal starts, 7 mutants. Deploy
+check recorded in §4 by a follow-up docs commit.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -120,12 +128,13 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 135 files · **367/367 unit** (10 new in
-`report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
-`session-status.test.mjs`) · **129/129 mutations, printed green baseline**
-(15 new this session; run alone) · build **2,480 kB JS**,
-`index-Dv_RGDzl.js` (the slice fix; dev deploy observed serving it for
-`e39c57d`; `index-CzGO2ggA.js` before it for `7c6a432`), guard OK, `dist/` cleared · **79 integration not
+Five gates green on 136 files · **380/380 unit** (13 new in
+`report-period.test.mjs`, 10 in `report-scope.test.mjs`, 15 in
+`loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **135/135
+mutations, printed green baseline** (22 new this session; run alone) · build
+**2,478 kB JS**, `index-CprJulHE.js` (audit batch 1; deploy check pending
+at the time this was written; `index-Dv_RGDzl.js` observed for
+`e39c57d`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -204,7 +213,12 @@ cleared at close.
    guard); a contacts array written into a text column; the Actions report
    storing a Response as data; six "Save as my report" buttons with no
    handler; a report-builder preview made of constants. Recommended order
-   is in §0.68. Do not start on it without reading §0.68 first.
+   is in §0.68. Do not start on it without reading §0.68 first. **Batch 1
+   (period + comparison, tier 1 items 1–2) is DONE — state §0.69.** Next:
+   batch 2 — the two crashes (`products.map` L6434, toolbar above the null
+   guard L6256), the contacts array write (L6500), the Actions fetch
+   (L4817). Line numbers shift by about −166 after batch 1; grep, don't
+   trust them.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.

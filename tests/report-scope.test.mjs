@@ -82,7 +82,7 @@ test('users missing entirely: rep slice still works, team/territory select nothi
 test('ReportsTab builds the timed activity set from the SLICED activities, not the role-gated list', () => {
     const src = readFileSync(new URL('../src/Tabs/ReportsTab.jsx', import.meta.url), 'utf8');
     assert.match(src, /const reportsActivities = sliceActivities\(roleFilteredActivities, \{ rep: reportsRep, team: reportsTeam, territory: reportsTerritory \}, settings\.users\);/);
-    assert.match(src, /const allActs = reportsActivities;/, 'reportsTimedActivities must start from the sliced set');
-    assert.doesNotMatch(src, /const allActs = roleFilteredActivities;/, 'the unsliced start is the bug');
+    assert.match(src, /\? reportsActivities\.filter\(a => inRange\(dayOf\(a\.date \|\| a\.createdAt\), reportRange\)\)/, 'reportsTimedActivities must start from the sliced set');
+    assert.doesNotMatch(src, /roleFilteredActivities\.filter\(a => inRange/, 'the unsliced start is the bug');
     assert.match(src, /from '\.\.\/utils\/reportScope'/);
 });

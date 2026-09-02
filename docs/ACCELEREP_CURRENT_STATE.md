@@ -1986,6 +1986,54 @@ fallback, and cycle time from `lostDate` / the closing history entry, with
 `wonDate` written on Closed Won; (6) dead controls wired or removed. Each
 batch pure-helper + tests + mutants, as §0.66/§0.67 were done.
 
+### 0.69 Audit batch 1 — the period and comparison windows (2 Sep, fourth session)
+
+**Jeff: "please proceed top down."** §0.68 tier 1 items 1 and 2, plus the
+UTC-day slice the period filters applied to instants. `src/utils/
+reportPeriod.js`, pure, built on `quarters.js` (fiscal year = the calendar
+year it ENDS in, the convention the Pipeline list and Home already use):
+`currentFiscalYear`, `fiscalRange(fy, 'Q1'..'Q4'|'FY')`, `periodRange`
+('all' → null, 'custom' → the user's bounds with open ends allowed),
+`priorRange` (previous quarter: Qn → Q(n−1), Q1 → Q4 of the year before, FY
+→ the year before, custom → the equal-length window ending the day before;
+previous year: the same key a fiscal year earlier, custom shifted a year;
+**'All time' → null — no more comparing everything against a 90-day slice**),
+`dayOf` (a day as written; an instant on the LOCAL clock via
+`parseLocalDate`, not `.slice(0,10)`), `inRange` (inclusive, open ends, an
+empty day never inside). ReportsTab's four hand-rolled builders (three
+identical period ones and the opposite-convention comparison one) are gone:
+`reportRange` and `priorRangeR` are computed once, the deal / activity /
+lead sets filter through `dayOf` + `inRange`, and **`comparedOpps` now
+starts from `reportsOpps` (the sliced set)**, so a rep's period is compared
+with that rep's prior period. `fiscalStart` is `parseInt(settings.
+fiscalYearStart) || 10`, the App.jsx / HomeTab convention (the reports used
+`|| 10` without parseInt). The period dropdown's "FY" label now names the
+fiscal year, not the calendar year.
+
+What a user sees change: under the default January fiscal start, "FY 2026" and
+Q1–Q4 show **2026** data (they showed 2025); every "vs previous quarter / year"
+delta compares the right years and the right rep; with "All Time" selected the
+deltas disappear instead of reading a meaningless large positive number; an
+activity logged after ~7pm Central lands in the day it was logged, not the
+next.
+
+`tests/report-period.test.mjs` (13, every case under both a January and an
+October start — 18b18; the REGRESSION cases are the year-off FY and the Q1 →
+prior-year Q4). Gates green on 136 files, **380/380**, **135/135 mutations,
+printed green baseline** (seven new: the year named by its start, Q1's prior
+quarter in the same year, the fake 90-day baseline, `dayOf` slicing UTC,
+`inRange` admitting an empty day — that one SURVIVED the first run because
+the test only used a range with a `from`; the open-start case was added and
+it is caught — the comparison baseline unsliced, the timed activity set
+unsliced), build guard OK (2,478 kB, `index-CprJulHE.js`). One slip on the
+way: the span replacement that removed the old deal-period block also
+swallowed the `reportsActivities` line between the two markers; the §0.67
+scan test caught it before anything ran, and it was restored. **Not
+browser-checked here** (the pane's Karen session needs her second factor);
+Jeff eyeballs after the deploy: Reports → Pipeline & Forecast with FY 2026
+and Q3 selected should show this year's deals, and "All Time" should show no
+delta chips.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

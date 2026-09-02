@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -718,8 +718,34 @@ const mutations = [
         '    return acts.filter(a => { const r = activityRepOf(a); return !r || reps.has(r); });'],
     ['reports: the timed activity set starts from the role-gated list again (the 0.67 bug)',
         'src/Tabs/ReportsTab.jsx',
-        '                    const allActs = reportsActivities;',
-        '                    const allActs = roleFilteredActivities;'],
+        '                    ? reportsActivities.filter(a => inRange(dayOf(a.date || a.createdAt), reportRange))',
+        '                    ? roleFilteredActivities.filter(a => inRange(dayOf(a.date || a.createdAt), reportRange))'],
+
+    // ── Report period + comparison windows (0.68 tier 1, items 1–2) ─────────
+    ['period: the fiscal year is named by its START year again (every quarter a year off)',
+        'src/utils/reportPeriod.js',
+        "    return quarterOf(isoLocal(today), fiscalStart).fiscalYear;",
+        "    return today.getFullYear() - (fiscalStart === 1 ? 1 : 0);"],
+    ['period: Q1 previous-quarter stays in the same fiscal year',
+        'src/utils/reportPeriod.js',
+        "        return q === 1 ? fiscalRange(fy - 1, 'Q4', fiscalStart) : fiscalRange(fy, `Q${q - 1}`, fiscalStart);",
+        "        return q === 1 ? fiscalRange(fy, 'Q4', fiscalStart) : fiscalRange(fy, `Q${q - 1}`, fiscalStart);"],
+    ['period: All time gets a fake 90-day baseline again',
+        'src/utils/reportPeriod.js',
+        "    if (!period || period === 'all') return null;\n    const fy = currentFiscalYear(fiscalStart, today);",
+        "    const fy = currentFiscalYear(fiscalStart, today);\n    if (!period || period === 'all') { const t = isoLocal(today); return { from: shiftDays(t, -180), to: shiftDays(t, -90) }; }"],
+    ['period: dayOf slices the UTC day off an instant',
+        'src/utils/reportPeriod.js',
+        "    const d = parseLocalDate(s);\n    return d ? isoLocal(d) : '';",
+        "    return s.slice(0, 10);"],
+    ['period: inRange treats an empty day as inside every range',
+        'src/utils/reportPeriod.js',
+        "    if (!day || !range) return false;",
+        "    if (!range) return false;"],
+    ['reports: the comparison baseline starts from the role-gated list again (unsliced)',
+        'src/Tabs/ReportsTab.jsx',
+        "const comparedOpps = priorRangeR ? reportsOpps.filter(",
+        "const comparedOpps = priorRangeR ? roleFilteredOpps.filter("],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
