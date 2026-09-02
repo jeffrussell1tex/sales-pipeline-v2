@@ -1580,6 +1580,48 @@ prod now see: a CSV row with an unreadable Close or Created Date refused at
 Preview by row, field and cell; "Sept 15" no longer imports as 2001; Excel's
 "9/15/26" still imports as 2026.
 
+### 0.65 FOUND, NOT FIXED: the app ignores Clerk's pending session state, so "Require MFA" would not lock sign-in (2 Sep, fourth session)
+
+**Jeff: "i enabled MFA on the UKG instance. It is still letting me log in
+without it."** His screenshot of the Clerk Dashboard (Sales Pipeline Tracker →
+Development → Multi-factor) shows what was enabled: the **SMS verification
+code** strategy ON, Authenticator application OFF, Backup codes OFF, and
+**"Require multi-factor authentication" OFF**. A strategy toggle makes MFA
+available for a user to enrol; only the Require toggle forces it. So Clerk
+letting him in is the configured behaviour, not a defect — the pane's Karen
+session on the same Development instance reads `session.status` "active",
+token `v` 2, `sts` "active", `twoFactorEnabled` false, consistent with an
+optional policy and no enrolment.
+
+**But the app could not honour Require if it were on — read in code, not yet
+observed.** Clerk enforces Require by giving an un-enrolled sign-in a session
+with `status: "pending"` and a `setup-mfa` task; the docs treat pending as
+signed-out and the v2 token carries `sts: "pending"`. (1) `App.jsx` gates the
+whole app on `useUser().user` (`if (!clerkUser)`), and in the installed SDK
+`useUser` returns the raw user regardless of session status — only
+`useAuth()` runs Clerk's `resolveAuthState`, which is where
+`treatPendingAsSignedOut` turns a pending session into `isSignedIn: false`.
+A pending session therefore passes the gate, `<SignIn />` unmounts, and the
+`setup-mfa` task the component would render never appears. (2)
+`verifyAuth` in `auth.mjs` uses `verifyToken`, which checks signature and
+claims and never reads `sts`; Clerk's pending handling lives in
+`authenticateRequest`/`getAuthObjectFromJwt`, which the app does not use.
+So the API would serve a pending session too. (3) `MfaDetail.jsx` tells
+admins "Require MFA in Clerk Dashboard to lock down sign-in" — a promise the
+app cannot keep as built — and still carries a dead "Send reminders" button,
+an unreachable `EnforceMfaModal` with fabricated counts ("22 users",
+"kirim@accelerep.com"), and hardcoded "Allowed factors" tiles that now
+contradict the real Development config (tiles say TOTP on / SMS off; Clerk
+says SMS on / TOTP off).
+
+**Queued, Jeff's call — do not turn Require on for Production until (1) and
+(2) are fixed:** gate on `useAuth().isSignedIn` and keep `<SignIn />` (or
+`TaskSetupMFA` / `RedirectToTasks`, both exported by clerk-react 5.61.9)
+mounted while pending; refuse `payload.sts === 'pending'` in `verifyAuth`
+with a mutant; fix the MfaDetail copy and remove its dead controls. To
+observe the bug first: flip Require on the Development instance, sign in
+fresh as Karen in the pane, read `Clerk.session.status`.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

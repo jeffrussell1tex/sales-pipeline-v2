@@ -114,10 +114,18 @@ banner observed at Preview with the rows and cells named, nothing imported
    year-2001 default for a yearless cell is gated (state §0.64).
 6. **DONE (fourth session):** the nine stale App.jsx default imports are
    removed (state §0.63).
-7. Smaller carried: the MFA known-ON green dot (still unsighted); the
+7. **NEW, found not fixed (state §0.65):** the app ignores Clerk's pending
+   session state — `App.jsx` gates on `useUser().user` and `verifyAuth`
+   never reads `sts` — so Clerk's "Require multi-factor authentication"
+   would not lock sign-in here. Jeff's Development instance has only the
+   SMS strategy on and Require OFF (his screenshot), which is why his
+   sign-in went through: that part is configured behaviour. Do not turn
+   Require on for Production before the fix. MfaDetail's copy promises
+   the lock-down and its factor tiles are hardcoded and now wrong.
+8. Smaller carried: the MFA known-ON green dot (still unsighted); the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
-8. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
+9. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
    regexes — write scripts with the Write tool and run the file; a
    scratchpad script cannot resolve the repo's packages — copy into the repo
    root, run, delete (tree checked clean after); `mutate-import` runs alone
