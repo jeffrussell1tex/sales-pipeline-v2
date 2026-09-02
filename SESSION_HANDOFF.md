@@ -99,8 +99,9 @@ hash.
 Leads tab sliced, deals-at-risk on the sliced activities, `SavedReportsTab`
 and `ActivityHistoryTab` handed the gated sets instead of the raw context
 arrays, rep lists in the scorecard / Actions report / history picker
-narrowed to the viewer's scope. 5 tests, 5 mutants. Deploy check recorded
-in §4 by a follow-up docs commit. Open for Jeff: the report's leads gate
+narrowed to the viewer's scope. 5 tests, 5 mutants. `f40b2c1`,
+**deploy-verified:** accelerep.netlify.app serves `index-D0ibE8V3.js`, the
+local gate build's hash. Open for Jeff: the report's leads gate
 drops unassigned leads for non-Admins while the server can serve them.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
@@ -150,8 +151,8 @@ Five gates green on 137 files · **394/394 unit** (9 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
 `session-status.test.mjs`) · **145/145 mutations, printed green baseline**
 (32 new this session; run alone) · build **2,479 kB JS**,
-`index-D0ibE8V3.js` (audit batch 3; deploy check pending at the time this
-was written; `index-D3lRwa5m.js` observed for `d79b888`), guard OK, `dist/` cleared · **79 integration not
+`index-D0ibE8V3.js` (audit batch 3; dev deploy observed serving it for
+`f40b2c1`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);

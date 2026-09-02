@@ -2120,6 +2120,9 @@ here; Jeff eyeballs after the deploy: Reports → Leads with a rep selected
 must change its numbers, and Saved reports → Rep scorecard as a rep must
 offer only that rep.
 
+**Dev landing (`f40b2c1`):** accelerep.netlify.app serves `index-D0ibE8V3.js`,
+the local gate build's hash, 40 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
