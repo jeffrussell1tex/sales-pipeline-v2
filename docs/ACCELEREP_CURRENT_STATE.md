@@ -2311,6 +2311,9 @@ re-run: no endpoint changed (`opportunities.mjs` already accepted
 Saved reports → Rep scorecard — "Attainment history" bars read "Q3 FY26",
 and a deal just marked Closed Won appears under Recent wins dated today.
 
+**Dev landing (`7dbfd6e`):** accelerep.netlify.app serves `index-DZcl2imu.js`,
+the local gate build's hash, 41 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

@@ -137,8 +137,9 @@ recent wins / losses and quarter buckets on closed deals read the real
 close day (`closeDayOf` — `wonDate` / `lostDate`, else the stage-change
 day), quarters are inclusive day ranges from quarters.js, the scorecard's
 attainment history uses each quarter's own quota, and Closed Won now
-writes `wonDate`. 6 tests, 6 mutants. Deploy check recorded in §4 by a
-follow-up docs commit.
+writes `wonDate`. 6 tests, 6 mutants. `7dbfd6e`, **deploy-verified:**
+accelerep.netlify.app serves `index-DZcl2imu.js`, the local gate build's
+hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -188,9 +189,8 @@ Five gates green on 139 files · **422/422 unit** (5 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
 `session-status.test.mjs`) · **169/169 mutations, printed green baseline**
 (56 new this session; run alone) · build
-**2,477 kB JS**, `index-DZcl2imu.js` (audit batch 5b; deploy check pending
-at the time this was written; `index-BBGjcEEV.js` observed for `090da10`),
-guard OK, `dist/` cleared · **79 integration not
+**2,477 kB JS**, `index-DZcl2imu.js` (audit batch 5b; dev deploy observed
+serving it for `7dbfd6e`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
