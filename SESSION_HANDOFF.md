@@ -7,7 +7,8 @@ engine's year-2001 default gated — all on dev, then SHIPPED to prod; after the
 ship, Clerk's pending-session bypass found, observed and FIXED on dev, then
 shipped; the Win / loss report made to read the category it was never
 reading; the Activity report made to honour the rep slice; the Reports
-audit's §0.68 list fixed through batch 7), FINAL.** Repo
+audit's §0.68 list fixed through batch 7, then SHIPPED to prod), FINAL.**
+Repo
 root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
@@ -167,6 +168,12 @@ Karen on the Beacon Metals account. `e2adc83`, **deploy-verified:**
 accelerep.netlify.app serves `index-AW6mOo3m.js`, the local gate build's
 hash.
 
+**PROD SHIPPED (Jeff: "looks great - please ship to production"):**
+`master` fast-forwarded `abb239a` → `1163eec`, 27 commits (§0.66–§0.77);
+salespipelinetracker.com serves `index-Ki3OVxo2.js`, `pk_live_` inlined,
+batch 6 and 7 strings present (state §0.77). `master` == `1163eec`; dev
+is ahead only by this docs commit.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -223,9 +230,9 @@ pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
 earlier the same session, the CSV refusal banner (state §0.64) · dev deploy
 observed serving `index-Cy6ZeOFD.js` for `ded3271` · `master` ==
-`abb239a`, prod serving `index-kU7R9Yoq.js`, Require MFA ON on both Clerk
-instances (see §1) · dev is ahead of master by the report fix and its docs
-(state §0.66) · the session's `netlify dev` stopped and `node_modules/.vite`
+`1163eec`, prod serving `index-Ki3OVxo2.js` (third ship, §1), Require MFA
+ON on both Clerk instances · dev is ahead of master only by the prod-ship
+docs commit · the session's `netlify dev` stopped and `node_modules/.vite`
 cleared at close.
 
 ## 5. Next — start here
@@ -309,11 +316,10 @@ cleared at close.
    §0.75. Batch 6 (dead controls wired or removed, the print path gone)
    is DONE — state §0.76. Batch 7 (the History tab on real columns, PDF
    escaping, honest labels) is DONE — state §0.77; §0.77 lists what was
-   left by design.** The §0.68 list is closed. Next: ship dev → prod
-   (prod is at `abb239a`, before every report fix — Jeff eyeballs the
-   reports on dev first, especially Win / loss, Activity by rep, Saved
-   reports → Rep scorecard, and Activity History on an account with
-   logged activities). Then Jeff's items in §5.
+   left by design. SHIPPED to prod as `1163eec` (§1).** The §0.68 list is
+   closed. Next: Jeff eyeballs the Reports tab on prod (Win / loss,
+   Activity by rep, Saved reports → Rep scorecard, Activity History on an
+   account with logged activities), then Jeff's items in §5.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
@@ -342,7 +348,7 @@ found the engine turning "Sept 15" into a day in 2001; a screenshot of a
 Clerk toggle led to the app walking past a pending session on both the
 client and the API; Jeff flipped Require on Development, signed in, watched
 the bypass, and an hour later watched the fix hold him at the task card —
-then did it again on prod. Two prod ships, each verified by bundle hash. The
+then did it again on prod. Three prod ships, each verified by bundle hash. The
 handoff was corrupted twice by edit scripts and restored from git both times
 before anything was committed. Observed, then written, then committed, and
 re-read from disk between every step.

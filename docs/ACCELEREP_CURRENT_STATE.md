@@ -2442,6 +2442,19 @@ batch 4.
 **Dev landing (`e2adc83`):** accelerep.netlify.app serves `index-AW6mOo3m.js`,
 the local gate build's hash, 31 seconds after the push.
 
+**PROD SHIP (Jeff: "looks great - please ship to production").** `master`
+fast-forwarded `abb239a` → `1163eec` (ancestor check first; 27 commits —
+the Win / loss and Activity report fixes, §0.66–§0.67, and audit batches
+1–7, §0.69–§0.77); salespipelinetracker.com serves `index-Ki3OVxo2.js`
+30 seconds after the push — the inlined key `pk_live_` (the bundle's one
+`pk_test_` literal is Clerk's own key-type check in
+`@clerk/shared/dist/keys.mjs`, present in every build), the batch 7 AI
+banner and the batch 6 saved-card title present, 2,535,030 bytes. Nothing
+probed on prod beyond the served bundle: Jeff eyeballs the Reports tab
+there. Dev and prod share the Neon `main` branch, so the two test saved
+reports in Karen's dev library (§0.76) are the same rows prod would show
+her.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
