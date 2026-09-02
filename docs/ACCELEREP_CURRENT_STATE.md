@@ -2076,6 +2076,50 @@ show its rows.
 **Dev landing (`d79b888`):** accelerep.netlify.app serves `index-D3lRwa5m.js`,
 the local gate build's hash, 40 seconds after the push.
 
+### 0.71 Audit batch 3 — scoping: leads sliced, the sub-tabs gated, rep lists narrowed (2 Sep, fourth session)
+
+§0.68 items 6, 10, 11, 13 (the scoping halves) and tier 2's Manager-wide rep
+lists. `reportScope.js` gains `leadRepOf` (a lead's rep is `assignedTo`),
+`sliceLeads` (the activities slice, for leads) and `visibleReps(names,
+scoped)` (null scope = everyone; else only the names in it — an empty scope
+sees nobody). In ReportsTab: (1) `scopedRepNames` is derived once from the
+role gate — `myTeamMembers ? [...myTeamMembers] : null` — so a rep LIST and
+the DATA behind it come from the same set and cannot disagree; (2) the Leads
+tab gets `reportsLeads = sliceLeads(roleFilteredLeads, slice, users)` and its
+period set starts there — the §0.67 symptom, for leads, is gone; (3) the
+Pipeline tab's deals-at-risk staleness reads `reportsActivities` instead of
+the raw `activities`; (4) `SavedReportsTab` receives
+`activities={reportsActivities}` (role-gated and sliced) and
+`scopedRepNames`; its scorecard rep list and team-average roster go through
+`visibleReps` — a User can no longer pick any rep in the org and read that
+rep's activity mix; (5) `ActivityHistoryTab` receives `reportsActivities`,
+`roleFilteredOpps` and `roleFilteredTasks` instead of the raw context
+arrays, and its opportunity picker's owner test drops the phantom `o.rep`;
+(6) `RecommendationReport`'s rep dropdown goes through `visibleReps`, so a
+Manager sees their team, not the org. The sub-tabs' period behaviour is
+unchanged in this batch (§0.68 tier 2, "likely on intent" — the templates
+describe their own windows); their role gate is what this batch closes.
+
+**Not changed, Jeff's call:** the leads role gate drops UNASSIGNED leads for
+every non-Admin (`leadInScope` tests `myTeamMembers.has('')`), while the
+leads endpoint deliberately serves unassigned rows to reps when
+`unassignedLeadsVisibleToReps` is on (§0.58). The report contradicts the
+server policy; which one is right is a product decision (§0.68 reader
+finding L2).
+
+`tests/report-scope.test.mjs` +5 (the leads slice on rep / team /
+territory, an unassigned lead under a slice, `leadRepOf`, `visibleReps`
+including the empty-scope case, and a source scan pinning every wiring point
+above — no sub-tab may receive `activities={activities}`,
+`opportunities={opportunities}` or `tasks={tasks}`). Gates green on 137
+files, **394/394**, **145/145 mutations, printed green baseline** (five new:
+the leads slice ignored, an empty scope seeing everyone, the leads period set
+unsliced, `SavedReportsTab` handed raw activities, the scorecard list every
+user), build guard OK (2,479 kB, `index-D0ibE8V3.js`). Not browser-checked
+here; Jeff eyeballs after the deploy: Reports → Leads with a rep selected
+must change its numbers, and Saved reports → Rep scorecard as a rep must
+offer only that rep.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

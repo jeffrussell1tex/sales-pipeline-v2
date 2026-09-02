@@ -6,7 +6,7 @@ import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
 // and the closing history entry's own stage instead of the stage it came from.
 import { lossBucketOf, exitStageOf, previousStageOf, lostByStageRowsOf } from '../utils/lossAnalysis';
 import { stages as defaultStages } from '../utils/constants';
-import { sliceActivities } from '../utils/reportScope';
+import { sliceActivities, sliceLeads, visibleReps } from '../utils/reportScope';
 import { periodRange, priorRange, inRange, dayOf, currentFiscalYear } from '../utils/reportPeriod';
 import { productsListOf, contactNamesText } from '../utils/oppText';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
@@ -113,6 +113,12 @@ export default function ReportsTab({ leadsEnabled = true }) {
                     return new Set([currentUserName]);
                 })();
 
+                // The rep names this viewer may see, for every rep list below and in
+                // the sub-tabs: null = the whole org (Admin), else the team (Manager) or
+                // themselves (User). Derived from the same gate the data goes through,
+                // so a list and its data can never disagree (0.68 batch 3).
+                const scopedRepNames = myTeamMembers ? [...myTeamMembers] : null;
+
                 // Returns true if an opportunity belongs to the current user's visible scope
                 const oppInScope = (o) => {
                     if (!myTeamMembers) return true; // admin
@@ -202,10 +208,14 @@ export default function ReportsTab({ leadsEnabled = true }) {
                     ? reportsActivities.filter(a => inRange(dayOf(a.date || a.createdAt), reportRange))
                     : reportsActivities;
 
+                // The slice, applied to leads — it never was (the §0.67 symptom for
+                // the Leads tab: every KPI frozen as a manager stepped through reps).
+                const reportsLeads = sliceLeads(roleFilteredLeads, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory }, settings.users);
+
                 // Apply period filter to leads (by createdAt)
                 const reportsTimedLeads = reportRange
-                    ? roleFilteredLeads.filter(l => inRange(dayOf(l.createdAt), reportRange))
-                    : roleFilteredLeads;
+                    ? reportsLeads.filter(l => inRange(dayOf(l.createdAt), reportRange))
+                    : reportsLeads;
 
                 // ── Comparison period data ─────────────────────────────────────
                 // The prior window for the selected period (see reportPeriod.js),
@@ -861,7 +871,7 @@ ${bodyHtml}
                             const today2iso = todayLocal();
                             const dealsRisk = openOpps.map(o=>{
                               const flags=[];
-                              const lastAct=(activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+                              const lastAct=reportsActivities.filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
                               const daysStale=lastAct?.date ? Math.floor((Date.now()-new Date(lastAct.date+'T12:00:00'))/86400000) : null;
                               const cd=o.forecastedCloseDate||o.closeDate;
                               if(daysStale!==null&&daysStale>=14) flags.push({l:`No activity in ${daysStale}d`,s:'high'});
@@ -2296,6 +2306,7 @@ ${bodyHtml}
                             <RecommendationReport
                                 currentUser={currentUser}
                                 canSeeAll={canSeeAll}
+                                scopedRepNames={scopedRepNames}
                                 settings={settings}
                             />
                         )}
@@ -2307,9 +2318,9 @@ ${bodyHtml}
                             <ActivityHistoryTab
                                 accounts={accounts}
                                 contacts={contacts}
-                                activities={activities}
-                                opportunities={opportunities}
-                                tasks={tasks}
+                                activities={reportsActivities}
+                                opportunities={roleFilteredOpps}
+                                tasks={roleFilteredTasks}
                                 currentUser={currentUser}
                                 userRole={userRole}
                                 settings={settings}
@@ -2325,7 +2336,8 @@ ${bodyHtml}
                             <SavedReportsTab
                                 reportsOpps={reportsOpps}
                                 reportsTimedActivities={reportsTimedActivities}
-                                activities={activities}
+                                activities={reportsActivities}
+                                scopedRepNames={scopedRepNames}
                                 settings={settings}
                                 currentUser={currentUser}
                                 savedReportsList={savedReportsList}
@@ -2341,7 +2353,7 @@ ${bodyHtml}
 // ─────────────────────────────────────────────────────────────
 //  Saved Reports Tab — proper React component (hooks-safe)
 // ─────────────────────────────────────────────────────────────
-function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp }) {
+function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp }) {
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
     const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
@@ -3444,7 +3456,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         );
 
         // ── Rep selector state (declared at component top level)
-        const repsListSC = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name);
+        const repsListSC = visibleReps((settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name), scopedRepNames);
         // Fall back to currentUser if repsListSC is empty
         const repNameSC = repsListSC.includes(selectedRepSC) ? selectedRepSC : (repsListSC[0]||currentUser||'');
         const repUserSC = (settings.users||[]).find(u=>u.name===repNameSC);
@@ -3464,7 +3476,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         const attainColor = attainPct>=1?T.ok:attainPct>=0.8?T.ink:T.warn;
 
         // Team metrics for comparison
-        const allRepsData = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>{
+        const allRepsData = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager'&&(!scopedRepNames||scopedRepNames.includes(u.name))).map(u=>{
             const rw = (reportsOpps||[]).filter(o=>(o.salesRep||o.assignedTo)===u.name&&o.stage==='Closed Won');
             const rl = (reportsOpps||[]).filter(o=>(o.salesRep||o.assignedTo)===u.name&&o.stage==='Closed Lost');
             const total = rw.length+rl.length;
@@ -4636,7 +4648,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         </div>
     );
 }
-function RecommendationReport({ currentUser, canSeeAll, settings }) {
+function RecommendationReport({ currentUser, canSeeAll, scopedRepNames = null, settings }) {
     // `isMobile` was read from the parent's scope, which this component does not
     // have — it threw on render at the grid below.
     const { isMobile } = useApp();
@@ -4647,7 +4659,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
     const [days, setDays] = React.useState(30);
 
     const allReps = canSeeAll
-        ? [...new Set((settings.users || []).filter(u => u.name).map(u => u.name))].sort()
+        ? visibleReps([...new Set((settings.users || []).filter(u => u.name).map(u => u.name))].sort(), scopedRepNames)
         : [currentUser];
 
     const fetchData = React.useCallback(async () => {
@@ -5914,7 +5926,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                 // ── Derived data ───────────────────────────────────────────────────────
                 const visibleOpps = (opportunities || []).filter(o => {
                     if (!canSeeAll) {
-                        const isOwner = o.salesRep === currentUserName || o.rep === currentUserName;
+                        const isOwner = o.salesRep === currentUserName;
                         if (!isOwner) return false;
                     }
                     if (!oppSearch) return true;

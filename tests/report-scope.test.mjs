@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { activityRepOf, repsForSlice, sliceActivities } from '../src/utils/reportScope.js';
+import { activityRepOf, repsForSlice, sliceActivities, leadRepOf, sliceLeads, visibleReps } from '../src/utils/reportScope.js';
 
 const USERS = [
     { name: 'Savannah Miller', team: 'Enterprise West', territory: 'West' },
@@ -85,4 +85,60 @@ test('ReportsTab builds the timed activity set from the SLICED activities, not t
     assert.match(src, /\? reportsActivities\.filter\(a => inRange\(dayOf\(a\.date \|\| a\.createdAt\), reportRange\)\)/, 'reportsTimedActivities must start from the sliced set');
     assert.doesNotMatch(src, /roleFilteredActivities\.filter\(a => inRange/, 'the unsliced start is the bug');
     assert.match(src, /from '\.\.\/utils\/reportScope'/);
+});
+
+// ── Leads and rep lists (0.68 batch 3) ──────────────────────────────────────
+
+const LEADS = [
+    { id: 'l1', assignedTo: 'Savannah Miller' },
+    { id: 'l2', assignedTo: 'Karen Russell' },
+    { id: 'l3', assignedTo: 'Ryan Algie' },
+    { id: 'l4' },                                      // unassigned
+];
+
+test('REGRESSION: the leads tab honours the rep slice — the same fix activities got', () => {
+    assert.deepEqual(ids(sliceLeads(LEADS, { rep: 'Karen Russell' }, USERS)), ['l2']);
+    assert.deepEqual(ids(sliceLeads(LEADS, { team: 'Enterprise West' }, USERS)), ['l1', 'l2']);
+    assert.deepEqual(ids(sliceLeads(LEADS, { territory: 'Central' }, USERS)), ['l3']);
+    assert.equal(sliceLeads(LEADS, {}, USERS), LEADS, 'no slice: untouched');
+});
+
+test('under a slice an unassigned lead belongs to nobody selected', () => {
+    assert.ok(!ids(sliceLeads(LEADS, { team: 'Enterprise West' }, USERS)).includes('l4'));
+});
+
+test('leadRepOf reads assignedTo, the only rep field a lead has', () => {
+    assert.equal(leadRepOf({ assignedTo: 'Karen Russell', author: 'x' }), 'Karen Russell');
+    assert.equal(leadRepOf({}), '');
+    assert.equal(leadRepOf(null), '');
+});
+
+test('visibleReps: null scope is everyone; a scope narrows to its names; nothing else leaks', () => {
+    const all = ['Karen Russell', 'Ryan Algie', 'Savannah Miller'];
+    assert.deepEqual(visibleReps(all, null), all);
+    assert.deepEqual(visibleReps(all, ['Karen Russell', 'Savannah Miller']), ['Karen Russell', 'Savannah Miller']);
+    assert.deepEqual(visibleReps(all, ['Karen Russell']), ['Karen Russell']);
+    assert.deepEqual(visibleReps(all, []), [], 'an empty scope sees nobody, not everybody');
+    assert.deepEqual(visibleReps(undefined, null), []);
+});
+
+test('ReportsTab: leads sliced, the sub-tabs handed the gated sets, rep lists scoped', () => {
+    const src = readFileSync(new URL('../src/Tabs/ReportsTab.jsx', import.meta.url), 'utf8');
+    assert.match(src, /const reportsLeads = sliceLeads\(roleFilteredLeads, \{ rep: reportsRep, team: reportsTeam, territory: reportsTerritory \}, settings\.users\);/);
+    assert.match(src, /\? reportsLeads\.filter\(l => inRange\(dayOf\(l\.createdAt\), reportRange\)\)/);
+    assert.doesNotMatch(src, /roleFilteredLeads\.filter\(l => inRange/, 'the unsliced start is the bug');
+    assert.match(src, /const scopedRepNames = myTeamMembers \? \[\.\.\.myTeamMembers\] : null;/);
+    // Deals at risk reads the sliced activities, not the raw array.
+    assert.match(src, /const lastAct=reportsActivities\.filter\(a=>a\.opportunityId===o\.id\)/);
+    // SavedReportsTab and ActivityHistoryTab get the gated sets.
+    assert.match(src, /<SavedReportsTab\s+reportsOpps=\{reportsOpps\}\s+reportsTimedActivities=\{reportsTimedActivities\}\s+activities=\{reportsActivities\}\s+scopedRepNames=\{scopedRepNames\}/);
+    assert.match(src, /<ActivityHistoryTab\s+accounts=\{accounts\}\s+contacts=\{contacts\}\s+activities=\{reportsActivities\}\s+opportunities=\{roleFilteredOpps\}\s+tasks=\{roleFilteredTasks\}/);
+    assert.doesNotMatch(src, /activities=\{activities\}/, 'no sub-tab may receive the raw activities array');
+    assert.doesNotMatch(src, /opportunities=\{opportunities\}/);
+    assert.doesNotMatch(src, /tasks=\{tasks\}/);
+    // Rep lists in the scorecard and the Actions report go through visibleReps.
+    assert.match(src, /const repsListSC = visibleReps\(/);
+    assert.match(src, /<RecommendationReport\s+currentUser=\{currentUser\}\s+canSeeAll=\{canSeeAll\}\s+scopedRepNames=\{scopedRepNames\}/);
+    assert.match(src, /const allReps = canSeeAll\s*\n\s*\? visibleReps\(/);
+    assert.doesNotMatch(src, /o\.rep === currentUserName/, 'o.rep is not a column');
 });

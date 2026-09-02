@@ -768,6 +768,28 @@ const mutations = [
         'src/Tabs/ReportsTab.jsx',
         "            if (!res.ok) throw new Error(`HTTP ${res.status}`);\n            setData(await res.json());",
         "            setData(res);"],
+
+    // ── Scoping: leads slice, sub-tab datasets, rep lists (0.68 batch 3) ───
+    ['scope: the leads slice is ignored',
+        'src/utils/reportScope.js',
+        "    const list = Array.isArray(leads) ? leads : [];\n    if (!reps) return list;",
+        "    const list = Array.isArray(leads) ? leads : [];\n    return list;"],
+    ['scope: visibleReps lets an empty scope see everyone',
+        'src/utils/reportScope.js',
+        "    if (scoped == null) return list;",
+        "    if (scoped == null || scoped.length === 0) return list;"],
+    ['reports: the leads period set starts from the unsliced list again',
+        'src/Tabs/ReportsTab.jsx',
+        "                    ? reportsLeads.filter(l => inRange(dayOf(l.createdAt), reportRange))",
+        "                    ? roleFilteredLeads.filter(l => inRange(dayOf(l.createdAt), reportRange))"],
+    ['reports: SavedReportsTab is handed the raw activities array again (role gate bypass)',
+        'src/Tabs/ReportsTab.jsx',
+        "                                activities={reportsActivities}\n                                scopedRepNames={scopedRepNames}\n                                settings={settings}",
+        "                                activities={activities}\n                                scopedRepNames={scopedRepNames}\n                                settings={settings}"],
+    ['reports: the scorecard rep list is every user again',
+        'src/Tabs/ReportsTab.jsx',
+        "        const repsListSC = visibleReps((settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name), scopedRepNames);",
+        "        const repsListSC = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name);"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

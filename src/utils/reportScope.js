@@ -40,3 +40,32 @@ export function sliceActivities(activities, slice, users) {
     if (!reps) return acts;
     return acts.filter(a => { const r = activityRepOf(a); return r && reps.has(r); });
 }
+
+// ── Leads and rep lists (0.68 batch 3) ──────────────────────────────────────
+// The Leads tab never received the slice at all (the §0.67 symptom, for
+// leads), and the saved-report scorecard, the Actions report and the history
+// picker offered a Manager every rep in the org while every other surface
+// narrowed them to their team. A lead carries its rep as `assignedTo`.
+
+/** The rep a lead belongs to. */
+export const leadRepOf = (l) => l?.assignedTo || '';
+
+/** Leads narrowed to the slice; no slice → the input untouched. */
+export function sliceLeads(leads, slice, users) {
+    const reps = repsForSlice(slice, users);
+    const list = Array.isArray(leads) ? leads : [];
+    if (!reps) return list;
+    return list.filter(l => { const r = leadRepOf(l); return r && reps.has(r); });
+}
+
+/**
+ * Rep names a viewer may see. `scoped` is null for a viewer who sees the whole
+ * org (Admin), else the names of their team (Manager) or themselves (User) —
+ * the same set ReportsTab's role gate is built from.
+ */
+export function visibleReps(names, scoped) {
+    const list = Array.isArray(names) ? names : [];
+    if (scoped == null) return list;
+    const allowed = new Set(scoped);
+    return list.filter(n => allowed.has(n));
+}
