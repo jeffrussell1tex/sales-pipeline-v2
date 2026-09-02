@@ -2439,6 +2439,9 @@ manager's own team (the only one they have) — a one-option control, not a
 no-op. The blank builder's preview bars (§0.68 item 12) were replaced in
 batch 4.
 
+**Dev landing (`e2adc83`):** accelerep.netlify.app serves `index-AW6mOo3m.js`,
+the local gate build's hash, 31 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

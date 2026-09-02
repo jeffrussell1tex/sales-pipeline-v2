@@ -163,8 +163,9 @@ both PDF writers escape user text, territory coverage honours a deal's own
 territory and reads industry from the accounts prop, forecast-vs-actual
 says quota, the AI builder banner is honest, dead state gone. New
 `src/utils/historyFeed.js`, 7 tests, 8 mutants. Observed locally as
-Karen on the Beacon Metals account. Deploy check recorded in §4 by a
-follow-up docs commit.
+Karen on the Beacon Metals account. `e2adc83`, **deploy-verified:**
+accelerep.netlify.app serves `index-AW6mOo3m.js`, the local gate build's
+hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -215,9 +216,8 @@ Five gates green on 140 files · **434/434 unit** (7 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
 `session-status.test.mjs`) · **182/182 mutations, printed green baseline**
 (69 new this session; run alone) · build
-**2,476 kB JS**, `index-AW6mOo3m.js` (audit batch 7; deploy check pending
-at the time this was written; `index-BorndMdE.js` observed for `9be3fe8`),
-guard OK, `dist/` cleared · **79 integration not
+**2,476 kB JS**, `index-AW6mOo3m.js` (audit batch 7; dev deploy observed
+serving it for `e2adc83`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
