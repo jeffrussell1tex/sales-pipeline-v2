@@ -182,8 +182,9 @@ amber "sign in again" banner, all eight loaders report through it — and
 the Settings → Security "Multi-factor auth" tile reads live Clerk
 enrolment through AdminView's live-counts fetch instead of hand-typed
 "Optional · not all enrolled · 3 months ago". 5 tests, 6 mutants. Not
-browser-observed (Admin-only list; the pane is Karen). Deploy check
-recorded in §4 by a follow-up docs commit.
+browser-observed (Admin-only list; the pane is Karen). `71d68e3`,
+**deploy-verified:** accelerep.netlify.app serves `index-CSnSB6MZ.js`, the
+local gate build's hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -234,9 +235,8 @@ Five gates green on 141 files · **439/439 unit** (5 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
 `session-status.test.mjs`) · **188/188 mutations, printed green baseline**
 (75 new this session; run alone) · build
-**2,477 kB JS**, `index-CSnSB6MZ.js` (state §0.78; deploy check pending at
-the time this was written; `index-AW6mOo3m.js` observed for `e2adc83`),
-guard OK, `dist/` cleared · **79 integration not
+**2,477 kB JS**, `index-CSnSB6MZ.js` (state §0.78; dev deploy observed
+serving it for `71d68e3`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);

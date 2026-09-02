@@ -2501,6 +2501,12 @@ auth banner needs a revoked or expired session to fire. Jeff eyeballs on
 dev: Settings → Security → the Multi-factor auth tile reads "2/4 enrolled ·
 50%" with "Managed in Clerk" and "Needs attention", matching the panel.
 
+**Dev landing (`71d68e3`):** accelerep.netlify.app serves `index-CSnSB6MZ.js`,
+the local gate build's hash, 30 seconds after the push. The pane's Karen
+session had expired by then: the app sat at Clerk's sign-in card with 401s
+from two non-hook calls (spiff-claims, calendar-events) in the console and
+no banner — right, the gate holds the app before any loader runs.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
