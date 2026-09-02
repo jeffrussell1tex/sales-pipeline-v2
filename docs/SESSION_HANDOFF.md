@@ -282,6 +282,12 @@ cleared at close.
    (f) **Carried:** `checkOk` in App.jsx sets `dbOffline` on any non-ok
    response, so that 401 rendered as "Database connection lost" — an auth
    refusal reported as a database outage (state §0.65, last paragraph).
+   **Jeff, after the prod ship: "401 dbase lost is no longer showing."**
+   Expected, not fixed: the client gate (§18b27) stops the app calling the
+   API while a session is pending, so the 401 that lit the banner no
+   longer happens; `checkOk` (App.jsx line ~399) is unchanged and still
+   maps ANY non-ok status to `dbOffline`, so an expired session or a
+   revoked user would light it again. Stays carried as latent.
 8. **DONE (Jeff: "why we lost is important…"):** the Win / loss report
    reads `lostCategory` and the exit stage's `prevStage` (state §0.66).
    **Jeff eyeballs after the deploy, as Admin, Reports → Win / loss
