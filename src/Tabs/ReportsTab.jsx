@@ -9,7 +9,7 @@ import { stages as defaultStages } from '../utils/constants';
 import { sliceActivities, sliceLeads, visibleReps, repsInScopeOf, activityRepOf } from '../utils/reportScope';
 import { periodRange, priorRange, inRange, dayOf, currentFiscalYear } from '../utils/reportPeriod';
 import { productsListOf, contactNamesText } from '../utils/oppText';
-import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep } from '../utils/pipelineReport';
+import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep, closeDayOf, cycleDaysOf, medianOf, closeDayInRange, lastQuarters } from '../utils/pipelineReport';
 import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStages } from '../utils/stageOrder';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
@@ -1196,8 +1196,8 @@ ${bodyHtml}
                               const attain = quota>0?closed/quota:0;
                               const commitPct = quota>0?commit/quota:0;
                               const winRate2 = (rWon.length+rLost.length)>0?rWon.length/(rWon.length+rLost.length):0;
-                              const vDeals = rWon.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate));
-                              const cycle = vDeals.length>0?Math.round(vDeals.reduce((s,o)=>{ return s+Math.max(0,Math.floor((new Date(o.forecastedCloseDate||o.closeDate)-new Date(o.createdDate))/86400000)); },0)/vDeals.length):null;
+                              const vCycles = rWon.map(cycleDaysOf).filter(v=>v!=null);
+                              const cycle = vCycles.length>0?Math.round(vCycles.reduce((s,v)=>s+v,0)/vCycles.length):null;
                               const avgDeal = rWon.length>0?closed/rWon.length:0;
                               return { rep, quota, closed, commit, attain, commitPct, winRate:winRate2, cycle, avgDeal, wonCount:rWon.length, openCount:rOpen.length, role:rUser?.userType||'Rep' };
                             }).sort((a,b)=>b.attain-a.attain);
@@ -1211,7 +1211,7 @@ ${bodyHtml}
                               const pts = Array.from({length:6},(_,i)=>{
                                 const d = new Date(new Date().getFullYear(), new Date().getMonth()-(5-i),1);
                                 const nxt = new Date(d.getFullYear(),d.getMonth()+1,1);
-                                return wonOpps.filter(o=>(o.salesRep||o.assignedTo)===rep&&(() => { const cd=new Date((o.forecastedCloseDate||o.closeDate||'')+'T12:00:00'); return cd>=d&&cd<nxt; })()).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                                return wonOpps.filter(o=>(o.salesRep||o.assignedTo)===rep&&(() => { const cd=closeDayOf(o); return !!cd&&cd>=isoLocal(d)&&cd<isoLocal(nxt); })()).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                               });
                               const max=Math.max(...pts,1);
                               const w=80,h=20;
@@ -1225,9 +1225,9 @@ ${bodyHtml}
                                 {/* Team KPI strip — 4 cards with delta trend colour coding */}
                                 {(() => {
                                   // Compute avg sales cycle from won opps
-                                  const cycleDeals = wonOpps.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate));
-                                  const avgCycleDays = cycleDeals.length>0
-                                    ? Math.round(cycleDeals.reduce((s,o)=>s+Math.max(0,Math.floor((new Date(o.forecastedCloseDate||o.closeDate)-new Date(o.createdDate))/86400000)),0)/cycleDeals.length)
+                                  const cycleValues = wonOpps.map(cycleDaysOf).filter(v=>v!=null);
+                                  const avgCycleDays = cycleValues.length>0
+                                    ? Math.round(cycleValues.reduce((s,v)=>s+v,0)/cycleValues.length)
                                     : null;
 
                                   // Comparison deltas for KPIs
@@ -2448,7 +2448,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
     });
     const stuckARR = stuckDeals.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
     const now30 = new Date(); now30.setDate(now30.getDate()+30);
-    const closingMonth = allOpen.filter(o=>{ const cd=o.forecastedCloseDate||o.closeDate||''; return cd&&cd<=isoLocal(now30); });
+    const closingMonth = allOpen.filter(o=>{ const cd=o.forecastedCloseDate||o.closeDate||''; return cd&&cd>=todayLocal()&&cd<=isoLocal(now30); });
     const closingARR = closingMonth.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
 
     const pinnedCards = [
@@ -3021,42 +3021,20 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
         const repsD = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager');
 
         // All won opps with a close date
-        const wonWithDate = (reportsOpps||[]).filter(o=>o.stage==='Closed Won'&&(o.forecastedCloseDate||o.closeDate));
+        const wonWithDate = (reportsOpps||[]).filter(o=>o.stage==='Closed Won'&&closeDayOf(o));
 
-        // Build last 6 quarters in reverse-chronological order then reverse for display
-        const now = new Date();
-        const quarters = [];
-        let yr = now.getFullYear(), mo = now.getMonth()+1;
-        // Find current fiscal quarter
-        let offset = mo - fiscalStart; if(offset<0) offset+=12;
-        let curQ = Math.floor(offset/3)+1;
-        const fyEnd = mo >= fiscalStart ? yr+1 : yr;
-        // Walk back 5 quarters to get 6 total
-        for (let i=0; i<6; i++) {
-            let q = curQ - i; let fy = fyEnd;
-            while(q<=0){ q+=4; fy--; }
-            // Quarter start/end calendar months
-            const qStartOffset = (q-1)*3;
-            let startM = ((fiscalStart-1+qStartOffset)%12)+1;
-            let startY = startM >= fiscalStart ? fy-1 : fy;
-            let endM = ((startM-1+2)%12)+1; // 3 months later - 1
-            endM = ((startM+2-1)%12)+1;
-            const startDate = new Date(startY, startM-1, 1);
-            const endDate   = new Date(startY, startM+2, 0); // last day of 3rd month
-            const isCurrentQ = i===0;
-            quarters.unshift({ q, fy, label:`Q${q} FY${String(fy).slice(2)}`, startDate, endDate, isCurrentQ });
-        }
+        // The last six fiscal quarters, current last, from quarters.js. The loop
+        // this replaces rebuilt them by hand and ended each at 00:00 on its last
+        // day, so a quarter-end close fell in no quarter (0.68 tier 2, F19).
+        const quarters = lastQuarters(fiscalStart, { count: 6 }).map(q => ({ ...q, isCurrentQ: q.isCurrent }));
 
         // For each quarter, compute actual (Closed Won) and forecast (team quota)
-        const totalQQuota = repsD.reduce((s,u)=>s+getRepQuarterQuota(u),0);
-
         const qData = quarters.map(qt => {
-            const won = wonWithDate.filter(o => {
-                const cd = new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00');
-                return cd >= qt.startDate && cd <= qt.endDate;
-            });
+            const won = wonWithDate.filter(o => closeDayInRange(o, qt.from, qt.to));
             const actual   = won.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-            const forecast = totalQQuota; // team quarterly quota
+            // The team's quota for THAT quarter — a quarterly plan's own figure, a
+            // quarter of an annual. It was one flattened average for all six.
+            const forecast = repsD.reduce((s,u)=>s+userQuotaFor(u, `Q${qt.q}`),0);
             const accuracy = forecast > 0 ? actual/forecast : null;
             return { ...qt, actual, forecast, accuracy, wonCount:won.length };
         });
@@ -3074,9 +3052,9 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
         const repRows = repsD.map(u => {
             const repWon = wonWithDate.filter(o=>(o.salesRep||o.assignedTo)===u.name);
             const qCells = quarters.map(qt => {
-                const won = repWon.filter(o=>{ const cd=new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00'); return cd>=qt.startDate&&cd<=qt.endDate; });
+                const won = repWon.filter(o=>closeDayInRange(o, qt.from, qt.to));
                 const actual   = won.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                const forecast = getRepQuarterQuota(u);
+                const forecast = userQuotaFor(u, `Q${qt.q}`);
                 return forecast>0 ? actual/forecast : null;
             });
             const completedCells = qCells.slice(0,-1).filter(v=>v!=null);
@@ -3250,13 +3228,9 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
 
         // Avg cycle: forecastedCloseDate - createdDate in days
         const cycleD = (opps) => {
-            const samples = opps.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate)).map(o=>{
-                const diff = Math.floor((new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00')-new Date(o.createdDate+'T12:00:00'))/86400000);
-                return diff > 0 ? diff : null;
-            }).filter(v=>v!=null);
+            const samples = opps.map(cycleDaysOf).filter(v=>v!=null);
             if (!samples.length) return null;
-            samples.sort((a,b)=>a-b);
-            return samples[Math.floor(samples.length/2)];
+            return medianOf(samples);
         };
         const avgCycleWon  = cycleD(wonOppsD);
         const avgCycleLost = cycleD(lostOppsD);
@@ -3452,7 +3426,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
             const total = rw.length+rl.length;
             const wr = total>0?rw.length/total:null;
             const avgD = rw.length>0?rw.reduce((s,o)=>s+(parseFloat(o.arr)||0),0)/rw.length:null;
-            const cycles = rw.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate)).map(o=>Math.max(0,Math.floor((new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00')-new Date(o.createdDate+'T12:00:00'))/86400000)));
+            const cycles = rw.map(cycleDaysOf).filter(v=>v!=null);
             const cyc = cycles.length>0?cycles.sort((a,b)=>a-b)[Math.floor(cycles.length/2)]:null;
             const acts = (activities||[]).filter(a=>a.author===u.name||a.assignedTo===u.name);
             const actRatio = repOpen.length>0?(acts.length/Math.max(repOpen.length,1)):null;
@@ -3466,7 +3440,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
         // Rep-specific metrics
         const repWR   = repWon.length+repLost.length>0 ? repWon.length/(repWon.length+repLost.length) : null;
         const repAvgD = repWon.length>0 ? repClosed/repWon.length : null;
-        const repCycles = repWon.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate)).map(o=>Math.max(0,Math.floor((new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00')-new Date(o.createdDate+'T12:00:00'))/86400000)));
+        const repCycles = repWon.map(cycleDaysOf).filter(v=>v!=null);
         const repCyc  = repCycles.length>0?repCycles.sort((a,b)=>a-b)[Math.floor(repCycles.length/2)]:null;
         const repActRatio = repOpen.length>0?(repActs.length/Math.max(repOpen.length,1)).toFixed(2):null;
         const teamActRatio= teamAvg(d=>d.actRatio);
@@ -3482,34 +3456,24 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
 
         // Attainment history — last 6 quarters
         const fiscalStartSC = parseInt(settings.fiscalYearStart)||10;
-        const now2 = new Date();
-        const moN = now2.getMonth()+1, yrN = now2.getFullYear();
-        let offN = moN-fiscalStartSC; if(offN<0) offN+=12;
-        let curQN = Math.floor(offN/3)+1;
-        const fyEndN = moN>=fiscalStartSC?yrN+1:yrN;
-        const qtrsH = [];
-        for(let i=0;i<6;i++){
-            let q=curQN-i; let fy=fyEndN;
-            while(q<=0){q+=4;fy--;}
-            const qStartOff=(q-1)*3;
-            let sm=((fiscalStartSC-1+qStartOff)%12)+1;
-            let sy=sm>=fiscalStartSC?fy-1:fy;
-            const startD=new Date(sy,sm-1,1);
-            const endD=new Date(sy,sm+2,0);
-            const wonInQ=repWon.filter(o=>{ const cd=new Date((o.forecastedCloseDate||o.closeDate||'')+'T12:00:00'); return cd>=startD&&cd<=endD; });
-            const actualV=wonInQ.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-            const qQuota=repQuota/4;
-            const acc=qQuota>0?actualV/qQuota:null;
-            qtrsH.unshift({label:`Q${q}`,acc,actual:actualV,isCurrentQ:i===0});
-        }
+        // The last six fiscal quarters (current last) from quarters.js, won deals
+        // by their close day, and the rep's quota for THAT quarter (a quarterly
+        // plan's own figure; the loop this replaces flattened it to annual/4 and
+        // labelled the bars Q1..Q4 with no year).
+        const qtrsH = lastQuarters(fiscalStartSC, { count: 6 }).map(qt => {
+            const wonInQ = repWon.filter(o => closeDayInRange(o, qt.from, qt.to));
+            const actualV = wonInQ.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+            const qQuota = userQuotaFor(repUserSC, `Q${qt.q}`);
+            return { label: qt.label, acc: qQuota>0?actualV/qQuota:null, actual: actualV, isCurrentQ: qt.isCurrent };
+        });
         const completedH=qtrsH.filter(q=>!q.isCurrentQ&&q.acc!=null);
         const avgAttain=completedH.length>0?completedH.reduce((s,q)=>s+q.acc,0)/completedH.length:null;
 
         // Recent wins/losses (30 days)
         const cutoff30=new Date(); cutoff30.setDate(cutoff30.getDate()-30);
         const iso30=isoLocal(cutoff30);
-        const recentWins  = repWon.filter(o=>(o.forecastedCloseDate||o.closeDate)>=iso30).sort((a,b)=>(b.forecastedCloseDate||b.closeDate||'').localeCompare(a.forecastedCloseDate||a.closeDate||'')).slice(0,4);
-        const recentLosses= repLost.filter(o=>(o.forecastedCloseDate||o.closeDate)>=iso30).sort((a,b)=>(b.forecastedCloseDate||b.closeDate||'').localeCompare(a.forecastedCloseDate||a.closeDate||'')).slice(0,3);
+        const recentWins  = repWon.filter(o=>closeDayInRange(o, iso30, todayLocal())).sort((a,b)=>closeDayOf(b).localeCompare(closeDayOf(a))).slice(0,4);
+        const recentLosses= repLost.filter(o=>closeDayInRange(o, iso30, todayLocal())).sort((a,b)=>closeDayOf(b).localeCompare(closeDayOf(a))).slice(0,3);
 
         const fmtDate = s => s ? new Date(s+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
         const attainBarColor = a => a==null?T.inkMuted:a>=1?T.ok:a>=0.8?T.ink:T.warn;
@@ -3650,7 +3614,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                             : recentWins.map((o,i)=>(
                                 <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:12, alignItems:'center', padding:'9px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
                                     <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{o.opportunityName||o.account}</span>
-                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{fmtDate(o.forecastedCloseDate||o.closeDate)}</span>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{fmtDate(closeDayOf(o))}</span>
                                     <span style={{ fontSize:13, color:T.ok, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(o.arr)}</span>
                                 </div>
                             ))
@@ -3666,7 +3630,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                                         <div style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
                                         {lossBucketOf(o,'')&&<div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontStyle:'italic', fontFamily:T.sans }}>{lossBucketOf(o,'')}</div>}
                                     </div>
-                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{fmtDate(o.forecastedCloseDate||o.closeDate)}</span>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{fmtDate(closeDayOf(o))}</span>
                                     <span style={{ fontSize:13, color:T.danger, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>−{fmtShort(o.arr)}</span>
                                 </div>
                             ))

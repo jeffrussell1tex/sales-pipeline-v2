@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, closeDayOf, openPipelineByRep } from '../src/utils/pipelineReport.js';
+import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, closeDayOf, openPipelineByRep, cycleDaysOf, medianOf, closeDayInRange, lastQuarters } from '../src/utils/pipelineReport.js';
 import { repsInScopeOf } from '../src/utils/reportScope.js';
 
 // ── quotas ──────────────────────────────────────────────────────────────────
@@ -198,4 +198,65 @@ test('ReportsTab: the last fabricated constants are gone and the Activity compar
     assert.match(src, /reportsActivities\.filter\(a=>activityRepOf\(a\)===rep&&dayOf\(a\.date\|\|a\.createdAt\)===d\.date\)/, 'heat cells: unclipped set, local day');
     assert.match(src, /c\.v===0\)\.length>=5\)/, 'the coaching threshold');
     assert.match(src, /const rows = openPipelineByRep\(reportsOpps, 5\);/);
+});
+
+// ── Batch 5b: cycle time and quarter membership from the real close day ─────
+
+test('REGRESSION: a won deal\'s cycle runs to the day it CLOSED, not the forecast', () => {
+    const o = { stage: 'Closed Won', createdDate: '2026-01-01', wonDate: '2026-01-31', forecastedCloseDate: '2026-06-30' };
+    assert.equal(cycleDaysOf(o), 30);
+    assert.equal(cycleDaysOf({ ...o, wonDate: undefined, stageChangedDate: '2026-02-10' }), 40, 'stage-change day when wonDate was never written');
+    assert.equal(cycleDaysOf({ stage: 'Closed Lost', createdDate: '2026-03-01', lostDate: '2026-03-01' }), 0, 'a same-day close is 0, not missing');
+});
+
+test('cycleDaysOf is null for an open deal or a missing day', () => {
+    assert.equal(cycleDaysOf({ stage: 'Proposal', createdDate: '2026-01-01', forecastedCloseDate: '2026-02-01' }), null);
+    assert.equal(cycleDaysOf({ stage: 'Closed Won', wonDate: '2026-02-01' }), null);
+    assert.equal(cycleDaysOf(null), null);
+});
+
+test('medianOf: the middle, or the mean of the two middles', () => {
+    assert.equal(medianOf([5, 1, 3]), 3);
+    assert.equal(medianOf([4, 1, 3, 2]), 2.5, 'not the upper middle');
+    assert.equal(medianOf([7]), 7);
+    assert.equal(medianOf([]), null);
+    assert.equal(medianOf([1, NaN, 3]), 2);
+});
+
+test('closeDayInRange is inclusive at both ends, so a quarter-end close is in its quarter', () => {
+    const o = { stage: 'Closed Won', wonDate: '2026-06-30' };
+    assert.equal(closeDayInRange(o, '2026-04-01', '2026-06-30'), true);
+    assert.equal(closeDayInRange(o, '2026-07-01', '2026-09-30'), false);
+    assert.equal(closeDayInRange({ stage: 'Closed Won' }, '2026-01-01', '2026-12-31'), false, 'no close day, no quarter');
+    assert.equal(closeDayInRange(o, '', '2026-06-30'), true, 'open ends');
+});
+
+test('lastQuarters: the current quarter last, six deep, inclusive day bounds, under both starts', () => {
+    const at = new Date(2026, 8, 2);
+    const jan = lastQuarters(1, { today: at });
+    assert.equal(jan.length, 6);
+    assert.deepEqual(jan.at(-1), { fiscalYear: 2026, q: 3, key: '2026-Q3', label: 'Q3 FY26', from: '2026-07-01', to: '2026-09-30', isCurrent: true });
+    assert.deepEqual(jan[0].key, '2025-Q2');
+    assert.ok(jan.slice(0, -1).every(q => !q.isCurrent));
+    const oct = lastQuarters(10, { today: at });
+    assert.deepEqual(oct.at(-1), { fiscalYear: 2026, q: 4, key: '2026-Q4', label: 'Q4 FY26', from: '2026-07-01', to: '2026-09-30', isCurrent: true });
+    assert.deepEqual(oct[0].key, '2025-Q3');
+});
+
+test('ReportsTab: closed deals are measured and bucketed by the close day; Closed Won writes wonDate', () => {
+    const src = readFileSync(new URL('../src/Tabs/ReportsTab.jsx', import.meta.url), 'utf8');
+    // The forecast date remains the right field only for OPEN deals: deals at risk,
+    // closing-next-30-days, and the dead print block's two reads.
+    const reads = (src.match(/forecastedCloseDate\s*\|\|\s*o\.closeDate/g) || []).length;
+    assert.equal(reads, 4, `forecast-date reads left: ${reads} (deals-at-risk, closingMonth, two in the dead print block)`);
+    assert.doesNotMatch(src, /fmtDate\(o\.forecastedCloseDate/, 'recent wins/losses show the close day');
+    assert.match(src, /const recentWins\s+= repWon\.filter\(o=>closeDayInRange\(o, iso30, todayLocal\(\)\)\)/, 'an upper bound: a future forecast is not a recent win');
+    assert.match(src, /const quarters = lastQuarters\(fiscalStart, \{ count: 6 \}\)/);
+    assert.match(src, /const qtrsH = lastQuarters\(fiscalStartSC, \{ count: 6 \}\)/);
+    assert.doesNotMatch(src, /qt\.startDate|qt\.endDate/, 'midnight-ended quarter bounds');
+    assert.match(src, /return cd&&cd>=todayLocal\(\)&&cd<=isoLocal\(now30\);/, 'closing next 30 days has a lower bound');
+    assert.equal((src.match(/map\(cycleDaysOf\)\.filter\(v=>v!=null\)/g) || []).length, 5, 'five cycle sites on the helper: Performance rep + avg, win/loss median, scorecard team + rep');
+    assert.match(src, /return medianOf\(samples\);/);
+    const hook = readFileSync(new URL('../src/hooks/useOpportunities.js', import.meta.url), 'utf8');
+    assert.match(hook, /wonDate:\s+formData\.stage === 'Closed Won'/, 'Closed Won writes the day it was won');
 });

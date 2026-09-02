@@ -868,6 +868,32 @@ const mutations = [
         'src/Tabs/ReportsTab.jsx',
         "                    : selectedOpp.stage === 'Closed Won' ? funnelStages.length",
         "                    : selectedOpp.stage === 'Closed Won' ? -1"],
+
+    // ── Close day, not forecast date (0.68 batch 5b) ────────────────────────
+    ['pipeline: cycle time runs to the FORECAST date again',
+        'src/utils/pipelineReport.js',
+        "    const from = dayOf(o.createdDate), to = closeDayOf(o);",
+        "    const from = dayOf(o.createdDate), to = dayOf(o.forecastedCloseDate);"],
+    ['pipeline: the median is the upper middle again',
+        'src/utils/pipelineReport.js',
+        "    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;",
+        "    return s[mid];"],
+    ['pipeline: a quarter-end close falls out of its quarter (end exclusive)',
+        'src/utils/pipelineReport.js',
+        "    return !!d && (!from || d >= from) && (!to || d <= to);",
+        "    return !!d && (!from || d >= from) && (!to || d < to);"],
+    ['pipeline: lastQuarters skips the current quarter',
+        'src/utils/pipelineReport.js',
+        "    let qk = { fiscalYear: cur.fiscalYear, q: cur.q };",
+        "    let qk = prevQuarter({ fiscalYear: cur.fiscalYear, q: cur.q });"],
+    ['reports: a won deal with a future forecast date is a "recent win" again (no upper bound)',
+        'src/Tabs/ReportsTab.jsx',
+        "        const recentWins  = repWon.filter(o=>closeDayInRange(o, iso30, todayLocal()))",
+        "        const recentWins  = repWon.filter(o=>closeDayInRange(o, iso30, ''))"],
+    ['opps: Closed Won stops writing wonDate',
+        'src/hooks/useOpportunities.js',
+        "            wonDate:      formData.stage === 'Closed Won'",
+        "            wonDate:      false"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

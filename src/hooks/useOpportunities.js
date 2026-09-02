@@ -113,6 +113,13 @@ export function useOpportunities(deps) {
             lostReason:   formData.lostReason   || prevOpp?.lostReason   || '',
             lostCategory: formData.lostCategory || prevOpp?.lostCategory || '',
             lostDate:     formData.lostDate     || prevOpp?.lostDate     || '',
+            // The day a deal was won. The column existed and the endpoint passed it
+            // through, but nothing ever wrote it, so every "days to close" read the
+            // forecast date instead (0.68 batch 5b). Kept across edits of a won deal;
+            // cleared if the deal is reopened.
+            wonDate:      formData.stage === 'Closed Won'
+                ? ((prevOpp?.stage === 'Closed Won' && prevOpp?.wonDate) ? prevOpp.wonDate : (formData.wonDate || today))
+                : '',
         };
 
         if (formData.stage === 'Closed Lost' && (!prevOpp || prevOpp.stage !== 'Closed Lost')) {

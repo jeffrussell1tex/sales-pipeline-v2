@@ -12,7 +12,7 @@
 // Pure so tests/pipeline-report.test.mjs can pin each one.
 
 import { repsForSlice } from './reportScope.js';
-import { quarterOf } from './quarters.js';
+import { quarterOf, quarterStartDate, quarterEndDate } from './quarters.js';
 import { dayOf } from './reportPeriod.js';
 import { isoLocal, parseLocalDate } from './dateLocal.js';
 
@@ -133,4 +133,53 @@ export function openPipelineByRep(opps, top = 5) {
         map.set(o.salesRep, cur);
     }
     return [...map.values()].sort((a, b) => b.value - a.value || a.rep.localeCompare(b.rep)).slice(0, top);
+}
+
+// ── Cycle time and quarter membership from the real close day (0.68 batch 5b) ──
+// Every "days to close", "recent wins" and "won in quarter" in the reports read
+// forecastedCloseDate — the rep's prediction — for CLOSED deals, so a deal won
+// three weeks early reported the forecast-length cycle and a won deal with a
+// stale future forecast date was a "recent win" forever. The close day is
+// closeDayOf: wonDate / lostDate, else the stage-change day, else the forecast.
+
+/** Days from createdDate to the close day, for a closed deal; null when either is missing. Same-day is 0, not "no data". */
+export function cycleDaysOf(o) {
+    if (!o || !CLOSED.includes(o.stage)) return null;
+    const from = dayOf(o.createdDate), to = closeDayOf(o);
+    if (!from || !to) return null;
+    const a = parseLocalDate(from), b = parseLocalDate(to);
+    if (!a || !b) return null;
+    return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+/** The median of a list of numbers: the mean of the two middles for an even count. null for none. */
+export function medianOf(nums) {
+    const s = (Array.isArray(nums) ? nums : []).filter(v => typeof v === 'number' && !Number.isNaN(v)).sort((a, b) => a - b);
+    if (!s.length) return null;
+    const mid = s.length >> 1;
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/** Did the deal close on a day within [from, to] (yyyy-mm-dd, inclusive)? */
+export function closeDayInRange(o, from, to) {
+    const d = closeDayOf(o);
+    return !!d && (!from || d >= from) && (!to || d <= to);
+}
+
+/**
+ * The last `count` fiscal quarters ending with the CURRENT one, oldest first:
+ * [{ fiscalYear, q, key, label, from, to, isCurrent }], days inclusive.
+ */
+export function lastQuarters(fiscalStart, { today = new Date(), count = 6 } = {}) {
+    const cur = quarterOf(isoLocal(today), fiscalStart);
+    if (!cur) return [];
+    const list = [];
+    let qk = { fiscalYear: cur.fiscalYear, q: cur.q };
+    for (let i = 0; i < count; i++) {
+        const start = quarterStartDate(qk.fiscalYear, qk.q, fiscalStart);
+        const end = quarterEndDate(qk.fiscalYear, qk.q, fiscalStart);
+        list.unshift({ fiscalYear: qk.fiscalYear, q: qk.q, key: `${qk.fiscalYear}-Q${qk.q}`, label: `Q${qk.q} FY${String(qk.fiscalYear).slice(2)}`, from: isoLocal(start), to: isoLocal(end), isCurrent: i === 0 });
+        qk = prevQuarter(qk);
+    }
+    return list;
 }

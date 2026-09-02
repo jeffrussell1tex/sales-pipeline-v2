@@ -132,6 +132,14 @@ as all stages visited. 5 tests, 5 mutants. `090da10`, **deploy-verified:**
 accelerep.netlify.app serves `index-BBGjcEEV.js`, the local gate build's
 hash.
 
+**Batch 5b, the commit this handoff rides in (state §0.75):** cycle time,
+recent wins / losses and quarter buckets on closed deals read the real
+close day (`closeDayOf` — `wonDate` / `lostDate`, else the stage-change
+day), quarters are inclusive day ranges from quarters.js, the scorecard's
+attainment history uses each quarter's own quota, and Closed Won now
+writes `wonDate`. 6 tests, 6 mutants. Deploy check recorded in §4 by a
+follow-up docs commit.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -174,14 +182,15 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 139 files · **416/416 unit** (5 in
-`stage-order.test.mjs`, 17 in `pipeline-report.test.mjs`, 9 in
+Five gates green on 139 files · **422/422 unit** (5 in
+`stage-order.test.mjs`, 23 in `pipeline-report.test.mjs`, 9 in
 `opp-text.test.mjs`, 13 in `report-period.test.mjs`, 15 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
-`session-status.test.mjs`) · **163/163 mutations, printed green baseline**
-(50 new this session; run alone) · build
-**2,478 kB JS**, `index-BBGjcEEV.js` (audit batch 5a; dev deploy observed
-serving it for `090da10`), guard OK, `dist/` cleared · **79 integration not
+`session-status.test.mjs`) · **169/169 mutations, printed green baseline**
+(56 new this session; run alone) · build
+**2,477 kB JS**, `index-DZcl2imu.js` (audit batch 5b; deploy check pending
+at the time this was written; `index-BBGjcEEV.js` observed for `090da10`),
+guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -268,16 +277,19 @@ cleared at close.
    quota basis, items 3, 4, 7, 8, and item 6's nextStep) is DONE — state
    §0.72. Batch 4b (the last constants, item 9, the "+3%", item 12, the
    orphan captions) is DONE — state §0.73. Batch 5a (stage lists from the
-   org's settings, item 5) is DONE — state §0.74.** Next: batch 5b — cycle
-   time and quarter bucketing from the real close day (`closeDayOf` in
-   pipelineReport.js: `wonDate` / `lostDate`, else the stage-change day)
-   instead of the forecast date, at every `forecastedCloseDate||o.closeDate`
-   read on a CLOSED deal (Performance cycle and sparkline, win/loss cycleD,
-   scorecard cycles / attainment-by-quarter / recent wins and losses,
-   forecast-vs-actual quarters); plus writing `wonDate` on Closed Won in
-   `useOpportunities` so the explicit day exists. §0.68's line numbers have
-   shifted; grep, don't trust them. Span edits: print the span from git
-   first and list every `const` in it (§0.72's slip).
+   org's settings, item 5) is DONE — state §0.74. Batch 5b (close day
+   for cycle time and quarters; `wonDate` written) is DONE — state
+   §0.75.** Next: batch 6 — dead controls and dead code: the six "Save as
+   my report" buttons (wire to `handleSaveReport` or remove), "Send
+   reminders"-class buttons, "See all →", the inert Fullscreen /
+   Regenerate / Export / Duplicate controls, the unreachable print block
+   at the top of the file (L84–88 `stages` / `stageColors` and its
+   `byStage` / `revenueByQuarter` / `monthlyData` / `topAccounts`
+   consumers), the dead `getRepQuarterQuota`, the "Email to owner" mailto
+   of a display name, and the export label map naming sub-tabs that no
+   longer exist. Then the tier 2 remainder in §0.68 (labels, 12-of-N
+   truncations, the Actions sub-tab that no nav button reaches). §0.68's
+   line numbers have shifted; grep, don't trust them.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.

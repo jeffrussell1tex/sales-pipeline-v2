@@ -2266,6 +2266,51 @@ completed 6 of 6".
 **Dev landing (`090da10`):** accelerep.netlify.app serves `index-BBGjcEEV.js`,
 the local gate build's hash, 41 seconds after the push.
 
+### 0.75 Audit batch 5b — cycle time and quarter buckets from the real close day; wonDate written (2 Sep, fourth session)
+
+§0.68 tier 2's cycle-time and quarter items (P12, F17–F19, A5–A6, A9–A10)
+plus the `wonDate` gap found in the audit's ground-truth pass. Every "days
+to close", "recent wins / losses" and "won in quarter" on a CLOSED deal read
+`forecastedCloseDate` — the rep's prediction — so a deal won three weeks
+early reported the forecast-length cycle, a won deal with a stale future
+forecast date was a "recent win" forever, and "actual" bookings landed in
+the quarter the rep had predicted. `pipelineReport.js` gains
+`cycleDaysOf` (createdDate → `closeDayOf`: `wonDate` / `lostDate`, else
+the stage-change day, else the forecast; same-day is 0, not "no data"),
+`medianOf` (the mean of the two middles on an even count — the old code
+took the upper one), `closeDayInRange` (inclusive day strings — the old
+quarter loops ended at 00:00 on the last day, so a quarter-end close fell in
+no quarter), and `lastQuarters` (the last six fiscal quarters ending with
+the current one, from quarters.js, labelled "Q3 FY26"). In ReportsTab: the
+Performance leaderboard's per-rep cycle, sparkline months and team average;
+the win/loss median cycles; the scorecard's team and rep cycles, its
+attainment history (now the rep's quota for THAT quarter — a quarterly
+plan's own figure instead of annual/4 — and bars labelled with the fiscal
+year), its recent wins and losses (by close day, with an upper bound of
+today, dated by close day); the forecast-vs-actual template's six quarters
+and per-quarter team quota; and "Closing next 30 days" gets a lower bound
+so overdue deals stop counting as closing soon. The four remaining
+forecast-date reads are on OPEN deals (deals at risk, closing-next-30) and
+the dead print block. **`useOpportunities` writes `wonDate`** on a Closed
+Won save (kept across later edits, cleared on reopen); the column existed
+and the endpoint passed it through, but nothing had ever set it.
+
+`tests/pipeline-report.test.mjs` +6 (the cycle to the close day and the
+stage-change fallback, same-day 0, nulls; the median; inclusive quarter
+ends; `lastQuarters` under both starts; and the wiring scan — exactly four
+forecast-date reads left, five cycle sites on the helper, no midnight
+quarter bounds, `wonDate` written). Gates green on 139 files, **422/422**,
+**169/169 mutations, printed green baseline** (six new: cycle to the
+forecast again, upper-middle median, end-exclusive quarter, current quarter
+skipped, no upper bound on recent wins, `wonDate` not written), build guard
+OK (2,477 kB, `index-DZcl2imu.js`). Three span edits, each asserted to hold
+exactly the constants it replaced (two first-guess counts were wrong and
+aborted cleanly; the printed lists matched intent). Integration suites not
+re-run: no endpoint changed (`opportunities.mjs` already accepted
+`wonDate`). Not browser-checked here; Jeff eyeballs after the deploy:
+Saved reports → Rep scorecard — "Attainment history" bars read "Q3 FY26",
+and a deal just marked Closed Won appears under Recent wins dated today.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
