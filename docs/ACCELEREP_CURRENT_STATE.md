@@ -1483,7 +1483,7 @@ dates, and — for Jeff's two-org account — a profile panel that fits.
 **Jeff, on prod, the Dispatch Demo Group account: "the dispatch demo fits."**
 The bug he reported this morning is observed closed where he reported it.
 
-### 0.63 The nine stale App.jsx imports dropped, and a test CSV for the importer (1 Sep, fourth session)
+### 0.63 The nine stale App.jsx imports dropped, and a test CSV for the importer (1–2 Sep, fourth session)
 
 **The owed §18b26 bullet landed first** (`410095e`, docs only): grep the FILE
 for every other reader of a value before calling a fix live. Writing it taught
@@ -1504,6 +1504,11 @@ path on the same line and read two, which is not proof of anything. Gates
 green on 133 files, **317/317**, **105/105, printed green baseline**, build
 guard OK (2,482 kB, `index-wHucaxGK.js`), `dist/` and `.vite` cleared. No
 rendered component changed, so the deploy is the check, not a browser pass.
+**Dev landing (`7f14eb3`):** accelerep.netlify.app serves `index-wHucaxGK.js`, the
+same hash as the local gate build. On dates: this session began the evening
+of 1 Sep (`410095e`, 18:03 -0500) and finished the morning of 2 Sep
+(`7f14eb3`, 10:49 -0500); Jeff's reply came overnight. The first cut of this
+entry and of the handoff said "1 Sep" for both, corrected here.
 
 **Test CSV for the unobserved importer check** delivered to Jeff
 (`zztest-close-dates.csv`, not tracked): three ZZTest deals under "ZZTest

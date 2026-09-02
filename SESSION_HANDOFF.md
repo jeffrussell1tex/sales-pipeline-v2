@@ -1,6 +1,6 @@
 # SESSION_HANDOFF.md
 
-**Session of 1 September 2026, fourth session (the owed §18b26 bullet
+**Session of 1–2 September 2026, fourth session (the owed §18b26 bullet
 written, the nine stale App.jsx imports dropped, a test CSV delivered for
 the importer's unobserved 9/15/2026 check — small, all on dev, deploy
 check recorded below), FINAL.** Repo root. Read this first, then verify every claim
@@ -26,9 +26,11 @@ their headers is Jeff's call, not done.
 
 **Fourth session, on top of everything below:** `410095e` (the owed guide
 bullet, docs only) and the commit this handoff rides in (nine unused
-default imports removed from App.jsx, state §0.63). Deploy check for the
-second is recorded in §4 by a follow-up docs commit once CI has run.
-`master` is unchanged at `13f9ffe`; nothing user-visible changed.
+default imports removed from App.jsx, state §0.63). **Deploy-verified:**
+accelerep.netlify.app serves `index-wHucaxGK.js`, the local gate build's hash.
+`master` is unchanged at `13f9ffe`; nothing user-visible changed. The
+session began the evening of 1 Sep and finished the morning of 2 Sep; git
+carries `410095e` at 1 Sep 18:03 and `7f14eb3` at 2 Sep 10:49 (-0500).
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -70,15 +72,15 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (all observed 1 Sep, fourth session)
+## 4. Verified state at close (all observed 2 Sep, fourth session)
 
 Five gates green on 133 files · **317/317 unit** · **105/105 mutations,
 printed green baseline** (run alone, after the App.jsx edit) · build
 **2,482 kB JS**, `index-wHucaxGK.js`, guard OK, `dist/` and
 `node_modules/.vite` cleared · **79 integration not re-run** (no endpoint
 changed) · `master` == `13f9ffe`, three docs commits and one code commit
-behind dev · no browser pass: no rendered component changed · **deploy check
-pending** at the time this was written (see §1).
+behind dev · no browser pass: no rendered component changed · dev deploy
+observed serving `index-wHucaxGK.js` (see §1).
 
 ## 5. Next — start here
 
@@ -96,7 +98,7 @@ pending** at the time this was written (see §1).
    by unit test; neither has been seen live. The CSV is delivered
    (`zztest-close-dates.csv`, state §0.63 lists the expected values);
    record Jeff's result in §0.63 when it comes.
-4. **DONE (fourth session, 1 Sep):** the guide bullet owed from §3 — "grep
+4. **DONE (fourth session, 1 Sep evening):** the guide bullet owed from §3 — "grep
    the FILE for every other reader of the value" — is now the closing bullet
    of §18b26; state doc §0.62 no longer says "not yet written".
 5. **Open question from the importer:** an unrecognisable date cell passes
