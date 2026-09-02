@@ -1580,7 +1580,7 @@ prod now see: a CSV row with an unreadable Close or Created Date refused at
 Preview by row, field and cell; "Sept 15" no longer imports as 2001; Excel's
 "9/15/26" still imports as 2026.
 
-### 0.65 OBSERVED, NOT FIXED: the app ignores Clerk's pending session state, so "Require MFA" does not lock sign-in (2 Sep, fourth session)
+### 0.65 The app ignored Clerk's pending session state, so "Require MFA" did not lock sign-in — observed, then FIXED on both sides (2 Sep, fourth session)
 
 **Jeff: "i enabled MFA on the UKG instance. It is still letting me log in
 without it."** His screenshot of the Clerk Dashboard (Sales Pipeline Tracker →
@@ -1634,8 +1634,52 @@ with `sts: "pending"` and the org claim present, the app shell fully rendered
 (nav, Home), and a direct `GET /.netlify/functions/opportunities` with that
 token returned **200**. Both halves confirmed: the `useUser` gate lets the
 pending session render the app, and `verifyAuth` serves it. Clerk did its
-part — the task is there — and the app walked past it. Fix queued above,
-Jeff's call.
+part — the task is there — and the app walked past it.
+
+**FIXED (Jeff: "lets do it").** Three changes, one commit. (1) `App.jsx`:
+`useAuth()` now also yields `isSignedIn`, and the user the app trusts is
+`isSignedIn ? rawClerkUser : null` — every consumer (the gate, the settings
+loader, the role effect) sees a pending session as signed out, and
+`<SignIn />` stays mounted so Clerk renders the task inside it. (2)
+`auth.mjs`: `pendingSessionRefusal(payload)`, exported and pure, refuses any
+`sts` that is not "active" with a 401 naming the pending state; called right
+after `verifyToken`, before the user lookup and before the cache; a token
+without `sts` (v1) passes. (3) `MfaDetail.jsx` rewritten honest: the
+unreachable `EnforceMfaModal` with its fabricated "22 users" /
+"kirim@accelerep.com", the handler-less "Send reminders" button and the
+hardcoded factor tiles are gone; the copy now says Require holds un-enrolled
+users at sign-in "and this app honours that on both the sign-in screen and
+the API", and the factors card says the app does not read that configuration.
+New `tests/session-status.test.mjs` (six: the refusal on pending / active /
+no claim / any other status, and two source scans pinning the wiring in
+`verifyAuth` and in `App.jsx`). Gates green on 133 files, **342/342**,
+**119/119 mutations, printed green baseline** (five new: the server bypass
+back, "not pending" instead of "active or nothing", a v1 token refused, the
+helper left uncalled, the client gate trusting `useUser` again), build guard
+OK (2,479 kB, `index-Cy6ZeOFD.js`). Guide §18b27.
+
+**Observed — the same pending Karen session, Development, Require on.** After
+HMR the page rendered Clerk's **"Set up two-step verification — SMS code /
+Authenticator application — Signed in as accelerep@outlook.com"** inside the
+sign-in card: `session.status` still "pending", `currentTask` setup-mfa, no
+app nav. The pending token against `opportunities`, `settings` and
+`clerk-mfa-status` returned **401 "Unauthorized: session pending — finish
+sign-in (multi-factor setup) first"** where the same call had returned 200
+an hour earlier. Not browser-checked: the rewritten MFA panel itself
+(Admin-gated; Karen is a rep) — Jeff eyeballs it as Admin. Carried:
+`catalogue.js`'s MFA entry still hardcodes "Optional · not all enrolled" and
+"3 months ago".
+
+**Jeff's screenshot while this was being committed — two sightings.** (1)
+accelerep.netlify.app at `#/tasks/setup-mfa`, signed in as Jeff (Admin, MFA
+dot ○), the Users list fully rendered: Clerk's hash router had sent his
+pending session to its task URL and the DEPLOYED dev build — still the code
+before this fix — rendered the app over it. The bypass, seen a second way,
+on the deployed site, by an Admin. Closed by this commit's deploy. (2)
+Karen's row: MFA **●** green, the rail "MFA on 1/4 · 3 off" — Jeff enrolled
+her authenticator, and **the known-ON state, unsighted since §0.59, is
+observed.** Karen's pane session is therefore no longer pending; the pane is
+usable again after a fresh sign-in.
 
 ---
 

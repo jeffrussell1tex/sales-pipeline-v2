@@ -39,9 +39,20 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
     // Clerk auth — powered by @clerk/clerk-react
-    const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
+    // A session Clerk has parked as PENDING -- a setup-mfa task after "Require
+    // multi-factor authentication", or a choose-organization task -- still
+    // carries a user object: useUser() returns it regardless of session status,
+    // and only useAuth() runs Clerk's resolveAuthState, where a pending session
+    // becomes isSignedIn: false. Gating on the user alone let a pending session
+    // render the whole app and call every endpoint (0.65, observed as Karen with
+    // Require on). So the user this app trusts is null until the session is
+    // ACTIVE; while pending, <SignIn /> below stays mounted and Clerk renders
+    // the task inside it. The API refuses the pending token independently
+    // (auth.mjs, pendingSessionRefusal).
+    const { user: rawClerkUser, isLoaded: clerkLoaded } = useUser();
     const { signOut } = useClerk();
-    const { getToken } = useAuth();
+    const { getToken, isSignedIn } = useAuth();
+    const clerkUser = isSignedIn ? rawClerkUser : null;
     const { organization, isLoaded: orgLoaded } = useOrganization();
     const prevOrgIdRef = React.useRef(null);
     const { userMemberships, setActive, isLoaded: orgListLoaded } = useOrganizationList({

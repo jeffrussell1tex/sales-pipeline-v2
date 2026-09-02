@@ -3,16 +3,16 @@
 **Session of 1–2 September 2026, fourth session (the owed §18b26 bullet
 written, the nine stale App.jsx imports dropped, the importer's 9/15/2026
 check observed live, unreadable date cells REFUSED at Preview and the
-engine's year-2001 default gated — all on dev, then SHIPPED to prod), FINAL.**
-Repo root. Read this first, then verify every claim
+engine's year-2001 default gated — all on dev, then SHIPPED to prod; after the
+ship, Clerk's pending-session bypass found, observed and FIXED on dev),
+FINAL.** Repo root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.64` with a paragraph beginning **"Found on the way, and worse than
-the open question"**, and does `docs/ACCELEREP_CODING_GUIDE.md` carry
-**`## 18b26`** with a closing bullet beginning **"A written-out date must
-carry a four-digit year"**? If not,
+`### 0.65` with a paragraph beginning **"FIXED (Jeff: "lets do it")"**, and
+does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b27`** with a bullet
+beginning **"Client: gate on"**? If not,
 you are looking at a copy that predates this handoff. Check section content,
 never dates.
 
@@ -37,6 +37,19 @@ serves `index-Bpb-wphy.js`, the local gate build's hash. **PROD SHIPPED
 salespipelinetracker.com serves `index-DvbBtbWW.js`, `pk_live_` inlined,
 refusal string and year gate present, same byte size as dev's bundle (state
 §0.64). The session began the evening of 1 Sep and finished 2 Sep.
+
+**After the prod ship — the pending-session bypass, FIXED on dev (state
+§0.65, guide §18b27), the commit this handoff rides in.** Jeff turned on
+Clerk's "Require multi-factor authentication" for the Development instance
+and a fresh Karen sign-in loaded straight through: `App.jsx` gated on
+`useUser().user` (populated while pending) and `verifyAuth` never read the
+token's `sts`. Now the app trusts the user only while `useAuth().isSignedIn`,
+and `pendingSessionRefusal` 401s any non-active `sts` before the user lookup
+and the cache. Observed on the same pending session: Clerk's "Set up two-step
+verification" card where the app used to render, and 401 from three endpoints
+where one had answered 200. MfaDetail rewritten honest. Deploy check for this
+commit is recorded in §4 by a follow-up docs commit. **`master` does NOT have
+it** — ship dev to prod again when Jeff is ready.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -80,15 +93,17 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 133 files · **336/336 unit** (19 new) · **114/114
-mutations, printed green baseline** (9 new; run alone, before the pane was
-opened) · build **2,483 kB JS**, `index-Bpb-wphy.js`, guard OK, `dist/` and
-`node_modules/.vite` cleared · **79 integration not re-run** (no endpoint
-changed all session) · **browser pass as Karen on localhost:** the refusal
-banner observed at Preview with the rows and cells named, nothing imported
-(state §0.64) · dev deploy observed serving `index-Bpb-wphy.js` for
-`51202b4` · `master` == `d078c8f` == dev, prod serving
-`index-DvbBtbWW.js` (see §1).
+Five gates green on 133 files · **342/342 unit** (6 new in
+`session-status.test.mjs`) · **119/119 mutations, printed green baseline**
+(5 new; run alone, after the pane reads) · build **2,479 kB JS**,
+`index-Cy6ZeOFD.js`, guard OK, `dist/` cleared · **79 integration not
+re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
+pass as Karen on localhost, Development, Require ON:** the pending session
+held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
+earlier the same session, the CSV refusal banner (state §0.64) · prod
+serves `index-DvbBtbWW.js` for `d078c8f`; **`master` is behind dev by
+the MFA fix and its docs** · deploy check for the fix pending at the time
+this was written (see §1).
 
 ## 5. Next — start here
 
@@ -114,17 +129,18 @@ banner observed at Preview with the rows and cells named, nothing imported
    year-2001 default for a yearless cell is gated (state §0.64).
 6. **DONE (fourth session):** the nine stale App.jsx default imports are
    removed (state §0.63).
-7. **NEW, OBSERVED, not fixed (state §0.65):** the app ignores Clerk's
-   pending session state — `App.jsx` gates on `useUser().user` and
-   `verifyAuth` never reads `sts` — so Clerk's "Require multi-factor
-   authentication" does not lock sign-in here. Jeff turned Require ON for
-   the Development instance; a fresh Karen sign-in "loaded straight
-   through" with `session.status` "pending", `currentTask` setup-mfa, a
-   token carrying `sts: "pending"`, and the opportunities endpoint
-   answering 200. **Require is ON for Development right now** — every
-   fresh dev sign-in is a pending session until this is fixed. Do not turn
-   it on for Production before the fix. MfaDetail's copy promises the
-   lock-down and its factor tiles are hardcoded and now wrong.
+7. **DONE — the pending-session bypass is FIXED (state §0.65, guide
+   §18b27)** and observed on Development with Require ON. Left for Jeff:
+   (a) **Karen's pane session is pending** — enrol a factor for her (the
+   authenticator app is on) or turn Require off on Development, or the
+   pane stays at the MFA card; enrolling her also lights the never-sighted
+   green known-ON dot. (b) Eyeball the rewritten MFA panel as Admin
+   (Settings → Security → Multi-factor auth): no Enforce modal, no Send
+   reminders, no factor tiles. (c) `catalogue.js`'s MFA entry still
+   hardcodes "Optional · not all enrolled" / "3 months ago". (d) Ship dev
+   to prod, then Require can go on for Production. (e) Integration suites
+   mock `verifyAuth`, so the `sts` refusal is covered by unit + mutation
+   only; the live 401 was observed in the pane.
 8. Smaller carried: the MFA known-ON green dot (still unsighted); the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.

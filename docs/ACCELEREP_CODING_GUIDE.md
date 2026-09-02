@@ -2915,3 +2915,30 @@ renders as the previous evening across the Americas (TaskItem's `Due:`), and
   its fallback on a four-digit run and decodes the two-digit US shape by hand
   (0.64). A refusal that fires on null cannot catch a confident wrong answer;
   probe the parser with the cells a real file would carry before trusting it.
+
+## 18b27. A Session Is Signed In Only When Clerk Says So (hard rule)
+
+Clerk can authenticate a user and still not admit the session. "Require
+multi-factor authentication" (or a required organization choice) parks the
+sign-in as status `pending` with a task to finish. Pending is signed OUT:
+Clerk's helpers say so (`treatPendingAsSignedOut`), the v2 token says so
+(`sts: "pending"`), the docs say so. The app said otherwise on both sides
+(0.65, observed as Karen: Require on, "loaded straight through", the
+opportunities endpoint 200).
+
+- Client: gate on `useAuth().isSignedIn`, never on `useUser().user`.
+  `useUser` returns the user object regardless of session status; only
+  `useAuth` runs `resolveAuthState`, where pending becomes `isSignedIn:
+  false`. App.jsx derives the user it trusts from `isSignedIn`, so every
+  consumer sees a pending session as signed out, and `<SignIn />` stays
+  mounted so Clerk renders the task inside it.
+- Server: read `sts`. `verifyToken` checks signature, expiry and authorized
+  party and nothing else. `pendingSessionRefusal(payload)` runs before the
+  user lookup and before the cache, and the gate is "active or nothing" — an
+  unrecognised status does not pass by being unrecognised (18b20). A token
+  with no `sts` claim is v1 and passes; absence is not pending.
+- A security surface may only state what the code enforces. The MFA panel
+  told admins that Require in Clerk "locks down sign-in" while the app
+  ignored pending: true of Clerk, false of the app. Copy about enforcement is
+  a claim about code and is verified like one — toggle on, fresh sign-in,
+  read `session.status` and the API's answer.

@@ -15,6 +15,24 @@ import { verifyToken, createClerkClient } from '@clerk/backend';
 export const APP_ROLES = Object.freeze(['Admin', 'Manager', 'User', 'ReadOnly', 'Technician']);
 export const isAppRole = (role) => APP_ROLES.includes(role);
 
+// ── SESSION STATUS ───────────────────────────────────────────────────────────
+//
+// Clerk v2 session tokens carry `sts`. When the instance requires MFA (or an
+// organization must be chosen), an un-enrolled sign-in gets a session with
+// status "pending" and a task to finish; Clerk's own helpers treat that as
+// signed OUT (treatPendingAsSignedOut). verifyToken() checks signature, expiry
+// and authorized party and never reads `sts`, so a pending token verified here
+// exactly like an active one and the API served a session Clerk had not
+// admitted (0.65, observed: Require on, fresh sign-in, opportunities 200).
+//
+// The gate is "active or nothing" (18b20): an unrecognised status must not pass
+// by being unrecognised. A token with NO `sts` claim is a v1 token, which has
+// no pending state, and passes -- absence is not pending.
+export const pendingSessionRefusal = (payload) =>
+    payload?.sts !== undefined && payload.sts !== 'active'
+        ? { error: 'Unauthorized: session pending — finish sign-in (multi-factor setup) first', status: 401 }
+        : null;
+
 
 // Short-lived in-memory cache keyed by token to avoid repeated Clerk API calls
 // during bulk imports (97 records × 3 concurrent = ~97 getUser calls → rate limit)
@@ -70,6 +88,11 @@ export async function verifyAuth(event) {
                 'http://localhost:8888',
             ]
         });
+        // Before the user lookup and before the cache: a refused token must never
+        // become a cached result.
+        const pending = pendingSessionRefusal(payload);
+        if (pending) return pending;
+
         const userId = payload.sub || '';
 
         // Extract org_id from JWT (Clerk puts it in org_id or active_organization_id)

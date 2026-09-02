@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -654,6 +654,28 @@ const mutations = [
         'src/utils/dateLocal.js',
         'return validDay(2000 + +m[3], +m[1], +m[2]);',
         'return null;'],
+
+    // ── Pending sessions (0.65) ─────────────────────────────────────────────
+    ['auth: a pending session token passes again (the 0.65 bypass, server side)',
+        'netlify/functions/auth.mjs',
+        "    payload?.sts !== undefined && payload.sts !== 'active'",
+        '    false'],
+    ['auth: the gate becomes "not pending" instead of "active or nothing"',
+        'netlify/functions/auth.mjs',
+        "    payload?.sts !== undefined && payload.sts !== 'active'",
+        "    payload?.sts === 'pending'"],
+    ['auth: a v1 token with no sts claim is refused (every old session locked out)',
+        'netlify/functions/auth.mjs',
+        "    payload?.sts !== undefined && payload.sts !== 'active'",
+        "    payload?.sts !== 'active'"],
+    ['auth: verifyAuth no longer refuses (the helper exists, nothing calls it)',
+        'netlify/functions/auth.mjs',
+        '        const pending = pendingSessionRefusal(payload);\n        if (pending) return pending;',
+        '        const pending = null;'],
+    ['App: the gate trusts useUser again (the 0.65 bypass, client side)',
+        'src/App.jsx',
+        '    const clerkUser = isSignedIn ? rawClerkUser : null;',
+        '    const clerkUser = rawClerkUser;'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
