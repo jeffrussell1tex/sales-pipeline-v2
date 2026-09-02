@@ -4,13 +4,14 @@
 written, the nine stale App.jsx imports dropped, the importer's 9/15/2026
 check observed live, unreadable date cells REFUSED at Preview and the
 engine's year-2001 default gated — all on dev, then SHIPPED to prod; after the
-ship, Clerk's pending-session bypass found, observed and FIXED on dev),
-FINAL.** Repo root. Read this first, then verify every claim
+ship, Clerk's pending-session bypass found, observed and FIXED on dev, then
+shipped; the Win / loss report made to read the category it was never
+reading), FINAL.** Repo root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.65` with a paragraph beginning **"FIXED (Jeff: "lets do it")"**, and
+`### 0.66` with a paragraph beginning **"Carried, found on the way:"**, and
 does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b27`** with a bullet
 beginning **"Client: gate on"**? If not,
 you are looking at a copy that predates this handoff. Check section content,
@@ -58,6 +59,15 @@ authentication is now ON for Production too** (Jeff: "worked in
 production"). Every prod user without a second factor is held at Clerk's
 setup card on their next sign-in — expected, and the point.
 
+**After the second ship — the Win / loss report (state §0.66), the commit
+this handoff rides in.** Jeff marked four deals Closed Lost with a category
+and the report said "Other · 5 · 100%" and "No stage history data": it read
+the free-text notes instead of `lostCategory`, and the closing history
+entry's own stage instead of its `prevStage`. Eight readers in ReportsTab now
+go through `src/utils/lossAnalysis.js`; 15 tests on the five real rows, six
+mutants. Deploy check recorded in §4 by a follow-up docs commit. `master`
+does NOT have it.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -100,18 +110,19 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 133 files · **342/342 unit** (6 new in
-`session-status.test.mjs`) · **119/119 mutations, printed green baseline**
-(5 new; run alone, after the pane reads) · build **2,479 kB JS**,
-`index-Cy6ZeOFD.js`, guard OK, `dist/` cleared · **79 integration not
+Five gates green on 134 files · **357/357 unit** (15 new in
+`loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **125/125
+mutations, printed green baseline** (11 new this session; run alone) · build
+**2,479 kB JS**, `index-CzGO2ggA.js` (the report fix; deploy check pending
+at the time this was written), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
 earlier the same session, the CSV refusal banner (state §0.64) · dev deploy
 observed serving `index-Cy6ZeOFD.js` for `ded3271` · `master` ==
 `abb239a`, prod serving `index-kU7R9Yoq.js`, Require MFA ON on both Clerk
-instances (see §1) · dev is two docs commits ahead of master, no code
-difference · the session's `netlify dev` stopped and `node_modules/.vite`
+instances (see §1) · dev is ahead of master by the report fix and its docs
+(state §0.66) · the session's `netlify dev` stopped and `node_modules/.vite`
 cleared at close.
 
 ## 5. Next — start here
@@ -160,10 +171,17 @@ cleared at close.
    (f) **Carried:** `checkOk` in App.jsx sets `dbOffline` on any non-ok
    response, so that 401 rendered as "Database connection lost" — an auth
    refusal reported as a database outage (state §0.65, last paragraph).
-8. Smaller carried: the
+8. **DONE (Jeff: "why we lost is important…"):** the Win / loss report
+   reads `lostCategory` and the exit stage's `prevStage` (state §0.66).
+   **Jeff eyeballs after the deploy, as Admin, Reports → Win / loss
+   analysis:** expected Timing 4 · 80%, Competitor 1 · 20%, exit-stage rows
+   Qualification 4 and Proposal 1. **Carried from it:** the Performance
+   tab's hardcoded stage list (ReportsTab line 78) and the funnel's fallback
+   list are not the app's stages.
+9. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
-9. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
+10. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
    regexes — write scripts with the Write tool and run the file; a
    scratchpad script cannot resolve the repo's packages — copy into the repo
    root, run, delete (tree checked clean after); `mutate-import` runs alone

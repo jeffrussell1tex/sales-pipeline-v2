@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -676,6 +676,32 @@ const mutations = [
         'src/App.jsx',
         '    const clerkUser = isSignedIn ? rawClerkUser : null;',
         '    const clerkUser = rawClerkUser;'],
+
+    // ── Loss analysis reads (0.66) ──────────────────────────────────────────
+    ['loss: the bucket ignores the category again (every categorised loss is "Other")',
+        'src/utils/lossAnalysis.js',
+        "    return clean(o?.lostCategory) || clean(o?.lostReason) || fallback;",
+        "    return clean(o?.lostReason) || fallback;"],
+    ['loss: the exit stage reads the closing entry\'s own stage ("No stage history data")',
+        'src/utils/lossAnalysis.js',
+        "        if (CLOSED_STAGES.includes(last.stage)) return clean(last.prevStage) || null;",
+        "        if (false) return clean(last.prevStage) || null;"],
+    ['loss: a close with no history reports itself as the exit stage',
+        'src/utils/lossAnalysis.js',
+        "    return cur && !CLOSED_STAGES.includes(cur) ? cur : null;",
+        "    return cur || null;"],
+    ['loss: previousStageOf draws the move\'s own stage (X -> X)',
+        'src/utils/lossAnalysis.js',
+        "    return last ? (clean(last.prevStage) || null) : null;",
+        "    return last ? (clean(last.stage) || null) : null;"],
+    ['loss: a stage outside the funnel order vanishes from the rows',
+        'src/utils/lossAnalysis.js',
+        "        if (s) counts[s] = (counts[s] || 0) + 1;",
+        "        if (s && stageOrder.includes(s)) counts[s] = (counts[s] || 0) + 1;"],
+    ['reports: the Win / loss bucket reads the notes first again',
+        'src/Tabs/ReportsTab.jsx',
+        "            const r = lossBucketOf(o, 'Other');",
+        "            const r = o.lostReason || 'Other';"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

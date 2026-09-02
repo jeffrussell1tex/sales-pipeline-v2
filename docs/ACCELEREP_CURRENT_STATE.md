@@ -1747,6 +1747,57 @@ production."** The Require path is observed on both instances; the server
 refusal on prod is implied by the sign-in being held (the app cannot render
 without an active session now), not separately probed.
 
+### 0.66 The Win / loss report read the notes instead of the category, and the closing entry instead of the stage it left (2 Sep, fourth session)
+
+**Jeff: "why we lost is important as it is supposed to be feeding this
+report."** His screenshot — Reports → Win / loss analysis, Accelerep Test on
+dev: "Why we lost · Other · 5 · 100%", "Biggest leak: 100% of losses (other)",
+"Losses by stage exited — No stage history data on lost deals". A read-only
+SELECT of the same five deals: every one carries `lost_category` (Timing ×4,
+Competitor ×1), `lost_reason` null, and a `stage_history` ending in a
+Closed Lost entry with `prevStage`. The data was right; the report read the
+wrong field, twice.
+
+(1) Three surfaces read `o.lostReason || o.closedLostReason || 'Other'`: the
+free-text notes, then a field nothing has ever written (grep: zero writers),
+then the default. `completeLostSave` stores the picker in `lostCategory`
+and the notes in `lostReason`; notes are usually empty. (2) Two surfaces took
+the last history entry's `.stage` as the stage exited and then excluded
+'Closed Lost' — but that entry IS the move into Closed Lost; the stage it left
+is its `prevStage`. So the table was empty for every org that had losses,
+and "Stage changes this week" drew "Closed Lost → Closed Lost". (3) The
+exit-stage row order was a hardcoded list with no "Evaluation (Demo)". (4)
+Three more displays — Recent losses, and the Activity History timeline's lost
+events (two builders) — subtitled with the notes alone.
+
+**Fixed:** `src/utils/lossAnalysis.js`, pure: `lossBucketOf(o, fallback)`
+(category, else notes, else the caller's word), `exitStageOf(o)` (the closing
+entry's prevStage; a non-closing last entry's stage; no history → the current
+stage unless closed), `previousStageOf(o)`, `lostByStageRowsOf(lost,
+order)` (ordered by the org's `settings.funnelStages`, else the default
+stage list; a stage outside the order still shows, after them). Every reader
+in ReportsTab goes through it — eight sites — and a source scan pins that no
+bare `o.lostReason ||`, `{o.lostReason}` or `history[…]?.stage` read
+remains and that `closedLostReason` is gone. The competitor heuristic ("Lost
+to X" parsed from the notes) is unchanged. `tests/loss-analysis.test.mjs`
+(15, built on the five real rows: Timing ×4 / Competitor ×1, exit stages
+Qualification ×4 / Proposal ×1). Gates green on 134 files, **357/357**,
+**125/125 mutations, printed green baseline** (six new), build guard OK
+(2,479 kB, `index-CzGO2ggA.js`). **Not browser-checked here:** the five lost
+deals are Jeff's, so Karen's rep scope shows none of them; Jeff eyeballs the
+report as Admin after the deploy — expected: Timing 4 · 80%, Competitor 1 ·
+20%, exit-stage rows Qualification 4 and Proposal 1, and the Performance
+tab's "Why deals are lost" the same split.
+
+**Carried, found on the way:** ReportsTab line 78 hardcodes `stages =
+['Prospecting','Qualified','Demo','Proposal','Negotiation',…]` for the
+Performance tab's "Stage conversion", and the funnel deep-dive falls back to
+`['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing']`
+— neither is the app's stage list (Qualification, Discovery, Evaluation
+(Demo), Proposal, Negotiation/Review, Contracts). The funnel uses
+`settings.funnelStages` when set; the Performance tab never does. Not
+changed this session.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

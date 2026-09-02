@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
+// Every read of a lost deal's reason or exit stage goes through here (0.66):
+// the reports used to read the free-text notes instead of the picked category,
+// and the closing history entry's own stage instead of the stage it came from.
+import { lossBucketOf, exitStageOf, previousStageOf, lostByStageRowsOf } from '../utils/lossAnalysis';
+import { stages as defaultStages } from '../utils/constants';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
 
@@ -1638,7 +1643,7 @@ ${bodyHtml}
                             const totalClosed = wonOpps.length + lostOpps.length;
                             const lostTotal = lostOpps.length;
                             const lostCats = lostOpps.reduce((acc,o)=>{
-                              const cat = o.lostReason || o.closedLostReason || 'Unknown';
+                              const cat = lossBucketOf(o, 'Unknown');
                               acc[cat]=(acc[cat]||0)+1; return acc;
                             },{});
                             const lostRows = Object.entries(lostCats).sort((a,b)=>b[1]-a[1]);
@@ -2848,8 +2853,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                                 : changedOpps.slice(0,6).map((o,i) => {
                                     const isLoss = o.stage==='Closed Lost';
                                     const isWin  = o.stage==='Closed Won';
-                                    const history = o.stageHistory || [];
-                                    const prevStage = history.length>0 ? history[history.length-1]?.stage : null;
+                                    const prevStage = previousStageOf(o);
                                     return (
                                         <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'10px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
                                             <div>
@@ -2959,15 +2963,13 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
             ? funnelDataD[funnelDataD.length-1].advanced / funnelDataD[0].entered : 0;
         const totalCycleDays = funnelDataD.reduce((s,st)=>s+(st.avgDays||0),0);
 
-        // Drop-off reasons from lostReason on closed-lost opps, grouped by stage exited
+        // Drop-off reasons (the picked category, else the notes) on closed-lost opps, grouped by stage exited
         const lostOppsD = allScopeD.filter(o=>o.stage==='Closed Lost');
         const dropoffMap = {};
         lostOppsD.forEach(o => {
-            if (!o.lostReason) return;
-            // Stage they were in when lost
-            const history = o.stageHistory||[];
-            const exitStage = history.length>0 ? history[history.length-1]?.stage : o.stage;
-            const key = (exitStage||'Unknown')+'||'+(o.lostReason||'Other');
+            const bucket = lossBucketOf(o, '');
+            if (!bucket) return;
+            const key = (exitStageOf(o)||'Unknown')+'||'+bucket;
             dropoffMap[key] = (dropoffMap[key]||0) + 1;
         });
         const dropoffReasons = Object.entries(dropoffMap)
@@ -3430,7 +3432,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         // Loss reasons grouped + counted
         const lossReasonMap = {};
         lostOppsD.forEach(o => {
-            const r = o.lostReason || o.closedLostReason || 'Other';
+            const r = lossBucketOf(o, 'Other');
             lossReasonMap[r] = (lossReasonMap[r]||0)+1;
         });
         const lossReasons = Object.entries(lossReasonMap)
@@ -3439,17 +3441,12 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         const maxLossCount = Math.max(...lossReasons.map(r=>r.count),1);
         const lossBarColors = [T.danger, T.warn, T.inkMid, T.inkMuted, T.inkMuted, T.inkMuted];
 
-        // Losses by stage exited (last stageHistory entry, or current stage if lost)
-        const lostByStage = {};
-        lostOppsD.forEach(o => {
-            const history = o.stageHistory||[];
-            const exitStage = history.length>0 ? history[history.length-1]?.stage : o.stage;
-            if (exitStage && exitStage!=='Closed Lost') lostByStage[exitStage] = (lostByStage[exitStage]||0)+1;
-        });
-        const stageSeqForLoss = ['Prospecting','Qualification','Discovery','Proposal','Negotiation/Review','Negotiation','Contracts','Closing'];
-        const lostByStageRows = stageSeqForLoss
-            .filter(s=>lostByStage[s]>0)
-            .map(s=>({ stage:s, count:lostByStage[s] }));
+        // Losses by stage exited: the stage the deal LEFT, from the closing
+        // history entry's prevStage. Ordered by the org's funnel; a stage not in
+        // it still shows (the old hardcoded list had no "Evaluation (Demo)").
+        const lostStageOrder = (settings.funnelStages||[]).filter(s=>s.name).map(s=>s.name).filter(s=>s!=='Closed Won'&&s!=='Closed Lost');
+        const lostByStageRows = lostByStageRowsOf(lostOppsD, lostStageOrder.length ? lostStageOrder : defaultStages.filter(s=>s!=='Closed Won'&&s!=='Closed Lost'));
+        const lostByStage = Object.fromEntries(lostByStageRows.map(r=>[r.stage, r.count]));
         const maxLostStage = Math.max(...lostByStageRows.map(r=>r.count),1);
 
         // Competitor table: lostCategory field or parse "Lost to X" from lostReason
@@ -3835,7 +3832,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                                 <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:12, alignItems:'center', padding:'9px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
                                     <div>
                                         <div style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
-                                        {o.lostReason&&<div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontStyle:'italic', fontFamily:T.sans }}>{o.lostReason}</div>}
+                                        {lossBucketOf(o,'')&&<div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontStyle:'italic', fontFamily:T.sans }}>{lossBucketOf(o,'')}</div>}
                                     </div>
                                     <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{fmtDate(o.forecastedCloseDate||o.closeDate)}</span>
                                     <span style={{ fontSize:13, color:T.danger, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>−{fmtShort(o.arr)}</span>
@@ -5420,7 +5417,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                     date: o.closedAt || o.closeDate || o.updatedAt || '',
                     type: 'lost', actType: 'Lost',
                     label: o.opportunityName || o.name || 'Deal',
-                    sub: o.lostReason || '', rep: o.salesRep || o.assignedTo || '',
+                    sub: lossBucketOf(o, ''), rep: o.salesRep || o.assignedTo || '',
                     amount: parseFloat(o.arr||o.revenue||0)||0,
                 });
             } else {
@@ -5496,7 +5493,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             if (o.stage === 'Closed Won') {
                 events.push({ id:'opp_won_'+o.id, date:o.closedAt||o.closeDate||o.updatedAt||'', type:'won', actType:'Won', label:o.opportunityName||o.name||'Deal', sub:o.stage, rep:o.salesRep||o.assignedTo||'', amount:parseFloat(o.arr||o.revenue||0)||0 });
             } else if (o.stage === 'Closed Lost') {
-                events.push({ id:'opp_lost_'+o.id, date:o.closedAt||o.closeDate||o.updatedAt||'', type:'lost', actType:'Lost', label:o.opportunityName||o.name||'Deal', sub:o.lostReason||'', rep:o.salesRep||o.assignedTo||'', amount:parseFloat(o.arr||o.revenue||0)||0 });
+                events.push({ id:'opp_lost_'+o.id, date:o.closedAt||o.closeDate||o.updatedAt||'', type:'lost', actType:'Lost', label:o.opportunityName||o.name||'Deal', sub:lossBucketOf(o, ''), rep:o.salesRep||o.assignedTo||'', amount:parseFloat(o.arr||o.revenue||0)||0 });
             } else {
                 events.push({ id:'opp_open_'+o.id, date:o.createdAt||o.closeDate||'', type:'deal', actType:'Deal', label:o.opportunityName||o.name||'Deal', sub:o.stage, rep:o.salesRep||o.assignedTo||'', amount:parseFloat(o.arr||o.revenue||0)||0 });
             }
