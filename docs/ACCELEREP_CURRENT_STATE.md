@@ -1702,6 +1702,21 @@ reported as a database outage — the wrong layer (18b22). Reachable only by
 an old client against a new server, or a session that goes pending mid-use;
 still a misdiagnosis on the user's screen. Not changed this session.
 
+**Jeff: "I used sms MFA to login."** He refreshed, was held at Clerk's task
+card on the deployed dev site, enrolled the SMS factor, and came through as
+Admin — the full Require path end to end on accelerep.netlify.app. His
+screenshot is the REWRITTEN panel with real numbers: "✓ 2/4 enrolled · 50%",
+Enrollment by role Admin 1/1 Complete · User 1/2 · Technician 0/1, Not yet
+enrolled listing smiller@test.com and ryanalgie@gmail.com, the info callout
+carrying the new sentence "this app honours that on both the sign-in screen
+and the API", the warn callout "2 users haven't set up a second factor. Turn
+on Require multi-factor authentication in Clerk Dashboard to hold them at
+sign-in until they do." with its single Open Clerk Dashboard button, and the
+Allowed factors card as prose with a link. No Enforce modal, no Send
+reminders, no factor tiles. The URL still reads `#/tasks/setup-mfa`: Clerk's
+hash router leaves the task path in place after the task completes; the app
+has no hash routing of its own, so it is inert — noted, not changed.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

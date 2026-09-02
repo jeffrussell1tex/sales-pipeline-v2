@@ -136,9 +136,11 @@ the MFA fix and its docs** · dev deploy observed serving `index-Cy6ZeOFD.js` fo
    (a) DONE while committing — Jeff enrolled Karen's authenticator; her MFA
    dot is green ● (1/4), **the known-ON state sighted at last**; the pane
    needs a fresh Karen sign-in (with her second factor) to be useful again.
-   (b) Eyeball the rewritten MFA panel as Admin
-   (Settings → Security → Multi-factor auth): no Enforce modal, no Send
-   reminders, no factor tiles. (c) `catalogue.js`'s MFA entry still
+   (b) DONE — Jeff enrolled SMS MFA through Clerk's task card on the
+   deployed dev site and eyeballed the rewritten panel as Admin: 2/4
+   enrolled, real per-role rows, no Enforce modal, no Send reminders, no
+   factor tiles (state §0.65). The stale `#/tasks/setup-mfa` hash Clerk
+   leaves in the URL is inert; noted. (c) `catalogue.js`'s MFA entry still
    hardcodes "Optional · not all enrolled" / "3 months ago". (d) Ship dev
    to prod, then Require can go on for Production. (e) Integration suites
    mock `verifyAuth`, so the `sts` refusal is covered by unit + mutation
