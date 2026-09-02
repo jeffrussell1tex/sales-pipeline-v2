@@ -93,11 +93,11 @@ observed serving `index-wHucaxGK.js` (see §1).
    labels never read "Invalid Date"; the profile panel fits a two-org
    account with a long org name (Jeff's original prod report).
 3. **Still unobserved:** as Admin after 7pm Central, a coaching note carries
-   today's date (Jeff: "I will have to check the time tonight"); as Admin,
-   a CSV with a `9/15/2026` close date imports as `2026-09-15`. Both hold
-   by unit test; neither has been seen live. The CSV is delivered
-   (`zztest-close-dates.csv`, state §0.63 lists the expected values);
-   record Jeff's result in §0.63 when it comes.
+   today's date (Jeff: "I will have to check the time tonight"). **The CSV
+   half is OBSERVED:** Jeff imported `zztest-close-dates.csv`; a read-only
+   SELECT shows `9/15/2026` stored as `2026-09-15` and the ISO and
+   Excel-datetime rows as expected (state §0.63). The three ZZTest deals
+   under "ZZTest Import Co" are Jeff's to delete when done.
 4. **DONE (fourth session, 1 Sep evening):** the guide bullet owed from §3 — "grep
    the FILE for every other reader of the value" — is now the closing bullet
    of §18b26; state doc §0.62 no longer says "not yet written".

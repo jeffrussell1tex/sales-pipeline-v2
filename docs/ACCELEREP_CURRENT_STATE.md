@@ -1515,8 +1515,14 @@ entry and of the handoff said "1 Sep" for both, corrected here.
 Import Co" with Close Dates `9/15/2026`, `2026-10-01` and
 `2026-11-20 00:00:00`, row 1 also carrying `8/15/2026` as Created Date.
 Expected after import: `2026-09-15`, `2026-10-01`, `2026-11-20`, and
-created `2026-08-15`. Jeff imports as Admin on his own account; the result is
-to be recorded here.
+created `2026-08-15`. **OBSERVED (Jeff: "imported the file"; read-only SELECT
+on the shared DB, 2 Sep):** three rows under Jeff's org, created 2 Sep
+21:07Z. Close dates stored `2026-09-15`, `2026-10-01`, `2026-11-20` — the
+US-format, the ISO and the Excel-datetime cells all normalised. Row 1's
+created_date is `2026-08-15` from its US-format cell; rows 2 and 3, blank in
+the file, carry `2026-09-02`, the import day on the local clock. Stage,
+account and sales rep (Jeff, the importer) as sent. The importer half of the
+"still unobserved" pair is closed; the after-7pm coaching note remains.
 
 ---
 
