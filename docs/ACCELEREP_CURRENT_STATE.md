@@ -2073,6 +2073,9 @@ History → an opportunity with products must render, and Reports' "Actions"
 report (reachable only by an older saved sub-tab — §0.68 tier 2) would now
 show its rows.
 
+**Dev landing (`d79b888`):** accelerep.netlify.app serves `index-D3lRwa5m.js`,
+the local gate build's hash, 40 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

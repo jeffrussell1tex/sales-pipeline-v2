@@ -91,8 +91,9 @@ read on the local clock. 13 tests under two fiscal starts, 7 mutants.
 `products.map` crash, the toolbar above the null guard, the contacts array
 written into a text column (both paths), the phantom `nextStep(Date)`
 reads, and the Actions report storing a Response as data. `src/utils/
-oppText.js`, 9 tests, 5 mutants. Deploy check recorded in §4 by a
-follow-up docs commit.
+oppText.js`, 9 tests, 5 mutants. `d79b888`, **deploy-verified:**
+accelerep.netlify.app serves `index-D3lRwa5m.js`, the local gate build's
+hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -141,8 +142,8 @@ Five gates green on 137 files · **389/389 unit** (9 new in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
 `session-status.test.mjs`) · **140/140 mutations, printed green baseline**
 (27 new this session; run alone) · build **2,478 kB JS**,
-`index-D3lRwa5m.js` (audit batch 2; deploy check pending at the time this
-was written; `index-CprJulHE.js` observed for `939f7a2`), guard OK, `dist/` cleared · **79 integration not
+`index-D3lRwa5m.js` (audit batch 2; dev deploy observed serving it for
+`d79b888`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
