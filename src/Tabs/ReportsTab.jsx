@@ -9,6 +9,7 @@ import { stages as defaultStages } from '../utils/constants';
 import { sliceActivities, sliceLeads, visibleReps } from '../utils/reportScope';
 import { periodRange, priorRange, inRange, dayOf, currentFiscalYear } from '../utils/reportPeriod';
 import { productsListOf, contactNamesText } from '../utils/oppText';
+import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter } from '../utils/pipelineReport';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
 
@@ -773,7 +774,11 @@ ${bodyHtml}
                             );
 
                             // ── Computed pipeline values
-                            const quota = (settings.quotaData?.quarterlyQuota || (settings.users||[]).reduce((s,u)=>s+(parseFloat(u.quota)||0),0)) || 175000;
+                            // The reps' configured quotas for the selected period and slice —
+                            // this was a hardcoded dollar figure behind two fallbacks that read
+                            // fields nothing writes (0.68 item 3). 0 means no quota is set, and the
+                            // ring says so instead of measuring against an invented number.
+                            const quota = teamQuotaFor(settings.users, reportTimePeriod, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory });
                             // Commit = won + deals where rep marked commit (falls back to Closing/Negotiation stage if no forecastCategory set)
                             const commitOpps  = openOpps.filter(o=> o.forecastCategory === 'commit' || (!o.forecastCategory && ['Closing','Negotiation/Review','Contracts'].includes(o.stage)));
                             // Best case = commit + deals marked best_case (falls back to Proposal stage)
@@ -781,40 +786,19 @@ ${bodyHtml}
                             // Omitted deals are excluded from all calculations
                             const commitVal   = wonOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0) + commitOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                             const bestCaseVal = commitVal + bestCaseOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                            const attainPct   = Math.round((totalWonRevenue / Math.max(quota,1)) * 100);
+                            const attainPct   = quota > 0 ? Math.round((totalWonRevenue / quota) * 100) : 0;
                             const gapToQuota  = Math.max(0, quota - totalWonRevenue);
                             const coverage    = gapToQuota > 0 ? (totalPipelineValue / gapToQuota) : null;
 
-                            // Pipeline movement (last 7 days)
-                            const cutoff7 = isoLocal(new Date(Date.now()-7*86400000));
-                            const addedOpps2  = reportsOpps.filter(o=>o.createdDate>=cutoff7 && !['Closed Won','Closed Lost'].includes(o.stage));
-                            const slippedOpps2= reportsOpps.filter(o=>{ const cd=o.forecastedCloseDate||o.closeDate; return cd && cd<todayLocal() && !['Closed Won','Closed Lost'].includes(o.stage); });
-                            const added2  = addedOpps2.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                            const slipped2= slippedOpps2.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                            const startPipe = Math.max(totalPipelineValue + slipped2 - added2, 0);
-                            const netDelta = totalPipelineValue - startPipe;
-
-                            // Waterfall steps
-                            const wfSteps = [
-                              { label:'Start of week', value:startPipe, kind:'total' },
-                              { label:'Added',  value:added2,    kind:'pos' },
-                              { label:'Slipped', value:-slipped2, kind:'neg' },
-                              { label:'Won',    value:-totalWonRevenue, kind:'won' },
-                              { label:'End of week', value:totalPipelineValue, kind:'total' },
-                            ];
-                            const maxWF = Math.max(startPipe, totalPipelineValue) * 1.1 || 1;
-                            const chartW=600, chartH=180, barW=66;
-                            const gap=(chartW-barW*wfSteps.length)/(wfSteps.length+1);
-                            const yS=(v)=>chartH-(Math.max(0,v)/maxWF)*chartH;
-                            let running=0;
-                            const wfBars = wfSteps.map((s,i)=>{
-                              const x=gap+i*(barW+gap);
-                              if(s.kind==='total'){ running=s.value; return {...s,x,y:yS(s.value),h:Math.max(2,chartH-yS(s.value)),vl:fmt(s.value)}; }
-                              const before=running; running+=s.value;
-                              const top=yS(Math.max(before,running)); const bot=yS(Math.min(before,running));
-                              return {...s,x,y:top,h:Math.max(2,bot-top),vl:(s.value>=0?'+':'')+fmt(s.value)};
-                            });
-                            const wfColor=(k)=>k==='total'?T.ink:k==='pos'?T.ok:k==='won'?'#3a5530':T.danger;
+                            // Pipeline movement, last 7 days — real flows from the sliced set
+                            // (pipelineReport.js). "Lost" was the literal 0, "Slipped" was every
+                            // past-due deal ever, and "Won" / "Carried over" used all-time
+                            // revenue (0.68 item 7).
+                            const mv = pipelineMovement(reportsOpps, { today: todayLocal() });
+                            const startPipe = mv.start$;
+                            const endPipe   = mv.openNow$;
+                            const added2    = mv.added$;
+                            const netDelta  = mv.net$;
 
                             // Stage conversion funnel — cohort-based calculation
                             // Logic: for each stage N, "entered" = all opps that have ever
@@ -876,42 +860,21 @@ ${bodyHtml}
                               const cd=o.forecastedCloseDate||o.closeDate;
                               if(daysStale!==null&&daysStale>=14) flags.push({l:`No activity in ${daysStale}d`,s:'high'});
                               if(cd&&cd<today2iso) flags.push({l:`Close date passed ${Math.floor((Date.now()-new Date(cd+'T12:00:00'))/86400000)}d ago`,s:'high'});
-                              if(!o.nextStep) flags.push({l:'No next step',s:'low'});
+                              if(!o.nextSteps) flags.push({l:'No next step',s:'low'});
                               return {...o,flags};
                             }).filter(o=>o.flags.length>0).sort((a,b)=>(b.flags.filter(f=>f.s==='high').length-a.flags.filter(f=>f.s==='high').length)||((parseFloat(b.arr)||0)-(parseFloat(a.arr)||0))).slice(0,5);
-
-                            // Forecast accuracy - computed from real closed-won opps grouped by fiscal quarter.
-                            // Until a forecast-snapshot table exists in the DB, we display closed-won revenue
-                            // per quarter. If no closed deals exist yet, fxHasData=false renders an empty state.
-                            const buildFxHistory = () => {
-                              const now2 = new Date();
-                              const results = [];
-                              for (let qi = 5; qi >= 0; qi--) {
-                                const qStart = new Date(now2.getFullYear(), now2.getMonth() - qi * 3 - 3, 1);
-                                const qEnd   = new Date(qStart.getFullYear(), qStart.getMonth() + 3, 0);
-                                if (qEnd >= now2) continue;
-                                const qWon = (reportsTimedOpps || []).filter(o => {
-                                  if (o.stage !== 'Closed Won') return false;
-                                  const d = o.forecastedCloseDate || o.closeDate;
-                                  if (!d) return false;
-                                  const od = new Date(d + 'T12:00:00');
-                                  return od >= qStart && od <= qEnd;
-                                });
-                                const actual = qWon.reduce((s,o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
-                                const label = `Q${Math.ceil((qStart.getMonth()+1)/3)} ${String(qStart.getFullYear()).slice(2)}`;
-                                results.push({ q: label, fc: actual, ac: actual, att: 1.0, hasReal: qWon.length > 0 });
-                              }
-                              return results;
-                            };
-                            const fxHistory = buildFxHistory();
-                            const fxHasData = fxHistory.some(h => h.hasReal);
-                            const avgAcc = fxHistory.length > 0 ? fxHistory.reduce((s,h)=>s+h.att,0)/fxHistory.length : 1;
-                            const fxMax = fxHasData ? Math.max(...fxHistory.map(h=>Math.max(h.fc,h.ac)))*1.1 : 1;
+                            // Closed-won by fiscal quarter — the last six COMPLETED quarters, from
+                            // the sliced set. This panel was "Forecast accuracy" with forecast ===
+                            // actual and an accuracy hardcoded to 100%, so every point read 100%
+                            // (0.68 item 4). There is no forecast snapshot to compare against; this shows
+                            // what closed, by the house fiscal convention.
+                            const fxHistory = closedWonByQuarter(reportsOpps, fiscalStart, { count: 6 });
+                            const fxHasData = fxHistory.some(h => h.count > 0);
+                            const fxMax = fxHasData ? Math.max(...fxHistory.map(h=>h.actual))*1.1 : 1;
                             const fxW=500,fxH=130,fxPL=16,fxPR=16,fxIW=fxW-fxPL-fxPR;
                             const fxX=(i)=>fxPL+(i/Math.max(fxHistory.length-1,1))*fxIW;
                             const fxY=(v)=>fxH-(v/Math.max(fxMax,1))*fxH;
-                            const fcPath=fxHasData?fxHistory.map((h,i)=>`${i===0?'M':'L'}${fxX(i)},${fxY(h.fc)}`).join(' '):'M0,0';
-                            const acPath=fxHasData?fxHistory.map((h,i)=>`${i===0?'M':'L'}${fxX(i)},${fxY(h.ac)}`).join(' '):'M0,0';
+                            const acPath=fxHasData?fxHistory.map((h,i)=>`${i===0?'M':'L'}${fxX(i)},${fxY(h.actual)}`).join(' '):'M0,0';
 
                             // Comparison deltas for pipeline tab
                             const pipelineDelta  = cmpDelta(totalPipelineValue, o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
@@ -954,21 +917,22 @@ ${bodyHtml}
 
                                   {/* ── Anchor totals row ─────────────────────────────── */}
                                   {(() => {
-                                    // Ribbon segments: carried-over | slipped | won | lost | added
-                                    // Total width = endOfWeek + slipped2 + totalWonRevenue + added2
-                                    // (i.e. startOfWeek + added2 — decomposed into all flows)
+                                    // Ribbon: carried-over | won | lost | added — the flows of the
+                                    // week, start + added wide. "Slipped" is listed but not a ribbon
+                                    // segment: a slipped deal is still in the pipeline.
                                     const ribbonTotal = Math.max(startPipe + added2, 1);
                                     const segments = [
-                                      { key:'carried', label:'Carried over', value:Math.max(startPipe - slipped2 - totalWonRevenue, 0), kind:'carried', count:null },
-                                      { key:'slipped', label:'Slipped',      value:slipped2,          kind:'neg',     count:slippedOpps2.length },
-                                      { key:'won',     label:'Won',           value:totalWonRevenue,   kind:'won',     count:null },
-                                      { key:'lost',    label:'Lost',          value:0,                 kind:'neg',     count:null },
-                                      { key:'added',   label:'Added',         value:added2,            kind:'added',   count:addedOpps2.length },
+                                      { key:'carried', label:'Carried over',        value:mv.carried$, kind:'carried', count:mv.carried.length },
+                                      { key:'won',     label:'Won',                 value:mv.won$,     kind:'won',     count:mv.won.length },
+                                      { key:'lost',    label:'Lost',                value:mv.lost$,    kind:'neg',     count:mv.lost.length },
+                                      { key:'added',   label:'Added',               value:mv.added$,   kind:'added',   count:mv.added.length },
+                                      { key:'slipped', label:'Slipped, still open', value:mv.slipped$, kind:'slipped', count:mv.slipped.length, ribbon:false },
                                     ];
                                     const segColor = (kind) => {
                                       if (kind==='carried') return T.ink;
                                       if (kind==='won')     return '#3a5530';
                                       if (kind==='added')   return T.ok;
+                                      if (kind==='slipped') return T.warn;
                                       return T.danger;
                                     };
                                     const segBg = (kind) => {
@@ -982,14 +946,10 @@ ${bodyHtml}
                                     const fmtLegendVal = (seg) => {
                                       if (seg.kind==='carried') return fmt(seg.value);
                                       if (seg.kind==='added')   return '+' + fmt(seg.value);
+                                      if (seg.kind==='slipped') return fmt(seg.value);
                                       return '−' + fmt(seg.value);
                                     };
-                                    const subLabel = (seg) => {
-                                      if (seg.key==='slipped' && seg.count!=null) return seg.count + ' deal' + (seg.count!==1?'s':'');
-                                      if (seg.key==='won'     && wonOpps.length)  return wonOpps.length + ' closed';
-                                      if (seg.key==='added'   && seg.count!=null) return seg.count + ' deal' + (seg.count!==1?'s':'');
-                                      return null;
-                                    };
+                                    const subLabel = (seg) => (seg.count != null && seg.count > 0) ? seg.count + ' deal' + (seg.count!==1?'s':'') : null;
 
                                     return (
                                       <>
@@ -1001,13 +961,13 @@ ${bodyHtml}
                                           <div style={{ flex:1 }}/>
                                           <div style={{ textAlign:'right' }}>
                                             <div style={{ fontSize:10, fontWeight:600, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans }}>End of week</div>
-                                            <div style={{ fontSize:22, fontWeight:600, color:T.ink, fontFeatureSettings:'"tnum"', letterSpacing:-0.5, fontFamily:T.sans }}>{fmt(totalPipelineValue)}</div>
+                                            <div style={{ fontSize:22, fontWeight:600, color:T.ink, fontFeatureSettings:'"tnum"', letterSpacing:-0.5, fontFamily:T.sans }}>{fmt(endPipe)}</div>
                                           </div>
                                         </div>
 
                                         {/* ── Ribbon ──────────────────────────────────── */}
                                         <div style={{ display:'flex', height:34, width:'100%', borderRadius:3, overflow:'hidden' }}>
-                                          {segments.filter(s=>s.value>0).map((seg, i, arr) => {
+                                          {segments.filter(s=>s.ribbon!==false && s.value>0).map((seg, i, arr) => {
                                             const pct = (seg.value / ribbonTotal) * 100;
                                             const isFirst = i === 0;
                                             const isLast  = i === arr.length - 1;
@@ -1063,8 +1023,8 @@ ${bodyHtml}
                                           })}
                                         </svg>
                                         <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column' }}>
-                                          <div style={{ fontSize:22, fontWeight:700, color:T.ink, lineHeight:1, fontFamily:T.sans }}>{attainPct}%</div>
-                                          <div style={{ fontSize:9, color:T.inkMuted, fontFamily:T.sans, textTransform:'uppercase', letterSpacing:0.4 }}>commit</div>
+                                          <div style={{ fontSize:22, fontWeight:700, color:T.ink, lineHeight:1, fontFamily:T.sans }}>{quota > 0 ? attainPct + '%' : '—'}</div>
+                                          <div style={{ fontSize:9, color:T.inkMuted, fontFamily:T.sans, textTransform:'uppercase', letterSpacing:0.4 }}>{quota > 0 ? 'won of quota' : 'no quota'}</div>
                                         </div>
                                       </div>
                                       <div style={{ flex:1 }}>
@@ -1081,39 +1041,38 @@ ${bodyHtml}
                                           </div>
                                         ))}
                                         <div style={{ marginTop:4, padding:'8px 12px', background:T.surface2, borderRadius:T.r, display:'flex', gap:12, fontSize:12, color:T.inkMid, fontFamily:T.sans, flexWrap:'wrap' }}>
-                                          <span><strong style={{ color:T.ink }}>{fmt(gapToQuota)}</strong> gap to quota</span>
+                                          {quota > 0
+                                            ? <span><strong style={{ color:T.ink }}>{fmt(gapToQuota)}</strong> gap to quota</span>
+                                            : <span>No quota set for this scope and period — quotas are set on the Sales Manager tab</span>}
                                           {coverage && <><span style={{ opacity:0.4 }}>·</span><span><strong style={{ color:T.ink }}>{coverage.toFixed(1)}×</strong> coverage</span></>}
                                         </div>
                                       </div>
                                     </div>
                                   </Panel>
                                   <Panel>
-                                    <SecHdr title="Forecast accuracy" sub={fxHasData ? `Last ${fxHistory.length} closed quarters` : 'Closed quarter history'}
-                                      right={fxHasData ? <div style={{ textAlign:'right' }}><div style={eb(T.inkMuted)}>Avg accuracy</div><div style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{Math.round(avgAcc*100)}%</div></div> : null}/>
+                                    <SecHdr title="Closed-won by quarter" sub={`Last ${fxHistory.length} completed fiscal quarters`}
+                                      right={fxHasData ? <div style={{ textAlign:'right' }}><div style={eb(T.inkMuted)}>Total</div><div style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{fmt(fxHistory.reduce((s,h)=>s+h.actual,0))}</div></div> : null}/>
                                     {!fxHasData ? (
                                       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:130, gap:8, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, background:T.surface2, padding:'20px 24px', textAlign:'center' }}>
                                         <svg width="36" height="24" viewBox="0 0 36 24" fill="none"><path d="M2 20 L8 14 L14 17 L22 7 L34 10" stroke={T.borderStrong} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 3"/><circle cx="34" cy="10" r="2" fill={T.borderStrong}/></svg>
                                         <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>No closed deal history yet</div>
-                                        <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.55, maxWidth:280, fontFamily:T.sans }}>This chart will populate automatically once deals close. It compares won revenue to forecast each quarter — no setup needed.</div>
+                                        <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.55, maxWidth:280, fontFamily:T.sans }}>Nothing closed-won in the last six completed fiscal quarters for this scope. The chart fills in as deals close.</div>
                                       </div>
                                     ) : (
                                     <>
                                     <svg width="100%" viewBox={`0 0 ${fxW} ${fxH+30}`} style={{ display:'block' }}>
                                       {[0.5,1].map(f=><line key={f} x1={fxPL} x2={fxW-fxPR} y1={fxH-fxH*f} y2={fxH-fxH*f} stroke={T.border} strokeWidth={0.5} strokeDasharray="2 4"/>)}
-                                      <path d={fcPath} fill="none" stroke={T.inkMuted} strokeWidth={1.5} strokeDasharray="4 3"/>
                                       <path d={acPath} fill="none" stroke={T.ink} strokeWidth={2}/>
                                       {fxHistory.map((h,i)=>(
                                         <g key={i}>
-                                          <circle cx={fxX(i)} cy={fxY(h.fc)} r={3} fill={T.surface} stroke={T.inkMuted} strokeWidth={1.5}/>
-                                          <circle cx={fxX(i)} cy={fxY(h.ac)} r={3.5} fill={T.ink}/>
-                                          <text x={fxX(i)} y={fxH+18} fontSize="10" textAnchor="middle" fill={T.inkMuted} fontFamily={T.sans}>{h.q}</text>
-                                          <text x={fxX(i)} y={fxY(h.ac)-7} fontSize="9" textAnchor="middle" fill={h.att>=1?T.ok:h.att>=0.9?T.ink:T.danger} fontWeight="600" fontFamily={T.sans}>{Math.round(h.att*100)}%</text>
+                                          <circle cx={fxX(i)} cy={fxY(h.actual)} r={3.5} fill={T.ink}/>
+                                          <text x={fxX(i)} y={fxH+18} fontSize="10" textAnchor="middle" fill={T.inkMuted} fontFamily={T.sans}>{h.label}</text>
+                                          <text x={fxX(i)} y={fxY(h.actual)-7} fontSize="9" textAnchor="middle" fill={T.ink} fontWeight="600" fontFamily={T.sans}>{h.count>0?fmt(h.actual):''}</text>
                                         </g>
                                       ))}
                                     </svg>
                                     <div style={{ display:'flex', gap:14, marginTop:4, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
-                                      <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><svg width="18" height="2"><line x1="0" y1="1" x2="18" y2="1" stroke={T.inkMuted} strokeWidth="1.5" strokeDasharray="3 2"/></svg>Forecast</span>
-                                      <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><svg width="18" height="2"><line x1="0" y1="1" x2="18" y2="1" stroke={T.ink} strokeWidth="2"/></svg>Actual</span>
+                                      <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><svg width="18" height="2"><line x1="0" y1="1" x2="18" y2="1" stroke={T.ink} strokeWidth="2"/></svg>Closed-won, by the quarter the deal closed</span>
                                     </div>
                                     </>
                                     )}
@@ -1203,15 +1162,17 @@ ${bodyHtml}
                               if (reportsTerritory) return new Set((settings.users||[]).filter(u=>u.territory===reportsTerritory).map(u=>u.name));
                               return new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean));
                             })();
-                            const quotaMode = (settings.users||[]).find(u=>u.quotaType)?.quotaType||'annual';
                             const hasSlice2 = reportsRep||reportsTeam||reportsTerritory;
                             const visibleUsers2 = (settings.users||[]).filter(u=>{
                               if(u.userType==='ReadOnly'||!u.name)return false;
                               if(hasSlice2)return visibleRepNames2.has(u.name);
-                              const hq=(u.annualQuota||0)>0||(u.q1Quota||0)>0;
+                              const hq=userQuotaFor(u,'FY')>0;
                               return hq||visibleRepNames2.has(u.name);
                             });
-                            const getUserQuota = (u) => (u.quotaType||quotaMode)==='annual'?(u.annualQuota||0):(u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0);
+                            // Period-scoped: a quarter's revenue against a quarter's quota. This
+                            // divided the selected period's revenue by the FULL year's quota, so a
+                            // quarter read ~¼ attainment (0.68 item 8).
+                            const getUserQuota = (u) => userQuotaFor(u, reportTimePeriod);
                             const totalQuota2 = visibleUsers2.reduce((s,u)=>s+getUserQuota(u),0);
                             const closedWonValue2 = wonOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0),0);
                             const attainPct2 = totalQuota2>0?(closedWonValue2/totalQuota2*100):0;

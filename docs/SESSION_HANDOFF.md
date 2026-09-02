@@ -104,6 +104,16 @@ narrowed to the viewer's scope. 5 tests, 5 mutants. `f40b2c1`,
 local gate build's hash. Open for Jeff: the report's leads gate
 drops unassigned leads for non-Admins while the server can serve them.
 
+**Batch 4a, the commit this handoff rides in (state §0.72):** the Pipeline &
+Forecast tab's constants — the $175,000 quota replaced by the reps'
+configured quotas for the period and slice (and the Performance
+leaderboard's quota basis made period-scoped), the fabricated
+forecast-accuracy chart replaced by closed-won by completed fiscal quarter,
+the 7-day movement built from real won / lost / added / slipped flows, and
+the "No next step" flag reading the real column. `src/utils/
+pipelineReport.js`, 14 tests, 8 mutants. Deploy check recorded in §4 by a
+follow-up docs commit.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -146,13 +156,14 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 137 files · **394/394 unit** (9 in
-`opp-text.test.mjs`, 13 in `report-period.test.mjs`, 15 in
-`report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
-`session-status.test.mjs`) · **145/145 mutations, printed green baseline**
-(32 new this session; run alone) · build **2,479 kB JS**,
-`index-D0ibE8V3.js` (audit batch 3; dev deploy observed serving it for
-`f40b2c1`), guard OK, `dist/` cleared · **79 integration not
+Five gates green on 138 files · **408/408 unit** (14 in
+`pipeline-report.test.mjs`, 9 in `opp-text.test.mjs`, 13 in
+`report-period.test.mjs`, 15 in `report-scope.test.mjs`, 15 in
+`loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **153/153
+mutations, printed green baseline** (40 new this session; run alone) · build
+**2,478 kB JS**, `index-CLXLmsDb.js` (audit batch 4a; deploy check pending
+at the time this was written; `index-D0ibE8V3.js` observed for `f40b2c1`),
+guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -235,12 +246,15 @@ cleared at close.
    (period + comparison, tier 1 items 1–2) is DONE — state §0.69. Batch 2
    (the crashes, the contacts array write, the Actions fetch, tier 1 items
    13–14) is DONE — state §0.70. Batch 3 (scoping) is DONE — state
-   §0.71.** Next: batch 4 — every fabricated constant removed or replaced:
-   the $175,000 quota (item 3), the forecast-accuracy chart at 1.0 (item
-   4), the Activity tab's 0.91 prior period and the coaching flag (item 9),
-   the win/loss "+3% vs prev period" (item 11), the builder's bar constants
-   and the "LIVE" sparklines (item 12), the 0.28 connect rate. §0.68's line
-   numbers have shifted; grep, don't trust them.
+   §0.71. Batch 4a (the Pipeline & Forecast constants + the Performance
+   quota basis, items 3, 4, 7, 8, and item 6's nextStep) is DONE — state
+   §0.72.** Next: batch 4b — the Activity tab's 0.91 prior period, the
+   coaching flag and "Per rep" denominator (item 9), the win/loss "+3% vs
+   prev period" and the two "vs previous period" captions with no
+   comparison (item 11 / tier 2), the builder's bar constants and the
+   "LIVE" sparklines (item 12), the 0.28 connect rate. §0.68's line numbers
+   have shifted; grep, don't trust them. Span edits: print the span from
+   git first and list every `const` in it (§0.72's slip).
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.

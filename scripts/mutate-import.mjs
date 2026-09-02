@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -790,6 +790,40 @@ const mutations = [
         'src/Tabs/ReportsTab.jsx',
         "        const repsListSC = visibleReps((settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name), scopedRepNames);",
         "        const repsListSC = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name);"],
+
+    // ── Pipeline & Forecast constants (0.68 batch 4a) ───────────────────────
+    ['pipeline: a quarter of an annual plan is the whole year again (attainment ÷4)',
+        'src/utils/pipelineReport.js',
+        "            : (parseFloat(u.annualQuota) || 0) / 4;",
+        "            : (parseFloat(u.annualQuota) || 0);"],
+    ['pipeline: the team quota ignores the slice',
+        'src/utils/pipelineReport.js',
+        "        .filter(u => u?.name && !REP_EXCLUDED.has(u.userType) && (!reps || reps.has(u.name)))",
+        "        .filter(u => u?.name && !REP_EXCLUDED.has(u.userType))"],
+    ['pipeline: Lost is the literal 0 again',
+        'src/utils/pipelineReport.js',
+        "    const lost    = list.filter(o => o.stage === 'Closed Lost' && closedInWindow(o));",
+        "    const lost    = [];"],
+    ['pipeline: start of week forgets the deals that closed this week',
+        'src/utils/pipelineReport.js',
+        "    const start   = [...carried, ...won.filter(o => !createdInWindow(o)), ...lost.filter(o => !createdInWindow(o))];",
+        "    const start   = [...carried];"],
+    ['pipeline: slipped is every past-due deal ever again',
+        'src/utils/pipelineReport.js',
+        "    const slipped = openNow.filter(o => { const d = dayOf(o.forecastedCloseDate); return !!d && d >= cutoff && d < today; });",
+        "    const slipped = openNow.filter(o => { const d = dayOf(o.forecastedCloseDate); return !!d && d < today; });"],
+    ['pipeline: closed-won by quarter buckets on the FORECAST date first',
+        'src/utils/pipelineReport.js',
+        "    return dayOf(explicit || o.stageChangedDate || o.forecastedCloseDate);",
+        "    return dayOf(o.forecastedCloseDate || explicit || o.stageChangedDate);"],
+    ['pipeline: closed-won by quarter includes the current, unfinished quarter',
+        'src/utils/pipelineReport.js',
+        "    let qk = prevQuarter(cur);",
+        "    let qk = cur;"],
+    ['reports: the quota is $175,000 again',
+        'src/Tabs/ReportsTab.jsx',
+        "                            const quota = teamQuotaFor(settings.users, reportTimePeriod, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory });",
+        "                            const quota = 175000;"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

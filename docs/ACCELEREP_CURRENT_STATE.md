@@ -2123,6 +2123,63 @@ offer only that rep.
 **Dev landing (`f40b2c1`):** accelerep.netlify.app serves `index-D0ibE8V3.js`,
 the local gate build's hash, 40 seconds after the push.
 
+### 0.72 Audit batch 4a — the Pipeline & Forecast tab's constants, and the Performance quota basis (2 Sep, fourth session)
+
+§0.68 tier 1 items 3, 4, 7 and 8, plus item 6's phantom `nextStep`.
+`src/utils/pipelineReport.js`, pure: (1) `userQuotaFor(u, period)` — a
+quarter gets the quarter's own figure on a quarterly plan or a quarter of the
+annual; a year gets the annual or the four quarters summed — and
+`teamQuotaFor(users, period, slice)`, the reps in scope (named, not Admin /
+Manager / ReadOnly, narrowed by the slice), **0 when none is set**. The
+Pipeline tab's ring, gap and coverage now read that instead of the literal
+$175,000 behind two fallbacks nothing writes; with no quota the ring shows "—
+/ no quota" and the footer says where quotas are set, instead of measuring
+against an invented number. Its label was "commit" while the ring is won vs
+quota; it now says "won of quota". The Performance leaderboard's
+`getUserQuota` goes through the same helper with the selected period, so a
+quarter's revenue is divided by a quarter's quota (it was the full year's —
+attainment read ~¼), and a rep with only Q2–Q4 quotas no longer drops from
+the roster. (2) `pipelineMovement(opps, { today, days: 7 })` — added (created
+in the window), won and lost (close day in the window: `wonDate` /
+`lostDate`, else the stage-change day, else the forecast — `closeDayOf`),
+slipped (still open, forecast date passed DURING the window), carried (open
+now, created before), start (carried + what closed this week and was open
+at its start), net. The ribbon is carried | won | lost | added, start + added
+wide; slipped is listed but not a segment, because a slipped deal is still
+in the pipeline. "Lost" was the literal 0, "Slipped" every past-due deal
+ever, "Won" and "Carried over" all-time revenue against a 7-day label; the
+dead waterfall computed and never drawn is gone. (3) `closedWonByQuarter`
+— the last six COMPLETED fiscal quarters from the sliced set, by the house
+convention, labelled "Q2 FY26". The panel was "Forecast accuracy" drawing
+forecast === actual with an accuracy hardcoded to 100% and rolling 3-month
+windows mislabelled as quarters; it is now "Closed-won by quarter" with a
+total, one line, and an empty state that no longer promises a forecast
+comparison. And deals-at-risk's "No next step" flag reads `nextSteps` (the
+column) — it read `nextStep`, never written, so every open deal was flagged.
+
+**A slip, caught twice by the same scan:** the span that replaced the old
+movement derivations also swallowed the stage-conversion funnel and the
+deals-at-risk block that sat between the two markers (the same shape as the
+§0.69 slip). The §0.71 scope scan failed before anything ran; both blocks
+were restored verbatim from HEAD by a script that asserted their absence
+before and presence after. Rule for the next span edit: print the span from
+git first and list every `const` in it.
+
+`tests/pipeline-report.test.mjs` (14: quotas by plan and period, the team
+quota following the slice, movement on a nine-deal fixture — Lost ≠ 0, won by
+`wonDate` or stage-change day, slipped only within the window, start and
+net — closed-won by quarter under January and October starts with a
+last-day-of-quarter close, and the wiring scan). Gates green on 138 files,
+**408/408**, **153/153 mutations, printed green baseline** (eight new: a
+quarter of an annual plan back to the whole year, the team quota ignoring
+the slice, Lost the literal 0, start forgetting the week's closes, slipped
+every past-due deal, closed-won bucketed on the forecast date, the current
+quarter included, the quota $175,000 again), build guard OK (2,478 kB,
+`index-CLXLmsDb.js`). Not browser-checked here; Jeff eyeballs after the
+deploy: Reports → Pipeline & Forecast — the ring reads "no quota" or the
+real attainment, the movement legend has a Lost figure, and the quarter
+panel is titled "Closed-won by quarter".
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
