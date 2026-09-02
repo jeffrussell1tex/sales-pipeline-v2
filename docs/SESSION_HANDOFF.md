@@ -6,12 +6,13 @@ check observed live, unreadable date cells REFUSED at Preview and the
 engine's year-2001 default gated — all on dev, then SHIPPED to prod; after the
 ship, Clerk's pending-session bypass found, observed and FIXED on dev, then
 shipped; the Win / loss report made to read the category it was never
-reading), FINAL.** Repo root. Read this first, then verify every claim
+reading; the Activity report made to honour the rep slice), FINAL.** Repo
+root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.66` with a paragraph beginning **"Carried, found on the way:"**, and
+`### 0.67` with a paragraph beginning **"Fixed:** `src/utils/reportScope.js`"**, and
 does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b27`** with a bullet
 beginning **"Client: gate on"**? If not,
 you are looking at a copy that predates this handoff. Check section content,
@@ -69,6 +70,12 @@ mutants. `7c6a432`, **deploy-verified:** accelerep.netlify.app serves
 `index-CzGO2ggA.js`, the local gate build's hash. `master` does NOT have
 it — ship dev to prod when Jeff has eyeballed the report.
 
+**Then the Activity report (state §0.67), the commit this handoff rides in:**
+the Rep / Team / Territory slice was applied to opportunities and never to
+activities, so "Total activities" read 23 for every rep. `reportsActivities`
+now comes from `sliceActivities` in `src/utils/reportScope.js`; ten tests,
+four mutants. Deploy check recorded in §4 by a follow-up docs commit.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -111,11 +118,12 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 134 files · **357/357 unit** (15 new in
-`loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **125/125
-mutations, printed green baseline** (11 new this session; run alone) · build
-**2,479 kB JS**, `index-CzGO2ggA.js` (the report fix; dev deploy observed
-serving it for `7c6a432`), guard OK, `dist/` cleared · **79 integration not
+Five gates green on 135 files · **367/367 unit** (10 new in
+`report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
+`session-status.test.mjs`) · **129/129 mutations, printed green baseline**
+(15 new this session; run alone) · build **2,480 kB JS**,
+`index-Dv_RGDzl.js` (the slice fix; deploy check pending at the time this
+was written; `index-CzGO2ggA.js` observed for `7c6a432`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -179,10 +187,14 @@ cleared at close.
    Qualification 4 and Proposal 1. **Carried from it:** the Performance
    tab's hardcoded stage list (ReportsTab line 78) and the funnel's fallback
    list are not the app's stages.
-9. Smaller carried: the
+9. **DONE (Jeff: "activities logged stays the same as I use the filter"):**
+   the Activity report honours the Rep / Team / Territory slice (state
+   §0.67). **Jeff eyeballs after the deploy, as Admin, Reports → Activity:**
+   Total activities must change as the rep changes and "All" restore it.
+10. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
-10. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
+11. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
    regexes — write scripts with the Write tool and run the file; a
    scratchpad script cannot resolve the repo's packages — copy into the repo
    root, run, delete (tree checked clean after); `mutate-import` runs alone

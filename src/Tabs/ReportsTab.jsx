@@ -6,6 +6,7 @@ import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
 // and the closing history entry's own stage instead of the stage it came from.
 import { lossBucketOf, exitStageOf, previousStageOf, lostByStageRowsOf } from '../utils/lossAnalysis';
 import { stages as defaultStages } from '../utils/constants';
+import { sliceActivities } from '../utils/reportScope';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
 
@@ -213,9 +214,16 @@ export default function ReportsTab({ leadsEnabled = true }) {
                     });
                 })();
 
+                // The Rep / Team / Territory slice, applied to activities the way
+                // reportsOpps applies it to deals. It never was: the Activity tab's
+                // "Total activities" read the same number for every rep a manager
+                // selected (0.67). Team and territory resolve to names through
+                // settings.users, as the Performance leaderboard already does.
+                const reportsActivities = sliceActivities(roleFilteredActivities, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory }, settings.users);
+
                 // Apply period filter to activities (by date field)
                 const reportsTimedActivities = (() => {
-                    const allActs = roleFilteredActivities;
+                    const allActs = reportsActivities;
                     if (reportTimePeriod === 'all') return allActs;
                     const now = new Date();
                     const fy = now.getFullYear();
@@ -1650,10 +1658,10 @@ ${bodyHtml}
                             const maxLost = Math.max(...lostRows.map(([,c])=>c),1);
 
                             // Activity mix from filtered activities
-                            const actMix = roleFilteredActivities.reduce((acc,a)=>{
+                            const actMix = reportsActivities.reduce((acc,a)=>{
                               const t=a.type||'Other'; acc[t]=(acc[t]||0)+1; return acc;
                             },{});
-                            const actTotal = roleFilteredActivities.length;
+                            const actTotal = reportsActivities.length;
                             const actRows = Object.entries(actMix).sort((a,b)=>b[1]-a[1]).slice(0,6);
                             const actColors = { 'Call':'#3a5a7a','Email':'#c8b99a','Meeting':'#4d6b3d','Demo':'#b87333','Note':'#8a8378','Other':'#5a4a7a' };
                             const maxAct = Math.max(...actRows.map(([,c])=>c),1);
@@ -1834,7 +1842,7 @@ ${bodyHtml}
                                 {/* Activity KPI strip — same pattern as performance tab */}
                                 {(() => {
                                   // Comparison deltas for activity KPIs
-                                  const cmpActs    = comparedOpps ? roleFilteredActivities.filter(a => {
+                                  const cmpActs    = comparedOpps ? reportsActivities.filter(a => {
                                     // Filter activities that belong to comparison opps
                                     return true; // activities don't have a close-date range; use all for now
                                   }) : null;

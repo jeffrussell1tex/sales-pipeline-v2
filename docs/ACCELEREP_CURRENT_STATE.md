@@ -1802,6 +1802,37 @@ changed this session.
 the local gate build's hash, 55 seconds after the push. Jeff's eyeball as
 Admin is the observation.
 
+### 0.67 The Activity report ignored the Rep / Team / Territory slice — "Total activities 23" for every rep (2 Sep, fourth session)
+
+**Jeff: "I noticed activited logged (23) stays the same as I use the filter
+to select different reps. This should just reflect all or a specific reps
+activities."** His screenshot: Reports → Activity, grouped by Rep, Savannah
+Miller selected, Total activities 23, the same as with no rep. In ReportsTab
+the slice selectors (`reportsRep` / `reportsTeam` / `reportsTerritory`)
+are applied to opportunities through `reportsOpps` — and to nothing else.
+`reportsTimedActivities`, which every Activity-tab number is built from,
+started from `roleFilteredActivities`, the role gate alone. The Performance
+tab's activity mix and the Activity KPI comparison read the same unsliced
+list. (The Performance leaderboard already resolved the slice to a set of rep
+names through `settings.users`; the activity side never did.)
+
+**Fixed:** `src/utils/reportScope.js`, pure: `activityRepOf(a)` (the
+`rep || salesRep || assignedTo || author` chain the reports already use),
+`repsForSlice(slice, users)` (rep → that name; team / territory → the names
+of the org's users on it; nothing → null), `sliceActivities(activities,
+slice, users)` (no slice → the input untouched; under a slice an activity
+with no rep belongs to nobody selected). ReportsTab derives
+`reportsActivities` from it and `reportsTimedActivities`, the Performance
+activity mix and the KPI comparison start there. `tests/report-scope.test.mjs`
+(10, including the wiring pinned as text). Gates green on 135 files,
+**367/367**, **129/129 mutations, printed green baseline** (four new: the
+slice ignored, a team slice selecting every named user, a rep-less activity
+passing a slice, the timed set starting from the role-gated list again),
+build guard OK (2,480 kB, `index-Dv_RGDzl.js`). **Not browser-checked
+here:** the slice selectors are Admin/Manager-only and the pane's Karen is a
+rep; Jeff eyeballs after the deploy — expected: Total activities changes as
+the rep changes, and "All" restores the full count.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -702,6 +702,24 @@ const mutations = [
         'src/Tabs/ReportsTab.jsx',
         "            const r = lossBucketOf(o, 'Other');",
         "            const r = o.lostReason || 'Other';"],
+
+    // ── The slice applies to activities (0.67) ─────────────────────────────
+    ['scope: the slice is ignored — every rep shows every activity again',
+        'src/utils/reportScope.js',
+        '    if (!reps) return acts;',
+        '    return acts;'],
+    ['scope: a team slice selects every named user, not the team',
+        'src/utils/reportScope.js',
+        "    if (team)      return new Set(list.filter(u => u.name && u.team === team).map(u => u.name));",
+        "    if (team)      return new Set(list.filter(u => u.name).map(u => u.name));"],
+    ['scope: an activity with no rep passes every slice',
+        'src/utils/reportScope.js',
+        '    return acts.filter(a => { const r = activityRepOf(a); return r && reps.has(r); });',
+        '    return acts.filter(a => { const r = activityRepOf(a); return !r || reps.has(r); });'],
+    ['reports: the timed activity set starts from the role-gated list again (the 0.67 bug)',
+        'src/Tabs/ReportsTab.jsx',
+        '                    const allActs = reportsActivities;',
+        '                    const allActs = roleFilteredActivities;'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
