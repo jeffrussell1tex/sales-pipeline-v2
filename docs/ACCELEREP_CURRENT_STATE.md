@@ -2507,6 +2507,13 @@ session had expired by then: the app sat at Clerk's sign-in card with 401s
 from two non-hook calls (spiff-claims, calendar-events) in the console and
 no banner — right, the gate holds the app before any loader runs.
 
+**PROD SHIP (Jeff: "ship to prod").** `master` fast-forwarded `1163eec` →
+`d63644f` by `git push origin dev:master` (ancestor check first; six
+commits — §0.78 and the docs commits around it); salespipelinetracker.com
+serves `index-DrRd6S0A.js` 30 seconds after the push — `pk_live_` inlined,
+the sign-in banner copy and the "Managed in" line present, 2,535,963
+bytes. `master` == `dev` == `d63644f`.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

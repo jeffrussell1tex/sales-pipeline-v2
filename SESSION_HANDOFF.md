@@ -184,7 +184,11 @@ enrolment through AdminView's live-counts fetch instead of hand-typed
 "Optional · not all enrolled · 3 months ago". 5 tests, 6 mutants. Not
 browser-observed (Admin-only list; the pane is Karen). `71d68e3`,
 **deploy-verified:** accelerep.netlify.app serves `index-CSnSB6MZ.js`, the
-local gate build's hash.
+local gate build's hash. **PROD SHIPPED (Jeff: "ship to prod"):** `master`
+fast-forwarded `1163eec` → `d63644f`; salespipelinetracker.com serves
+`index-DrRd6S0A.js`, `pk_live_` inlined, the banner copy and "Managed in"
+present (state §0.78). `master` == `dev` == `d63644f` at the time of this
+commit; dev is ahead only by this docs commit.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -242,7 +246,7 @@ pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
 earlier the same session, the CSV refusal banner (state §0.64) · dev deploy
 observed serving `index-Cy6ZeOFD.js` for `ded3271` · `master` ==
-`1163eec`, prod serving `index-Ki3OVxo2.js` (third ship, §1), Require MFA
+`d63644f`, prod serving `index-DrRd6S0A.js` (fourth ship, §1), Require MFA
 ON on both Clerk instances · dev is ahead of master only by the prod-ship
 docs commit · the session's `netlify dev` stopped and `node_modules/.vite`
 cleared at close.
@@ -340,10 +344,10 @@ cleared at close.
    left by design. SHIPPED to prod as `1163eec` (§1).** The §0.68 list is
    closed; Jeff eyeballed the Reports tab on prod and confirmed it. The
    401 banner (item 7f) and the MFA card (item 7c) are DONE — state §0.78.
-   Next: Jeff eyeballs the Security → Multi-factor auth tile on dev as
-   Admin, then ship dev → prod again (prod is at `1163eec`, without §0.78);
-   the report-delete confirm (item 13) and the after-7pm coaching note
-   (item 3) remain.
+   SHIPPED to prod as `d63644f` (§1). Next: Jeff eyeballs the Security →
+   Multi-factor auth tile as Admin (dev or prod — same code); the
+   report-delete confirm (item 13) and the after-7pm coaching note (item 3)
+   remain.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
@@ -384,7 +388,7 @@ found the engine turning "Sept 15" into a day in 2001; a screenshot of a
 Clerk toggle led to the app walking past a pending session on both the
 client and the API; Jeff flipped Require on Development, signed in, watched
 the bypass, and an hour later watched the fix hold him at the task card —
-then did it again on prod. Three prod ships, each verified by bundle hash. The
+then did it again on prod. Four prod ships, each verified by bundle hash. The
 handoff was corrupted twice by edit scripts and restored from git both times
 before anything was committed. Observed, then written, then committed, and
 re-read from disk between every step.
