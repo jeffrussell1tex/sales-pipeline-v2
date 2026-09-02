@@ -2450,8 +2450,9 @@ the Win / loss and Activity report fixes, §0.66–§0.67, and audit batches
 `pk_test_` literal is Clerk's own key-type check in
 `@clerk/shared/dist/keys.mjs`, present in every build), the batch 7 AI
 banner and the batch 6 saved-card title present, 2,535,030 bytes. Nothing
-probed on prod beyond the served bundle: Jeff eyeballs the Reports tab
-there. Dev and prod share the Neon `main` branch, so the two test saved
+probed on prod beyond the served bundle by the session; **Jeff eyeballed
+the Reports tab on prod afterwards: "eyeball work is all confirmed
+correct."** Dev and prod share the Neon `main` branch, so the two test saved
 reports in Karen's dev library (§0.76) are the same rows prod would show
 her.
 

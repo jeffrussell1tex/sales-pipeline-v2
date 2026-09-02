@@ -172,7 +172,8 @@ hash.
 `master` fast-forwarded `abb239a` → `1163eec`, 27 commits (§0.66–§0.77);
 salespipelinetracker.com serves `index-Ki3OVxo2.js`, `pk_live_` inlined,
 batch 6 and 7 strings present (state §0.77). `master` == `1163eec`; dev
-is ahead only by this docs commit.
+is ahead only by the docs commits. **Jeff eyeballed the Reports tab on
+prod: "eyeball work is all confirmed correct."**
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -317,9 +318,8 @@ cleared at close.
    is DONE — state §0.76. Batch 7 (the History tab on real columns, PDF
    escaping, honest labels) is DONE — state §0.77; §0.77 lists what was
    left by design. SHIPPED to prod as `1163eec` (§1).** The §0.68 list is
-   closed. Next: Jeff eyeballs the Reports tab on prod (Win / loss,
-   Activity by rep, Saved reports → Rep scorecard, Activity History on an
-   account with logged activities), then Jeff's items in §5.
+   closed; Jeff eyeballed the Reports tab on prod and confirmed it. Next:
+   Jeff's items in §5.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
