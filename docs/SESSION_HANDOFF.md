@@ -87,6 +87,13 @@ read on the local clock. 13 tests under two fiscal starts, 7 mutants.
 `939f7a2`, **deploy-verified:** accelerep.netlify.app serves
 `index-CprJulHE.js`, the local gate build's hash.
 
+**Batch 2, the commit this handoff rides in (state §0.70):** the
+`products.map` crash, the toolbar above the null guard, the contacts array
+written into a text column (both paths), the phantom `nextStep(Date)`
+reads, and the Actions report storing a Response as data. `src/utils/
+oppText.js`, 9 tests, 5 mutants. Deploy check recorded in §4 by a
+follow-up docs commit.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -129,12 +136,13 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 136 files · **380/380 unit** (13 new in
-`report-period.test.mjs`, 10 in `report-scope.test.mjs`, 15 in
-`loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **135/135
-mutations, printed green baseline** (22 new this session; run alone) · build
-**2,478 kB JS**, `index-CprJulHE.js` (audit batch 1; dev deploy observed serving it for
-`939f7a2`), guard OK, `dist/` cleared · **79 integration not
+Five gates green on 137 files · **389/389 unit** (9 new in
+`opp-text.test.mjs`, 13 in `report-period.test.mjs`, 10 in
+`report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
+`session-status.test.mjs`) · **140/140 mutations, printed green baseline**
+(27 new this session; run alone) · build **2,478 kB JS**,
+`index-D3lRwa5m.js` (audit batch 2; deploy check pending at the time this
+was written; `index-CprJulHE.js` observed for `939f7a2`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -214,11 +222,13 @@ cleared at close.
    storing a Response as data; six "Save as my report" buttons with no
    handler; a report-builder preview made of constants. Recommended order
    is in §0.68. Do not start on it without reading §0.68 first. **Batch 1
-   (period + comparison, tier 1 items 1–2) is DONE — state §0.69.** Next:
-   batch 2 — the two crashes (`products.map` L6434, toolbar above the null
-   guard L6256), the contacts array write (L6500), the Actions fetch
-   (L4817). Line numbers shift by about −166 after batch 1; grep, don't
-   trust them.
+   (period + comparison, tier 1 items 1–2) is DONE — state §0.69. Batch 2
+   (the crashes, the contacts array write, the Actions fetch, tier 1 items
+   13–14) is DONE — state §0.70.** Next: batch 3, scoping — the leads tab
+   never sliced (§0.68 item 10), `SavedReportsTab` and `ActivityHistoryTab`
+   handed raw `activities` / `opportunities` / `tasks` (items 11 and 13),
+   the scorecard's unscoped rep list, the deals-at-risk raw `activities`
+   read (item 6). §0.68's line numbers have shifted; grep, don't trust them.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.

@@ -8,6 +8,7 @@ import { lossBucketOf, exitStageOf, previousStageOf, lostByStageRowsOf } from '.
 import { stages as defaultStages } from '../utils/constants';
 import { sliceActivities } from '../utils/reportScope';
 import { periodRange, priorRange, inRange, dayOf, currentFiscalYear } from '../utils/reportPeriod';
+import { productsListOf, contactNamesText } from '../utils/oppText';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
 
@@ -4655,8 +4656,13 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
             const rep = canSeeAll ? (selectedRep || '') : currentUser;
             const params = new URLSearchParams({ days });
             if (rep) params.append('rep', rep);
-            const json = await dbFetch(`/.netlify/functions/recommendation-log?${params}`);
-            setData(json);
+            // dbFetch resolves to the RESPONSE for any status (18b1/18b3); the
+            // endpoint returns { logs, summary } as a JSON body. Storing the
+            // Response left data.summary undefined forever, so this report read
+            // "No actions logged yet" over any number of rows (0.68).
+            const res = await dbFetch(`/.netlify/functions/recommendation-log?${params}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            setData(await res.json());
         } catch (err) {
             setError(err.message);
         } finally {
@@ -6095,17 +6101,18 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                             </div>
                             <div style={{ flex:1 }}/>
                             <button
-                                onClick={() => handleSaveAsReport(selectedOpp.opportunityName || selectedOpp.name || selectedOpp.account, 'Opportunity')}
-                                disabled={saveReportState === 'saving'}
+                                onClick={() => selectedOpp && handleSaveAsReport(selectedOpp.opportunityName || selectedOpp.account, 'Opportunity')}
+                                disabled={!selectedOpp || saveReportState === 'saving'}
                                 style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5,
                                     color: saveReportState==='saved' ? T.ok : saveReportState==='error' ? T.danger : T.inkMid,
                                     cursor:'pointer', fontFamily:T.sans, opacity: saveReportState==='saving' ? 0.6 : 1 }}>
                                 {saveReportState==='saving' ? 'Saving…' : saveReportState==='saved' ? '✓ Saved' : saveReportState==='error' ? 'Error — retry' : 'Save as report'}
                             </button>
-                            <button onClick={() => handleOppExportPDF(selectedOpp, allEvents)} style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Export PDF</button>
+                            <button disabled={!selectedOpp} onClick={() => selectedOpp && handleOppExportPDF(selectedOpp, allEvents)} style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Export PDF</button>
                             <button
                                 onClick={() => {
-                                    const owner = selectedOpp.salesRep || selectedOpp.rep || '';
+                                    if (!selectedOpp) return;
+                                    const owner = selectedOpp.salesRep || '';
                                     const subject = encodeURIComponent(`Opportunity history: ${selectedOpp.opportunityName || selectedOpp.account}`);
                                     const body = encodeURIComponent(`Hi ${owner},\n\nPlease find the opportunity history report for ${selectedOpp.opportunityName || selectedOpp.account} attached.\n\nDeal: ${selectedOpp.opportunityName || ''}\nAccount: ${selectedOpp.account || ''}\nStage: ${selectedOpp.stage || ''}\nAmount: $${(parseFloat(selectedOpp.arr||0)/1000).toFixed(1)}k\nClose date: ${selectedOpp.forecastedCloseDate || selectedOpp.closeDate || '—'}\n`);
                                     window.location.href = `mailto:${owner}?subject=${subject}&body=${body}`;
@@ -6267,27 +6274,21 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                     </div>
                                                 )}
                                                 {/* Products + next step */}
-                                                {(selectedOpp.products?.length > 0 || selectedOpp.nextStep) && (
+                                                {(productsListOf(selectedOpp.products).length > 0 || selectedOpp.nextSteps) && (
                                                     <div style={{ display:'flex', alignItems:'center', gap:14, padding:'10px 14px',
                                                         background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, flexWrap:'wrap' }}>
-                                                        {selectedOpp.products?.length > 0 && <>
+                                                        {productsListOf(selectedOpp.products).length > 0 && <>
                                                             <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6 }}>Products</span>
-                                                            {selectedOpp.products.map((p,i) => (
+                                                            {productsListOf(selectedOpp.products).map((p,i) => (
                                                                 <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12 }}>
                                                                     <span style={{ fontWeight:600, color:T.ink }}>{p.name || p}</span>
                                                                 </span>
                                                             ))}
                                                             <span style={{ width:1, height:14, background:T.border }}/>
                                                         </>}
-                                                        {selectedOpp.nextStep && <>
+                                                        {selectedOpp.nextSteps && <>
                                                             <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6 }}>Next step</span>
-                                                            <span style={{ fontSize:12, color:T.ink, fontWeight:600 }}>{selectedOpp.nextStep}</span>
-                                                            {selectedOpp.nextStepDate && (
-                                                                <span style={{ padding:'2px 8px', fontSize:10.5, fontWeight:600, borderRadius:8,
-                                                                    background:`${T.warn}14`, color:T.warn, border:`1px solid ${T.warn}40` }}>
-                                                                    due {new Date(selectedOpp.nextStepDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-                                                                </span>
-                                                            )}
+                                                            <span style={{ fontSize:12, color:T.ink, fontWeight:600 }}>{selectedOpp.nextSteps}</span>
                                                         </>}
                                                     </div>
                                                 )}
@@ -6338,7 +6339,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                             body: JSON.stringify({
                                                                 ...selectedOpp,
                                                                 contactIds: mergedIds,
-                                                                contacts:   mergedNames,
+                                                                contacts:   contactNamesText(mergedNames),
                                                             }),
                                                         });
                                                         if (res.ok) {
@@ -6392,7 +6393,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                         try {
                                                             const res = await dbFetch(`/.netlify/functions/opportunities?id=${selectedOpp.id}`, {
                                                                 method: 'PUT',
-                                                                body: JSON.stringify({ ...selectedOpp, contactIds: merged, contacts: mergedNames }),
+                                                                body: JSON.stringify({ ...selectedOpp, contactIds: merged, contacts: contactNamesText(mergedNames) }),
                                                             });
                                                             if (res.ok) setLocalContactIds(merged);
                                                         } catch(e) { console.error('Remove contact failed:', e); }

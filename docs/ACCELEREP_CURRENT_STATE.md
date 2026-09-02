@@ -2037,6 +2037,42 @@ delta chips.
 **Dev landing (`939f7a2`):** accelerep.netlify.app serves `index-CprJulHE.js`,
 the local gate build's hash, 41 seconds after the push.
 
+### 0.70 Audit batch 2 — the crashes, the array write, the unparsed fetch (2 Sep, fourth session)
+
+§0.68 tier 1 items 13 and 14, plus the phantom `nextStep` / `nextStepDate`
+reads in the same block. `src/utils/oppText.js`, pure: `productsListOf`
+(the `products` TEXT column — "Shiftboard, AutoCall" — as a trimmed list; an
+array tolerated) and `contactNamesText` (names back to the ", "-joined text
+OpportunityModal writes and every reader splits; trimmed, deduped). In
+ReportsTab's Opportunity History pane: (1) `selectedOpp.products.map` — a
+TypeError for every deal with products, which took the whole pane down — now
+reads through `productsListOf`, and the block's `products?.length` test (a
+string has a length too, which is how the crash was reached) goes the same
+way; (2) the "Next step" chip reads `nextSteps` (the column) instead of
+`nextStep` (never written), and the `nextStepDate` badge is removed —
+nothing writes that field; (3) the three toolbar buttons rendered ABOVE the
+pane's `!selectedOpp` guard — Save as report, Export PDF, Email to owner —
+are disabled and short-circuited until a deal is selected (they threw on
+`selectedOpp.…` on the pane's default, empty state); (4) both "Add contact"
+paths PUT `contacts: contactNamesText(mergedNames)` instead of the array
+that landed in a text column as a Postgres array literal. And in the Actions
+report, `const json = await dbFetch(…); setData(json)` stored the Response —
+`data.summary` was undefined forever, so the report read "No actions logged
+yet" over any number of rows; now `if (!res.ok) throw` then
+`setData(await res.json())`, the pattern already used at the top of the same
+file. `check:dbfetch` did not catch it because the Response was assigned,
+not discarded — a scan gap, noted.
+
+`tests/opp-text.test.mjs` (9: both directions of the text columns, a round
+trip, and four source scans pinning the products read, the contacts write on
+both paths, the `nextSteps` read, the guarded toolbar and the parsed fetch).
+Gates green on 137 files, **389/389**, **140/140 mutations, printed green
+baseline** (five new), build guard OK (2,478 kB, `index-D3lRwa5m.js`). Not
+browser-checked here; Jeff eyeballs after the deploy: Reports → Activity
+History → an opportunity with products must render, and Reports' "Actions"
+report (reachable only by an older saved sub-tab — §0.68 tier 2) would now
+show its rows.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
