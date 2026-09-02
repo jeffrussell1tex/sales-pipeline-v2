@@ -129,8 +129,11 @@ cleared at close.
    today's date (Jeff: "I will have to check the time tonight"). **The CSV
    half is OBSERVED:** Jeff imported `zztest-close-dates.csv`; a read-only
    SELECT shows `9/15/2026` stored as `2026-09-15` and the ISO and
-   Excel-datetime rows as expected (state §0.63). The three ZZTest deals
-   under "ZZTest Import Co" are Jeff's to delete when done.
+   Excel-datetime rows as expected (state §0.63). The three ZZTest Close
+   deals sit in the Development instance's org named "UKG" (not the prod
+   UKG — two orgs share the name, one per instance; state §0.65) and are
+   still open, Jeff's to delete. The four older ZZTest deals he marked
+   Closed Lost are in "Accelerep Test" and saved correctly.
 4. **DONE (fourth session, 1 Sep evening):** the guide bullet owed from §3 — "grep
    the FILE for every other reader of the value" — is now the closing bullet
    of §18b26; state doc §0.62 no longer says "not yet written".

@@ -1726,7 +1726,23 @@ The client gate is in that bundle; the server refusal ships in the same
 commit's functions and was NOT probed on prod (it needs a pending prod
 token, and Require is off there). Require can go on for the Production
 instance — Jeff's call; the first un-enrolled prod sign-in after that is the
-live proof. **Jeff turned Require on for Production and signed in: "worked in
+live proof. **Jeff: "I marked those deals closed lost — does that show?"** Read-only:
+the audit log has four `update` rows by Jeff at 23:45–23:46Z, "Closed Lost:
+Timing", for ZZTest Alpha / Bravo / Charlie / Delta — and those four rows are
+Closed Lost with `lost_category` "Timing", `lost_date` 2026-09-02,
+`lost_reason` null (no free text was typed). Saved correctly. They are NOT
+the three CSV deals (ZZTest Close US / ISO / Excel), which are untouched.
+**"What instance are they in?"** Resolved by looking each `org_id` up
+against the Development Clerk instance with the local `sk_test_` key:
+`org_…Tf0LK` = Development, org **"Accelerep Test"** (51 deals; the four
+closed ones, Karen's org); `org_…WNwU` = Development, org **"UKG"** (3
+deals: the CSV imports; members yahoo, outlook, ukg); `org_…K8UD` = not on
+Development, so **Production** (15 deals — the prod UKG org of §0.59). **Two
+orgs are named UKG, one per instance**; "the UKG instance" earlier meant the
+Development instance's UKG org. The shared database holds all three side by
+side, separated only by `org_id`.
+
+**Jeff turned Require on for Production and signed in: "worked in
 production."** The Require path is observed on both instances; the server
 refusal on prod is implied by the sign-in being held (the app cannot render
 without an active session now), not separately probed.
