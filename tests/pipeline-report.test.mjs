@@ -8,7 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, closeDayOf } from '../src/utils/pipelineReport.js';
+import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, closeDayOf, openPipelineByRep } from '../src/utils/pipelineReport.js';
+import { repsInScopeOf } from '../src/utils/reportScope.js';
 
 // ── quotas ──────────────────────────────────────────────────────────────────
 
@@ -145,4 +146,56 @@ test('ReportsTab: no $175,000, no att: 1.0, no Lost: 0; the helpers are what ren
     assert.match(src, /const fxHistory = closedWonByQuarter\(reportsOpps, fiscalStart,/);
     assert.match(src, /const getUserQuota = \(u\) => userQuotaFor\(u, reportTimePeriod\);/, 'the Performance leaderboard divides period revenue by period quota');
     assert.doesNotMatch(src, /settings\.quotaData\?\.quarterlyQuota/, 'a field nothing writes');
+});
+
+// ── Batch 4b: the reps in scope, open pipeline by owner, and the last constants ─
+
+test('repsInScopeOf: the roster minus Admin / Manager / ReadOnly, narrowed by slice and scope, sorted', () => {
+    const users = [
+        { name: 'Savannah Miller', userType: 'User', team: 'West' },
+        { name: 'Karen Russell',   userType: 'User', team: 'West' },
+        { name: 'Ryan Algie',      userType: 'Technician', team: 'Field' },
+        { name: 'Jeff Russell',    userType: 'Admin' },
+        { name: 'Boss',            userType: 'Manager' },
+        { name: 'Viewer',          userType: 'ReadOnly' },
+        { userType: 'User' },
+    ];
+    assert.deepEqual(repsInScopeOf(users, {}, null), ['Karen Russell', 'Ryan Algie', 'Savannah Miller']);
+    assert.deepEqual(repsInScopeOf(users, { team: 'West' }, null), ['Karen Russell', 'Savannah Miller']);
+    assert.deepEqual(repsInScopeOf(users, {}, ['Ryan Algie']), ['Ryan Algie']);
+    assert.deepEqual(repsInScopeOf(users, { team: 'West' }, ['Ryan Algie']), [], 'slice and scope both apply');
+    assert.deepEqual(repsInScopeOf(undefined, {}, null), []);
+});
+
+test('openPipelineByRep: open deals by rep, biggest first, closed and unowned skipped, top N', () => {
+    const opps = [
+        { salesRep: 'A', stage: 'Proposal', arr: '100' },
+        { salesRep: 'A', stage: 'Discovery', arr: 50 },
+        { salesRep: 'B', stage: 'Proposal', arr: 400 },
+        { salesRep: 'B', stage: 'Closed Won', arr: 9999 },
+        { salesRep: 'C', stage: 'Closed Lost', arr: 9999 },
+        { stage: 'Proposal', arr: 9999 },
+        { salesRep: 'D', stage: 'Qualification', arr: 10 },
+    ];
+    assert.deepEqual(openPipelineByRep(opps), [{ rep: 'B', value: 400, count: 1 }, { rep: 'A', value: 150, count: 2 }, { rep: 'D', value: 10, count: 1 }]);
+    assert.deepEqual(openPipelineByRep(opps, 1).map(r => r.rep), ['B']);
+    assert.deepEqual(openPipelineByRep([]), []);
+});
+
+test('ReportsTab: the last fabricated constants are gone and the Activity comparison is real', () => {
+    const src = readFileSync(new URL('../src/Tabs/ReportsTab.jsx', import.meta.url), 'utf8');
+    assert.doesNotMatch(src, /0\.91/, 'the placeholder prior-period ratio');
+    assert.doesNotMatch(src, /\+3% vs prev period/);
+    assert.doesNotMatch(src, />vs previous period<\/div>/, 'a caption asserting a comparison nothing computes');
+    assert.doesNotMatch(src, /vs prior 5 quarters/);
+    assert.doesNotMatch(src, /\[85,72,64,51,38\]/);
+    assert.doesNotMatch(src, /attainPctS\*0\.003|addedRecent\*0\.3|closingARR\*0\.45/, 'synthetic sparkline ramps');
+    assert.doesNotMatch(src, /connectRate/);
+    assert.match(src, /const comparedActivities = priorRangeR \? reportsActivities\.filter\(/);
+    assert.match(src, /const cmpTotalActs\s+= comparedActivities \? comparedActivities\.length : null;/);
+    assert.match(src, /const hasComparison3 = compareLabel3 && comparedActivities !== null;/);
+    assert.match(src, /const repsInScope3 = repsInScopeOf\(settings\.users,/);
+    assert.match(src, /reportsActivities\.filter\(a=>activityRepOf\(a\)===rep&&dayOf\(a\.date\|\|a\.createdAt\)===d\.date\)/, 'heat cells: unclipped set, local day');
+    assert.match(src, /c\.v===0\)\.length>=5\)/, 'the coaching threshold');
+    assert.match(src, /const rows = openPipelineByRep\(reportsOpps, 5\);/);
 });

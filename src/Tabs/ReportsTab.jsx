@@ -6,10 +6,10 @@ import { parseLocalDate, isoLocal, todayLocal } from '../utils/dateLocal';
 // and the closing history entry's own stage instead of the stage it came from.
 import { lossBucketOf, exitStageOf, previousStageOf, lostByStageRowsOf } from '../utils/lossAnalysis';
 import { stages as defaultStages } from '../utils/constants';
-import { sliceActivities, sliceLeads, visibleReps } from '../utils/reportScope';
+import { sliceActivities, sliceLeads, visibleReps, repsInScopeOf, activityRepOf } from '../utils/reportScope';
 import { periodRange, priorRange, inRange, dayOf, currentFiscalYear } from '../utils/reportPeriod';
 import { productsListOf, contactNamesText } from '../utils/oppText';
-import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter } from '../utils/pipelineReport';
+import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep } from '../utils/pipelineReport';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
 
@@ -224,6 +224,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 // reportCompareTo: 'previous_quarter' | 'previous_year' | 'none'
                 const priorRangeR = priorRange(reportTimePeriod, reportCompareTo, fiscalStart, { from: reportDateFrom, to: reportDateTo });
                 const comparedOpps = priorRangeR ? reportsOpps.filter(o => inRange(dayOf(o.forecastedCloseDate || o.createdDate), priorRangeR)) : null;
+                const comparedActivities = priorRangeR ? reportsActivities.filter(a => inRange(dayOf(a.date || a.createdAt), priorRangeR)) : null;
 
                 // Helper: compute a delta label vs comparison period, or null if no comparison
                 const cmpDelta = (currentVal, cmpOppsFilter) => {
@@ -1584,12 +1585,15 @@ ${bodyHtml}
 
                             // ── Computed activity data from real activities array
                             const allActs = reportsTimedActivities;
-                            const repNames3 = [...new Set(allActs.map(a=>a.rep||a.salesRep||a.assignedTo||a.author).filter(Boolean))].sort();
+                            // Reps in scope come from the roster (slice + role scope), not from
+                            // whoever happened to log something: "Per rep" divides by all of
+                            // them, and the rhythm grid lists all of them, so a rep with no
+                            // activity is a row that can be flagged, not an absence (0.68 item 9).
+                            const repsInScope3 = repsInScopeOf(settings.users, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory }, scopedRepNames);
+                            const repNames3 = repsInScope3.length > 0 ? repsInScope3 : [...new Set(allActs.map(activityRepOf).filter(Boolean))].sort();
                             const totalActs = allActs.length;
                             const perRep = repNames3.length > 0 ? Math.round(totalActs / repNames3.length) : 0;
                             const perOpp = openOpps.length > 0 ? (totalActs / openOpps.length).toFixed(1) : '0';
-                            const callActs = allActs.filter(a=>(a.type||'').toLowerCase().includes('call'));
-                            const connectRate = callActs.length > 0 ? 0.28 : 0; // stored if available
 
                             // ── 14-day heatmap — build real per-rep × per-day grid
                             const heatDays = Array.from({length:14},(_,i)=>{
@@ -1604,15 +1608,18 @@ ${bodyHtml}
                               if(v===4)return '#8a6d3a';
                               return '#5a4420';
                             };
-                            const heatRows = repNames3.slice(0,8).map(rep=>{
+                            // The grid is the last 14 calendar days whatever the period selector
+                            // says, so it reads the unclipped (sliced) activities, on the local
+                            // clock. Every rep in scope is a row; busiest first; top 8.
+                            const heatRows = repNames3.map(rep=>{
                               const cells = heatDays.map(d=>{
-                                const count = allActs.filter(a=>(a.rep||a.salesRep||a.assignedTo||a.author)===rep&&(a.date||a.createdAt||'').slice(0,10)===d.date).length;
+                                const count = reportsActivities.filter(a=>activityRepOf(a)===rep&&dayOf(a.date||a.createdAt)===d.date).length;
                                 const v = count===0?0:count<=2?1:count<=4?2:count<=6?3:count<=9?4:5;
                                 return {...d,v,count};
                               });
                               const total14 = cells.reduce((s,c)=>s+c.count,0);
                               return {rep,cells,total14};
-                            });
+                            }).sort((a,b)=>b.total14-a.total14).slice(0,8);
 
                             // ── Activity → outcome funnel from real data
                             const funnelSteps = [
@@ -1655,13 +1662,15 @@ ${bodyHtml}
                                 {/* Activity KPI strip — same pattern as performance tab */}
                                 {(() => {
                                   // Comparison deltas for activity KPIs
-                                  const cmpActs    = comparedOpps ? reportsActivities.filter(a => {
-                                    // Filter activities that belong to comparison opps
-                                    return true; // activities don't have a close-date range; use all for now
-                                  }) : null;
-                                  const cmpTotalActs  = comparedOpps ? Math.round(totalActs * 0.91) : null; // placeholder ratio until activity timestamps drive this
-                                  const cmpPerRep     = comparedOpps && repNames3.length > 0 ? Math.round(cmpTotalActs / repNames3.length) : null;
-                                  const cmpPerOpp     = comparedOpps && openOpps.length > 0 ? parseFloat((cmpTotalActs / openOpps.length).toFixed(1)) : null;
+                                  // The prior period's activities are real (comparedActivities: the
+                                  // window comparedOpps uses, applied to the sliced activities). This
+                                  // was totalActs times a placeholder ratio, so every delta read about
+                                  // +10% for every org (0.68 item 9). "Per open opp" has no honest
+                                  // prior denominator and shows no delta.
+                                  const cmpTotalActs  = comparedActivities ? comparedActivities.length : null;
+                                  const cmpReps       = comparedActivities ? new Set(comparedActivities.map(activityRepOf).filter(Boolean)).size : 0;
+                                  const cmpPerRep     = comparedActivities && cmpReps > 0 ? Math.round(cmpTotalActs / cmpReps) : null;
+                                  const cmpPerOpp     = null;
 
                                   const fmtDeltaAct = (cur, prior, inverted=false) => {
                                     if(prior===null||prior===undefined||prior===0) return null;
@@ -1672,7 +1681,7 @@ ${bodyHtml}
 
                                   const compareLabel3 = reportCompareTo==='previous_quarter' ? 'vs previous period'
                                     : reportCompareTo==='previous_year' ? 'vs previous period' : null;
-                                  const hasComparison3 = compareLabel3 && comparedOpps && comparedOpps.length > 0;
+                                  const hasComparison3 = compareLabel3 && comparedActivities !== null;
 
                                   const kpis3 = [
                                     { label:'Total activities', value:totalActs.toLocaleString(),  sub:'this period',                    delta: fmtDeltaAct(totalActs, cmpTotalActs) },
@@ -1744,12 +1753,12 @@ ${bodyHtml}
                                       ))}
                                       {/* Coaching callout if any rep has many zero-days */}
                                       {(() => {
-                                        const lowReps = heatRows.filter(r=>r.cells.filter(c=>c.dow!==0&&c.dow!==6&&c.v===0).length>=3).map(r=>r.rep);
+                                        const lowReps = heatRows.filter(r=>r.cells.filter(c=>c.dow!==0&&c.dow!==6&&c.v===0).length>=5).map(r=>r.rep);
                                         if(lowReps.length===0)return null;
                                         return (
                                           <div style={{ marginTop:12, padding:'8px 12px', background:`rgba(156,58,46,0.08)`, border:`1px solid rgba(156,58,46,0.2)`, borderRadius:T3.r, fontSize:12, color:T3.ink, fontFamily:T3.sans }}>
                                             <strong style={{ fontWeight:700, color:T3.danger }}>Coaching flag:</strong>{' '}
-                                            {lowReps.join(', ')} {lowReps.length===1?'has':'have'} 3+ zero-activity weekdays in the last 14 days.
+                                            {lowReps.join(', ')} {lowReps.length===1?'has':'have'} 5 or more zero-activity weekdays out of the last 10.
                                           </div>
                                         );
                                       })()}
@@ -2439,10 +2448,10 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
     const closingARR = closingMonth.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
 
     const pinnedCards = [
-        { id:'p1', name:'Quota pacing', basedOn:'Performance', headline:attainPctS+'%', subhead:`${fmtS(closedWonRev)} of ${fmtS(totalQ)} quota`, preview:{ kind:'line', data:[0,Math.max(0.05,attainPctS*0.003),Math.max(0.1,attainPctS*0.005),Math.max(0.15,attainPctS*0.007),Math.max(0.2,attainPctS*0.008),Math.max(0.25,attainPctS*0.009),attainPctS/100] } },
-        { id:'p2', name:'Pipeline added this week', basedOn:'Pipeline & Forecast', headline:fmtS(addedRecent), subhead:`${allOpen.filter(o=>o.createdDate&&o.createdDate>=sevenISO).length} new deals · 7d`, preview:{ kind:'bars', data:[Math.max(10,addedRecent*0.3),Math.max(10,addedRecent*0.6),Math.max(10,addedRecent*0.8),Math.max(10,addedRecent*0.5),Math.max(10,addedRecent)] } },
+        { id:'p1', name:'Quota pacing', basedOn:'Performance', headline:attainPctS+'%', subhead:`${fmtS(closedWonRev)} of ${fmtS(totalQ)} quota`, preview:{ kind:'number', big:attainPctS+'%', sub:'of quota, closed-won' } },
+        { id:'p2', name:'Pipeline added this week', basedOn:'Pipeline & Forecast', headline:fmtS(addedRecent), subhead:`${allOpen.filter(o=>o.createdDate&&o.createdDate>=sevenISO).length} new deals · 7d`, preview:{ kind:'number', big:fmtS(addedRecent), sub:'added, last 7 days' } },
         { id:'p3', name:'Stuck deals (14d+ no activity)', basedOn:'Pipeline & Forecast', headline:stuckDeals.length+' deals', subhead:fmtS(stuckARR)+' at risk', preview:{ kind:'number', big:String(stuckDeals.length), sub:fmtS(stuckARR)+' pipeline' } },
-        { id:'p4', name:'Closing next 30 days', basedOn:'Pipeline & Forecast', headline:fmtS(closingARR), subhead:`${closingMonth.length} deals open`, preview:{ kind:'stacked', segments:[{v:Math.max(1,closingARR*0.45),c:TS.ok},{v:Math.max(1,closingARR*0.30),c:TS.gold},{v:Math.max(1,closingARR*0.25),c:'#b0a088'}] } },
+        { id:'p4', name:'Closing next 30 days', basedOn:'Pipeline & Forecast', headline:fmtS(closingARR), subhead:`${closingMonth.length} deals open`, preview:{ kind:'number', big:fmtS(closingARR), sub:`${closingMonth.length} deals` } },
     ];
     const templates = [
         { id:'t1', name:'Deal review — weekly', basedOn:'Pipeline & Forecast', icon:'📅', description:'1:1-ready view: commits, at-risk, and new deals since last review' },
@@ -2830,7 +2839,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                         <div key={k.label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
                             <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>{k.label}</div>
                             <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{k.value}</div>
-                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>vs previous period</div>
                         </div>
                     ))}
                 </div>
@@ -3094,7 +3102,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
                         <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Avg accuracy (5Q)</div>
                         <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{avgAccuracy!=null?Math.round(avgAccuracy*100)+'%':'—'}</div>
-                        {avgAccuracy!=null&&<div style={{ fontSize:11, color:T.ok, marginTop:5, fontFamily:T.sans }}>vs prior 5 quarters</div>}
                     </div>
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
                         <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Current quarter forecast</div>
@@ -3309,7 +3316,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                 {/* KPI strip — 5 cards */}
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:14 }}>
                     {[
-                        { label:'WIN RATE',    value:Math.round(winRate*100)+'%',       sub:'+3% vs prev period', subColor:T.ok },
+                        { label:'WIN RATE',    value:Math.round(winRate*100)+'%',       sub:`${wonOppsD.length} won of ${wonOppsD.length+lostOppsD.length} closed`, subColor:T.inkMuted },
                         { label:'DEALS WON',   value:wonOppsD.length,                   sub:fmtShort(wonVal)+' total value', subColor:T.ok },
                         { label:'DEALS LOST',  value:lostOppsD.length,                  sub:fmtShort(lostVal)+' total value', subColor:T.inkMuted },
                         { label:'CYCLE · WON',  value:avgCycleWon!=null?avgCycleWon+'d':'—', sub:'median days to close', subColor:T.inkMuted },
@@ -4403,23 +4410,24 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, scop
                             </div>
                             {builderRendered ? (
                                 <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'20px 24px', minHeight:320, display:'flex', flexDirection:'column', gap:14 }}>
-                                    <div style={{ fontFamily:serif, fontStyle:'italic', fontSize:18, color:T.ink, letterSpacing:-0.3 }}>Pipeline by {builderDims.map(d=>d.label).join(' × ') || 'owner'}</div>
+                                    <div style={{ fontFamily:serif, fontStyle:'italic', fontSize:18, color:T.ink, letterSpacing:-0.3 }}>Open pipeline by owner <span style={{ fontSize:12, color:T.inkMuted, fontStyle:'normal', fontFamily:T.sans }}>· preview — dimensions and metrics are not applied yet</span></div>
                                     <div style={{ display:'flex', flexDirection:'column', gap:10, flex:1 }}>
-                                        {(settings.users||[]).filter(u=>u.name&&u.userType!=='Admin').slice(0,5).map((u,i)=>{
-                                            const w = [85,72,64,51,38][i]||30;
-                                            return (
-                                                <div key={u.name} style={{ display:'flex', alignItems:'center', gap:12 }}>
-                                                    <div style={{ width:110, fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</div>
+                                        {(() => {
+                                            // Real open pipeline by owner from the scoped deals. This drew
+                                            // five constant bars against real names (0.68 item 12).
+                                            const rows = openPipelineByRep(reportsOpps, 5);
+                                            const max = Math.max(...rows.map(r=>r.value), 1);
+                                            if (rows.length === 0) return <div style={{ textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', padding:'2rem', fontFamily:T.sans }}>No open pipeline in scope to chart.</div>;
+                                            return rows.map(r => (
+                                                <div key={r.rep} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                                                    <div style={{ width:110, fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.rep}</div>
                                                     <div style={{ flex:1, height:20, background:T.surface2, borderRadius:2, overflow:'hidden' }}>
-                                                        <div style={{ width:`${w}%`, height:'100%', background:T.goldInk, opacity:0.8 }}/>
+                                                        <div style={{ width:`${(r.value/max)*100}%`, height:'100%', background:T.goldInk, opacity:0.8 }}/>
                                                     </div>
-                                                    <div style={{ width:48, fontSize:12, fontWeight:600, color:T.ink, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>${w*10}K</div>
+                                                    <div style={{ width:48, fontSize:12, fontWeight:600, color:T.ink, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtS(r.value)}</div>
                                                 </div>
-                                            );
-                                        })}
-                                        {(settings.users||[]).filter(u=>u.name&&u.userType!=='Admin').length===0 && (
-                                            <div style={{ textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', padding:'2rem', fontFamily:T.sans }}>Configure your fields and click Update preview.</div>
-                                        )}
+                                            ));
+                                        })()}
                                     </div>
                                     <div style={{ fontSize:11, color:T.inkMuted, paddingTop:10, borderTop:`1px solid ${T.border}`, fontFamily:T.sans }}>
                                         Chart: <strong style={{ color:T.ink }}>{CHART_TYPES.find(c=>c.id===builderChart)?.label||'Stacked bar'}</strong> · {builderDims.length} dimensions · {builderMetrics.length} metrics

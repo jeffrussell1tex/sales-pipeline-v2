@@ -69,3 +69,20 @@ export function visibleReps(names, scoped) {
     const allowed = new Set(scoped);
     return list.filter(n => allowed.has(n));
 }
+
+// ── The reps in scope, from the roster (0.68 batch 4b) ─────────────────────
+// "Per rep" divided by whoever happened to log an activity, and the activity
+// rhythm grid listed only those reps, so a rep who logged nothing was not a
+// row and could never be flagged. The roster is the denominator.
+
+const ROSTER_EXCLUDED = new Set(['Admin', 'Manager', 'ReadOnly']);
+
+/** Rep names from the roster (named, not Admin / Manager / ReadOnly), narrowed by the slice and the viewer's scope, sorted. */
+export function repsInScopeOf(users, slice, scoped) {
+    const list = Array.isArray(users) ? users : [];
+    const reps = repsForSlice(slice, list);
+    const names = list
+        .filter(u => u?.name && !ROSTER_EXCLUDED.has(u.userType) && (!reps || reps.has(u.name)))
+        .map(u => u.name);
+    return visibleReps([...new Set(names)].sort(), scoped);
+}

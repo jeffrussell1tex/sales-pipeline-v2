@@ -116,3 +116,21 @@ export function closedWonByQuarter(opps, fiscalStart, { today = new Date(), coun
         return { key, label: `Q${q} FY${String(fiscalYear).slice(2)}`, actual: sum(inQ), count: inQ.length };
     });
 }
+
+// ── Open pipeline by owner (0.68 batch 4b) ─────────────────────────────────
+// The report builder's preview drew five constant bars ($850K … $380K) against
+// whichever five users came first. This is the real thing: open deals grouped
+// by rep, biggest first, top N. A deal with no rep is skipped, not invented.
+
+/** [{ rep, value, count }] of open deals by salesRep, value descending, top `top`. */
+export function openPipelineByRep(opps, top = 5) {
+    const map = new Map();
+    for (const o of Array.isArray(opps) ? opps : []) {
+        if (!o || CLOSED.includes(o.stage) || !o.salesRep) continue;
+        const cur = map.get(o.salesRep) || { rep: o.salesRep, value: 0, count: 0 };
+        cur.value += arrOf(o);
+        cur.count += 1;
+        map.set(o.salesRep, cur);
+    }
+    return [...map.values()].sort((a, b) => b.value - a.value || a.rep.localeCompare(b.rep)).slice(0, top);
+}

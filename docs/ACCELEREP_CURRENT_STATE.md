@@ -2183,6 +2183,48 @@ panel is titled "Closed-won by quarter".
 **Dev landing (`d25b894`):** accelerep.netlify.app serves `index-CLXLmsDb.js`,
 the local gate build's hash, 41 seconds after the push.
 
+### 0.73 Audit batch 4b — the last fabricated constants (2 Sep, fourth session)
+
+§0.68 items 9, 11 (the "+3%") and 12, plus tier 2's orphan captions and the
+0.28 connect rate. **Activity tab:** the prior period is real —
+`comparedActivities` is the same window `comparedOpps` uses, applied to the
+sliced activities — where it was `totalActs * 0.91`, a placeholder that made
+every delta read about +10% for every org; "Per open opp" has no honest
+prior denominator and shows no delta; the comparison is shown when a prior
+window exists, not when prior DEALS happen to. "Per rep" divides by the reps
+in scope from the roster (`repsInScopeOf`: named, not Admin / Manager /
+ReadOnly, narrowed by the slice and the viewer's scope), not by whoever
+logged something. The rhythm grid lists every rep in scope, busiest first,
+top 8, from the unclipped sliced activities on the local clock (`dayOf`) —
+it was clipped to the period, so a past quarter showed all zeros and flagged
+everyone — and the coaching flag fires at five or more zero weekdays out of
+ten (it was three, a long weekend plus one) and can now name a rep who
+logged nothing at all. The never-rendered `connectRate = 0.28` is gone.
+**Win / loss:** the WIN RATE card's "+3% vs prev period", a literal in
+success green, is now "N won of M closed". **Stage conversion and
+forecast-vs-actual templates:** the "vs previous period" caption under four
+KPIs and the "vs prior 5 quarters" caption asserted comparisons nothing
+computes; both removed. **Report builder:** the preview is real open
+pipeline by owner from the scoped deals (`openPipelineByRep`, top 5), titled
+as a preview whose dimensions and metrics are not applied yet; it drew five
+constant bars ($850K … $380K) against whichever five users came first.
+**Pinned cards:** Quota pacing, Pipeline added and Closing next 30 days show
+their real headline as the preview; the sparklines were the headline times
+fixed coefficients — a guaranteed smooth ramp under a green LIVE badge.
+
+`reportScope.js` +`repsInScopeOf`; `pipelineReport.js` +`openPipelineByRep`;
+tests +3 (the roster scope, open pipeline by rep, and the wiring scan that
+pins every constant above as absent and every replacement as present). Gates
+green on 138 files, **411/411**, **158/158 mutations, printed green baseline**
+(five new: the scope ignored, closed deals in the builder's pipeline, the
+0.91 back, the grid period-clipped, the threshold back to three), build
+guard OK (2,479 kB, `index-BtwmtTXu.js`). The one span edit was asserted to
+contain exactly one `const` before it ran (the §0.72 rule). Not
+browser-checked here; Jeff eyeballs after the deploy: Reports → Activity
+with a period selected and "vs previous period" on — the deltas are real or
+absent, never +10%; Saved reports → the four pinned cards show numbers, not
+ramps.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

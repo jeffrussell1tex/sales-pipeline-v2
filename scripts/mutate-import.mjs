@@ -824,6 +824,28 @@ const mutations = [
         'src/Tabs/ReportsTab.jsx',
         "                            const quota = teamQuotaFor(settings.users, reportTimePeriod, { rep: reportsRep, team: reportsTeam, territory: reportsTerritory });",
         "                            const quota = 175000;"],
+
+    // ── The last constants (0.68 batch 4b) ──────────────────────────────────
+    ['scope: repsInScopeOf ignores the viewer scope',
+        'src/utils/reportScope.js',
+        "    return visibleReps([...new Set(names)].sort(), scoped);",
+        "    return [...new Set(names)].sort();"],
+    ['pipeline: open pipeline by rep counts closed deals too',
+        'src/utils/pipelineReport.js',
+        "        if (!o || CLOSED.includes(o.stage) || !o.salesRep) continue;",
+        "        if (!o || !o.salesRep) continue;"],
+    ['reports: the Activity prior period is totalActs * 0.91 again',
+        'src/Tabs/ReportsTab.jsx',
+        "                                  const cmpTotalActs  = comparedActivities ? comparedActivities.length : null;",
+        "                                  const cmpTotalActs  = comparedActivities ? Math.round(totalActs * 0.91) : null;"],
+    ['reports: the rhythm grid reads the period-clipped set again',
+        'src/Tabs/ReportsTab.jsx',
+        "                                const count = reportsActivities.filter(a=>activityRepOf(a)===rep&&dayOf(a.date||a.createdAt)===d.date).length;",
+        "                                const count = allActs.filter(a=>activityRepOf(a)===rep&&dayOf(a.date||a.createdAt)===d.date).length;"],
+    ['reports: the coaching flag fires on three quiet weekdays again',
+        'src/Tabs/ReportsTab.jsx',
+        "c.v===0).length>=5).map(r=>r.rep);",
+        "c.v===0).length>=3).map(r=>r.rep);"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

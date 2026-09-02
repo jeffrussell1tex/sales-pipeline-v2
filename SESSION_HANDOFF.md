@@ -115,6 +115,14 @@ pipelineReport.js`, 14 tests, 8 mutants. `d25b894`, **deploy-verified:**
 accelerep.netlify.app serves `index-CLXLmsDb.js`, the local gate build's
 hash.
 
+**Batch 4b, the commit this handoff rides in (state §0.73):** the last
+constants — the Activity tab's 0.91 prior period replaced by real
+prior-period activities, "Per rep" and the rhythm grid on the roster in
+scope with a five-zero-weekday flag, the win/loss "+3%" and two orphan
+"vs previous period" captions removed, the builder preview and the pinned
+cards on real numbers. 3 tests, 5 mutants. Deploy check recorded in §4 by
+a follow-up docs commit.
+
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
 (`parseLocalDate` / `toLocalDay`), the CSV importer normalising Close and
@@ -157,13 +165,14 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 138 files · **408/408 unit** (14 in
+Five gates green on 138 files · **411/411 unit** (17 in
 `pipeline-report.test.mjs`, 9 in `opp-text.test.mjs`, 13 in
 `report-period.test.mjs`, 15 in `report-scope.test.mjs`, 15 in
-`loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **153/153
-mutations, printed green baseline** (40 new this session; run alone) · build
-**2,478 kB JS**, `index-CLXLmsDb.js` (audit batch 4a; dev deploy observed
-serving it for `d25b894`), guard OK, `dist/` cleared · **79 integration not
+`loss-analysis.test.mjs`, 6 in `session-status.test.mjs`) · **158/158
+mutations, printed green baseline** (45 new this session; run alone) · build
+**2,479 kB JS**, `index-BtwmtTXu.js` (audit batch 4b; deploy check pending
+at the time this was written; `index-CLXLmsDb.js` observed for `d25b894`),
+guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -248,11 +257,14 @@ cleared at close.
    13–14) is DONE — state §0.70. Batch 3 (scoping) is DONE — state
    §0.71. Batch 4a (the Pipeline & Forecast constants + the Performance
    quota basis, items 3, 4, 7, 8, and item 6's nextStep) is DONE — state
-   §0.72.** Next: batch 4b — the Activity tab's 0.91 prior period, the
-   coaching flag and "Per rep" denominator (item 9), the win/loss "+3% vs
-   prev period" and the two "vs previous period" captions with no
-   comparison (item 11 / tier 2), the builder's bar constants and the
-   "LIVE" sparklines (item 12), the 0.28 connect rate. §0.68's line numbers
+   §0.72. Batch 4b (the last constants, item 9, the "+3%", item 12, the
+   orphan captions) is DONE — state §0.73.** Next: batch 5 — stage lists
+   from `settings.funnelStages` with `defaultStages` fallback everywhere a
+   hardcoded list remains (item 5: the Pipeline tab's `stageOrder` and
+   `stageColors2`, the funnel deep-dive fallback, the history track
+   fallback, `stageColorMap`, the commit fallback lists), and cycle time /
+   quarter bucketing from the real close day (`closeDayOf`, already in
+   pipelineReport.js) instead of the forecast date. §0.68's line numbers
    have shifted; grep, don't trust them. Span edits: print the span from
    git first and list every `const` in it (§0.72's slip).
 11. Smaller carried: the
