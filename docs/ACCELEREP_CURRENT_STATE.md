@@ -2606,8 +2606,8 @@ appeared with "Karen Russell · Sep 2" and the note, the settings PUT
 returned 200, and after a full reload the note is still there. **A test
 note now sits in Jeff's dev org's coaching list** ("Karen Russell: test
 note from the house-prompt check (Claude, 2 Sep) — safe to ignore"); the
-card has no delete, so it stays until an Admin PUT drops it — Jeff's
-call. Reports → Saved reports → × on the leftover "Rep scorecard (copy)"
+card has no delete, so it stays until an Admin PUT drops it — Jeff:
+"Dont worry about the test note"; it stays. Reports → Saved reports → × on the leftover "Rep scorecard (copy)"
 opened the app's Confirm dialog naming the report; Delete → `DELETE 200`,
 library "No saved reports yet". **Not observed:** the Enter key in the
 prompt — the pane's "Return" keystroke did not submit (the handler is
@@ -2618,8 +2618,10 @@ defined in ES module scope" from
 `.netlify/functions-serve/saved-reports/saved-reports.js` — netlify
 dev's compiled copy of the function, stale after the session's many
 reloads; stopping the server, `rm -rf .netlify/functions-serve`, and
-restarting cleared it. Same family as the CLAUDE.md stale-build note;
-that note names `node_modules/.vite` and `dist` only.
+restarting cleared it. Same family as the CLAUDE.md stale-build note,
+which named `node_modules/.vite` and `dist` only — CLAUDE.md now carries a
+"Stale local FUNCTION" bullet for this cache (Jeff: "update the md with
+the notes").
 
 **Found in the same screen, carried (handoff §5 item 16):** the Sales
 Manager header reads "Team forecast · Q3 2026 · 4 weeks remaining" on the

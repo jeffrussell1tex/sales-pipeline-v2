@@ -132,6 +132,11 @@ One commit per verified batch; doc patch in the same commit.
   restart, hard-refresh — suspect this before diagnosing code. The gate
   chain's own `npm run build` writes `dist/` and re-arms this every run:
   `rm -rf dist` after any local gate build, before any browser pass.
+- Stale local FUNCTION: `netlify dev` also caches compiled functions under
+  `.netlify/functions-serve`. A 500 from one endpoint with "module is not
+  defined in ES module scope" in the server log is that cache serving a
+  stale CommonJS copy, not the code — stop the server,
+  `rm -rf .netlify/functions-serve`, restart (state §0.79).
 - Dev: `accelerep.netlify.app` (branch `dev`, Clerk `pk_test_`). Prod:
   `salespipelinetracker.com` (branch `master`). No `main` branch.
 - Integration suites that seed `users` use their own org namespace prefix
