@@ -3685,6 +3685,14 @@ he controls, or a request-bin), store the secret, Send test event, watch
 the status and the delivery count move, then do something audited and see
 it arrive.
 
+**Dev landing (`2e7a219`, pushed 13:25 local):** accelerep.netlify.app served
+`index-BJ1VcE9y.js` — the local gate build's hash — at 13:26:26 local (was
+`index-Wjd4yjDA.js`), 2,482,786 bytes, `pk_test_` inlined; "Send test event",
+"Rotate secret" and "the last 500 events are loaded" present in the served
+bundle, "Streaming to Splunk" and "Manage alerts" absent; the deployed
+`audit-stream` function answers 401 unauthenticated. Not yet observed by
+Jeff; `master` stays at `eec3948`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
