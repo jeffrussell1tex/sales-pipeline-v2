@@ -12,6 +12,8 @@
 // "Fiscal year" is named by the calendar year in which the FY ENDS.
 // e.g. Oct 2025 → FY2026, Jan 2026 → FY2026.
 
+import { isoLocal } from './dateLocal.js';
+
 export function quarterOf(isoDate, fiscalStart) {
     if (!isoDate) return null;
     const d = new Date(isoDate.slice(0, 10) + 'T12:00:00'); // normalize to date-only before appending time
@@ -65,6 +67,26 @@ export function quarterRange(fiscalYear, q, fiscalStart) {
     const end   = quarterEndDate(fiscalYear, q, fiscalStart);
     const fmt   = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     return `${fmt(start)} – ${fmt(end)}`;
+}
+
+// The fiscal quarter `today` falls in, with its bounds and how much of it is
+// left. For the Sales Manager header, which built a CALENDAR quarter from
+// now.getMonth() and never read the org's fiscal start: with an October fiscal
+// year, September read "Q3 2026 · 4 weeks remaining" on the day Home read
+// "Q4 · Week 10" and every report said Q4 FY26 (state §0.80).
+//
+// Days are counted noon-to-noon so the hour of the day and a DST change inside
+// the quarter cannot move the count (18b18: clock). Today is included, so the
+// last day of the quarter has 1 day and 1 week left, never 0 — the Gap-to-Quota
+// tile divides its gap by weeksLeft, and 0 there rendered "$InfinityM/wk".
+export function currentQuarter(fiscalStart, today = new Date()) {
+    const qk    = quarterOf(isoLocal(today), fiscalStart);
+    const start = quarterStartDate(qk.fiscalYear, qk.q, fiscalStart);
+    const end   = quarterEndDate(qk.fiscalYear, qk.q, fiscalStart);
+    const noon  = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
+    const daysLeft  = Math.round((noon(end) - noon(today)) / 86400000) + 1;
+    const weeksLeft = Math.ceil(daysLeft / 7);
+    return { ...qk, from: isoLocal(start), to: isoLocal(end), daysLeft, weeksLeft, label: `Q${qk.q} FY${qk.fiscalYear}` };
 }
 
 // A deal with no close date belongs to no quarter. `if (!qk) continue` DROPPED it

@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** September 2, 2026 (fourth session, evening close)
-**Verified at:** five gates green on 142 files · **446 tests** · **195/195 mutations, printed green baseline** · **79/79 integration** (re-run at §0.79, settings.mjs changed) · build guard OK 2,479 kB `index-B0b_2Pd3.js` · prod `d513b0e` serving `index-C61hseh3.js` (fifth ship) · dev ahead of master by docs only.
-**Batch:** **the Reports audit closed (§0.68 → §0.69–§0.77, seven batches), the 401 banner and the MFA catalogue card made honest (§0.78), every native confirm/prompt replaced by house dialogs and coaching notes persisted with a Manager-writable settings key (§0.79)** — all shipped to prod, each deploy verified by bundle hash; the Manager path and the after-7pm date observed by Jeff as Karen; carried: Settings catalogue footers and Workspace Health constants (handoff item 15), the Sales Manager tab's calendar quarter (16), addressed coaching notes as a product (17).
+**Updated:** September 3, 2026 (fifth session)
+**Verified at:** five gates green on 142 files · **456 tests** · **200/200 mutations, printed green baseline** · **79/79 integration** (re-run at §0.80; no function changed) · build guard OK 2,480 kB `index-CWYRS-Kk.js` · prod `d513b0e` serving `index-C61hseh3.js` (fifth ship) · dev ahead of master by §0.80 and docs.
+**Batch:** **the Sales Manager tab's quarter is the org's FISCAL quarter (§0.80)** — the header built a calendar quarter from `now.getMonth()` and never read `fiscalYearStart`, so an October-year org read "Q3 2026" in September while Home and every report said Q4; `currentQuarter()` in quarters.js is the one helper it reads now, and weeks remaining count today and are never 0 (the Today tab's Gap-to-Quota tile divides by them — "$InfinityM/wk" on a quarter's last day). The audit of the tab's totals found them on NO quarter at all (all-time closed against the annual quota); Jeff's call: quarter-to-date, and the three inert header buttons go — the next batch (handoff item 16).
+**Prior batch:** **the Reports audit closed (§0.68 → §0.69–§0.77, seven batches), the 401 banner and the MFA catalogue card made honest (§0.78), every native confirm/prompt replaced by house dialogs and coaching notes persisted with a Manager-writable settings key (§0.79)** — all shipped to prod, each deploy verified by bundle hash; the Manager path and the after-7pm date observed by Jeff as Karen; carried: Settings catalogue footers and Workspace Health constants (handoff item 15), the Sales Manager tab's calendar quarter (16), addressed coaching notes as a product (17).
 **Prior batch:** **the ten unmounted components are DELETED** (Jeff: "lets do 2 and 3") — 4,160 lines and twelve stale import lines gone, every reference re-verified as a comment or nothing; gates green, 317/317, 105/105, build guard OK at the identical 2,534.93 kB (a different hash: fewer imports reorder Rollup's module emission, the size proves the code was never in the bundle) · **`documents` re-probe CLOSED** — 401 JSON on a fresh `netlify dev`, the R2 dependency fix verified locally, sibling `leads` 401 as control (§0.61)
 **Prior batch:** **the date-pattern audit** — the `+'T12:00:00'` shape counted at ~140 sites, not the ~20 queued; four live-or-unguarded NaN sites fixed (deal-timeline task sort, speed-to-lead/velocity on the varchar(30) lead dates, avgDaysForStage's never-written `changedAt` fallback, TaskItem's UTC-midnight `Due:` and 7pm-Central overdue — and TaskItem turned out to be UNMOUNTED, so three live, not four) · `parseLocalDate`/`toLocalDay` — the READ side of the date contract, guide **§18b26** · **the CSV importer normalises Close/Created Date** (both passed through as written: "9/15/2026" made an Invalid Date of that deal everywhere downstream — never-stale, undated quarter) · **the isoLocal queue was LOST with an overwritten handoff — found and SWEPT the same session**: 45 UTC-truncated day sites (43 hand-counted; the pinning scan found two more on its first run), 37 rewritten to `isoLocal`/`todayLocal` across 12 files, 8 named exceptions, and the scan in `date-local.test.mjs` is the list that cannot be lost · **ten component files are imported by App.jsx and rendered NOWHERE** (4,160 lines — the three Viewing panels, Account/Task/Activity modals, TaskItem, AnalyticsDashboard, PipelinesSettingsPanel, LeadForm), proven by the bundle being byte-identical with and without an edit to two of them; deletion is Jeff's call, chip spawned (§0.60)
 **Prior batch:** **the request flow shipped end to end** (§0.58) and **the SettingsTab cleanup + honest Security surfaces** (§0.59); both on prod, deploy-verified. Their headers say "2 Sep"; git carries every one of their commits at 1 Sep -0500 — flagged in §0.60, not rewritten
@@ -2660,6 +2661,82 @@ the saved-report confirm present, 2,538,858 bytes. `master` == `dev` ==
 `d513b0e`.
 
 ---
+
+### 0.80 The Sales Manager tab's quarter is the org's fiscal quarter (3 Sep, fifth session)
+
+**Jeff: "Lets do number 1" (handoff item 16), then: "All quarters showing
+should run off the fiscal year set in the settings area of the application.
+UKG is a good example, the fiscal ends on 9/30 so they are currently in
+Q4."** Seen in the §0.79 pane check: the Sales Manager header read "Team
+forecast · Q3 2026 · 4 weeks remaining" on the day Home read "Q4 · Week 10".
+
+**What was read (the whole tab's quarter math, before the header was
+touched).** `SalesManagerTab.jsx` ~769 built `qNum` from
+`Math.floor(now.getMonth()/3) + 1`, `qEnd` as that calendar quarter's last
+day and `weeksLeft` from it, and never read `settings.fiscalYearStart`;
+`getQuarter` / `getQuarterLabel` were destructured from the context and
+never called. The header and the Today tab's "Gap to Quota" tile
+(`${weeksLeft} weeks · ${fmtV(gapToQuota/weeksLeft)}/wk needed`) were the
+only readers. **The totals under the header are on no quarter at all:**
+`buildRepStats` counts `closedArr` from EVERY Closed Won deal the rep has
+(no date window), `quota` is `annualQuota` or the four quarterly figures
+summed, and `attainPct`, the health score and its "AT RISK" / "ON TRACK"
+label, the Forecast roll-up's "Team to quota", the Team cards' Attainment
+bar and the Administration board's bar all divide those two — all-time
+revenue against a year's quota under a heading that names a quarter.
+`commit` and `bestCase` are rep fields with no period. Also found:
+`weeksLeft` reached 0 on a quarter's last day (`qEnd` at 00:00 is already
+behind `now`), so the Gap tile divided by zero and rendered
+"$InfinityM/wk needed" that day; the header's three buttons — This quarter
+/ All reps / Export — have no `onClick` (the batch-6 class, §0.76); and the
+Forecast ledger's editable Commit is sent through `updateRepField` →
+`saveUser` → users PUT, whose `sanitize()` carries neither `commit` nor
+`bestCase` in a column or in the profile blob — a typed commit is 0 again
+on refresh (persistent-data rule; not fixed here, handoff item 18).
+
+**What changed.** `currentQuarter(fiscalStart, today = new Date())` in
+`src/utils/quarters.js` (which now imports `isoLocal`): the fiscal quarter
+today falls in — `quarterOf`'s fields plus `from` / `to` (yyyy-mm-dd,
+inclusive), `daysLeft`, `weeksLeft` and a `label` of the form
+`Q4 FY2026` (the fiscal year named, so "Q4 2026" cannot be misread as
+Oct–Dec). Days are counted noon-to-noon and include today, so the hour of
+the day and a DST change inside the quarter cannot move the count and the
+last day has 1 day / 1 week left, never 0. The tab's block is now
+`fiscalStart = parseInt(settings?.fiscalYearStart) || 10` (the App.jsx /
+HomeTab / ReportsTab default; ListView's `|| 1` drift is still flagged in
+HomeTab's comment, not fixed), `curQ = currentQuarter(fiscalStart)`,
+`weeksLeft = curQ.weeksLeft`, `qLabel = curQ.label`. Nothing else in the
+tab changed in this batch.
+
+**What a user sees change:** an October-year org's Sales Manager header
+reads "Team forecast · Q4 FY2026 · 4 weeks remaining" in September (was
+"Q3 2026"); a January-year org reads "Q3 FY2026" (was "Q3 2026"); the
+Today tab's "/wk needed" is finite on a quarter's last day. The totals
+themselves are unchanged in this batch.
+
+`tests/current-quarter.test.mjs` (10, every case under a January and an
+October start — 18b18; the REGRESSION case is September under October
+being Q4 not Q3; a February start pins a quarter that ends in the next
+calendar year; the last-day / hour-of-day / two-timezone-children cases pin
+the count; a source assertion pins the tab's import, default and header
+line and refuses `getMonth()/3`). Gates green on 142 files, **456/456**,
+**200/200 mutations, printed green baseline** (five new: the calendar
+quarter again, weeks reaching 0, the count from the clock instead of the
+calendar day, the header reading the calendar quarter, the fiscal-start
+default drifting to 1), **79/79 integration** (no function changed), build
+guard OK (2,480 kB, `index-CWYRS-Kk.js`), `dist/` cleared. **Not
+browser-checked here:** the tab renders for Admin and Manager only, so
+Karen's rep path cannot reach it; Jeff eyeballs the header on deployed dev
+as Admin.
+
+**Jeff's two decisions for the next batch (asked with the audit above):**
+the totals move to **quarter-to-date** — Closed is the deals won in the
+current fiscal quarter by close day (`closeDayOf`, §0.75), Quota is that
+quarter's figure (`userQuotaFor(u, 'Qn')`: a quarterly plan's own number,
+or annual ÷ 4), attainment / health / Gap-to-Quota follow, and the
+Administration board keeps the annual quota with a fiscal-year-to-date
+bar; and the three inert header buttons are **removed**. Numbers and
+health labels will change on the Forecast, Team and Today tabs.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

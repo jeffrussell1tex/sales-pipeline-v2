@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1004,6 +1004,28 @@ const mutations = [
         'src/Tabs/ReportsTab.jsx',
         "<td>${esc(e.label||'—')}</td>",
         "<td>${e.label||'—'}</td>"],
+
+    // ── The Sales Manager tab's quarter is the org's fiscal quarter (0.80) ──
+    ['quarters: currentQuarter ignores the fiscal start (the calendar quarter again)',
+        'src/utils/quarters.js',
+        "    const qk    = quarterOf(isoLocal(today), fiscalStart);",
+        "    const qk    = quarterOf(isoLocal(today), 1);"],
+    ['quarters: weeks remaining reaches 0 on the last day of the quarter (÷0 in the Gap tile)',
+        'src/utils/quarters.js',
+        "    const daysLeft  = Math.round((noon(end) - noon(today)) / 86400000) + 1;",
+        "    const daysLeft  = Math.round((noon(end) - noon(today)) / 86400000);"],
+    ['quarters: the days left are counted from the clock, not the calendar day (18b18)',
+        'src/utils/quarters.js',
+        "    const daysLeft  = Math.round((noon(end) - noon(today)) / 86400000) + 1;",
+        "    const daysLeft  = Math.floor((end - today) / 86400000) + 1;"],
+    ['manager: the header reads the calendar quarter again',
+        'src/Tabs/SalesManagerTab.jsx',
+        "    const curQ      = currentQuarter(fiscalStart);",
+        "    const curQ      = currentQuarter(1);"],
+    ['manager: the fiscal-start default diverges from the app\'s (the ListView drift)',
+        'src/Tabs/SalesManagerTab.jsx',
+        "    const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;",
+        "    const fiscalStart = parseInt(settings?.fiscalYearStart) || 1;"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

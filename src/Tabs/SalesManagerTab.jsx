@@ -3,6 +3,7 @@ import { newCoachingNote, withCoachingNote } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import { isoLocal, todayLocal } from '../utils/dateLocal';
+import { currentQuarter } from '../utils/quarters';
 
 // ── V1 Design tokens ──────────────────────────────────────────
 const T = {
@@ -765,12 +766,17 @@ export default function SalesManagerTab() {
     const teamPipe    = repStats.reduce((s,r) => s+r.pipelineArr, 0);
     const teamAttain  = teamQuota > 0 ? Math.round((teamClosed/teamQuota)*100) : null;
 
-    // Quarter info
-    const now  = new Date();
-    const qNum = Math.floor(now.getMonth()/3) + 1;
-    const qEnd = new Date(now.getFullYear(), qNum*3, 0);
-    const weeksLeft = Math.max(0, Math.ceil((qEnd - now)/(7*86400000)));
-    const qLabel = `Q${qNum} ${now.getFullYear()}`;
+    // Quarter info — the org's FISCAL quarter from quarters.js, the helper Home
+    // and every report already use. This block built a CALENDAR quarter from
+    // now.getMonth() and never read settings.fiscalYearStart, so with an October
+    // fiscal start the header read "Q3 2026 · 4 weeks remaining" on the day Home
+    // read "Q4 · Week 10" (state §0.80). Default 10 is the App.jsx / HomeTab /
+    // ReportsTab convention. weeksLeft counts today and is never 0 — the
+    // Gap-to-Quota tile divides by it.
+    const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
+    const curQ      = currentQuarter(fiscalStart);
+    const weeksLeft = curQ.weeksLeft;
+    const qLabel    = curQ.label;
 
     // Card style
     const card = { background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, overflow:'hidden', marginBottom:16 };
