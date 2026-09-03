@@ -16,8 +16,8 @@
 // Methods:
 //   GET               the notes the caller may see, newest first
 //   POST              create (Admin | Manager). body: { id, text, date, recipientIds? | teamId? }
-//                     legacy import (Admin): { ..., legacy:true, authorName } — upsert-on-id,
-//                     so re-running the import is harmless (guide §18c)
+//                     (the one-time legacy import branch ran on dev and prod on 3 Sep 2026
+//                     and is gone — §0.83; rows it wrote carry legacy:true)
 //   PUT               { id, action:'read' } — the caller marks a note they can see as read
 //   DELETE ?id=       author or Admin
 import { db } from '../../db/index.js';
@@ -77,8 +77,7 @@ export const handler = async (event) => {
 
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body || '{}');
-            const legacy = data.legacy === true;
-            const forbiddenRole = requireRole(auth, legacy ? ['Admin'] : ['Admin', 'Manager'], headers);
+            const forbiddenRole = requireRole(auth, ['Admin', 'Manager'], headers);
             if (forbiddenRole) return forbiddenRole;
             if (!me) return reply(403, { error: 'Your account is not in this organization\'s roster.' });
 
@@ -86,7 +85,7 @@ export const handler = async (event) => {
             const text = String(data.text ?? '').trim();
             if (!text) return reply(400, { error: 'The note is empty.' });
             if (!isDay(data.date)) return reply(400, { error: 'date must be yyyy-mm-dd (the author\'s local day)' });
-            const audience = audienceOf(data, { legacy });
+            const audience = audienceOf(data);
             if (!audience.ok) return reply(400, { error: audience.error });
 
             // Recipients must be roster rows of THIS org; a team must exist in this org's settings.
@@ -105,35 +104,20 @@ export const handler = async (event) => {
                 id:           data.id,
                 orgId,
                 authorId:     me.id,                                                    // server-stamped, never the payload
-                authorName:   legacy ? (String(data.authorName || '').trim() || me.name) : me.name,
+                authorName:   me.name,
                 text,
                 date:         data.date,
                 recipientIds: audience.recipientIds,
                 teamId:       audience.teamId,
                 readBy:       {},
-                legacy,
             };
-            let inserted, created = true;
-            if (legacy) {
-                // Idempotent: the id is derived from the old blob row, so a second import is a no-op.
-                const rows = await db.insert(coachingNotes).values(values).onConflictDoNothing({ target: coachingNotes.id }).returning();
-                if (rows.length) inserted = rows[0];
-                else {
-                    created = false;
-                    [inserted] = await db.select().from(coachingNotes).where(and(eq(coachingNotes.id, data.id), eq(coachingNotes.orgId, orgId)));
-                    if (!inserted) return reply(409, { error: 'That id already exists in another organization.' });
-                }
-            } else {
-                [inserted] = await db.insert(coachingNotes).values(values).returning();
-            }
-            if (created) {
-                await writeAudit(orgId, {
-                    action: legacy ? 'coaching_note.imported' : 'coaching_note.created', entityType: 'coaching_note', entityId: inserted.id,
-                    entityName: audience.teamId ? `team ${audience.teamId}` : `${audience.recipientIds.length} recipient(s)`,
-                    detail: text.slice(0, 120), userId,
-                });
-            }
-            return reply(created ? 201 : 200, { coachingNote: inserted });
+            const [inserted] = await db.insert(coachingNotes).values(values).returning();
+            await writeAudit(orgId, {
+                action: 'coaching_note.created', entityType: 'coaching_note', entityId: inserted.id,
+                entityName: audience.teamId ? `team ${audience.teamId}` : `${audience.recipientIds.length} recipient(s)`,
+                detail: text.slice(0, 120), userId,
+            });
+            return reply(201, { coachingNote: inserted });
         }
 
         if (event.httpMethod === 'PUT') {

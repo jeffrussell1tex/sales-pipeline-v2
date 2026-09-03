@@ -38,7 +38,7 @@ export function useCoachingNotes({ waitForToken, enabled = true } = {}) {
         return () => { cancelled = true; };
     }, [enabled, waitForToken, reload]);
 
-    /** POST a payload from newNotePayload / legacyNotePayload. Returns { ok, note?, error? }. */
+    /** POST a payload from newNotePayload. Returns { ok, note?, error? }. */
     const addCoachingNote = useCallback(async (payload) => {
         const res = await dbFetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) return { ok: false, error: await errorOf(res, `The server returned ${res.status}.`) };

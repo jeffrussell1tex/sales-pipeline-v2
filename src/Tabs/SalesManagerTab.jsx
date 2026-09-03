@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { legacyNotePayload, audienceLabel, sortNotes } from '../utils/coachingNotes';
+import { audienceLabel, sortNotes } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import { isoLocal, todayLocal } from '../utils/dateLocal';
@@ -686,7 +686,7 @@ export default function SalesManagerTab() {
         currentUser, userRole,
         getQuarter, getQuarterLabel,
         exportToCSV, showConfirm, softDelete, setUndoToast,
-        coachingNotes, showCoachingNote, addCoachingNote, deleteCoachingNote, currentUserId,
+        coachingNotes, showCoachingNote, deleteCoachingNote, currentUserId,
         activeTab, setActiveTab,
         spiffClaims, setSpiffClaims,
         isMobile,
@@ -833,28 +833,12 @@ export default function SalesManagerTab() {
         const wobbly  = repStats.filter(r => r.score >= 40 && r.score < 65).length;
         const atRisk  = repStats.filter(r => r.score < 40).length;
 
-        // Coaching notes come from their own table now (state §0.82), already
-        // filtered by the server to what this caller may see. The settings blob's
-        // old rows stay readable only for the one-time Admin import below.
+        // Coaching notes come from their own table (state §0.82), already filtered
+        // by the server to what this caller may see. The one-time import of the old
+        // settings-blob notes ran on dev and prod on 3 Sep 2026 and is gone (§0.83).
         const recentNotes = sortNotes(coachingNotes).slice(0, 8);
         const roster      = settings.users || [];
         const teams       = settings.teams || [];
-        const legacyNotes = settings.coachingNotes || [];
-        const importLegacy = async () => {
-            let unresolved = 0;
-            for (const old of legacyNotes) {
-                const p = legacyNotePayload(old, roster);
-                if (!p) continue;
-                if (p.unresolvedRep) unresolved++;
-                const { unresolvedRep, ...payload } = p;
-                const r = await addCoachingNote(payload);
-                if (!r.ok) { setSaveState({ status: 'error', msg: `Import stopped — ${r.error}` }); return; }
-            }
-            // Idempotent on the server (ids derive from the old ids), so emptying the
-            // blob afterwards is safe: useSettings' Admin PUT persists the empty list.
-            setSettings(prev => ({ ...prev, coachingNotes: [] }));
-            setSaveState({ status: 'idle', msg: unresolved ? `${unresolved} imported note${unresolved !== 1 ? 's' : ''} had no matching rep and are visible to Admins only.` : '' });
-        };
 
         return (
             <>
@@ -873,13 +857,6 @@ export default function SalesManagerTab() {
                         onClick={showCoachingNote}>
                         + Add coaching note
                     </button>
-                    {isAdmin && legacyNotes.length > 0 && (
-                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', marginLeft:8, background:'transparent', border:`1px dashed ${T.borderStrong}`, color:T.goldInk, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}
-                            title="One-time: move the old settings-blob notes into the notes table. Re-running is harmless."
-                            onClick={() => showConfirm(`Import ${legacyNotes.length} legacy coaching note${legacyNotes.length !== 1 ? 's' : ''} into the new notes table? Rep names are matched against the roster; unmatched notes become visible to Admins only.`, importLegacy, false)}>
-                            Import {legacyNotes.length} legacy note{legacyNotes.length !== 1 ? 's' : ''}
-                        </button>
-                    )}
                 </div>
             </div>
 
@@ -1040,9 +1017,6 @@ export default function SalesManagerTab() {
 
             {saveState.status === 'error' && (
                 <div style={{ padding:'8px 12px', marginBottom:12, background:'rgba(156,58,46,0.08)', border:`1px solid rgba(156,58,46,0.3)`, borderRadius:T.r, fontSize:12, color:T.danger, fontFamily:T.sans }}>{saveState.msg}</div>
-            )}
-            {saveState.status === 'idle' && saveState.msg && (
-                <div style={{ padding:'8px 12px', marginBottom:12, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{saveState.msg}</div>
             )}
             {/* Recent coaching — the coaching_notes table, server-filtered (state §0.82). The
                 inert "See all →" button is gone; the header states what the list is. */}

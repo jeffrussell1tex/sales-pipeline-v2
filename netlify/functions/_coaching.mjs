@@ -80,15 +80,13 @@ export function canDeleteNote(note, viewer) {
 
 /**
  * Validate a create payload's audience. Exactly one of a non-empty recipient
- * list or a team id — unless `legacy`, where an unresolvable old "rep: text"
- * note may have neither and is then visible to its author and Admins only.
- * Returns { ok, error, recipientIds, teamId }.
+ * list or a team id. Returns { ok, error, recipientIds, teamId }.
  */
-export function audienceOf(body, { legacy = false } = {}) {
+export function audienceOf(body) {
     const recipientIds = [...new Set((Array.isArray(body?.recipientIds) ? body.recipientIds : []).filter(v => typeof v === 'string' && v))];
     const teamId = typeof body?.teamId === 'string' && body.teamId ? body.teamId : null;
     if (recipientIds.length && teamId) return { ok: false, error: 'Address a note to people OR to a team, not both.' };
-    if (!recipientIds.length && !teamId && !legacy) return { ok: false, error: 'Address the note to at least one person or to a team.' };
+    if (!recipientIds.length && !teamId) return { ok: false, error: 'Address the note to at least one person or to a team.' };
     return { ok: true, recipientIds, teamId };
 }
 

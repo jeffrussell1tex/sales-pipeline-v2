@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (fifth session)
-**Verified at:** five gates green on 145 files · **484 tests** · **218/218 mutations, printed green baseline** · **87/87 integration** (8 new in `coaching-notes.itest.mjs`) · build guard OK 2,491 kB `index-Kg6gw2rZ.js` · **prod `bdb0f3c` serving `index-CIR6aj2A.js` (sixth ship, 3 Sep)** · dev ahead of master by docs only.
-**Batch:** **coaching notes are ADDRESSED — to a person, several people, or a team — in their own org-scoped table (§0.82, handoff item 17)** — `coaching_notes` + `users.team_joined_at` (DDL applied to the test and app databases FIRST, guide §18c), `coaching-notes.mjs` with visibility decided by the pure `_coaching.mjs` (Jeff's two rules: a note to people is seen by author, recipients and Admins — never another manager; a team note by the team's manager and by members from their FIRST DAY, team_joined_at else created_at, resolved at read time), a house dialog with a rep/team picker replacing the typed "rep: text" prompt, the Team tab reading the table with delete for author/Admin, a "Notes from your manager" block on Home with read stamps, unread notes in the bell, an idempotent Admin import of the old settings-blob notes, and the §0.79 Manager carve-out in settings.mjs retired. Not browser-checked; Jeff eyeballs as Admin and as Karen.
+**Verified at:** five gates green on 145 files · **482 tests** · **214/214 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,489 kB `index-DzhyaR_f.js` · **prod `bdb0f3c` serving `index-CIR6aj2A.js` (sixth ship, 3 Sep)** · dev ahead of master by §0.83 (one code commit) and docs.
+**Batch:** **the coachingNotes settings key is retired (§0.83, handoff item 23)** — both orgs imported their old blob notes on 3 Sep, so the key leaves both halves of settings.mjs, the legacy POST branch leaves coaching-notes.mjs, the import button and helpers leave the Team tab and the util, and four mutants whose targets went with them are retired (218 → 214). Rows the import wrote keep `legacy: true` for the "imported" label. Dev only; not yet shipped.
+**Prior batch:** **coaching notes are ADDRESSED — to a person, several people, or a team — in their own org-scoped table (§0.82, handoff item 17)** — `coaching_notes` + `users.team_joined_at` (DDL applied to the test and app databases FIRST, guide §18c), `coaching-notes.mjs` with visibility decided by the pure `_coaching.mjs` (Jeff's two rules: a note to people is seen by author, recipients and Admins — never another manager; a team note by the team's manager and by members from their FIRST DAY, team_joined_at else created_at, resolved at read time), a house dialog with a rep/team picker replacing the typed "rep: text" prompt, the Team tab reading the table with delete for author/Admin, a "Notes from your manager" block on Home with read stamps, unread notes in the bell, an idempotent Admin import of the old settings-blob notes, and the §0.79 Manager carve-out in settings.mjs retired. Not browser-checked; Jeff eyeballs as Admin and as Karen.
 **Prior batch:** **the Settings catalogue and its panel headers carry no invented text; Workspace Health counts only what it can read (§0.81)** — 48 hand-typed footers ("Edited 2 months ago by Admin", values that never moved) gone, the two typed attention flags and five typed statuses gone, card status / attention / detail computed in one pure module (`settingsCards.js`, the block that lived inside the card component), the Needs Attention list computed from the same, the health tile's eight checks (four constants) replaced by the six that can be read with a sentence that names what failed, and 16 detail panels' typed "Last edited 3 weeks ago by Admin" removed (the shared headers render the line only when both values are real; the SSO panel's fictional "Morgan" gone). Carried: the mockup depth of the SSO / Session / Audit / Import panels and the remaining hand-typed card counts (handoff items 21–22).
 **Prior batch:** **the Sales Manager tab's quarter is the org's FISCAL quarter (§0.80)** — the header built a calendar quarter from `now.getMonth()` and never read `fiscalYearStart`, so an October-year org read "Q3 2026" in September while Home and every report said Q4; `currentQuarter()` in quarters.js is the one helper it reads now, and weeks remaining count today and are never 0 (the Today tab's Gap-to-Quota tile divides by them — "$InfinityM/wk" on a quarter's last day). The audit of the tab's totals found them on NO quarter at all (all-time closed against the annual quota); **Jeff's call, done in the second commit: Closed and Quota are quarter-to-date** (won by close day inside the fiscal quarter, against that quarter's figure), the Administration board measures fiscal-year-to-date against its annual quota, and the three inert header buttons are gone. Health labels and attainment on the Forecast, Team and Today tabs change accordingly. Carried: the Forecast ledger's editable Commit was never stored (handoff item 18); "Coach →", Home's annual ÷ 4 quota card, and the tab having no export at all (item 19).
 **Prior batch:** **the Reports audit closed (§0.68 → §0.69–§0.77, seven batches), the 401 banner and the MFA catalogue card made honest (§0.78), every native confirm/prompt replaced by house dialogs and coaching notes persisted with a Manager-writable settings key (§0.79)** — all shipped to prod, each deploy verified by bundle hash; the Manager path and the after-7pm date observed by Jeff as Karen; carried: Settings catalogue footers and Workspace Health constants (handoff item 15), the Sales Manager tab's calendar quarter (16), addressed coaching notes as a product (17).
@@ -3102,6 +3103,49 @@ the Admin "Import N legacy notes" button** ("import n legacy notes is done")
 empty; the settings key `coachingNotes` now exists only so that button can
 appear for an org that still holds old rows, and can be retired once no org
 does (carried, handoff item 23).
+
+### 0.83 The coachingNotes settings key is retired (3 Sep, fifth session)
+
+**Jeff: "do 23."** Item 23 existed only because §0.82's import needed the
+old blob readable; Jeff ran the import on dev and on prod the same
+morning ("import n legacy notes is done"), so nothing reads the key any
+more.
+
+**What changed.** `settings.mjs`: the `coachingNotes` line is gone from
+the GET response object and from the PUT read-then-merge (both halves at
+once — the CLAUDE.md rule cuts both ways; a value an old org still holds in
+`extra` is simply never read or rewritten), and the comment above the
+Admin gate says so. `coaching-notes.mjs`: the legacy POST branch is gone
+— no `legacy` flag, no Admin-only import gate, no `authorName` from the
+payload, no `onConflictDoNothing`; POST is one insert, one audit row,
+one 201. `_coaching.mjs`: `audienceOf(body)` has no legacy escape — a
+note always needs people or a team. `src/utils/coachingNotes.js`:
+`parseCoachingNote` (the §0.79 "rep: text" parser) and `legacyNotePayload`
+are gone; `audienceLabel` still reads a row's `legacy` flag for the
+"Imported · no recipient" label, because the rows the import wrote keep
+it. SalesManagerTab: the "Import N legacy notes" button, `legacyNotes`,
+`importLegacy`, the idle-message banner that only it set, and the
+`addCoachingNote` destructure are gone; `setSettings` stays (quota
+edits). `useSettings` never carried the key. The `legacy` COLUMN stays
+(§18c: additive only, and it is data).
+
+**Tests.** `house-dialogs.test.mjs`: the parser test is gone; the
+settings scan now asserts `coachingNotes:` appears in NEITHER half.
+`coaching-notes.test.mjs` (14, was 16): the legacy payload test is gone;
+`audienceOf({}, { legacy:true })` must now be refused; the function scan
+requires the plain Admin | Manager gate and forbids `data.legacy`,
+`onConflictDoNothing` and `coaching_note.imported`; the tab, util and
+useSettings scans forbid every import identifier. The integration suite's
+legacy test became "a payload that still says legacy:true is an ordinary
+note": 400 without an audience, 201 with one, the row's `legacy` false and
+`authorName` the caller's. Four mutants retired with their targets (the
+"rep: text" parser, the settings PUT whitelist line, the legacy id and the
+ambiguous-name guess); the §18b26 `today = todayLocal()` mutant keeps its
+target in `newNotePayload` and stays. Gates green on 145 files,
+**482/482**, **214/214 mutations, printed green baseline**, **87/87
+integration**, build guard OK (2,489 kB, `index-DzhyaR_f.js`), `dist/`
+cleared. Not browser-checked: nothing user-visible changes for an org
+that has imported — the button was already gone on dev and prod.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

@@ -3,8 +3,9 @@
 // endpoint's identity and visibility rules against the real database: author
 // stamped from the caller, reps cannot write, a note to people is invisible to
 // another manager, a team note obeys the member's first day, read stamps need
-// visibility, delete is author-or-Admin, the legacy import is idempotent, and
-// org B sees nothing of org A.
+// visibility, delete is author-or-Admin, a legacy-flagged payload is an
+// ordinary note (the import branch is gone, §0.83), and org B sees nothing of
+// org A.
 //
 // Run:  npm run test:int   (needs DATABASE_URL_TEST — and the coaching_notes
 // table + users.team_joined_at from db/apply-coaching-notes.mjs --test)
@@ -155,18 +156,14 @@ test('delete: a recipient and another manager are refused; the author succeeds; 
     assert.equal(await row('cn_t12'), undefined);
 });
 
-test('the legacy import is Admin-only and idempotent: 201 then 200, one row, author-only when unresolved', async () => {
-    const body = { id: 'cn_legacy_cn_1', text: 'old note', date: '2026-09-02', recipientIds: [], legacy: true, authorName: 'Jeff Russell' };
-    assert.equal((await handler(asMgr(ev(A, 'POST', body)))).statusCode, 403, 'a Manager may not import');
-    const first = await handler(ev(A, 'POST', body));
-    assert.equal(first.statusCode, 201);
-    const again = await handler(ev(A, 'POST', body));
-    assert.equal(again.statusCode, 200, 'a second import is a no-op');
-    const rows = await db.select().from(coachingNotes).where(eq(coachingNotes.id, 'cn_legacy_cn_1'));
-    assert.equal(rows.length, 1);
-    assert.deepEqual([rows[0].legacy, rows[0].authorName, rows[0].authorId], [true, 'Jeff Russell', ADMIN]);
-    assert.deepEqual(await idsSeen(asRep1), ['cn_t5'], 'author-only: no rep sees the unresolved import');
-    assert.ok((await idsSeen(null)).includes('cn_legacy_cn_1'), 'Admin does');
+test('a payload that still says legacy:true is an ordinary note: it needs an audience, and the flag and authorName are ignored', async () => {
+    const noAudience = { id: 'cn_legacy_cn_1', text: 'old note', date: '2026-09-02', recipientIds: [], legacy: true, authorName: 'Jeff Russell' };
+    assert.equal((await handler(ev(A, 'POST', noAudience))).statusCode, 400, 'the legacy escape hatch is gone (§0.83)');
+    assert.equal(await row('cn_legacy_cn_1'), undefined);
+    const res = await handler(ev(A, 'POST', { ...noAudience, id: 'cn_flagged', recipientIds: [REP1] }));
+    assert.equal(res.statusCode, 201);
+    const r = await row('cn_flagged');
+    assert.deepEqual([r.legacy, r.authorName, r.authorId], [false, 'Itest Cnote Admin', ADMIN], 'the column stays false and the author is the caller');
 });
 
 test('org B sees nothing of org A, and cannot read or delete A\'s rows by id', async () => {

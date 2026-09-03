@@ -8,7 +8,6 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCoachingNote } from '../src/utils/coachingNotes.js';
 
 const root = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
@@ -20,15 +19,6 @@ const walk = (dir, out = []) => {
     }
     return out;
 };
-
-test('parseCoachingNote: "rep: text" splits on the first colon; no colon is text only', () => {
-    assert.deepEqual(parseCoachingNote('Karen Russell: great discovery call'), { rep: 'Karen Russell', text: 'great discovery call' });
-    assert.deepEqual(parseCoachingNote('follow up on pricing: soon'), { rep: 'follow up on pricing', text: 'soon' });
-    assert.deepEqual(parseCoachingNote('no rep here'), { rep: '', text: 'no rep here' });
-    assert.deepEqual(parseCoachingNote('Karen:'), { rep: '', text: 'Karen' });
-    assert.equal(parseCoachingNote('   '), null);
-    assert.equal(parseCoachingNote(null), null);
-});
 
 test('no native confirm() or prompt() survives anywhere under src/', () => {
     const offenders = [];
@@ -67,10 +57,9 @@ test('every replaced site goes through showConfirm / showPrompt', () => {
     assert.ok(sm.includes('onClick={showCoachingNote}'));
 });
 
-test('coachingNotes stays in BOTH halves of settings.mjs for the Admin import; the Manager carve-out is retired (§0.82)', () => {
+test('coachingNotes is OUT of settings.mjs entirely (§0.83), and the Manager carve-out is gone (§0.82)', () => {
     const s = read('netlify/functions/settings.mjs');
-    assert.ok(s.includes("coachingNotes:        row.extra?.coachingNotes        || [],"), 'GET returns it');
-    assert.ok(s.includes("coachingNotes:        'coachingNotes'        in data ? (data.coachingNotes        || [])   : existingExtra.coachingNotes        || [],"), 'PUT merges it (the import empties it)');
+    assert.doesNotMatch(s, /coachingNotes:/, 'neither half carries the key — the notes have their own table');
     assert.ok(!s.includes('managerNote'), 'no Manager may write the settings blob');
     assert.ok(s.includes("const forbidden = requireRole(auth, ['Admin'], headers);"));
 });

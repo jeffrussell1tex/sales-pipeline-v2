@@ -8,13 +8,14 @@
 //   (b) managers cannot see each other's private notes — a note to people is
 //       visible to its author, its recipients and Admins, not a recipient's
 //       own manager unless they wrote it.
-// The client helpers (payloads, the idempotent legacy import, the "for you"
-// tests) and the wiring scans follow.
+// The client helpers (payloads, the "for you" tests) and the wiring scans
+// follow. The one-time legacy import ran on dev and prod on 3 Sep 2026 and its
+// code is gone (§0.83).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { noteVisibleTo, firstDayOf, canDeleteNote, audienceOf, isReadBy as srvIsReadBy } from '../netlify/functions/_coaching.mjs';
-import { parseCoachingNote, newNotePayload, legacyNotePayload, audienceLabel, isAddressedTo, isReadBy, unreadFor, sortNotes } from '../src/utils/coachingNotes.js';
+import { newNotePayload, audienceLabel, isAddressedTo, isReadBy, unreadFor, sortNotes } from '../src/utils/coachingNotes.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 
@@ -91,13 +92,13 @@ test('delete: the author or an Admin; read stamps are per user', () => {
     assert.equal(srvIsReadBy({ ...people, readBy: null }, 'usr_rep1'), false);
 });
 
-test('audienceOf: people OR a team, never both, never neither — except a legacy import', () => {
+test('audienceOf: people OR a team, never both, never neither', () => {
     assert.deepEqual(audienceOf({ recipientIds: ['a', 'a', 'b'] }), { ok: true, recipientIds: ['a', 'b'], teamId: null });
     assert.deepEqual(audienceOf({ teamId: 't1' }), { ok: true, recipientIds: [], teamId: 't1' });
     assert.equal(audienceOf({ recipientIds: ['a'], teamId: 't1' }).ok, false);
     assert.equal(audienceOf({}).ok, false);
     assert.equal(audienceOf({ recipientIds: [3, null, ''] }).ok, false, 'non-string ids are not recipients');
-    assert.deepEqual(audienceOf({}, { legacy: true }), { ok: true, recipientIds: [], teamId: null }, 'an unresolvable legacy rep name');
+    assert.equal(audienceOf({}, { legacy: true }).ok, false, 'the legacy escape hatch is gone (§0.83)');
 });
 
 // ── client helpers ────────────────────────────────────────────────────────────
@@ -108,20 +109,6 @@ test('newNotePayload: local day, one audience, trimmed text; nothing without an 
     assert.equal(newNotePayload({ text: '', recipientIds: ['a'] }), null);
     assert.equal(newNotePayload({ text: 'x', recipientIds: [] }), null);
     assert.ok(read('src/utils/coachingNotes.js').includes('today = todayLocal()') && !read('src/utils/coachingNotes.js').includes('toISOString'), 'the day is local (18b26)');
-});
-
-test('legacyNotePayload: id derived from the old id (idempotent), rep name resolved against the roster, ambiguity unresolved', () => {
-    const roster = [{ id: 'usr_k', name: 'Karen Russell' }, { id: 'usr_j', name: 'Jeff Russell' }, { id: 'usr_s1', name: 'Sam Lee' }, { id: 'usr_s2', name: 'Sam Lee' }];
-    const p = legacyNotePayload({ id: 'cn_1756800000000', rep: 'Karen Russell', text: 'nice close', date: '2026-09-02', author: 'Jeff Russell' }, roster);
-    assert.equal(p.id, 'cn_legacy_cn_1756800000000');
-    assert.deepEqual([p.recipientIds, p.teamId, p.legacy, p.authorName, p.date, p.unresolvedRep], [['usr_k'], null, true, 'Jeff Russell', '2026-09-02', null]);
-    assert.equal(legacyNotePayload({ id: 'a', rep: 'karen russell', text: 't', date: '2026-09-02' }, roster).recipientIds[0], 'usr_k', 'case-insensitive');
-    const amb = legacyNotePayload({ id: 'b', rep: 'Sam Lee', text: 't', date: '2026-09-02' }, roster);
-    assert.deepEqual([amb.recipientIds, amb.unresolvedRep], [[], 'Sam Lee'], 'two Sams: nobody is guessed');
-    assert.deepEqual(legacyNotePayload({ id: 'c', rep: '', text: 'no rep', date: '2026-09-02' }, roster).recipientIds, []);
-    assert.equal(legacyNotePayload({ id: 'd', rep: 'Karen Russell', text: '   ' }, roster), null, 'an empty note is not imported');
-    assert.equal(legacyNotePayload({ id: 'e', text: 'x', date: 'not a day' }, roster).date.length, 10, 'an unreadable date becomes today, not garbage');
-    assert.deepEqual(parseCoachingNote('Karen Russell: great call'), { rep: 'Karen Russell', text: 'great call' }, 'the old "rep: text" parser stays for the import');
 });
 
 test('audienceLabel, isAddressedTo, isReadBy, unreadFor, sortNotes', () => {
@@ -156,8 +143,8 @@ test('the function stamps the author from the caller, filters through the pure m
     assert.doesNotMatch(fn, /authorId:\s*data\.authorId/, 'never the payload');
     assert.ok(fn.includes('rows.filter(n => noteVisibleTo(n, me, teams))'), 'GET filters on the server');
     assert.ok(fn.includes("if (!me) return reply(200, { coachingNotes: [] });"), 'an unresolvable caller gets nothing, not everything');
-    assert.ok(fn.includes("legacy ? ['Admin'] : ['Admin', 'Manager']"), 'reps cannot write; only Admins import');
-    assert.ok(fn.includes('onConflictDoNothing({ target: coachingNotes.id })'), 'the legacy import is idempotent');
+    assert.ok(fn.includes("requireRole(auth, ['Admin', 'Manager'], headers)"), 'reps cannot write');
+    assert.doesNotMatch(fn, /data\.legacy|onConflictDoNothing|coaching_note\.imported/, 'the legacy import branch is gone (§0.83)');
     assert.ok(fn.includes("if (!noteVisibleTo(note, me, teams)) return reply(404"), 'marking read needs visibility, and does not confirm existence');
     assert.ok(fn.includes('if (!canDeleteNote(note, me)) return reply(403'));
     assert.ok(read('db/schema.ts').includes("export const coachingNotes = pgTable('coaching_notes'"), 'the table is in the schema');
@@ -171,7 +158,7 @@ test('users.mjs stamps team_joined_at when a rep\'s team changes, and the settin
     const s = read('netlify/functions/settings.mjs');
     assert.doesNotMatch(s, /managerNote/, 'the §0.79 carve-out is retired');
     assert.ok(s.includes("const forbidden = requireRole(auth, ['Admin'], headers);"));
-    assert.ok(s.includes("coachingNotes:        row.extra?.coachingNotes        || [],"), 'GET still returns the blob so the Admin import can read it');
+    assert.doesNotMatch(s, /coachingNotes:/, 'the key is out of both halves (§0.83)');
 });
 
 test('the client: a house dialog with a picker, the Team tab reads the table, Home shows notes addressed to me, the bell counts unread', () => {
@@ -180,7 +167,9 @@ test('the client: a house dialog with a picker, the Team tab reads the table, Ho
     assert.doesNotMatch(sm, /showPrompt\(\{\s*title: 'Add coaching note'/, 'the typed "rep: text" prompt is gone');
     assert.doesNotMatch(sm, /settings\.coachingNotes \|\| \[\]\)\s*\.sort/, 'the card no longer reads the blob');
     assert.ok(sm.includes('const recentNotes = sortNotes(coachingNotes)'), 'the card reads the table');
-    assert.ok(sm.includes('legacyNotePayload(old, roster)') && sm.includes("coachingNotes: []"), 'the Admin import, then the blob is emptied');
+    assert.doesNotMatch(sm, /legacyNotePayload|legacyNotes|settings\.coachingNotes/, 'the import button and every read of the blob are gone (§0.83)');
+    assert.doesNotMatch(read('src/utils/coachingNotes.js'), /legacyNotePayload|parseCoachingNote/, 'the import helpers are gone');
+    assert.doesNotMatch(read('src/hooks/useSettings.js'), /coachingNotes/, 'no client default for the key');
     assert.doesNotMatch(sm, />See all →</, 'the inert button is gone');
     const home = read('src/Tabs/HomeTab.jsx');
     assert.ok(home.includes('isAddressedTo(n, currentUserId, myTeamId)'), 'Home shows what is addressed to me');

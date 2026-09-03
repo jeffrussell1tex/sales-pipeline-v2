@@ -156,7 +156,6 @@ export const handler = async (event) => {
                 industries:           row.extra?.industries            || null,
                 buyerPersonas:        row.extra?.buyerPersonas         || [],
                 // Sales Manager coaching notes — Manager-writable (see the PUT gate).
-                coachingNotes:        row.extra?.coachingNotes        || [],
                 quotesEnabled:        row.extra?.quotesEnabled         ?? true,
                 dispatchEnabled:      row.extra?.dispatchEnabled       ?? false,
                 dispatchSkills:       row.extra?.dispatchSkills        || [],
@@ -190,10 +189,10 @@ export const handler = async (event) => {
             // fiscal year, the BYOK key). Per the role model, only Admins may
             // write them — without this, any member could rewrite shared config
             // that every other user depends on.
-            // The §0.79 Manager carve-out for coachingNotes is retired (state §0.82):
-            // notes live in their own table now (coaching-notes.mjs). The key stays
-            // in this blob only so the Admin import can read the old rows and then
-            // empty it.
+            // Coaching notes are not in this blob any more (state §0.82): they live in
+            // their own table (coaching-notes.mjs). The §0.79 Manager carve-out and
+            // the coachingNotes key itself are gone (§0.83) — an old value left in
+            // extra by a pre-import org is simply never read or rewritten.
             const body = JSON.parse(event.body);
             const forbidden = requireRole(auth, ['Admin'], headers);
             if (forbidden) return forbidden;
@@ -301,7 +300,6 @@ export const handler = async (event) => {
                 ssoConfig:            'ssoConfig'            in data ? (data.ssoConfig            || null) : existingExtra.ssoConfig            || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 buyerPersonas:        'buyerPersonas'        in data ? (data.buyerPersonas        || [])   : existingExtra.buyerPersonas        || [],
-                coachingNotes:        'coachingNotes'        in data ? (data.coachingNotes        || [])   : existingExtra.coachingNotes        || [],
                 quotesEnabled:        'quotesEnabled'        in data ? !!data.quotesEnabled                : existingExtra.quotesEnabled        ?? true,
                 dispatchEnabled:      'dispatchEnabled'      in data ? !!data.dispatchEnabled               : existingExtra.dispatchEnabled       ?? false,
                 dispatchSkills:       'dispatchSkills'       in data ? (data.dispatchSkills       || [])   : existingExtra.dispatchSkills        || [],
