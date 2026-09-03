@@ -2634,6 +2634,14 @@ With an October fiscal start, September is Q4 FY26 to every report and
 totals (quota, closed, commit) share the calendar bucket is not yet
 read — the audit for that tab.
 
+**PROD SHIP (Jeff: "ship to prod").** `master` fast-forwarded `d63644f` →
+`d513b0e` by `git push origin dev:master` (ancestor check first; eight
+commits — the §0.78 notice reword, §0.79 and the docs around them);
+salespipelinetracker.com serves `index-C61hseh3.js` 31 seconds after the
+push — `pk_live_` inlined, the notice copy, the coaching-note prompt and
+the saved-report confirm present, 2,538,858 bytes. `master` == `dev` ==
+`d513b0e`.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
