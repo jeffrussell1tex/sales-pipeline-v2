@@ -36,7 +36,12 @@ production"): `master` fast-forwarded `d513b0e` → `bdb0f3c`,
 salespipelinetracker.com serves `index-CIR6aj2A.js` (20 seconds after the
 push, `pk_live_` inlined, all four new strings present, the coaching-notes
 function 401 unauthenticated); state §0.82 last paragraph. Jeff ran the
-Admin "Import N legacy notes" button on prod: done.** Third batch:
+Admin "Import N legacy notes" button on prod: done.** **Fourth batch, dev
+only — NOT shipped:** `6bf1e6e` (the coachingNotes settings key and the
+legacy import path retired, state §0.83); accelerep.netlify.app served
+`index-DzhyaR_f.js` 40 seconds after the push. Nothing user-visible
+changes for an org that has imported; shipping it is Jeff's call. Third
+batch:
 `aef4b4b` (coaching notes addressed to people or a team, their own table),
 state §0.82; docs `38b7d55`. Deploy-verified: accelerep.netlify.app served
 `index-Kg6gw2rZ.js` 41 seconds after the push; the deployed

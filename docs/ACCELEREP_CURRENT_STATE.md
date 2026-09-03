@@ -3147,6 +3147,13 @@ integration**, build guard OK (2,489 kB, `index-DzhyaR_f.js`), `dist/`
 cleared. Not browser-checked: nothing user-visible changes for an org
 that has imported — the button was already gone on dev and prod.
 
+**Dev landing (`e2dca2d`, the push carrying `6bf1e6e` and its handoff
+line):** accelerep.netlify.app served `index-DzhyaR_f.js` — the local gate
+build's hash — 40 seconds after the push (10:31:25 local, was
+`index-Kg6gw2rZ.js`), 2,548,788 bytes; the deployed `coaching-notes`
+function answers 401 unauthenticated. Not shipped to prod: the ship is
+Jeff's call, and nothing user-visible changes for an org that has imported.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
