@@ -1,26 +1,24 @@
 # SESSION_HANDOFF.md
 
-**Session of 1–2 September 2026, fourth session (the owed §18b26 bullet
-written, the nine stale App.jsx imports dropped, the importer's 9/15/2026
-check observed live, unreadable date cells REFUSED at Preview and the
-engine's year-2001 default gated — all on dev, then SHIPPED to prod; after the
-ship, Clerk's pending-session bypass found, observed and FIXED on dev, then
-shipped; the Win / loss report made to read the category it was never
-reading; the Activity report made to honour the rep slice; the Reports
-audit's §0.68 list fixed through batch 7, then SHIPPED to prod; the 401
-banner and the MFA catalogue card made honest; every native confirm/prompt
-replaced by house dialogs and coaching notes persisted; guide §18b28
-written), FINAL.** Repo
-root. Read this first, then verify every claim
-in it against the live repo before acting — **including the claims in this
-file**.
+**Session of 3 September 2026, fifth session (the Sales Manager tab moved
+onto the org's FISCAL quarter with quarter-to-date totals — item 16; the
+Settings catalogue and its panel headers stripped of invented text and the
+Workspace Health tile made to count only what it can read — item 15;
+coaching notes ADDRESSED to a person, people or a team in their own
+org-scoped table, with Jeff's two visibility rules, a picker dialog, a Home
+block, the bell and an idempotent legacy import — item 17; all three
+observed by Jeff on dev and SHIPPED to prod as the sixth ship; the prod
+legacy import run by Jeff; then the coachingNotes settings key retired —
+item 23, on dev only), FINAL.** Repo root. Read this first, then verify
+every claim in it against the live repo before acting — **including the
+claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.79` with a paragraph beginning **"Native dialogs replaced:"**, and
-does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
-beginning **"Never `window.confirm`"**? If not,
-you are looking at a copy that predates this handoff. Check section content,
-never dates.
+`### 0.83` with a paragraph beginning **"Jeff: "do 23.""**, and does
+`docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
+beginning **"Never `window.confirm`"** (the guide did not change this
+session)? If not, you are looking at a copy that predates this handoff.
+Check section content, never dates.
 
 **On dates:** §0.58, §0.59 and the previous handoff say "2 Sep". Git carries
 every one of their commits at 1 Sep -0500, the same day as §0.56/§0.57 and
@@ -293,32 +291,46 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (all observed 2 Sep, fourth session)
+## 4. Verified state at close (all observed 3 Sep, fifth session)
 
-Five gates green on 142 files · **446/446 unit** (6 in
-`house-dialogs.test.mjs`, 6 in `fetch-status.test.mjs`, 7 in `history-feed.test.mjs`, 5 in `reports-controls.test.mjs`, 5 in
-`stage-order.test.mjs`, 23 in `pipeline-report.test.mjs`, 9 in
-`opp-text.test.mjs`, 13 in `report-period.test.mjs`, 15 in
-`report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
-`session-status.test.mjs`) · **195/195 mutations, printed green baseline**
-(82 new this session; run alone) · build
-**2,479 kB JS**, `index-B0b_2Pd3.js` (items 13/14; dev deploy observed
-serving it for `147e5f4`), guard OK, `dist/` cleared · **79/79 integration**
-(re-run at §0.79 — settings.mjs changed) · **browser pass as Karen on
-localhost, Development, Require ON:** the pending session
-held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
-earlier the same session, the CSV refusal banner (state §0.64) · dev deploy
-observed serving `index-Cy6ZeOFD.js` for `ded3271` · `master` ==
-`d513b0e`, prod serving `index-C61hseh3.js` (fifth ship, §1), Require MFA
-ON on both Clerk instances · dev is ahead of master only by the prod-ship
-docs commit · the session's `netlify dev` stopped at close (pane server
-`1071f888`), `node_modules/.vite` and `dist` cleared after the last gate
-build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
+Five gates green on 145 files · **482/482 unit** (13 in
+`current-quarter.test.mjs`, 13 in `settings-cards.test.mjs`, 14 in
+`coaching-notes.test.mjs`; `house-dialogs` and `fetch-status` repointed) ·
+**214/214 mutations, printed green baseline** (26 added this session, 7
+retired with their targets — §0.82 three, §0.83 four; one §0.78 anchor
+repointed to `settingsCards.js` after the harness reported it STALE; run
+alone) · build **2,489 kB JS**, `index-DzhyaR_f.js`, guard OK, `dist/`
+cleared · **87/87 integration** (8 new in `coaching-notes.itest.mjs`; the
+test database carries `coaching_notes` and `users.team_joined_at`) ·
+**no pane browser pass this session** — every batch was observed by Jeff
+on deployed dev instead (Admin for items 16, 15, 17; Karen for 17's Home
+block and bell), each observation quoted in the state doc · dev deploys
+observed serving `index-ByAdikgx.js` (§0.80), `index-CsUn53YS.js` (§0.81),
+`index-Kg6gw2rZ.js` (§0.82), `index-DzhyaR_f.js` (§0.83) · **`master` ==
+`bdb0f3c`, prod serving `index-CIR6aj2A.js` (sixth ship, §1)**; dev is
+ahead of master by `6bf1e6e` (item 23, code) and docs · the shared app
+database and the test database both hold `coaching_notes` + its index and
+`users.team_joined_at` (`db/apply-coaching-notes.mjs`, read back) · both
+orgs' `settings.extra.coachingNotes` emptied by Jeff's imports · no
+`netlify dev` was started this session; `dist` cleared after the last gate
+build.
 
 ## 5. Next — start here
 
 **Next session prep, in order (Jeff: "update the next session prep"):**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
+  expect `6bf1e6e` (item 23, code) and docs commits after `bdb0f3c`;
+  anything else is unshipped code and a finding. **Item 23 is the one
+  unshipped code commit:** shipping it is Jeff's call (nothing user-visible
+  changes for an org that has imported; it removes the settings key and the
+  legacy POST branch).
+- **Then pick from items 18–22** — each starts with a read of files this
+  session did not open (the Forecast Commit persistence, the inert Coach
+  chips and Home's quota card, the Performance rep view, the four mockup
+  Security / Data panels, the hand-typed card counts and NEW badges). Items
+  21 and 22 are Jeff's calls before code.
+- **Karen is a User**; the dev org's coaching notes are all in the table.
+- **(Historic, fourth session):** `git log --oneline origin/master..dev` —
   expect only docs commits after `d513b0e`; anything else is unshipped code
   and a finding.
 - **Karen's role: back to User** (Jeff, 2 Sep close: "already done"). She
@@ -712,3 +724,23 @@ was gated, mutated, deployed, hash-checked, and the last two were observed
 by Jeff signed in as a Manager he had just made. What is left is written
 down with what exists and what was decided, and nothing in this file
 describes a state that was not seen.
+
+**Fifth session (3 Sep).** Three carried items and one new one, in the
+order the handoff gave them. Item 16 began as a header fix and became a
+question put to Jeff with the audit in front of him — the totals under the
+header were on no quarter at all — and he chose quarter-to-date. Item 15's
+"footers" turned out to be one of three classes of invented text, and the
+fix moved the card logic into a pure module where the harness could reach
+it; the harness then reported a stale anchor from the day before, which is
+what it is for. Item 17 was designed before it was built: two decisions
+taken by Jeff before the schema was written, the DDL in both databases
+before the code, visibility in a pure module with the two rules as
+regression cases, and the old blob migrated by a button that cannot
+duplicate on a second click. Everything went to dev, was observed by Jeff
+as Admin and as Karen, and shipped to prod as one fast-forward — the first
+ship to carry a new table. Then the import ran on prod, and the scaffolding
+that made it possible was taken down the same morning, four mutants
+retiring with their targets. Two anchors were mis-typed on the way and each
+was re-read from disk before anything was written; one claim about a
+working Export button was made without reading and corrected in the same
+message it would have misled. Observed, then written, then committed.
