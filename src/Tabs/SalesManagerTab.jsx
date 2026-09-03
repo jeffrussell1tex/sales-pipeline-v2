@@ -4,6 +4,8 @@ import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import { isoLocal, todayLocal } from '../utils/dateLocal';
 import { currentQuarter } from '../utils/quarters';
+import { fiscalRange } from '../utils/reportPeriod';
+import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
 
 // ── V1 Design tokens ──────────────────────────────────────────
 const T = {
@@ -44,22 +46,27 @@ const Avatar = ({ name, size=28 }) => {
 };
 
 // ── Per-rep stats computation ─────────────────────────────────
-function buildRepStats(rep, opportunities, activities, tasks) {
+// `period` is the current fiscal quarter from currentQuarter(): { q, from, to }.
+// Closed and quota are QUARTER-TO-DATE — the deals won inside it by close day
+// (closeDayInRange, §0.75) against that quarter's figure (userQuotaFor: a
+// quarterly plan's own number, else annual ÷ 4). They used to be every Closed
+// Won deal the rep ever had against the ANNUAL quota, under a header that names
+// a quarter (state §0.80; Jeff's call). wonOpps stays all-time: the Team tab's
+// win rate reads it.
+function buildRepStats(rep, opportunities, activities, tasks, period) {
     const today    = new Date();
     const todayStr = isoLocal(today);
 
     const allRepOpps  = (opportunities||[]).filter(o => o.salesRep === rep.name || o.assignedTo === rep.name);
     const activeOpps  = allRepOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
     const wonOpps     = allRepOpps.filter(o => o.stage === 'Closed Won');
+    const wonInQ      = wonOpps.filter(o => closeDayInRange(o, period.from, period.to));
 
-    const closedArr   = wonOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+    const closedArr   = wonInQ.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
     const pipelineArr = activeOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
 
-    // Quota
-    const quotaMode = rep.quotaType || 'annual';
-    const quota     = quotaMode === 'annual'
-        ? (rep.annualQuota || 0)
-        : (rep.q1Quota||0)+(rep.q2Quota||0)+(rep.q3Quota||0)+(rep.q4Quota||0);
+    // Quota — this quarter's
+    const quota     = userQuotaFor(rep, `Q${period.q}`);
     const attainPct = quota > 0 ? Math.round((closedArr / quota) * 100) : null;
 
     // Commit — use rep.commit field (editable in Forecast tab)
@@ -98,7 +105,7 @@ function buildRepStats(rep, opportunities, activities, tasks) {
     // Trend (positive = improving)
     const trend = attainPct !== null && attainPct >= 80 ? 'up' : attainPct !== null && attainPct < 40 ? 'down' : 'flat';
 
-    return { rep, quota, closedArr, commit, bestCase, pipelineArr, attainPct, score, healthColor, healthLabel, trend, daysSinceAct, act7d, stuck, overdueCnt, wonOpps, activeOpps };
+    return { rep, quota, closedArr, commit, bestCase, pipelineArr, attainPct, score, healthColor, healthLabel, trend, daysSinceAct, act7d, stuck, overdueCnt, wonOpps, wonInQ, activeOpps };
 }
 
 // ── QuotaRepCard (unchanged from original) ────────────────────
@@ -294,7 +301,10 @@ function ForecastTab({ card, repStats, teamAttain, teamBest, teamClosed, teamCom
 // ════════════════════════════════════════════════════════
 // ADMINISTRATION TAB (unchanged logic, V1 tokens)
 // ════════════════════════════════════════════════════════
-function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, opportunities, quarters, quotaMode, saveState, setActiveTab, setAllQuotaMode, setSaveState, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, updateRepField, visibleReps }) {
+// `fyRange` is the current fiscal year { from, to }: the board's quota column is
+// the ANNUAL figure, so its bar is fiscal-year-to-date won by close day — not
+// every deal ever (state §0.80).
+function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, isAdmin, opportunities, quarters, quotaMode, saveState, setActiveTab, setAllQuotaMode, setSaveState, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, updateRepField, visibleReps }) {
     const unassignedReps = isAdmin ? visibleReps.filter(u => !u.territory?.trim()) : [];
     const visibleTerritories = [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort();
     const terrFilter = settings.__qbTerrFilter || 'all';
@@ -439,7 +449,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, o
 
             {/* Column headers */}
             <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'6px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
-                <div>Rep</div><div>{quotaMode==='annual'?'Annual Quota':'Total Quota'}</div><div>Attainment</div>
+                <div>Rep</div><div>{quotaMode==='annual'?'Annual Quota':'Total Quota'}</div><div>FY attainment</div>
             </div>
 
             {visibleReps.length === 0 ? (
@@ -463,7 +473,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, o
                                 </div>
                             )}
                             {terrReps.map((u,ui) => {
-                                const rWon = (opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                                const rWon = (opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)&&closeDayInRange(o, fyRange.from, fyRange.to)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                                 const quota = getRepTotal(u);
                                 const attain = quota>0 ? Math.min((rWon/quota)*100,100) : 0;
                                 const aColor = attain>=100?T.ok:attain>=75?T.warn:attain>=40?T.info:T.inkMuted;
@@ -496,7 +506,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, getRepTotal, isAdmin, o
                 })}
                 {/* Unassigned reps */}
                 {isAdmin && filteredReps.filter(u=>!u.territory?.trim()).map((u,ui,arr) => {
-                    const rWon=(opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                    const rWon=(opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)&&closeDayInRange(o, fyRange.from, fyRange.to)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                     const quota=getRepTotal(u), attain=quota>0?Math.min((rWon/quota)*100,100):0;
                     const aColor=attain>=100?T.ok:attain>=75?T.warn:T.inkMuted;
                     const initials=(u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
@@ -698,9 +708,23 @@ export default function SalesManagerTab() {
         (currentUserObj?.team   && u.team   === currentUserObj?.team)
     );
 
+    // Quarter info — the org's FISCAL quarter from quarters.js, the helper Home
+    // and every report already use. This block built a CALENDAR quarter from
+    // now.getMonth() and never read settings.fiscalYearStart, so with an October
+    // fiscal start the header read "Q3 2026 · 4 weeks remaining" on the day Home
+    // read "Q4 · Week 10" (state §0.80). Default 10 is the App.jsx / HomeTab /
+    // ReportsTab convention. weeksLeft counts today and is never 0 — the
+    // Gap-to-Quota tile divides by it.
+    const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
+    const curQ      = currentQuarter(fiscalStart);
+    const weeksLeft = curQ.weeksLeft;
+    const qLabel    = curQ.label;
+    const fyRange   = fiscalRange(curQ.fiscalYear, 'FY', fiscalStart);
+
     const repStats = useMemo(() =>
-        visibleReps.map(rep => buildRepStats(rep, opportunities, activities, tasks)),
-        [visibleReps, opportunities, activities, tasks]
+        visibleReps.map(rep => buildRepStats(rep, opportunities, activities, tasks, curQ)),
+        // curQ is a fresh object every render; its key names the quarter.
+        [visibleReps, opportunities, activities, tasks, curQ.key]   // eslint-disable-line react-hooks/exhaustive-deps
     );
 
     const quarters    = ['Q1','Q2','Q3','Q4'];
@@ -765,18 +789,6 @@ export default function SalesManagerTab() {
     const teamBest    = repStats.reduce((s,r) => s+r.bestCase, 0);
     const teamPipe    = repStats.reduce((s,r) => s+r.pipelineArr, 0);
     const teamAttain  = teamQuota > 0 ? Math.round((teamClosed/teamQuota)*100) : null;
-
-    // Quarter info — the org's FISCAL quarter from quarters.js, the helper Home
-    // and every report already use. This block built a CALENDAR quarter from
-    // now.getMonth() and never read settings.fiscalYearStart, so with an October
-    // fiscal start the header read "Q3 2026 · 4 weeks remaining" on the day Home
-    // read "Q4 · Week 10" (state §0.80). Default 10 is the App.jsx / HomeTab /
-    // ReportsTab convention. weeksLeft counts today and is never 0 — the
-    // Gap-to-Quota tile divides by it.
-    const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
-    const curQ      = currentQuarter(fiscalStart);
-    const weeksLeft = curQ.weeksLeft;
-    const qLabel    = curQ.label;
 
     // Card style
     const card = { background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, overflow:'hidden', marginBottom:16 };
@@ -1219,11 +1231,6 @@ export default function SalesManagerTab() {
                     <div style={{ fontSize:28, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, letterSpacing:-0.8, color:T.ink, lineHeight:1, marginBottom:5 }}>Sales Manager</div>
                     <div style={{ fontSize:12, color:T.inkMuted }}>Team forecast · {qLabel} · {weeksLeft} weeks remaining</div>
                 </div>
-                <div style={{ display:'flex', gap:8 }}>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:12, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>This quarter</button>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:12, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>All reps</button>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:12, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Export</button>
-                </div>
             </div>
 
             <SubTabs />
@@ -1238,7 +1245,7 @@ export default function SalesManagerTab() {
                 card={card} cardHdr={cardHdr} eyebrow={eyebrow}
                 settings={settings} setSettings={setSettings}
                 opportunities={opportunities} currentUser={currentUser} isAdmin={isAdmin}
-                visibleReps={visibleReps} quarters={quarters} quotaMode={quotaMode}
+                visibleReps={visibleReps} quarters={quarters} quotaMode={quotaMode} fyRange={fyRange}
                 getRepTotal={getRepTotal} updateRepField={updateRepField}
                 saveState={saveState} setSaveState={setSaveState}
                 setAllQuotaMode={setAllQuotaMode} setActiveTab={setActiveTab}

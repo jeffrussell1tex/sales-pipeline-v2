@@ -1026,6 +1026,22 @@ const mutations = [
         'src/Tabs/SalesManagerTab.jsx',
         "    const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;",
         "    const fiscalStart = parseInt(settings?.fiscalYearStart) || 1;"],
+    ['manager: Closed is every deal ever won again (no quarter window)',
+        'src/Tabs/SalesManagerTab.jsx',
+        "    const wonInQ      = wonOpps.filter(o => closeDayInRange(o, period.from, period.to));",
+        "    const wonInQ      = wonOpps;"],
+    ['manager: Quota is the annual figure again under the quarter header',
+        'src/Tabs/SalesManagerTab.jsx',
+        "    const quota     = userQuotaFor(rep, `Q${period.q}`);",
+        "    const quota     = userQuotaFor(rep, 'FY');"],
+    ['manager: the Administration bar counts every deal ever won against the annual quota',
+        'src/Tabs/SalesManagerTab.jsx',
+        "&&closeDayInRange(o, fyRange.from, fyRange.to)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);\n                                const quota = getRepTotal(u);",
+        ").reduce((s,o)=>s+(parseFloat(o.arr)||0),0);\n                                const quota = getRepTotal(u);"],
+    ['manager: the stats ignore the quarter they were handed (memo deps drop the key)',
+        'src/Tabs/SalesManagerTab.jsx',
+        "        [visibleReps, opportunities, activities, tasks, curQ.key]",
+        "        [visibleReps, opportunities, activities, tasks]"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
