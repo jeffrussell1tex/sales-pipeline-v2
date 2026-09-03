@@ -320,6 +320,16 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
 - **Items 21 and 22 are new** (found reading for 15): four Security / Data
   panels are mockups in depth; the remaining hand-typed card counts and the
   16 never-expiring NEW badges. Both are Jeff's calls before code.
+- **Item 17 DONE (3 Sep, `aef4b4b`, state §0.82)** — coaching notes in
+  their own table, addressed to people or a team. **The DDL is already in
+  BOTH databases** (test and the shared app database), so the code may
+  deploy in any order (§18c satisfied). **Jeff eyeballs on deployed dev:**
+  as Admin, Sales Manager → Team → "+ Add coaching note" opens the dialog
+  and a note to Karen lists with her name; as Karen, Home shows "Notes from
+  your manager" unread, the bell counts it, "Mark read" clears both; the
+  "Import 2 legacy notes" button moves the two test notes and disappears.
+  **Then prod ship** (Jeff: "and then we will ship to prod") — after the
+  ship, Jeff imports prod's legacy notes as Admin the same way.
 - **Items 18 and 19 are new** (found reading for 16): the Forecast ledger's
   Commit is never stored; "Coach →" is inert; Home's quota card is annual
   ÷ 4; the tab has no export at all.
@@ -544,7 +554,23 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    SalesManagerTab.jsx ~line 769: `qNum = Math.floor(now.getMonth()/3)+1`,
    `qEnd` the calendar quarter's last day, `weeksLeft` from it; no read of
    `fiscalYearStart` anywhere in the file.
-17. **Product (Jeff, 2 Sep, after observing §0.79): coaching notes should
+17. **DONE — state §0.82, commit `aef4b4b` (3 Sep; Jeff: "lets do item 17
+   and then we will ship to prod").** Two decisions taken by Jeff before the
+   schema was written: **first day = the team-join date** (new nullable
+   `users.team_joined_at`, stamped by users.mjs on a team change, falling
+   back to `created_at`), and **the old blob notes migrate through an
+   Admin import button** (idempotent). Built: `coaching_notes` table (DDL
+   applied to test and app databases first), `_coaching.mjs` (pure
+   visibility: author / recipients / Admins for a people note — never
+   another manager; team manager + members from their first day for a team
+   note), `coaching-notes.mjs` (GET filtered server-side, POST Admin |
+   Manager with author stamped from the caller, PUT read, DELETE
+   author-or-Admin, legacy POST Admin-only and upsert-on-id),
+   `CoachingNoteDialog` with a rep/team picker, the Team tab on the table,
+   Home's "Notes from your manager", unread notes in the bell, the
+   settings Manager carve-out retired. 16 unit + 8 integration tests, 9
+   mutations (218/218). Not browser-checked; Jeff's eyeball owed (prep
+   bullet above). Was: **Product (Jeff, 2 Sep, after observing §0.79): coaching notes should
    be ADDRESSED — a manager sends a note to a specific person, several
    people, or the whole team.** What exists today, read from code: a
    note is `{ id, rep, text, date, author }` in the org's
