@@ -667,8 +667,13 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    territories", "5 roles", "4 templates", "3 tiers", "12 holidays"). Each
    needs its panel's settings key read first. The 16 `isNew:true` badges
    never expire (dsp-* are months old). Not started.
-23. **Carried (after the prod import, state §0.82): retire the
-   `coachingNotes` settings key.** Both orgs' blobs are empty now; the key
+23. **DONE — state §0.83, commit `6bf1e6e` (3 Sep; Jeff: "do 23").** The
+   key is out of both halves of settings.mjs, the legacy POST branch out of
+   coaching-notes.mjs, the import button and helpers out of the tab and
+   the util; four mutants retired with their targets (214/214). On dev
+   only — not shipped; the ship is Jeff's call (nothing user-visible
+   changes for an org that has imported). Was: **Carried (after the prod
+   import, state §0.82): retire the `coachingNotes` settings key.** Both orgs' blobs are empty now; the key
    remains in both halves of settings.mjs and the GET default only so the
    Admin import button can appear for an org that still holds old rows. Once
    every org has imported (dev and prod have), drop the key from settings.mjs
