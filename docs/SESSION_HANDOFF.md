@@ -263,7 +263,17 @@ cleared at close.
    labels never read "Invalid Date"; the profile panel fits a two-org
    account with a long org name (Jeff's original prod report).
 3. **Still unobserved:** as Admin after 7pm Central, a coaching note carries
-   today's date (Jeff: "I will have to check the time tonight"). **The CSV
+   today's date (Jeff: "I will have to check the time tonight"). **Half
+   observed after 7pm on 2 Sep:** Jeff's Home header read "Good evening,
+   Jeff. Wednesday, Sep 2 · Q4 · Week 10" while UTC was already 3 Sep —
+   the header's day is local. The note itself is the Sales Manager tab's
+   "+ Add coaching note" button, which stamps `date: todayLocal()`
+   (SalesManagerTab.jsx ~line 838) — the same local-day helper, so the
+   same result is expected; not yet observed. **Found reading that code,
+   carried as item 14:** the note is added through the browser's native
+   `prompt()` and kept only in `setSettings` — no `dbFetch` follows and
+   `settings.mjs` has no `coachingNotes` key in GET or PUT, so a coaching
+   note vanishes on refresh (persistent-data rule; guide §18b1). **The CSV
    half is OBSERVED:** Jeff imported `zztest-close-dates.csv`; a read-only
    SELECT shows `9/15/2026` stored as `2026-09-15` and the ISO and
    Excel-datetime rows as expected (state §0.63). The three ZZTest Close
@@ -378,6 +388,16 @@ cleared at close.
    DocumentsTab.jsx, EditBrandModal.jsx and PriceBookDetail.jsx (three) —
    same fix, same batch, if Jeff wants the sweep. Jeff deleted the ZZTest
    deals and the two test saved reports himself after the prod eyeball.
+14. **Carried (found during item 3): coaching notes do not persist.**
+   SalesManagerTab's "+ Add coaching note" takes the text through a native
+   `prompt()` and writes `settings.coachingNotes` with `setSettings` only;
+   no `dbFetch` follows, and `settings.mjs` neither returns nor merges a
+   `coachingNotes` key, so the note is gone on refresh and never reaches
+   another Manager. Fix: a house modal for the text (the same
+   `confirmModal`-class dialog as item 13, or a small form), then save
+   through `settings` PUT with `coachingNotes` added to BOTH the GET
+   response and the read-then-merge (CLAUDE.md's `settings.extra` rule),
+   org-scoped like every other settings key.
 
 ## 6. The thread
 
