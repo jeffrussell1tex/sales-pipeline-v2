@@ -31,6 +31,15 @@ their headers is Jeff's call, not done.
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
 
+**Fifth session (3 Sep), on dev only — NOT shipped to prod:** `1e15e45`
+(Sales Manager header on the org's fiscal quarter, weeks remaining never
+0) and `327ce8f` (totals quarter-to-date, Administration bar FY-to-date,
+three inert header buttons removed), state §0.80; docs `b673aa2`,
+`49ca620`. Deploy-verified: accelerep.netlify.app served
+`index-ByAdikgx.js` (the local gate build's hash) 21 seconds after the
+push. Jeff's Admin eyeball of the tab on deployed dev is still owed
+before any prod ship; prod stays at `d513b0e`.
+
 **Fourth session, on top of everything below:** `410095e` (the owed guide
 bullet, docs only); `7f14eb3` (nine unused default imports removed from
 App.jsx, state §0.63; deploy-verified, accelerep.netlify.app served

@@ -2782,6 +2782,13 @@ browser-checked here** (Admin/Manager-only tab); Jeff eyeballs on deployed
 dev as Admin: header "Q4 FY2026 · N weeks remaining", Forecast Closed
 equal to this quarter's wins, Administration "FY attainment".
 
+**Dev landing (`49ca620`, the push carrying `1e15e45` → `327ce8f` and
+their docs):** accelerep.netlify.app served `index-ByAdikgx.js` — the local
+gate build's hash — 21 seconds after the push (08:46:47 local, was
+`index-B0b_2Pd3.js`), 2,538,382 bytes, "FY attainment" and "weeks
+remaining" present in the bundle. Jeff's Admin eyeball of the tab is
+still owed.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
