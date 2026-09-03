@@ -1,23 +1,20 @@
 # SESSION_HANDOFF.md
 
-**Session of 3 September 2026, fifth session (the Sales Manager tab moved
-onto the org's FISCAL quarter with quarter-to-date totals — item 16; the
-Settings catalogue and its panel headers stripped of invented text and the
-Workspace Health tile made to count only what it can read — item 15;
-coaching notes ADDRESSED to a person, people or a team in their own
-org-scoped table, with Jeff's two visibility rules, a picker dialog, a Home
-block, the bell and an idempotent legacy import — item 17; all three
-observed by Jeff on dev and SHIPPED to prod as the sixth ship; the prod
-legacy import run by Jeff; then the coachingNotes settings key retired —
-item 23, on dev only), FINAL.** Repo root. Read this first, then verify
+**Session of 3 September 2026, sixth session (the Forecast ledger's Commit
+and Best case STORED, per fiscal quarter, and Best case editable for the
+first time — item 18; the Sales Manager tab's FIVE inert buttons wired to
+real destinations, the ledger's Export CSV, and Home's quota card on this
+quarter's own figures — item 19; one commit, on dev, deploy-verified,
+NOT yet observed by Jeff and NOT shipped to prod), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.83` with a paragraph beginning **"Jeff: "do 23.""**, and does
+`### 0.84` with a paragraph beginning **"Jeff: "let's get a new session
+going"** and a paragraph beginning **"Dev landing (`9782e97`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
 beginning **"Never `window.confirm`"** (the guide did not change this
-session)? If not, you are looking at a copy that predates this handoff.
+session either)? If not, you are looking at a copy that predates this handoff.
 Check section content, never dates.
 
 **On dates:** §0.58, §0.59 and the previous handoff say "2 Sep". Git carries
@@ -28,6 +25,33 @@ their headers is Jeff's call, not done.
 ---
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
+
+**Sixth session (3 Sep) — ON DEV ONLY, deploy-verified, NOT observed, NOT
+shipped:** `9782e97` (items 18 + 19, state §0.84) and its landing docs
+commit `3b2aba3`. accelerep.netlify.app served `index-C9mGhBOf.js` — the
+local gate build's hash — 56 seconds after the push (11:08:11 local),
+2,553,081 bytes, `pk_test_` inlined, "Forecast ledger" / "Export CSV" /
+`forecastCalls` / the estimate title / "1:1 with " all in the served
+bundle; the deployed `users` function answers 401 unauthenticated. What
+it is: a Manager's typed Commit on the Forecast ledger PUT a key that
+`users.mjs`'s `sanitize()` never carried (0 on refresh — §0.80's
+finding); now `profile.forecastCalls` keyed by fiscal quarter
+(`{ '2026-Q4': { commit, bestCase } }`) through one pure validator on both
+sides (`src/utils/forecastCall.js`), so a call never resets by accident,
+only when the quarter turns; Best case is editable in the same cell and an
+untyped one reads muted/italic "est." (60% of open pipeline); "Coach →",
+the Team card's "Coach" and Today's "Open coaching" open the note dialog
+with the rep pre-addressed (a Manager's preset is filtered to their teams'
+reps); "Pipeline" / "Their pipeline" set the Viewing bar's rep slicer and
+open the Pipeline tab; "Schedule 1:1" opens a new task in the rail; the
+ledger card has a header and **Export CSV**; Home's quota card is the
+quarter's own quota (`userQuotaFor`), wins by close day inside the fiscal
+quarter, commit by the org's last two open stages, labelled "Q4 FY2026".
+Every claim above is from the served bundle and the gates, not from a
+screen: **Jeff eyeballs on deployed dev** (§5). `master` stays at
+`eec3948`; `git log --oneline origin/master..dev` now lists this
+session's commits plus the previous ship-record docs commit — that is
+expected, not a finding.
 
 **Fifth session (3 Sep) — SHIPPED TO PROD as the sixth ship (Jeff: "ship to
 production"): `master` fast-forwarded `d513b0e` → `bdb0f3c`,
@@ -292,42 +316,59 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (all observed 3 Sep, fifth session)
+## 4. Verified state at close (all observed 3 Sep, sixth session)
 
-Five gates green on 145 files · **482/482 unit** (13 in
-`current-quarter.test.mjs`, 13 in `settings-cards.test.mjs`, 14 in
-`coaching-notes.test.mjs`; `house-dialogs` and `fetch-status` repointed) ·
-**214/214 mutations, printed green baseline** (26 added this session, 7
-retired with their targets — §0.82 three, §0.83 four; one §0.78 anchor
-repointed to `settingsCards.js` after the harness reported it STALE; run
-alone) · build **2,489 kB JS**, `index-DzhyaR_f.js`, guard OK, `dist/`
-cleared · **87/87 integration** (8 new in `coaching-notes.itest.mjs`; the
-test database carries `coaching_notes` and `users.team_joined_at`) ·
-**no pane browser pass this session** — every batch was observed by Jeff
-on deployed dev instead (Admin for items 16, 15, 17; Karen for 17's Home
-block and bell), each observation quoted in the state doc · dev deploys
-observed serving `index-ByAdikgx.js` (§0.80), `index-CsUn53YS.js` (§0.81),
-`index-Kg6gw2rZ.js` (§0.82), `index-DzhyaR_f.js` (§0.83) · **`master` ==
-`eec3948`, prod serving `index-Bsn2ZlRv.js` (seventh ship, §1)**; dev is ahead of
-master by the ship-record docs commit only · the shared app
-database and the test database both hold `coaching_notes` + its index and
-`users.team_joined_at` (`db/apply-coaching-notes.mjs`, read back) · both
-orgs' `settings.extra.coachingNotes` emptied by Jeff's imports · no
-`netlify dev` was started this session; `dist` cleared after the last gate
-build.
+Five gates green on 146 files · **499/499 unit** (17 new in
+`forecast-call.test.mjs`; no existing suite changed) · **224/224
+mutations, printed green baseline** (10 added this session, none retired,
+none stale; run alone, after the unit and integration runs) · build
+**2,493 kB JS**, `index-C9mGhBOf.js`, guard OK, `dist/` cleared · **87/87
+integration** (no function's behaviour under test changed; `users.mjs`
+still has no integration suite — the forecastCalls round trip is pinned by
+source scans and mutants only) · **no pane browser pass this session** —
+no `netlify dev` was started and the pane holds no session (a sign-in
+needs Karen's second factor, which Claude cannot enter); the Sales Manager
+tab is Admin/Manager-only in any case · dev deploy observed serving
+`index-C9mGhBOf.js` (§0.84) · **`master` == `eec3948`, prod serving
+`index-Bsn2ZlRv.js` (seventh ship)**; dev is ahead of master by
+`9782e97` + two docs commits · no schema change (the calls live in the
+`users.profile` jsonb) · the working tree was clean after the harness run
+(`_ownership.mjs` showed modified DURING the run — the harness's first
+mutation in flight — and was restored; not a finding).
 
 ## 5. Next — start here
 
 **Next session prep, in order (Jeff: "update the next session prep"):**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect only the ship-record docs commit after `eec3948`; anything else is
-  unshipped code and a finding. **Nothing is unshipped:** item 23 went to
-  prod as the seventh ship at the session's end.
-- **Then pick from items 18–22** — each starts with a read of files this
-  session did not open (the Forecast Commit persistence, the inert Coach
-  chips and Home's quota card, the Performance rep view, the four mockup
-  Security / Data panels, the hand-typed card counts and NEW badges). Items
+  expect `9782e97` and the docs commits after it, plus `6af58fb` (the
+  seventh ship's record). **Items 18 + 19 are UNSHIPPED and UNOBSERVED** —
+  that is the state, not a finding.
+- **Jeff eyeballs on deployed dev, as Admin, Sales Manager → Forecast:**
+  type a Commit, refresh — it stays; the Team card / Today tab read the
+  same number; click a Best case — type one, or leave it and see "est.";
+  **Export CSV** downloads `forecast-2026-Q4.csv` with a Team total row;
+  "Coach →" opens the note dialog with that rep ticked; Team → "Pipeline"
+  opens the Pipeline tab with the Viewing bar reading "Rep: <name>" and a
+  "✕ Clear"; Today → "Schedule 1:1" opens the task rail on "1:1 with
+  <name>". **As Karen, Home:** the quota card is labelled "Q4 FY2026 Quota"
+  with her Q4 figure ($350K on her quarterly plan), closed = this quarter's
+  wins, the gold bar = commit deals forecast to close this quarter.
+  Escape in a call cell keeps the old value (a ref flag skips the blur's
+  save) — worth one press. The Enter key in the cell: not observed.
+- **Then ship to prod when Jeff says so** — `git push origin dev:master`
+  after the ancestor check, then poll salespipelinetracker.com for the
+  bundle hash; `pk_live_` must be inlined there.
+- **Then pick from items 20–22** — 20 (the Performance rep view's won /
+  lost list with totals) is a product ask with the helpers already named;
   21 and 22 are Jeff's calls before code.
+- **Carried from this session's read (state §0.84, last paragraph):**
+  `SubTabs`, `TeamTab` and `AuditTab` are defined inside
+  `SalesManagerTab` and rendered as JSX — churn-only today per
+  `check:inline` (no input, hook or ref inside them), the forbidden
+  pattern nonetheless; hoisting them is a mechanical batch (data as props:
+  `repStats`, `teamQuota`…, the setters). And users PUT lets a Manager
+  write any org user's profile, forecast calls included — the existing
+  quota behaviour, not widened, noted.
 - **Karen is a User**; the dev org's coaching notes are all in the table.
 - **(Historic, fourth session):** `git log --oneline origin/master..dev` —
   expect only docs commits after `d513b0e`; anything else is unshipped code
@@ -630,7 +671,15 @@ build.
    and Admins; NOT to other managers, not even a recipient's own manager
    unless they wrote it. Team notes are visible to the team's members
    (from their first day) and its managers. Not started.
-18. **Carried (found reading for item 16, state §0.80): the Forecast
+18. **DONE — state §0.84, commit `9782e97` (3 Sep, sixth session).**
+   `src/utils/forecastCall.js` (pure): the call is per fiscal quarter in
+   `profile.forecastCalls`, validated by `cleanForecastCalls` in
+   `users.mjs`'s `sanitize()` (imported from src/utils the way
+   `_stage.mjs` imports stageClock.js), read by `forecastCallOf`,
+   written by `withForecastCall` through the same users PUT as quotas;
+   Best case editable in the same `CallCell`, an untyped one flagged as the
+   60% estimate. 17 tests, 10 mutants. Unobserved; unshipped. Was:
+   **Carried (found reading for item 16, state §0.80): the Forecast
    ledger's editable Commit is never stored.** Clicking a rep's Commit
    cell calls `updateRepField(rep.id, 'commit', n)` → `saveUser` → users
    PUT, and `users.mjs` `sanitize()` carries neither `commit` nor
@@ -640,8 +689,19 @@ build.
    add both to the profile blob in `sanitize()` (additive), and decide
    whether a commit is per quarter (it should be — it is a quarter's
    call, so a key per fiscal quarter, not one number that never resets).
-19. **Carried, same read:** the Forecast ledger's per-row "Coach →" button
-   has no handler (the batch-6 class; Jeff removed the header's three,
+19. **DONE — state §0.84, commit `9782e97` (3 Sep, sixth session).** Not
+   one inert button but FIVE (Coach →; the Team card's Coach and Pipeline;
+   Today's Open coaching / Schedule 1:1 / Their pipeline), all wired —
+   the note dialog pre-addressed through `showCoachingNote({ recipientIds })`
+   (host filters to addressable reps; dialog takes `initialRecipientIds`),
+   the Viewing bar's `setViewingRep` + the Pipeline tab, a new task in the
+   rail; the ledger card gained a header and Export CSV (the tab's first
+   working export); Home's card: `userQuotaFor(u, 'Qn')`, closed by close
+   day in the fiscal quarter, commit by `commitFallbackStages`, labelled
+   "Qn FYyyyy" (the old label was the first forecast bucket's). A standing
+   scan now refuses any `<button` on the tab without an `onClick`.
+   Unobserved; unshipped. Was: **Carried, same read:** the Forecast
+   ledger's per-row "Coach →" button has no handler (the batch-6 class; Jeff removed the header's three,
    this one was found after the question was asked). HomeTab's quota card
    is `annualQuota / 4` (HomeTab.jsx ~351) — a quarterly-plan user sees a
    $0 quota there; `userQuotaFor(u, 'Qn')` is the helper — and its
@@ -743,3 +803,18 @@ retiring with their targets. Two anchors were mis-typed on the way and each
 was re-read from disk before anything was written; one claim about a
 working Export button was made without reading and corrected in the same
 message it would have misled. Observed, then written, then committed.
+
+**Sixth session (3 Sep).** Opened on a clean tree with nothing unshipped,
+and took the two items the handoff left that needed no decision from Jeff.
+Item 18 was named as one missing key and turned out to be a shape
+question: a commit that lives on the rep row is one number forever, and a
+quarter's call has to be the quarter's — so the fix was a keyed blob and
+a validator that both sides import, not a line in `sanitize()`. Item 19
+named one inert button; the read found five, and a scan now stands
+guard over the tab so the count cannot drift back. Home's card, read for
+its "annual ÷ 4", was also summing every win the rep ever had and
+labelling itself with whichever quarter held the first dated deal.
+Gated, mutated, deployed, hash-checked — and not observed: the pane has no
+session and the tab is a Manager's, so this handoff says "unobserved" in
+four places rather than once, and the first bullet of §5 is what Jeff
+should look at. Nothing in this file describes a screen that was seen.
