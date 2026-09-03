@@ -4,16 +4,16 @@
 and Best case STORED, per fiscal quarter, and Best case editable for the
 first time — item 18; the Sales Manager tab's FIVE inert buttons wired to
 real destinations, the ledger's Export CSV, and Home's quota card on this
-quarter's own figures — item 19; one commit, on dev, deploy-verified,
-OBSERVED by Jeff on deployed dev — "verified changes. they are working" —
-and NOT shipped to prod), FINAL.** Repo root. Read this first, then verify
+quarter's own figures — item 19; OBSERVED by Jeff on deployed dev —
+"verified changes. they are working"; then the Performance tab's single-rep
+view listing that rep's won and lost deals with totals — item 20, on dev,
+deploy-verified, NOT yet observed; nothing shipped to prod), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.84` with a paragraph beginning **"Jeff: "let's get a new session
-going"** and a paragraph beginning **"OBSERVED by Jeff on deployed dev (3 Sep):
-"verified changes."**, and does
+`### 0.85` with a paragraph beginning **"Jeff: "lets do 20.""** and a
+paragraph beginning **"Dev landing (`6db6ea8`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
 beginning **"Never `window.confirm`"** (the guide did not change this
 session either)? If not, you are looking at a copy that predates this handoff.
@@ -27,6 +27,20 @@ their headers is Jeff's call, not done.
 ---
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
+
+**Sixth session, second batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
+observed, NOT shipped:** `6db6ea8` (item 20, state §0.85) and its landing
+docs commit `be5e91b`. accelerep.netlify.app served `index-DmjjOHZE.js` —
+the local gate build's hash — 32 seconds after the push (12:08:54 local),
+2,559,307 bytes, `pk_test_` inlined, "Won deals —" / "Lost deals —" / "no
+closed deals" in the served bundle. What it is: Reports → Performance with
+the Rep slicer set showed one leaderboard row and hid the Rep metrics table
+(gated `repRows.length > 1`), so a manager saw an attainment bar and no
+deals behind it; now two panels below the leaderboard — Won deals (Deal ·
+Closed · Cycle · ARR, Total, win rate) and Lost deals (the stage each left
+and why, Total) — from the SAME period-filtered sets the leaderboard sums,
+pure in `src/utils/repDeals.js`. **Jeff eyeballs on deployed dev as Admin**
+(§5). `master` stays at `eec3948`.
 
 **Sixth session (3 Sep) — ON DEV ONLY, deploy-verified, OBSERVED by Jeff
 ("verified changes. they are working"), NOT shipped:** `9782e97` (items 18 + 19, state §0.84) and its landing docs
@@ -320,20 +334,21 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 3 Sep, sixth session)
 
-Five gates green on 146 files · **499/499 unit** (17 new in
-`forecast-call.test.mjs`; no existing suite changed) · **224/224
-mutations, printed green baseline** (10 added this session, none retired,
-none stale; run alone, after the unit and integration runs) · build
-**2,493 kB JS**, `index-C9mGhBOf.js`, guard OK, `dist/` cleared · **87/87
+Five gates green on 147 files · **505/505 unit** (17 new in
+`forecast-call.test.mjs`, 6 in `rep-deals.test.mjs`; no existing suite
+changed) · **229/229 mutations, printed green baseline** (15 added this
+session, none retired, none stale; run alone, after the unit and
+integration runs, twice) · build **2,499 kB JS**, `index-DmjjOHZE.js`,
+guard OK, `dist/` cleared · **87/87
 integration** (no function's behaviour under test changed; `users.mjs`
 still has no integration suite — the forecastCalls round trip is pinned by
 source scans and mutants only) · **no pane browser pass this session** —
 no `netlify dev` was started and the pane holds no session (a sign-in
 needs Karen's second factor, which Claude cannot enter); the Sales Manager
-tab is Admin/Manager-only in any case · dev deploy observed serving
-`index-C9mGhBOf.js` (§0.84) · **`master` == `eec3948`, prod serving
-`index-Bsn2ZlRv.js` (seventh ship)**; dev is ahead of master by
-`9782e97` + two docs commits · no schema change (the calls live in the
+tab is Admin/Manager-only in any case · dev deploys observed serving
+`index-C9mGhBOf.js` (§0.84) and `index-DmjjOHZE.js` (§0.85) · **`master`
+== `eec3948`, prod serving `index-Bsn2ZlRv.js` (seventh ship)**; dev is
+ahead of master by `9782e97`, `6db6ea8` and their docs commits · no schema change (the calls live in the
 `users.profile` jsonb) · the working tree was clean after the harness run
 (`_ownership.mjs` showed modified DURING the run — the harness's first
 mutation in flight — and was restored; not a finding).
@@ -342,9 +357,16 @@ mutation in flight — and was restored; not a finding).
 
 **Next session prep, in order (Jeff: "update the next session prep"):**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect `9782e97` and the docs commits after it, plus `6af58fb` (the
-  seventh ship's record). **Items 18 + 19 are OBSERVED (Jeff: "verified changes.
-  they are working") and UNSHIPPED** — that is the state, not a finding.
+  expect `9782e97`, `6db6ea8` and the docs commits around them, plus
+  `6af58fb` (the seventh ship's record). **Items 18 + 19 are OBSERVED (Jeff:
+  "verified changes. they are working") and UNSHIPPED; item 20 is UNOBSERVED
+  and UNSHIPPED** — that is the state, not a finding.
+- **Jeff eyeballs item 20 on deployed dev, as Admin:** Reports → Performance,
+  Grouped by → Rep, pick Karen: below the one-row leaderboard, "Won deals —
+  Karen Russell" and "Lost deals — Karen Russell" for the selected Period,
+  each with a Total row and the win rate in the won header; change Period
+  and the lists and the leaderboard's Closed move together; clear the slice
+  and the panels are gone.
 - **DONE — Jeff verified on deployed dev.** Was the eyeball list, kept as
   the record of what "working" covers: **as Admin, Sales Manager → Forecast:**
   type a Commit, refresh — it stays; the Team card / Today tab read the
@@ -361,9 +383,8 @@ mutation in flight — and was restored; not a finding).
 - **Then ship to prod when Jeff says so** — `git push origin dev:master`
   after the ancestor check, then poll salespipelinetracker.com for the
   bundle hash; `pk_live_` must be inlined there.
-- **Then pick from items 20–22** — 20 (the Performance rep view's won /
-  lost list with totals) is a product ask with the helpers already named;
-  21 and 22 are Jeff's calls before code.
+- **Then items 21 and 22** — Jeff's calls before code (the four mockup
+  Security / Data panels; the hand-typed card counts and the NEW badges).
 - **Carried from this session's read (state §0.84, last paragraph):**
   `SubTabs`, `TeamTab` and `AuditTab` are defined inside
   `SalesManagerTab` and rendered as JSX — churn-only today per
@@ -717,9 +738,14 @@ mutation in flight — and was restored; not a finding).
    header button, now gone (Claude told Jeff the Team/Admin tabs had their
    own working Export when asking about the buttons — that was unverified
    and wrong; corrected the same session).
-20. **Product (Jeff, 3 Sep, while eyeballing the Forecast tab): Reports →
-   Performance → the single-rep view should have a section listing that
-   rep's won and lost deals, with totals.** Not started; not read. What
+20. **DONE — state §0.85, commit `6db6ea8` (3 Sep, sixth session).** Two
+   panels below the leaderboard while the Rep slicer names one rep, from
+   the same period-filtered sets it sums (the list's total IS the
+   leaderboard's Closed); `src/utils/repDeals.js` (pure), 6 tests, 5
+   mutants. Unobserved; unshipped. Was: **Product (Jeff, 3 Sep, while
+   eyeballing the Forecast tab): Reports → Performance → the single-rep
+   view should have a section listing that rep's won and lost deals, with
+   totals.** Not started; not read. What
    exists to build on: the Performance leaderboard already slices by rep
    (`repsForSlice`), `closeDayOf` / `closeDayInRange` give the close day
    and period window, and the History tab (§0.77) lists deals on real
@@ -823,3 +849,10 @@ Gated, mutated, deployed, hash-checked — and not observed: the pane has no
 session and the tab is a Manager's, so this handoff says "unobserved" in
 four places rather than once — and then Jeff looked: "verified changes.
 they are working." Recorded, committed, and the ship left as his call.
+
+Then "lets do 20." The read found the single-rep view was a one-row
+leaderboard with the metrics table hiding itself below two reps — the ask
+was for the deals behind the bar, and the only honest source for them was
+the sets the bar already summed, so the list's total is the bar's number
+and a mutant that points it elsewhere is caught. Pure module, six tests,
+five mutants, gated, deployed, hash-checked; unobserved, and said so.
