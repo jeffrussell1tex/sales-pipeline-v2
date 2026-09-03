@@ -3068,6 +3068,15 @@ change; the UTC-day mutation is caught on Jeff's Central-time machine and
 would survive on a UTC runner (18b18 — the child-process pattern from
 date-local.test.mjs is the fix if this suite ever runs in CI).
 
+**Dev landing (`38b7d55`, the push carrying `aef4b4b` and its docs):**
+accelerep.netlify.app served `index-Kg6gw2rZ.js` — the local gate build's
+hash — 41 seconds after the push (09:58:33 local, was `index-CsUn53YS.js`),
+2,550,612 bytes; "Notes from your manager", the legacy-import button and the
+bell's "Coaching note from" present in the bundle; an unauthenticated GET of
+`/.netlify/functions/coaching-notes` on the deployed site answered 401 —
+the function is deployed and gated. Jeff's eyeball as Admin and as Karen
+is owed before the prod ship.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it

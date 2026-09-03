@@ -31,7 +31,13 @@ their headers is Jeff's call, not done.
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
 
-**Fifth session (3 Sep), on dev only — NOT shipped to prod.** Second batch:
+**Fifth session (3 Sep), on dev only — NOT shipped to prod.** Third batch:
+`aef4b4b` (coaching notes addressed to people or a team, their own table),
+state §0.82; docs `38b7d55`. Deploy-verified: accelerep.netlify.app served
+`index-Kg6gw2rZ.js` 41 seconds after the push; the deployed
+`coaching-notes` function answers 401 unauthenticated. **The DDL is in both
+databases already.** Jeff's eyeball as Admin and as Karen is owed, then
+the prod ship. Second batch:
 `59212ec` (the Settings catalogue and its panel headers carry no invented
 text; Workspace Health counts only what it can read), state §0.81; docs
 `6bb4d49`. Deploy-verified: accelerep.netlify.app served
