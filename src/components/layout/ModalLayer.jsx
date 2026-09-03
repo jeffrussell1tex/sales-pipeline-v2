@@ -104,6 +104,7 @@ export default function ModalLayer() {
         showOutlookImportModal, setShowOutlookImportModal,
         showSpiffClaimModal, setShowSpiffClaimModal, spiffClaimContext, setSpiffClaimContext,
         confirmModal, setConfirmModal,
+        promptModal, setPromptModal,
         blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal, completeLostSave,
         notesPopover, setNotesPopover,
@@ -707,6 +708,35 @@ export default function ModalLayer() {
                     </div>
                 </div>
             )}
+
+            {/* ════ PROMPT MODAL — the app's own prompt dialog (state §0.79) ════ */}
+            {promptModal && (() => {
+                const value = promptModal.value ?? '';
+                const submit = () => { const v = value.trim(); if (!v) return; const fn = promptModal.onSubmit; setPromptModal(null); fn(v); };
+                return (
+                    <div className="modal-overlay" onClick={() => setPromptModal(null)}>
+                        <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '460px', width: '100%', padding: isMobile ? '1.25rem' : '2rem' }}>
+                            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem', fontWeight: '700', color: '#1e293b' }}>{promptModal.title}</h3>
+                            {promptModal.help && <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 1rem 0', lineHeight: '1.5' }}>{promptModal.help}</p>}
+                            {promptModal.label && <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.375rem' }}>{promptModal.label}</label>}
+                            <input
+                                autoFocus
+                                value={value}
+                                placeholder={promptModal.placeholder || ''}
+                                onChange={e => setPromptModal(m => ({ ...m, value: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
+                                style={{ width: '100%', padding: '0.625rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.9rem', fontFamily: 'inherit', boxSizing: 'border-box', marginBottom: '1.25rem' }}
+                            />
+                            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                                <button onClick={() => setPromptModal(null)}
+                                    style={{ padding: '0.625rem 1.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#ffffff', color: '#64748b', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                                <button onClick={submit} disabled={!value.trim()}
+                                    style={{ padding: '0.625rem 1.5rem', border: 'none', borderRadius: '6px', background: '#1c1917', color: 'white', fontWeight: '600', fontSize: '0.875rem', cursor: value.trim() ? 'pointer' : 'default', opacity: value.trim() ? 1 : 0.5, fontFamily: 'inherit' }}>{promptModal.submitLabel || 'Save'}</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* ════ BLOCKED DELETE MODAL ════ */}
             {blockedDeleteModal && (

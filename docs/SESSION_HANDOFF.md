@@ -8,13 +8,14 @@ ship, Clerk's pending-session bypass found, observed and FIXED on dev, then
 shipped; the Win / loss report made to read the category it was never
 reading; the Activity report made to honour the rep slice; the Reports
 audit's §0.68 list fixed through batch 7, then SHIPPED to prod; the 401
-banner and the MFA catalogue card made honest), FINAL.** Repo
+banner and the MFA catalogue card made honest; every native confirm/prompt
+replaced by house dialogs and coaching notes persisted), FINAL.** Repo
 root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.78` with a paragraph beginning **"Two carried items, Jeff:"**, and
+`### 0.79` with a paragraph beginning **"Native dialogs replaced:"**, and
 does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b27`** with a bullet
 beginning **"Client: gate on"**? If not,
 you are looking at a copy that predates this handoff. Check section content,
@@ -191,8 +192,17 @@ present (state §0.78). `master` == `dev` == `d63644f` at the time of this
 commit; dev is ahead only by this docs commit. **Then (state §0.78, last
 paragraph; Jeff: "please reword the policy settings dialogue"):** the MFA
 panel's callout no longer tells the Admin to turn on Require MFA (on since
-§0.65, unreadable by the app); 1 scan, 1 mutant. Deploy check recorded in
-§4 by a follow-up docs commit.
+§0.65, unreadable by the app); 1 scan, 1 mutant. `b26c74c`,
+**deploy-verified:** accelerep.netlify.app serves `index-ylwf4HZI.js`.
+
+**Items 13 + 14, the commit this handoff rides in (state §0.79; Jeff: "do
+13 and 14 together as well"):** every native `confirm()` / `prompt()`
+under src/ replaced by the house `showConfirm` and a new `showPrompt`
+dialog (promptModal in useModalState → App.jsx → ModalLayer); coaching
+notes persisted — `coachingNotes` in both halves of settings.mjs and a
+Manager may write that key alone. 6 tests, 6 mutants (+1 repointed),
+79/79 integration. Not browser-observed (the pane's session expired).
+Deploy check recorded in §4 by a follow-up docs commit.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -236,16 +246,16 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 141 files · **440/440 unit** (6 in
-`fetch-status.test.mjs`, 7 in `history-feed.test.mjs`, 5 in `reports-controls.test.mjs`, 5 in
+Five gates green on 142 files · **446/446 unit** (6 in
+`house-dialogs.test.mjs`, 6 in `fetch-status.test.mjs`, 7 in `history-feed.test.mjs`, 5 in `reports-controls.test.mjs`, 5 in
 `stage-order.test.mjs`, 23 in `pipeline-report.test.mjs`, 9 in
 `opp-text.test.mjs`, 13 in `report-period.test.mjs`, 15 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
-`session-status.test.mjs`) · **189/189 mutations, printed green baseline**
-(76 new this session; run alone) · build
-**2,477 kB JS**, `index-ylwf4HZI.js` (the MFA notice reword; deploy check
-pending at the time this was written; `index-CSnSB6MZ.js` observed for
-`71d68e3`), guard OK, `dist/` cleared · **79 integration not
+`session-status.test.mjs`) · **195/195 mutations, printed green baseline**
+(82 new this session; run alone) · build
+**2,479 kB JS**, `index-B0b_2Pd3.js` (items 13/14; deploy check pending at
+the time this was written; `index-ylwf4HZI.js` observed for `b26c74c`),
+guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
@@ -361,8 +371,11 @@ cleared at close.
    401 banner (item 7f) and the MFA card (item 7c) are DONE — state §0.78.
    SHIPPED to prod as `d63644f` (§1); Jeff's screenshot of the Security
    list confirms the tile ("2/4 enrolled · 50%", "Needs attention",
-   "Managed in Clerk"). Next: items 13, 14 and 15 are Jeff's call; the
-   coaching-note half of item 3 is still unobserved.
+   "Managed in Clerk"). Items 13 and 14 are DONE — state §0.79. Next: Jeff
+   eyeballs the house dialogs on dev (Reports → Saved reports → ✕; Sales
+   Manager → + Add coaching note, then refresh — as a Manager too), then
+   ship dev → prod (prod is at `d63644f`, without §0.78's notice reword or
+   §0.79). Item 15 and the coaching-note half of item 3 remain.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
@@ -381,7 +394,8 @@ cleared at close.
    String.replace splice the rest of the file in after the match (use a
    function replacer), and a heredoc turned a doubled backslash into a bare
    CR byte that made git treat the handoff as `-text` and diff it whole.
-13. **Carried (Jeff, after the prod eyeball): the saved-report delete asks
+13. **DONE — state §0.79 (Jeff: "do 13 and 14 together as well"), the
+   whole sweep.** Was: **Carried (Jeff, after the prod eyeball): the saved-report delete asks
    through the browser's native `confirm('Delete this report?')`**
    (`ReportsTab.jsx`, the saved-card ✕ handler) — "just gives the windows
    confirmation, not an application look and feel process". The app has a
@@ -393,7 +407,7 @@ cleared at close.
    DocumentsTab.jsx, EditBrandModal.jsx and PriceBookDetail.jsx (three) —
    same fix, same batch, if Jeff wants the sweep. Jeff deleted the ZZTest
    deals and the two test saved reports himself after the prod eyeball.
-14. **Carried (found during item 3): coaching notes do not persist.**
+14. **DONE — state §0.79.** Was: **Carried (found during item 3): coaching notes do not persist.**
    SalesManagerTab's "+ Add coaching note" takes the text through a native
    `prompt()` and writes `settings.coachingNotes` with `setSettings` only;
    no `dbFetch` follows, and `settings.mjs` neither returns nor merges a

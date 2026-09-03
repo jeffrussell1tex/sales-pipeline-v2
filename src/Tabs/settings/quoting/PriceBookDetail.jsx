@@ -1,5 +1,6 @@
 // settings/quoting/PriceBookDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useApp } from '../../../AppContext';
 import { putSettings } from '../shared/saveSettings.js';
 import { T, eb } from '../shared/tokens.js';
 import { ATToggle } from './shared.jsx';
@@ -164,8 +165,9 @@ const PBProductModal = ({ mode, product, onClose, onSave }) => {
         });
     };
 
+    const { showConfirm } = useApp();
     const handleBackdrop = () => {
-        if (dirty) { if (!window.confirm('Discard unsaved changes?')) return; }
+        if (dirty) { showConfirm('Discard unsaved changes?', onClose, false); return; }
         onClose();
     };
 
@@ -456,7 +458,7 @@ const PBProductModal = ({ mode, product, onClose, onSave }) => {
                             onMouseLeave={e => e.currentTarget.style.background=T.surface}>
                             Test on quote
                         </button>
-                        <button onClick={() => { if (dirty) { if (!window.confirm('Discard unsaved changes?')) return; } onClose(); }}
+                        <button onClick={handleBackdrop}
                             style={{ padding:'8px 16px', background:T.surface, color:T.inkMid, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                             onMouseEnter={e => e.currentTarget.style.background=T.surface2}
                             onMouseLeave={e => e.currentTarget.style.background=T.surface}>
@@ -558,10 +560,12 @@ export const PriceBookDetail = ({ settings, setSettings, onBack }) => {
         setModal({ mode:'new', product: copy });
     };
 
+    const { showConfirm } = useApp();
     const handleArchive = (product) => {
-        if (!window.confirm(`Archive "${product.name}"? It will no longer appear in new quotes.`)) return;
-        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, active:false } : p));
-        setDirty(true);
+        showConfirm(`Archive "${product.name}"? It will no longer appear in new quotes.`, () => {
+            setProducts(prev => prev.map(p => p.id === product.id ? { ...p, active:false } : p));
+            setDirty(true);
+        });
     };
 
     // ── CSV export / import (flat product fields) ──────────────────────────

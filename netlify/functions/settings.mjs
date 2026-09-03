@@ -155,6 +155,8 @@ export const handler = async (event) => {
                 quoteBoilerplate:     row.extra?.quoteBoilerplate     || null,
                 industries:           row.extra?.industries            || null,
                 buyerPersonas:        row.extra?.buyerPersonas         || [],
+                // Sales Manager coaching notes — Manager-writable (see the PUT gate).
+                coachingNotes:        row.extra?.coachingNotes        || [],
                 quotesEnabled:        row.extra?.quotesEnabled         ?? true,
                 dispatchEnabled:      row.extra?.dispatchEnabled       ?? false,
                 dispatchSkills:       row.extra?.dispatchSkills        || [],
@@ -188,10 +190,16 @@ export const handler = async (event) => {
             // fiscal year, the BYOK key). Per the role model, only Admins may
             // write them — without this, any member could rewrite shared config
             // that every other user depends on.
-            const forbidden = requireRole(auth, ['Admin'], headers);
+            // Exception (state §0.79): coaching notes are Manager content that
+            // lives in this blob. A Manager may write THAT key and nothing else —
+            // the payload is reduced to it, so every other key merges from the
+            // existing row below.
+            const body = JSON.parse(event.body);
+            const managerNote = auth.userRole === 'Manager' && 'coachingNotes' in body;
+            const forbidden = managerNote ? null : requireRole(auth, ['Admin'], headers);
             if (forbidden) return forbidden;
 
-            const data = JSON.parse(event.body);
+            const data = managerNote ? { coachingNotes: body.coachingNotes } : body;
 
             // Read existing row first so we can merge extra fields safely.
             const existing = await db.select().from(settings).where(eq(settings.orgId, orgId))
@@ -294,6 +302,7 @@ export const handler = async (event) => {
                 ssoConfig:            'ssoConfig'            in data ? (data.ssoConfig            || null) : existingExtra.ssoConfig            || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 buyerPersonas:        'buyerPersonas'        in data ? (data.buyerPersonas        || [])   : existingExtra.buyerPersonas        || [],
+                coachingNotes:        'coachingNotes'        in data ? (data.coachingNotes        || [])   : existingExtra.coachingNotes        || [],
                 quotesEnabled:        'quotesEnabled'        in data ? !!data.quotesEnabled                : existingExtra.quotesEnabled        ?? true,
                 dispatchEnabled:      'dispatchEnabled'      in data ? !!data.dispatchEnabled               : existingExtra.dispatchEnabled       ?? false,
                 dispatchSkills:       'dispatchSkills'       in data ? (data.dispatchSkills       || [])   : existingExtra.dispatchSkills        || [],

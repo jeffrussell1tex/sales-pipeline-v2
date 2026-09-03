@@ -247,8 +247,8 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, onClose }) => {
   const [previewSections, setPreviewSections] = React.useState(['cover', 'lines', 'terms', 'signature']);
   const set = (key, val) => setBrand((b) => ({ ...b, [key]: val }));
   const dirty = JSON.stringify(brand) !== JSON.stringify(initial);
-  const { setSettings } = useApp();
-  const close = () => { if (dirty && !window.confirm('Discard unsaved brand changes?')) return; onClose(); };
+  const { setSettings, showConfirm } = useApp();
+  const close = () => { if (dirty) { showConfirm('Discard unsaved brand changes?', onClose, false); return; } onClose(); };
   const [saveError, setSaveError] = React.useState('');
   const handleSave = async () => {
     // The modal used to close unconditionally. PUT /settings is Admin-only since

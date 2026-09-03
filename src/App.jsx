@@ -202,7 +202,7 @@ function App() {
         accountCreatedFromOppForm, setAccountCreatedFromOppForm,
         pendingOppFormData, setPendingOppFormData,
         lastCreatedRepName, setLastCreatedRepName,
-        confirmModal, setConfirmModal, blockedDeleteModal, setBlockedDeleteModal, lostReasonModal, setLostReasonModal,
+        confirmModal, setConfirmModal, promptModal, setPromptModal, blockedDeleteModal, setBlockedDeleteModal, lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover, undoToast, setUndoToast,
         taskReminderPopup, setTaskReminderPopup,
         taskReminderSnoozeH, setTaskReminderSnoozeH, taskReminderSnoozeM, setTaskReminderSnoozeM,
@@ -346,6 +346,12 @@ function App() {
         setConfirmModal({ message, onConfirm, danger });
     };
 
+    // The app's own prompt dialog: a titled text field with Cancel / submit. onSubmit
+    // receives the trimmed value; an empty value never submits.
+    const showPrompt = ({ title, label = '', help = '', placeholder = '', initial = '', submitLabel = 'Save' }, onSubmit) => {
+        setPromptModal({ title, label, help, placeholder, initial, submitLabel, value: initial, onSubmit });
+    };
+
     const showBlockedDelete = (title, message) => {
         setBlockedDeleteModal({ title, message });
     };
@@ -469,6 +475,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
                 if (showProfilePanel) { setShowProfilePanel(false); return; }
                 if (confirmModal) { setConfirmModal(null); return; }
+                if (promptModal) { setPromptModal(null); return; }
                 if (notesPopover) { setNotesPopover(null); return; }
                 if (undoToast) { clearTimeout(undoToast.timerId); setUndoToast(null); return; }
                 if (showNotifications) { setShowNotifications(false); return; }
@@ -479,7 +486,7 @@ dbFetch('/.netlify/functions/users?me=true')
             // Don't fire shortcuts while typing
             if (isTyping) return;
             // Don't fire if any modal is open (except ? for help)
-            const anyModalOpen = showModal || showAccountModal || showContactModal || showTaskModal || showUserModal || showActivityModal || confirmModal;
+            const anyModalOpen = showModal || showAccountModal || showContactModal || showTaskModal || showUserModal || showActivityModal || confirmModal || promptModal;
 
             if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
                 e.preventDefault();
@@ -546,7 +553,7 @@ dbFetch('/.netlify/functions/users?me=true')
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
     }, [showModal, showAccountModal, showContactModal, showTaskModal, showUserModal, showActivityModal,
-        confirmModal, notesPopover, undoToast, showNotifications, showSearchResults, showShortcuts]);
+        confirmModal, promptModal, notesPopover, undoToast, showNotifications, showSearchResults, showShortcuts]);
 
 
 
@@ -1330,7 +1337,7 @@ dbFetch('/.netlify/functions/users?me=true')
             showActivityModal || showUserModal || showShortcuts || showProfilePanel ||
             showCsvImportModal || showLeadImportModal || showLeadModal ||
             showOutlookImportModal || showSpiffClaimModal ||
-            confirmModal || blockedDeleteModal || lostReasonModal ||
+            confirmModal || promptModal || blockedDeleteModal || lostReasonModal ||
             viewingContact || viewingAccount || viewingTask ||
             meetingPrepOpen || logFromCalOpen || showCalConfig ||
             quickLogOpen || showNavGuard
@@ -1456,6 +1463,7 @@ dbFetch('/.netlify/functions/users?me=true')
         calculateDealHealth,
         exportToCSV,
         showConfirm,
+        showPrompt,
         softDelete,
         addAudit,
         canViewField,
@@ -1597,6 +1605,7 @@ dbFetch('/.netlify/functions/users?me=true')
         showSpiffClaimModal, setShowSpiffClaimModal,
         spiffClaimContext, setSpiffClaimContext,
         confirmModal, setConfirmModal,
+        promptModal, setPromptModal,
         blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover,

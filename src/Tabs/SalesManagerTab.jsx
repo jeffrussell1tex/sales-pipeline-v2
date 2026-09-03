@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { newCoachingNote, withCoachingNote } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import { isoLocal, todayLocal } from '../utils/dateLocal';
@@ -673,7 +674,7 @@ export default function SalesManagerTab() {
         opportunities, activities, tasks,
         currentUser, userRole,
         getQuarter, getQuarterLabel,
-        exportToCSV, showConfirm, softDelete, setUndoToast,
+        exportToCSV, showConfirm, showPrompt, softDelete, setUndoToast,
         activeTab, setActiveTab,
         spiffClaims, setSpiffClaims,
         isMobile,
@@ -833,11 +834,18 @@ export default function SalesManagerTab() {
                 <div style={{ marginLeft:'auto' }}>
                     <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}
                         onClick={() => {
-                            const note = prompt('Add coaching note (rep name: note text):');
-                            if (note) {
-                                const notes = [...(settings.coachingNotes||[]), { id:'cn_'+Date.now(), text:note, date:todayLocal(), author:currentUser }];
-                                setSettings(prev => ({...prev, coachingNotes:notes}));
-                            }
+                            showPrompt({
+                                title: 'Add coaching note',
+                                label: 'Rep name: note',
+                                placeholder: 'Karen Russell: strong discovery call on Beacon Metals',
+                                help: 'Saved to the org and shown to every manager. Start with the rep\'s name and a colon.',
+                            }, (input) => {
+                                const note = newCoachingNote({ input, author: currentUser });
+                                if (!note) return;
+                                // Persisted by useSettings' PUT effect; settings.mjs merges
+                                // coachingNotes for a Manager too (state §0.79).
+                                setSettings(prev => ({ ...prev, coachingNotes: withCoachingNote(prev.coachingNotes, note) }));
+                            });
                         }}>
                         + Add coaching note
                     </button>

@@ -43,6 +43,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
         allPipelines,
         isMobile,
         setViewingAccount,
+        showConfirm,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -1987,6 +1988,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             ════════════════════════════════════════════ */}
                         {reportSubTab === 'custom' && (
                             <SavedReportsTab
+                                showConfirm={showConfirm}
                                 accounts={accounts}
                                 reportsOpps={reportsOpps}
                                 reportsTimedActivities={reportsTimedActivities}
@@ -2007,7 +2009,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
 // ─────────────────────────────────────────────────────────────
 //  Saved Reports Tab — proper React component (hooks-safe)
 // ─────────────────────────────────────────────────────────────
-function SavedReportsTab({ accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp }) {
+function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp }) {
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
     const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
@@ -4194,7 +4196,7 @@ function SavedReportsTab({ accounts = [], reportsOpps, reportsTimedActivities, a
                                 {r.description && <div style={{ fontSize:11.5, color:TS.inkMuted, lineHeight:1.4, fontFamily:TS.sans }}>{r.description}</div>}
                                 <div style={{ marginTop:'auto', paddingTop:6, borderTop:`1px solid ${TS.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:TS.inkMuted, fontFamily:TS.sans }}>
                                     <span>{r.ownerName||currentUser}</span>
-                                    <button onClick={async (e)=>{ e.stopPropagation(); if(!confirm('Delete this report?')) return; const rd = await dbWrite('/.netlify/functions/saved-reports',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); if(!rd.ok){ setSavedReportsList(prev=>prev); window.alert(`Report not deleted \u2014 ${rd.error}`); return; } setSavedReportsList(prev=>prev.filter(x=>x.id!==r.id)); }}
+                                    <button onClick={(e)=>{ e.stopPropagation(); showConfirm(`Delete the saved report "${r.name}"?`, async () => { const rd = await dbWrite('/.netlify/functions/saved-reports',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); if(!rd.ok){ window.alert(`Report not deleted \u2014 ${rd.error}`); return; } setSavedReportsList(prev=>prev.filter(x=>x.id!==r.id)); }); }}
                                         style={{ background:'transparent', border:'none', color:TS.inkMuted, cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>×</button>
                                 </div>
                             </div>

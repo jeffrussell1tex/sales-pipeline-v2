@@ -2541,6 +2541,60 @@ mutant (the old sentence back). Gates green, **440/440**, **189/189,
 printed green baseline**, build guard OK (2,477 kB, `index-ylwf4HZI.js`).
 Not browser-observed (Admin-only panel; the pane is Karen).
 
+### 0.79 House dialogs for every native confirm/prompt; coaching notes persisted (2 Sep, fourth session)
+
+Handoff items 13 and 14, Jeff: "do 13 and 14 together as well".
+
+**Native dialogs replaced:** the app already had a confirmation modal
+(`confirmModal` in useModalState → `showConfirm(message, onConfirm,
+danger)` in App.jsx → rendered by ModalLayer) but seven places still
+called the browser's `window.confirm()` and two called `window.prompt()`.
+A **house prompt dialog** now exists beside it: `promptModal` state,
+`showPrompt({ title, label, help, placeholder, initial, submitLabel },
+onSubmit)` in App.jsx (in the app context; Escape closes it; the
+modal-open guard and the shortcut deps know it), rendered by ModalLayer
+as a titled text field with Cancel / submit, Enter submits, an empty value
+never submits. Rewired: the saved-report ✕ in Reports (`showConfirm`
+with the report's name — it was `confirm('Delete this report?')`, the
+thing Jeff saw); Delete document in DocumentRail and DocumentsTab;
+"Discard unsaved brand changes?" in EditBrandModal and "Discard unsaved
+changes?" ×2 plus "Archive …?" in PriceBookDetail (each component takes
+`showConfirm` from `useApp()`); Rename role in RolesDetail and Add
+coaching note in SalesManagerTab through `showPrompt`. A src-wide scan
+now forbids `confirm(` / `prompt(` for good. The one `window.alert` in
+the report-delete failure path stays (a plain notice, not a decision).
+
+**Coaching notes persisted:** the note was kept in React state only —
+`settings.mjs` neither returned nor merged `coachingNotes`, and the
+settings PUT is Admin-only while the Sales Manager tab is for Managers
+too, so even with the key whitelisted a Manager's note would 403. Now:
+`coachingNotes` is in BOTH halves of settings.mjs (GET default `[]`,
+PUT read-then-merge), and the PUT gate has one exception — a
+**Manager** may write a payload that carries `coachingNotes`, and the
+payload is reduced to that key alone so every other setting merges from
+the existing row; anything else from a Manager is still 403. New
+`src/utils/coachingNotes.js`: `parseCoachingNote` ("rep: text" on the
+first colon), `newCoachingNote` (the row, dated `todayLocal()`),
+`withCoachingNote` (append, never replace — the list is org-wide).
+SalesManagerTab appends through `setSettings`, which useSettings' PUT
+effect persists (DB first, cache second). The coaching card's "See all
+→" button is still inert — noted, not changed.
+
+`tests/house-dialogs.test.mjs` (2 unit + 4 scans: the src sweep, the
+prompt dialog's wiring, every replaced site, both halves of settings.mjs
+and the Manager exception; plus the helper's local-day default).
+`report-scope.test.mjs`'s SavedReportsTab scan admits the `showConfirm`
+prop. Six new mutants; the §18b26 sweep's coaching-note mutant went
+STALE when the date line moved into the helper — the harness reported
+it, and it was repointed. Gates green on 142 files, **446/446**,
+**195/195 mutations, printed green baseline**, **79/79 integration**
+(settings.mjs changed), build guard OK (2,479 kB, `index-B0b_2Pd3.js`). **Not
+browser-observed:** the pane's session had expired. Jeff eyeballs on
+dev: Reports → Saved reports → ✕ on a card opens the app's Confirm
+dialog; Sales Manager → "+ Add coaching note" opens the house prompt,
+the note appears under Recent coaching and **survives a refresh** — as
+Admin and, the point of the exception, as a Manager.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

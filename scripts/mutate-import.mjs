@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -613,10 +613,10 @@ const mutations = [
         'src/utils/importRows.js',
         '    forecastedCloseDate:csvDay,',
         "    forecastedCloseDate:(v) => v || '',"],
-    ['date: the coaching note stores a UTC day again (the sweep scan)',
-        'src/Tabs/SalesManagerTab.jsx',
-        'date:todayLocal(), author:currentUser }];',
-        "date:new Date().toISOString().split('T')[0], author:currentUser }];"],
+    ['date: the coaching note stores a UTC day again (the helper, since 0.79)',
+        'src/utils/coachingNotes.js',
+        'today = todayLocal()',
+        "today = new Date().toISOString().split('T')[0]"],
     // ── Unreadable dates refused at Preview (0.64) ──────────────────────────
     ['csvMapping: an unreadable date cell passes through again (the 0.60 open question, re-opened)',
         'src/utils/csvMapping.js',
@@ -967,6 +967,31 @@ const mutations = [
         'src/App.jsx',
         "const checkOk = (r) => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r; };",
         "const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };"],
+    // ── House dialogs + coaching notes persisted (items 13/14, state §0.79) ──
+    ['coaching: the rep name is dropped from a "rep: text" note',
+        'src/utils/coachingNotes.js',
+        "    return { rep, text };",
+        "    return { rep: '', text };"],
+    ['coaching: a new note replaces every other manager\'s notes',
+        'src/utils/coachingNotes.js',
+        "    return [...(Array.isArray(list) ? list : []), note];",
+        "    return [note];"],
+    ['settings: a Manager\'s coaching-note PUT is 403 again',
+        'netlify/functions/settings.mjs',
+        "const managerNote = auth.userRole === 'Manager' && 'coachingNotes' in body;",
+        "const managerNote = false;"],
+    ['settings: a Manager\'s PUT carries the whole settings object',
+        'netlify/functions/settings.mjs',
+        "const data = managerNote ? { coachingNotes: body.coachingNotes } : body;",
+        "const data = body;"],
+    ['settings: coachingNotes dropped from the PUT whitelist (the note vanishes on refresh)',
+        'netlify/functions/settings.mjs',
+        "coachingNotes:        'coachingNotes'        in data ? (data.coachingNotes        || [])   : existingExtra.coachingNotes        || [],",
+        ""],
+    ['reports: the saved-report delete asks through the browser again',
+        'src/Tabs/ReportsTab.jsx',
+        "showConfirm(`Delete the saved report \"${r.name}\"?`, async () => {",
+        "if (!window.confirm('Delete this report?')) return; (async () => {"],
     ['mfa: the panel notice tells the Admin to turn on Require MFA again (already on)',
         'src/Tabs/settings/security/MfaDetail.jsx',
         "With Require multi-factor authentication on in Clerk, they are held at sign-in until they enrol. This app cannot read that setting — check it in Clerk Dashboard.",

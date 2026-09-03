@@ -63,6 +63,9 @@ export function useModalState() {
     const [lastCreatedRepName, setLastCreatedRepName] = useState(null);
 
     const [confirmModal, setConfirmModal] = useState(null);
+    // { title, label, help, placeholder, initial, submitLabel, value, onSubmit } — the
+    // app's own prompt dialog; opened through showPrompt in App.jsx (state §0.79).
+    const [promptModal, setPromptModal] = useState(null);
     const [blockedDeleteModal, setBlockedDeleteModal] = useState(null);
     const [lostReasonModal, setLostReasonModal] = useState(null);
     const [notesPopover, setNotesPopover] = useState(null);
@@ -121,6 +124,7 @@ export function useModalState() {
         pendingOppFormData, setPendingOppFormData,
         lastCreatedRepName, setLastCreatedRepName,
         confirmModal, setConfirmModal,
+        promptModal, setPromptModal,
         blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover,

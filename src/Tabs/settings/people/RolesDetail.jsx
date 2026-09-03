@@ -319,7 +319,7 @@ const PermCellPopover = ({ anchor, currentValue, roleName, onApply, onClose }) =
 export const RolesDetail = ({ settings, onBack }) => {
     const [activeRole, setActiveRole] = useState('r3'); // default: Sales Rep
     const [openRoleKebab, setOpenRoleKebab] = useState(null);
-    const { showConfirm, setSettings } = useApp();
+    const { showConfirm, showPrompt, setSettings } = useApp();
     // Every save below was fire-and-forget into .catch(console.error). dbFetch
     // resolves for ANY response (guide 18b1), so that catch fires on a network
     // failure only — and PUT /settings is Admin-only since SVR-2, meaning a
@@ -413,8 +413,9 @@ export const RolesDetail = ({ settings, onBack }) => {
     };
     const renameRole = (id) => {
         const r = roles.find(x => x.id === id); if (!r) return;
-        const name = window.prompt('Rename role', r.name);
-        if (name && name.trim()) saveRoles(roles.map(x => x.id === id ? { ...x, name: name.trim() } : x));
+        showPrompt({ title:'Rename role', label:'Role name', initial:r.name, submitLabel:'Rename' }, (name) => {
+            if (name && name.trim()) saveRoles(roles.map(x => x.id === id ? { ...x, name: name.trim() } : x));
+        });
     };
     const deleteRole = (id) => {
         const r = roles.find(x => x.id === id); if (!r) return;

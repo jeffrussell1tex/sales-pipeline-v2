@@ -35,7 +35,7 @@ export default function DocumentRail() {
     const {
         documentRailId, setDocumentRailId,
         documents = [],
-        updateDocument, removeDocument, restoreVersion, fetchVersions,
+        updateDocument, removeDocument, restoreVersion, fetchVersions, showConfirm,
         downloadDoc, previewDoc, unlinkDocument,
         setShowUploadRail, setUploadRailContext,
         setShowDocLinkPicker, setDocLinkPickerContext,
@@ -78,10 +78,10 @@ export default function DocumentRail() {
         setShowDocLinkPicker && setShowDocLinkPicker(true);
     };
     const onDelete = () => {
-        if (window.confirm(`Delete "${doc.name}"? This removes the file and all its versions.`)) {
+        showConfirm(`Delete "${doc.name}"? This removes the file and all its versions.`, () => {
             removeDocument && removeDocument(doc.id);
             close();
-        }
+        });
     };
 
     const actionBtn = (label, onClick, primary) => (

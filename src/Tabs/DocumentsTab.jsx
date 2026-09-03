@@ -90,7 +90,7 @@ export default function DocumentsTab() {
     const {
         documents = [], docsLoading,
         setDocumentRailId, setShowUploadRail, setUploadRailContext,
-        downloadDoc, previewDoc, removeDocument,
+        downloadDoc, previewDoc, removeDocument, showConfirm,
     } = useApp();
 
     const [search, setSearch] = useState('');
@@ -118,9 +118,9 @@ export default function DocumentsTab() {
     const openUpload = () => { setUploadRailContext && setUploadRailContext(null); setShowUploadRail && setShowUploadRail(true); };
     const handleDelete = (doc) => {
         setMenu(null);
-        if (window.confirm(`Delete "${doc.name}"? This removes the file and all its versions.`)) {
+        showConfirm(`Delete "${doc.name}"? This removes the file and all its versions.`, () => {
             removeDocument && removeDocument(doc.id);
-        }
+        });
     };
 
     return (
