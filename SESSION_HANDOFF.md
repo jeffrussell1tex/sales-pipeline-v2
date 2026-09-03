@@ -306,7 +306,15 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
   Forecast good, Administration "FY attainment" 9.5% for Karen against
   $1,000,000 while Today reads 27% of her $350K Q4 — the same wins, two
   windows, consistent. Unshipped; prod at `d513b0e`.
-- **Then item 15** (catalogue footers, Workspace Health constants) — unchanged.
+- **Item 15 DONE (3 Sep, `59212ec`, state §0.81):** footers gone, statuses
+  and attention computed, health tile counts only readable checks, 16
+  panel headers' typed "Last edited" removed. **Jeff eyeballs on deployed
+  dev as Admin:** Settings → All — footers empty except MFA's "Managed in
+  Clerk"; the Workspace Health count and sentence; Webhooks' chip; the
+  Pipelines panel header without "Last edited".
+- **Items 21 and 22 are new** (found reading for 15): four Security / Data
+  panels are mockups in depth; the remaining hand-typed card counts and the
+  16 never-expiring NEW badges. Both are Jeff's calls before code.
 - **Items 18 and 19 are new** (found reading for 16): the Forecast ledger's
   Commit is never stored; "Coach →" is inert; Home's quota card is annual
   ÷ 4; the tab has no export at all.
@@ -476,7 +484,19 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    through `settings` PUT with `coachingNotes` added to BOTH the GET
    response and the read-then-merge (CLAUDE.md's `settings.extra` rule),
    org-scoped like every other settings key.
-15. **Carried (Jeff's Security-list screenshot, state §0.78 last
+15. **DONE — state §0.81, commit `59212ec` (3 Sep; Jeff: "lets proceed
+   with item 15").** `src/utils/settingsCards.js` (pure): `cardStateOf`
+   (the card component's enrichment block moved out verbatim + three
+   rules: webhooks status/attention from live counts; sso and apps claim
+   nothing; ok-with-null-detail → 'none'), `healthChecksOf` (only what
+   can be read: MFA fully enrolled / Webhooks / Backups once their fetch
+   answered, plus pipeline, team assignment, quote branding — SSO and
+   Session policy dropped), `healthSummaryOf` (a sentence naming what
+   failed). Catalogue: 48 footer pairs and two `attention:true` removed,
+   six no-data cards `status:'none'`. Two shared headers render "Last
+   edited" only when both values are real; 16 panels' typed values and
+   SsoDetail's "Morgan" removed. 13 tests + 8 mutations (212/212). Not
+   browser-checked (Admin-only); Jeff's eyeball owed. Was: **Carried (Jeff's Security-list screenshot, state §0.78 last
    paragraph): the rest of the Settings catalogue's invented text.** 46
    cards carry hand-typed footers — `updatedAt:'2 months ago'` / `'just
    now'` / `'3 weeks ago'` and an `updatedBy` that never changes — and
@@ -579,6 +599,29 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    and period window, and the History tab (§0.77) lists deals on real
    columns — the list wants the same row shape and the period filter the
    report already carries.
+21. **Carried (found reading for item 15, state §0.81 last paragraph):
+   four Settings panels are design mockups in depth.** SsoDetail's
+   `SEC_SSO` (Okta URLs, "Active · 412 logins / 30d", verified domain
+   `acme-corp.com`; the panel saves `settings.ssoConfig`, which nothing
+   in sign-in reads); SessionDetail's badge "Strong policy · 8h idle ·
+   90-day rotation" (typed; the policy it saves is real); AuditDetail's
+   "Streaming to Splunk · 2 alerts triggered today · retention 13 months";
+   ImportDetail's whole `DATA_IMPORT` constant (a history by
+   `morgan@accelerep.com`, a fake Salesforce file) — the real importer is
+   the CSV modal, not this panel. Jeff decides per panel: remove, reduce
+   to what is real, or build the feature. Not started.
+22. **Carried, same read: the hand-typed card COUNTS and the NEW badges.**
+   Where no settings key is read the catalogue's typed detail still
+   shows: KPI thresholds "12 KPIs configured", Pain points "23", Customer
+   types / Account segments "5 tiers", Industries "14 · 47 sub-types",
+   Lead conversion "8 sources configured", Price book "15 products · 3
+   bundles", Field-level visibility "6 rules", Fiscal year "Q1 starts Feb
+   1" (readable from `fiscalYearStart` — the one clear fix), Company
+   profile "Complete"; and the `&& settings?.x` guards fall back to a
+   typed count when the key is absent ("18 custom fields", "8 stages", "8
+   territories", "5 roles", "4 templates", "3 tiers", "12 holidays"). Each
+   needs its panel's settings key read first. The 16 `isNew:true` badges
+   never expire (dsp-* are months old). Not started.
 
 ## 6. The thread
 
