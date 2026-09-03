@@ -354,10 +354,10 @@ cleared at close.
    left by design. SHIPPED to prod as `1163eec` (§1).** The §0.68 list is
    closed; Jeff eyeballed the Reports tab on prod and confirmed it. The
    401 banner (item 7f) and the MFA card (item 7c) are DONE — state §0.78.
-   SHIPPED to prod as `d63644f` (§1). Next: Jeff eyeballs the Security →
-   Multi-factor auth tile as Admin (dev or prod — same code); the
-   report-delete confirm (item 13) and the after-7pm coaching note (item 3)
-   remain.
+   SHIPPED to prod as `d63644f` (§1); Jeff's screenshot of the Security
+   list confirms the tile ("2/4 enrolled · 50%", "Needs attention",
+   "Managed in Clerk"). Next: items 13, 14 and 15 are Jeff's call; the
+   coaching-note half of item 3 is still unobserved.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
@@ -398,6 +398,20 @@ cleared at close.
    through `settings` PUT with `coachingNotes` added to BOTH the GET
    response and the read-then-merge (CLAUDE.md's `settings.extra` rule),
    org-scoped like every other settings key.
+15. **Carried (Jeff's Security-list screenshot, state §0.78 last
+   paragraph): the rest of the Settings catalogue's invented text.** 46
+   cards carry hand-typed footers — `updatedAt:'2 months ago'` / `'just
+   now'` / `'3 weeks ago'` and an `updatedBy` that never changes — and
+   the Workspace Health tile's "N of 8 checks passing" is built from
+   `healthChecks` in AdminView.jsx (~line 673) with four constants: "MFA
+   enforced" always false (enrolment is live one card over —
+   `liveCounts.mfa`), "Backups running" / "Session policy set" / "Quote
+   branding configured" always true; its sentence "Set up SSO and enforce
+   MFA to reach 90%+" is static. Honest minimum: footers show "Managed in
+   X" or nothing (the audit log knows real edit times per entity if a
+   footer is wanted), health checks that cannot be read are dropped from
+   the denominator, "MFA enforced" becomes "MFA fully enrolled" from
+   `liveCounts.mfa`, and the sentence names only the checks that failed.
 
 ## 6. The thread
 

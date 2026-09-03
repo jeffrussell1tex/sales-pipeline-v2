@@ -2514,6 +2514,21 @@ serves `index-DrRd6S0A.js` 30 seconds after the push — `pk_live_` inlined,
 the sign-in banner copy and the "Managed in" line present, 2,535,963
 bytes. `master` == `dev` == `d63644f`.
 
+**Observed by Jeff (screenshot, Settings → Security list as Admin):** the
+Multi-factor auth tile reads "◐ 2/4 enrolled · 50%", "Needs attention",
+footer "Managed in Clerk" — matching the panel behind it. **The same
+screenshot shows the rest of the class, carried (handoff §5 item 15):**
+every other card's footer ("Edited 2 months ago by Admin", "Edited just
+now by System", "Never changed") is hand-typed in `catalogue.js` — 46
+cards carry an `updatedBy`, with `updatedAt` values like "2 months ago"
+that never move; and the Workspace Health tile's "4 of 8 checks passing ·
+50%" comes from `healthChecks` in AdminView (~line 673) where "MFA
+enforced" is `ok:false` unconditionally (enrolment is live one card
+over), "Backups running", "Session policy set" and "Quote branding
+configured" are `ok:true` unconditionally, and the sentence "Set up SSO
+and enforce MFA to reach 90%+" is static. Only the webhooks, pipeline and
+team-assignment checks read anything.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
