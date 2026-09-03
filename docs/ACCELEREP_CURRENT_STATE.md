@@ -3482,6 +3482,124 @@ unauthenticated and `/.netlify/functions/import` now falls through to the
 SPA catch-all (the function is gone). Not yet observed by Jeff; `master`
 stays at `eec3948`.
 
+### 0.87 Audit streaming, built for real (3 Sep, sixth session) — DESIGN, written before the code
+
+**Jeff's call on the fourth panel of item 21 (3 Sep): "Build audit
+streaming"** — keep the destinations UI and actually POST each audit row
+to them with an HMAC signature. This section is the design, committed
+before any code, so the code can be read against it.
+
+**What exists today, from source.** Four places insert an `audit_log` row:
+`_lib.mjs` `writeAudit()` (25 call sites across 12 functions), `users.mjs`'s
+own `writeAudit` (4 sites), the `audit-log.mjs` POST (client-originated
+rows from App.jsx's `addAudit`), and `users-sync.mjs` (one direct insert).
+The panel (`AuditDetail.jsx`, 1,205 lines) reads real rows through the
+audit-log GET (capped at 500, newest first), filters and searches them,
+exports the current view as CSV / JSON / NDJSON, and shows a "Streaming
+destinations" table read from `settings.extra.streamingDestinations` with
+an add modal, a pause toggle, a remove and a "globals" drawer saved to
+`settings.extra.streamingGlobals`. **Nothing reads either key server-side;
+no audit row has ever been sent anywhere.** A destination's "Active" and
+"Last delivered · Never" were typed at creation. Also invented, and not
+covered by Jeff's option: a "Streaming to Splunk · 2 alerts triggered
+today" badge, "retention 13 months" (the GET caps at 500 rows and nothing
+deletes), "Export all 12,847 events…" and "Schedule recurring export…"
+(no handler), a Manage alerts modal (local state, never saved, never
+fires), "Create alert from event", a row menu whose Edit / Send test event
+/ Pause / Delivery log do nothing, "View delivery logs", an IP column that
+is always "—" (no column in the schema), and a "Related · same actor" list
+computed from a hardcoded `SEC_AUDIT_EVENTS` array instead of the real
+rows. They go in the same batch, and this section says so.
+
+**Design.**
+
+*Storage — its own table, not the settings blob.* A destination carries a
+secret and delivery state; both are the wrong shape for a JSON column the
+client round-trips on every settings save (a PUT would either wipe the
+secret or have to be taught to preserve it, and the client would see it).
+New table `audit_stream_destinations` (guide §18c: DDL to BOTH databases
+first, `db/apply-audit-stream.mjs`, additive and idempotent): `id`
+(`asd_<uuid>`), `org_id`, `name`, `url` (https only), `fmt`
+(`JSON` | `NDJSON`), `secret` (AES-256-GCM ciphertext through
+`crypto.mjs` — the key BYOK already uses; when `SETTINGS_ENCRYPTION_KEY`
+is unset, create and rotate answer 503 the way the BYOK save does),
+`secret_hint` (last 4 of the plaintext, for the list), `paused`,
+`failures` (consecutive), `last_status`, `last_error`,
+`last_attempt_at`, `last_delivered_at`, `delivered_count`,
+`created_by`, `created_at`, `updated_at`; index on `org_id`. **Org-scoped
+from the first line:** a destination belongs to the org whose id is on its
+row, every read and write carries `eq(orgId)`, and a delivery is built
+from that org's audit row only. The two settings keys
+(`streamingDestinations`, `streamingGlobals`) are retired from both
+halves of settings.mjs; an org that "added" a destination under the old
+panel added a row nothing ever sent to, so nothing is migrated.
+
+*Delivery — at the write, signed, timed, recorded.* One shared
+`streamAudit(orgId, row)` in `_auditStream.mjs`, called after the insert
+at all four write sites. It reads the org's un-paused destinations (a 30 s
+per-org cache, invalidated by the endpoint's writes, so an audited request
+does not add a SELECT), builds one payload per row — `{ type:'audit',
+delivery_id, sent_at, id, org_id, action, entity_type, entity_id,
+entity_name, detail, actor_id, actor_name, timestamp }` — as JSON or as one
+NDJSON line, signs the exact body with HMAC-SHA256 over the destination's
+secret (`X-Accelerep-Signature: sha256=<hex>`, plus `X-Accelerep-Event`,
+`X-Accelerep-Delivery`, `X-Accelerep-Timestamp`; the webhooks.mjs
+convention), and POSTs to every destination in parallel with a **4 s
+timeout each**, awaited — a serverless function cannot promise a fire-and-
+forget fetch will finish. Cost: an audited write waits for the slowest
+destination, at most 4 s. Each attempt is recorded on the row (status,
+error, attempt time; delivered time and count on 2xx); **a destination is
+paused automatically after 10 consecutive failures**, with the reason in
+`last_error`, so a dead endpoint costs at most ten slow writes. No retry
+queue and no buffering — there is nowhere to hold events between
+invocations, and the panel says so instead of promising "Buffer & retry".
+`streamAudit` never throws: an audit write must never fail because a
+customer's endpoint did.
+
+*Endpoint — `audit-stream.mjs`, Admin only.* GET lists destinations
+without secrets (`secret_hint` and a computed status: Paused / Failing /
+Active / Never delivered); POST creates one and **returns the secret
+once**; POST `?test=<id>` sends a `type:'audit.test'` event through the
+same delivery path and returns the real status; PUT edits name / url / fmt,
+pauses or resumes (resume resets `failures`), or rotates the secret
+(returned once); DELETE removes. Validation in the pure module: https
+only, no credentials in the URL, no localhost / link-local / private-range
+host (an Admin's destination must not become a probe of the function's own
+network), name 1–120 characters, fmt from the list.
+
+*Pure module — `_auditPayload.mjs`.* Validation, secret minting
+(`ast_` + 48 hex), payload shapes, body encoding, signing, headers, the
+next-delivery-state rule (reset on success, count and auto-pause on
+failure), the list view (strips the secret), the status label. Everything
+the harness can reach without a database.
+
+*Client — `AuditDetail.jsx` rewritten around what is real.* Kept: the
+event stream, filters, search, the row popover and its facet chips, the
+export of the current view. Streaming: the table and add modal read and
+write the new endpoint; the secret is shown once on create and on rotate,
+with Copy; row actions are Send test event (shows the status the endpoint
+returned), Pause / Resume, Rotate secret and Remove (house `showConfirm`);
+status and "last delivered" are the row's real columns. Removed: the typed
+badge (now "Streaming to N destinations" or nothing), the retention claims
+("last 500 events" instead), the alerts modal and button, "Export all" /
+"Schedule recurring", "Create alert from event", "View delivery logs", the
+globals drawer, the IP column, and the mock-backed related list (now from
+the loaded rows).
+
+*Tests.* Pure: validation (https, private hosts, credentials, fmt, name),
+secret shape, payload and NDJSON body, a signing vector, headers, the
+state rule (10 → paused, success → 0), the view. Integration
+(`audit-stream.itest.mjs`, namespace `itest_astream_*`): a local
+`http.createServer` receives deliveries — create → secret once → a
+`writeAudit` for org A arrives at A's server with a verifying signature
+and not at B's; a paused destination receives nothing; the test event
+arrives; rotate invalidates the old secret; GET never carries the secret;
+a private host is refused. Mutants on the rule, the signature, the org
+scope and the hook points.
+
+**Status: design only.** Nothing below this line exists until the next
+paragraph says so.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
