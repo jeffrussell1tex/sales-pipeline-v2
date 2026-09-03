@@ -2625,7 +2625,11 @@ signed in as Karen, Sales Manager → Team → "+ Add coaching note", saved,
 hard-refreshed: "it all works" — the settings-PUT Manager exception
 holds a note across a reload, and Jeff's Admin note was visible to her.
 Karen is to be set back to User afterwards (the rep-path checks depend
-on her). **Local quirk found on
+on her). **Product note from Jeff after this:** coaching notes should be
+addressed to a person, several people, or the team — handoff §5 item 17
+records what exists (a name-string note in the org settings blob, seen
+by managers only, never by the rep) and the shape of the real feature
+(its own org-scoped table, recipients, a rep-side surface). **Local quirk found on
 the way:** the first Save hit `saved-reports` → 500 "module is not
 defined in ES module scope" from
 `.netlify/functions-serve/saved-reports/saved-reports.js` — netlify

@@ -463,6 +463,26 @@ cleared at close.
    quarter" totals (quota, closed, commit, best case) for the same
    bucket before fixing the header alone; then `quarterOf` /
    `quarterEndDate` from quarters.js, tests under two fiscal starts.
+17. **Product (Jeff, 2 Sep, after observing §0.79): coaching notes should
+   be ADDRESSED — a manager sends a note to a specific person, several
+   people, or the whole team.** What exists today, read from code: a
+   note is `{ id, rep, text, date, author }` in the org's
+   `settings.coachingNotes` blob; it is rendered only on the Sales
+   Manager tab's Team view (Admins and Managers), the "rep" is a free-text
+   name parsed from "rep: text", and a rep never sees a note written
+   about them — there is no recipient, no team, no read state, no
+   delivery. The org-wide settings blob is the wrong home for addressed,
+   per-person content: it is one JSON column every Admin PUT rewrites,
+   and the §0.79 Manager exception is a stopgap for exactly that. Design
+   from the first line as its own org-scoped table (guide §18c, additive:
+   `coaching_notes` — id, orgId, authorId, recipients (user ids) or
+   team, text, date, createdAt, readAt per recipient) with its own
+   function and visibility rules (author, Admins, managers of a
+   recipient, the recipient), a picker of reps / teams in the house
+   prompt instead of a typed name, a rep-side surface (Home "on your
+   plate" or a notes panel) and a notification; then migrate the blob's
+   existing notes and retire the settings key and the Manager exception.
+   Not started.
 
 ## 6. The thread
 
