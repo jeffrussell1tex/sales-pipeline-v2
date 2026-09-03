@@ -36,7 +36,9 @@ their headers is Jeff's call, not done.
 text; Workspace Health counts only what it can read), state §0.81; docs
 `6bb4d49`. Deploy-verified: accelerep.netlify.app served
 `index-CsUn53YS.js` (the local gate build's hash) 20 seconds after the
-push. Jeff's Admin eyeball of Settings is owed. First batch: `1e15e45`
+push. **OBSERVED by Jeff as Admin (3 Sep): footers empty except MFA,
+Workspace Health accurate, Webhooks accurate, Pipelines header without
+"Last edited"** (state §0.81, last paragraph). First batch: `1e15e45`
 (Sales Manager header on the org's fiscal quarter, weeks remaining never
 0) and `327ce8f` (totals quarter-to-date, Administration bar FY-to-date,
 three inert header buttons removed), state §0.80; docs `b673aa2`,
@@ -313,10 +315,8 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
   windows, consistent. Unshipped; prod at `d513b0e`.
 - **Item 15 DONE (3 Sep, `59212ec`, state §0.81):** footers gone, statuses
   and attention computed, health tile counts only readable checks, 16
-  panel headers' typed "Last edited" removed. **Jeff eyeballs on deployed
-  dev as Admin:** Settings → All — footers empty except MFA's "Managed in
-  Clerk"; the Workspace Health count and sentence; Webhooks' chip; the
-  Pipelines panel header without "Last edited".
+  panel headers' typed "Last edited" removed. **OBSERVED by Jeff as Admin
+  on deployed dev:** all four checks good. Unshipped; prod at `d513b0e`.
 - **Items 21 and 22 are new** (found reading for 15): four Security / Data
   panels are mockups in depth; the remaining hand-typed card counts and the
   16 never-expiring NEW badges. Both are Jeff's calls before code.
@@ -500,8 +500,9 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    failed). Catalogue: 48 footer pairs and two `attention:true` removed,
    six no-data cards `status:'none'`. Two shared headers render "Last
    edited" only when both values are real; 16 panels' typed values and
-   SsoDetail's "Morgan" removed. 13 tests + 8 mutations (212/212). Not
-   browser-checked (Admin-only); Jeff's eyeball owed. Was: **Carried (Jeff's Security-list screenshot, state §0.78 last
+   SsoDetail's "Morgan" removed. 13 tests + 8 mutations (212/212).
+   **OBSERVED by Jeff as Admin on deployed dev (3 Sep): footers, health
+   tile, Webhooks chip, Pipelines header — all good.** Was: **Carried (Jeff's Security-list screenshot, state §0.78 last
    paragraph): the rest of the Settings catalogue's invented text.** 46
    cards carry hand-typed footers — `updatedAt:'2 months ago'` / `'just
    now'` / `'3 weeks ago'` and an `updatedBy` that never changes — and

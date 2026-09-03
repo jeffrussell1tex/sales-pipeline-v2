@@ -2926,8 +2926,11 @@ badges that never expire.
 accelerep.netlify.app served `index-CsUn53YS.js` — the local gate build's
 hash — 20 seconds after the push (09:20:26 local, was `index-ByAdikgx.js`),
 2,536,390 bytes; both health sentences present in the bundle, the old "Set
-up SSO and enforce MFA" pitch and "Last edited by Morgan" absent. Jeff's
-Admin eyeball of Settings is owed.
+up SSO and enforce MFA" pitch and "Last edited by Morgan" absent.
+
+**OBSERVED by Jeff as Admin on deployed dev (3 Sep):** "footers are empty
+except MFA · Workforce heath is accurate · Webhooks accurate · Pipelines
+has no last edit line" — the four checks asked for, all four good.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
