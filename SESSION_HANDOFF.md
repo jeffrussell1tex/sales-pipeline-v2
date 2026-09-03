@@ -201,7 +201,11 @@ under src/ replaced by the house `showConfirm` and a new `showPrompt`
 dialog (promptModal in useModalState → App.jsx → ModalLayer); coaching
 notes persisted — `coachingNotes` in both halves of settings.mjs and a
 Manager may write that key alone. 6 tests, 6 mutants (+1 repointed),
-79/79 integration. Not browser-observed (the pane's session expired).
+79/79 integration. **Observed afterwards in the pane as Jeff/Admin:** the
+house prompt saves a coaching note that survives a reload (PUT 200); the
+saved-report × opens the Confirm dialog and Delete removes the card
+(DELETE 200) — state §0.79's observed paragraph, which also records the
+test note left in the dev org and the Enter key as unobserved.
 `147e5f4`, **deploy-verified:** accelerep.netlify.app serves
 `index-B0b_2Pd3.js`, the local gate build's hash.
 
@@ -371,15 +375,19 @@ cleared at close.
    401 banner (item 7f) and the MFA card (item 7c) are DONE — state §0.78.
    SHIPPED to prod as `d63644f` (§1); Jeff's screenshot of the Security
    list confirms the tile ("2/4 enrolled · 50%", "Needs attention",
-   "Managed in Clerk"). Items 13 and 14 are DONE — state §0.79. Next: Jeff
-   eyeballs the house dialogs on dev (Reports → Saved reports → ✕; Sales
-   Manager → + Add coaching note, then refresh — as a Manager too), then
-   ship dev → prod (prod is at `d63644f`, without §0.78's notice reword or
-   §0.79). Item 15 and the coaching-note half of item 3 remain.
+   "Managed in Clerk"). Items 13 and 14 are DONE and observed as Admin —
+   state §0.79. Next: ship dev → prod (prod is at `d63644f`, without
+   §0.78's notice reword or §0.79); the Manager path of the coaching note
+   (the settings-PUT exception) is unobserved — Jeff tries it signed in as
+   a Manager. Items 15 and 16 and the coaching-note half of item 3 remain.
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.
-12. Session quirks: inline `node -e` and Bash heredocs mangled `\\` in
+12. Session quirks: `netlify dev` caches compiled functions under
+   `.netlify/functions-serve`; after many reloads one served a stale
+   CommonJS copy ("module is not defined in ES module scope", 500 on every
+   call) — stop the server, `rm -rf .netlify/functions-serve`, restart
+   (state §0.79). Inline `node -e` and Bash heredocs mangled `\\` in
    regexes — write scripts with the Write tool and run the file; a
    scratchpad script cannot resolve the repo's packages — copy into the repo
    root, run, delete (tree checked clean after); `mutate-import` runs alone
@@ -431,6 +439,16 @@ cleared at close.
    footer is wanted), health checks that cannot be read are dropped from
    the denominator, "MFA enforced" becomes "MFA fully enrolled" from
    `liveCounts.mfa`, and the sentence names only the checks that failed.
+16. **Carried (seen in the pane during the §0.79 check): the Sales Manager
+   tab's quarter is the CALENDAR quarter.** Header "Team forecast · Q3
+   2026 · 4 weeks remaining" beside Home's "Q4 · Week 10" on 2 Sep.
+   SalesManagerTab.jsx ~line 769: `qNum = Math.floor(now.getMonth()/3)+1`,
+   `qEnd` the calendar quarter's last day, `weeksLeft` from it; no read of
+   `fiscalYearStart` anywhere in the file. Home and every report use
+   quarters.js with the org's fiscal start. Audit the tab's "this
+   quarter" totals (quota, closed, commit, best case) for the same
+   bucket before fixing the header alone; then `quarterOf` /
+   `quarterEndDate` from quarters.js, tests under two fiscal starts.
 
 ## 6. The thread
 

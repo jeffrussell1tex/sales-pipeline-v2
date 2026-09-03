@@ -2598,6 +2598,40 @@ Admin and, the point of the exception, as a Manager.
 **Dev landing (`147e5f4`):** accelerep.netlify.app serves `index-B0b_2Pd3.js`,
 the local gate build's hash, 46 seconds after the push.
 
+**Observed (local, Jeff's Admin session in the pane — Jeff: "open the
+browser"):** Sales Manager → Team → "+ Add coaching note" opens the house
+prompt (title, help line, "Rep name: note" label, placeholder, Save
+disabled until text); Save closed it, the "Recent coaching" card
+appeared with "Karen Russell · Sep 2" and the note, the settings PUT
+returned 200, and after a full reload the note is still there. **A test
+note now sits in Jeff's dev org's coaching list** ("Karen Russell: test
+note from the house-prompt check (Claude, 2 Sep) — safe to ignore"); the
+card has no delete, so it stays until an Admin PUT drops it — Jeff's
+call. Reports → Saved reports → × on the leftover "Rep scorecard (copy)"
+opened the app's Confirm dialog naming the report; Delete → `DELETE 200`,
+library "No saved reports yet". **Not observed:** the Enter key in the
+prompt — the pane's "Return" keystroke did not submit (the handler is
+`onKeyDown` Enter; the pane may not deliver it as Enter), Save was
+clicked instead; Jeff tries Enter on his keyboard. **Local quirk found on
+the way:** the first Save hit `saved-reports` → 500 "module is not
+defined in ES module scope" from
+`.netlify/functions-serve/saved-reports/saved-reports.js` — netlify
+dev's compiled copy of the function, stale after the session's many
+reloads; stopping the server, `rm -rf .netlify/functions-serve`, and
+restarting cleared it. Same family as the CLAUDE.md stale-build note;
+that note names `node_modules/.vite` and `dist` only.
+
+**Found in the same screen, carried (handoff §5 item 16):** the Sales
+Manager header reads "Team forecast · Q3 2026 · 4 weeks remaining" on the
+same day Home reads "Q4 · Week 10". SalesManagerTab.jsx ~line 769 builds
+its quarter from the calendar — `Math.floor(now.getMonth()/3) + 1`, an
+end date of that calendar quarter, weeks left from it — and never reads
+`fiscalYearStart`; Home uses quarters.js with the org's fiscal start.
+With an October fiscal start, September is Q4 FY26 to every report and
+"Q3 2026, 4 weeks left" to the manager. Whether the tab's "this quarter"
+totals (quota, closed, commit) share the calendar bucket is not yet
+read — the audit for that tab.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
