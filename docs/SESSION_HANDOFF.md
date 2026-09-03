@@ -16,14 +16,16 @@ batches on dev, deploy-verified, OBSERVED by Jeff — "Looks correct";
 then ALL of it SHIPPED to prod as the eighth ship — `master` `eec3948` →
 `ad76a38`, salespipelinetracker.com serving `index-BYLyFXw4.js`; then item
 22 — the Settings catalogue's counts from the panels' own keys and the NEW
-badges retired — on dev, deploy-verified, NOT yet observed, NOT shipped;
+badges retired — on dev, deploy-verified, OBSERVED by Jeff — "confirmed
+that settings cards are correct and all badges are gone" — NOT shipped;
 "call it a day"), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
 `### 0.88` with a paragraph beginning **"Jeff: "lets do 22 and then call
-it a day.""** and a paragraph beginning **"Dev landing (`539eaa1`"**, and does
+it a day.""** and a paragraph beginning **"OBSERVED by Jeff on deployed dev (3
+Sep): "confirmed that settings cards"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
 beginning **"Never `window.confirm`"** (the guide did not change this
 session either)? If not, you are looking at a copy that predates this handoff.
@@ -48,8 +50,9 @@ answer 401 unauthenticated. `master` == `dev` == `ad76a38` at the ship; dev
 is ahead only by this ship-record docs commit. Nothing was unshipped at the
 ship; item 22 (next paragraph) came after it.
 
-**Sixth session, fifth batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
-observed, NOT shipped:** `539eaa1` (item 22, state §0.88) and its landing
+**Sixth session, fifth batch (3 Sep) — ON DEV ONLY, deploy-verified,
+OBSERVED by Jeff ("confirmed that settings cards are correct and all badges
+are gone"), NOT shipped:** `539eaa1` (item 22, state §0.88) and its landing
 docs commit `9cb2d2a`. accelerep.netlify.app served `index-WThsNanc.js` —
 the local gate build's hash — 42 seconds after the push (14:02:19 local),
 2,483,334 bytes, `pk_test_` inlined, "App defaults" / "recent event" / "FY
@@ -60,8 +63,9 @@ is null, or says "App defaults" where the panel supplies one; two guards had
 named keys no panel writes (`customFields`, `holidays`), so "18 custom
 fields" and "12 holidays" had shown for every org always; the audit card no
 longer says "last 30d" over a 500-row cap; all 16 never-expiring NEW badges
-and two dead `moved` flags are gone. **Jeff eyeballs on deployed dev as
-Admin** (§5). `master` stays at `ad76a38`.
+and two dead `moved` flags are gone. **OBSERVED by Jeff on deployed dev (3
+Sep): "confirmed that settings cards are correct and all badges are gone."**
+`master` stays at `ad76a38`.
 
 **Sixth session, fourth batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff ("Looks correct"), NOT shipped:** `2e7a219` (audit streaming, state §0.87 — the
@@ -451,11 +455,13 @@ mutation in flight — and was restored; not a finding).
   (Jeff: "confirmed on karen under performance") and UNSHIPPED; item 21's
   three reductions (`6ec3c05`) and audit streaming (`2e7a219`) are
   OBSERVED (Jeff: "Looks correct")** — and ALL of it is SHIPPED (the
-  eighth ship, `ad76a38`). **Item 22 (`539eaa1`) is UNOBSERVED and
-  UNSHIPPED** — that is the state, not a finding. Expect `git log --oneline
+  eighth ship, `ad76a38`). **Item 22 (`539eaa1`) is OBSERVED (Jeff: "confirmed
+  that settings cards are correct and all badges are gone") and UNSHIPPED**
+  — that is the state, not a finding. **Everything on dev has been seen.** Expect `git log --oneline
   origin/master..dev` to list the ship-record docs commit, `539eaa1` and its
   two docs commits; anything else is unshipped code and a finding.
-- **Jeff eyeballs item 22 on deployed dev, as Admin:** Settings → All. No
+- **DONE — Jeff confirmed item 22 on deployed dev.** Was the eyeball list,
+  kept as the record of what "correct" covers: Settings → All. No
   card wears NEW. Custom fields and Company calendar no longer assert "18"
   and "12" for an org that set neither; KPI thresholds, Customer types,
   Account segments and Industries read "App defaults" until the org saves
@@ -931,8 +937,10 @@ mutation in flight — and was restored; not a finding).
    "lets do 22 and then call it a day").** Every count from its panel's
    key or null, "App defaults" where the panel supplies one, the two
    wrong-key guards fixed, "last 30d" gone, all 16 badges and both `moved`
-   flags gone; 9 tests, 5 mutants. Unobserved; unshipped. Was: **Carried,
-   same read: the hand-typed card COUNTS and the NEW badges.**
+   flags gone; 9 tests, 5 mutants. **OBSERVED by Jeff on deployed dev
+   ("confirmed that settings cards are correct and all badges are gone").**
+   Unshipped. Was: **Carried, same read: the hand-typed card COUNTS and the
+   NEW badges.**
    Where no settings key is read the catalogue's typed detail still
    shows: KPI thresholds "12 KPIs configured", Pain points "23", Customer
    types / Account segments "5 tiers", Industries "14 · 47 sub-types",
@@ -1062,5 +1070,7 @@ to need no decision: a count is the panel's key or it is nothing, and two
 of the guards had been reading keys no panel ever wrote, so two numbers
 had been true of every org and no org. Thirty typed details, sixteen
 badges and two dead flags left the catalogue; nine tests and five mutants
-hold the rule. Deployed, hash-checked, unobserved, and said so. Then the
-day was called. Observed, then written, then committed.
+hold the rule. Deployed, hash-checked; then Jeff looked — "confirmed that
+settings cards are correct and all badges are gone" — and the day was
+called. Six items on dev this session, all six seen, five shipped; the
+sixth is his call. Observed, then written, then committed.
