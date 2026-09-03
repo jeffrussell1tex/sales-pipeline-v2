@@ -1,8 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (sixth session)
 **Verified at:** five gates green on 147 files · **527 tests** · **244/244 mutations, printed green baseline** · **94/94 integration** · build guard OK 2,425 kB `index-BJ1VcE9y.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · dev ahead of `master` by four batches (§0.84 and §0.85 observed, §0.86, §0.87) and their docs; not yet shipped. The app database and the test database both hold `audit_stream_destinations`.
-**Batch:** **audit streaming, built for real (§0.87, item 21's fourth panel — Jeff's "build")** — every audit row is POSTed, HMAC-SHA256-signed, to each of the org's destinations as it is written (four write sites), from a new org-scoped `audit_stream_destinations` table (DDL in both databases first), through an Admin-only `audit-stream` endpoint that shows a secret once, sends a real test event, pauses / resumes / rotates / removes, and records every attempt; a dead endpoint pauses itself after ten failures; the panel keeps what was real and drops the alerts modal, the typed badge and retention claims, the inert menus and the IP column. Proven against a local receiver in the integration suite. Dev only; not yet shipped; not browser-checked — Jeff eyeballs as Admin.
-**Prior batch:** **three Settings panels reduced to what is real — SSO, Session & password, Import (§0.86, handoff item 21, Jeff's call per panel)** — SSO was a constant with a fake domain and a frozen wizard saving a key sign-in never read; Session & password was a policy form whose Save PUT a key in NEITHER half of settings.mjs (the toast said saved; nothing was) with nothing enforcing any of it; Import was a fake history and a wizard whose "Run import" posted no rows and echoed the preview back as a success. Now: two Managed-in-Clerk panels (what Clerk does, what the app does, what it does not do), an Import launcher for the real CSV and lead importers, `import.mjs` deleted, `ssoConfig` and `importPresets` retired from both halves. Audit streaming is Jeff's "build" and is the next batch (§0.87). Dev only; not yet shipped; not browser-checked — Jeff eyeballs as Admin.
+**Batch:** **audit streaming, built for real (§0.87, item 21's fourth panel — Jeff's "build")** — every audit row is POSTed, HMAC-SHA256-signed, to each of the org's destinations as it is written (four write sites), from a new org-scoped `audit_stream_destinations` table (DDL in both databases first), through an Admin-only `audit-stream` endpoint that shows a secret once, sends a real test event, pauses / resumes / rotates / removes, and records every attempt; a dead endpoint pauses itself after ten failures; the panel keeps what was real and drops the alerts modal, the typed badge and retention claims, the inert menus and the IP column. Proven against a local receiver in the integration suite. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("Looks correct").**
+**Prior batch:** **three Settings panels reduced to what is real — SSO, Session & password, Import (§0.86, handoff item 21, Jeff's call per panel)** — SSO was a constant with a fake domain and a frozen wizard saving a key sign-in never read; Session & password was a policy form whose Save PUT a key in NEITHER half of settings.mjs (the toast said saved; nothing was) with nothing enforcing any of it; Import was a fake history and a wizard whose "Run import" posted no rows and echoed the preview back as a success. Now: two Managed-in-Clerk panels (what Clerk does, what the app does, what it does not do), an Import launcher for the real CSV and lead importers, `import.mjs` deleted, `ssoConfig` and `importPresets` retired from both halves. Audit streaming is Jeff's "build" and is §0.87. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("Looks correct").**
 **Prior batch:** **the Performance tab's single-rep view lists that rep's won and lost deals, with totals (§0.85, handoff item 20)** — with the Rep slicer set the leaderboard was one row and the Rep metrics table hid itself below two reps, so a manager saw an attainment bar and no deals behind it; now two panels below the leaderboard, from the SAME period-filtered sets the leaderboard sums (one number, itemised): won deals with close day, cycle and ARR and a total, lost deals with the stage each left and why and a total, the win rate the two imply, all pure in `repDeals.js`. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("confirmed on karen under performance").**
 **Prior batch:** **the Forecast ledger's Commit and Best case are STORED, per fiscal quarter; the Sales Manager tab's five inert buttons reach real destinations; the tab has an export; Home's quota card is this quarter's (§0.84, handoff items 18 + 19)** — a typed Commit went through a users PUT whose `sanitize()` never carried the key (0 on refresh, §0.80), and one number per rep could never reset when the quarter turned; now `profile.forecastCalls` keyed by quarter through one pure validator on both sides (`forecastCall.js`), Best case editable for the first time with an untyped one flagged "est.", "Coach →" / "Coach" / "Open coaching" open the note dialog with the rep pre-addressed, "Pipeline" / "Their pipeline" open the Pipeline tab viewing as the rep, "Schedule 1:1" opens a new task in the rail, the ledger exports CSV, and Home's card reads the quarter's own quota, wins by close day and commit by the org's stages under the quarter's real name. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("verified changes. they are working").**
 **Prior batch:** **the coachingNotes settings key is retired (§0.83, handoff item 23)** — both orgs imported their old blob notes on 3 Sep, so the key leaves both halves of settings.mjs, the legacy POST branch leaves coaching-notes.mjs, the import button and helpers leave the Team tab and the util, and four mutants whose targets went with them are retired (218 → 214). Rows the import wrote keep `legacy: true` for the "imported" label. Dev only; not yet shipped.
@@ -3480,8 +3480,9 @@ real importer).
 from this page itself." present in the served bundle, "acme-corp.com" and
 "Policy saved" absent; the deployed `settings` function answers 401
 unauthenticated and `/.netlify/functions/import` now falls through to the
-SPA catch-all (the function is gone). Not yet observed by Jeff; `master`
-stays at `eec3948`.
+SPA catch-all (the function is gone). `master` stays at `eec3948`.
+
+**OBSERVED by Jeff on deployed dev (3 Sep): "Looks correct."** Unshipped.
 
 ### 0.87 Audit streaming, built for real (3 Sep, sixth session) — DESIGN, written before the code
 
@@ -3690,8 +3691,13 @@ it arrive.
 `index-Wjd4yjDA.js`), 2,482,786 bytes, `pk_test_` inlined; "Send test event",
 "Rotate secret" and "the last 500 events are loaded" present in the served
 bundle, "Streaming to Splunk" and "Manage alerts" absent; the deployed
-`audit-stream` function answers 401 unauthenticated. Not yet observed by
-Jeff; `master` stays at `eec3948`.
+`audit-stream` function answers 401 unauthenticated. `master` stays at
+`eec3948`.
+
+**OBSERVED by Jeff on deployed dev (3 Sep): "Looks correct."** His words
+cover what he saw on the panel; whether he walked a destination through
+(secret, test event, a delivered row) he did not say, and this record does
+not claim it. Unshipped.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

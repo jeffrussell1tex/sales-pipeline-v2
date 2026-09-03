@@ -12,14 +12,15 @@ item 21 decided per panel by Jeff: three panels reduced to what is real —
 SSO, Session & password, Import — and the fourth, audit streaming, BUILT
 for real (its own table, signed delivery at every audit write, an Admin
 endpoint, a local receiver proving it in the integration suite); both
-batches on dev, deploy-verified, NOT yet observed; nothing shipped to
-prod), FINAL.** Repo root. Read this first, then verify
+batches on dev, deploy-verified, OBSERVED by Jeff — "Looks correct";
+nothing shipped to prod), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
 `### 0.87` with a paragraph beginning **"BUILT (same day), to the design
-above"** and a paragraph beginning **"Dev landing (`2e7a219`"**, and does
+above"** and a paragraph beginning **"OBSERVED by Jeff on deployed dev (3
+Sep): "Looks correct.""**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
 beginning **"Never `window.confirm`"** (the guide did not change this
 session either)? If not, you are looking at a copy that predates this handoff.
@@ -34,8 +35,8 @@ their headers is Jeff's call, not done.
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
 
-**Sixth session, fourth batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
-observed, NOT shipped:** `2e7a219` (audit streaming, state §0.87 — the
+**Sixth session, fourth batch (3 Sep) — ON DEV ONLY, deploy-verified,
+OBSERVED by Jeff ("Looks correct"), NOT shipped:** `2e7a219` (audit streaming, state §0.87 — the
 design committed first as `1ac3d64`, then the build) and its landing docs
 commit `3541d8a`. accelerep.netlify.app served `index-BJ1VcE9y.js` —
 the local gate build's hash — 52 seconds after the push (13:26:26 local),
@@ -53,11 +54,13 @@ itself after ten consecutive failures; an Admin-only endpoint creates one
 removes; the panel keeps the real stream, filters and export and drops the
 alerts modal, the typed badge, the retention claims, the inert menus and the
 IP column. The integration suite runs a local receiver and verifies real
-signatures against the real database. **Jeff eyeballs on deployed dev as
-Admin** (§5). `master` stays at `eec3948`.
+signatures against the real database. **OBSERVED by Jeff on deployed dev
+(3 Sep): "Looks correct"** — his words cover the panel as seen; a
+destination walked through to a delivered row he did not report. `master`
+stays at `eec3948`.
 
-**Sixth session, third batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
-observed, NOT shipped:** `6ec3c05` (item 21, three of four panels, state
+**Sixth session, third batch (3 Sep) — ON DEV ONLY, deploy-verified,
+OBSERVED by Jeff ("Looks correct"), NOT shipped:** `6ec3c05` (item 21, three of four panels, state
 §0.86) and its landing docs commit `49783ef`. accelerep.netlify.app served
 `index-Wjd4yjDA.js` — the local gate build's hash — 42 seconds after the
 push (13:03:13 local), 2,500,619 bytes, `pk_test_` inlined, "Managed in
@@ -74,8 +77,8 @@ caller was the fake wizard) is deleted, `ssoConfig` and `importPresets`
 are out of both halves of settings.mjs. **Found reading: SessionDetail's
 Save PUT `sessionPolicy`, a key in NEITHER half of settings.mjs — the
 previous handoff's "the policy it saves is real" was wrong; it toasted
-"Policy saved." and saved nothing.** **Jeff eyeballs on deployed dev as
-Admin** (§5). `master` stays at `eec3948`.
+"Policy saved." and saved nothing.** **OBSERVED by Jeff on deployed dev
+(3 Sep): "Looks correct."** `master` stays at `eec3948`.
 
 **Sixth session, second batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff ("confirmed on karen under performance"), NOT shipped:** `6db6ea8` (item 20, state §0.85) and its landing
@@ -417,8 +420,11 @@ mutation in flight — and was restored; not a finding).
   "verified changes. they are working") and UNSHIPPED; item 20 is OBSERVED
   (Jeff: "confirmed on karen under performance") and UNSHIPPED; item 21's
   three reductions (`6ec3c05`) and audit streaming (`2e7a219`) are
-  UNOBSERVED and UNSHIPPED** — that is the state, not a finding.
-- **Jeff eyeballs audit streaming on deployed dev, as Admin:** Settings →
+  OBSERVED (Jeff: "Looks correct") and UNSHIPPED** — that is the state,
+  not a finding. **Everything on dev has been seen; nothing is shipped.**
+- **DONE — Jeff: "Looks correct."** Was the walkthrough, kept as the
+  record of what a full check covers (his words do not say he walked a
+  destination through to a delivered row): Settings →
   Security → Audit log. The badge is absent until a destination exists;
   the subtitle says the last 500 events are loaded; no Manage alerts, no IP
   column. "+ Add destination" → a receiver he controls (a request-bin
@@ -434,7 +440,8 @@ mutation in flight — and was restored; not a finding).
   `SETTINGS_ENCRYPTION_KEY` — the same variable the BYOK save needs; set it
   in Netlify → Site → Environment variables (the crypto.mjs header says how
   to generate one). Not verifiable from here.
-- **Jeff eyeballs the three panels on deployed dev, as Admin:** Settings →
+- **DONE — Jeff: "Looks correct."** Was the eyeball list, kept as the record
+  of what "correct" covers: Settings →
   Security → Single sign-on (a Managed in Clerk chip, an info callout with
   two links, one card, no form); → Session & password (the chip, the
   callout, "What Accelerep adds on top", "Not available in Accelerep");
@@ -851,7 +858,7 @@ mutation in flight — and was restored; not a finding).
    report already carries.
 21. **DONE — all four: state §0.86 (`6ec3c05`, the three reductions) and
    §0.87 (`1ac3d64` design, `2e7a219` build — audit streaming for real).**
-   Both unobserved; both unshipped. Was: **THREE OF FOUR DONE — state
+   **OBSERVED by Jeff on deployed dev ("Looks correct").** Both unshipped. Was: **THREE OF FOUR DONE — state
    §0.86, commit `6ec3c05` (3 Sep, sixth session; Jeff's call per panel:
    SSO reduce, Session reduce, Import launcher, Audit streaming BUILD).** SSO and Session & password are
    Managed-in-Clerk panels; Import launches the real importers;
@@ -978,5 +985,5 @@ designed in the state doc and committed as a design before a line of code —
 its own table rather than the settings blob, delivery at the write with a
 signature and a timeout, a destination that pauses itself — and then built
 to that design, with a local receiver in the integration suite verifying
-the signatures the customer would verify. Five items on dev, three seen;
-the ship is his call.
+the signatures the customer would verify. Then Jeff looked: "Looks
+correct." Five items on dev, all five seen; the ship is his call.
