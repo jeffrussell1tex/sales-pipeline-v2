@@ -12,6 +12,7 @@ import { escapeHtml as esc, taskDay, linkedToAccount, linkedToContact, contactTo
 import { productsListOf, contactNamesText } from '../utils/oppText';
 import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep, closeDayOf, cycleDaysOf, medianOf, closeDayInRange, lastQuarters } from '../utils/pipelineReport';
 import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStages } from '../utils/stageOrder';
+import { repDeals } from '../utils/repDeals';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
 
@@ -1136,6 +1137,104 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                   </div>
                                 )}
                               </>
+                            );
+                          })()}
+
+
+                          {/* ── Won and lost deals — the ONE rep the slicer names (state §0.85, handoff item 20).
+                               With the Rep slicer set the leaderboard is one row and the Rep metrics
+                               table hides itself below two reps, so a manager saw an attainment bar and
+                               no deals behind it. The lists come from the SAME period-filtered sets the
+                               leaderboard sums, so the total here is the leaderboard's number. ── */}
+                          {reportsRep && (() => {
+                            const T2c = { surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378', ok:'#4d6b3d', danger:'#9c3a2e', sans:'"Plus Jakarta Sans",system-ui,sans-serif', serif:'Georgia,serif', r:3 };
+                            const eb2c = (c) => ({ fontSize:10, fontWeight:700, color:c||T2c.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T2c.sans });
+                            const fmt2c = (v) => { const n=parseFloat(v)||0; if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3)return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n).toLocaleString(); };
+                            const fmtDay2c = (s) => s ? new Date(s+'T12:00:00').toLocaleDateString('en-US',{ month:'short', day:'numeric', year:'numeric' }) : 'no close day';
+                            const d = repDeals(wonOpps, lostOpps, reportsRep);
+                            const periodLabel2c = reportTimePeriod === 'all' ? 'all time'
+                              : reportTimePeriod === 'custom' ? `${reportDateFrom || '…'} to ${reportDateTo || '…'}`
+                              : reportTimePeriod === 'FY' ? `FY ${currentFiscalYear(fiscalStart)}`
+                              : `${reportTimePeriod} FY${currentFiscalYear(fiscalStart)}`;
+                            const panel2c = { background:T2c.surface, border:`1px solid ${T2c.border}`, borderRadius:T2c.r, padding:'20px 22px 14px' };
+                            const hdr2c = { display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 };
+                            const title2c = { fontSize:16, fontFamily:T2c.serif, fontStyle:'italic', fontWeight:400, color:T2c.ink, lineHeight:1.1, letterSpacing:-0.2 };
+                            const sub2c = { fontSize:11.5, color:T2c.inkMuted, marginTop:3, fontFamily:T2c.sans };
+                            const cell2c = { fontSize:12, color:T2c.inkMid, fontFamily:T2c.sans, whiteSpace:'nowrap' };
+                            const total2c = { display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'10px 0 4px', borderTop:`2px solid ${T2c.ink}`, marginTop:4, fontSize:12.5, fontWeight:700, color:T2c.ink, fontFamily:T2c.sans };
+                            return (
+                              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                                {/* Won */}
+                                <div style={panel2c}>
+                                  <div style={hdr2c}>
+                                    <div style={{ flex:1 }}>
+                                      <div style={title2c}>Won deals — {reportsRep}</div>
+                                      <div style={sub2c}>Closed Won, {periodLabel2c} · newest close first</div>
+                                    </div>
+                                    <span style={{ fontSize:12, color:T2c.inkMid, fontFamily:T2c.sans }}>
+                                      {d.totals.winRate != null ? `${Math.round(d.totals.winRate*100)}% win rate` : 'no closed deals'}
+                                    </span>
+                                  </div>
+                                  {d.won.length === 0 ? (
+                                    <div style={{ padding:'1.5rem 0', color:T2c.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T2c.sans }}>No won deals in this period.</div>
+                                  ) : (
+                                    <>
+                                      <div style={{ display:'grid', gridTemplateColumns:'1fr 96px 56px 84px', gap:10, padding:'0 0 6px', borderBottom:`1px solid ${T2c.border}` }}>
+                                        {['Deal','Closed','Cycle','ARR'].map((h,i)=><div key={h} style={{ ...eb2c(), textAlign:i===0?'left':'right' }}>{h}</div>)}
+                                      </div>
+                                      {d.won.map((r,i)=>(
+                                        <div key={r.id||i} style={{ display:'grid', gridTemplateColumns:'1fr 96px 56px 84px', gap:10, alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${T2c.border}` }}>
+                                          <div style={{ minWidth:0 }}>
+                                            <div style={{ fontSize:13, fontWeight:600, color:T2c.ink, fontFamily:T2c.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
+                                            {r.account && r.account !== r.name && <div style={{ fontSize:11, color:T2c.inkMuted, fontFamily:T2c.sans }}>{r.account}</div>}
+                                          </div>
+                                          <div style={{ ...cell2c, textAlign:'right' }}>{fmtDay2c(r.closeDay)}</div>
+                                          <div style={{ ...cell2c, textAlign:'right' }}>{r.cycleDays != null ? r.cycleDays+'d' : '—'}</div>
+                                          <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T2c.ok, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmt2c(r.arr)}</div>
+                                        </div>
+                                      ))}
+                                      <div style={total2c}>
+                                        <span>Total</span>
+                                        <span>{d.totals.wonCount} won · {fmt2c(d.totals.wonArr)} ARR{d.totals.wonImpl > 0 && <span style={{ fontWeight:500, color:T2c.inkMid }}> · +{fmt2c(d.totals.wonImpl)} implementation</span>}</span>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                                {/* Lost */}
+                                <div style={panel2c}>
+                                  <div style={hdr2c}>
+                                    <div style={{ flex:1 }}>
+                                      <div style={title2c}>Lost deals — {reportsRep}</div>
+                                      <div style={sub2c}>Closed Lost, {periodLabel2c} · the stage each left and why</div>
+                                    </div>
+                                  </div>
+                                  {d.lost.length === 0 ? (
+                                    <div style={{ padding:'1.5rem 0', color:T2c.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T2c.sans }}>No lost deals in this period.</div>
+                                  ) : (
+                                    <>
+                                      <div style={{ display:'grid', gridTemplateColumns:'1fr 96px 84px', gap:10, padding:'0 0 6px', borderBottom:`1px solid ${T2c.border}` }}>
+                                        {['Deal','Closed','ARR'].map((h,i)=><div key={h} style={{ ...eb2c(), textAlign:i===0?'left':'right' }}>{h}</div>)}
+                                      </div>
+                                      {d.lost.map((r,i)=>(
+                                        <div key={r.id||i} style={{ display:'grid', gridTemplateColumns:'1fr 96px 84px', gap:10, alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${T2c.border}` }}>
+                                          <div style={{ minWidth:0 }}>
+                                            <div style={{ fontSize:13, fontWeight:600, color:T2c.ink, fontFamily:T2c.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
+                                            <div style={{ fontSize:11, color:T2c.inkMuted, fontFamily:T2c.sans }}>
+                                              {r.account && r.account !== r.name ? r.account + ' · ' : ''}left {r.exitStage || 'an unrecorded stage'} · {r.lossReason || 'no reason recorded'}
+                                            </div>
+                                          </div>
+                                          <div style={{ ...cell2c, textAlign:'right' }}>{fmtDay2c(r.closeDay)}</div>
+                                          <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T2c.danger, fontFamily:'ui-monospace,Menlo,monospace' }}>−{fmt2c(r.arr)}</div>
+                                        </div>
+                                      ))}
+                                      <div style={total2c}>
+                                        <span>Total</span>
+                                        <span>{d.totals.lostCount} lost · {fmt2c(d.totals.lostArr)} ARR</span>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
                             );
                           })()}
 

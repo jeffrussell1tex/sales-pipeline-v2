@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (sixth session)
-**Verified at:** five gates green on 146 files · **499 tests** · **224/224 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,493 kB `index-C9mGhBOf.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · dev ahead of `master` by this batch and its docs; not yet shipped.
-**Batch:** **the Forecast ledger's Commit and Best case are STORED, per fiscal quarter; the Sales Manager tab's five inert buttons reach real destinations; the tab has an export; Home's quota card is this quarter's (§0.84, handoff items 18 + 19)** — a typed Commit went through a users PUT whose `sanitize()` never carried the key (0 on refresh, §0.80), and one number per rep could never reset when the quarter turned; now `profile.forecastCalls` keyed by quarter through one pure validator on both sides (`forecastCall.js`), Best case editable for the first time with an untyped one flagged "est.", "Coach →" / "Coach" / "Open coaching" open the note dialog with the rep pre-addressed, "Pipeline" / "Their pipeline" open the Pipeline tab viewing as the rep, "Schedule 1:1" opens a new task in the rail, the ledger exports CSV, and Home's card reads the quarter's own quota, wins by close day and commit by the org's stages under the quarter's real name. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("verified changes. they are working").**
+**Verified at:** five gates green on 147 files · **505 tests** · **229/229 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,499 kB `index-DmjjOHZE.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · dev ahead of `master` by two batches (§0.84 observed, §0.85) and their docs; not yet shipped.
+**Batch:** **the Performance tab's single-rep view lists that rep's won and lost deals, with totals (§0.85, handoff item 20)** — with the Rep slicer set the leaderboard was one row and the Rep metrics table hid itself below two reps, so a manager saw an attainment bar and no deals behind it; now two panels below the leaderboard, from the SAME period-filtered sets the leaderboard sums (one number, itemised): won deals with close day, cycle and ARR and a total, lost deals with the stage each left and why and a total, the win rate the two imply, all pure in `repDeals.js`. Dev only; not yet shipped; not browser-checked — Jeff eyeballs as Admin.
+**Prior batch:** **the Forecast ledger's Commit and Best case are STORED, per fiscal quarter; the Sales Manager tab's five inert buttons reach real destinations; the tab has an export; Home's quota card is this quarter's (§0.84, handoff items 18 + 19)** — a typed Commit went through a users PUT whose `sanitize()` never carried the key (0 on refresh, §0.80), and one number per rep could never reset when the quarter turned; now `profile.forecastCalls` keyed by quarter through one pure validator on both sides (`forecastCall.js`), Best case editable for the first time with an untyped one flagged "est.", "Coach →" / "Coach" / "Open coaching" open the note dialog with the rep pre-addressed, "Pipeline" / "Their pipeline" open the Pipeline tab viewing as the rep, "Schedule 1:1" opens a new task in the rail, the ledger exports CSV, and Home's card reads the quarter's own quota, wins by close day and commit by the org's stages under the quarter's real name. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("verified changes. they are working").**
 **Prior batch:** **the coachingNotes settings key is retired (§0.83, handoff item 23)** — both orgs imported their old blob notes on 3 Sep, so the key leaves both halves of settings.mjs, the legacy POST branch leaves coaching-notes.mjs, the import button and helpers leave the Team tab and the util, and four mutants whose targets went with them are retired (218 → 214). Rows the import wrote keep `legacy: true` for the "imported" label. Dev only; not yet shipped.
 **Prior batch:** **coaching notes are ADDRESSED — to a person, several people, or a team — in their own org-scoped table (§0.82, handoff item 17)** — `coaching_notes` + `users.team_joined_at` (DDL applied to the test and app databases FIRST, guide §18c), `coaching-notes.mjs` with visibility decided by the pure `_coaching.mjs` (Jeff's two rules: a note to people is seen by author, recipients and Admins — never another manager; a team note by the team's manager and by members from their FIRST DAY, team_joined_at else created_at, resolved at read time), a house dialog with a rep/team picker replacing the typed "rep: text" prompt, the Team tab reading the table with delete for author/Admin, a "Notes from your manager" block on Home with read stamps, unread notes in the bell, an idempotent Admin import of the old settings-blob notes, and the §0.79 Manager carve-out in settings.mjs retired. Not browser-checked; Jeff eyeballs as Admin and as Karen.
 **Prior batch:** **the Settings catalogue and its panel headers carry no invented text; Workspace Health counts only what it can read (§0.81)** — 48 hand-typed footers ("Edited 2 months ago by Admin", values that never moved) gone, the two typed attention flags and five typed statuses gone, card status / attention / detail computed in one pure module (`settingsCards.js`, the block that lived inside the card component), the Needs Attention list computed from the same, the health tile's eight checks (four constants) replaced by the six that can be read with a sentence that names what failed, and 16 detail panels' typed "Last edited 3 weeks ago by Admin" removed (the shared headers render the line only when both values are real; the SSO panel's fictional "Morgan" gone). Carried: the mockup depth of the SSO / Session / Audit / Import panels and the remaining hand-typed card counts (handoff items 21–22).
@@ -3304,6 +3305,72 @@ unauthenticated. `master` stays at `eec3948`.
 
 **OBSERVED by Jeff on deployed dev (3 Sep): "verified changes. they are
 working."** Unshipped; the ship is Jeff's call.
+
+### 0.85 The Performance tab's single-rep view lists that rep's won and lost deals, with totals (3 Sep, sixth session)
+
+**Jeff: "lets do 20."** Item 20 was his product note from the §0.80 eyeball:
+"Reports → Performance → the single-rep view should have a section listing
+that rep's won and lost deals, with totals."
+
+**What was read.** The Performance sub-tab in full (`ReportsTab.jsx`
+834–1250): with the Rep slicer set, `visibleRepNames2` is that one name, the
+leaderboard renders one row, and the "Rep metrics" table is gated
+`repRows.length > 1` — so the single-rep view was an attainment bar, a
+sparkline and four team KPIs, with no deal behind any of them. The Rep
+scorecard template (t3) has "Recent wins / losses" but capped at 30 days
+and four / three rows, and it is a template, not the tab Jeff was on. The
+tab's `wonOpps` / `lostOpps` are the period-filtered sets (`reportsTimedOpps`
+by `forecastedCloseDate || createdDate` inside `periodRange`) that the
+leaderboard's Closed sums — the right sets for a list whose total must be
+the leaderboard's number. `closeDayOf`, `cycleDaysOf` (pipelineReport.js),
+`exitStageOf` and `lossBucketOf` (lossAnalysis.js) already give the close
+day, the cycle, the stage a lost deal left and its reason; the period
+labels live in the filter bar's `periodOptions`.
+
+**What changed.** New pure `src/utils/repDeals.js`: `dealRepOf` (salesRep,
+else assignedTo — the leaderboard's resolution), `dealRowOf` (id, name —
+opportunityName else account else "(unnamed deal)" — account, stage, close
+day or '', ARR and implementation cost as numbers, cycle days, exit stage,
+loss bucket with no fallback), and `repDeals(wonOpps, lostOpps, rep)` →
+`{ won, lost, totals }`: each list only that rep's deals whose stage
+matches the list it came in (a deal filed in the wrong list is dropped, not
+mis-filed), newest close first with undated rows last and names as the
+tie-break, and totals { wonCount, wonArr, wonImpl, lostCount, lostArr,
+winRate } — winRate null with no closed deals, never 0% or NaN. In the
+Performance sub-tab, below the leaderboard and above "Why deals are lost",
+a block rendered only while `reportsRep` is set: two panels, **Won deals —
+<rep>** (Deal with account beneath · Closed · Cycle · ARR, a Total row
+"N won · $X ARR", "+$Y implementation" only when there is some, and the
+win rate or "no closed deals" in the header) and **Lost deals — <rep>**
+(Deal, then "<account> · left <stage> · <reason>" beneath, Closed, −ARR, a
+Total row "N lost · $X ARR"); the subtitle names the period ("all time",
+"FY 2026", "Q4 FY2026", or the custom bounds) and the sort. Rendered with
+plain styled divs, no component defined inside the tab. Nothing else on
+the tab changed; with no rep sliced the block is absent.
+
+**What a user sees change:** Reports → Performance → Grouped by Rep → a
+rep: below the one-row leaderboard, that rep's won deals and lost deals for
+the selected period, each with a total, and the win rate the two lists
+imply — the same Closed figure the leaderboard bar shows, itemised.
+
+**Tests.** `tests/rep-deals.test.mjs` (6): the REGRESSION (only that rep's
+deals, assignedTo counts, newest first, undated last, the other rep
+absent, the totals and 3/5 win rate), a wrong-list deal dropped, empty
+lists with a null win rate, the row shape (wonDate / lostDate first, the
+stage-change day next, cycle 80 days, exit stage from prevStage, category
+before free text, '' not "Invalid Date"), `dealRepOf`, and a scan pinning
+the import, the `reportsRep &&` gate, `repDeals(wonOpps, lostOpps,
+reportsRep)`, both titles, both totals, the implementation-cost guard, the
+exit stage and reason, the null-safe win rate, and the block's position
+inside the Performance sub-tab below the leaderboard. Five mutants (an
+assignedTo deal nobody's, oldest first, win rate 0 with no deals, a lost
+deal filed as a win, the lists reading `reportsOpps` instead of the
+leaderboard's sets). Gates green on 147 files, **505/505**, **229/229
+mutations, printed green baseline** (run alone), **87/87 integration**
+(no function changed), build guard OK (2,499 kB, `index-DmjjOHZE.js`),
+`dist/` cleared. **Not browser-checked:** no `netlify dev`, no pane
+session; Jeff eyeballs on deployed dev as Admin (Reports → Performance →
+Grouped by Rep).
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
