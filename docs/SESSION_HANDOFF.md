@@ -289,12 +289,16 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
   and a finding.
 - **Karen's role: back to User** (Jeff, 2 Sep close: "already done"). She
   was a Manager only to observe the coaching-note Manager path.
-- **Item 16 — header HALF DONE (3 Sep, `1e15e45`, state §0.80):** the tab's
-  quarter math was read whole first; the header and weeks remaining now come
-  from `currentQuarter()` in quarters.js (tests under two fiscal starts).
-  **Jeff's two decisions, taken with the audit in front of him:** the totals
-  move to quarter-to-date and the three inert header buttons go — that is
-  the batch in progress; see item 16.
+- **Item 16 DONE (3 Sep, `1e15e45` + `327ce8f`, state §0.80):** header on
+  the fiscal quarter; totals quarter-to-date; Administration board
+  FY-to-date; three inert header buttons gone. **Jeff eyeballs on deployed
+  dev as Admin** (the tab renders for Admin/Manager only, so Karen's rep
+  path cannot reach it): header "Q4 FY2026 · N weeks remaining", Forecast
+  Closed = this quarter's wins, Administration column "FY attainment".
+- **Then item 15** (catalogue footers, Workspace Health constants) — unchanged.
+- **Items 18 and 19 are new** (found reading for 16): the Forecast ledger's
+  Commit is never stored; "Coach →" is inert; Home's quota card is annual
+  ÷ 4; the tab has no export at all.
 - **Then item 15** (catalogue footers, Workspace Health constants): the
   same honesty class as §0.78; `liveCounts` already carries the MFA
   numbers.
@@ -490,9 +494,14 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    `userQuotaFor(u, 'Qn')` (a quarterly plan's own figure, else annual ÷
    4); the Administration board keeps the annual quota with a
    fiscal-year-to-date bar; **and the header's three inert buttons (This
-   quarter / All reps / Export) are removed.** Not yet committed when this
-   was written — if the next commit after `1e15e45` is not that batch, it
-   was not finished. Was: **Carried (seen in the pane during the §0.79 check): the Sales Manager
+   quarter / All reps / Export) are removed.** **DONE — commit `327ce8f`,
+   state §0.80 second half:** `buildRepStats(…, period)` with `wonInQ` /
+   `closeDayInRange` and `userQuotaFor(rep, 'Qn')`; `fyRange` prop into
+   AdminTab, both `rWon` sums FY-windowed, column "FY attainment"; the
+   quarter block moved above the memo, deps carry `curQ.key`; 13 tests,
+   204/204 mutations. Health labels on Forecast / Team / Today change: a
+   rep whose wins were all in earlier quarters now reads 0% / AT RISK
+   there (the Team tab's win-rate flag stays all-time by design). Was: **Carried (seen in the pane during the §0.79 check): the Sales Manager
    tab's quarter is the CALENDAR quarter.** Header "Team forecast · Q3
    2026 · 4 weeks remaining" beside Home's "Q4 · Week 10" on 2 Sep.
    SalesManagerTab.jsx ~line 769: `qNum = Math.floor(now.getMonth()/3)+1`,
@@ -545,7 +554,12 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    is `annualQuota / 4` (HomeTab.jsx ~351) — a quarterly-plan user sees a
    $0 quota there; `userQuotaFor(u, 'Qn')` is the helper — and its
    closed-this-quarter buckets won deals by `forecastedCloseDate`, not
-   the close day (§0.75's rule, applied to Reports only so far).
+   the close day (§0.75's rule, applied to Reports only so far). **The
+   Sales Manager tab has no export:** `exportToCSV` is destructured from
+   the context there and never called; the only "Export" was the dead
+   header button, now gone (Claude told Jeff the Team/Admin tabs had their
+   own working Export when asking about the buttons — that was unverified
+   and wrong; corrected the same session).
 
 ## 6. The thread
 
