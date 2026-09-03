@@ -287,10 +287,8 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect only docs commits after `d513b0e`; anything else is unshipped code
   and a finding.
-- **Karen's role.** Jeff promoted her to Manager on 2 Sep to observe the
-  coaching-note Manager path; if Settings → People still says Manager, ask
-  before any rep-path browser check — every rep-path proof in CLAUDE.md
-  assumes she is a User.
+- **Karen's role: back to User** (Jeff, 2 Sep close: "already done"). She
+  was a Manager only to observe the coaching-note Manager path.
 - **Item 16 first** (the Sales Manager tab's calendar quarter): read the
   whole tab's quarter math before touching the header; helper + tests under
   two fiscal starts, as §0.69 did for Reports.
@@ -412,8 +410,7 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    state §0.79. SHIPPED to prod as `d513b0e` (§1). The Manager path of
    the coaching note is OBSERVED: Jeff promoted Karen to Manager, signed
    in as her, saved a note, hard-refreshed — "it all works" (state §0.79).
-   **Karen is a Manager until Jeff sets her back to User** — the rep-path
-   browser checks (CLAUDE.md) need her as a User. Next: items 15 and 16;
+   Karen was set back to User at the session close (Jeff: "already done"). Next: items 15 and 16;
    the coaching-note half of item 3 is now observed too (a note saved
    after 7pm Central carried Sep 2).
 11. Smaller carried: the

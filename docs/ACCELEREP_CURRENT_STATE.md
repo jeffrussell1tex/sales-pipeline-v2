@@ -2625,8 +2625,7 @@ coaching red flags and every rep list at once — Managers are not reps);
 signed in as Karen, Sales Manager → Team → "+ Add coaching note", saved,
 hard-refreshed: "it all works" — the settings-PUT Manager exception
 holds a note across a reload, and Jeff's Admin note was visible to her.
-Karen is to be set back to User afterwards (the rep-path checks depend
-on her). **Product note from Jeff after this:** coaching notes should be
+Karen was set back to User at the session close (Jeff: "already done"). **Product note from Jeff after this:** coaching notes should be
 addressed to a person, several people, or the team — handoff §5 item 17
 records what exists (a name-string note in the org settings blob, seen
 by managers only, never by the rep) and the shape of the real feature
