@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (fifth session)
-**Verified at:** five gates green on 143 files · **472 tests** · **212/212 mutations, printed green baseline** · **79/79 integration** (re-run at §0.81; no function changed) · build guard OK 2,477 kB `index-CsUn53YS.js` · prod `d513b0e` serving `index-C61hseh3.js` (fifth ship) · dev ahead of master by §0.80 and §0.81 (three code commits) and docs.
-**Batch:** **the Settings catalogue and its panel headers carry no invented text; Workspace Health counts only what it can read (§0.81)** — 48 hand-typed footers ("Edited 2 months ago by Admin", values that never moved) gone, the two typed attention flags and five typed statuses gone, card status / attention / detail computed in one pure module (`settingsCards.js`, the block that lived inside the card component), the Needs Attention list computed from the same, the health tile's eight checks (four constants) replaced by the six that can be read with a sentence that names what failed, and 16 detail panels' typed "Last edited 3 weeks ago by Admin" removed (the shared headers render the line only when both values are real; the SSO panel's fictional "Morgan" gone). Carried: the mockup depth of the SSO / Session / Audit / Import panels and the remaining hand-typed card counts (handoff items 21–22).
+**Verified at:** five gates green on 145 files · **484 tests** · **218/218 mutations, printed green baseline** · **87/87 integration** (8 new in `coaching-notes.itest.mjs`) · build guard OK 2,491 kB `index-Kg6gw2rZ.js` · prod `d513b0e` serving `index-C61hseh3.js` (fifth ship) · dev ahead of master by §0.80–§0.82 (four code commits) and docs.
+**Batch:** **coaching notes are ADDRESSED — to a person, several people, or a team — in their own org-scoped table (§0.82, handoff item 17)** — `coaching_notes` + `users.team_joined_at` (DDL applied to the test and app databases FIRST, guide §18c), `coaching-notes.mjs` with visibility decided by the pure `_coaching.mjs` (Jeff's two rules: a note to people is seen by author, recipients and Admins — never another manager; a team note by the team's manager and by members from their FIRST DAY, team_joined_at else created_at, resolved at read time), a house dialog with a rep/team picker replacing the typed "rep: text" prompt, the Team tab reading the table with delete for author/Admin, a "Notes from your manager" block on Home with read stamps, unread notes in the bell, an idempotent Admin import of the old settings-blob notes, and the §0.79 Manager carve-out in settings.mjs retired. Not browser-checked; Jeff eyeballs as Admin and as Karen.
+**Prior batch:** **the Settings catalogue and its panel headers carry no invented text; Workspace Health counts only what it can read (§0.81)** — 48 hand-typed footers ("Edited 2 months ago by Admin", values that never moved) gone, the two typed attention flags and five typed statuses gone, card status / attention / detail computed in one pure module (`settingsCards.js`, the block that lived inside the card component), the Needs Attention list computed from the same, the health tile's eight checks (four constants) replaced by the six that can be read with a sentence that names what failed, and 16 detail panels' typed "Last edited 3 weeks ago by Admin" removed (the shared headers render the line only when both values are real; the SSO panel's fictional "Morgan" gone). Carried: the mockup depth of the SSO / Session / Audit / Import panels and the remaining hand-typed card counts (handoff items 21–22).
 **Prior batch:** **the Sales Manager tab's quarter is the org's FISCAL quarter (§0.80)** — the header built a calendar quarter from `now.getMonth()` and never read `fiscalYearStart`, so an October-year org read "Q3 2026" in September while Home and every report said Q4; `currentQuarter()` in quarters.js is the one helper it reads now, and weeks remaining count today and are never 0 (the Today tab's Gap-to-Quota tile divides by them — "$InfinityM/wk" on a quarter's last day). The audit of the tab's totals found them on NO quarter at all (all-time closed against the annual quota); **Jeff's call, done in the second commit: Closed and Quota are quarter-to-date** (won by close day inside the fiscal quarter, against that quarter's figure), the Administration board measures fiscal-year-to-date against its annual quota, and the three inert header buttons are gone. Health labels and attainment on the Forecast, Team and Today tabs change accordingly. Carried: the Forecast ledger's editable Commit was never stored (handoff item 18); "Coach →", Home's annual ÷ 4 quota card, and the tab having no export at all (item 19).
 **Prior batch:** **the Reports audit closed (§0.68 → §0.69–§0.77, seven batches), the 401 banner and the MFA catalogue card made honest (§0.78), every native confirm/prompt replaced by house dialogs and coaching notes persisted with a Manager-writable settings key (§0.79)** — all shipped to prod, each deploy verified by bundle hash; the Manager path and the after-7pm date observed by Jeff as Karen; carried: Settings catalogue footers and Workspace Health constants (handoff item 15), the Sales Manager tab's calendar quarter (16), addressed coaching notes as a product (17).
 **Prior batch:** **the ten unmounted components are DELETED** (Jeff: "lets do 2 and 3") — 4,160 lines and twelve stale import lines gone, every reference re-verified as a comment or nothing; gates green, 317/317, 105/105, build guard OK at the identical 2,534.93 kB (a different hash: fewer imports reorder Rollup's module emission, the size proves the code was never in the bundle) · **`documents` re-probe CLOSED** — 401 JSON on a fresh `netlify dev`, the R2 dependency fix verified locally, sibling `leads` 401 as control (§0.61)
@@ -2931,6 +2932,141 @@ up SSO and enforce MFA" pitch and "Last edited by Morgan" absent.
 **OBSERVED by Jeff as Admin on deployed dev (3 Sep):** "footers are empty
 except MFA · Workforce heath is accurate · Webhooks accurate · Pipelines
 has no last edit line" — the four checks asked for, all four good.
+
+### 0.82 Coaching notes addressed to a person, people, or a team — their own table (3 Sep, fifth session)
+
+**Jeff: "lets do item 17 and then we will ship to prod."** Handoff item 17
+said design first; the design was put to Jeff with the one question the
+handoff left open and he took both decisions before the schema was written:
+**"first day" is the team-join date** (a new nullable `users.team_joined_at`,
+stamped whenever a rep's team changes, falling back to the roster row's
+`created_at` until then — so a rep moved from Team A to Team B does not see
+B's older notes), and **the old blob notes are migrated by an Admin import
+button** (idempotent, per guide §18c), not dropped.
+
+**What existed (read whole first).** A note was `{ id, rep, text, date,
+author }` in `settings.extra.coachingNotes` — one org-wide JSON blob every
+Admin settings PUT rewrote, that a Manager could write only through the
+§0.79 carve-out in the settings gate, rendered on the Sales Manager Team tab
+only, with `rep` a free-text name parsed from "rep: text"; no recipient, no
+read state, no delivery, and a rep never saw a note about them. Teams live
+in `settings.extra.teams` as `{ id, name, managerId, repIds }`; a user's
+team is `profile.teamId` (TeamsDetail writes it) and the assignment carried
+no timestamp. The notification bell is built in App.jsx from deals and
+tasks every minute; Home has an "On your plate" column; the lead-requests
+function (§0.58) is the house pattern for a small org-scoped table with a
+server-stamped caller.
+
+**Database first (§18c).** `db/apply-coaching-notes.mjs` — CREATE TABLE IF
+NOT EXISTS `coaching_notes` (id, org_id, author_id, author_name, text,
+date varchar(20), recipient_ids jsonb, team_id, read_by jsonb, legacy
+boolean, created_at, updated_at) + its org index + `ALTER TABLE users ADD
+COLUMN IF NOT EXISTS team_joined_at timestamp` (nullable). Run against the
+TEST database (`--test`) and then the APP database (shared by dev and
+prod); both read back 12 columns, 2 indexes and the nullable column. Then
+`db/schema.ts` gained `coachingNotes` and `users.teamJoinedAt`.
+
+**Server.** `netlify/functions/_coaching.mjs` (pure): `noteVisibleTo(note,
+viewer, teams)` — an unresolvable caller (no roster id) sees nothing; Admin
+sees all; the author sees theirs; a listed recipient sees it; a team note
+is seen by `team.managerId` and by a member of that team whose
+`firstDayOf` (team_joined_at, else created_at, as a LOCAL day) is on or
+before the note's day — or with no floor when neither date is known.
+`canDeleteNote` (author or Admin), `audienceOf` (people OR a team, never
+both, never neither — except a legacy import), `isReadBy`.
+`coaching-notes.mjs`: GET returns the org's rows filtered through
+`noteVisibleTo` against the caller's roster row and the org's teams (`[]`
+for a caller with no roster row); POST (Admin | Manager; `legacy:true`
+Admin only) validates a yyyy-mm-dd day, a non-empty text, the audience,
+that every recipient is a roster row of THIS org and a team exists in this
+org's settings, stamps `authorId` from the caller (never the payload) and
+writes an audit row; a legacy POST inserts `onConflictDoNothing` on the id
+and answers 200 with the existing row on a re-run; PUT `{ id, action:'read' }`
+stamps `readBy[callerId]` only for a note the caller can see (404 otherwise
+— existence is not confirmed); DELETE is author-or-Admin. `users.mjs`: the
+Admin PUT compares the stored `profile.teamId` with the incoming one and
+sets `teamJoinedAt` (now on a new team, null on leaving one, untouched when
+unchanged); `flatten` exposes it. `settings.mjs`: the Manager carve-out is
+gone — the PUT is Admin-only again; `coachingNotes` stays in both halves
+so the import can read the blob and then empty it.
+
+**Client.** `src/utils/coachingNotes.js` (pure): `newNotePayload` (local
+day, one audience), `legacyNotePayload` (id `cn_legacy_<old id>`, the rep
+NAME resolved against the roster case-insensitively — one match or none,
+ambiguity is never guessed), `audienceLabel`, `isAddressedTo`,
+`isReadBy`, `unreadFor`, `sortNotes`; `parseCoachingNote` stays.
+`src/hooks/useCoachingNotes.js`: load after the token, add / mark read /
+delete, each checking `res.ok` and adopting the server row. `src/components/
+modals/CoachingNoteDialog.jsx` (module scope): People | Team segmented
+control, a searchable checkbox list of reps or a team select, a textarea,
+Cmd/Ctrl+Enter sends; `CoachingNoteDialogHost` reads the app context and
+decides whom the caller may address — Admin every active rep and team, a
+Manager the reps of teams they manage (`team.managerId`) or belong to, and
+those teams. Wiring: `coachingNoteModal` in useModalState → App.jsx
+(`showCoachingNote`, the Escape and modal-open guards, the context) →
+`<CoachingNoteDialogHost />` in ModalLayer (the four-step rule in
+CLAUDE.md). Sales Manager → Team: "+ Add coaching note" opens the dialog;
+"Recent coaching" reads the table (audience label, day, author, "imported"),
+with × for the author or an Admin through `showConfirm`; the inert "See
+all →" is gone; an Admin sees "Import N legacy notes" while the blob holds
+any — it POSTs each through `legacyNotePayload`, then empties the blob
+(useSettings' Admin PUT persists `[]`) and reports how many had no matching
+rep. Home: a "Notes from your manager" block above "This week" for notes
+addressed to me (direct, or my team), unread highlighted with "Mark read".
+App.jsx: unread notes addressed to me join the bell as "Coaching note from
+<author>".
+
+**What a user sees change:** a Manager or Admin addressing a note picks
+people or a team instead of typing a name; a rep sees the notes for them on
+Home and in the bell and can mark them read; a manager no longer sees other
+managers' private notes; a Manager can no longer write the settings blob
+at all; Admins see "Import N legacy notes" on the Team tab once (dev holds
+two test notes; whatever prod holds is Jeff's to import after the ship).
+
+**Verification.** `tests/coaching-notes.test.mjs` (16: the two rules as
+REGRESSION cases, the created_at fallback, the local join day, delete and
+read stamps, audience validation, the payload helpers, the idempotent legacy
+id and the unguessed ambiguity, the display helpers, and scans of the
+function, schema, users.mjs, settings.mjs, the tab, Home, App.jsx, the
+modal layer and the dialog host); `house-dialogs.test.mjs` repointed (the
+prompt is gone, the carve-out is gone). `tests/integration/
+coaching-notes.itest.mjs` (8, namespace `itest_cnote_*`, a seeded settings
+row with a team): author stamped from the caller with a smuggled authorId
+ignored; rep POST 403; no audience / bad day / unknown recipient / unknown
+team / both → 400; a people note visible to recipient, author and Admin and
+NOT to another manager or a teammate; a team note dated 5 Sep visible to
+the 1-Sep joiner and the team's manager, NOT to the 10-Sep joiner, who sees
+the 12-Sep note; read needs visibility (404) and stamps per user; delete
+refused to a recipient and another manager, allowed to the author and
+Admin; the legacy import Manager-403, 201 then 200, one row, author-only;
+org B sees nothing and cannot read or delete A's rows. `_schema-guard`
+gains both objects. Gates green on 145 files, **484/484**, **218/218
+mutations, printed green baseline** (nine new: another manager seeing a
+private note, the first-day floor ignored, an unresolvable caller seeing
+everything, the join day as the UTC day, a recipient deleting, the author
+from the payload, the legacy id minted fresh, an ambiguous name guessed,
+the team stamp never firing). **The first harness run printed 218/221
+with three anchors STALE** — the §0.79 mutants for the blob-append helper
+and both halves of the settings Manager carve-out, whose targets this
+batch removed on purpose; they were retired from the harness, not
+repointed (the behaviour they pinned no longer exists), and the re-run
+printed clean. **87/87 integration**, build guard OK
+(2,491 kB, `index-Kg6gw2rZ.js`), `dist/` cleared. **Not browser-checked
+here** (authoring is Admin/Manager; the pane holds no session); Jeff
+eyeballs on deployed dev: as Admin, Sales Manager → Team → "+ Add coaching
+note" opens the dialog, a note to Karen saves and lists with her name; as
+Karen, Home shows "Notes from your manager" with the note unread and the
+bell counts it, "Mark read" clears both; the "Import 2 legacy notes" button
+moves the two test notes and disappears.
+
+**Carried:** the coaching "Open coaching / Schedule 1:1 / Their pipeline"
+chips on the Today tab and the "Coach →" ledger button are still inert
+(item 19); `exportToCSV` is still destructured and unused in the tab; a
+team note's "first day" for members whose team never changes after this
+ship is their roster created date — the stamp arrives on their next team
+change; the UTC-day mutation is caught on Jeff's Central-time machine and
+would survive on a UTC runner (18b18 — the child-process pattern from
+date-local.test.mjs is the fix if this suite ever runs in CI).
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

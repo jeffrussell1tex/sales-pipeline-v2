@@ -66,6 +66,9 @@ export function useModalState() {
     // { title, label, help, placeholder, initial, submitLabel, value, onSubmit } — the
     // app's own prompt dialog; opened through showPrompt in App.jsx (state §0.79).
     const [promptModal, setPromptModal] = useState(null);
+    // {} while the coaching-note dialog is open (state §0.82); opened through
+    // showCoachingNote in App.jsx, rendered by CoachingNoteDialogHost in ModalLayer.
+    const [coachingNoteModal, setCoachingNoteModal] = useState(null);
     const [blockedDeleteModal, setBlockedDeleteModal] = useState(null);
     const [lostReasonModal, setLostReasonModal] = useState(null);
     const [notesPopover, setNotesPopover] = useState(null);
@@ -125,6 +128,7 @@ export function useModalState() {
         lastCreatedRepName, setLastCreatedRepName,
         confirmModal, setConfirmModal,
         promptModal, setPromptModal,
+        coachingNoteModal, setCoachingNoteModal,
         blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover,

@@ -27,6 +27,8 @@ import { sql } from 'drizzle-orm';
 // [table, column] pairs the suites need. Newest first -- the most recently added
 // column is the one most likely to be missing.
 const REQUIRED = [
+    ['coaching_notes', 'id'],      // §0.82: coaching notes in their own table
+    ['users',          'team_joined_at'],   // §0.82: the first-day floor for team notes
     // Phase 2: ownership keys on ids. Every object-level authorization check
     // reads these, so a test database without them refuses every owned record
     // and the suites fail as 403s rather than as a missing column.

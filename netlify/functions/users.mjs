@@ -169,6 +169,7 @@ export const handler = async (event) => {
         territory:     row.territory,
         quota:         row.quota,
         active:        row.active,
+        teamJoinedAt:  row.teamJoinedAt || null,
     });
 
     // ── Partial-update merge (hard requirement) ──────────────────────────────
@@ -600,7 +601,15 @@ export const handler = async (event) => {
                 // would change the roster without changing Clerk, which is what
                 // auth.mjs actually reads. Role changes go through user-role.mjs.
                 const merged = await mergeForUpdate(data);
-                const result = await upsertUser(withRole(sanitize(merged), await roleOf(data.id) || 'User'));
+                const clean = withRole(sanitize(merged), await roleOf(data.id) || 'User');
+                // First day on a team (state §0.82): when profile.teamId changes, stamp
+                // team_joined_at — the floor a team coaching note is read against.
+                // Leaving a team clears it; an unchanged team leaves the column alone.
+                const [before] = await db.select({ profile: users.profile }).from(users)
+                    .where(and(eq(users.id, data.id), eq(users.orgId, orgId)));
+                const prevTeam = before?.profile?.teamId || null, nextTeam = clean.profile?.teamId || null;
+                if (before && prevTeam !== nextTeam) clean.teamJoinedAt = nextTeam ? new Date() : null;
+                const result = await upsertUser(clean);
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };
                 }

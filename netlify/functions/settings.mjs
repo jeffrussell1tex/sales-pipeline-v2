@@ -190,16 +190,15 @@ export const handler = async (event) => {
             // fiscal year, the BYOK key). Per the role model, only Admins may
             // write them — without this, any member could rewrite shared config
             // that every other user depends on.
-            // Exception (state §0.79): coaching notes are Manager content that
-            // lives in this blob. A Manager may write THAT key and nothing else —
-            // the payload is reduced to it, so every other key merges from the
-            // existing row below.
+            // The §0.79 Manager carve-out for coachingNotes is retired (state §0.82):
+            // notes live in their own table now (coaching-notes.mjs). The key stays
+            // in this blob only so the Admin import can read the old rows and then
+            // empty it.
             const body = JSON.parse(event.body);
-            const managerNote = auth.userRole === 'Manager' && 'coachingNotes' in body;
-            const forbidden = managerNote ? null : requireRole(auth, ['Admin'], headers);
+            const forbidden = requireRole(auth, ['Admin'], headers);
             if (forbidden) return forbidden;
 
-            const data = managerNote ? { coachingNotes: body.coachingNotes } : body;
+            const data = body;
 
             // Read existing row first so we can merge extra fields safely.
             const existing = await db.select().from(settings).where(eq(settings.orgId, orgId))

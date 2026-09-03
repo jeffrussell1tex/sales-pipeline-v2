@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -972,18 +972,6 @@ const mutations = [
         'src/utils/coachingNotes.js',
         "    return { rep, text };",
         "    return { rep: '', text };"],
-    ['coaching: a new note replaces every other manager\'s notes',
-        'src/utils/coachingNotes.js',
-        "    return [...(Array.isArray(list) ? list : []), note];",
-        "    return [note];"],
-    ['settings: a Manager\'s coaching-note PUT is 403 again',
-        'netlify/functions/settings.mjs',
-        "const managerNote = auth.userRole === 'Manager' && 'coachingNotes' in body;",
-        "const managerNote = false;"],
-    ['settings: a Manager\'s PUT carries the whole settings object',
-        'netlify/functions/settings.mjs',
-        "const data = managerNote ? { coachingNotes: body.coachingNotes } : body;",
-        "const data = body;"],
     ['settings: coachingNotes dropped from the PUT whitelist (the note vanishes on refresh)',
         'netlify/functions/settings.mjs',
         "coachingNotes:        'coachingNotes'        in data ? (data.coachingNotes        || [])   : existingExtra.coachingNotes        || [],",
@@ -1076,6 +1064,44 @@ const mutations = [
         'src/Tabs/settings/shared/CategoryDetailChrome.jsx',
         "                    {updatedAt && updatedBy && (<>",
         "                    {(<>"],
+
+    // ── Coaching notes addressed to people or a team (0.82) ─────────────────
+    ['coaching: another manager sees a private note (Jeff\'s rule b)',
+        'netlify/functions/_coaching.mjs',
+        "    if (viewer.role === 'Admin') return true;",
+        "    if (viewer.role === 'Admin' || viewer.role === 'Manager') return true;"],
+    ['coaching: the first-day floor is ignored (Jeff\'s rule a)',
+        'netlify/functions/_coaching.mjs',
+        "            if (!first || !day || first <= day) return true;",
+        "            return true;"],
+    ['coaching: an unresolvable caller sees everything an Admin would',
+        'netlify/functions/_coaching.mjs',
+        "    if (!note || !viewer || !viewer.id) return false;",
+        "    if (!note || !viewer) return false;"],
+    ['coaching: the join day is the UTC day, not the local one (18b26)',
+        'netlify/functions/_coaching.mjs',
+        "const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;",
+        "const isoLocal = (d) => d.toISOString().slice(0, 10);"],
+    ['coaching: a recipient may delete the note about them',
+        'netlify/functions/_coaching.mjs',
+        "    return viewer.role === 'Admin' || note.authorId === viewer.id;",
+        "    return viewer.role === 'Admin' || note.authorId === viewer.id || (Array.isArray(note.recipientIds) && note.recipientIds.includes(viewer.id));"],
+    ['coaching: the function takes the author from the payload',
+        'netlify/functions/coaching-notes.mjs',
+        "                authorId:     me.id,",
+        "                authorId:     data.authorId || me.id,"],
+    ['coaching: the legacy import mints fresh ids (duplicates on re-run)',
+        'src/utils/coachingNotes.js',
+        "        id: 'cn_legacy_' + String(old.id || `${old.date || ''}_${old.text}`).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120),",
+        "        id: 'cn_legacy_' + Math.random().toString(36).slice(2),"],
+    ['coaching: an ambiguous rep name is guessed',
+        'src/utils/coachingNotes.js',
+        "    const recipientIds = matches.length === 1 ? [matches[0].id] : [];",
+        "    const recipientIds = matches.length >= 1 ? [matches[0].id] : [];"],
+    ['users: the team stamp never fires',
+        'netlify/functions/users.mjs',
+        "                if (before && prevTeam !== nextTeam) clean.teamJoinedAt = nextTeam ? new Date() : null;",
+        "                if (false) clean.teamJoinedAt = nextTeam ? new Date() : null;"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

@@ -29,6 +29,10 @@ export const users = pgTable('users', {
     quota:         decimal('quota', { precision: 12, scale: 2 }),
     active:        boolean('active').notNull().default(true),
     profile:       jsonb('profile').default('{}'),                   // full profile fields (firstName, lastName, phone, etc.)
+    // First day on the CURRENT team (state §0.82): stamped by users.mjs whenever
+    // profile.teamId changes; null until then — created_at is the fallback floor
+    // a team coaching note is read against (_coaching.mjs).
+    teamJoinedAt:  timestamp('team_joined_at'),
     createdAt:     timestamp('created_at').notNull().defaultNow(),
     orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
@@ -446,6 +450,29 @@ export const leadClaimRequests = pgTable('lead_claim_requests', {
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('lead_claim_requests_org_id_idx').on(t.orgId),
+]);
+
+// Coaching notes addressed to people or a team (state §0.82, handoff item 17).
+// Used to be rows in settings.extra.coachingNotes — an org-wide blob every Admin
+// PUT rewrote, with a free-text rep NAME and no recipient, read state or
+// delivery. authorId and recipientIds are users.id (usr_<uuid>), the author
+// server-stamped. A team note is resolved against membership at READ time with
+// the member's first day as the floor — never expanded into per-user rows.
+export const coachingNotes = pgTable('coaching_notes', {
+    id:           text('id').primaryKey(),                                     // cn_<uuid>, client-minted; cn_legacy_<old id> for the import
+    orgId:        text('org_id').notNull(),
+    authorId:     text('author_id').notNull(),                                 // users.id — server-stamped from the caller
+    authorName:   varchar('author_name', { length: 255 }),                     // display snapshot; the imported blob's author for legacy rows
+    text:         text('text').notNull(),
+    date:         varchar('date', { length: 20 }).notNull(),                   // yyyy-mm-dd, the author's LOCAL day (18b26)
+    recipientIds: jsonb('recipient_ids').default('[]'),                        // users.id[]; empty for a team note
+    teamId:       text('team_id'),                                             // settings.extra.teams id; null for a note to people
+    readBy:       jsonb('read_by').default('{}'),                              // { [users.id]: iso instant }
+    legacy:       boolean('legacy').notNull().default(false),                  // imported from the settings blob
+    createdAt:    timestamp('created_at').notNull().defaultNow(),
+    updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+    index('coaching_notes_org_id_idx').on(t.orgId),
 ]);
 // ── DASHBOARD CONFIGS ─────────────────────────────────────────────────────────
 export const dashboardConfigs = pgTable('dashboard_configs', {

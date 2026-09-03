@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { dbStatusOf, bannerCopyOf } from './utils/fetchStatus';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken } from './utils/storage';
+import { useCoachingNotes } from './hooks/useCoachingNotes';
+import { unreadFor } from './utils/coachingNotes';
 import { isoLocal } from './utils/dateLocal';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import { useSettings } from './hooks/useSettings';
@@ -202,7 +204,7 @@ function App() {
         accountCreatedFromOppForm, setAccountCreatedFromOppForm,
         pendingOppFormData, setPendingOppFormData,
         lastCreatedRepName, setLastCreatedRepName,
-        confirmModal, setConfirmModal, promptModal, setPromptModal, blockedDeleteModal, setBlockedDeleteModal, lostReasonModal, setLostReasonModal,
+        confirmModal, setConfirmModal, promptModal, setPromptModal, coachingNoteModal, setCoachingNoteModal, blockedDeleteModal, setBlockedDeleteModal, lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover, undoToast, setUndoToast,
         taskReminderPopup, setTaskReminderPopup,
         taskReminderSnoozeH, setTaskReminderSnoozeH, taskReminderSnoozeM, setTaskReminderSnoozeM,
@@ -352,6 +354,9 @@ function App() {
         setPromptModal({ title, label, help, placeholder, initial, submitLabel, value: initial, onSubmit });
     };
 
+    // The coaching-note dialog (state §0.82); rendered by CoachingNoteDialogHost in ModalLayer.
+    const showCoachingNote = () => setCoachingNoteModal({});
+
     const showBlockedDelete = (title, message) => {
         setBlockedDeleteModal({ title, message });
     };
@@ -475,6 +480,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
                 if (showProfilePanel) { setShowProfilePanel(false); return; }
                 if (confirmModal) { setConfirmModal(null); return; }
+                if (coachingNoteModal) { setCoachingNoteModal(null); return; }
                 if (promptModal) { setPromptModal(null); return; }
                 if (notesPopover) { setNotesPopover(null); return; }
                 if (undoToast) { clearTimeout(undoToast.timerId); setUndoToast(null); return; }
@@ -486,7 +492,7 @@ dbFetch('/.netlify/functions/users?me=true')
             // Don't fire shortcuts while typing
             if (isTyping) return;
             // Don't fire if any modal is open (except ? for help)
-            const anyModalOpen = showModal || showAccountModal || showContactModal || showTaskModal || showUserModal || showActivityModal || confirmModal || promptModal;
+            const anyModalOpen = showModal || showAccountModal || showContactModal || showTaskModal || showUserModal || showActivityModal || confirmModal || promptModal || coachingNoteModal;
 
             if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
                 e.preventDefault();
@@ -553,7 +559,7 @@ dbFetch('/.netlify/functions/users?me=true')
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
     }, [showModal, showAccountModal, showContactModal, showTaskModal, showUserModal, showActivityModal,
-        confirmModal, promptModal, notesPopover, undoToast, showNotifications, showSearchResults, showShortcuts]);
+        confirmModal, promptModal, coachingNoteModal, notesPopover, undoToast, showNotifications, showSearchResults, showShortcuts]);
 
 
 
@@ -570,6 +576,9 @@ dbFetch('/.netlify/functions/users?me=true')
         };
         load();
     }, []);
+
+    // Coaching notes (state §0.82) — the server returns only what this caller may see.
+    const { coachingNotes, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken });
 
 
 
@@ -1165,6 +1174,16 @@ dbFetch('/.netlify/functions/users?me=true')
                 }
             });
             
+            // Coaching notes addressed to me that I have not read (state §0.82).
+            for (const n of unreadFor(coachingNotes, currentUserId, myProfile?.teamId || null)) {
+                newNotifications.push({
+                    id: `coach-${n.id}`,
+                    type: 'info',
+                    message: `Coaching note from ${n.authorName || 'your manager'}`,
+                    date: n.createdAt || now.toISOString()
+                });
+            }
+
             setNotifications(newNotifications);
         };
         
@@ -1172,7 +1191,7 @@ dbFetch('/.netlify/functions/users?me=true')
         const interval = setInterval(generateNotifications, 60000); // Check every minute
         
         return () => clearInterval(interval);
-    }, [opportunities, activities, tasks]);
+    }, [opportunities, activities, tasks, coachingNotes, currentUserId, myProfile]);
 
     // Task reminder popup checker
     useEffect(() => {
@@ -1337,7 +1356,7 @@ dbFetch('/.netlify/functions/users?me=true')
             showActivityModal || showUserModal || showShortcuts || showProfilePanel ||
             showCsvImportModal || showLeadImportModal || showLeadModal ||
             showOutlookImportModal || showSpiffClaimModal ||
-            confirmModal || promptModal || blockedDeleteModal || lostReasonModal ||
+            confirmModal || promptModal || coachingNoteModal || blockedDeleteModal || lostReasonModal ||
             viewingContact || viewingAccount || viewingTask ||
             meetingPrepOpen || logFromCalOpen || showCalConfig ||
             quickLogOpen || showNavGuard
@@ -1464,6 +1483,8 @@ dbFetch('/.netlify/functions/users?me=true')
         exportToCSV,
         showConfirm,
         showPrompt,
+        showCoachingNote,
+        coachingNotes, addCoachingNote, markCoachingNoteRead, deleteCoachingNote,
         softDelete,
         addAudit,
         canViewField,
@@ -1606,6 +1627,7 @@ dbFetch('/.netlify/functions/users?me=true')
         spiffClaimContext, setSpiffClaimContext,
         confirmModal, setConfirmModal,
         promptModal, setPromptModal,
+        coachingNoteModal, setCoachingNoteModal,
         blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover,

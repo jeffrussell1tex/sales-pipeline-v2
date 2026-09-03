@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { newCoachingNote, withCoachingNote } from '../utils/coachingNotes';
+import { legacyNotePayload, audienceLabel, sortNotes } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import { isoLocal, todayLocal } from '../utils/dateLocal';
@@ -685,7 +685,8 @@ export default function SalesManagerTab() {
         opportunities, activities, tasks,
         currentUser, userRole,
         getQuarter, getQuarterLabel,
-        exportToCSV, showConfirm, showPrompt, softDelete, setUndoToast,
+        exportToCSV, showConfirm, softDelete, setUndoToast,
+        coachingNotes, showCoachingNote, addCoachingNote, deleteCoachingNote, currentUserId,
         activeTab, setActiveTab,
         spiffClaims, setSpiffClaims,
         isMobile,
@@ -832,10 +833,28 @@ export default function SalesManagerTab() {
         const wobbly  = repStats.filter(r => r.score >= 40 && r.score < 65).length;
         const atRisk  = repStats.filter(r => r.score < 40).length;
 
-        // Recent coaching notes from settings
-        const coachingNotes = (settings.coachingNotes || [])
-            .sort((a,b) => (b.date||'').localeCompare(a.date||''))
-            .slice(0, 5);
+        // Coaching notes come from their own table now (state §0.82), already
+        // filtered by the server to what this caller may see. The settings blob's
+        // old rows stay readable only for the one-time Admin import below.
+        const recentNotes = sortNotes(coachingNotes).slice(0, 8);
+        const roster      = settings.users || [];
+        const teams       = settings.teams || [];
+        const legacyNotes = settings.coachingNotes || [];
+        const importLegacy = async () => {
+            let unresolved = 0;
+            for (const old of legacyNotes) {
+                const p = legacyNotePayload(old, roster);
+                if (!p) continue;
+                if (p.unresolvedRep) unresolved++;
+                const { unresolvedRep, ...payload } = p;
+                const r = await addCoachingNote(payload);
+                if (!r.ok) { setSaveState({ status: 'error', msg: `Import stopped — ${r.error}` }); return; }
+            }
+            // Idempotent on the server (ids derive from the old ids), so emptying the
+            // blob afterwards is safe: useSettings' Admin PUT persists the empty list.
+            setSettings(prev => ({ ...prev, coachingNotes: [] }));
+            setSaveState({ status: 'idle', msg: unresolved ? `${unresolved} imported note${unresolved !== 1 ? 's' : ''} had no matching rep and are visible to Admins only.` : '' });
+        };
 
         return (
             <>
@@ -851,22 +870,16 @@ export default function SalesManagerTab() {
                 </div>
                 <div style={{ marginLeft:'auto' }}>
                     <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}
-                        onClick={() => {
-                            showPrompt({
-                                title: 'Add coaching note',
-                                label: 'Rep name: note',
-                                placeholder: 'Karen Russell: strong discovery call on Beacon Metals',
-                                help: 'Saved to the org and shown to every manager. Start with the rep\'s name and a colon.',
-                            }, (input) => {
-                                const note = newCoachingNote({ input, author: currentUser });
-                                if (!note) return;
-                                // Persisted by useSettings' PUT effect; settings.mjs merges
-                                // coachingNotes for a Manager too (state §0.79).
-                                setSettings(prev => ({ ...prev, coachingNotes: withCoachingNote(prev.coachingNotes, note) }));
-                            });
-                        }}>
+                        onClick={showCoachingNote}>
                         + Add coaching note
                     </button>
+                    {isAdmin && legacyNotes.length > 0 && (
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', marginLeft:8, background:'transparent', border:`1px dashed ${T.borderStrong}`, color:T.goldInk, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}
+                            title="One-time: move the old settings-blob notes into the notes table. Re-running is harmless."
+                            onClick={() => showConfirm(`Import ${legacyNotes.length} legacy coaching note${legacyNotes.length !== 1 ? 's' : ''} into the new notes table? Rep names are matched against the roster; unmatched notes become visible to Admins only.`, importLegacy, false)}>
+                            Import {legacyNotes.length} legacy note{legacyNotes.length !== 1 ? 's' : ''}
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -1025,24 +1038,45 @@ export default function SalesManagerTab() {
                 );
             })()}
 
-            {/* Recent coaching */}
-            {coachingNotes.length > 0 && (
+            {saveState.status === 'error' && (
+                <div style={{ padding:'8px 12px', marginBottom:12, background:'rgba(156,58,46,0.08)', border:`1px solid rgba(156,58,46,0.3)`, borderRadius:T.r, fontSize:12, color:T.danger, fontFamily:T.sans }}>{saveState.msg}</div>
+            )}
+            {saveState.status === 'idle' && saveState.msg && (
+                <div style={{ padding:'8px 12px', marginBottom:12, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{saveState.msg}</div>
+            )}
+            {/* Recent coaching — the coaching_notes table, server-filtered (state §0.82). The
+                inert "See all →" button is gone; the header states what the list is. */}
+            {recentNotes.length > 0 && (
                 <div style={card}>
                     <div style={{ ...cardHdr }}>
                         <span style={{ fontSize:14, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink }}>Recent coaching</span>
-                        <button style={{ fontSize:11, color:T.goldInk, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>See all →</button>
+                        <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{coachingNotes.length} note{coachingNotes.length !== 1 ? 's' : ''} you can see</span>
                     </div>
                     <div style={{ padding:'8px 0' }}>
-                        {coachingNotes.map((n,i) => (
-                            <div key={n.id||i} style={{ display:'flex', gap:12, padding:'10px 16px', borderBottom:i<coachingNotes.length-1?`1px solid ${T.border}`:'none' }}>
-                                <Avatar name={n.rep || n.author || '?'} size={26} />
-                                <div>
-                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{n.rep || n.author}</div>
-                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:1 }}>{n.date ? new Date(n.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</div>
+                        {recentNotes.map((n,i) => {
+                            const who = audienceLabel(n, roster, teams);
+                            return (
+                            <div key={n.id} style={{ display:'flex', gap:12, padding:'10px 16px', borderBottom:i<recentNotes.length-1?`1px solid ${T.border}`:'none' }}>
+                                <Avatar name={who} size={26} />
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{who}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:1 }}>
+                                        {n.date ? new Date(n.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}
+                                        {n.authorName ? ` · ${n.authorName}` : ''}{n.legacy ? ' · imported' : ''}
+                                    </div>
                                     <div style={{ fontSize:12, color:T.inkMid, marginTop:4, fontStyle:'italic' }}>"{n.text}"</div>
                                 </div>
+                                {(isAdmin || n.authorId === currentUserId) && (
+                                    <button title="Delete this note"
+                                        onClick={() => showConfirm('Delete this coaching note? The people it was addressed to will no longer see it.', async () => {
+                                            const r = await deleteCoachingNote(n.id);
+                                            if (!r.ok) setSaveState({ status: 'error', msg: `Not deleted — ${r.error}` });
+                                        }, true)}
+                                        style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:15, lineHeight:1, alignSelf:'flex-start', fontFamily:T.sans }}>×</button>
+                                )}
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             )}

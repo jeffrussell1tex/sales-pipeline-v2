@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCoachingNote, newCoachingNote, withCoachingNote } from '../src/utils/coachingNotes.js';
+import { parseCoachingNote } from '../src/utils/coachingNotes.js';
 
 const root = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
@@ -28,18 +28,6 @@ test('parseCoachingNote: "rep: text" splits on the first colon; no colon is text
     assert.deepEqual(parseCoachingNote('Karen:'), { rep: '', text: 'Karen' });
     assert.equal(parseCoachingNote('   '), null);
     assert.equal(parseCoachingNote(null), null);
-});
-
-test('newCoachingNote builds the stored row on the local day; withCoachingNote appends', () => {
-    const n = newCoachingNote({ input: 'Karen Russell: nice close', author: 'Jeff', today: '2026-09-02', id: 'cn_1' });
-    assert.deepEqual(n, { id: 'cn_1', rep: 'Karen Russell', text: 'nice close', date: '2026-09-02', author: 'Jeff' });
-    assert.equal(newCoachingNote({ input: '', author: 'Jeff' }), null);
-    assert.deepEqual(withCoachingNote([{ id: 'a' }], n), [{ id: 'a' }, n]);
-    assert.deepEqual(withCoachingNote(undefined, n), [n], 'a first note on an org with none');
-    // The day is the LOCAL day (18b26): the helper defaults `today` to todayLocal(), never a UTC slice.
-    const helper = read('src/utils/coachingNotes.js');
-    assert.ok(helper.includes('today = todayLocal()'), 'the default day is local');
-    assert.ok(!helper.includes('toISOString'), 'no UTC day');
 });
 
 test('no native confirm() or prompt() survives anywhere under src/', () => {
@@ -72,18 +60,17 @@ test('every replaced site goes through showConfirm / showPrompt', () => {
     assert.ok(pb.includes("showConfirm('Discard unsaved changes?', onClose, false)"));
     assert.ok(pb.includes('showConfirm(`Archive "${product.name}"? It will no longer appear in new quotes.`, () => {'));
     assert.ok(read('src/Tabs/settings/people/RolesDetail.jsx').includes("showPrompt({ title:'Rename role'"));
+    // The coaching note moved from the house prompt to its own dialog with a
+    // picker (state §0.82; tests/coaching-notes.test.mjs pins that wiring).
     const sm = read('src/Tabs/SalesManagerTab.jsx');
-    assert.ok(sm.includes("title: 'Add coaching note',") && sm.includes('}, (input) => {'), 'the coaching note opens the house prompt');
     assert.ok(!sm.includes("prompt('Add coaching note"));
-    assert.ok(sm.includes('const note = newCoachingNote({ input, author: currentUser });'));
-    assert.ok(sm.includes('coachingNotes: withCoachingNote(prev.coachingNotes, note)'));
+    assert.ok(sm.includes('onClick={showCoachingNote}'));
 });
 
-test('coachingNotes is in BOTH halves of settings.mjs, and a Manager may write that key alone', () => {
+test('coachingNotes stays in BOTH halves of settings.mjs for the Admin import; the Manager carve-out is retired (§0.82)', () => {
     const s = read('netlify/functions/settings.mjs');
     assert.ok(s.includes("coachingNotes:        row.extra?.coachingNotes        || [],"), 'GET returns it');
-    assert.ok(s.includes("coachingNotes:        'coachingNotes'        in data ? (data.coachingNotes        || [])   : existingExtra.coachingNotes        || [],"), 'PUT merges it');
-    assert.ok(s.includes("const managerNote = auth.userRole === 'Manager' && 'coachingNotes' in body;"));
-    assert.ok(s.includes("const forbidden = managerNote ? null : requireRole(auth, ['Admin'], headers);"));
-    assert.ok(s.includes("const data = managerNote ? { coachingNotes: body.coachingNotes } : body;"), 'a Manager write carries nothing else');
+    assert.ok(s.includes("coachingNotes:        'coachingNotes'        in data ? (data.coachingNotes        || [])   : existingExtra.coachingNotes        || [],"), 'PUT merges it (the import empties it)');
+    assert.ok(!s.includes('managerNote'), 'no Manager may write the settings blob');
+    assert.ok(s.includes("const forbidden = requireRole(auth, ['Admin'], headers);"));
 });

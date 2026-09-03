@@ -3,6 +3,7 @@ import { useApp } from '../AppContext';
 import { useAuth } from '@clerk/clerk-react';
 import { quarterOf, quarterStartDate, quarterEndDate } from '../utils/quarters';
 import { isoLocal } from '../utils/dateLocal';
+import { isAddressedTo, isReadBy, sortNotes, audienceLabel } from '../utils/coachingNotes';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (V1 — matches variation1.jsx TOKENS exactly)
@@ -164,6 +165,7 @@ export default function HomeTab() {
         handleCompleteTask,
         calendarEvents, calendarConnected, calendarLoading,
         setActiveTab, isMobile,
+        coachingNotes, markCoachingNoteRead, currentUserId,
         setEditingOpp, setShowModal,
         setEditingTask, setShowTaskModal,
         setTaskRailId, setTaskRailMode,
@@ -224,6 +226,15 @@ export default function HomeTab() {
     const qStart      = todayQk ? quarterStartDate(todayQk.fiscalYear, todayQk.q, fiscalStart) : new Date(now.getFullYear(), 0, 1);
     const qWeek       = Math.floor((today12 - qStart) / 86400000 / 7) + 1;
     const dateContext = `${dayNames[now.getDay()]}, ${monthNames[now.getMonth()]} ${now.getDate()} · Q${quarter} · Week ${qWeek}`;
+
+    // ── Coaching notes addressed to me (state §0.82) ──────────────────────────
+    // The server already limits the list to what I may see; this narrows it to
+    // what is FOR me — a direct recipient, or my team — for the Home block and
+    // the unread count. Authors and Admins read the wider list on the Sales
+    // Manager tab.
+    const myTeamId        = (settings?.users || []).find(u => u.id === currentUserId)?.teamId || null;
+    const myCoachingNotes = sortNotes((coachingNotes || []).filter(n => isAddressedTo(n, currentUserId, myTeamId)));
+    const unreadCoaching  = myCoachingNotes.filter(n => !isReadBy(n, currentUserId)).length;
 
     // ── Task / calendar data ──────────────────────────────────
     const openTasks    = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed');
@@ -611,6 +622,39 @@ export default function HomeTab() {
                             </div>
                         )}
                     </div>
+
+                    {/* NOTES FROM YOUR MANAGER — coaching notes addressed to me (state §0.82) */}
+                    {myCoachingNotes.length > 0 && (
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '0.625rem' }}>
+                                <div style={eyebrow(T.goldInk)}>Notes from your manager</div>
+                                {unreadCoaching > 0 && <div style={{ fontSize: '0.6875rem', color: T.goldInk, fontWeight: 600, fontFamily: T.sans }}>{unreadCoaching} unread</div>}
+                            </div>
+                            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, overflow: 'hidden' }}>
+                                {myCoachingNotes.slice(0, 5).map((n, i) => {
+                                    const unread = !isReadBy(n, currentUserId);
+                                    return (
+                                        <div key={n.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '0.75rem 1rem', borderBottom: i < Math.min(myCoachingNotes.length, 5) - 1 ? `1px solid ${T.border}` : 'none', background: unread ? 'rgba(200,185,154,0.10)' : 'transparent' }}>
+                                            <div style={{ width: 8, height: 8, borderRadius: '50%', marginTop: 6, background: unread ? T.goldInk : 'transparent', border: `1px solid ${unread ? T.goldInk : T.border}`, flexShrink: 0 }} />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: '0.75rem', color: T.inkMuted, fontFamily: T.sans }}>
+                                                    {n.authorName || 'Your manager'} · {n.date ? new Date(n.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                                                    {n.teamId ? ` · ${audienceLabel(n, settings?.users || [], settings?.teams || [])}` : ''}
+                                                </div>
+                                                <div style={{ fontSize: '0.875rem', color: T.ink, fontFamily: T.sans, marginTop: 2, lineHeight: 1.45 }}>{n.text}</div>
+                                            </div>
+                                            {unread && (
+                                                <button onClick={() => markCoachingNoteRead(n.id)}
+                                                    style={{ fontSize: '0.75rem', color: T.goldInk, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.sans, flexShrink: 0 }}>
+                                                    Mark read
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {/* THIS WEEK */}
                     <div>

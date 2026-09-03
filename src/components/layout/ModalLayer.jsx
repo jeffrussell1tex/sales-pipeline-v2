@@ -23,6 +23,7 @@ import LeadModal from '../modals/LeadModal';
 import LostReasonModal from '../modals/LostReasonModal';
 import MergeReviewModal from '../modals/MergeReviewModal';
 import ContactMergeReviewModal from '../modals/ContactMergeReviewModal';
+import { CoachingNoteDialogHost } from '../modals/CoachingNoteDialog';
 // ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
 // Chunked bulk transport for the CSV importer.
@@ -1158,6 +1159,7 @@ export default function ModalLayer() {
             <DocumentLinkPicker />
             <MergeReviewModal />
             <ContactMergeReviewModal />
+            <CoachingNoteDialogHost />
         </>
     );
 }
