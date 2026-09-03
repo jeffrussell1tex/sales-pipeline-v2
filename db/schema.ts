@@ -474,6 +474,31 @@ export const coachingNotes = pgTable('coaching_notes', {
 }, (t) => [
     index('coaching_notes_org_id_idx').on(t.orgId),
 ]);
+// ── AUDIT STREAM DESTINATIONS (state §0.87) ───────────────────────────────────
+// Where an org's audit rows are POSTed, signed, as they are written. Its own
+// table, not settings.extra: a secret and delivery state are the wrong shape
+// for a JSON column the client round-trips on every settings save.
+export const auditStreamDestinations = pgTable('audit_stream_destinations', {
+    id:              text('id').primaryKey(),                                  // asd_<uuid>
+    orgId:           text('org_id').notNull(),
+    name:            varchar('name', { length: 120 }).notNull(),
+    url:             text('url').notNull(),                                    // https only (validated in _auditPayload.mjs)
+    fmt:             varchar('fmt', { length: 10 }).notNull().default('JSON'), // 'JSON' | 'NDJSON'
+    secret:          text('secret').notNull(),                                 // AES-256-GCM ciphertext (crypto.mjs); plaintext shown once
+    secretHint:      varchar('secret_hint', { length: 8 }),                    // last 4 of the plaintext, for the list
+    paused:          boolean('paused').notNull().default(false),
+    failures:        integer('failures').notNull().default(0),                 // consecutive; 10 pauses the destination
+    lastStatus:      integer('last_status'),                                   // HTTP status of the last attempt; 0 = no response
+    lastError:       text('last_error'),
+    lastAttemptAt:   timestamp('last_attempt_at'),
+    lastDeliveredAt: timestamp('last_delivered_at'),
+    deliveredCount:  integer('delivered_count').notNull().default(0),
+    createdBy:       text('created_by'),
+    createdAt:       timestamp('created_at').notNull().defaultNow(),
+    updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+    index('audit_stream_destinations_org_id_idx').on(t.orgId),
+]);
 // ── DASHBOARD CONFIGS ─────────────────────────────────────────────────────────
 export const dashboardConfigs = pgTable('dashboard_configs', {
     id:        text('id').primaryKey(),

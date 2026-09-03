@@ -21,6 +21,7 @@ import { users, auditLog } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAppRole } from './auth.mjs';
 import { serverErrorBody, invalidateRoster } from './_lib.mjs';
+import { streamAudit } from './_auditStream.mjs';
 import { randomUUID } from 'crypto';
 
 const newUserId = () => 'usr_' + randomUUID();
@@ -223,7 +224,7 @@ export const handler = async (event) => {
         // 5. Audit (best-effort). A dry run changes nothing, so it must not
         // write an audit row claiming a sync happened.
         if (!dryRun) try {
-            await db.insert(auditLog).values({
+            const [row] = await db.insert(auditLog).values({
                 id:         'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
                 orgId,
                 action:     'users.synced',
@@ -233,7 +234,8 @@ export const handler = async (event) => {
                 userId,
                 userName:   null,
                 timestamp:  new Date(),
-            });
+            }).returning();
+            await streamAudit(orgId, row);   // state §0.87
         } catch (e) { console.warn('users-sync audit failed:', e.message); }
 
         return {

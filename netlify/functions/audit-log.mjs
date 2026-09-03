@@ -3,6 +3,7 @@ import { auditLog } from '../../db/schema.js';
 import { desc, and, eq } from 'drizzle-orm';
 import { verifyAuth, requireWrite, requireRole } from './auth.mjs';
 import { serverErrorBody, getCallerName } from './_lib.mjs';
+import { streamAudit } from './_auditStream.mjs';
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -46,6 +47,7 @@ export const handler = async (event) => {
                 userName:   callerName || null,
                 timestamp:  new Date(),
             }).returning();
+            await streamAudit(orgId, inserted);   // state §0.87
             return { statusCode: 201, headers, body: JSON.stringify({ entry: inserted }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };

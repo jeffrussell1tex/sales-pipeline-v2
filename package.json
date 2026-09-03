@@ -13,7 +13,7 @@
     "check:dupes": "node scripts/check-dupes.mjs",
     "check:dbfetch": "node scripts/scan-dbfetch.mjs",
     "test": "node --test",
-    "test:int": "node --env-file-if-exists=.env --import tsx --test --experimental-test-module-mocks tests/integration/accounts.itest.mjs tests/integration/leads.itest.mjs tests/integration/contacts.itest.mjs tests/integration/opportunities.itest.mjs tests/integration/tasks.itest.mjs tests/integration/lead-requests.itest.mjs tests/integration/coaching-notes.itest.mjs",
+    "test:int": "node --env-file-if-exists=.env --import tsx --test --experimental-test-module-mocks tests/integration/accounts.itest.mjs tests/integration/leads.itest.mjs tests/integration/contacts.itest.mjs tests/integration/opportunities.itest.mjs tests/integration/tasks.itest.mjs tests/integration/lead-requests.itest.mjs tests/integration/coaching-notes.itest.mjs tests/integration/audit-stream.itest.mjs",
     "check:handoff": "node scripts/check-handoff.mjs"
   },
   "dependencies": {

@@ -70,9 +70,7 @@ test('the import function nothing called any more is gone, and its keys are out 
     const s = code(read('netlify/functions/settings.mjs'));
     assert.ok(!s.includes('importPresets'), 'never read back — retired with the wizard');
     assert.ok(!s.includes('ssoConfig'), 'never read by sign-in — retired with the form');
-    // The keys that stay are the streaming pair (built for real in the next batch).
-    assert.equal((s.match(/streamingDestinations:/g) || []).length, 2, 'GET and PUT halves');
-    assert.equal((s.match(/streamingGlobals:/g) || []).length, 2, 'GET and PUT halves');
+    // The streaming pair left in §0.87 (its own table); tests/audit-stream.test.mjs pins that.
 });
 
 // ── the catalogue says where each lives ──────────────────────────────────────

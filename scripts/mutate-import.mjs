@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1166,12 +1166,54 @@ const mutations = [
         ""],
     ['settings: the unread importPresets key returns to the PUT half only',
         'netlify/functions/settings.mjs',
-        "                streamingGlobals:      'streamingGlobals'      in data ? (data.streamingGlobals      || null) : existingExtra.streamingGlobals      || null,",
-        "                streamingGlobals:      'streamingGlobals'      in data ? (data.streamingGlobals      || null) : existingExtra.streamingGlobals      || null,\n                importPresets:  'importPresets'  in data ? (data.importPresets  || []) : existingExtra.importPresets  || [],"],
+        "                connectedApps:  'connectedApps'  in data ? (data.connectedApps  || {}) : existingExtra.connectedApps  || {},",
+        "                connectedApps:  'connectedApps'  in data ? (data.connectedApps  || {}) : existingExtra.connectedApps  || {},\n                importPresets:  'importPresets'  in data ? (data.importPresets  || []) : existingExtra.importPresets  || [],"],
     ['catalogue: the Session card stops saying where the policy lives',
         'src/Tabs/settings/catalogue.js',
         "desc:'Sessions, passwords and lockout · set in Clerk',              status:'none',    statusDetail:null, managedIn:'Clerk' },",
         "desc:'Sessions, passwords and lockout · set in Clerk',              status:'none',    statusDetail:null },"],
+
+    // ── Audit streaming, built for real (0.87) ──────────────────────────────────
+    ['stream: an http:// destination is accepted',
+        'netlify/functions/_auditPayload.mjs',
+        "    if (u.protocol !== 'https:') return { ok: false, error: 'Endpoint URL must use https://.' };",
+        "    if (u.protocol !== 'https:' && u.protocol !== 'http:') return { ok: false, error: 'Endpoint URL must use https://.' };"],
+    ['stream: a private host is accepted (the function becomes a probe)',
+        'netlify/functions/_auditPayload.mjs',
+        "    if (isPrivateHost(u.hostname)) return { ok: false, error: 'Endpoint URL must be a public host.' };",
+        ""],
+    ['stream: the signature covers something other than the exact body',
+        'netlify/functions/_auditPayload.mjs',
+        "    return 'sha256=' + createHmac('sha256', String(secret)).update(String(body), 'utf8').digest('hex');",
+        "    return 'sha256=' + createHmac('sha256', String(secret)).update(String(body).trim(), 'utf8').digest('hex');"],
+    ['stream: a dead endpoint never pauses (every write pays 4s forever)',
+        'netlify/functions/_auditPayload.mjs',
+        "    const pause = failures >= MAX_CONSECUTIVE_FAILURES;",
+        "    const pause = false;"],
+    ['stream: a success does not reset the failure count',
+        'netlify/functions/_auditPayload.mjs',
+        "            failures: 0, lastStatus: status, lastError: null, lastAttemptAt: attempt,",
+        "            failures: dest?.failures || 0, lastStatus: status, lastError: null, lastAttemptAt: attempt,"],
+    ['stream: the list view leaks the ciphertext',
+        'netlify/functions/_auditPayload.mjs',
+        "    const { secret, ...rest } = row;",
+        "    const rest = row;"],
+    ['stream: a paused destination is still delivered to',
+        'netlify/functions/_auditStream.mjs',
+        "        const dests = (await destinationsOf(orgId)).filter(d => !d.paused);",
+        "        const dests = await destinationsOf(orgId);"],
+    ['stream: _lib.writeAudit stops streaming',
+        'netlify/functions/_lib.mjs',
+        "        await streamAudit(orgId, row);\n    } catch (e) {\n        console.warn('writeAudit error:', e.message);",
+        "    } catch (e) {\n        console.warn('writeAudit error:', e.message);"],
+    ['stream: the endpoint admits Managers',
+        'netlify/functions/audit-stream.mjs',
+        "    const denied = requireRole(auth, ['Admin'], headers);",
+        "    const denied = requireRole(auth, ['Admin', 'Manager'], headers);"],
+    ['stream: a DELETE is not org-scoped',
+        'netlify/functions/audit-stream.mjs',
+        "            await db.delete(auditStreamDestinations)\n                .where(and(eq(auditStreamDestinations.id, id), eq(auditStreamDestinations.orgId, orgId)));",
+        "            await db.delete(auditStreamDestinations)\n                .where(eq(auditStreamDestinations.id, id));"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

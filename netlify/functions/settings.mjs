@@ -100,13 +100,6 @@ export const handler = async (event) => {
                 customerTypes:    row.extra?.customerTypes    || [],
                 companyProfile:   row.extra?.companyProfile   || null,
                 leadConvBenchmarks: row.extra?.leadConvBenchmarks || null,
-                // Audit-log streaming. Added because AuditDetail.jsx was PUTting
-                // both keys and reading them back, but neither was in the GET or
-                // the PUT whitelist — the PUT rebuilds `extra` from the list below,
-                // so both were silently dropped and the endpoint still returned 200.
-                // The whole streaming panel therefore persisted nothing: add, remove,
-                // pause and globals all appeared to work and reverted on reload.
-                streamingDestinations: row.extra?.streamingDestinations || [],
                 // Integrations panel. Written and read back by ConnectedAppsDetail,
                 // but present in neither half — so the PUT dropped both keys, the
                 // GET always returned {}, and connect/disconnect/Slack-config all
@@ -114,7 +107,6 @@ export const handler = async (event) => {
                 // failure mode after the audit-streaming keys; see guide 18b.
                 connectedApps:  row.extra?.connectedApps  || {},
                 slackConfig:    row.extra?.slackConfig    || {},
-                streamingGlobals:      row.extra?.streamingGlobals      || null,
                 // Company profile detail fields
                 companyDisplayName:   row.extra?.companyDisplayName   || row.companyName || '',
                 companyLegalName:     row.extra?.companyLegalName     || '',
@@ -253,10 +245,8 @@ export const handler = async (event) => {
                 customerTypes:    'customerTypes'    in data ? (data.customerTypes    || [])   : existingExtra.customerTypes    || [],
                 companyProfile:   'companyProfile'   in data ? (data.companyProfile   || null) : existingExtra.companyProfile   || null,
                 leadConvBenchmarks:   'leadConvBenchmarks'   in data ? (data.leadConvBenchmarks   || null) : existingExtra.leadConvBenchmarks   || null,
-                streamingDestinations: 'streamingDestinations' in data ? (data.streamingDestinations || []) : existingExtra.streamingDestinations || [],
                 connectedApps:  'connectedApps'  in data ? (data.connectedApps  || {}) : existingExtra.connectedApps  || {},
                 slackConfig:    'slackConfig'    in data ? (data.slackConfig    || {}) : existingExtra.slackConfig    || {},
-                streamingGlobals:      'streamingGlobals'      in data ? (data.streamingGlobals      || null) : existingExtra.streamingGlobals      || null,
                 // Company profile detail fields
                 companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,
                 companyLegalName:     'companyLegalName'     in data ? (data.companyLegalName     || null) : existingExtra.companyLegalName     || null,

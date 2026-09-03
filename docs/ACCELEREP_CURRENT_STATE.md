@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (sixth session)
-**Verified at:** five gates green on 147 files · **511 tests** · **234/234 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,442 kB `index-Wjd4yjDA.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · dev ahead of `master` by three batches (§0.84 and §0.85 observed, §0.86) and their docs; not yet shipped.
-**Batch:** **three Settings panels reduced to what is real — SSO, Session & password, Import (§0.86, handoff item 21, Jeff's call per panel)** — SSO was a constant with a fake domain and a frozen wizard saving a key sign-in never read; Session & password was a policy form whose Save PUT a key in NEITHER half of settings.mjs (the toast said saved; nothing was) with nothing enforcing any of it; Import was a fake history and a wizard whose "Run import" posted no rows and echoed the preview back as a success. Now: two Managed-in-Clerk panels (what Clerk does, what the app does, what it does not do), an Import launcher for the real CSV and lead importers, `import.mjs` deleted, `ssoConfig` and `importPresets` retired from both halves. Audit streaming is Jeff's "build" and is the next batch (§0.87). Dev only; not yet shipped; not browser-checked — Jeff eyeballs as Admin.
+**Verified at:** five gates green on 147 files · **527 tests** · **244/244 mutations, printed green baseline** · **94/94 integration** · build guard OK 2,425 kB `index-BJ1VcE9y.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · dev ahead of `master` by four batches (§0.84 and §0.85 observed, §0.86, §0.87) and their docs; not yet shipped. The app database and the test database both hold `audit_stream_destinations`.
+**Batch:** **audit streaming, built for real (§0.87, item 21's fourth panel — Jeff's "build")** — every audit row is POSTed, HMAC-SHA256-signed, to each of the org's destinations as it is written (four write sites), from a new org-scoped `audit_stream_destinations` table (DDL in both databases first), through an Admin-only `audit-stream` endpoint that shows a secret once, sends a real test event, pauses / resumes / rotates / removes, and records every attempt; a dead endpoint pauses itself after ten failures; the panel keeps what was real and drops the alerts modal, the typed badge and retention claims, the inert menus and the IP column. Proven against a local receiver in the integration suite. Dev only; not yet shipped; not browser-checked — Jeff eyeballs as Admin.
+**Prior batch:** **three Settings panels reduced to what is real — SSO, Session & password, Import (§0.86, handoff item 21, Jeff's call per panel)** — SSO was a constant with a fake domain and a frozen wizard saving a key sign-in never read; Session & password was a policy form whose Save PUT a key in NEITHER half of settings.mjs (the toast said saved; nothing was) with nothing enforcing any of it; Import was a fake history and a wizard whose "Run import" posted no rows and echoed the preview back as a success. Now: two Managed-in-Clerk panels (what Clerk does, what the app does, what it does not do), an Import launcher for the real CSV and lead importers, `import.mjs` deleted, `ssoConfig` and `importPresets` retired from both halves. Audit streaming is Jeff's "build" and is the next batch (§0.87). Dev only; not yet shipped; not browser-checked — Jeff eyeballs as Admin.
 **Prior batch:** **the Performance tab's single-rep view lists that rep's won and lost deals, with totals (§0.85, handoff item 20)** — with the Rep slicer set the leaderboard was one row and the Rep metrics table hid itself below two reps, so a manager saw an attainment bar and no deals behind it; now two panels below the leaderboard, from the SAME period-filtered sets the leaderboard sums (one number, itemised): won deals with close day, cycle and ARR and a total, lost deals with the stage each left and why and a total, the win rate the two imply, all pure in `repDeals.js`. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("confirmed on karen under performance").**
 **Prior batch:** **the Forecast ledger's Commit and Best case are STORED, per fiscal quarter; the Sales Manager tab's five inert buttons reach real destinations; the tab has an export; Home's quota card is this quarter's (§0.84, handoff items 18 + 19)** — a typed Commit went through a users PUT whose `sanitize()` never carried the key (0 on refresh, §0.80), and one number per rep could never reset when the quarter turned; now `profile.forecastCalls` keyed by quarter through one pure validator on both sides (`forecastCall.js`), Best case editable for the first time with an untyped one flagged "est.", "Coach →" / "Coach" / "Open coaching" open the note dialog with the rep pre-addressed, "Pipeline" / "Their pipeline" open the Pipeline tab viewing as the rep, "Schedule 1:1" opens a new task in the rail, the ledger exports CSV, and Home's card reads the quarter's own quota, wins by close day and commit by the org's stages under the quarter's real name. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("verified changes. they are working").**
 **Prior batch:** **the coachingNotes settings key is retired (§0.83, handoff item 23)** — both orgs imported their old blob notes on 3 Sep, so the key leaves both halves of settings.mjs, the legacy POST branch leaves coaching-notes.mjs, the import button and helpers leave the Team tab and the util, and four mutants whose targets went with them are retired (218 → 214). Rows the import wrote keep `legacy: true` for the "imported" label. Dev only; not yet shipped.
@@ -3599,6 +3600,90 @@ scope and the hook points.
 
 **Status: design only.** Nothing below this line exists until the next
 paragraph says so.
+
+**BUILT (same day), to the design above, in this order.** (1) `db/schema.ts`
+gained `auditStreamDestinations` and `db/apply-audit-stream.mjs` (CREATE
+TABLE / INDEX IF NOT EXISTS, 17 columns read back and counted) was run against
+the TEST database and then the APP database — both verified by the script's
+read-back — before any code that reads the table was committed (§18c). (2)
+`netlify/functions/_auditPayload.mjs` (pure): `validateDestination`
+(https only, no credentials, `isPrivateHost` covering localhost / .local /
+.internal / 10 / 127 / 0 / 169.254 / 172.16–31 / 192.168 / 100.64–127 /
+::1 / fc00::/7 / fe80::/10 / ::ffff-mapped, name 1–120, fmt JSON | NDJSON),
+`newSecret` (`ast_` + 48 hex from the CSPRNG), `secretHintOf`,
+`auditPayloadOf` / `testPayloadOf`, `bodyFor` (NDJSON = one line + \n),
+`signBody` (HMAC-SHA256 over the exact body bytes), `deliveryHeaders`,
+`nextDeliveryState` (2xx → failures 0 + delivered stamp + count; else count,
+and the 10th consecutive failure sets `paused` with the reason in
+`lastError`), `statusOf` (Paused / Failing / Active / Never delivered),
+`destinationView` (never the ciphertext). (3) `_auditStream.mjs`:
+`streamAudit(orgId, row)` — a 30 s per-org cache of the destinations
+(`invalidateAuditStream`), un-paused rows only, one payload per row, each
+destination decrypted / signed / POSTed in parallel with
+`AbortSignal.timeout(4000)`, every attempt recorded on its row with an
+org-scoped UPDATE, a catch-all that returns `{ attempted:0, delivered:0 }` so
+an audit write can never fail because of a customer's endpoint; and
+`sendTestEvent`. It imports db, schema, crypto and the pure module and NOT
+`_lib.mjs`. (4) The four write sites — `_lib.writeAudit`, `users.mjs`'s
+own writer, the `audit-log.mjs` POST, `users-sync.mjs` — take
+`.returning()` and `await streamAudit(orgId, row)` inside their existing
+try. (5) `audit-stream.mjs`: Admin-only (`requireRole(['Admin'])`), GET /
+POST / POST ?test / PUT / DELETE as designed, every query
+`and(eq(id), eq(orgId))`, the secret in the 201 body once and the rotated
+one once, 503 when `encrypt` throws (no `SETTINGS_ENCRYPTION_KEY`), a
+resume resetting `failures`, and its own audit rows
+(`audit_stream.created` / `.updated` / `.deleted`) — which stream like any
+other, so a resume's own row is the first thing a resumed destination
+receives. (6) `settings.mjs`: `streamingDestinations` and
+`streamingGlobals` out of both halves. (7) `AuditDetail.jsx` rewritten
+(1,205 → 470 lines): the stream, filters (the time range now ends at "All
+loaded · everything in the last 500 events"), search (detail included), the
+popover (related rows from the loaded list, the real timestamp, the row's
+id copied), export of the current view; destinations from the endpoint with
+Add (presets Datadog / Splunk HEC / Webhook, JSON or NDJSON), a
+`SecretRevealModal` shown once on create and on rotate with Copy, and per
+row Send test event (the endpoint's real status shown under the row),
+Pause / Resume, Rotate secret and Remove (both through `showConfirm`); the
+badge is "Streaming to N destinations · M not delivering" or nothing; the
+subtitle says "the last 500 events are loaded". Everything listed as
+invented above is gone. `tests/integration/_schema-guard.mjs` learned the
+table; `package.json`'s `test:int` runs the new suite.
+
+**Tests.** `tests/audit-stream.test.mjs` (16): validation and the private
+list both ways, the secret, the payload / body / a signing vector (the
+NDJSON newline is signed) / headers, the state rule (10 → paused, a 3xx or
+4xx is not a delivery), the view, and scans of the four write sites (and
+that those four are the only `db.insert(auditLog)` in the directory), the
+delivery module (no `_lib` import, paused filter, timeout, allSettled,
+catch-all, decrypt per attempt, org-scoped), the endpoint (gate, secret
+once, validator, 503, ≥4 org-scoped queries, the insert stamped with the
+org, resume reset), the settings keys, the schema / DDL / guard agreement,
+and the panel's honesty. `tests/integration/audit-stream.itest.mjs` (7,
+namespace `itest_astream_*`): a local `http.createServer` is the customer
+— create returns the secret once and the list never carries it (nor the
+ciphertext), a Manager is 403, org B sees none; http / private /
+credentialed / bad-format URLs are 400; **a `writeAudit` for org A arrives
+at A's receiver as NDJSON with a signature that verifies against the secret
+and org B's receiver is never attempted**; a paused destination gets
+nothing, a resume through the handler streams the resume's own row and then
+the next; a 500-answering receiver counts 9 → 10 and pauses; the test event
+arrives as `audit.test` and a 503 receiver is reported as `ok:false`;
+rotate makes the old secret stop verifying; B cannot test or delete A's
+destination. (The create's own audit row is attempted against an
+`.invalid` host — RFC 2606, never resolves — so no test contacts a third
+party.) Ten mutants (http accepted, private host accepted, signature over a
+trimmed body, never pausing, success not resetting, the view leaking the
+ciphertext, paused rows delivered to, `_lib` no longer streaming, Managers
+admitted, an unscoped DELETE); the §0.86 importPresets anchor repointed to
+the `connectedApps` line after the harness reported it STALE. Gates green
+on 147 files, **527/527**, **244/244 mutations, printed green baseline**
+(run alone), **94/94 integration**, build guard OK (2,425 kB,
+`index-BJ1VcE9y.js`), `dist/` cleared. **Not browser-checked** (an
+Admin-only panel, no pane session); Jeff eyeballs on deployed dev as Admin
+— Settings → Security → Audit log: add a destination (any https receiver
+he controls, or a request-bin), store the secret, Send test event, watch
+the status and the delivery count move, then do something audited and see
+it arrive.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

@@ -5,6 +5,9 @@ import { auditLog, users } from '../../db/schema.js';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { bulkInsert as coreBulkInsert, bulkUpsert as coreBulkUpsert } from './_bulk.mjs';
 import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor, mayMutate, OWNERSHIP_FORBIDDEN, isAppUserId } from './_ownership.mjs';
+// Audit streaming (state §0.87): every row written here is delivered to the
+// org's destinations after the insert. _auditStream.mjs must not import this file.
+import { streamAudit } from './_auditStream.mjs';
 
 // Browser origins allowed to call the API. Kept in sync with the Clerk
 // authorizedParties list in auth.mjs. Exported for the CORS follow-up; any
@@ -38,7 +41,7 @@ export function serverErrorBody(err, label = 'function') {
 // operation being audited; it is logged server-side instead.
 export async function writeAudit(orgId, { action, entityType, entityId, entityName = null, detail = null, userId = null, userName = null }) {
     try {
-        await db.insert(auditLog).values({
+        const [row] = await db.insert(auditLog).values({
             id: 'audit_' + randomUUID(),
             orgId,
             action,
@@ -49,7 +52,8 @@ export async function writeAudit(orgId, { action, entityType, entityId, entityNa
             userId,
             userName,
             timestamp: new Date(),
-        });
+        }).returning();
+        await streamAudit(orgId, row);
     } catch (e) {
         console.warn('writeAudit error:', e.message);
     }

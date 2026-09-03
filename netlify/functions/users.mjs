@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 // Pure, shared with the Sales Manager tab (the _stage.mjs / stageClock.js
 // arrangement): one validator decides the forecast-call shape on both sides.
 import { cleanForecastCalls } from '../../src/utils/forecastCall.js';
+import { streamAudit } from './_auditStream.mjs';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
 
@@ -18,7 +19,7 @@ const newUserId = () => 'usr_' + randomUUID();
 
 const writeAudit = async (orgId, action, entityId, entityName, actorId, actorName) => {
     try {
-        await db.insert(auditLog).values({
+        const [row] = await db.insert(auditLog).values({
             id:         'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
             orgId,
             action,
@@ -28,7 +29,8 @@ const writeAudit = async (orgId, action, entityId, entityName, actorId, actorNam
             userId:     actorId    || null,
             userName:   actorName  || null,
             timestamp:  new Date(),
-        });
+        }).returning();
+        await streamAudit(orgId, row);   // state §0.87
     } catch (e) { console.warn('writeAudit error:', e.message); }
 };
 
