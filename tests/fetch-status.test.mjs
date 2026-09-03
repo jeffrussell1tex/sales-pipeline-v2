@@ -52,6 +52,12 @@ test('every loader reports through dbStatusOf; nothing sets the outage flag on a
     assert.ok(!app.includes('<span>Database connection lost'), 'no hardcoded outage sentence');
 });
 
+test('the MFA panel notice does not tell an Admin to turn on a policy the app cannot read', () => {
+    const src = read('src/Tabs/settings/security/MfaDetail.jsx');
+    assert.ok(!src.includes('Turn on Require multi-factor authentication'), 'asserts the policy is off');
+    assert.ok(src.includes('This app cannot read that setting'), 'says what it does not know');
+});
+
 test('the MFA catalogue card reads live enrolment and carries no invented text', () => {
     const cat = read('src/Tabs/settings/catalogue.js');
     const row = cat.split('\n').find(l => l.includes("id:'mfa'"));

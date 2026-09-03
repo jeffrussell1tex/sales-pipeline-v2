@@ -2529,6 +2529,18 @@ configured" are `ok:true` unconditionally, and the sentence "Set up SSO
 and enforce MFA to reach 90%+" is static. Only the webhooks, pipeline and
 team-assignment checks read anything.
 
+**Notice reworded (Jeff: "please reword the policy settings dialogue").**
+The panel's amber callout said "Turn on Require multi-factor
+authentication in Clerk Dashboard to hold them at sign-in until they do"
+— Require has been ON on both instances since §0.65, and the app cannot
+read that setting (`clerk-mfa-status` reports per-user enrolment only).
+It now reads "With Require multi-factor authentication on in Clerk, they
+are held at sign-in until they enrol. This app cannot read that setting —
+check it in Clerk Dashboard." One scan in `fetch-status.test.mjs`, one
+mutant (the old sentence back). Gates green, **440/440**, **189/189,
+printed green baseline**, build guard OK (2,477 kB, `index-ylwf4HZI.js`).
+Not browser-observed (Admin-only panel; the pane is Karen).
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

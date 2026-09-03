@@ -80,7 +80,7 @@ export const MfaDetail = ({ onBack }) => {
 
             {!loading && notEnrolledCount > 0 && (
                 <SecCallout tone="warn"
-                    text={<>MFA is not fully enrolled. <b>{notEnrolledCount} user{notEnrolledCount !== 1 ? 's' : ''} haven't set up a second factor.</b> Turn on Require multi-factor authentication in Clerk Dashboard to hold them at sign-in until they do.</>}
+                    text={<>MFA is not fully enrolled. <b>{notEnrolledCount} user{notEnrolledCount !== 1 ? 's' : ''} haven't set up a second factor.</b> With Require multi-factor authentication on in Clerk, they are held at sign-in until they enrol. This app cannot read that setting — check it in Clerk Dashboard.</>}
                     actions={[
                         <a key="dash" href={CLERK_DASHBOARD} target="_blank" rel="noopener noreferrer">
                             <SecBtn label="Open Clerk Dashboard →"/>

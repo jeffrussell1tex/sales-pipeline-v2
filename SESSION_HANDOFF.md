@@ -188,7 +188,11 @@ local gate build's hash. **PROD SHIPPED (Jeff: "ship to prod"):** `master`
 fast-forwarded `1163eec` → `d63644f`; salespipelinetracker.com serves
 `index-DrRd6S0A.js`, `pk_live_` inlined, the banner copy and "Managed in"
 present (state §0.78). `master` == `dev` == `d63644f` at the time of this
-commit; dev is ahead only by this docs commit.
+commit; dev is ahead only by this docs commit. **Then (state §0.78, last
+paragraph; Jeff: "please reword the policy settings dialogue"):** the MFA
+panel's callout no longer tells the Admin to turn on Require MFA (on since
+§0.65, unreadable by the app); 1 scan, 1 mutant. Deploy check recorded in
+§4 by a follow-up docs commit.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -232,15 +236,16 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 2 Sep, fourth session)
 
-Five gates green on 141 files · **439/439 unit** (5 in
+Five gates green on 141 files · **440/440 unit** (6 in
 `fetch-status.test.mjs`, 7 in `history-feed.test.mjs`, 5 in `reports-controls.test.mjs`, 5 in
 `stage-order.test.mjs`, 23 in `pipeline-report.test.mjs`, 9 in
 `opp-text.test.mjs`, 13 in `report-period.test.mjs`, 15 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
-`session-status.test.mjs`) · **188/188 mutations, printed green baseline**
-(75 new this session; run alone) · build
-**2,477 kB JS**, `index-CSnSB6MZ.js` (state §0.78; dev deploy observed
-serving it for `71d68e3`), guard OK, `dist/` cleared · **79 integration not
+`session-status.test.mjs`) · **189/189 mutations, printed green baseline**
+(76 new this session; run alone) · build
+**2,477 kB JS**, `index-ylwf4HZI.js` (the MFA notice reword; deploy check
+pending at the time this was written; `index-CSnSB6MZ.js` observed for
+`71d68e3`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
