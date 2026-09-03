@@ -1,30 +1,31 @@
 # SESSION_HANDOFF.md
 
 **Session of 3 September 2026, seventh session (Jeff: "claude, lets
-continue" — reading the two item-24 panels to put the reduce-or-build call in
-front of him found that the Connected Apps panel had rendered a component
-bound nowhere in `src/` since 11 May: `<SlackConfigModal/>`, deleted by
-`5772f63` in a cleanup, every build green, every "Configure Slack" click a
-ReferenceError into the Settings error boundary, no org able to set the
-webhook the five pipeline alerts read; restored at module scope; the
-`check:tdz` gate that exists for this never counted a JSX element name as a
-read, nor a default-exported declaration as module scope — both fixed with
-fixtures; `IntBtn` had dropped `disabled` for four callers; the Industries
-defaults' typed `n` counts, never rendered but persisted by every Save, are
-gone; the Account rail read `.name` from a taxonomy keyed `k`, so an org
-that saved its industries got NO suggestions — fixed; on dev,
-deploy-verified — NOT yet observed by Jeff, NOT shipped; item 22 still
-unshipped), FINAL.** Repo root. Read this first, then verify
+continue" — reading the two item-24 panels found the Connected Apps panel had
+rendered a component bound nowhere in `src/` since 11 May: `<SlackConfigModal/>`,
+every build green, every "Configure Slack" click a ReferenceError into the
+Settings error boundary; restored, the `check:tdz` gate taught that a JSX name
+is a read, `IntBtn`'s dropped `disabled`, the Industries typed counts and the
+Account rail's wrong key — state §0.89, OBSERVED by Jeff on deployed dev
+("verified"); then Jeff: "can we create a list of common apps … right now
+(other than slack) they all show morgan reyes with no ability to switch" —
+the honest answer went back (three real things exist; a modal is not an
+integration) and Jeff chose **option A**: the panel is what exists — Slack,
+Google and Microsoft 365 calendars through the real OAuth, an Email-logging
+card for the BCC address that had no UI, and a ten-app catalogue whose rows
+are REQUESTS recorded on the org, audited and mailed to the owner, never a
+Connect — state §0.90, on dev, deploy-verified, NOT yet observed by Jeff;
+NOTHING from this session is shipped to prod; item 22 still unshipped), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.89` with a paragraph beginning **"Jeff: "claude, lets continue.""**
-and a paragraph beginning **"Dev landing (`95141cb`"**, and does
-`docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b29`** with a bullet
-beginning **"A capitalised JSX element name is a read"**? If not, you are
-looking at a copy that predates this handoff. Check section content, never
-dates.
+`### 0.90` with a paragraph beginning **"Design (decided before code, no new
+table)."** and a paragraph beginning **"Dev landing (`e3d15f2`"**, and does
+`docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b29`** and, under `## 18b7`,
+a paragraph beginning **"The mirror image (3 Sep 2026, state §0.90)"**? If
+not, you are looking at a copy that predates this handoff. Check section
+content, never dates.
 
 **On dates:** §0.58, §0.59 and the previous handoff say "2 Sep". Git carries
 every one of their commits at 1 Sep -0500, the same day as §0.56/§0.57 and
@@ -33,11 +34,38 @@ their headers is Jeff's call, not done.
 
 ---
 
-## 1. What shipped — everything is on `dev`, deploy-verified; all but the seventh-session batch observed
+## 1. What shipped — everything is on `dev`, deploy-verified; all but the item-24 batch observed
 
-**Seventh session (3 Sep) — ON DEV ONLY, deploy-verified, NOT observed by
-Jeff, NOT shipped:** `95141cb` (state §0.89, guide §18b29) and the docs
-commit this handoff rides in. accelerep.netlify.app served
+**Seventh session, second batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
+observed by Jeff, NOT shipped:** `e3d15f2` (item 24 option A, state §0.90,
+guide §18b7's new paragraph) and the docs commit this handoff rides in.
+accelerep.netlify.app served `index-UiFDxZrS.js` — the local gate build's hash —
+42 seconds after the push (15:29:53 local), `pk_test_` inlined; "Request an
+integration", "Microsoft 365 Calendar", "Email logging" and "Not available on
+this site" in the served bundle, "Morgan Reyes", "Browse marketplace" and
+"Authorize" absent; the deployed `integration-requests` function answers 401
+unauthenticated. What it is: **Jeff: "option a."** The Connected Apps panel
+renders the integrations that exist and nothing else — Slack (as §0.89 left
+it); Google Calendar and **Microsoft 365 Calendar** (offered in the UI for the
+first time; the backend always took it) from `calendar-connections`, company
+and personal, with the real connected email, Connect through the existing
+OAuth start, Disconnect through the existing DELETE, and "Not available on
+this site" when `calendar-connections` GET's new `providers` map (env-var
+NAME presence, never a value) says the site has no credentials for that
+provider; **Email logging**, a card for the org's BCC address from
+`email-inbound` (a complete feature that had no UI); and **Request an
+integration** — ten apps from one shared module (`src/utils/integrationCatalog.js`,
+imported by the panel AND by the new `integration-requests.mjs`) whose rows
+are requests: POST → recorded at `settings.extra.integrationRequests` (both
+halves of `settings.mjs`), org-scoped, idempotent, audited as
+`integration.requested`, mailed to `INTEGRATION_REQUESTS_TO` when set. Gone:
+the "Morgan Reyes" connect modal, `INT_APPS`, "Browse marketplace", "+
+Request integration", the `gcal` flag. **Not observed** — no pane session.
+`master` stays at `ad76a38`.
+
+**Seventh session, first batch (3 Sep) — ON DEV ONLY, deploy-verified,
+OBSERVED by Jeff ("verified"), NOT shipped:** `95141cb` (state §0.89, guide
+§18b29) and its docs commit `7bb3e70`. accelerep.netlify.app served
 `index-CEn91emU.js` — the local gate build's hash — 32 seconds after the push
 (14:57:35 local), 2,486,255 bytes in `dist/`, `pk_test_` inlined; "Configure
 Slack", "Send test message" and "Incoming Webhook URL" in the served bundle,
@@ -438,57 +466,63 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (3 Sep, seventh session)
+## 4. Verified state at close (3 Sep, seventh session, second batch)
 
-Five gates green on 147 files (`check:tdz` "No render-time TDZ issues in
-147 file(s)" AFTER the fix — it reported the Slack line first, then a false
-positive on `CoachingNoteDialogHost` rendering its file's default export,
-which was the second gate bug, then clean) · **546/546 unit** (9 new in
-`connected-apps.test.mjs`, 2 in `scanners.test.mjs`) · **261/261 mutations,
-printed green baseline** (12 added this session, none retired; run alone,
-after the unit and integration runs; the harness restored the tree — status
-clean after) · build **2,428 kB JS**, `index-CEn91emU.js`, guard OK,
-`dist/` cleared · **94/94 integration** (no function changed) · **no pane
-browser pass this session** — no `netlify dev` was started and the pane
-holds no session (a sign-in needs Karen's second factor); the crash and the
-fix are reasoned from code and the gate's fixture · dev deploy observed
-serving `index-CEn91emU.js` (§0.89) · **`master` == `ad76a38`, prod serving
+Five gates green on 148 files · **552/552 unit** (17 new this session: 15 in
+`connected-apps.test.mjs`, 2 in `scanners.test.mjs`) · **273/273 mutations, printed green baseline (12 added this batch; the first run let one survive and the test was tightened before the number was written; run alone)** ·
+build **2,429 kB JS**, `index-UiFDxZrS.js`, guard OK, `dist/` cleared · **100/100
+integration** (6 new in `integration-requests.itest.mjs`; the test database
+needed no schema change) · **no pane browser pass this session** — no
+`netlify dev` was started and the pane holds no session (a sign-in needs
+Karen's second factor); §0.89 was OBSERVED by Jeff on deployed dev, §0.90 was
+not · dev deploys observed serving `index-CEn91emU.js` (§0.89) and
+`index-UiFDxZrS.js` (§0.90) · **`master` == `ad76a38`, prod serving
 `index-BYLyFXw4.js` (eighth ship)**; dev is ahead of master by the
-ship-record docs commit, item 22 (`539eaa1` + docs) and this session's
-`95141cb` + docs · no schema change · the working tree was clean at close.
+ship-record docs commit, item 22 (`539eaa1` + docs), `95141cb` + `7bb3e70`,
+and `e3d15f2` + this handoff's commit · no schema change · the working tree
+was clean at close.
 
 ## 5. Next — start here
 
 **Next session prep, in order (Jeff: "update the next session prep"):**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect the eighth-ship record docs commit, `539eaa1` + its two docs
-  commits (item 22, OBSERVED), and `95141cb` + its docs commit (this
-  session, NOT observed). Anything else is unshipped code and a finding.
-- **Jeff eyeballs the seventh-session batch on deployed dev (state §0.89):**
-  as Admin, Settings → Integrations → Connected apps → "Configure Slack"
-  opens a modal (it was "Something went wrong" with `SlackConfigModal is not
-  defined`); paste a real Incoming Webhook URL → "Send test message" → the
-  message lands in the channel; "Save configuration" → the Slack card reads
-  Connected with a Configure link and the purple callout is gone; refresh —
-  it stays. Settings → Sales process → Industries → Distribution unchanged
-  (its counts were always the org's accounts). Accounts → an account →
-  Industry: the typeahead lists the org's saved industries if it ever saved
-  the taxonomy, the built-in list otherwise. Settings → Integrations → API
-  keys → "Create key" is greyed until a name is typed.
-- **Then ship items 22 + this batch when Jeff says so** — `git push origin
-  dev:master` after the ancestor check, then poll salespipelinetracker.com
-  for the bundle hash; `pk_live_` inlined. Prod has carried the Slack crash
-  since May; this batch is the first that removes it.
-- **Then item 24 — Jeff's call before code, with the corrected premise
-  (state §0.89 finding 6):** the Connected Apps panel's `connected:true` /
-  `traffic` fields are never rendered; what is invented is the connect
-  modal ("Morgan Reyes", fixed scopes, an Authorize that closes), the two
-  inert header buttons, thirteen catalogue apps with nothing behind them, and
-  `connectedApps.gcal`, which nothing sets (the calendar OAuth writes its own
-  tables), so Google Calendar always reads unconnected here. Industries is
-  DONE as far as it was wrong (finding 4). Reduce (Slack + a Google Calendar
-  card that reads the real connection) or build, per Jeff.
-- **Item 25 (new, Jeff's call):** `send-slack`'s handler posts a test to ANY
+  commits (item 22, OBSERVED), `95141cb` + `7bb3e70` (§0.89, OBSERVED —
+  Jeff: "verified"), and `e3d15f2` + its docs commit (§0.90, NOT
+  observed). Anything else is unshipped code and a finding.
+- **Jeff eyeballs the item-24 batch on deployed dev (state §0.90), as
+  Admin:** Settings → Integrations → Connected apps. Four cards under
+  Integrations — Slack, Google Calendar, Microsoft 365 Calendar, Email
+  logging — and ten rows under Request an integration; no Morgan Reyes
+  anywhere, nothing says Connect except the calendars' own "Connect my
+  calendar" / "Connect company calendar". Google Calendar: those two links
+  if the site has Google credentials, or "Not available on this site" (the
+  Company Calendar panel's existing Connect would 503 in that case too — same
+  truth, now said). Microsoft 365 Calendar: the same, per the Microsoft
+  credentials. Email logging: the BCC address with Copy, or "Not available
+  on this site" if the inbound domain is unset. Click Request on any row →
+  "Requested · <today>", refresh — it stays, the button is gone for that
+  app; Settings → Security → Audit log shows `integration.requested`. **As
+  Karen:** same panel, no Slack Configure (Admin only), her own calendar
+  Connect, no company Connect, Request works.
+- **Two env vars are Jeff's, not verifiable from here:** set
+  `INTEGRATION_REQUESTS_TO` in Netlify (dev and prod) to the address that
+  should receive requests — until then a request is recorded and audited but
+  not mailed (`notified:false`); and whether `GOOGLE_CLIENT_ID/SECRET` and
+  `MICROSOFT_CLIENT_ID/SECRET` are set on each site decides what the two
+  calendar cards offer (the Netlify reader exposes no env).
+- **Then ship item 22 + both seventh-session batches when Jeff says so** —
+  `git push origin dev:master` after the ancestor check, then poll
+  salespipelinetracker.com for the bundle hash; `pk_live_` inlined. Prod
+  has carried the Slack crash since May; this ship is the first that
+  removes it.
+- **Item 24 is DONE (§0.90, option A).** What it did NOT do, by Jeff's
+  choice: build any third-party integration. Option B — naming the first
+  real one — is open; Zapier or a generic signed webhook-out reaches the
+  most customers for the least work (the audit stream already proved the
+  signed-delivery pattern). It needs Jeff's developer account with the
+  provider before code.
+- **Item 25 (Jeff's call):** `send-slack`'s handler posts a test to ANY
   `webhookUrl` in the body behind `verifyAuth` alone — no role gate, no host
   check; the audit-stream endpoint refuses literal private hosts and is
   Admin-only. One line each.
@@ -1011,7 +1045,15 @@ ship-record docs commit, item 22 (`539eaa1` + docs) and this session's
    and the scans that pin them (house-dialogs, coaching-notes); mutation
    entries follow. Small, mechanical, its own commit.
 
-24. **Carried, premise corrected (state §0.89, findings 4–6). Half done.**
+24. **DONE — state §0.90, commit `e3d15f2` (3 Sep, seventh session; Jeff:
+   "option a").** The panel is what exists: Slack; Google and Microsoft 365
+   calendars through the real OAuth (Outlook offered for the first time),
+   with "Not available on this site" when the site lacks credentials; an
+   Email-logging card for the BCC address; ten catalogue rows that are
+   requests (recorded, audited, mailed when `INTEGRATION_REQUESTS_TO` is
+   set). The Morgan Reyes modal, `INT_APPS`, the inert header buttons and
+   the `gcal` flag are gone. Not observed by Jeff; not shipped. Was:
+   **Carried, premise corrected (state §0.89, findings 4–6). Half done.**
    The sixth session recorded six apps "marked connected and typed traffic"
    and Industries' "typed account counts that no query produced". Reading
    both panels: `INT_APPS`'s `connected:true` and `traffic` are never
@@ -1149,3 +1191,16 @@ an account form that offered no industries to any org that had saved its
 own. Twelve mutants, all caught. Deployed, hash-checked, not yet seen by
 Jeff; the ship, and item 24's real question, are his. Reasoned, then
 written, then committed.
+
+Then Jeff looked — "verified" — and asked the real question: could the
+catalogue's apps each get a connection modal, since everything but Slack
+showed Morgan Reyes. The answer had to be honest before it was useful: three
+integrations exist, and a modal is not one. He chose the honest shape. The
+panel now shows what is there — Slack; two calendars, one of which the
+backend had supported for months without the UI ever offering it; an
+email-logging address that had been complete and invisible — and turns the
+rest into requests that reach him by mail. One catalogue module serves the
+panel and the endpoint, so the list a customer can see is exactly the list
+the server will accept. Six integration tests, twelve mutants; the first
+harness run let one survive and the test was tightened before the number was
+written. Deployed, hash-checked, not yet seen by Jeff.

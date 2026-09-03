@@ -4027,6 +4027,15 @@ here (the Netlify reader exposes no env) — the panel now says so per provider
 instead of failing. **Carried:** item 25 (`send-slack` posts to any URL behind
 `verifyAuth` alone) and item 26 (the duplicate fixture).
 
+**Dev landing (`e3d15f2`, pushed 15:29:11 local):** accelerep.netlify.app
+served `index-UiFDxZrS.js` — the local gate build's hash — at 15:29:53 local (was
+`index-CEn91emU.js`), 42 seconds after the push, `pk_test_` inlined;
+"Request an integration", "Microsoft 365 Calendar" and "Email logging" present
+in the served bundle, "Morgan Reyes" and "Authorize" absent; the deployed
+`integration-requests` function answers 401 unauthenticated. `master` stays
+at `ad76a38` (the eighth ship). **Not yet observed by Jeff.** The ship is
+Jeff's call.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
