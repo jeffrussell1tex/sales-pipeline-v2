@@ -6,14 +6,16 @@ first time — item 18; the Sales Manager tab's FIVE inert buttons wired to
 real destinations, the ledger's Export CSV, and Home's quota card on this
 quarter's own figures — item 19; OBSERVED by Jeff on deployed dev —
 "verified changes. they are working"; then the Performance tab's single-rep
-view listing that rep's won and lost deals with totals — item 20, on dev,
-deploy-verified, NOT yet observed; nothing shipped to prod), FINAL.** Repo root. Read this first, then verify
+view listing that rep's won and lost deals with totals — item 20, OBSERVED
+by Jeff on deployed dev — "confirmed on karen under performance"; nothing
+shipped to prod), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
 `### 0.85` with a paragraph beginning **"Jeff: "lets do 20.""** and a
-paragraph beginning **"Dev landing (`6db6ea8`"**, and does
+paragraph beginning **"OBSERVED by Jeff on deployed dev (3 Sep), Karen
+sliced"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
 beginning **"Never `window.confirm`"** (the guide did not change this
 session either)? If not, you are looking at a copy that predates this handoff.
@@ -28,8 +30,8 @@ their headers is Jeff's call, not done.
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
 
-**Sixth session, second batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
-observed, NOT shipped:** `6db6ea8` (item 20, state §0.85) and its landing
+**Sixth session, second batch (3 Sep) — ON DEV ONLY, deploy-verified,
+OBSERVED by Jeff ("confirmed on karen under performance"), NOT shipped:** `6db6ea8` (item 20, state §0.85) and its landing
 docs commit `be5e91b`. accelerep.netlify.app served `index-DmjjOHZE.js` —
 the local gate build's hash — 32 seconds after the push (12:08:54 local),
 2,559,307 bytes, `pk_test_` inlined, "Won deals —" / "Lost deals —" / "no
@@ -39,8 +41,8 @@ the Rep slicer set showed one leaderboard row and hid the Rep metrics table
 deals behind it; now two panels below the leaderboard — Won deals (Deal ·
 Closed · Cycle · ARR, Total, win rate) and Lost deals (the stage each left
 and why, Total) — from the SAME period-filtered sets the leaderboard sums,
-pure in `src/utils/repDeals.js`. **Jeff eyeballs on deployed dev as Admin**
-(§5). `master` stays at `eec3948`.
+pure in `src/utils/repDeals.js`. **OBSERVED by Jeff on deployed dev (3 Sep):
+"confirmed on karen under performance."** `master` stays at `eec3948`.
 
 **Sixth session (3 Sep) — ON DEV ONLY, deploy-verified, OBSERVED by Jeff
 ("verified changes. they are working"), NOT shipped:** `9782e97` (items 18 + 19, state §0.84) and its landing docs
@@ -359,9 +361,11 @@ mutation in flight — and was restored; not a finding).
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect `9782e97`, `6db6ea8` and the docs commits around them, plus
   `6af58fb` (the seventh ship's record). **Items 18 + 19 are OBSERVED (Jeff:
-  "verified changes. they are working") and UNSHIPPED; item 20 is UNOBSERVED
-  and UNSHIPPED** — that is the state, not a finding.
-- **Jeff eyeballs item 20 on deployed dev, as Admin:** Reports → Performance,
+  "verified changes. they are working") and UNSHIPPED; item 20 is OBSERVED
+  (Jeff: "confirmed on karen under performance") and UNSHIPPED** — that is
+  the state, not a finding. **Nothing on dev is unobserved.**
+- **DONE — Jeff confirmed item 20 on deployed dev with Karen sliced.** Was
+  the eyeball list, kept as the record of what "confirmed" covers: Reports → Performance,
   Grouped by → Rep, pick Karen: below the one-row leaderboard, "Won deals —
   Karen Russell" and "Lost deals — Karen Russell" for the selected Period,
   each with a Total row and the win rate in the won header; change Period
@@ -742,7 +746,8 @@ mutation in flight — and was restored; not a finding).
    panels below the leaderboard while the Rep slicer names one rep, from
    the same period-filtered sets it sums (the list's total IS the
    leaderboard's Closed); `src/utils/repDeals.js` (pure), 6 tests, 5
-   mutants. Unobserved; unshipped. Was: **Product (Jeff, 3 Sep, while
+   mutants. **OBSERVED by Jeff on deployed dev ("confirmed on karen under
+   performance").** Unshipped. Was: **Product (Jeff, 3 Sep, while
    eyeballing the Forecast tab): Reports → Performance → the single-rep
    view should have a section listing that rep's won and lost deals, with
    totals.** Not started; not read. What
@@ -855,4 +860,6 @@ leaderboard with the metrics table hiding itself below two reps — the ask
 was for the deals behind the bar, and the only honest source for them was
 the sets the bar already summed, so the list's total is the bar's number
 and a mutant that points it elsewhere is caught. Pure module, six tests,
-five mutants, gated, deployed, hash-checked; unobserved, and said so.
+five mutants, gated, deployed, hash-checked; then Jeff sliced Karen under
+Performance and confirmed it. Three items on dev, all three seen; the ship
+is his call.
