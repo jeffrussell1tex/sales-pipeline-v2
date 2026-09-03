@@ -2595,6 +2595,9 @@ dialog; Sales Manager → "+ Add coaching note" opens the house prompt,
 the note appears under Recent coaching and **survives a refresh** — as
 Admin and, the point of the exception, as a Manager.
 
+**Dev landing (`147e5f4`):** accelerep.netlify.app serves `index-B0b_2Pd3.js`,
+the local gate build's hash, 46 seconds after the push.
+
 ---
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

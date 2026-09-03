@@ -202,7 +202,8 @@ dialog (promptModal in useModalState → App.jsx → ModalLayer); coaching
 notes persisted — `coachingNotes` in both halves of settings.mjs and a
 Manager may write that key alone. 6 tests, 6 mutants (+1 repointed),
 79/79 integration. Not browser-observed (the pane's session expired).
-Deploy check recorded in §4 by a follow-up docs commit.
+`147e5f4`, **deploy-verified:** accelerep.netlify.app serves
+`index-B0b_2Pd3.js`, the local gate build's hash.
 
 **Three pushes, all CI green, all served bundles byte-matched to the local
 gate build.** (1) `c435ee4`→`35c4f12`: the read side of the date contract
@@ -253,9 +254,8 @@ Five gates green on 142 files · **446/446 unit** (6 in
 `report-scope.test.mjs`, 15 in `loss-analysis.test.mjs`, 6 in
 `session-status.test.mjs`) · **195/195 mutations, printed green baseline**
 (82 new this session; run alone) · build
-**2,479 kB JS**, `index-B0b_2Pd3.js` (items 13/14; deploy check pending at
-the time this was written; `index-ylwf4HZI.js` observed for `b26c74c`),
-guard OK, `dist/` cleared · **79 integration not
+**2,479 kB JS**, `index-B0b_2Pd3.js` (items 13/14; dev deploy observed
+serving it for `147e5f4`), guard OK, `dist/` cleared · **79 integration not
 re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
 pass as Karen on localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
