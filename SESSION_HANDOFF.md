@@ -289,9 +289,12 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
   and a finding.
 - **Karen's role: back to User** (Jeff, 2 Sep close: "already done"). She
   was a Manager only to observe the coaching-note Manager path.
-- **Item 16 first** (the Sales Manager tab's calendar quarter): read the
-  whole tab's quarter math before touching the header; helper + tests under
-  two fiscal starts, as §0.69 did for Reports.
+- **Item 16 — header HALF DONE (3 Sep, `1e15e45`, state §0.80):** the tab's
+  quarter math was read whole first; the header and weeks remaining now come
+  from `currentQuarter()` in quarters.js (tests under two fiscal starts).
+  **Jeff's two decisions, taken with the audit in front of him:** the totals
+  move to quarter-to-date and the three inert header buttons go — that is
+  the batch in progress; see item 16.
 - **Then item 15** (catalogue footers, Workspace Health constants): the
   same honesty class as §0.78; `liveCounts` already carries the MFA
   numbers.
@@ -472,16 +475,29 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    footer is wanted), health checks that cannot be read are dropped from
    the denominator, "MFA enforced" becomes "MFA fully enrolled" from
    `liveCounts.mfa`, and the sentence names only the checks that failed.
-16. **Carried (seen in the pane during the §0.79 check): the Sales Manager
+16. **Header DONE — state §0.80, commit `1e15e45` (3 Sep; Jeff: "All
+   quarters showing should run off the fiscal year set in the settings
+   area … UKG … fiscal ends on 9/30 so they are currently in Q4").**
+   `currentQuarter(fiscalStart)` in quarters.js; the header reads
+   "Q4 FY2026 · 4 weeks remaining" for an October year; weeks count today
+   and are never 0 (the Gap tile divided by 0 on a quarter's last day).
+   **The audit found the totals on NO quarter:** `closedArr` is every
+   Closed Won deal ever, `quota` the annual figure (or four quarterlies
+   summed); attainment, health score, "Team to quota", the Team cards'
+   bar and the Administration board's bar all divide those two.
+   **Jeff's decisions (3 Sep): quarter-to-date** — Closed = won in the
+   current fiscal quarter by close day (`closeDayInRange`, §0.75), Quota =
+   `userQuotaFor(u, 'Qn')` (a quarterly plan's own figure, else annual ÷
+   4); the Administration board keeps the annual quota with a
+   fiscal-year-to-date bar; **and the header's three inert buttons (This
+   quarter / All reps / Export) are removed.** Not yet committed when this
+   was written — if the next commit after `1e15e45` is not that batch, it
+   was not finished. Was: **Carried (seen in the pane during the §0.79 check): the Sales Manager
    tab's quarter is the CALENDAR quarter.** Header "Team forecast · Q3
    2026 · 4 weeks remaining" beside Home's "Q4 · Week 10" on 2 Sep.
    SalesManagerTab.jsx ~line 769: `qNum = Math.floor(now.getMonth()/3)+1`,
    `qEnd` the calendar quarter's last day, `weeksLeft` from it; no read of
-   `fiscalYearStart` anywhere in the file. Home and every report use
-   quarters.js with the org's fiscal start. Audit the tab's "this
-   quarter" totals (quota, closed, commit, best case) for the same
-   bucket before fixing the header alone; then `quarterOf` /
-   `quarterEndDate` from quarters.js, tests under two fiscal starts.
+   `fiscalYearStart` anywhere in the file.
 17. **Product (Jeff, 2 Sep, after observing §0.79): coaching notes should
    be ADDRESSED — a manager sends a note to a specific person, several
    people, or the whole team.** What exists today, read from code: a
@@ -513,6 +529,23 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    and Admins; NOT to other managers, not even a recipient's own manager
    unless they wrote it. Team notes are visible to the team's members
    (from their first day) and its managers. Not started.
+18. **Carried (found reading for item 16, state §0.80): the Forecast
+   ledger's editable Commit is never stored.** Clicking a rep's Commit
+   cell calls `updateRepField(rep.id, 'commit', n)` → `saveUser` → users
+   PUT, and `users.mjs` `sanitize()` carries neither `commit` nor
+   `bestCase` in a column or in the profile blob — the typed commit is 0
+   again on refresh (persistent-data rule, guide §18b1). `bestCase` is
+   never editable anywhere and falls back to 60% of open pipeline. Fix:
+   add both to the profile blob in `sanitize()` (additive), and decide
+   whether a commit is per quarter (it should be — it is a quarter's
+   call, so a key per fiscal quarter, not one number that never resets).
+19. **Carried, same read:** the Forecast ledger's per-row "Coach →" button
+   has no handler (the batch-6 class; Jeff removed the header's three,
+   this one was found after the question was asked). HomeTab's quota card
+   is `annualQuota / 4` (HomeTab.jsx ~351) — a quarterly-plan user sees a
+   $0 quota there; `userQuotaFor(u, 'Qn')` is the helper — and its
+   closed-this-quarter buckets won deals by `forecastedCloseDate`, not
+   the close day (§0.75's rule, applied to Reports only so far).
 
 ## 6. The thread
 
