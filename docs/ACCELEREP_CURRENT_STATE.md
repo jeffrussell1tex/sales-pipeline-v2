@@ -3932,6 +3932,101 @@ message" and "Incoming Webhook URL" present in the served bundle, "n:118"
 absent. `master` stays at `ad76a38` (the eighth ship); dev is ahead by item
 22 and this batch. **Not yet observed by Jeff.** The ship is Jeff's call.
 
+### 0.90 Connected apps is what exists: Slack, two calendars, email logging, and requests for the rest (3 Sep, seventh session)
+
+**Jeff, after verifying §0.89: "So can we create a list of common apps that
+people want to connect to and have the connection modal built and available?
+Right now (other than slack) they all show morgan reyes with no ability to
+switch."** The honest answer went back first: a connection modal is real only
+when there is an OAuth app, a callback, token storage and a feature that uses
+the data behind it, and the code has exactly three real things — Slack
+(webhook), the calendar OAuth (Google and Outlook actually fetched; Yahoo
+tokens stored and never read; only Google ever offered in the UI), and a BCC
+email-logging address (`email-inbound.mjs`) with no UI anywhere. Four points
+were offered as option A; option B was A plus naming the first real
+third-party integration. **Jeff: "option a."**
+
+**Design (decided before code, no new table).**
+
+1. **The panel renders the integrations that exist and nothing else.** Slack
+   from `settings.slackConfig` / `connectedApps.slack` (Configure, Disconnect,
+   Admin only); Google Calendar and Microsoft 365 Calendar from
+   `calendar-connections` GET — the company connection (Admin connects and
+   disconnects) and the caller's own — with the real connected email and date;
+   Connect is the existing `calendar-oauth-start` redirect with the identity in
+   the query exactly as HomeTab and CompanyCalendarDetail send it, Disconnect
+   the existing DELETE. Outlook is offered for the first time — the backend
+   always took it.
+2. **A provider the site has no credentials for says so.** `calendar-oauth-start`
+   answers 503 without a client id, but it is a browser redirect: a Connect
+   would navigate INTO a JSON error. `calendar-connections` GET now returns
+   `providers: { google, outlook, yahoo }` — booleans from env-var NAME
+   presence (both id and secret), never a value — and the card reads "Not
+   available on this site" with no button.
+3. **Email logging gets a card.** `email-inbound` GET already returned
+   `{ address, configured }`; the card shows the org's BCC address with Copy,
+   or "Not available on this site" when the inbound domain is unset.
+4. **A catalogue row is a REQUEST, never a Connect.** `src/utils/integrationCatalog.js`
+   is the one list (ten apps: Gmail, Outlook mail, Zoom, DocuSign, HubSpot,
+   Salesforce, QuickBooks, Stripe, LinkedIn, Zapier), imported by the panel and
+   by the new `integration-requests.mjs` — the way `users.mjs` imports
+   `forecastCall.js` — so an id the panel can show is exactly an id the server
+   accepts. POST `{ appId, note? }`: `verifyAuth` + `requireWrite`; unknown id
+   400; recorded at `settings.extra.integrationRequests[appId] = { requestedAt,
+   byUserId, byName, note }` (org-scoped update, or a settings row created with
+   the same id/orgId shape `settings.mjs` uses when the workspace has none);
+   idempotent (a second request returns the first, `already:true`, no second
+   audit row, no mail); audited as `integration.requested` with the caller
+   resolved through `users.clerk_user_id`; mailed through the shared Resend
+   mailer to `INTEGRATION_REQUESTS_TO` when that is set, and only then —
+   `notified` in the response says which. The key is in BOTH halves of
+   `settings.mjs` (18b12). No new table (18c not engaged).
+5. **Deleted:** `ConnectAppModal` (Morgan Reyes, the fixed scope list, the
+   inert Switch, "You'll be redirected to Google", the Authorize that closed),
+   `INT_APPS`, "Browse marketplace", "+ Request integration", the category
+   filter, `handleMarkConnected`, the `connectedApps.gcal` flag.
+
+**What changed.** `ConnectedAppsDetail.jsx` rewritten (every sub-component at
+module scope: `IntegrationCard`, `CalendarCard`, `BccCard`, `RequestRow`,
+plus §0.89's `SlackConfigModal`); `src/utils/integrationCatalog.js` (new);
+`netlify/functions/integration-requests.mjs` (new, POST only);
+`settings.mjs` both halves; `calendar-connections.mjs` GET `providers`;
+`catalogue.js` card blurb ("Slack, Google and Microsoft 365 calendars, email
+logging — and requests for the rest"). Tests: `connected-apps.test.mjs` +6
+scans; `tests/integration/integration-requests.itest.mjs` (new, 6 — record +
+audit + no mail without an address; idempotent; unknown id / ReadOnly /
+Technician refused; mail attempted through the mocked mailer with an address
+set; a workspace with no settings row gets one and org A is untouched; a note
+is plain, short text); 12 mutants. **Pre-existing, kept:** the panel
+self-fetches settings (guide §20 says panels read the `settings` prop) — its
+other two sources are not settings at all; noted, not widened.
+
+**Verified.** Five gates green on 148 files; **552/552** unit (6 new);
+build guard OK, `index-UiFDxZrS.js`, 2,486,902 bytes, `pk_test_` inlined — "Request an integration",
+"Microsoft 365 Calendar", "Email logging", "Not available on this site" in
+the bundle; "Morgan Reyes", "Browse marketplace" and "Authorize" absent;
+**100/100** integration (6 new); **273/273 mutations, printed green baseline (12 added; the first run let one survive — the catalogue row's Connect rename, the scan matched only a bare element — and the test was tightened and the harness re-run before this number was written; run alone, after the unit and integration runs)**; `dist/` cleared. **Not
+browser-checked** — no pane session. **Jeff eyeballs on deployed dev, as
+Admin:** Settings → Integrations → Connected apps: four cards under
+Integrations and ten rows under Request an integration; Slack as before;
+Google Calendar shows "Connect my calendar" / "Connect company calendar" (or
+"Not available on this site" if the site has no Google credentials — the
+Company Calendar panel's existing Connect would 503 too in that case);
+Microsoft 365 Calendar the same; Email logging shows the BCC address with
+Copy, or "Not available on this site"; Request on any row → "Requested ·
+<today>", refresh — it stays; a second click is impossible; Settings →
+Security → Audit log shows `integration.requested`. **As Karen:** the same
+panel with no Slack Configure (Admin only), her own calendar Connect, no
+company Connect.
+
+**Open, Jeff's:** (a) set `INTEGRATION_REQUESTS_TO` in Netlify (both sites)
+to the address that should receive requests — until then requests are
+recorded and audited but not mailed; (b) whether `GOOGLE_CLIENT_ID/SECRET`
+and `MICROSOFT_CLIENT_ID/SECRET` are set on each site is not readable from
+here (the Netlify reader exposes no env) — the panel now says so per provider
+instead of failing. **Carried:** item 25 (`send-slack` posts to any URL behind
+`verifyAuth` alone) and item 26 (the duplicate fixture).
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it

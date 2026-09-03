@@ -107,6 +107,10 @@ export const handler = async (event) => {
                 // failure mode after the audit-streaming keys; see guide 18b.
                 connectedApps:  row.extra?.connectedApps  || {},
                 slackConfig:    row.extra?.slackConfig    || {},
+                // Written server-side by integration-requests.mjs (§0.90); read by
+                // the Connected Apps panel. Carried here so an Admin settings save
+                // never wipes it.
+                integrationRequests: row.extra?.integrationRequests || {},
                 // Company profile detail fields
                 companyDisplayName:   row.extra?.companyDisplayName   || row.companyName || '',
                 companyLegalName:     row.extra?.companyLegalName     || '',
@@ -247,6 +251,7 @@ export const handler = async (event) => {
                 leadConvBenchmarks:   'leadConvBenchmarks'   in data ? (data.leadConvBenchmarks   || null) : existingExtra.leadConvBenchmarks   || null,
                 connectedApps:  'connectedApps'  in data ? (data.connectedApps  || {}) : existingExtra.connectedApps  || {},
                 slackConfig:    'slackConfig'    in data ? (data.slackConfig    || {}) : existingExtra.slackConfig    || {},
+                integrationRequests: 'integrationRequests' in data ? (data.integrationRequests || {}) : existingExtra.integrationRequests || {},
                 // Company profile detail fields
                 companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,
                 companyLegalName:     'companyLegalName'     in data ? (data.companyLegalName     || null) : existingExtra.companyLegalName     || null,

@@ -66,11 +66,22 @@ export const handler = async (event) => {
                 .from(orgCalendarConnections)
                 .where(eq(orgCalendarConnections.orgId, orgId));
 
+            // Which providers this site can actually start an OAuth flow for.
+            // calendar-oauth-start answers 503 when a client id is missing — but
+            // it is a browser redirect, so the panel would navigate INTO the 503.
+            // Saying so here lets the panel say "Not available on this site"
+            // instead of offering a Connect that lands on a JSON error (§0.90).
+            // Names only, never values.
+            const providers = {
+                google:  !!(process.env.GOOGLE_CLIENT_ID    && process.env.GOOGLE_CLIENT_SECRET),
+                outlook: !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET),
+                yahoo:   !!(process.env.YAHOO_CLIENT_ID     && process.env.YAHOO_CLIENT_SECRET),
+            };
             // Never return encrypted tokens to the frontend
             return {
                 statusCode: 200,
                 headers,
-                body: JSON.stringify({ userConnections: userRows, orgConnections: orgRows }),
+                body: JSON.stringify({ userConnections: userRows, orgConnections: orgRows, providers }),
             };
         }
 

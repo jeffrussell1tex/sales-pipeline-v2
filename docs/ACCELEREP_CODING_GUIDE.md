@@ -1564,6 +1564,18 @@ grep -rn "setShowSomeModal(" src/ --include=*.jsx   # any call with `true`?
 A comment describing UI (e.g. the `[⋯]` column in `PipelineTab.jsx:613`) is not
 evidence the UI exists.
 
+**The mirror image (3 Sep 2026, state §0.90):** a catalogue that promises a
+Connect nothing performs. The Connected Apps panel listed fifteen apps with a
+modal — an account row, a scope list, an Authorize — behind every one, and
+three of them existed. A third-party integration is real only when there is a
+developer app under the owner's account, an OAuth flow, token storage and a
+feature that reads the data; a modal is none of those. The honest shape for an
+app that does not exist yet is a **request**: recorded on the org, audited,
+mailed to the owner, never a Connect. One catalogue module
+(`src/utils/integrationCatalog.js`) is imported by the panel and by the
+endpoint, so what the UI can show is exactly what the server accepts — and a
+real integration (Slack, the calendars) is never in it.
+
 ---
 
 ## 18b8. Bulk Writes Must Chunk (hard rule)
