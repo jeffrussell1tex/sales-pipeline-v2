@@ -3472,6 +3472,16 @@ session; Jeff eyeballs on deployed dev as Admin (Settings → Security →
 SSO, Session & password; Settings → Data → Import → each card opens the
 real importer).
 
+**Dev landing (`6ec3c05`, pushed 13:02 local):** accelerep.netlify.app served
+`index-Wjd4yjDA.js` — the local gate build's hash — at 13:03:13 local (was
+`index-DmjjOHZE.js`), 2,500,619 bytes, `pk_test_` inlined; "Managed in Clerk",
+"Sessions, passwords and lockout are set in Clerk" and "Nothing is imported
+from this page itself." present in the served bundle, "acme-corp.com" and
+"Policy saved" absent; the deployed `settings` function answers 401
+unauthenticated and `/.netlify/functions/import` now falls through to the
+SPA catch-all (the function is gone). Not yet observed by Jeff; `master`
+stays at `eec3948`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
