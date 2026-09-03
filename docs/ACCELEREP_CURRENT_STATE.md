@@ -2786,8 +2786,20 @@ equal to this quarter's wins, Administration "FY attainment".
 their docs):** accelerep.netlify.app served `index-ByAdikgx.js` — the local
 gate build's hash — 21 seconds after the push (08:46:47 local, was
 `index-B0b_2Pd3.js`), 2,538,382 bytes, "FY attainment" and "weeks
-remaining" present in the bundle. Jeff's Admin eyeball of the tab is
-still owed.
+remaining" present in the bundle.
+
+**OBSERVED by Jeff as Admin on deployed dev (3 Sep, Netlify green at
+8:48; two screenshots):** header "Team forecast · Q4 FY2026 · 4 weeks
+remaining", no buttons beside it; Today tab "Team Commit $0 of $350K
+quota" (Karen's Q4 figure on a quarterly plan — her Q1–Q4 are 200/200/
+250/350K), "Gap to Quota $350K · 4 weeks · $88K/wk needed" (finite),
+Karen "27% to quota"; Administration column "FY attainment", Karen 9.5%
+against $1,000,000 — the same ~$95K of Q4 wins read two ways, so the
+quarter and year windows agree. Jeff: "Header is good … Forecast tab is
+good … Admin tab is good." The $0 commit is item 18 (never stored).
+**Product note from the eyeball (handoff item 20):** Reports →
+Performance → rep view should list that rep's won and lost deals with
+totals.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

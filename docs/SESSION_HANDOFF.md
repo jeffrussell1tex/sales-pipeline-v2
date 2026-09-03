@@ -37,8 +37,9 @@ their headers is Jeff's call, not done.
 three inert header buttons removed), state §0.80; docs `b673aa2`,
 `49ca620`. Deploy-verified: accelerep.netlify.app served
 `index-ByAdikgx.js` (the local gate build's hash) 21 seconds after the
-push. Jeff's Admin eyeball of the tab on deployed dev is still owed
-before any prod ship; prod stays at `d513b0e`.
+push. **OBSERVED by Jeff as Admin (3 Sep): header, Forecast and
+Administration all good** (state §0.80, last paragraph). Not yet shipped
+to prod; prod stays at `d513b0e` — the ship is Jeff's call.
 
 **Fourth session, on top of everything below:** `410095e` (the owed guide
 bullet, docs only); `7f14eb3` (nine unused default imports removed from
@@ -300,10 +301,11 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
   was a Manager only to observe the coaching-note Manager path.
 - **Item 16 DONE (3 Sep, `1e15e45` + `327ce8f`, state §0.80):** header on
   the fiscal quarter; totals quarter-to-date; Administration board
-  FY-to-date; three inert header buttons gone. **Jeff eyeballs on deployed
-  dev as Admin** (the tab renders for Admin/Manager only, so Karen's rep
-  path cannot reach it): header "Q4 FY2026 · N weeks remaining", Forecast
-  Closed = this quarter's wins, Administration column "FY attainment".
+  FY-to-date; three inert header buttons gone. **OBSERVED by Jeff as
+  Admin on deployed dev** — header "Q4 FY2026 · 4 weeks remaining",
+  Forecast good, Administration "FY attainment" 9.5% for Karen against
+  $1,000,000 while Today reads 27% of her $350K Q4 — the same wins, two
+  windows, consistent. Unshipped; prod at `d513b0e`.
 - **Then item 15** (catalogue footers, Workspace Health constants) — unchanged.
 - **Items 18 and 19 are new** (found reading for 16): the Forecast ledger's
   Commit is never stored; "Coach →" is inert; Home's quota card is annual
@@ -569,6 +571,14 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    header button, now gone (Claude told Jeff the Team/Admin tabs had their
    own working Export when asking about the buttons — that was unverified
    and wrong; corrected the same session).
+20. **Product (Jeff, 3 Sep, while eyeballing the Forecast tab): Reports →
+   Performance → the single-rep view should have a section listing that
+   rep's won and lost deals, with totals.** Not started; not read. What
+   exists to build on: the Performance leaderboard already slices by rep
+   (`repsForSlice`), `closeDayOf` / `closeDayInRange` give the close day
+   and period window, and the History tab (§0.77) lists deals on real
+   columns — the list wants the same row shape and the period filter the
+   report already carries.
 
 ## 6. The thread
 
