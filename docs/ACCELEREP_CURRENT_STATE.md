@@ -2612,7 +2612,13 @@ opened the app's Confirm dialog naming the report; Delete → `DELETE 200`,
 library "No saved reports yet". **Not observed:** the Enter key in the
 prompt — the pane's "Return" keystroke did not submit (the handler is
 `onKeyDown` Enter; the pane may not deliver it as Enter), Save was
-clicked instead; Jeff tries Enter on his keyboard. **Local quirk found on
+clicked instead; Jeff tries Enter on his keyboard. **Observed by Jeff on
+accelerep.netlify.app (screenshot):** after a hard refresh (his tab had
+still been running the pre-§0.79 bundle and showed the browser's own
+dialog), the house prompt saved "09.02.26 Second test coaching note." —
+no "rep:" prefix, so it renders under the author, Jeff Russell, the
+designed fallback (`n.rep || n.author`). Written as Admin; the Manager
+path is still unobserved. **Local quirk found on
 the way:** the first Save hit `saved-reports` → 500 "module is not
 defined in ES module scope" from
 `.netlify/functions-serve/saved-reports/saved-reports.js` — netlify

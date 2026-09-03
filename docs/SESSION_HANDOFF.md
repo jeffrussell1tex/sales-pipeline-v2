@@ -206,7 +206,9 @@ house prompt saves a coaching note that survives a reload (PUT 200); the
 saved-report × opens the Confirm dialog and Delete removes the card
 (DELETE 200) — state §0.79's observed paragraph, which also records the
 test note left in the dev org (Jeff: leave it) and the Enter key as
-unobserved. CLAUDE.md gained a "Stale local FUNCTION" bullet for the
+unobserved; Jeff then saved a second note through the house prompt on
+the deployed dev site as Admin (a stale tab had shown the old browser
+dialog first — hard refresh). CLAUDE.md gained a "Stale local FUNCTION" bullet for the
 `.netlify/functions-serve` cache (Jeff: "update the md with the notes").
 `147e5f4`, **deploy-verified:** accelerep.netlify.app serves
 `index-B0b_2Pd3.js`, the local gate build's hash. **PROD SHIPPED (Jeff:
