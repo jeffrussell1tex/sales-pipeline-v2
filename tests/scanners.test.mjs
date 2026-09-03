@@ -71,6 +71,24 @@ test('check-tdz stays quiet on correct code and genuine imports', () => {
     assert.doesNotMatch(r.stdout, /IMPORTED_CONST/);
 });
 
+test('check-tdz catches a JSX element whose name is bound nowhere in the file', () => {
+    // The Connected Apps crash (state §0.89). Both sites: inside a top-level
+    // component, and in a module-level expression no component loop visits.
+    const r = run('scripts/check-tdz.mjs', [`${FIX}/tdz-undefined-jsx.jsx`]);
+    assert.notEqual(r.code, 0, 'an unbound JSX element name was not reported');
+    assert.match(r.stdout, /UNDEF/);
+    assert.match(r.stdout, /<Panel> reads "SlackConfigModal"/, 'inside a component: the scope walk names the component');
+    assert.match(r.stdout, /<file> reads "RowFromNowhere"/, 'outside any component: the whole-file pass');
+    assert.doesNotMatch(r.stdout, /"div"|"button"/, 'intrinsic elements are not references');
+});
+
+test('check-tdz is clean on the whole tree — no JSX element is bound nowhere', () => {
+    // The gate's own scan of src/. A finding here is a component that will throw
+    // on first render in production with every other gate green.
+    const r = run('scripts/check-tdz.mjs');
+    assert.equal(r.code, 0, r.stdout);
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // check-inline-components
 // ─────────────────────────────────────────────────────────────────────────────

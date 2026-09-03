@@ -9,26 +9,32 @@ import { SPDrag } from './shared.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
 
+// The defaults carried a typed `n` per industry (118, 74, 62…) that nothing
+// rendered — the Distribution card counts the org's own accounts — but every
+// Save deep-copied it into settings.industries. Gone since state §0.89; the
+// clone below strips it from a taxonomy an org saved earlier.
+const cloneIndustries = (list) => list.map(({ n, ...ind }) => ({ ...ind, subs: [...(ind.subs || [])] }));
+
 const DEFAULT_INDUSTRIES = [
-    { k:'Technology',          subs:['SaaS','Hardware','IT services','Cybersecurity','Fintech'],              n:118 },
-    { k:'Manufacturing',       subs:['Industrial','Consumer goods','Automotive','Aerospace'],                 n:74  },
-    { k:'Healthcare',          subs:['Providers','Payers','Pharma','Medical devices'],                        n:62  },
-    { k:'Financial services',  subs:['Banking','Insurance','Asset mgmt','Capital markets'],                   n:54  },
-    { k:'Retail & CPG',        subs:['Apparel','Grocery','E-comm','Luxury'],                                  n:41  },
-    { k:'Professional services',subs:['Consulting','Legal','Accounting'],                                     n:38  },
-    { k:'Logistics',           subs:['Freight','Warehousing','Last-mile'],                                    n:29  },
-    { k:'Energy',              subs:['Oil & gas','Utilities','Renewables'],                                   n:22  },
-    { k:'Education',           subs:['K-12','Higher ed','EdTech'],                                            n:18  },
-    { k:'Government',          subs:['Federal','State & local','Defense'],                                    n:14  },
-    { k:'Real estate',         subs:['Commercial','Residential','PropTech'],                                  n:12  },
-    { k:'Media & entertainment',subs:['Publishing','Streaming','Gaming'],                                     n:9   },
-    { k:'Agriculture',         subs:['Farming','AgTech'],                                                     n:5   },
-    { k:'Non-profit',          subs:['Foundations','NGOs'],                                                   n:4   },
+    { k:'Technology',          subs:['SaaS','Hardware','IT services','Cybersecurity','Fintech'] },
+    { k:'Manufacturing',       subs:['Industrial','Consumer goods','Automotive','Aerospace'] },
+    { k:'Healthcare',          subs:['Providers','Payers','Pharma','Medical devices'] },
+    { k:'Financial services',  subs:['Banking','Insurance','Asset mgmt','Capital markets'] },
+    { k:'Retail & CPG',        subs:['Apparel','Grocery','E-comm','Luxury'] },
+    { k:'Professional services',subs:['Consulting','Legal','Accounting'] },
+    { k:'Logistics',           subs:['Freight','Warehousing','Last-mile'] },
+    { k:'Energy',              subs:['Oil & gas','Utilities','Renewables'] },
+    { k:'Education',           subs:['K-12','Higher ed','EdTech'] },
+    { k:'Government',          subs:['Federal','State & local','Defense'] },
+    { k:'Real estate',         subs:['Commercial','Residential','PropTech'] },
+    { k:'Media & entertainment',subs:['Publishing','Streaming','Gaming'] },
+    { k:'Agriculture',         subs:['Farming','AgTech'] },
+    { k:'Non-profit',          subs:['Foundations','NGOs'] },
 ];
 
 export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, setAccountsDeepFilter }) => {
     const saved = settings?.industries?.length ? settings.industries : DEFAULT_INDUSTRIES;
-    const [industries, setIndustries] = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [industries, setIndustries] = useState(() => cloneIndustries(saved));
     const [dirty, setDirty]     = useState(false);
     const [saving, setSaving]   = useState(false);
     const [saveError, setSaveError] = useState('');
@@ -40,7 +46,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     const [dragIdx, setDragIdx] = useState(null);
     const [overIdx, setOverIdx] = useState(null);
 
-    const handleCancel = () => { setIndustries(JSON.parse(JSON.stringify(saved))); setDirty(false); };
+    const handleCancel = () => { setIndustries(cloneIndustries(saved)); setDirty(false); };
     const handleSave   = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, industries }));
@@ -91,7 +97,7 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     };
     const addIndustry = () => {
         if (!newInd.trim()) return;
-        setIndustries(prev => [...prev, { k: newInd.trim(), subs:[], n:0 }]);
+        setIndustries(prev => [...prev, { k: newInd.trim(), subs:[] }]);
         setNewInd(''); setShowAddInd(false); setDirty(true);
     };
 
@@ -102,16 +108,16 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
         setRenamingInd(null); setRenameIndVal(''); setDirty(true);
     };
     const handleDuplicateInd = (ind) => {
-        const clone = { ...ind, k: ind.k + ' (copy)', n: 0 };
+        const clone = { ...ind, k: ind.k + ' (copy)' };
         setIndustries(prev => [...prev, clone]); setDirty(true); setOpenIndKebab(null);
     };
     const handleInsertAbove = (i) => {
-        const blank = { k: 'New industry', subs: [], n: 0 };
+        const blank = { k: 'New industry', subs: [] };
         setIndustries(prev => { const next = [...prev]; next.splice(i, 0, blank); return next; });
         setDirty(true); setOpenIndKebab(null);
     };
     const handleInsertBelow = (i) => {
-        const blank = { k: 'New industry', subs: [], n: 0 };
+        const blank = { k: 'New industry', subs: [] };
         setIndustries(prev => { const next = [...prev]; next.splice(i + 1, 0, blank); return next; });
         setDirty(true); setOpenIndKebab(null);
     };

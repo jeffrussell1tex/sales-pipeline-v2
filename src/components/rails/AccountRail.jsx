@@ -229,9 +229,12 @@ export default function AccountRail() {
     ])].sort();
 
     const industryList = (() => {
+        // settings.industries is the Industries panel's taxonomy, [{ k, subs, hidden }]:
+        // the primary is `k`. Reading `name` mapped every saved row to '' and left an
+        // org that had saved its own taxonomy with NO industry suggestions (state §0.89).
         const raw = settings?.industries || settings?.verticalMarkets || [];
         if (raw.length === 0) return INDUSTRIES;
-        return raw.map(m => typeof m === 'string' ? m : m.name || '').filter(Boolean).sort();
+        return raw.filter(m => !(m && m.hidden)).map(m => typeof m === 'string' ? m : m.k || m.name || '').filter(Boolean).sort();
     })();
 
     const allCustomerTypes = (() => {

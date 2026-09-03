@@ -2972,3 +2972,44 @@ coaching note. The app had owned a confirmation modal for months.
   async callback. The one `window.alert` left (a failed report delete) is a
   notice, not a decision; replace it when that code is next touched.
 
+
+## 18b29. A JSX Name Is A Reference (hard rule)
+
+Origin (3 Sep 2026, state §0.89): reading `ConnectedAppsDetail.jsx` for
+handoff item 24 found `<SlackConfigModal .../>` rendered on the
+"Configure Slack" path with no import and no declaration anywhere in
+`src/`. Commit `5772f63` (11 May 2026, "tab fixes in settings") had
+deleted the component from SettingsTab.jsx in a cleanup while the panel
+kept rendering it. Babel validated the file, `vite build` bundled it
+(esbuild emits an unbound JSX name as a global read), and `check:tdz`
+reported "No render-time TDZ issues in 147 file(s)" — its undefined-reference
+walk counted `Identifier` nodes, and a JSX element name is a
+`JSXIdentifier`. Every "Configure Slack" click threw `SlackConfigModal is
+not defined` into the Settings error boundary for four months on prod, so no
+org could enter the webhook that `send-slack.mjs` and five pipeline alerts
+read. The check written to find the class found exactly one in the tree.
+
+- **A capitalised JSX element name is a read of that binding.** Every
+  `<Name/>` (and the root of `<A.B/>`) must be an import, a module-scope
+  declaration, a parameter, or a local. `check:tdz` now has pass (c): a
+  name bound nowhere in the file fails the gate as `<file> reads "Name"`,
+  and its per-component scope walk reports a name bound elsewhere in the
+  file as `<Component> reads "Name"` — the stranded-closure shape of 18b0.
+- **Deleting a component means grepping for `<Name` across `src/`
+  first.** 18b26 asks for that grep before writing "live"; this is its
+  mirror. A definition with no use is dead code; a use with no definition is
+  a crash that no build reports.
+- **A gate is proven by a fixture that fails it** (18b11).
+  `tests/fixtures/scanners/tdz-undefined-jsx.jsx` carries both sites (inside
+  a top-level component, and a module-level expression no component loop
+  visits); `tdz-clean.jsx` carries every legitimate binding form — an
+  import, a module declaration, a prop parameter, a destructured local,
+  `<React.Fragment>`, and a default-exported function declaration rendered
+  by a sibling export, which the gate had never collected as module scope
+  either (46 such declarations in `src/`).
+- **The shape of the blind spot:** a scanner that walks one node type and
+  treats every other as inert. A gate's header names the node types it
+  reads; when a bug "cannot be there because the gate would have caught
+  it", read the gate before believing it — the gate's own fixture suite
+  (`tests/scanners.test.mjs`) exists because three of the four had a
+  false-negative class found only by a bug reaching production.

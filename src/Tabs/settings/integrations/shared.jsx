@@ -24,11 +24,15 @@ export const IntTitle = ({ title, sub, actions, dirty }) => (
     </div>
 );
 
-export const IntBtn = ({ label, primary, onClick }) => (
-    <button onClick={onClick}
+// `disabled` was passed by four callers (Create key, Creating…, Create automation,
+// Create endpoint) and dropped here, so none of those buttons was ever actually
+// disabled — a second click during a save went through. Honoured since state §0.89.
+export const IntBtn = ({ label, primary, onClick, disabled }) => (
+    <button onClick={onClick} disabled={disabled}
         style={{ padding:'7px 14px', background: primary ? T.ink : T.surface, color: primary ? '#fbf8f3' : T.ink,
-            border: primary ? 'none' : `1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans, whiteSpace:'nowrap' }}
-        onMouseEnter={e=>e.currentTarget.style.background= primary ? '#3d3530' : T.surface2}
+            border: primary ? 'none' : `1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600,
+            cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.55 : 1, fontFamily:T.sans, whiteSpace:'nowrap' }}
+        onMouseEnter={e=>{ if (!disabled) e.currentTarget.style.background= primary ? '#3d3530' : T.surface2; }}
         onMouseLeave={e=>e.currentTarget.style.background= primary ? T.ink : T.surface}>
         {label}
     </button>

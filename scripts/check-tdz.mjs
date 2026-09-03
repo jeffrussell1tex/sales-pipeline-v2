@@ -3,6 +3,7 @@
 // check-tdz.mjs — find identifier bugs that only fail in production:
 //   (a) temporal-dead-zone reads   — declared, but read too early
 //   (b) undefined references       — never declared in any enclosing scope
+//   (c) undefined JSX elements     — <Name/> bound nowhere in the file
 //
 //   node scripts/check-tdz.mjs src/Tabs/DispatchTab.jsx
 //   node scripts/check-tdz.mjs src/Tabs/*.jsx
@@ -230,31 +231,49 @@ const collectScopeBindings = (node, into) => {
     }
 };
 
-const usedIdentifiers = (node, out = new Map()) => {
+// `jsx` collects the names that were used AS JSX ELEMENTS. A JSX element name is
+// a JSXIdentifier, not an Identifier, so until 3 Sep 2026 this walk never counted
+// `<SlackConfigModal/>` as a read of SlackConfigModal — and the Connected Apps
+// panel rendered a component bound nowhere, since 11 May, with this gate green.
+// Lower-case names are intrinsic elements (<div>) and are not references.
+const usedIdentifiers = (node, out = new Map(), jsx = new Set()) => {
     if (!node || typeof node !== 'object') return out;
-    if (Array.isArray(node)) { node.forEach(n => usedIdentifiers(n, out)); return out; }
+    if (Array.isArray(node)) { node.forEach(n => usedIdentifiers(n, out, jsx)); return out; }
     switch (node.type) {
         case 'Identifier':
             if (!out.has(node.name)) out.set(node.name, node.loc?.start.line);
             return out;
         case 'MemberExpression':
         case 'OptionalMemberExpression':
-            usedIdentifiers(node.object, out);
-            if (node.computed) usedIdentifiers(node.property, out);
+            usedIdentifiers(node.object, out, jsx);
+            if (node.computed) usedIdentifiers(node.property, out, jsx);
+            return out;
+        case 'JSXOpeningElement': {
+            const nm = node.name;
+            if (nm.type === 'JSXIdentifier' && /^[A-Z]/.test(nm.name)) {
+                jsx.add(nm.name);
+                if (!out.has(nm.name)) out.set(nm.name, node.loc?.start.line);
+            } else if (nm.type === 'JSXMemberExpression') {
+                usedIdentifiers(nm, out, jsx);
+            }
+            usedIdentifiers(node.attributes, out, jsx);
+            return out;
+        }
+        case 'JSXClosingElement':
             return out;
         case 'JSXMemberExpression':
-            usedIdentifiers(node.object, out); return out;
+            usedIdentifiers(node.object, out, jsx); return out;
         case 'ObjectProperty':
         case 'ObjectMethod':
-            if (node.computed) usedIdentifiers(node.key, out);
-            usedIdentifiers(node.value, out); return out;
+            if (node.computed) usedIdentifiers(node.key, out, jsx);
+            usedIdentifiers(node.value, out, jsx); return out;
         case 'JSXAttribute':
-            usedIdentifiers(node.value, out); return out;
+            usedIdentifiers(node.value, out, jsx); return out;
         default: break;
     }
     for (const k of Object.keys(node)) {
         if (['loc','start','end'].includes(k)) continue;
-        usedIdentifiers(node[k], out);
+        usedIdentifiers(node[k], out, jsx);
     }
     return out;
 };
@@ -273,6 +292,12 @@ const checkUndefined = (ast, file, findings) => {
                 d.declarations.forEach(x => declaredNames(x.id).forEach(n => moduleScope.add(n)));
             if (d.type === 'FunctionDeclaration' && d.id) moduleScope.add(d.id.name);
         }
+        // `export default function Dialog()` is a module-scope binding too. It was
+        // never collected, which went unnoticed only because a JSX element name was
+        // never counted as a read (46 default-exported declarations in src/ on 3 Sep
+        // 2026; CoachingNoteDialogHost renders its file's default export).
+        if (st.type === 'ExportDefaultDeclaration' && st.declaration?.id
+            && ['FunctionDeclaration', 'ClassDeclaration'].includes(st.declaration.type)) moduleScope.add(st.declaration.id.name);
     }
 
     const components = [];
@@ -317,7 +342,8 @@ const checkUndefined = (ast, file, findings) => {
         const local = new Set();
         (c.node.params || []).forEach(p => declaredNames(p).forEach(n => local.add(n)));
         collectScopeBindings(c.node.body, local);
-        for (const [name, line] of usedIdentifiers(c.node.body)) {
+        const jsx = new Set();
+        for (const [name, line] of usedIdentifiers(c.node.body, new Map(), jsx)) {
             if (local.has(name) || moduleScope.has(name) || GLOBALS.has(name)) continue;
             // Shouty constants are usually imported — UNLESS the name is declared
             // somewhere else in this same file, which is the exact signature of a
@@ -329,10 +355,42 @@ const checkUndefined = (ast, file, findings) => {
             // EntitySelector at module scope reading T 10 times while T was declared
             // inside ActivityHistoryTab — a hard crash of the whole Reports tab that
             // this scan reported clean.
-            if (/^[A-Z_]+$/.test(name) && !declaredSomewhere.has(name)) continue;
-            findings.push({ file, line: line || c.line, target: c.name, ref: name, at: null, label: 'not defined in any enclosing scope' });
+            // A JSX element name never takes the escape: an imported component is
+            // in moduleScope already, so an all-caps <FL/> that reaches here is
+            // bound nowhere.
+            if (!jsx.has(name) && /^[A-Z_]+$/.test(name) && !declaredSomewhere.has(name)) continue;
+            findings.push({ file, line: line || c.line, target: c.name, ref: name, at: null,
+                label: jsx.has(name) ? 'rendered as a JSX element, bound nowhere in scope' : 'not defined in any enclosing scope' });
         }
     }
+
+    // ── (c) Undefined JSX elements, whole file ───────────────────────────────
+    // The component loop above is deliberately limited to top-level components.
+    // A JSX element can be rendered from anywhere — a module-level helper, a
+    // nested render function — and its name must be bound SOMEWHERE in the file:
+    // an import, a declaration, a parameter. This is lenient on purpose (a name
+    // bound in the wrong scope is the loop's job); what it refuses is a name
+    // bound nowhere, which esbuild bundles as a global read and React throws on
+    // at first render. Origin: <SlackConfigModal/> in ConnectedAppsDetail, whose
+    // definition 5772f63 deleted on 11 May 2026 — "Configure Slack" crashed the
+    // Settings tab to its error boundary until 3 Sep, every gate green.
+    const boundAnywhere = new Set([...moduleScope, ...declaredSomewhere]);
+    collectScopeBindings(ast.program.body, boundAnywhere);
+    const reported = new Set(findings.map(f => f.ref));
+    (function walkJsx(n) {
+        if (!n || typeof n !== 'object') return;
+        if (Array.isArray(n)) return n.forEach(walkJsx);
+        if (n.type === 'JSXOpeningElement') {
+            let nm = n.name;
+            while (nm.type === 'JSXMemberExpression') nm = nm.object;
+            if (nm.type === 'JSXIdentifier' && /^[A-Z]/.test(nm.name)
+                && !boundAnywhere.has(nm.name) && !GLOBALS.has(nm.name) && !reported.has(nm.name)) {
+                reported.add(nm.name);
+                findings.push({ file, line: n.loc.start.line, target: 'file', ref: nm.name, at: null, label: 'rendered as a JSX element, bound nowhere in this file' });
+            }
+        }
+        for (const k of Object.keys(n)) if (!['loc','start','end'].includes(k)) walkJsx(n[k]);
+    })(ast.program.body);
 };
 
 const checkFile = (file) => {

@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1236,6 +1236,56 @@ const mutations = [
         'src/utils/settingsCards.js',
         "    if (item.id === 'kpi-settings')    statusDetail = len(settings?.kpiThresholds) ? plural(len(settings.kpiThresholds), 'KPI') : 'App defaults';",
         "    if (item.id === 'kpi-settings')    statusDetail = plural(len(settings?.kpiThresholds), 'KPI');"],
+
+    // ── The Slack modal comes back; a JSX name is a reference (0.89) ────────────
+    ['slack: the modal definition goes missing again — the May–Sep crash',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        'const SlackConfigModal = ({ existing, onClose, onSave }) => {',
+        'const SlackConfigModalGone = ({ existing, onClose, onSave }) => {'],
+    ['slack: the field wrapper moves back inside the modal (a per-render remount)',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        'const SlackField = ({ label, hint, children }) => (',
+        'const FL = ({ label, hint, children }) => ('],
+    ['slack: the test posts without the typed URL — the stored webhook is hit instead',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        '                body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),',
+        '                body: JSON.stringify({}),'],
+    ['slack: a failed test reads as success',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        "            if (!res.ok) throw new Error(data.error || 'Test failed');",
+        "            if (false) throw new Error(data.error || 'Test failed');"],
+    ['slack: saved without enabled — send-slack still sends (enabled !== false), but the shape is the contract',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        "        await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true });",
+        "        await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim() });"],
+    ['IntBtn: disabled is dropped on the floor again',
+        'src/Tabs/settings/integrations/shared.jsx',
+        '<button onClick={onClick} disabled={disabled}',
+        '<button onClick={onClick}'],
+    ['industries: a typed count returns to the defaults',
+        'src/Tabs/settings/salesProcess/IndustriesDetail.jsx',
+        "    { k:'Technology',          subs:['SaaS','Hardware','IT services','Cybersecurity','Fintech'] },",
+        "    { k:'Technology',          subs:['SaaS','Hardware','IT services','Cybersecurity','Fintech'], n:118 },"],
+    ['industries: the clone stops stripping n from a saved taxonomy',
+        'src/Tabs/settings/salesProcess/IndustriesDetail.jsx',
+        'const cloneIndustries = (list) => list.map(({ n, ...ind }) => ({ ...ind, subs: [...(ind.subs || [])] }));',
+        'const cloneIndustries = (list) => list.map((ind) => ({ ...ind, subs: [...(ind.subs || [])] }));'],
+    ['rail: industries read .name again — every saved row maps to nothing',
+        'src/components/rails/AccountRail.jsx',
+        "m.k || m.name || ''",
+        "m.name || ''"],
+    ['rail: hidden industries are suggested again',
+        'src/components/rails/AccountRail.jsx',
+        'raw.filter(m => !(m && m.hidden))',
+        'raw.filter(m => true)'],
+    ['check-tdz: a JSX element name stops counting as a reference (the blind spot itself)',
+        'scripts/check-tdz.mjs',
+        "            if (nm.type === 'JSXIdentifier' && /^[A-Z]/.test(nm.name)) {",
+        "            if (false) {"],
+    ['check-tdz: the whole-file JSX pass stops reporting',
+        'scripts/check-tdz.mjs',
+        "                && !boundAnywhere.has(nm.name) && !GLOBALS.has(nm.name) && !reported.has(nm.name)) {",
+        "                && false) {"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

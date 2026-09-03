@@ -3803,6 +3803,128 @@ configured", "14 industries" and "Q1 starts Feb 1" absent. `master` stays at `ad
 **OBSERVED by Jeff on deployed dev (3 Sep): "confirmed that settings cards
 are correct and all badges are gone."** Unshipped; the ship is Jeff's call.
 
+### 0.89 The Slack modal comes back after four months; a JSX name is a reference (3 Sep, seventh session)
+
+**Jeff: "claude, lets continue."** The queue at open: ship item 22 when Jeff
+says so; take item 24 — the Connected Apps and Industries panels — to Jeff per
+panel before code. Reading both panels to put that decision in front of him
+found a crash that every gate had been green over since May.
+
+**What was read.** `ConnectedAppsDetail.jsx` and `IndustriesDetail.jsx` in
+full; `integrations/shared.jsx`; `send-slack.mjs` (the handler and
+`sendSlackToOrg`) and the five `sendSlackToOrg` calls in
+`pipeline-alerts.mjs`; `calendar-oauth-callback.mjs`'s header and the two
+calendar-connection tables in the schema; AccountRail's `industryList`;
+`settingsCards.industriesDetail`; `ErrorBoundary.jsx` and App.jsx's twelve
+boundary wrappers; `check-tdz.mjs` in full and `tests/scanners.test.mjs`;
+the git history of `SlackConfigModal`.
+
+**Found.**
+
+1. **`<SlackConfigModal existing={slackConfig} …/>` is rendered at
+   ConnectedAppsDetail line 210 whenever `slackModal` is set — and the name is
+   bound nowhere in `src/`.** `git grep` through history: defined in
+   SettingsTab.jsx at `ed38ac6`; absent from `5772f63` (11 May 2026, "tab
+   fixes in settings", −1,220 lines) onward; `f5549dc` (1 Jun) moved the panel
+   into its own file with the reference intact. Reasoned from code — no browser
+   session this session: "Configure Slack", the Slack card's "Configure" and
+   the Popular row's "Configure →" all set `slackModal`; React evaluates the
+   unbound identifier; `ReferenceError: SlackConfigModal is not defined` reaches
+   the Settings `ErrorBoundary` ("Something went wrong"). `slackConnected`
+   requires `slackConfig.webhookUrl`, which only this modal writes, so **no org
+   has been able to configure Slack through the UI since 11 May**;
+   `sendSlackToOrg` returns false silently and the Slack half of all five
+   pipeline alerts was unreachable. Every prod ship since carried it.
+2. **The gate that exists for this did not see it.** `check-tdz`'s pass (b)
+   ("undefined references — never declared in any enclosing scope") walks
+   `Identifier` nodes; a JSX element name is a `JSXIdentifier` and was never
+   counted as a read. Separately, `export default function X()` was never
+   collected into its module-scope set (46 such declarations in `src/`) — which
+   only surfaced once JSX names counted, as a false report on
+   `CoachingNoteDialogHost` rendering its file's default export. A standalone
+   scan written first, over all 147 files, found exactly one unbound JSX name:
+   this one. It was folded into `check-tdz` and deleted.
+3. **`IntBtn` dropped `disabled`.** Four callers pass it — ApiKeys "Create
+   key" / "Creating…", Automations "Create automation", Webhooks "Create
+   endpoint" — and none of those buttons was ever disabled; a second click
+   during a save went through.
+4. **Item 24's Industries premise was wrong.** The Distribution card's counts
+   are computed from the org's own accounts (the `counts` useMemo); the typed
+   `n:118, n:74…` in `DEFAULT_INDUSTRIES` was never rendered. It was not
+   harmless: every Save deep-copied it into `settings.industries`, and three
+   writers (add, duplicate, insert) wrote `n:0`.
+5. **Found reading for 4:** AccountRail's `industryList` read `m.name` from
+   a taxonomy whose primary is `k` — so an org that had saved its own
+   industries got an account-form Industry typeahead with **no suggestions at
+   all** (a non-empty list mapped to `''` and filtered to nothing), while an
+   org that never saved fell through to the built-in list. Hidden industries
+   were suggested too.
+6. **Item 24's Connected Apps premise was half wrong.** The `connected:true`
+   and `traffic` fields in `INT_APPS` are never rendered — `liveApps`
+   recomputes `connected` from settings and nothing reads `traffic`. What IS
+   invented: `ConnectAppModal` (the "Morgan Reyes · morgan@accelerep.com" row,
+   fixed scopes, "You'll be redirected to Google", an Authorize that closes),
+   "Browse marketplace" and "+ Request integration" with no `onClick`, thirteen
+   catalogue apps with no integration behind them, and `connectedApps.gcal`,
+   which nothing sets — the calendar OAuth callback writes
+   `user_calendar_connections` / `org_calendar_connections` — so Google
+   Calendar always reads unconnected on this panel even when it is connected.
+   Still Jeff's call; carried as item 24 with the corrected premise.
+
+**What changed.** `ConnectedAppsDetail.jsx`: `SlackConfigModal` restored at
+module scope from the `5772f63^` source, verbatim except — `FL` hoisted to
+module scope as `SlackField` (the children-rendering wrapper class
+`check:inline` scores user-visible), `React.useState` → the file's imported
+`useState`, and the callout names the five alerts that actually post
+(`dealSilent`, `dealStuck`, `closeDateLapsed`, `dealMomentum`,
+`scoreDrop`) instead of "AI score drops · Weekly manager digest". "Send test
+message" POSTs `{ webhookUrl }` to `send-slack`, which posts to an explicit
+URL without touching the stored one; Save calls the panel's existing
+`handleSaveSlack`, which PUTs `slackConfig` + `connectedApps.slack` in one
+write and closes only when it lands. `shared.jsx`: `IntBtn` honours
+`disabled` (attribute, cursor, opacity, no hover). `IndustriesDetail.jsx`:
+`cloneIndustries` strips `n` at load and on Cancel; the defaults and the
+three writers carry none. `AccountRail.jsx`: `m.k || m.name`, hidden rows
+skipped. `check-tdz.mjs`: JSX element names count as reads in the scope walk
+(and never take the shouty-constant escape), a whole-file pass (c) for a JSX
+name bound nowhere, default-exported declarations in module scope, the header
+lists (c). Fixtures: `tdz-undefined-jsx.jsx` (both sites), `tdz-clean.jsx`
+(every legitimate binding form). `tests/scanners.test.mjs`: two tests (the
+fixture; the whole tree clean). `tests/connected-apps.test.mjs`: nine.
+`mutate-import.mjs`: the suite in SUITES and twelve mutants — the modal
+definition gone, the wrapper back inline, the test without the URL, a failed
+test reading as success, `enabled` dropped, `disabled` dropped, a typed
+count back in the defaults, the clone not stripping, the rail on `.name`,
+hidden rows suggested, and the gate's two JSX passes each switched off. Guide
+§18b29.
+
+**Verified.** Gates green on 147 files (`check:tdz` "No render-time TDZ
+issues in 147 file(s)" AFTER the fix — it reported the Slack line first, then
+the default-export false positive, then clean); **546/546** unit (11 new);
+build guard OK, 2,428 kB, `index-CEn91emU.js`, 2,486,255 bytes, `pk_test_`
+inlined — "Configure Slack", "Send test message", "Incoming Webhook URL" and
+"Save configuration" in the bundle, "n:118" absent, "Morgan Reyes" still
+present (item 24); **94/94** integration (no function changed); **261/261 mutations, printed green baseline (12 added, none retired; run alone, after the unit and integration runs)**;
+`dist/` cleared. **Not browser-checked** — no pane session (a sign-in needs
+Karen's second factor); the crash and the fix are reasoned from code and
+proven by the gate's fixture, not observed. **Jeff eyeballs on deployed dev:**
+Settings → Integrations → Connected apps → "Configure Slack" opens a modal
+(was: "Something went wrong"); paste a real Incoming Webhook URL → "Send test
+message" → the message lands in the channel; "Save configuration" → the Slack
+card reads Connected with a Configure link, and the purple callout is gone;
+Settings → Sales process → Industries → Distribution unchanged (its counts
+were always real); Accounts → an account's Industry field → the typeahead
+lists the org's saved industries if it saved any.
+
+**Also noted, not changed.** (a) `send-slack`'s handler posts a test to ANY
+`webhookUrl` in the body behind `verifyAuth` alone — no role gate, no host
+check — so any signed-in user can make the server POST to an arbitrary URL; the
+audit-stream endpoint (§0.87) refuses literal private hosts and is Admin-only.
+Same class, one line each; Jeff's call — item 25. (b)
+`tests/fixtures/scanners/dupes-jsx-attribute - Copy.jsx` is a tracked,
+byte-identical duplicate of its neighbour from `db4ef5b`; harmless to the
+fixture-coverage test, clutter otherwise; not deleted (not mine).
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it

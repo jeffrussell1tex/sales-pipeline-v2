@@ -102,6 +102,93 @@ const ConnectAppModal = ({ app, onClose }) => {
     );
 };
 
+// ── Slack configuration ──────────────────────────────────────────────────────
+// This modal was defined in SettingsTab.jsx until `5772f63` (11 May 2026) deleted
+// it in a cleanup while the panel kept rendering <SlackConfigModal/>. Vite bundles
+// an unbound JSX name as a global read, so every build passed and every
+// "Configure Slack" click threw "SlackConfigModal is not defined" into the
+// Settings error boundary — no org could ever set the webhook that
+// send-slack.mjs and pipeline-alerts.mjs read. Restored 3 Sep 2026 (state §0.89)
+// from the pre-deletion source; `FL` is hoisted to module scope as SlackField,
+// since a children-rendering wrapper declared per render remounts the input it
+// wraps (check:inline, the AuditDetail FL bug).
+const slackInputStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
+
+const SlackField = ({ label, hint, children }) => (
+    <div style={{ marginBottom:14 }}>
+        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>
+        {children}
+        {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
+    </div>
+);
+
+const SlackConfigModal = ({ existing, onClose, onSave }) => {
+    const [webhookUrl, setWebhookUrl] = useState(existing?.webhookUrl || '');
+    const [channel,    setChannel]    = useState(existing?.channel    || '#sales-alerts');
+    const [testing,    setTesting]    = useState(false);
+    const [testMsg,    setTestMsg]    = useState(null);
+    const [saving,     setSaving]     = useState(false);
+
+    // send-slack.mjs posts to an explicit webhookUrl when one is in the body —
+    // the org's stored one is not touched until Save.
+    const handleTest = async () => {
+        if (!webhookUrl.trim()) return;
+        setTesting(true); setTestMsg(null);
+        try {
+            const res  = await dbFetch('/.netlify/functions/send-slack', {
+                method: 'POST',
+                body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Test failed');
+            setTestMsg({ ok: true, text: 'Message sent — check your Slack channel.' });
+        } catch (e) {
+            setTestMsg({ ok: false, text: e.message });
+        } finally { setTesting(false); }
+    };
+
+    const handleSave = async () => {
+        if (!webhookUrl.trim()) return;
+        setSaving(true);
+        await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true });
+        setSaving(false);
+    };
+
+    return (
+        <IntModal width={560} onClose={onClose}>
+            <IntModalHeader onClose={onClose}
+                left={<AppTile name="Slack" color="#4a154b" emoji="💬" size={36}/>}
+                title="Configure Slack"
+                sub="Incoming Webhook · pipeline alerts and digests"/>
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                <SlackField label="Incoming Webhook URL"
+                    hint="Create one at api.slack.com/apps → your app → Incoming Webhooks → Add New Webhook">
+                    <input value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
+                        placeholder="https://hooks.slack.com/services/T.../B.../..."
+                        style={slackInputStyle}/>
+                </SlackField>
+                <SlackField label="Default channel" hint="The channel the webhook posts to — set when you create the webhook; shown here for reference">
+                    <input value={channel} onChange={e => setChannel(e.target.value)}
+                        placeholder="#sales-alerts"
+                        style={{ ...slackInputStyle, fontFamily: T.sans }}/>
+                </SlackField>
+                <div style={{ padding:'12px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid, fontFamily:T.sans, marginBottom:14 }}>
+                    <b style={{ color:T.info }}>What posts to Slack:</b> the pipeline alerts this workspace has on — deal silent, stuck in stage, close date lapsed, deal momentum, score drop — alongside their emails.
+                </div>
+                {testMsg && (
+                    <div style={{ padding:'10px 14px', background: testMsg.ok ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)', borderLeft:`3px solid ${testMsg.ok ? T.ok : T.danger}`, borderRadius:4, fontSize:12, color: testMsg.ok ? T.ok : T.danger, fontFamily:T.sans, marginBottom:14 }}>
+                        {testMsg.text}
+                    </div>
+                )}
+            </div>
+            <IntModalFooter left={<IntBtn label={testing ? 'Sending…' : 'Send test message'} onClick={handleTest} disabled={!webhookUrl.trim() || testing}/>}>
+                <IntBtn label="Cancel" onClick={onClose}/>
+                <IntBtn label={saving ? 'Saving…' : 'Save configuration'} primary onClick={handleSave} disabled={!webhookUrl.trim() || saving}/>
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
 export const ConnectedAppsDetail = ({ onBack }) => {
     const [connectModal,  setConnectModal]  = React.useState(null);
     const [slackModal,    setSlackModal]    = React.useState(false);
