@@ -36,10 +36,11 @@ const seg = (active) => ({
  *   teams    — [{ id, name }] the caller may address (Admin: every team; Manager: the teams they manage)
  *   onSave   — async ({ recipientIds, teamId, text }) => { ok, error? }
  *   onClose  — () => void
+ *   initialRecipientIds — rep ids ticked when the dialog opens (a rep's Coach button, state §0.84)
  */
-export default function CoachingNoteDialog({ reps = [], teams = [], onSave, onClose, isMobile = false }) {
-    const [mode, setMode] = useState(teams.length && !reps.length ? 'team' : 'people');
-    const [picked, setPicked] = useState(() => new Set());
+export default function CoachingNoteDialog({ reps = [], teams = [], onSave, onClose, isMobile = false, initialRecipientIds = [] }) {
+    const [mode, setMode] = useState(initialRecipientIds.length ? 'people' : (teams.length && !reps.length ? 'team' : 'people'));
+    const [picked, setPicked] = useState(() => new Set(initialRecipientIds));
     const [teamId, setTeamId] = useState(teams[0]?.id || '');
     const [query, setQuery] = useState('');
     const [text, setText] = useState('');
@@ -153,5 +154,8 @@ export function CoachingNoteDialogHost() {
         if (!payload) return { ok: false, error: 'Address the note and write something.' };
         return addCoachingNote(payload);
     };
-    return <CoachingNoteDialog reps={reps} teams={addressableTeams} onSave={onSave} onClose={() => setCoachingNoteModal(null)} isMobile={isMobile} />;
+    // A preset from a Coach button is honoured only for reps this caller may
+    // address — a Manager's button cannot pre-address a rep outside their teams.
+    const preset = (coachingNoteModal.recipientIds || []).filter(id => reps.some(r => r.id === id));
+    return <CoachingNoteDialog reps={reps} teams={addressableTeams} onSave={onSave} onClose={() => setCoachingNoteModal(null)} isMobile={isMobile} initialRecipientIds={preset} />;
 }

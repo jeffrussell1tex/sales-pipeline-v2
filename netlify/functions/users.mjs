@@ -5,6 +5,9 @@ import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
 import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName } from './_lib.mjs';
 import { randomUUID } from 'crypto';
+// Pure, shared with the Sales Manager tab (the _stage.mjs / stageClock.js
+// arrangement): one validator decides the forecast-call shape on both sides.
+import { cleanForecastCalls } from '../../src/utils/forecastCall.js';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
 
@@ -117,6 +120,10 @@ export const handler = async (event) => {
             q3Quota:       data.q3Quota       ?? null,
             q4Quota:       data.q4Quota       ?? null,
             quotaType:     data.quotaType     || null,
+            // Forecast calls per fiscal quarter — { '2026-Q4': { commit, bestCase } }
+            // (state §0.84). The ledger's Commit used to arrive as `commit`, a key
+            // this builder never carried, so it was 0 again on every refresh.
+            forecastCalls: cleanForecastCalls(data.forecastCalls),
         },
     });
 

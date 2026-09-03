@@ -355,7 +355,10 @@ function App() {
     };
 
     // The coaching-note dialog (state §0.82); rendered by CoachingNoteDialogHost in ModalLayer.
-    const showCoachingNote = () => setCoachingNoteModal({});
+    // Opened bare from "+ Add coaching note", or with { recipientIds } from a
+    // rep's Coach button (state §0.84) — the dialog pre-ticks those reps. The
+    // guard keeps a click event passed as the first argument from becoming state.
+    const showCoachingNote = (preset) => setCoachingNoteModal(Array.isArray(preset?.recipientIds) ? { recipientIds: preset.recipientIds } : {});
 
     const showBlockedDelete = (title, message) => {
         setBlockedDeleteModal({ title, message });

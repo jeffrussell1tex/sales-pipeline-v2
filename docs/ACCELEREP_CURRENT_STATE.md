@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** September 3, 2026 (fifth session, close)
-**Verified at:** five gates green on 145 files · **482 tests** · **214/214 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,489 kB `index-DzhyaR_f.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · `master` == `dev` at the ship; dev ahead by the ship-record docs commit only.
-**Batch:** **the coachingNotes settings key is retired (§0.83, handoff item 23)** — both orgs imported their old blob notes on 3 Sep, so the key leaves both halves of settings.mjs, the legacy POST branch leaves coaching-notes.mjs, the import button and helpers leave the Team tab and the util, and four mutants whose targets went with them are retired (218 → 214). Rows the import wrote keep `legacy: true` for the "imported" label. Dev only; not yet shipped.
+**Updated:** September 3, 2026 (sixth session)
+**Verified at:** five gates green on 146 files · **499 tests** · **224/224 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,493 kB `index-C9mGhBOf.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · dev ahead of `master` by this batch and its docs; not yet shipped.
+**Batch:** **the Forecast ledger's Commit and Best case are STORED, per fiscal quarter; the Sales Manager tab's five inert buttons reach real destinations; the tab has an export; Home's quota card is this quarter's (§0.84, handoff items 18 + 19)** — a typed Commit went through a users PUT whose `sanitize()` never carried the key (0 on refresh, §0.80), and one number per rep could never reset when the quarter turned; now `profile.forecastCalls` keyed by quarter through one pure validator on both sides (`forecastCall.js`), Best case editable for the first time with an untyped one flagged "est.", "Coach →" / "Coach" / "Open coaching" open the note dialog with the rep pre-addressed, "Pipeline" / "Their pipeline" open the Pipeline tab viewing as the rep, "Schedule 1:1" opens a new task in the rail, the ledger exports CSV, and Home's card reads the quarter's own quota, wins by close day and commit by the org's stages under the quarter's real name. Dev only; not yet shipped; not browser-checked — Jeff eyeballs as Admin and as Karen.
+**Prior batch:** **the coachingNotes settings key is retired (§0.83, handoff item 23)** — both orgs imported their old blob notes on 3 Sep, so the key leaves both halves of settings.mjs, the legacy POST branch leaves coaching-notes.mjs, the import button and helpers leave the Team tab and the util, and four mutants whose targets went with them are retired (218 → 214). Rows the import wrote keep `legacy: true` for the "imported" label. Dev only; not yet shipped.
 **Prior batch:** **coaching notes are ADDRESSED — to a person, several people, or a team — in their own org-scoped table (§0.82, handoff item 17)** — `coaching_notes` + `users.team_joined_at` (DDL applied to the test and app databases FIRST, guide §18c), `coaching-notes.mjs` with visibility decided by the pure `_coaching.mjs` (Jeff's two rules: a note to people is seen by author, recipients and Admins — never another manager; a team note by the team's manager and by members from their FIRST DAY, team_joined_at else created_at, resolved at read time), a house dialog with a rep/team picker replacing the typed "rep: text" prompt, the Team tab reading the table with delete for author/Admin, a "Notes from your manager" block on Home with read stamps, unread notes in the bell, an idempotent Admin import of the old settings-blob notes, and the §0.79 Manager carve-out in settings.mjs retired. Not browser-checked; Jeff eyeballs as Admin and as Karen.
 **Prior batch:** **the Settings catalogue and its panel headers carry no invented text; Workspace Health counts only what it can read (§0.81)** — 48 hand-typed footers ("Edited 2 months ago by Admin", values that never moved) gone, the two typed attention flags and five typed statuses gone, card status / attention / detail computed in one pure module (`settingsCards.js`, the block that lived inside the card component), the Needs Attention list computed from the same, the health tile's eight checks (four constants) replaced by the six that can be read with a sentence that names what failed, and 16 detail panels' typed "Last edited 3 weeks ago by Admin" removed (the shared headers render the line only when both values are real; the SSO panel's fictional "Morgan" gone). Carried: the mockup depth of the SSO / Session / Audit / Import panels and the remaining hand-typed card counts (handoff items 21–22).
 **Prior batch:** **the Sales Manager tab's quarter is the org's FISCAL quarter (§0.80)** — the header built a calendar quarter from `now.getMonth()` and never read `fiscalYearStart`, so an October-year org read "Q3 2026" in September while Home and every report said Q4; `currentQuarter()` in quarters.js is the one helper it reads now, and weeks remaining count today and are never 0 (the Today tab's Gap-to-Quota tile divides by them — "$InfinityM/wk" on a quarter's last day). The audit of the tab's totals found them on NO quarter at all (all-time closed against the annual quota); **Jeff's call, done in the second commit: Closed and Quota are quarter-to-date** (won by close day inside the fiscal quarter, against that quarter's figure), the Administration board measures fiscal-year-to-date against its annual quota, and the three inert header buttons are gone. Health labels and attainment on the Forecast, Team and Today tabs change accordingly. Carried: the Forecast ledger's editable Commit was never stored (handoff item 18); "Coach →", Home's annual ÷ 4 quota card, and the tab having no export at all (item 19).
@@ -3162,6 +3163,137 @@ bytes, `pk_live_` inlined; the deployed `coaching-notes` function answers
 401 unauthenticated. Nothing user-visible changed for either org — both had
 imported — and the settings key and the legacy POST branch are now gone
 from prod as well. `master` == `eec3948`.
+
+### 0.84 Forecast calls stored per quarter; the Sales Manager tab's buttons wired; Home's quota card on the quarter (3 Sep, sixth session)
+
+**Jeff: "let's get a new session going and continue to improve Accelerep."**
+The handoff's "start here" pointed at items 18–22 with 21 and 22 as Jeff's
+calls before code, so this batch is items 18 and 19, both read in full first.
+
+**What was read.** `SalesManagerTab.jsx` (all 1,263 lines), `users.mjs`
+(sanitize, flatten, mergeForUpdate, the PUT branch), `HomeTab.jsx`'s quota
+block and its readers, `quarters.js`, `pipelineReport.js`'s quota and
+close-day helpers, `stageOrder.js`, `CoachingNoteDialog.jsx` and its host,
+`useCoachingNotes.js`, App.jsx's `showCoachingNote` / `exportToCSV` /
+Viewing-bar filter, `PipelineTab.jsx`'s filter state, `TaskRail.jsx`'s
+seeding of a new task, and every test that scans these files. Confirmed
+from source, not from the handoff: `sanitize()` carried no `commit` /
+`bestCase` anywhere, so `updateRepField(rep.id, 'commit', n)` PUT a key
+the row builder dropped (item 18); the ledger's "Coach →", the Team card's
+"Coach" and "Pipeline", and the Today tab's "Open coaching" / "Schedule
+1:1" / "Their pipeline" — FIVE buttons, not the one item 19 named — had no
+handler; `exportToCSV` was destructured and never called; Home's card was
+`annualQuota / 4` against EVERY Closed Won deal the rep ever had (no date
+window at all — item 19 said the buckets were by `forecastedCloseDate`;
+the closed sum had no window, the "closing this quarter" tile is the one
+on the forecast date), its commit bar read a typed stage list
+(`'Negotiation','Closing','Negotiation/Review','Contracts'` — two of
+those are stages no deal can be in, the §0.74 class), and its label was
+the FIRST forecast bucket's — whichever quarter held the first dated deal.
+
+**Design (item 18).** A commit is a quarter's call, so it is keyed by
+quarter and never resets by accident, only by the calendar. New pure
+`src/utils/forecastCall.js`: `cleanForecastCalls` (the validator —
+quarter keys of quarters.js's `FY-Qn` form, non-negative numbers, a
+blank is "no call", a negative or unreadable figure is refused rather than
+stored as 0, an emptied blob is null), `forecastCallOf(rep, key)`,
+`withForecastCall(rep, key, patch)` (one quarter written, every other
+carried through, a malformed key throws), `bestCaseOf(rep, key,
+pipelineArr)` (the rep's figure when set, else the ledger's long-standing
+60%-of-open-pipeline estimate, FLAGGED). Storage is
+`users.profile.forecastCalls = { '2026-Q4': { commit, bestCase } }` — the
+jsonb blob, so no schema change (§18c satisfied by construction);
+`users.mjs` imports the validator from src/utils the way `_stage.mjs`
+imports stageClock.js and `sanitize()` carries
+`forecastCalls: cleanForecastCalls(data.forecastCalls)`; `flatten()`
+spreads the blob first, so the client reads `rep.forecastCalls`. Writes
+go through the same users PUT as quotas (Admin | Manager, the existing
+gate), via `updateRepField(rep.id, 'forecastCalls', withForecastCall(…))`.
+
+**What changed — the tab.** `buildRepStats` takes `commit` from
+`forecastCallOf(rep, period.key)` (0 when never called) and best case
+from `bestCaseOf`, returning `bestCaseEstimated`. A module-scope
+`CallCell` (click to type, blur / Enter saves, Escape keeps the old value
+through a ref flag so the blur that follows does not save, blank clears)
+replaces the inline Commit input, and the Best case cell is now the same
+cell — editable for the first time; an estimate renders muted, italic,
+with "est." and a title saying so. The ledger card gained a header:
+"Forecast ledger · Q4 FY2026", one sentence of instructions, and **Export
+CSV** — `exportToCSV(\`forecast-${period.key}.csv\`, …, 'forecast')`, one
+row per rep (quota, closed, commit, best case and its basis — "rep call" or
+"estimate (60% of open pipeline)" — pipeline, attainment, health, days
+since activity, stuck, overdue) plus a Team total row; the button reads
+"Exporting…" while the app's `exportingCSV` is set. **The five buttons:**
+"Coach →" / "Coach" / "Open coaching" call
+`showCoachingNote({ recipientIds: [rs.rep.id] })`; "Pipeline" / "Their
+pipeline" call `setViewingRep(rs.rep.name); setActiveTab('pipeline')` —
+the Viewing bar's existing rep slicer, so the Pipeline tab opens narrowed
+to that rep with the bar's "✕ Clear"; "Schedule 1:1" opens the task rail
+on a new task titled "1:1 with <rep>", typed Meeting when the org's task
+types include it, assigned to the caller, priority High. `ForecastTab` is
+handed `period={curQ}`, `cardHdr`, `eyebrow`, `exportToCSV`,
+`exportingCSV` and `showCoachingNote`. App.jsx: `showCoachingNote(preset)`
+accepts `{ recipientIds }` (a click event passed as the argument is
+ignored, so the bare "+ Add coaching note" is unchanged);
+`CoachingNoteDialogHost` filters the preset to the reps this caller may
+address — a Manager's button cannot pre-address a rep outside their teams
+— and the dialog takes `initialRecipientIds`, opening in People mode with
+them ticked.
+
+**What changed — Home.** The quota card's figure is
+`userQuotaFor(myUserObj, \`Q${quarter}\`)` (a quarterly plan's own number,
+else annual ÷ 4 — the Sales Manager and Reports rule; a quarterly-plan
+user no longer reads $0), closed is Closed Won by close day inside the
+fiscal quarter (`closeDayInRange`, §0.75), commit is open deals forecast
+to close this quarter that are called commit or sit in the org's last two
+open stages (`commitFallbackStages(openStagesOf(settings))`, the §0.74
+rule), and the label is `Q4 FY2026` from `todayQk` — the name the
+Sales Manager header and every report use; the two "Closing {qLabel}"
+captions follow it. The fiscal window moved above the figures that use
+it (one `quarterStart`, not two); `getQuarter` / `getQuarterLabel` leave
+the tab's destructure (nothing read them any more).
+
+**What a user sees change:** a Manager's typed Commit survives a refresh
+and a sign-out, and reads 0 again when the quarter turns; Best case can
+be typed, and an untyped one says "est."; every button on the Sales
+Manager tab does something; the Forecast tab has "Export CSV"; a rep's
+Home quota card shows this quarter's quota, this quarter's wins and this
+quarter's commit under this quarter's name (a rep whose wins were all in
+earlier quarters drops to $0 there, as they did on the Sales Manager tab
+in §0.80).
+
+**Tests.** `tests/forecast-call.test.mjs` (17): the REGRESSION (Q4
+FY2026's commit is not Q1 FY2027's), the validator's refusals, one
+quarter written leaves the others, blank clears / empty removes / bad key
+throws, best case called vs estimated (a typed 0 is a call), and source
+scans pinning users.mjs, the tab (no `parseFloat(rep.commit)`, the two
+`withForecastCall` writes, `CallCell` at module scope, every
+`<button` on the tab carrying an `onClick` — the §0.76 class as a
+standing check — three Coach handlers, two view-as handlers, the 1:1
+helper, the export), App.jsx, the dialog and Home. Ten mutants (the call
+ignoring the quarter key, a negative accepted, other quarters dropped, a
+typed 0 read as an estimate, sanitize dropping the key, `rep.commit`
+again, the ledger's Coach inert again, the preset not ticked, annual ÷ 4
+again, closed all-time again). Gates green on 146 files, **499/499**,
+**224/224 mutations, printed green baseline** (run alone), **87/87
+integration** (no function's behaviour under test changed; users.mjs has
+no integration suite — carried), build guard OK (2,493 kB,
+`index-C9mGhBOf.js`), `dist/` cleared. **Not browser-checked:** no
+`netlify dev` was started and the pane has no session (a sign-in needs
+Karen's second factor); Jeff eyeballs on deployed dev — as Admin, the
+Forecast tab (type a Commit, refresh, it stays; Best case editable; Export
+CSV; Coach → opens the dialog with the rep ticked; Team card Pipeline
+opens the Pipeline tab viewing as that rep; Today's three buttons), and as
+Karen, Home's quota card labelled Q4 FY2026 with her Q4 figure.
+
+**Found reading, not fixed:** `SubTabs`, `TeamTab` and `AuditTab` are
+still defined inside `SalesManagerTab` and rendered as JSX (the
+inline-component rule); `check:inline` classes them churn-only — no form
+control, hook state or ref inside them — so they remount harmlessly, but
+they are the pattern the guide forbids and would bite the moment one
+gained an input. Users.mjs's PUT lets a Manager write any user's profile
+in the org, forecast calls included — the existing quota behaviour, not
+widened here, noted.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

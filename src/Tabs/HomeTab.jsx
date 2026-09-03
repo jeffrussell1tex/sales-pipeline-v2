@@ -3,6 +3,8 @@ import { useApp } from '../AppContext';
 import { useAuth } from '@clerk/clerk-react';
 import { quarterOf, quarterStartDate, quarterEndDate } from '../utils/quarters';
 import { isoLocal } from '../utils/dateLocal';
+import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
+import { openStagesOf, commitFallbackStages } from '../utils/stageOrder';
 import { isAddressedTo, isReadBy, sortNotes, audienceLabel } from '../utils/coachingNotes';
 
 // ─────────────────────────────────────────────────────────────
@@ -159,7 +161,7 @@ export default function HomeTab() {
     const {
         opportunities, accounts, contacts, tasks, activities, settings,
         currentUser, userRole, canSeeAll, spiffClaims,
-        getStageColor, getQuarter, getQuarterLabel,
+        getStageColor,
         calculateDealHealth, getKpiColor,
         visibleOpportunities, visibleTasks, activePipeline, allPipelines, stages,
         handleCompleteTask,
@@ -208,9 +210,9 @@ export default function HomeTab() {
     // Q and week come from utils/quarters.js, the same helper the Pipeline list
     // uses. This block previously computed `Math.floor(now.getMonth() / 3) + 1`,
     // a CALENDAR quarter that ignored settings.fiscalYearStart entirely: with an
-    // October fiscal year, August rendered as Q3 when it is Q4. getQuarter was
-    // already destructured from useApp() above and used correctly 140 lines below
-    // for the quota card, so the fiscal rule was in scope and simply not called.
+    // October fiscal year, August rendered as Q3 when it is Q4. The fiscal rule was
+    // in scope (getQuarter, from the context) and simply not called; the quota card
+    // now reads quarters.js and pipelineReport.js directly (§0.84).
     //
     // Default 10 matches App.jsx, OpportunityModal, AnalyticsDashboard and
     // ReportsTab. NOTE: ListView.jsx:349 defaults to 1 instead, so an org that has
@@ -357,43 +359,46 @@ export default function HomeTab() {
     const plateCount   = plate.length;
     const overdueCount = overdueTasks.length;
 
-    // ── Quota data ────────────────────────────────────────────
+    // ── Quota data — THIS fiscal quarter's (state §0.84) ──────────────────────
+    // The card divided the annual quota by four (a quarterly-plan user read $0)
+    // and summed every Closed Won deal the rep ever had against it. Now: the
+    // quarter's own figure (userQuotaFor — the Sales Manager and Reports rule),
+    // closed = won by close day inside the quarter (closeDayInRange, §0.75), and
+    // commit = open deals forecast to close this quarter that are called commit
+    // or sit in the org's last two open stages (the Reports rule, §0.74) — not
+    // the typed list 'Negotiation','Closing',… which named stages no deal is in.
+    //
+    // Fiscal quarter window, not the calendar one. With an October fiscal start the
+    // two happen to coincide because the boundaries line up; with a start month of
+    // 2, 3, 5, 6, 8, 9, 11 or 12 they do not. isoLocal rather than toISOString: the
+    // latter converts to UTC first, so west of Greenwich it returns tomorrow's date
+    // all evening.
+    const quarterStart = isoLocal(todayQk ? quarterStartDate(todayQk.fiscalYear, todayQk.q, fiscalStart) : new Date(now.getFullYear(), (quarter-1)*3, 1));
+    const quarterEnd   = isoLocal(todayQk ? quarterEndDate(todayQk.fiscalYear, todayQk.q, fiscalStart)   : new Date(now.getFullYear(), quarter*3, 0));
     const myUserObj      = (settings?.users || []).find(u => u.name === currentUser);
-    const myAnnualQuota  = myUserObj?.annualQuota || 0;
-    const quarterlyQuota = myAnnualQuota / 4;
+    const quarterlyQuota = userQuotaFor(myUserObj, `Q${quarter}`);
 
     // Always scoped to current user — canSeeAll Admins/Managers still see their own home
     const myOpps         = visibleOpportunities.filter(o => !o.salesRep || o.salesRep === currentUser);
-    const myClosedWonARR = myOpps.filter(o => o.stage === 'Closed Won').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
-    const myCommitARR    = myOpps.filter(o => ['Negotiation','Closing','Negotiation/Review','Contracts'].includes(o.stage)).reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+    const myClosedWonARR = myOpps.filter(o => o.stage === 'Closed Won' && closeDayInRange(o, quarterStart, quarterEnd)).reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+    const commitStages   = commitFallbackStages(openStagesOf(settings));
+    const myCommitARR    = myOpps.filter(o => {
+        if (['Closed Won','Closed Lost'].includes(o.stage)) return false;
+        const cd = o.forecastedCloseDate || o.closeDate || '';
+        return (o.forecastCategory === 'commit' || (!o.forecastCategory && commitStages.includes(o.stage))) && cd >= quarterStart && cd <= quarterEnd;
+    }).reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
 
-    // Quarter label
-    const qLabel = (() => {
-        const quarterlyData = {};
-        visibleOpportunities.forEach(opp => {
-            if (opp.forecastedCloseDate) {
-                const q  = getQuarter(opp.forecastedCloseDate);
-                const ql = getQuarterLabel(q, opp.forecastedCloseDate);
-                if (!quarterlyData[ql]) quarterlyData[ql] = 0;
-                quarterlyData[ql] += opp.arr || 0;
-            }
-        });
-        const sorted = Object.keys(quarterlyData);
-        return sorted.length > 0 ? sorted[0] : `Q${quarter}`;
-    })();
+    // The quarter's name the way the Sales Manager header and every report say
+    // it. The old label was the FIRST forecast bucket's — whichever quarter held
+    // the first dated deal — so "Closing Q1 2027" could sit over this quarter's count.
+    const qLabel = todayQk ? `Q${todayQk.q} FY${todayQk.fiscalYear}` : `Q${quarter}`;
 
     // ── Pipeline summary (greeting subline) ───────────────────
     const activeMyOpps = myOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
     const activePipelineARR = activeMyOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
 
-    // Closing this quarter (for "This Week" 4th tile)
-    // Fiscal quarter window, not the calendar one. With an October fiscal start the
-    // two happen to coincide because the boundaries line up; with a start month of
-    // 2, 3, 5, 6, 8, 9, 11 or 12 they do not, and this tile would have counted the
-    // wrong three months. isoLocal rather than toISOString: the latter converts to
-    // UTC first, so west of Greenwich it returns tomorrow's date all evening.
-    const quarterStart = isoLocal(todayQk ? quarterStartDate(todayQk.fiscalYear, todayQk.q, fiscalStart) : new Date(now.getFullYear(), (quarter-1)*3, 1));
-    const quarterEnd   = isoLocal(todayQk ? quarterEndDate(todayQk.fiscalYear, todayQk.q, fiscalStart)   : new Date(now.getFullYear(), quarter*3, 0));
+    // Closing this quarter (for "This Week" 4th tile) — the fiscal window is
+    // computed with the quota data above (§0.84).
     const closingThisQ = myOpps.filter(o => {
         const cd = o.forecastedCloseDate || o.closeDate || '';
         return cd >= quarterStart && cd <= quarterEnd && !['Closed Won','Closed Lost'].includes(o.stage);

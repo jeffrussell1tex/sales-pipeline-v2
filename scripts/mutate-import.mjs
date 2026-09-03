@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1086,6 +1086,48 @@ const mutations = [
         'netlify/functions/users.mjs',
         "                if (before && prevTeam !== nextTeam) clean.teamJoinedAt = nextTeam ? new Date() : null;",
         "                if (false) clean.teamJoinedAt = nextTeam ? new Date() : null;"],
+
+    // ── Forecast calls per quarter; the tab's buttons wired; Home's quota card (0.84) ──
+    ['forecast: the call ignores the quarter key (one number that never resets)',
+        'src/utils/forecastCall.js',
+        "    const c = calls?.[quarterKey] || {};",
+        "    const c = Object.values(calls || {})[0] || {};"],
+    ['forecast: a negative figure is stored as a call',
+        'src/utils/forecastCall.js',
+        "    return Number.isFinite(n) && n >= 0 ? n : null;",
+        "    return Number.isFinite(n) ? n : null;"],
+    ['forecast: writing one quarter drops every other quarter',
+        'src/utils/forecastCall.js',
+        "    const out = { ...calls };",
+        "    const out = {};"],
+    ['forecast: a typed best case of 0 reads as "never set" (the estimate)',
+        'src/utils/forecastCall.js',
+        "    if (bestCase !== null) return { value: bestCase, estimated: false };",
+        "    if (bestCase) return { value: bestCase, estimated: false };"],
+    ['users: sanitize drops the forecast calls again (the §0.80 defect)',
+        'netlify/functions/users.mjs',
+        "            forecastCalls: cleanForecastCalls(data.forecastCalls),",
+        "            forecastCalls: null,"],
+    ['manager: Commit reads the never-stored rep.commit again',
+        'src/Tabs/SalesManagerTab.jsx',
+        "    const call     = forecastCallOf(rep, period.key);",
+        "    const call     = { commit: parseFloat(rep.commit) || null, bestCase: null };"],
+    ['manager: the Forecast ledger\'s Coach → is inert again',
+        'src/Tabs/SalesManagerTab.jsx',
+        "                            <button onClick={() => showCoachingNote({ recipientIds: [rs.rep.id] })} title={`Coaching note to ${rs.rep.name}`}",
+        "                            <button title={`Coaching note to ${rs.rep.name}`}"],
+    ['dialog: the preset recipients are not pre-ticked',
+        'src/components/modals/CoachingNoteDialog.jsx',
+        "    const [picked, setPicked] = useState(() => new Set(initialRecipientIds));",
+        "    const [picked, setPicked] = useState(() => new Set());"],
+    ['home: the quota card is annual ÷ 4 again',
+        'src/Tabs/HomeTab.jsx',
+        "    const quarterlyQuota = userQuotaFor(myUserObj, `Q${quarter}`);",
+        "    const quarterlyQuota = (myUserObj?.annualQuota || 0) / 4;"],
+    ['home: closed is every deal ever won again',
+        'src/Tabs/HomeTab.jsx',
+        "o.stage === 'Closed Won' && closeDayInRange(o, quarterStart, quarterEnd)",
+        "o.stage === 'Closed Won'"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

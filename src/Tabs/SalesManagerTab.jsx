@@ -6,6 +6,7 @@ import { isoLocal, todayLocal } from '../utils/dateLocal';
 import { currentQuarter } from '../utils/quarters';
 import { fiscalRange } from '../utils/reportPeriod';
 import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
+import { forecastCallOf, withForecastCall, bestCaseOf } from '../utils/forecastCall';
 
 // ── V1 Design tokens ──────────────────────────────────────────
 const T = {
@@ -69,9 +70,16 @@ function buildRepStats(rep, opportunities, activities, tasks, period) {
     const quota     = userQuotaFor(rep, `Q${period.q}`);
     const attainPct = quota > 0 ? Math.round((closedArr / quota) * 100) : null;
 
-    // Commit — use rep.commit field (editable in Forecast tab)
-    const commit   = parseFloat(rep.commit) || 0;
-    const bestCase = parseFloat(rep.bestCase) || pipelineArr * 0.6;
+    // Commit and Best case — the rep's forecast call for THIS quarter, from
+    // profile.forecastCalls keyed by quarter (state §0.84). `rep.commit` was a
+    // key users.mjs never stored, so the ledger's Commit was 0 on every refresh,
+    // and one number per rep could never reset when the quarter turned. Best
+    // case falls back to 60% of open pipeline, flagged as an estimate for the cell.
+    const call     = forecastCallOf(rep, period.key);
+    const commit   = call.commit ?? 0;
+    const best     = bestCaseOf(rep, period.key, pipelineArr);
+    const bestCase = best.value;
+    const bestCaseEstimated = best.estimated;
 
     // Activity recency
     const repActs     = (activities||[]).filter(a => a.salesRep === rep.name || a.author === rep.name);
@@ -105,7 +113,7 @@ function buildRepStats(rep, opportunities, activities, tasks, period) {
     // Trend (positive = improving)
     const trend = attainPct !== null && attainPct >= 80 ? 'up' : attainPct !== null && attainPct < 40 ? 'down' : 'flat';
 
-    return { rep, quota, closedArr, commit, bestCase, pipelineArr, attainPct, score, healthColor, healthLabel, trend, daysSinceAct, act7d, stuck, overdueCnt, wonOpps, wonInQ, activeOpps };
+    return { rep, quota, closedArr, commit, bestCase, bestCaseEstimated, pipelineArr, attainPct, score, healthColor, healthLabel, trend, daysSinceAct, act7d, stuck, overdueCnt, wonOpps, wonInQ, activeOpps };
 }
 
 // ── QuotaRepCard (unchanged from original) ────────────────────
@@ -142,11 +150,47 @@ function QuotaRepCard({ u, quotaMode, quarters, inputSt, updateRepField, compact
     return null;
 }
 
+// A forecast-call cell (Commit / Best case): click to type, blur or Enter to
+// save, Escape to keep the old value. `estimated` renders the fallback muted
+// and in italics with an "est." tag, so a figure the rep never called is not
+// read as one they did (state §0.84). Module scope: defined inside the tab it
+// would remount on every render and lose the input mid-edit.
+function CallCell({ value, estimated, editing, onEdit, onCancel, onSave, color }) {
+    const skip = React.useRef(false);
+    if (editing) return (
+        <input type="number" min="0" defaultValue={estimated ? '' : value} placeholder={estimated ? String(Math.round(value)) : '0'}
+            autoFocus
+            onBlur={e => { if (skip.current) { skip.current = false; onCancel(); return; } onSave(e.target.value); }}
+            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { skip.current = true; e.target.blur(); } }}
+            style={{ width:80, padding:'3px 6px', border:`1.5px dashed ${T.goldInk}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, background:T.surface2, color:T.ink, textAlign:'right', outline:'none' }} />
+    );
+    return (
+        <span onClick={onEdit} title={estimated ? 'Estimated at 60% of open pipeline — click to set a figure' : 'Click to change; blank clears it'}
+            style={{ fontSize:13, fontWeight:600, color: estimated ? T.inkMuted : color, fontStyle: estimated ? 'italic' : 'normal', cursor:'text', display:'inline-block', border:`1px dashed ${T.gold}`, padding:'2px 6px', borderRadius:2 }}>
+            {fmtV(value)}{estimated ? ' est.' : ''}
+        </span>
+    );
+}
+
 // ════════════════════════════════════════════════════════
 // FORECAST TAB
 // ════════════════════════════════════════════════════════
-function ForecastTab({ card, repStats, teamAttain, teamBest, teamClosed, teamCommit, teamPipe, teamQuota, updateRepField }) {
-    const [editingCommit, setEditingCommit] = useState(null);
+// `period` is the current fiscal quarter (currentQuarter): the calls are keyed
+// by its `key` and the export is named by it (state §0.84).
+function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, teamClosed, teamCommit, teamPipe, teamQuota, updateRepField, period, exportToCSV, exportingCSV, showCoachingNote }) {
+    const [editing, setEditing] = useState(null);   // { id, field: 'commit' | 'bestCase' }
+
+    // The tab's one export: the ledger as CSV, one row per rep plus the team
+    // total. The header's dead "Export" button was removed in §0.80 and nothing
+    // in the tab called exportToCSV (handoff item 19).
+    const exportLedger = () => exportToCSV(`forecast-${period.key}.csv`,
+        ['Rep', 'Team', 'Territory', 'Quarter', 'Quota', 'Closed', 'Commit', 'Best case', 'Best case basis', 'Open pipeline', 'Attainment %', 'Health', 'Days since activity', 'Stuck deals', 'Overdue tasks'],
+        [
+            ...repStats.map(rs => [rs.rep.name, rs.rep.team || '', rs.rep.territory || '', period.label, rs.quota, rs.closedArr, rs.commit, Math.round(rs.bestCase),
+                rs.bestCaseEstimated ? 'estimate (60% of open pipeline)' : 'rep call', rs.pipelineArr, rs.attainPct ?? '', rs.healthLabel, rs.daysSinceAct ?? '', rs.stuck, rs.overdueCnt]),
+            ['Team total', '', '', period.label, teamQuota, teamClosed, teamCommit, Math.round(teamBest), '', teamPipe, teamAttain ?? '', '', '', '', ''],
+        ],
+        'forecast');
 
     // Stacked bar widths
     const barTotal = Math.max(teamQuota, teamPipe);
@@ -203,6 +247,17 @@ function ForecastTab({ card, repStats, teamAttain, teamBest, teamClosed, teamCom
 
         {/* ── Ledger table ── */}
         <div style={card}>
+            <div style={cardHdr}>
+                <div>
+                    <div style={eyebrow}>Forecast ledger · {period.label}</div>
+                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Click a Commit or Best case figure to set this quarter's call. Best case in italics is an estimate — 60% of open pipeline.</div>
+                </div>
+                <button onClick={exportLedger} disabled={!!exportingCSV}
+                    style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor: exportingCSV ? 'not-allowed' : 'pointer', fontFamily:T.sans, opacity: exportingCSV ? 0.5 : 1 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    {exportingCSV === 'forecast' ? 'Exporting…' : 'Export CSV'}
+                </button>
+            </div>
             {/* Column headers */}
             <div style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
                 <div>Rep</div><div style={{textAlign:'right'}}>Quota</div><div style={{textAlign:'right'}}>Closed</div>
@@ -213,7 +268,6 @@ function ForecastTab({ card, repStats, teamAttain, teamBest, teamClosed, teamCom
 
             {/* Rep rows */}
             {repStats.map((rs, i) => {
-                const isEditing = editingCommit === rs.rep.id;
                 return (
                     <div key={rs.rep.id} style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'12px 16px', borderBottom:`1px solid ${T.border}`, background: i%2===0 ? T.surface : T.bg, fontFamily:T.sans, transition:'background 80ms' }}
                         onMouseEnter={e => e.currentTarget.style.background=T.surface2}
@@ -234,24 +288,23 @@ function ForecastTab({ card, repStats, teamAttain, teamBest, teamClosed, teamCom
                         {/* Closed */}
                         <div style={{ textAlign:'right', fontSize:13, color:T.ink, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.closedArr)}</div>
 
-                        {/* Commit — dashed gold border box, editable */}
+                        {/* Commit and Best case — this quarter's call, saved per quarter in
+                            profile.forecastCalls through the users PUT (state §0.84); click to
+                            set, blank to clear. Best case unset shows the 60% estimate. */}
                         <div style={{ textAlign:'right' }}>
-                            {isEditing ? (
-                                <input type="number" defaultValue={rs.commit}
-                                    autoFocus
-                                    onBlur={e => { updateRepField(rs.rep.id,'commit',parseFloat(e.target.value)||0); setEditingCommit(null); }}
-                                    onKeyDown={e => { if (e.key==='Enter'||e.key==='Escape') e.target.blur(); }}
-                                    style={{ width:80, padding:'3px 6px', border:`1.5px dashed ${T.goldInk}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, background:T.surface2, color:T.ink, textAlign:'right', outline:'none' }} />
-                            ) : (
-                                <span onClick={() => setEditingCommit(rs.rep.id)}
-                                    style={{ fontSize:13, fontWeight:600, color:T.goldInk, cursor:'text', display:'inline-block', border:`1px dashed ${T.gold}`, padding:'2px 6px', borderRadius:2 }}>
-                                    {fmtV(rs.commit)}
-                                </span>
-                            )}
+                            <CallCell value={rs.commit} estimated={false} color={T.goldInk}
+                                editing={editing?.id === rs.rep.id && editing.field === 'commit'}
+                                onEdit={() => setEditing({ id: rs.rep.id, field: 'commit' })}
+                                onCancel={() => setEditing(null)}
+                                onSave={v => { updateRepField(rs.rep.id, 'forecastCalls', withForecastCall(rs.rep, period.key, { commit: v })); setEditing(null); }} />
                         </div>
-
-                        {/* Best case */}
-                        <div style={{ textAlign:'right', fontSize:13, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.bestCase)}</div>
+                        <div style={{ textAlign:'right' }}>
+                            <CallCell value={rs.bestCase} estimated={rs.bestCaseEstimated} color={T.inkMid}
+                                editing={editing?.id === rs.rep.id && editing.field === 'bestCase'}
+                                onEdit={() => setEditing({ id: rs.rep.id, field: 'bestCase' })}
+                                onCancel={() => setEditing(null)}
+                                onSave={v => { updateRepField(rs.rep.id, 'forecastCalls', withForecastCall(rs.rep, period.key, { bestCase: v })); setEditing(null); }} />
+                        </div>
 
                         {/* Pipeline */}
                         <div style={{ textAlign:'right', fontSize:12.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.pipelineArr)}</div>
@@ -276,7 +329,8 @@ function ForecastTab({ card, repStats, teamAttain, teamBest, teamClosed, teamCom
 
                         {/* Coach action */}
                         <div style={{ textAlign:'center' }}>
-                            <button style={{ fontSize:11, color:T.goldInk, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600 }}>Coach →</button>
+                            <button onClick={() => showCoachingNote({ recipientIds: [rs.rep.id] })} title={`Coaching note to ${rs.rep.name}`}
+                                style={{ fontSize:11, color:T.goldInk, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600 }}>Coach →</button>
                         </div>
                     </div>
                 );
@@ -685,9 +739,10 @@ export default function SalesManagerTab() {
         opportunities, activities, tasks,
         currentUser, userRole,
         getQuarter, getQuarterLabel,
-        exportToCSV, showConfirm, softDelete, setUndoToast,
+        exportToCSV, exportingCSV, showConfirm, softDelete, setUndoToast,
         coachingNotes, showCoachingNote, deleteCoachingNote, currentUserId,
-        activeTab, setActiveTab,
+        activeTab, setActiveTab, setViewingRep,
+        setEditingTask, setTaskRailId, setTaskRailMode,
         spiffClaims, setSpiffClaims,
         isMobile,
     } = useApp();
@@ -781,6 +836,15 @@ export default function SalesManagerTab() {
                 if (!await saveUser(u, 'quota mode')) return;   // saveUser has already surfaced it
             }
         })();
+    };
+
+    // "Schedule 1:1" on the Today tab (state §0.84): a new task in the rail,
+    // assigned to the caller, typed Meeting when the org's task types include it.
+    const scheduleOneOnOne = (rep) => {
+        const types = settings.taskTypes || ['Call', 'Meeting', 'Email', 'Demo', 'Follow-up'];
+        setEditingTask({ title: `1:1 with ${rep.name}`, type: types.includes('Meeting') ? 'Meeting' : '', assignedTo: currentUser, priority: 'High' });
+        setTaskRailId('new');
+        setTaskRailMode('new');
     };
 
     // Team totals
@@ -918,11 +982,13 @@ export default function SalesManagerTab() {
 
                         {/* Buttons */}
                         <div style={{ display:'flex', gap:8, padding:'8px 14px', borderTop:`1px solid ${T.border}` }}>
-                            <button style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                            {/* Coach → the note dialog addressed to this rep; Pipeline → the Pipeline
+                                tab viewing as them (the Viewing bar's rep slicer) — state §0.84 */}
+                            <button onClick={() => showCoachingNote({ recipientIds: [rs.rep.id] })} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
                                 Coach
                             </button>
-                            <button style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                            <button onClick={() => { setViewingRep(rs.rep.name); setActiveTab('pipeline'); }} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                                 Pipeline
                             </button>
@@ -1144,8 +1210,14 @@ export default function SalesManagerTab() {
                                     </div>
                                 </div>
                                 <div style={{ display:'flex', gap:6 }}>
-                                    {[{l:'Open coaching'},{l:'Schedule 1:1'},{l:'Their pipeline'}].map(({l}) => (
-                                        <button key={l} style={{ fontSize:10, padding:'3px 8px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>{l}</button>
+                                    {/* Three real destinations (state §0.84): the coaching dialog addressed to
+                                        this rep, a new 1:1 task in the rail, the Pipeline tab viewing as them. */}
+                                    {[
+                                        { l:'Open coaching',  fn: () => showCoachingNote({ recipientIds: [rs.rep.id] }) },
+                                        { l:'Schedule 1:1',   fn: () => scheduleOneOnOne(rs.rep) },
+                                        { l:'Their pipeline', fn: () => { setViewingRep(rs.rep.name); setActiveTab('pipeline'); } },
+                                    ].map(({l,fn}) => (
+                                        <button key={l} onClick={fn} style={{ fontSize:10, padding:'3px 8px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>{l}</button>
                                     ))}
                                 </div>
                             </div>
@@ -1244,7 +1316,8 @@ export default function SalesManagerTab() {
             <SubTabs />
 
             {subTab === 'forecast' && <ForecastTab
-                card={card} repStats={repStats} updateRepField={updateRepField}
+                card={card} cardHdr={cardHdr} eyebrow={eyebrow} repStats={repStats} updateRepField={updateRepField}
+                period={curQ} exportToCSV={exportToCSV} exportingCSV={exportingCSV} showCoachingNote={showCoachingNote}
                 teamQuota={teamQuota} teamClosed={teamClosed} teamCommit={teamCommit}
                 teamBest={teamBest} teamPipe={teamPipe} teamAttain={teamAttain} />}
             {subTab === 'team'     && <TeamTab />}
