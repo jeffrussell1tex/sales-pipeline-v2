@@ -2942,3 +2942,33 @@ opportunities endpoint 200).
   ignored pending: true of Clerk, false of the app. Copy about enforcement is
   a claim about code and is verified like one — toggle on, fresh sign-in,
   read `session.status` and the API's answer.
+## 18b28. A Dialog That Asks Is The App's Own (hard rule)
+
+Origin (2 Sep 2026, state §0.79): Jeff's screenshot of the deployed dev
+site — a grey system box titled "accelerep.netlify.app says" asking for a
+coaching note — and his words, "we need to make this the same look and
+feel as the rest of the app". Seven `window.confirm()` and two
+`window.prompt()` calls were still live: the saved-report delete, both
+document deletes, the quoting discard/archive confirms, Rename role, Add
+coaching note. The app had owned a confirmation modal for months.
+
+- Never `window.confirm`, `window.prompt`, or their bare forms. A decision
+  goes through `showConfirm(message, onConfirm, danger)`; a value goes
+  through `showPrompt({ title, label, help, placeholder, initial,
+  submitLabel }, onSubmit)`. Both come from the app context (`useApp()`),
+  both render in ModalLayer, both close on Escape and count as an open
+  modal for the keyboard shortcuts.
+- The pattern for a new dialog: state in `useModalState.js`, the opener in
+  App.jsx beside `showConfirm`, the render in ModalLayer at module scope,
+  the state name added to the Escape handler, the modal-open guard, and the
+  shortcut deps — all four places, or the dialog works and the keyboard
+  does not.
+- `tests/house-dialogs.test.mjs` sweeps every file under `src/` for
+  `confirm(` / `prompt(` and fails the build on one. Comments count — say
+  "prompt dialog", not "prompt()".
+- A callback-style API changes control flow: `if (!confirm(...)) return;
+  doIt();` becomes `showConfirm(..., () => doIt());` — anything after the
+  old `return` moves inside the callback, and an `async` handler becomes an
+  async callback. The one `window.alert` left (a failed report delete) is a
+  notice, not a decision; replace it when that code is next touched.
+

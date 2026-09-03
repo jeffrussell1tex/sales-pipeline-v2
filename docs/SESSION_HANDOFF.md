@@ -9,15 +9,16 @@ shipped; the Win / loss report made to read the category it was never
 reading; the Activity report made to honour the rep slice; the Reports
 audit's §0.68 list fixed through batch 7, then SHIPPED to prod; the 401
 banner and the MFA catalogue card made honest; every native confirm/prompt
-replaced by house dialogs and coaching notes persisted), FINAL.** Repo
+replaced by house dialogs and coaching notes persisted; guide §18b28
+written), FINAL.** Repo
 root. Read this first, then verify every claim
 in it against the live repo before acting — **including the claims in this
 file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
 `### 0.79` with a paragraph beginning **"Native dialogs replaced:"**, and
-does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b27`** with a bullet
-beginning **"Client: gate on"**? If not,
+does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
+beginning **"Never `window.confirm`"**? If not,
 you are looking at a copy that predates this handoff. Check section content,
 never dates.
 
@@ -268,18 +269,39 @@ Five gates green on 142 files · **446/446 unit** (6 in
 `session-status.test.mjs`) · **195/195 mutations, printed green baseline**
 (82 new this session; run alone) · build
 **2,479 kB JS**, `index-B0b_2Pd3.js` (items 13/14; dev deploy observed
-serving it for `147e5f4`), guard OK, `dist/` cleared · **79 integration not
-re-run** (`verifyAuth` changed, but the suites mock it — see §5) · **browser
-pass as Karen on localhost, Development, Require ON:** the pending session
+serving it for `147e5f4`), guard OK, `dist/` cleared · **79/79 integration**
+(re-run at §0.79 — settings.mjs changed) · **browser pass as Karen on
+localhost, Development, Require ON:** the pending session
 held at Clerk's MFA setup card and 401 from three endpoints (state §0.65);
 earlier the same session, the CSV refusal banner (state §0.64) · dev deploy
 observed serving `index-Cy6ZeOFD.js` for `ded3271` · `master` ==
 `d513b0e`, prod serving `index-C61hseh3.js` (fifth ship, §1), Require MFA
 ON on both Clerk instances · dev is ahead of master only by the prod-ship
-docs commit · the session's `netlify dev` stopped and `node_modules/.vite`
-cleared at close.
+docs commit · the session's `netlify dev` stopped at close (pane server
+`1071f888`), `node_modules/.vite` and `dist` cleared after the last gate
+build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
 
 ## 5. Next — start here
+
+**Next session prep, in order (Jeff: "update the next session prep"):**
+- **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
+  expect only docs commits after `d513b0e`; anything else is unshipped code
+  and a finding.
+- **Karen's role.** Jeff promoted her to Manager on 2 Sep to observe the
+  coaching-note Manager path; if Settings → People still says Manager, ask
+  before any rep-path browser check — every rep-path proof in CLAUDE.md
+  assumes she is a User.
+- **Item 16 first** (the Sales Manager tab's calendar quarter): read the
+  whole tab's quarter math before touching the header; helper + tests under
+  two fiscal starts, as §0.69 did for Reports.
+- **Then item 15** (catalogue footers, Workspace Health constants): the
+  same honesty class as §0.78; `liveCounts` already carries the MFA
+  numbers.
+- **Item 17 is a design first**, not code: its own table (guide §18c
+  ordering), the two visibility decisions recorded in the item, and the
+  team-join date question, answered by Jeff before the schema is written.
+- Two test coaching notes sit in the dev org's list by Jeff's choice; the
+  saved-reports library is empty.
 
 1. **Ritual:** this file, `check:handoff`, `git status`. Expect `dev` and
    `origin/dev` to agree at the handoff commit.
@@ -508,3 +530,15 @@ then did it again on prod. Five prod ships, each verified by bundle hash. The
 handoff was corrupted twice by edit scripts and restored from git both times
 before anything was committed. Observed, then written, then committed, and
 re-read from disk between every step.
+
+The evening ran on Jeff's screenshots. Each one — the MFA panel, the
+Security list, the Home header at 7pm, a grey "accelerep.netlify.app says"
+box — was read against the code before anything was written, and each
+found something the code had been saying that was not true of the product:
+a policy the app could not read, footers typed by hand, a browser dialog
+where the app owned a modal, notes that vanished on refresh. Seven batches
+closed the Reports audit; three more closed the carried items; every one
+was gated, mutated, deployed, hash-checked, and the last two were observed
+by Jeff signed in as a Manager he had just made. What is left is written
+down with what exists and what was decided, and nothing in this file
+describes a state that was not seen.
