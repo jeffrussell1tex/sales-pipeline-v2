@@ -193,7 +193,6 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
             crumb="Buyer personas" title="Buyer personas"
             subtitle="Contact persona tags used in the contact form"
             statusDetail={`${personas.filter(p => p.active !== false).length} active personas`}
-            updatedBy="Admin" updatedAt="now"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             rightActions={

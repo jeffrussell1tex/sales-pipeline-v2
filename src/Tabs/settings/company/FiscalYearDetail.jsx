@@ -101,7 +101,6 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
             crumb="Fiscal year" title="Fiscal year"
             subtitle="Quarter starts and fiscal year alignment"
             statusDetail={`Q1 starts ${MONTHS_SHORT[startMonth]} 1`}
-            updatedBy={settings?.updatedBy || 'Admin'} updatedAt="11 months ago"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
         >

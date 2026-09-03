@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (fifth session)
-**Verified at:** five gates green on 142 files · **459 tests** · **204/204 mutations, printed green baseline** · **79/79 integration** (re-run at §0.80; no function changed) · build guard OK 2,479 kB `index-ByAdikgx.js` · prod `d513b0e` serving `index-C61hseh3.js` (fifth ship) · dev ahead of master by §0.80 (two code commits) and docs.
-**Batch:** **the Sales Manager tab's quarter is the org's FISCAL quarter (§0.80)** — the header built a calendar quarter from `now.getMonth()` and never read `fiscalYearStart`, so an October-year org read "Q3 2026" in September while Home and every report said Q4; `currentQuarter()` in quarters.js is the one helper it reads now, and weeks remaining count today and are never 0 (the Today tab's Gap-to-Quota tile divides by them — "$InfinityM/wk" on a quarter's last day). The audit of the tab's totals found them on NO quarter at all (all-time closed against the annual quota); **Jeff's call, done in the second commit: Closed and Quota are quarter-to-date** (won by close day inside the fiscal quarter, against that quarter's figure), the Administration board measures fiscal-year-to-date against its annual quota, and the three inert header buttons are gone. Health labels and attainment on the Forecast, Team and Today tabs change accordingly. Carried: the Forecast ledger's editable Commit was never stored (handoff item 18); "Coach →", Home's annual ÷ 4 quota card, and the tab having no export at all (item 19).
+**Verified at:** five gates green on 143 files · **472 tests** · **212/212 mutations, printed green baseline** · **79/79 integration** (re-run at §0.81; no function changed) · build guard OK 2,477 kB `index-CsUn53YS.js` · prod `d513b0e` serving `index-C61hseh3.js` (fifth ship) · dev ahead of master by §0.80 and §0.81 (three code commits) and docs.
+**Batch:** **the Settings catalogue and its panel headers carry no invented text; Workspace Health counts only what it can read (§0.81)** — 48 hand-typed footers ("Edited 2 months ago by Admin", values that never moved) gone, the two typed attention flags and five typed statuses gone, card status / attention / detail computed in one pure module (`settingsCards.js`, the block that lived inside the card component), the Needs Attention list computed from the same, the health tile's eight checks (four constants) replaced by the six that can be read with a sentence that names what failed, and 16 detail panels' typed "Last edited 3 weeks ago by Admin" removed (the shared headers render the line only when both values are real; the SSO panel's fictional "Morgan" gone). Carried: the mockup depth of the SSO / Session / Audit / Import panels and the remaining hand-typed card counts (handoff items 21–22).
+**Prior batch:** **the Sales Manager tab's quarter is the org's FISCAL quarter (§0.80)** — the header built a calendar quarter from `now.getMonth()` and never read `fiscalYearStart`, so an October-year org read "Q3 2026" in September while Home and every report said Q4; `currentQuarter()` in quarters.js is the one helper it reads now, and weeks remaining count today and are never 0 (the Today tab's Gap-to-Quota tile divides by them — "$InfinityM/wk" on a quarter's last day). The audit of the tab's totals found them on NO quarter at all (all-time closed against the annual quota); **Jeff's call, done in the second commit: Closed and Quota are quarter-to-date** (won by close day inside the fiscal quarter, against that quarter's figure), the Administration board measures fiscal-year-to-date against its annual quota, and the three inert header buttons are gone. Health labels and attainment on the Forecast, Team and Today tabs change accordingly. Carried: the Forecast ledger's editable Commit was never stored (handoff item 18); "Coach →", Home's annual ÷ 4 quota card, and the tab having no export at all (item 19).
 **Prior batch:** **the Reports audit closed (§0.68 → §0.69–§0.77, seven batches), the 401 banner and the MFA catalogue card made honest (§0.78), every native confirm/prompt replaced by house dialogs and coaching notes persisted with a Manager-writable settings key (§0.79)** — all shipped to prod, each deploy verified by bundle hash; the Manager path and the after-7pm date observed by Jeff as Karen; carried: Settings catalogue footers and Workspace Health constants (handoff item 15), the Sales Manager tab's calendar quarter (16), addressed coaching notes as a product (17).
 **Prior batch:** **the ten unmounted components are DELETED** (Jeff: "lets do 2 and 3") — 4,160 lines and twelve stale import lines gone, every reference re-verified as a comment or nothing; gates green, 317/317, 105/105, build guard OK at the identical 2,534.93 kB (a different hash: fewer imports reorder Rollup's module emission, the size proves the code was never in the bundle) · **`documents` re-probe CLOSED** — 401 JSON on a fresh `netlify dev`, the R2 dependency fix verified locally, sibling `leads` 401 as control (§0.61)
 **Prior batch:** **the date-pattern audit** — the `+'T12:00:00'` shape counted at ~140 sites, not the ~20 queued; four live-or-unguarded NaN sites fixed (deal-timeline task sort, speed-to-lead/velocity on the varchar(30) lead dates, avgDaysForStage's never-written `changedAt` fallback, TaskItem's UTC-midnight `Due:` and 7pm-Central overdue — and TaskItem turned out to be UNMOUNTED, so three live, not four) · `parseLocalDate`/`toLocalDay` — the READ side of the date contract, guide **§18b26** · **the CSV importer normalises Close/Created Date** (both passed through as written: "9/15/2026" made an Invalid Date of that deal everywhere downstream — never-stale, undated quarter) · **the isoLocal queue was LOST with an overwritten handoff — found and SWEPT the same session**: 45 UTC-truncated day sites (43 hand-counted; the pinning scan found two more on its first run), 37 rewritten to `isoLocal`/`todayLocal` across 12 files, 8 named exceptions, and the scan in `date-local.test.mjs` is the list that cannot be lost · **ten component files are imported by App.jsx and rendered NOWHERE** (4,160 lines — the three Viewing panels, Account/Task/Activity modals, TaskItem, AnalyticsDashboard, PipelinesSettingsPanel, LeadForm), proven by the bundle being byte-identical with and without an edit to two of them; deletion is Jeff's call, chip spawned (§0.60)
@@ -2800,6 +2801,126 @@ good … Admin tab is good." The $0 commit is item 18 (never stored).
 **Product note from the eyeball (handoff item 20):** Reports →
 Performance → rep view should list that rep's won and lost deals with
 totals.
+
+### 0.81 The Settings catalogue claims only what it can read (3 Sep, fifth session)
+
+**Jeff: "lets proceed with item 15."** §0.78's last paragraph and handoff
+item 15: the Security-list screenshot showed every card but MFA carrying
+a footer like "Edited 2 months ago by Admin", and the Workspace Health
+tile "4 of 8 checks passing" built from constants.
+
+**What was read.** `settings/catalogue.js` (68 lines, 48 cards): every
+card carried `updatedBy` (44 'Admin', 2 'System', 2 '—') and
+`updatedAt` (values from 'just now' to '11 months ago', 13 'never', none
+of them read from anywhere), a hand-typed `status` (43 'ok'; 'partial'
+on apps and webhooks; 'warning' on sso), `attention:true` on webhooks
+and sso, and `isNew:true` on 16. AdminView's card component rendered the
+footer as "Edited X by Y" / "Never changed" (or "Managed in X" since
+§0.78) and held ~135 lines of enrichment that made most card DETAILS
+live from settings or the mount-time `liveCounts` fetch — but never the
+status or the attention flag, so a webhooks card read "◐ partial · Needs
+attention" whatever the endpoints were doing, and the Needs Attention
+panel listed `SETTINGS_ITEMS.filter(i => i.attention)` with the row's
+typed detail ("4 endpoints · 1 failing"). `healthChecks` (AdminView
+~673): SSO configured `false`, MFA enforced `false`, Backups running /
+Session policy set / Quote branding configured `true` — five constants of
+eight; only webhooks (via the typed attention flag, so also constant),
+pipeline count and team assignment read anything; the sentence "Set up
+SSO and enforce MFA to reach 90%+" static. One level down, the two shared
+panel headers (`CategoryDetailChrome`, `DetailPageChrome`) rendered "Last
+edited {updatedAt} by {updatedBy}" unconditionally and 16 panels passed
+typed values ("2 months ago", "11 months ago", "now"…); `SsoDetail` passed
+"Last edited by Morgan" / "Last edited never by —" to the Security header.
+`SecTitle` / `DataTitle` print their line conditionally and the Mfa /
+Fls / Session / Audit sentences there are descriptive, not invented;
+Backup and Export read real runs.
+
+**What changed.** New `src/utils/settingsCards.js` (pure):
+`cardStateOf(item, settings, liveCounts)` — the enrichment block moved out
+of the card component VERBATIM (the script sliced it between two unique
+markers rather than retyping it), plus three rules: webhooks take status
+and attention from the same live counts as their detail (failing > 0 →
+'partial' + attention; 0 → 'ok'; fetch unanswered → 'none', nothing
+claimed), sso and apps are 'none' with no attention (the SSO panel stores
+`settings.ssoConfig`, which nothing in sign-in reads — the app cannot say
+whether SSO is in force; a workspace without it is not a fault), and **a
+status of 'ok' with a null detail becomes 'none'** — a green check with
+nothing behind it is an invented status. `healthChecksOf(settings,
+liveCounts, isHidden)` returns only checks that can be READ: "MFA fully
+enrolled" (not "enforced" — the app reads enrolment, never the policy)
+once `liveCounts.mfa` is known, "Webhooks all healthy" once the webhooks
+fetch answered, "Backups running" once the backup fetch answered
+(`backupChecked`; ok when the newest snapshot is ≤ 48 h old — none, or
+older, fails), and the three settings-readable ones: Default pipeline
+set, Team members assigned (unchanged predicate), Quote branding
+configured (`!!settings.quoteBrand`, the key the brand modal saves). SSO
+and Session policy are gone from the denominator. `healthSummaryOf` gives
+ok / total / pct and one sentence: "Not passing: A, B." / "Every check
+that can be read is passing." / "Nothing can be checked yet." AdminView:
+the card reads `cardStateOf`; the chip shows "No data" for 'none' with
+no detail (it used to print the word "none"); the footer is "Managed in
+X" or nothing; `allAttentionItems` is computed from card states with the
+computed detail; the health block is the two helpers; the tile sentence
+is `health.sentence`; the live-counts fetch records `backupChecked` (on an
+ok response) and `backupLastHours`. `catalogue.js`: all 48 footer pairs
+removed by a count-asserted regex; apps / webhooks / sso / session /
+import / export are `status:'none', statusDetail:null`; the two
+`attention:true` gone. The two shared headers render the "Last edited"
+line only when both values are given; the 16 panels' typed props are
+removed (one regex per file, one match asserted); `SsoDetail`'s line is
+gone. `isNew` badges are untouched — Jeff's call (item 22).
+
+**What a user sees change:** every Settings card footer is empty except
+"Managed in Clerk" on MFA; Webhooks shows its live state and needs
+attention only while an endpoint is failing; SSO, Connected apps, Session
+policy, Import and Export show "○ No data" instead of a green "ok" (or,
+for SSO, a red "Not configured · Needs attention" for a feature the app
+cannot read); the Workspace Health ring counts 3 checks before the live
+fetches answer and up to 6 after, with a sentence that names the failing
+ones; Needs Attention lists only computed items; every Company / Sales
+process / Quoting panel header loses its invented "Last edited … by
+Admin".
+
+`tests/settings-cards.test.mjs` (13: webhooks live overrules the row —
+the REGRESSION; sso/apps claim nothing; ok-with-nothing → none; MFA still
+through `mfaCardOf`; three readable checks before any fetch; live checks
+join and read what they claim; backup none/stale/fresh/unanswered; hidden
+items leave the denominator; settings checks fail honestly; the summary
+sentence; scans of the catalogue, AdminView, the two headers, the 16
+panels and SsoDetail). `fetch-status.test.mjs` repointed to the module
+for the MFA wiring it pins. Gates green on 143 files, **472/472**,
+**212/212 mutations, printed green baseline** (eight new: a failing
+webhook not flagged, the green-with-nothing rule removed, MFA counted
+before known, a stale backup passing, the static pitch back, the typed
+attention list back, the tile pitch back, "Last edited" with nothing to
+say). **The first harness run printed 211/212 with one anchor STALE:**
+§0.78's "the MFA card ignores the live enrolment" still pointed at
+AdminView, and its line had moved into the module — the harness reported
+it rather than counting it (the 18b18 fix doing its job); repointed to
+`settingsCards.js`, re-run clean. **79/79 integration** (no function changed), build guard OK
+(2,477 kB, `index-CsUn53YS.js`), `dist/` cleared. **Not browser-checked
+here** (Settings is Admin-only); Jeff eyeballs on deployed dev: Settings →
+All — footers empty except MFA's "Managed in Clerk", the Workspace Health
+tile's count and sentence, Webhooks' chip, and a panel header (Pipelines)
+without "Last edited".
+
+**Carried (found in the same read; not fixed):** (a) the SSO, Session,
+Audit and Import panels are design mockups in depth — SsoDetail's
+`SEC_SSO` constant (Okta URLs, "Active · 412 logins / 30d", verified
+domains `acme-corp.com`), SessionDetail's badge "Strong policy · 8h idle
+· 90-day rotation", AuditDetail's "Streaming to Splunk · 2 alerts
+triggered today · retention 13 months", ImportDetail's whole
+`DATA_IMPORT` (a history by `morgan@accelerep.com`, a fake Salesforce
+file) — handoff item 21; (b) the hand-typed card COUNTS that remain
+where no settings key is read (KPI thresholds "12 KPIs configured", Pain
+points "23", Customer types / Account segments "5 tiers", Industries "14
+· 47 sub-types", Lead conversion "8 sources", Price book "15 products · 3
+bundles", Field-level visibility "6 rules", Fiscal year "Q1 starts Feb
+1" — readable from `fiscalYearStart`, Company profile "Complete") and
+the fallbacks that show a typed count when the settings key is absent
+("18 custom fields", "8 stages", "8 territories", "5 roles", "4
+templates", "3 tiers", "12 holidays") — item 22, with the 16 `isNew`
+badges that never expire.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

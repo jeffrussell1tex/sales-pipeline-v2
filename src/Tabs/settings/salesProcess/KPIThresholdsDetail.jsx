@@ -138,7 +138,6 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
             crumb="KPI thresholds" title="KPI thresholds"
             subtitle="Thresholds, colors, and sparkline ranges for dashboards"
             statusDetail={`${rows.filter(r=>!r.hidden).length} KPIs configured`}
-            updatedBy="Admin" updatedAt="1 month ago"
             onBack={onBack} dirty={dirty && !hasErrors} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             disablePrimary={!dirty || hasErrors || saving}

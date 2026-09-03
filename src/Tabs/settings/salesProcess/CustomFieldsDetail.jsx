@@ -136,7 +136,6 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
             crumb="Custom fields" title="Custom fields"
             subtitle="Extend Accounts, Contacts, Leads, and Opportunities"
             statusDetail={`${totalFields} custom fields`}
-            updatedBy="Admin" updatedAt="5 days ago"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
         >

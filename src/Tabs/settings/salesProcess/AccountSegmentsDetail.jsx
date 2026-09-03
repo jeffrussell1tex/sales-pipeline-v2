@@ -108,7 +108,6 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
             crumb="Account segments" title="Account segments"
             subtitle="Account segment tiers (SMB, Mid-market, Enterprise…)"
             statusDetail={`${tiers.length} tiers`}
-            updatedBy="Admin" updatedAt="6 months ago"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             rightActions={

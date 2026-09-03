@@ -146,7 +146,6 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
             crumb="Pain points library" title="Pain points library"
             subtitle="Reusable customer pain point templates"
             statusDetail={`${totalItems} pain points`}
-            updatedBy="Admin" updatedAt="2 weeks ago"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             rightActions={

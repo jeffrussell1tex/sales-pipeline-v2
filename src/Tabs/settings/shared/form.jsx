@@ -70,8 +70,10 @@ export const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updated
                     <span>{subtitle}</span>
                     <span style={{ color:T.inkMuted }}>•</span>
                     <StatusChip status="ok" detail={statusDetail} small/>
-                    <span style={{ color:T.inkMuted }}>•</span>
-                    <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited {updatedAt} by <span style={{ color:T.inkMid, fontWeight:500 }}>{updatedBy}</span></span>
+                    {updatedAt && updatedBy && (<>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited {updatedAt} by <span style={{ color:T.inkMid, fontWeight:500 }}>{updatedBy}</span></span>
+                    </>)}
                 </div>
             </div>
             <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>

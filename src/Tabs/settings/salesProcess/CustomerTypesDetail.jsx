@@ -82,7 +82,6 @@ export const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTa
             crumb="Customer types" title="Customer types"
             subtitle="Account classification tags (SMB, Mid-market, Enterprise…)"
             statusDetail={`${tiers.length} tiers`}
-            updatedBy="Admin" updatedAt="6 months ago"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             rightActions={

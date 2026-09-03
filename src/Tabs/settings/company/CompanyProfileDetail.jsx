@@ -82,7 +82,7 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
             error={saveError}
             crumb="Company profile" title="Company profile"
             subtitle="Logo, address, phone, and default quote header"
-            statusDetail="Complete" updatedBy={settings?.updatedBy || 'Admin'} updatedAt="2 months ago"
+            statusDetail="Complete"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
         >

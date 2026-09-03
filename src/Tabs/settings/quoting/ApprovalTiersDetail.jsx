@@ -168,7 +168,6 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
             crumb="Approval tiers" category="Quoting" title="Approval tiers"
             subtitle="Discount thresholds that trigger manager or VP approval"
             statusDetail={`${tiers.length} tiers · advanced rules off`}
-            updatedBy="Admin" updatedAt="2 months ago"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
         >

@@ -1122,7 +1122,6 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
             crumb="Quote templates & branding" category="Quoting" title="Quote templates & branding"
             subtitle="Header, footer, terms boilerplate, and PDF styling for sent quotes"
             statusDetail={`${templates.length} templates · brand locked`}
-            updatedBy="Admin" updatedAt="1 month ago"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
         >

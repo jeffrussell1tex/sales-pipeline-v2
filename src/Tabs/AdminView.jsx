@@ -50,155 +50,12 @@ import { DispatchJobTemplatesDetail } from './settings/dispatch/DispatchJobTempl
 import { DispatchServicePlansDetail } from './settings/dispatch/DispatchServicePlansDetail.jsx';
 import { DispatchPropertyTypesDetail } from './settings/dispatch/DispatchPropertyTypesDetail.jsx';
 import { SETTINGS_ITEMS, WORKSPACE_TABS_BASE } from './settings/catalogue.js';
-import { mfaCardOf } from '../utils/fetchStatus';
+import { cardStateOf, healthChecksOf, healthSummaryOf } from '../utils/settingsCards';
 
 const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
     const [hov, setHov] = useState(false);
 
-    // ── Live badge enrichment ─────────────────────────────────────────────────
-    // Rules: use real data when available; null = show nothing; keep static only
-    // when the value is genuinely deterministic from settings (not counts of things
-    // we don't track). Never show made-up numbers.
-    let statusDetail = item.statusDetail;
-    let status = item.status;
-    let attention = !!item.attention;
-
-    // ── People & Teams — from settings.users / settings.pipelines etc ─────────
-    if (item.id === 'users' && settings?.users) {
-        const active  = (settings.users||[]).filter(u => u.name && u.active !== false).length;
-        const pending = (settings.users||[]).filter(u => u.status === 'Invited').length;
-        statusDetail = `${active} user${active!==1?'s':''}${pending > 0 ? ` · ${pending} pending` : ''}`;
-    }
-    if (item.id === 'teams' && settings?.users) {
-        const teamNames = [...new Set((settings.users||[]).filter(u=>u.team).map(u=>u.team))];
-        statusDetail = teamNames.length > 0 ? `${teamNames.length} team${teamNames.length!==1?'s':''}` : null;
-    }
-    if (item.id === 'territories' && settings?.territories) {
-        const count = (settings.territories||[]).length;
-        statusDetail = count > 0 ? `${count} territor${count!==1?'ies':'y'}` : null;
-    }
-    if (item.id === 'roles' && settings?.roles) {
-        const count = (settings.roles||[]).length;
-        statusDetail = count > 0 ? `${count} role${count!==1?'s':''}` : null;
-    }
-    // Lead visibility — show the policy actually in force, not the static text.
-    // An absent key reads as the default (visible), same as the server.
-    if (item.id === 'lead-visibility') {
-        statusDetail = settings?.unassignedLeadsVisibleToReps === false
-            ? 'Reps see assigned only'
-            : 'Unassigned visible to reps';
-    }
-
-    // ── Sales process ─────────────────────────────────────────────────────────
-    if (item.id === 'pipelines' && settings?.pipelines) {
-        const count  = (settings.pipelines||[]).length;
-        const stages = (settings.pipelines||[]).reduce((a,p) => a + (p.stages?.length||0), 0);
-        statusDetail = `${count} pipeline${count!==1?'s':''}${stages > 0 ? ` · ${stages} stages` : ''}`;
-    }
-    if (item.id === 'funnel-stages' && settings?.funnelStages) {
-        const count = (settings.funnelStages||[]).length;
-        statusDetail = count > 0 ? `${count} stage${count!==1?'s':''}` : null;
-    }
-    if (item.id === 'custom-fields' && settings?.customFields) {
-        const count = (settings.customFields||[]).length;
-        statusDetail = count > 0 ? `${count} custom field${count!==1?'s':''}` : null;
-    }
-
-    if (item.id === 'competitors') {
-        const count = (settings?.competitors || []).length;
-        statusDetail = `${count} competitor${count !== 1 ? 's' : ''}`;
-    }
-    if (item.id === 'reasons-won') {
-        const count = (settings?.reasonsWon || []).length;
-        statusDetail = `${count} reason${count !== 1 ? 's' : ''}`;
-    }
-    if (item.id === 'reasons-lost') {
-        const count = (settings?.reasonsLost || []).length;
-        statusDetail = `${count} reason${count !== 1 ? 's' : ''}`;
-    }
-
-    // ── Quoting ───────────────────────────────────────────────────────────────
-    if (item.id === 'approval-tiers' && settings?.approvalTiers) {
-        const count = (settings.approvalTiers||[]).length;
-        statusDetail = count > 0 ? `${count} tier${count!==1?'s':''}` : null;
-    }
-    if (item.id === 'quote-templates' && settings?.quoteTemplates) {
-        const count = (settings.quoteTemplates||[]).length;
-        statusDetail = count > 0 ? `${count} template${count!==1?'s':''}` : null;
-    }
-
-    // ── Features & AI — count from featureFlags in settings ─────────────────
-    if (item.id === 'features' && settings?.featureFlags) {
-        const flags = settings.featureFlags || {};
-        const on  = Object.values(flags).filter(Boolean).length;
-        const tot = Object.keys(flags).length;
-        statusDetail = tot > 0 ? `${on} of ${tot} on` : null;
-    }
-
-    // ── Security — only show what we actually know ────────────────────────────
-    if (item.id === 'sso')     statusDetail = null; // no SSO config tracked yet
-    if (item.id === 'mfa') {
-        // Live from Clerk (the same fetch the detail panel makes); nothing when
-        // the numbers are unknown — never the old hand-typed status text.
-        const card = mfaCardOf(liveCounts.mfa);
-        statusDetail = card?.detail ?? null;
-        status = card?.status ?? 'none';
-        attention = !!card?.attention;
-    }
-    if (item.id === 'session') statusDetail = null; // policy stored but no meaningful summary
-
-    // ── Integrations — from liveCounts fetched on mount ──────────────────────
-    if (item.id === 'api-keys') {
-        if (liveCounts.apiKeysTotal !== undefined) {
-            const a = liveCounts.apiKeysActive;
-            statusDetail = a > 0 ? `${a} active key${a!==1?'s':''}` : 'No active keys';
-        } else statusDetail = null;
-    }
-    if (item.id === 'webhooks') {
-        if (liveCounts.webhooksTotal !== undefined) {
-            const t = liveCounts.webhooksTotal;
-            const f = liveCounts.webhooksFailing || 0;
-            if (t === 0) statusDetail = 'No endpoints';
-            else statusDetail = `${t} endpoint${t!==1?'s':''}${f > 0 ? ` · ${f} failing` : ''}`;
-        } else statusDetail = null;
-    }
-    if (item.id === 'automations') {
-        if (liveCounts.autosTotal !== undefined) {
-            const a = liveCounts.autosActive;
-            const t = liveCounts.autosTotal;
-            if (t === 0) statusDetail = 'No rules yet';
-            else statusDetail = `${a} active · ${t - a} paused`;
-        } else statusDetail = null;
-    }
-
-    // ── Security — audit log real event count ─────────────────────────────────
-    if (item.id === 'audit-log') {
-        statusDetail = liveCounts.auditEvents !== undefined
-            ? `${liveCounts.auditEvents} event${liveCounts.auditEvents!==1?'s':''} · last 30d`
-            : null;
-    }
-
-    // ── Data — backup ─────────────────────────────────────────────────────────
-    if (item.id === 'backup') {
-        if (liveCounts.backupLastLabel) {
-            statusDetail = `${liveCounts.backupFreq} · last: ${liveCounts.backupLastLabel}`;
-        } else statusDetail = null;
-    }
-
-    // ── Data — import/export: no tracking table, show nothing rather than fake ─
-    if (item.id === 'import') statusDetail = null;
-    if (item.id === 'export') statusDetail = null;
-
-    // ── Personal cards — no real per-user data available ─────────────────────
-
-    // ── Company calendar ─────────────────────────────────────────────────────
-    if (item.id === 'company-calendar' && settings?.holidays) {
-        const count = (settings.holidays||[]).length;
-        statusDetail = count > 0 ? `${count} holiday${count!==1?'s':''} · ${new Date().getFullYear()}` : null;
-    }
-
-    // ── Connected apps — no real connection tracking ──────────────────────────
-    if (item.id === 'apps') statusDetail = null;
+    const { status, statusDetail, attention } = cardStateOf(item, settings, liveCounts);
     return (
         <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
             onClick={() => onOpen && onOpen(item)}
@@ -215,11 +72,14 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
                 </div>
             </div>
             <div style={{ padding:'8px 10px', background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r, marginBottom:10, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                <StatusChip status={status} detail={statusDetail} small/>
+                <StatusChip status={status} detail={statusDetail || (status === 'none' ? 'No data' : null)} small/>
                 {attention && <span style={{ fontSize:10, color:T.danger, fontWeight:700, fontFamily:T.sans }}>Needs attention</span>}
             </div>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>
-                <span>{item.managedIn ? `Managed in ${item.managedIn}` : item.updatedBy === '—' ? 'Never changed' : `Edited ${item.updatedAt} by ${(item.updatedBy||'').split(' ')[0]}`}</span>
+                {/* No invented edit history: the catalogue carried "Edited 2 months ago by
+                    Admin" on 46 cards, values that never moved (§0.81). "Managed in X" is the
+                    one footer that is true; otherwise nothing. */}
+                <span>{item.managedIn ? `Managed in ${item.managedIn}` : ''}</span>
                 <span style={{ color:T.info, fontWeight:600 }}>{item.link ? 'Open in Quotes →' : 'Open →'}</span>
             </div>
         </div>
@@ -474,11 +334,13 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
                 if (backupRes.status === 'fulfilled') {
                     const d = await backupRes.value.json().catch(() => ({}));
                     const snaps = d.snapshots || [];
+                    if (backupRes.value.ok) counts.backupChecked = true;   // an answer, even "no snapshots"
                     if (snaps[0]) {
                         const last = snaps[0];
                         const diffH = Math.round((Date.now() - new Date(last.createdAt)) / 3600000);
                         counts.backupLastLabel = diffH < 1 ? 'just now' : diffH < 24 ? diffH + 'h ago' : Math.round(diffH/24) + 'd ago';
                         counts.backupFreq = d.schedule?.frequency || 'Daily';
+                        counts.backupLastHours = diffH;
                     }
                 }
                 // Admin-only endpoint: a 403 leaves counts.mfa unset and the card blank.
@@ -663,32 +525,24 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
     const pipelines = settings?.pipelines || [];
     const funnelStages = settings?.funnelStages || [];
     const calConnected = settings?.googleCalendarConnected || false;
-    const allAttentionItems = SETTINGS_ITEMS.filter(i => i.attention);
+    // Attention is computed per card from the same live data as its chip (the
+    // catalogue's attention:true on webhooks and sso were hand-typed, §0.81);
+    // the row shows the computed detail, not the row's typed one.
+    const cardStates = Object.fromEntries(scopeItems.map(i => [i.id, cardStateOf(i, settings, liveCounts)]));
+    const allAttentionItems = scopeItems.filter(i => cardStates[i.id].attention).map(i => ({ ...i, statusDetail: cardStates[i.id].statusDetail }));
     const visibleAttention  = allAttentionItems.filter(it => !isHidden(it.id));
     const hiddenAttention   = allAttentionItems.filter(it =>  isHidden(it.id));
     const attentionItems    = visibleAttention; // alias for any remaining references
     const hiddenCount       = hiddenAttention.length;
     const lastHidden        = hiddenAttention.length > 0 ? hiddenAttention[hiddenAttention.length - 1] : null;
     const lastHiddenInfo    = lastHidden ? naHidden[lastHidden.id] : null;
-    const healthChecks = [
-        { label:'SSO configured',          ok: false                       },
-        { label:'MFA enforced',            ok: false                       },
-        { label:'Webhooks all healthy',    ok: !attentionItems.some(i=>i.id==='webhooks') },
-        { label:'Backups running',         ok: true                        },
-        { label:'Default pipeline set',    ok: pipelines.length > 0       },
-        { label:'Team members assigned',   ok: users.filter(u=>u.team).length === users.filter(u=>u.name).length },
-        { label:'Session policy set',      ok: true                        },
-        { label:'Quote branding configured', ok: true                      },
-    ];
-    // Exclude hidden attention items from health denominator
-    const activeHealthChecks = healthChecks.filter(h => {
-        if (h.label === 'SSO configured'       && isHidden('sso'))      return false;
-        if (h.label === 'MFA enforced'         && isHidden('mfa'))      return false;
-        if (h.label === 'Webhooks all healthy' && isHidden('webhooks')) return false;
-        return true;
-    });
-    const healthOk  = activeHealthChecks.filter(h => h.ok).length;
-    const healthPct = Math.round((healthOk / activeHealthChecks.length) * 100);
+    // Only checks that can be READ (settingsCards.js): four of the eight here
+    // were constants — "MFA enforced" false beside live enrolment, "Backups
+    // running" / "Session policy set" / "Quote branding configured" true (§0.81).
+    const activeHealthChecks = healthChecksOf(settings, liveCounts, isHidden);
+    const health    = healthSummaryOf(activeHealthChecks);
+    const healthOk  = health.ok;
+    const healthPct = health.pct;
 
 
     // Group items by category
@@ -726,7 +580,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
                         <div style={{ flex:1 }}>
                             <div style={{ ...eb(T.ok), marginBottom:4 }}>WORKSPACE HEALTH</div>
                             <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>{healthOk} of {activeHealthChecks.length} checks passing</div>
-                            <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>Set up SSO and enforce MFA to reach 90%+ — standard for multi-rep workspaces.</div>
+                            <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>{health.sentence}</div>
                         </div>
                     </div>
                     {/* Needs attention */}

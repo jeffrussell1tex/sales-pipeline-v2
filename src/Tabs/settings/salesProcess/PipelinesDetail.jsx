@@ -253,7 +253,6 @@ export const PipelinesDetail = ({ settings, setSettings, onBack }) => {
             crumb="Pipelines" title="Pipelines"
             subtitle="Manage multiple pipelines and their stages"
             statusDetail={`${pipelines.length} pipelines · ${pipelines.reduce((a,p) => a + (p.stages?.length||0), 0)} stages`}
-            updatedBy="Admin" updatedAt="3 weeks ago"
             onBack={onBack} dirty={false}
             rightActions={
                 <div style={{ display:'flex', gap:8 }}>

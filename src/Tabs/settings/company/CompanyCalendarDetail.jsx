@@ -194,7 +194,6 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
             crumb="Company calendar" title="Company calendar"
             subtitle="Shared org-wide holidays and events"
             statusDetail={`${allHolidays.length} holidays · ${year}`}
-            updatedBy={settings?.updatedBy || 'Admin'} updatedAt="2 months ago"
             onBack={onBack} dirty={false} onCancel={onBack} disablePrimary={true}
             primaryAction={() => {}} primaryLabel=""
             rightActions={

@@ -74,7 +74,6 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
             crumb="Funnel stages" title="Funnel stages"
             subtitle="Stage names and default win probability"
             statusDetail={`${stages.length} stages`}
-            updatedBy="Admin" updatedAt="3 weeks ago"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
         >

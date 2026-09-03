@@ -159,7 +159,6 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
             crumb="Industries" title="Industries"
             subtitle="Primary and sub-industry taxonomy"
             statusDetail={`${industries.length} industries · ${totalSubs} sub-types`}
-            updatedBy="Admin" updatedAt="4 months ago"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             rightActions={

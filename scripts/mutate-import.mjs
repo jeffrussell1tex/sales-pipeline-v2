@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -997,7 +997,7 @@ const mutations = [
         "With Require multi-factor authentication on in Clerk, they are held at sign-in until they enrol. This app cannot read that setting — check it in Clerk Dashboard.",
         "Turn on Require multi-factor authentication in Clerk Dashboard to hold them at sign-in until they do."],
     ['admin: the MFA card ignores the live enrolment',
-        'src/Tabs/AdminView.jsx',
+        'src/utils/settingsCards.js',
         "        const card = mfaCardOf(liveCounts.mfa);",
         "        const card = null;"],
     ['history: the PDF row interpolates the event label raw',
@@ -1042,6 +1042,40 @@ const mutations = [
         'src/Tabs/SalesManagerTab.jsx',
         "        [visibleReps, opportunities, activities, tasks, curQ.key]",
         "        [visibleReps, opportunities, activities, tasks]"],
+
+    // ── The Settings catalogue and Workspace Health claim only what they can read (0.81) ──
+    ['cards: a failing webhook no longer needs attention',
+        'src/utils/settingsCards.js',
+        "            attention = f > 0;",
+        "            attention = false;"],
+    ['cards: a green ok with nothing behind it is kept',
+        'src/utils/settingsCards.js',
+        "    if (statusDetail == null && status === 'ok') status = 'none';",
+        "    // (rule removed)"],
+    ['health: MFA is counted before enrolment is known',
+        'src/utils/settingsCards.js',
+        "    if (mfa && typeof mfa.total === 'number' && typeof mfa.enrolled === 'number' && !isHidden('mfa')) {",
+        "    if (!isHidden('mfa')) {"],
+    ['health: a two-day-old backup still passes',
+        'src/utils/settingsCards.js',
+        "typeof liveCounts.backupLastHours === 'number' && liveCounts.backupLastHours <= 48",
+        "typeof liveCounts.backupLastHours === 'number' && liveCounts.backupLastHours >= 0"],
+    ['health: the sentence is the static pitch again',
+        'src/utils/settingsCards.js',
+        "        : `Not passing: ${failing.join(', ')}.`;",
+        "        : 'Set up SSO and enforce MFA to reach 90%+ — standard for multi-rep workspaces.';"],
+    ['admin: the attention list reads the typed catalogue flags again',
+        'src/Tabs/AdminView.jsx',
+        "    const allAttentionItems = scopeItems.filter(i => cardStates[i.id].attention).map(i => ({ ...i, statusDetail: cardStates[i.id].statusDetail }));",
+        "    const allAttentionItems = SETTINGS_ITEMS.filter(i => i.attention);"],
+    ['admin: the health tile pitch is back',
+        'src/Tabs/AdminView.jsx',
+        "{health.sentence}</div>",
+        "Set up SSO and enforce MFA to reach 90%+ — standard for multi-rep workspaces.</div>"],
+    ['chrome: "Last edited" renders with nothing to say',
+        'src/Tabs/settings/shared/CategoryDetailChrome.jsx',
+        "                    {updatedAt && updatedBy && (<>",
+        "                    {(<>"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

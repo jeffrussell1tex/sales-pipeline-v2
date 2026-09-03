@@ -190,7 +190,6 @@ export const LeadConversionDetail = ({ settings, setSettings, onBack }) => {
             crumb="Lead conversion benchmarks" title="Lead conversion benchmarks"
             subtitle="Good / average / poor conversion rate targets by lead source"
             statusDetail="8 sources configured"
-            updatedBy="Admin" updatedAt="today"
             onBack={onBack} dirty={false}
             rightActions={<></>}
         >

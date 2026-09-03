@@ -68,7 +68,6 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
             error={saveError}
             crumb={title} title={title} subtitle={description}
             statusDetail={`${items.length} ${items.length === 1 ? title.toLowerCase().replace(/s$/, '') : title.toLowerCase()}`}
-            updatedBy="Admin" updatedAt="now"
             onBack={onBack} dirty={dirty} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             rightActions={

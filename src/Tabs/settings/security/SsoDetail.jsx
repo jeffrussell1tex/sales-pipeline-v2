@@ -160,7 +160,6 @@ export const SsoDetail = ({ onBack }) => {
                 title="Single sign-on (SSO)"
                 sub="SAML 2.0 / OIDC identity provider"
                 badge={SEC_SSO.configured ? 'Active · 412 logins / 30d' : undefined}
-                updatedAt={SEC_SSO.configured ? 'Last edited by Morgan' : 'Last edited never by —'}
                 actions={[
                     <SecBtn key="save" label={saving ? 'Saving…' : 'Save changes'} primary onClick={handleSave} disabled={!dirty || saving}/>,
                     <SecBtn key="dl" label="Download metadata"/>,

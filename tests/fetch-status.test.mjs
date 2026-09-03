@@ -66,11 +66,13 @@ test('the MFA catalogue card reads live enrolment and carries no invented text',
     assert.ok(row.includes("managedIn:'Clerk'"));
     assert.ok(row.includes("attention:false") && row.includes("isNew:false"));
     const av = read('src/Tabs/AdminView.jsx');
+    const sc = read('src/utils/settingsCards.js');   // the card-state block moved out of V2Card (§0.81)
     assert.ok(av.includes("dbFetch('/.netlify/functions/clerk-mfa-status'),"), 'AdminView fetches enrolment with the other live counts');
-    assert.ok(av.includes('const card = mfaCardOf(liveCounts.mfa);'));
-    assert.ok(av.includes("status = card?.status ?? 'none';"));
-    assert.ok(av.includes('attention = !!card?.attention;'));
-    assert.ok(av.includes('<StatusChip status={status} detail={statusDetail} small/>'), 'the chip reads the computed status');
+    assert.ok(sc.includes('const card = mfaCardOf(liveCounts.mfa);'));
+    assert.ok(sc.includes("status = card?.status ?? 'none';"));
+    assert.ok(sc.includes('attention = !!card?.attention;'));
+    assert.ok(av.includes('const { status, statusDetail, attention } = cardStateOf(item, settings, liveCounts);'), 'the card reads the module');
+    assert.ok(av.includes("<StatusChip status={status} detail={statusDetail || (status === 'none' ? 'No data' : null)} small/>"), 'the chip reads the computed status');
     assert.ok(av.includes('{attention && <span'), 'Needs attention reads the computed flag');
     assert.ok(av.includes('item.managedIn ? `Managed in ${item.managedIn}`'), 'no invented edit history on a Clerk-managed card');
     assert.ok(!av.includes("if (item.id === 'mfa')     statusDetail = null;"));
