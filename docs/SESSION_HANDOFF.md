@@ -31,7 +31,12 @@ their headers is Jeff's call, not done.
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
 
-**Fifth session (3 Sep), on dev only — NOT shipped to prod:** `1e15e45`
+**Fifth session (3 Sep), on dev only — NOT shipped to prod.** Second batch:
+`59212ec` (the Settings catalogue and its panel headers carry no invented
+text; Workspace Health counts only what it can read), state §0.81; docs
+`6bb4d49`. Deploy-verified: accelerep.netlify.app served
+`index-CsUn53YS.js` (the local gate build's hash) 20 seconds after the
+push. Jeff's Admin eyeball of Settings is owed. First batch: `1e15e45`
 (Sales Manager header on the org's fiscal quarter, weeks remaining never
 0) and `327ce8f` (totals quarter-to-date, Administration bar FY-to-date,
 three inert header buttons removed), state §0.80; docs `b673aa2`,

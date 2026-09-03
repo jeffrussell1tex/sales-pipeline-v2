@@ -2922,6 +2922,13 @@ the fallbacks that show a typed count when the settings key is absent
 templates", "3 tiers", "12 holidays") — item 22, with the 16 `isNew`
 badges that never expire.
 
+**Dev landing (`6bb4d49`, the push carrying `59212ec` and its docs):**
+accelerep.netlify.app served `index-CsUn53YS.js` — the local gate build's
+hash — 20 seconds after the push (09:20:26 local, was `index-ByAdikgx.js`),
+2,536,390 bytes; both health sentences present in the bundle, the old "Set
+up SSO and enforce MFA" pitch and "Last edited by Morgan" absent. Jeff's
+Admin eyeball of Settings is owed.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
