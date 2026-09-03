@@ -35,8 +35,8 @@ their headers is Jeff's call, not done.
 production"): `master` fast-forwarded `d513b0e` → `bdb0f3c`,
 salespipelinetracker.com serves `index-CIR6aj2A.js` (20 seconds after the
 push, `pk_live_` inlined, all four new strings present, the coaching-notes
-function 401 unauthenticated); state §0.82 last paragraph. Left for Jeff on
-prod: the Admin "Import N legacy notes" button, once.** Third batch:
+function 401 unauthenticated); state §0.82 last paragraph. Jeff ran the
+Admin "Import N legacy notes" button on prod: done.** Third batch:
 `aef4b4b` (coaching notes addressed to people or a team, their own table),
 state §0.82; docs `38b7d55`. Deploy-verified: accelerep.netlify.app served
 `index-Kg6gw2rZ.js` 41 seconds after the push; the deployed
@@ -341,8 +341,8 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
   your manager" unread, the bell counts it, "Mark read" clears both; the
   "Import 2 legacy notes" button moves the two test notes and disappears.
   **OBSERVED by Jeff (3 Sep): "all cleared and worked as planned."**
-  **SHIPPED TO PROD (`bdb0f3c`, `index-CIR6aj2A.js`).** Left for Jeff on
-  prod: the Admin "Import N legacy notes" button on Sales Manager → Team, once.
+  **SHIPPED TO PROD (`bdb0f3c`, `index-CIR6aj2A.js`); the prod legacy
+  import is DONE (Jeff, 3 Sep).**
 - **Items 18 and 19 are new** (found reading for 16): the Forecast ledger's
   Commit is never stored; "Coach →" is inert; Home's quota card is annual
   ÷ 4; the tab has no export at all.
@@ -667,6 +667,15 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    territories", "5 roles", "4 templates", "3 tiers", "12 holidays"). Each
    needs its panel's settings key read first. The 16 `isNew:true` badges
    never expire (dsp-* are months old). Not started.
+23. **Carried (after the prod import, state §0.82): retire the
+   `coachingNotes` settings key.** Both orgs' blobs are empty now; the key
+   remains in both halves of settings.mjs and the GET default only so the
+   Admin import button can appear for an org that still holds old rows. Once
+   every org has imported (dev and prod have), drop the key from settings.mjs
+   GET/PUT, from useSettings' defaults, the `legacyNotes` / import code in
+   SalesManagerTab, `legacyNotePayload` + `parseCoachingNote` in the util,
+   and the scans that pin them (house-dialogs, coaching-notes); mutation
+   entries follow. Small, mechanical, its own commit.
 
 ## 6. The thread
 

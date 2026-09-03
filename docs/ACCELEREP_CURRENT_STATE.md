@@ -3096,10 +3096,12 @@ object — §18c in the order it prescribes). salespipelinetracker.com served
 constant, the known false positive); "Notes from your manager", "FY
 attainment", the health sentence and "weeks remaining" all present; the
 deployed `coaching-notes` function answers 401 unauthenticated. `master`
-== `bdb0f3c`; dev is ahead by docs only. **Left for Jeff on prod:** the
-Admin "Import N legacy notes" button on Sales Manager → Team moves prod's
-old blob notes into the table; the UKG org's Sales Manager header should
-now read Q4 FY2026.
+== `bdb0f3c`; dev is ahead by docs only. **Done by Jeff on prod (3 Sep):
+the Admin "Import N legacy notes" button** ("import n legacy notes is done")
+— prod's old blob notes are in the `coaching_notes` table and the blob is
+empty; the settings key `coachingNotes` now exists only so that button can
+appear for an org that still holds old rows, and can be retired once no org
+does (carried, handoff item 23).
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
