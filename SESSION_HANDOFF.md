@@ -36,8 +36,9 @@ their headers is Jeff's call, not done.
 state §0.82; docs `38b7d55`. Deploy-verified: accelerep.netlify.app served
 `index-Kg6gw2rZ.js` 41 seconds after the push; the deployed
 `coaching-notes` function answers 401 unauthenticated. **The DDL is in both
-databases already.** Jeff's eyeball as Admin and as Karen is owed, then
-the prod ship. Second batch:
+databases already.** **OBSERVED by Jeff as Admin and as Karen (3 Sep):
+"all cleared and worked as planned"** — dialog, listing, legacy import,
+Home block, bell, Mark read (state §0.82, last paragraph). Second batch:
 `59212ec` (the Settings catalogue and its panel headers carry no invented
 text; Workspace Health counts only what it can read), state §0.81; docs
 `6bb4d49`. Deploy-verified: accelerep.netlify.app served
@@ -334,8 +335,9 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
   and a note to Karen lists with her name; as Karen, Home shows "Notes from
   your manager" unread, the bell counts it, "Mark read" clears both; the
   "Import 2 legacy notes" button moves the two test notes and disappears.
-  **Then prod ship** (Jeff: "and then we will ship to prod") — after the
-  ship, Jeff imports prod's legacy notes as Admin the same way.
+  **OBSERVED by Jeff (3 Sep): "all cleared and worked as planned."** **Then
+  prod ship** (Jeff: "ship to production") — after the ship, Jeff imports
+  prod's legacy notes as Admin the same way.
 - **Items 18 and 19 are new** (found reading for 16): the Forecast ledger's
   Commit is never stored; "Coach →" is inert; Home's quota card is annual
   ÷ 4; the tab has no export at all.
@@ -575,8 +577,8 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
    `CoachingNoteDialog` with a rep/team picker, the Team tab on the table,
    Home's "Notes from your manager", unread notes in the bell, the
    settings Manager carve-out retired. 16 unit + 8 integration tests, 9
-   mutations (218/218). Not browser-checked; Jeff's eyeball owed (prep
-   bullet above). Was: **Product (Jeff, 2 Sep, after observing §0.79): coaching notes should
+   mutations (218/218). **OBSERVED by Jeff as Admin and as Karen on
+   deployed dev (3 Sep): "all cleared and worked as planned."** Was: **Product (Jeff, 2 Sep, after observing §0.79): coaching notes should
    be ADDRESSED — a manager sends a note to a specific person, several
    people, or the whole team.** What exists today, read from code: a
    note is `{ id, rep, text, date, author }` in the org's

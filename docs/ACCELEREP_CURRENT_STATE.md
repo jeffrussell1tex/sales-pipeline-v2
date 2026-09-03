@@ -3074,8 +3074,14 @@ hash — 41 seconds after the push (09:58:33 local, was `index-CsUn53YS.js`),
 2,550,612 bytes; "Notes from your manager", the legacy-import button and the
 bell's "Coaching note from" present in the bundle; an unauthenticated GET of
 `/.netlify/functions/coaching-notes` on the deployed site answered 401 —
-the function is deployed and gated. Jeff's eyeball as Admin and as Karen
-is owed before the prod ship.
+the function is deployed and gated.
+
+**OBSERVED by Jeff on deployed dev (3 Sep): "all cleared and worked as
+planned"** — as Admin, the dialog, a note to Karen listing with her name,
+and the "Import 2 legacy notes" button moving the two test notes and
+disappearing; as Karen, "Notes from your manager" unread, the bell count,
+and "Mark read" clearing both. The dev org's settings blob is now empty of
+coaching notes.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
