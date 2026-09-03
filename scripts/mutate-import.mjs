@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1214,6 +1214,28 @@ const mutations = [
         'netlify/functions/audit-stream.mjs',
         "            await db.delete(auditStreamDestinations)\n                .where(and(eq(auditStreamDestinations.id, id), eq(auditStreamDestinations.orgId, orgId)));",
         "            await db.delete(auditStreamDestinations)\n                .where(eq(auditStreamDestinations.id, id));"],
+
+    // ── The catalogue's counts come from the panels' own keys (0.88) ───────────
+    ['counts: custom fields read a key no panel writes again',
+        'src/utils/settingsCards.js',
+        "    if (item.id === 'custom-fields')  statusDetail = countOrNull(customFieldCount(settings?.customFieldsByObject), 'custom field');",
+        "    if (item.id === 'custom-fields')  statusDetail = countOrNull(len(settings?.customFields), 'custom field');"],
+    ['counts: the calendar reads the nonexistent holidays key again',
+        'src/utils/settingsCards.js',
+        "        statusDetail = countOrNull(len(settings?.customHolidays) + len(settings?.federalHolidays), 'holiday');",
+        "        statusDetail = countOrNull(len(settings?.holidays), 'holiday');"],
+    ['counts: the audit card says "last 30d" over a 500-row cap again',
+        'src/utils/settingsCards.js',
+        "    return n >= 500 ? '500+ recent events' : plural(n, 'recent event');",
+        "    return plural(n, 'event') + ' · last 30d';"],
+    ['counts: a fiscal year that was never set claims a month',
+        'src/utils/settingsCards.js',
+        "    return m >= 1 && m <= 12 ? `FY starts ${MONTHS[m - 1]} 1` : null;",
+        "    return `FY starts ${MONTHS[(m >= 1 && m <= 12 ? m : 10) - 1]} 1`;"],
+    ['counts: an empty KPI list is counted as zero configured instead of the defaults',
+        'src/utils/settingsCards.js',
+        "    if (item.id === 'kpi-settings')    statusDetail = len(settings?.kpiThresholds) ? plural(len(settings.kpiThresholds), 'KPI') : 'App defaults';",
+        "    if (item.id === 'kpi-settings')    statusDetail = plural(len(settings?.kpiThresholds), 'KPI');"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

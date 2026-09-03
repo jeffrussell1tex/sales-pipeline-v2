@@ -21,6 +21,50 @@
 // is not in the denominator.
 import { mfaCardOf } from './fetchStatus.js';
 
+// ── counting helpers (state §0.88) ───────────────────────────────────────────
+// Every count below reads the key the card's OWN panel saves. The catalogue
+// used to carry typed numbers ("12 KPIs configured", "14 industries · 47
+// sub-types", "18 custom fields") that showed whenever the guard's key was
+// absent — and two guards named keys no panel writes (`customFields`,
+// `holidays`), so their typed counts showed always. A count the app cannot
+// read is null, and null renders nothing.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const len = (v) => (Array.isArray(v) ? v.length : 0);
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+const countOrNull = (n, one, many) => (n > 0 ? plural(n, one, many) : null);
+
+/** "FY starts October 1", or null when the org has never set it (consumers assume October). */
+export function fiscalYearDetail(fiscalYearStart) {
+    const m = parseInt(fiscalYearStart, 10);
+    return m >= 1 && m <= 12 ? `FY starts ${MONTHS[m - 1]} 1` : null;
+}
+
+/** Custom fields are stored per object: { accounts:[…], contacts:[…], … }. */
+export function customFieldCount(byObject) {
+    if (!byObject || typeof byObject !== 'object' || Array.isArray(byObject)) return 0;
+    return Object.values(byObject).reduce((s, list) => s + len(list), 0);
+}
+
+/** Industries as the panel saves them: [{ k, subs:[…] }]. */
+export function industriesDetail(industries) {
+    const n = len(industries);
+    if (!n) return null;
+    const subs = industries.reduce((s, i) => s + len(i?.subs), 0);
+    return `${plural(n, 'industry', 'industries')}${subs ? ` · ${plural(subs, 'sub-type')}` : ''}`;
+}
+
+/** Field-level visibility is a matrix keyed by field; a key with any rule counts. */
+export function fieldRuleCount(matrix) {
+    if (!matrix || typeof matrix !== 'object' || Array.isArray(matrix)) return 0;
+    return Object.values(matrix).filter(v => v && (typeof v !== 'object' || Object.keys(v).length > 0)).length;
+}
+
+/** The audit-log GET is capped at 500 rows; at the cap the count is a floor, not a total. */
+export function auditEventsDetail(n) {
+    if (typeof n !== 'number') return null;
+    return n >= 500 ? '500+ recent events' : plural(n, 'recent event');
+}
+
 /** { status, statusDetail, attention } for one catalogue card. */
 export function cardStateOf(item, settings, liveCounts = {}) {
     // ── Live badge enrichment ─────────────────────────────────────────────────
@@ -41,14 +85,8 @@ export function cardStateOf(item, settings, liveCounts = {}) {
         const teamNames = [...new Set((settings.users||[]).filter(u=>u.team).map(u=>u.team))];
         statusDetail = teamNames.length > 0 ? `${teamNames.length} team${teamNames.length!==1?'s':''}` : null;
     }
-    if (item.id === 'territories' && settings?.territories) {
-        const count = (settings.territories||[]).length;
-        statusDetail = count > 0 ? `${count} territor${count!==1?'ies':'y'}` : null;
-    }
-    if (item.id === 'roles' && settings?.roles) {
-        const count = (settings.roles||[]).length;
-        statusDetail = count > 0 ? `${count} role${count!==1?'s':''}` : null;
-    }
+    if (item.id === 'territories') statusDetail = countOrNull(len(settings?.territories), 'territory', 'territories');
+    if (item.id === 'roles')       statusDetail = countOrNull(len(settings?.roles), 'role');
     // Lead visibility — show the policy actually in force, not the static text.
     // An absent key reads as the default (visible), same as the server.
     if (item.id === 'lead-visibility') {
@@ -57,20 +95,34 @@ export function cardStateOf(item, settings, liveCounts = {}) {
             : 'Unassigned visible to reps';
     }
 
+    // ── Company ───────────────────────────────────────────────────────────────
+    if (item.id === 'company-profile') {
+        const name = String(settings?.companyDisplayName || settings?.companyName || '').trim();
+        statusDetail = name || null;
+    }
+    if (item.id === 'fiscal-year') statusDetail = fiscalYearDetail(settings?.fiscalYearStart);
+    if (item.id === 'company-calendar') {
+        // The panel saves customHolidays and reads federalHolidays; there is no `holidays` key.
+        statusDetail = countOrNull(len(settings?.customHolidays) + len(settings?.federalHolidays), 'holiday');
+    }
+
     // ── Sales process ─────────────────────────────────────────────────────────
-    if (item.id === 'pipelines' && settings?.pipelines) {
-        const count  = (settings.pipelines||[]).length;
-        const stages = (settings.pipelines||[]).reduce((a,p) => a + (p.stages?.length||0), 0);
-        statusDetail = `${count} pipeline${count!==1?'s':''}${stages > 0 ? ` · ${stages} stages` : ''}`;
+    if (item.id === 'pipelines') {
+        const count  = len(settings?.pipelines);
+        const stages = (settings?.pipelines || []).reduce((a,p) => a + len(p?.stages), 0);
+        statusDetail = count > 0 ? `${plural(count, 'pipeline')}${stages > 0 ? ` · ${plural(stages, 'stage')}` : ''}` : null;
     }
-    if (item.id === 'funnel-stages' && settings?.funnelStages) {
-        const count = (settings.funnelStages||[]).length;
-        statusDetail = count > 0 ? `${count} stage${count!==1?'s':''}` : null;
-    }
-    if (item.id === 'custom-fields' && settings?.customFields) {
-        const count = (settings.customFields||[]).length;
-        statusDetail = count > 0 ? `${count} custom field${count!==1?'s':''}` : null;
-    }
+    if (item.id === 'funnel-stages')  statusDetail = countOrNull(len(settings?.funnelStages), 'stage');
+    if (item.id === 'custom-fields')  statusDetail = countOrNull(customFieldCount(settings?.customFieldsByObject), 'custom field');
+    // Panels that fall back to app defaults when the key is empty say so — a
+    // count of the defaults would be a number the org never chose.
+    if (item.id === 'kpi-settings')    statusDetail = len(settings?.kpiThresholds) ? plural(len(settings.kpiThresholds), 'KPI') : 'App defaults';
+    if (item.id === 'customer-types')  statusDetail = len(settings?.customerTypeTiers) ? plural(len(settings.customerTypeTiers), 'tier') : 'App defaults';
+    if (item.id === 'account-segments') statusDetail = len(settings?.accountSegmentTiers) ? plural(len(settings.accountSegmentTiers), 'tier') : 'App defaults';
+    if (item.id === 'industries')      statusDetail = industriesDetail(settings?.industries) || 'App defaults';
+    if (item.id === 'lead-conv-benchmarks') statusDetail = countOrNull(len(settings?.leadConvBenchmarks), 'source');
+    if (item.id === 'pain-points')     statusDetail = countOrNull(len(settings?.painPoints), 'pain point');
+    if (item.id === 'buyer-personas')  statusDetail = plural(len(settings?.buyerPersonas), 'persona');
 
     if (item.id === 'competitors') {
         const count = (settings?.competitors || []).length;
@@ -86,22 +138,20 @@ export function cardStateOf(item, settings, liveCounts = {}) {
     }
 
     // ── Quoting ───────────────────────────────────────────────────────────────
-    if (item.id === 'approval-tiers' && settings?.approvalTiers) {
-        const count = (settings.approvalTiers||[]).length;
-        statusDetail = count > 0 ? `${count} tier${count!==1?'s':''}` : null;
-    }
-    if (item.id === 'quote-templates' && settings?.quoteTemplates) {
-        const count = (settings.quoteTemplates||[]).length;
-        statusDetail = count > 0 ? `${count} template${count!==1?'s':''}` : null;
-    }
+    if (item.id === 'approval-tiers')  statusDetail = countOrNull(len(settings?.approvalTiers), 'tier');
+    if (item.id === 'quote-templates') statusDetail = countOrNull(len(settings?.quoteTemplates), 'template');
+    if (item.id === 'price-book')      statusDetail = countOrNull(len(settings?.priceBookProducts), 'product');
 
     // ── Features & AI — count from featureFlags in settings ─────────────────
-    if (item.id === 'features' && settings?.featureFlags) {
-        const flags = settings.featureFlags || {};
+    if (item.id === 'features') {
+        const flags = settings?.featureFlags && typeof settings.featureFlags === 'object' ? settings.featureFlags : {};
         const on  = Object.values(flags).filter(Boolean).length;
         const tot = Object.keys(flags).length;
         statusDetail = tot > 0 ? `${on} of ${tot} on` : null;
     }
+
+    // ── Security — field-level visibility is a saved matrix ──────────────────
+    if (item.id === 'field-visibility') statusDetail = countOrNull(fieldRuleCount(settings?.fieldVisibility), 'rule');
 
     // ── Security — only show what we actually know ────────────────────────────
     if (item.id === 'sso') {
@@ -148,12 +198,9 @@ export function cardStateOf(item, settings, liveCounts = {}) {
         } else statusDetail = null;
     }
 
-    // ── Security — audit log real event count ─────────────────────────────────
-    if (item.id === 'audit-log') {
-        statusDetail = liveCounts.auditEvents !== undefined
-            ? `${liveCounts.auditEvents} event${liveCounts.auditEvents!==1?'s':''} · last 30d`
-            : null;
-    }
+    // ── Security — audit log real event count (the GET is capped at 500 rows,
+    // so this is "recent events", never "last 30 days") ──────────────────────
+    if (item.id === 'audit-log') statusDetail = auditEventsDetail(liveCounts.auditEvents);
 
     // ── Data — backup ─────────────────────────────────────────────────────────
     if (item.id === 'backup') {
@@ -165,14 +212,6 @@ export function cardStateOf(item, settings, liveCounts = {}) {
     // ── Data — import/export: no tracking table, show nothing rather than fake ─
     if (item.id === 'import') statusDetail = null;
     if (item.id === 'export') statusDetail = null;
-
-    // ── Personal cards — no real per-user data available ─────────────────────
-
-    // ── Company calendar ─────────────────────────────────────────────────────
-    if (item.id === 'company-calendar' && settings?.holidays) {
-        const count = (settings.holidays||[]).length;
-        statusDetail = count > 0 ? `${count} holiday${count!==1?'s':''} · ${new Date().getFullYear()}` : null;
-    }
 
     // ── Connected apps — no real connection tracking ──────────────────────────
     if (item.id === 'apps') { statusDetail = null; status = 'none'; attention = false; }

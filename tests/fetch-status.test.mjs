@@ -64,7 +64,8 @@ test('the MFA catalogue card reads live enrolment and carries no invented text',
     assert.ok(row, 'the mfa row');
     assert.ok(!row.includes('not all enrolled') && !row.includes('3 months ago') && !row.includes('Enforce MFA'), 'hand-typed status text');
     assert.ok(row.includes("managedIn:'Clerk'"));
-    assert.ok(row.includes("attention:false") && row.includes("isNew:false"));
+    // isNew left the catalogue altogether in §0.88 (a badge that never expired said nothing).
+    assert.ok(row.includes("attention:false") && !/isNew/.test(row));
     const av = read('src/Tabs/AdminView.jsx');
     const sc = read('src/utils/settingsCards.js');   // the card-state block moved out of V2Card (§0.81)
     assert.ok(av.includes("dbFetch('/.netlify/functions/clerk-mfa-status'),"), 'AdminView fetches enrolment with the other live counts');

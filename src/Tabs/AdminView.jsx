@@ -4,7 +4,7 @@ import { dbFetch } from '../utils/storage';
 import DuplicateScanView from './DuplicateScanView';
 import ContactDuplicateScanView from './ContactDuplicateScanView';
 import { T, eb } from './settings/shared/tokens.js';
-import { StatusChip, NewBadge, SettingIcon, Avatar, Ring, CategoryChip } from './settings/shared/ui.jsx';
+import { StatusChip, SettingIcon, Avatar, Ring, CategoryChip } from './settings/shared/ui.jsx';
 import { CompanyProfileDetail } from './settings/company/CompanyProfileDetail.jsx';
 import { FiscalYearDetail } from './settings/company/FiscalYearDetail.jsx';
 import { CompanyCalendarDetail } from './settings/company/CompanyCalendarDetail.jsx';
@@ -65,7 +65,6 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
                 <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2, flexWrap:'wrap' }}>
                         <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{item.name}</div>
-                        {item.isNew && <NewBadge/>}
                         {item.link && <span style={{ fontSize:11, color:T.info }}>↗</span>}
                     </div>
                     <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.45, fontFamily:T.sans }}>{item.desc}</div>

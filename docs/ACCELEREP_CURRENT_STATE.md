@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (sixth session)
-**Verified at:** five gates green on 147 files · **527 tests** · **244/244 mutations, printed green baseline** · **94/94 integration** · build guard OK 2,425 kB `index-BJ1VcE9y.js` · **prod `ad76a38` serving `index-BYLyFXw4.js` (eighth ship, 3 Sep)** · `master` == `dev` at the ship; dev ahead by the ship-record docs commit only. The app database and the test database both hold `audit_stream_destinations`.
-**Batch:** **audit streaming, built for real (§0.87, item 21's fourth panel — Jeff's "build")** — every audit row is POSTed, HMAC-SHA256-signed, to each of the org's destinations as it is written (four write sites), from a new org-scoped `audit_stream_destinations` table (DDL in both databases first), through an Admin-only `audit-stream` endpoint that shows a secret once, sends a real test event, pauses / resumes / rotates / removes, and records every attempt; a dead endpoint pauses itself after ten failures; the panel keeps what was real and drops the alerts modal, the typed badge and retention claims, the inert menus and the IP column. Proven against a local receiver in the integration suite. **OBSERVED by Jeff on deployed dev ("Looks correct"); SHIPPED to prod as the eighth ship (`ad76a38`, `index-BYLyFXw4.js`) with §0.84–§0.86.**
+**Verified at:** five gates green on 147 files · **535 tests** · **249/249 mutations, printed green baseline** · **94/94 integration** · build guard OK 2,425 kB `index-WThsNanc.js` · **prod `ad76a38` serving `index-BYLyFXw4.js` (eighth ship, 3 Sep)** · dev ahead of `master` by §0.88 and its docs; not yet shipped. The app database and the test database both hold `audit_stream_destinations`.
+**Batch:** **the Settings catalogue's counts come from the panels' own keys; the NEW badges retire (§0.88, handoff item 22)** — 30 hand-typed card details ("12 KPIs configured", "14 industries · 47 sub-types", "18 custom fields", "Q1 starts Feb 1", "Complete"…) are gone from the catalogue; every count is computed from the key its own panel saves, or is null, or says "App defaults" where the panel supplies one; two guards had named keys no panel writes, so their numbers had shown for every org always; the audit card no longer says "last 30 days" over a 500-row cap; all 16 never-expiring NEW badges and two dead `moved` flags are gone. Carried as item 24: Connected Apps and the Industries defaults are mockups in depth. Dev only; not yet shipped; not browser-checked — Jeff eyeballs as Admin.
+**Prior batch:** **audit streaming, built for real (§0.87, item 21's fourth panel — Jeff's "build")** — every audit row is POSTed, HMAC-SHA256-signed, to each of the org's destinations as it is written (four write sites), from a new org-scoped `audit_stream_destinations` table (DDL in both databases first), through an Admin-only `audit-stream` endpoint that shows a secret once, sends a real test event, pauses / resumes / rotates / removes, and records every attempt; a dead endpoint pauses itself after ten failures; the panel keeps what was real and drops the alerts modal, the typed badge and retention claims, the inert menus and the IP column. Proven against a local receiver in the integration suite. **OBSERVED by Jeff on deployed dev ("Looks correct"); SHIPPED to prod as the eighth ship (`ad76a38`, `index-BYLyFXw4.js`) with §0.84–§0.86.**
 **Prior batch:** **three Settings panels reduced to what is real — SSO, Session & password, Import (§0.86, handoff item 21, Jeff's call per panel)** — SSO was a constant with a fake domain and a frozen wizard saving a key sign-in never read; Session & password was a policy form whose Save PUT a key in NEITHER half of settings.mjs (the toast said saved; nothing was) with nothing enforcing any of it; Import was a fake history and a wizard whose "Run import" posted no rows and echoed the preview back as a success. Now: two Managed-in-Clerk panels (what Clerk does, what the app does, what it does not do), an Import launcher for the real CSV and lead importers, `import.mjs` deleted, `ssoConfig` and `importPresets` retired from both halves. Audit streaming is Jeff's "build" and is §0.87. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("Looks correct").**
 **Prior batch:** **the Performance tab's single-rep view lists that rep's won and lost deals, with totals (§0.85, handoff item 20)** — with the Rep slicer set the leaderboard was one row and the Rep metrics table hid itself below two reps, so a manager saw an attainment bar and no deals behind it; now two panels below the leaderboard, from the SAME period-filtered sets the leaderboard sums (one number, itemised): won deals with close day, cycle and ARR and a total, lost deals with the stage each left and why and a total, the win rate the two imply, all pure in `repDeals.js`. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("confirmed on karen under performance").**
 **Prior batch:** **the Forecast ledger's Commit and Best case are STORED, per fiscal quarter; the Sales Manager tab's five inert buttons reach real destinations; the tab has an export; Home's quota card is this quarter's (§0.84, handoff items 18 + 19)** — a typed Commit went through a users PUT whose `sanitize()` never carried the key (0 on refresh, §0.80), and one number per rep could never reset when the quarter turned; now `profile.forecastCalls` keyed by quarter through one pure validator on both sides (`forecastCall.js`), Best case editable for the first time with an untyped one flagged "est.", "Coach →" / "Coach" / "Open coaching" open the note dialog with the rep pre-addressed, "Pipeline" / "Their pipeline" open the Pipeline tab viewing as the rep, "Schedule 1:1" opens a new task in the rail, the ledger exports CSV, and Home's card reads the quarter's own quota, wins by close day and commit by the org's stages under the quarter's real name. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("verified changes. they are working").**
@@ -3713,6 +3714,85 @@ secret", "Managed in Clerk", "Nothing is imported from this page itself.",
 `audit_stream_destinations` table was already in the shared app database
 (§18c). `master` == `dev` == `ad76a38` at the ship; dev is ahead only by
 this ship-record docs commit.
+
+### 0.88 The Settings catalogue's counts come from the panels' own keys; the NEW badges retire (3 Sep, sixth session)
+
+**Jeff: "lets do 22 and then call it a day."** Item 22 was the last of the
+§0.81 read: the hand-typed card counts and the never-expiring NEW badges.
+
+**What was read.** `catalogue.js` in full (30 rows with a typed
+`statusDetail`, 16 `isNew` flags, 2 `moved` flags nothing renders),
+`settingsCards.js`'s `cardStateOf` (the count block that lived in the card
+component until §0.81), AdminView's `liveCounts` fetch and its badge line,
+and — for each typed count — the settings key the card's OWN panel saves:
+KPI thresholds → `kpiThresholds` (an array; the panel falls back to
+`DEFAULT_KPI_THRESHOLDS` when empty), Lead conversion → `leadConvBenchmarks`
+(array), Pain points → `painPoints`, Customer types → `customerTypeTiers`
+(defaults when empty), Account segments → `accountSegmentTiers`, Industries
+→ `industries` (`[{ k, subs }]`, defaults when empty), Custom fields →
+`customFieldsByObject` (an object of arrays), Buyer personas →
+`buyerPersonas`, Company calendar → `customHolidays` + `federalHolidays`,
+Fiscal year → `fiscalYearStart`, Company profile → `companyName` /
+`companyDisplayName`, Field-level visibility → `fieldVisibility` (a matrix),
+Price book → `priceBookProducts`, Features → `featureFlags`. **Two guards
+named keys no panel writes** — `settings?.customFields` (the panel saves
+`customFieldsByObject`) and `settings?.holidays` (the panel saves
+`customHolidays`) — so "18 custom fields" and "12 holidays · 2026" had
+shown for every org, always. Every other guard fell through to the typed
+number whenever its key was absent ("12 KPIs configured", "14 industries ·
+47 sub-types", "8 sources configured", "5 tiers", "15 products · 3
+bundles", "6 rules", "8 territories", "5 roles", "3 tiers", "4 templates",
+"Q1 starts Feb 1", "Complete", "users · pending invites", "teams ·
+managers", "Last 30 days · 2,418 events", "Daily · last: 03:14 UTC", "14 of
+18 on · AI enabled"). The audit card's live label said "· last 30d" over a
+GET capped at 500 rows.
+
+**What changed.** `settingsCards.js`: five small pure helpers
+(`fiscalYearDetail`, `customFieldCount`, `industriesDetail`,
+`fieldRuleCount`, `auditEventsDetail`) and every count rule rewritten to
+read the panel's key with no typed fallback — a count the app cannot read
+is null, and null renders nothing. Panels that fall back to app defaults
+when their key is empty (KPI thresholds, Customer types, Account segments,
+Industries) say **"App defaults"** rather than counting a list the org never
+chose. Fiscal year reads "FY starts October 1" from the key, or nothing
+when it was never set (every consumer assumes October, but the org did not
+choose it — the card must not say it did). The audit card reads "N recent
+events", and "500+ recent events" at the cap — a floor, never "last 30
+days". `catalogue.js`: all 30 typed details are `null` (the three
+deterministic labels — "Admin-defined", "Scan on demand", "Fit +
+Engagement" — stay), all 16 `isNew` and both `moved` flags are gone.
+`AdminView.jsx`: the `NewBadge` import and render are gone. (`NewBadge`
+itself stays exported from `settings/shared/ui.jsx`, unused; a badge that
+means something needs a date it expires on.)
+
+**What a user sees change:** Settings cards show a count only when the org
+has set the thing counted, or "App defaults" where the app supplies one;
+the fiscal-year card names the month the org chose; the custom-fields and
+calendar cards stop asserting 18 and 12 for everyone; no card wears NEW.
+
+**Tests.** `tests/settings-counts.test.mjs` (9): the REGRESSION (with an
+empty settings object no card claims a number), the two wrong-key guards
+now reading the panels' keys, every rule against its key and against
+absence, the audit cap, the catalogue scan (no typed digit, no `isNew`, no
+`moved`, only the three labels), no badge in AdminView.
+`fetch-status.test.mjs`'s §0.65 assertion that the MFA row carries
+`isNew:false` became "no `isNew` at all". Five mutants (custom fields on
+the wrong key, the calendar on the wrong key, "last 30d" over the cap, an
+unset fiscal year claiming October, an empty KPI list counted as 0
+instead of the defaults). Gates green on 147 files, **535/535**,
+**249/249 mutations, printed green baseline** (run alone), **94/94
+integration** (no function changed), build guard OK (2,425 kB,
+`index-WThsNanc.js`), `dist/` cleared. **Not browser-checked:** Admin-only
+cards, no pane session; Jeff eyeballs Settings → All on deployed dev.
+
+**Found reading, not fixed — carried (item 24):** `ConnectedAppsDetail.jsx`
+is the §0.86 class in depth — an `INT_APPS` list with six apps marked
+`connected:true` and typed traffic ("1,247 msgs/day", "Token refresh in
+6d"), a "Morgan Reyes · morgan@accelerep.com" account row and an Authorize
+button that closes the modal — while its Slack half (`slackConfig`, read by
+`send-slack.mjs`) is real; and `IndustriesDetail.jsx`'s default industry
+list carries typed account counts per industry (`n:118`, `n:74`…). Both
+are Jeff's calls: reduce or build.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
