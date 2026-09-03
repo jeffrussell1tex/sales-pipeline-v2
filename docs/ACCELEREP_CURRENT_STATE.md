@@ -1,7 +1,7 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (sixth session)
-**Verified at:** five gates green on 147 files · **527 tests** · **244/244 mutations, printed green baseline** · **94/94 integration** · build guard OK 2,425 kB `index-BJ1VcE9y.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · dev ahead of `master` by four batches (§0.84 and §0.85 observed, §0.86, §0.87) and their docs; not yet shipped. The app database and the test database both hold `audit_stream_destinations`.
-**Batch:** **audit streaming, built for real (§0.87, item 21's fourth panel — Jeff's "build")** — every audit row is POSTed, HMAC-SHA256-signed, to each of the org's destinations as it is written (four write sites), from a new org-scoped `audit_stream_destinations` table (DDL in both databases first), through an Admin-only `audit-stream` endpoint that shows a secret once, sends a real test event, pauses / resumes / rotates / removes, and records every attempt; a dead endpoint pauses itself after ten failures; the panel keeps what was real and drops the alerts modal, the typed badge and retention claims, the inert menus and the IP column. Proven against a local receiver in the integration suite. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("Looks correct").**
+**Verified at:** five gates green on 147 files · **527 tests** · **244/244 mutations, printed green baseline** · **94/94 integration** · build guard OK 2,425 kB `index-BJ1VcE9y.js` · **prod `ad76a38` serving `index-BYLyFXw4.js` (eighth ship, 3 Sep)** · `master` == `dev` at the ship; dev ahead by the ship-record docs commit only. The app database and the test database both hold `audit_stream_destinations`.
+**Batch:** **audit streaming, built for real (§0.87, item 21's fourth panel — Jeff's "build")** — every audit row is POSTed, HMAC-SHA256-signed, to each of the org's destinations as it is written (four write sites), from a new org-scoped `audit_stream_destinations` table (DDL in both databases first), through an Admin-only `audit-stream` endpoint that shows a secret once, sends a real test event, pauses / resumes / rotates / removes, and records every attempt; a dead endpoint pauses itself after ten failures; the panel keeps what was real and drops the alerts modal, the typed badge and retention claims, the inert menus and the IP column. Proven against a local receiver in the integration suite. **OBSERVED by Jeff on deployed dev ("Looks correct"); SHIPPED to prod as the eighth ship (`ad76a38`, `index-BYLyFXw4.js`) with §0.84–§0.86.**
 **Prior batch:** **three Settings panels reduced to what is real — SSO, Session & password, Import (§0.86, handoff item 21, Jeff's call per panel)** — SSO was a constant with a fake domain and a frozen wizard saving a key sign-in never read; Session & password was a policy form whose Save PUT a key in NEITHER half of settings.mjs (the toast said saved; nothing was) with nothing enforcing any of it; Import was a fake history and a wizard whose "Run import" posted no rows and echoed the preview back as a success. Now: two Managed-in-Clerk panels (what Clerk does, what the app does, what it does not do), an Import launcher for the real CSV and lead importers, `import.mjs` deleted, `ssoConfig` and `importPresets` retired from both halves. Audit streaming is Jeff's "build" and is §0.87. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("Looks correct").**
 **Prior batch:** **the Performance tab's single-rep view lists that rep's won and lost deals, with totals (§0.85, handoff item 20)** — with the Rep slicer set the leaderboard was one row and the Rep metrics table hid itself below two reps, so a manager saw an attainment bar and no deals behind it; now two panels below the leaderboard, from the SAME period-filtered sets the leaderboard sums (one number, itemised): won deals with close day, cycle and ARR and a total, lost deals with the stage each left and why and a total, the win rate the two imply, all pure in `repDeals.js`. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("confirmed on karen under performance").**
 **Prior batch:** **the Forecast ledger's Commit and Best case are STORED, per fiscal quarter; the Sales Manager tab's five inert buttons reach real destinations; the tab has an export; Home's quota card is this quarter's (§0.84, handoff items 18 + 19)** — a typed Commit went through a users PUT whose `sanitize()` never carried the key (0 on refresh, §0.80), and one number per rep could never reset when the quarter turned; now `profile.forecastCalls` keyed by quarter through one pure validator on both sides (`forecastCall.js`), Best case editable for the first time with an untyped one flagged "est.", "Coach →" / "Coach" / "Open coaching" open the note dialog with the rep pre-addressed, "Pipeline" / "Their pipeline" open the Pipeline tab viewing as the rep, "Schedule 1:1" opens a new task in the rail, the ledger exports CSV, and Home's card reads the quarter's own quota, wins by close day and commit by the org's stages under the quarter's real name. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("verified changes. they are working").**
@@ -3697,7 +3697,22 @@ bundle, "Streaming to Splunk" and "Manage alerts" absent; the deployed
 **OBSERVED by Jeff on deployed dev (3 Sep): "Looks correct."** His words
 cover what he saw on the panel; whether he walked a destination through
 (secret, test event, a delivered row) he did not say, and this record does
-not claim it. Unshipped.
+not claim it.
+
+**PROD SHIP (Jeff: "ship prod") — the eighth ship.** Ancestor check
+(`eec3948` is an ancestor of `ad76a38`), then `git push origin dev:master`:
+`master` fast-forwarded `eec3948` → `ad76a38` (17 commits: §0.84, §0.85,
+§0.86, the §0.87 design and build, and their docs). salespipelinetracker.com
+served `index-BYLyFXw4.js` at 13:48:22 local, 53 seconds after the push (was
+`index-Bsn2ZlRv.js`), 2,482,786 bytes — the same byte size as dev's
+`index-BJ1VcE9y.js` — `pk_live_` inlined; "Send test event", "Rotate
+secret", "Managed in Clerk", "Nothing is imported from this page itself.",
+"Won deals —" and "Forecast ledger" present in the served bundle,
+"Streaming to Splunk" and "acme-corp.com" absent; the deployed
+`audit-stream` and `users` functions answer 401 unauthenticated. The
+`audit_stream_destinations` table was already in the shared app database
+(§18c). `master` == `dev` == `ad76a38` at the ship; dev is ahead only by
+this ship-record docs commit.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

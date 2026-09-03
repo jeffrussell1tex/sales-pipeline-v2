@@ -13,7 +13,8 @@ SSO, Session & password, Import — and the fourth, audit streaming, BUILT
 for real (its own table, signed delivery at every audit write, an Admin
 endpoint, a local receiver proving it in the integration suite); both
 batches on dev, deploy-verified, OBSERVED by Jeff — "Looks correct";
-nothing shipped to prod), FINAL.** Repo root. Read this first, then verify
+then ALL of it SHIPPED to prod as the eighth ship — `master` `eec3948` →
+`ad76a38`, salespipelinetracker.com serving `index-BYLyFXw4.js`), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
@@ -34,6 +35,15 @@ their headers is Jeff's call, not done.
 ---
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
+
+**PROD SHIPPED (Jeff: "ship prod") — the eighth ship, state §0.87 last
+paragraph.** Ancestor check, then `git push origin dev:master`: `master`
+`eec3948` → `ad76a38` (17 commits — items 18, 19, 20 and 21 with their
+docs). salespipelinetracker.com served `index-BYLyFXw4.js` 53 seconds after
+the push (13:48:22 local), 2,482,786 bytes (dev's size), `pk_live_` inlined,
+every new string present and the fakes absent; `audit-stream` and `users`
+answer 401 unauthenticated. `master` == `dev` == `ad76a38` at the ship; dev
+is ahead only by this ship-record docs commit. **Nothing is unshipped.**
 
 **Sixth session, fourth batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff ("Looks correct"), NOT shipped:** `2e7a219` (audit streaming, state §0.87 — the
@@ -402,10 +412,9 @@ no `netlify dev` was started and the pane holds no session (a sign-in
 needs Karen's second factor, which Claude cannot enter); the Sales Manager
 tab is Admin/Manager-only in any case · dev deploys observed serving
 `index-C9mGhBOf.js` (§0.84), `index-DmjjOHZE.js` (§0.85),
-`index-Wjd4yjDA.js` (§0.86) and `index-BJ1VcE9y.js` (§0.87) · **`master`
-== `eec3948`, prod serving `index-Bsn2ZlRv.js` (seventh ship)**; dev is
-ahead of master by `9782e97`, `6db6ea8`, `6ec3c05`, `1ac3d64`, `2e7a219`
-and their docs commits · the app database and the test database both hold
+`index-Wjd4yjDA.js` (§0.86) and `index-BJ1VcE9y.js` (§0.87) · **`master` ==
+`ad76a38`, prod serving `index-BYLyFXw4.js` (eighth ship, §1)**; dev is
+ahead of master by this ship-record docs commit only · the app database and the test database both hold
 `audit_stream_destinations` + its index (read back by the apply script) · no schema change (the calls live in the
 `users.profile` jsonb) · the working tree was clean after the harness run
 (`_ownership.mjs` showed modified DURING the run — the harness's first
@@ -420,8 +429,10 @@ mutation in flight — and was restored; not a finding).
   "verified changes. they are working") and UNSHIPPED; item 20 is OBSERVED
   (Jeff: "confirmed on karen under performance") and UNSHIPPED; item 21's
   three reductions (`6ec3c05`) and audit streaming (`2e7a219`) are
-  OBSERVED (Jeff: "Looks correct") and UNSHIPPED** — that is the state,
-  not a finding. **Everything on dev has been seen; nothing is shipped.**
+  OBSERVED (Jeff: "Looks correct")** — and ALL of it is SHIPPED (the
+  eighth ship, `ad76a38`). Expect `git log --oneline origin/master..dev` to
+  list only the ship-record docs commit; anything else is unshipped code
+  and a finding.
 - **DONE — Jeff: "Looks correct."** Was the walkthrough, kept as the
   record of what a full check covers (his words do not say he walked a
   destination through to a delivered row): Settings →
@@ -484,9 +495,9 @@ mutation in flight — and was restored; not a finding).
   wins, the gold bar = commit deals forecast to close this quarter.
   Escape in a call cell keeps the old value (a ref flag skips the blur's
   save) — worth one press. The Enter key in the cell: not observed.
-- **Then ship to prod when Jeff says so** — `git push origin dev:master`
-  after the ancestor check, then poll salespipelinetracker.com for the
-  bundle hash; `pk_live_` must be inlined there.
+- **DONE — shipped (Jeff: "ship prod"), §1.** Was: ship to prod when Jeff
+  says so — `git push origin dev:master` after the ancestor check, then
+  poll salespipelinetracker.com for the bundle hash; `pk_live_` inlined.
 - **Then items 21 and 22** — Jeff's calls before code (the four mockup
   Security / Data panels; the hand-typed card counts and the NEW badges).
 - **Carried from this session's read (state §0.84, last paragraph):**
@@ -986,4 +997,6 @@ its own table rather than the settings blob, delivery at the write with a
 signature and a timeout, a destination that pauses itself — and then built
 to that design, with a local receiver in the integration suite verifying
 the signatures the customer would verify. Then Jeff looked: "Looks
-correct." Five items on dev, all five seen; the ship is his call.
+correct." Five items on dev, all five seen; then "ship prod", and the
+eighth ship went as one fast-forward, verified by bundle hash. Observed,
+then written, then committed.
