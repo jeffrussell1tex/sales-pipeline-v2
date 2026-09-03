@@ -7,15 +7,17 @@ real destinations, the ledger's Export CSV, and Home's quota card on this
 quarter's own figures — item 19; OBSERVED by Jeff on deployed dev —
 "verified changes. they are working"; then the Performance tab's single-rep
 view listing that rep's won and lost deals with totals — item 20, OBSERVED
-by Jeff on deployed dev — "confirmed on karen under performance"; nothing
-shipped to prod), FINAL.** Repo root. Read this first, then verify
+by Jeff on deployed dev — "confirmed on karen under performance"; then
+item 21 decided per panel by Jeff and three of the four panels reduced to
+what is real — SSO, Session & password, Import — on dev, deploy-verified,
+NOT yet observed; the fourth, audit streaming, is Jeff's "build" and is
+NOT started; nothing shipped to prod), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.85` with a paragraph beginning **"Jeff: "lets do 20.""** and a
-paragraph beginning **"OBSERVED by Jeff on deployed dev (3 Sep), Karen
-sliced"**, and does
+`### 0.86` with a paragraph beginning **"Jeff: "lets do 21.""** and a
+paragraph beginning **"Dev landing (`6ec3c05`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
 beginning **"Never `window.confirm`"** (the guide did not change this
 session either)? If not, you are looking at a copy that predates this handoff.
@@ -29,6 +31,27 @@ their headers is Jeff's call, not done.
 ---
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
+
+**Sixth session, third batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
+observed, NOT shipped:** `6ec3c05` (item 21, three of four panels, state
+§0.86) and its landing docs commit `49783ef`. accelerep.netlify.app served
+`index-Wjd4yjDA.js` — the local gate build's hash — 42 seconds after the
+push (13:03:13 local), 2,500,619 bytes, `pk_test_` inlined, "Managed in
+Clerk" / "Sessions, passwords and lockout are set in Clerk" / "Nothing is
+imported from this page itself." in the served bundle, "acme-corp.com" and
+"Policy saved" absent, `/.netlify/functions/import` falling through to the
+SPA catch-all (the function is deleted). What it is: **Jeff decided item
+21 per panel** — SSO reduce, Session reduce, Import launcher, **Audit
+streaming BUILD** — and this batch is the three reductions: SSO and
+Session & password are Managed-in-Clerk panels (what Clerk does, what the
+app does, what it does not do — no IP allowlist, no re-auth), Import is a
+launcher for the real CSV and lead importers, `import.mjs` (its only
+caller was the fake wizard) is deleted, `ssoConfig` and `importPresets`
+are out of both halves of settings.mjs. **Found reading: SessionDetail's
+Save PUT `sessionPolicy`, a key in NEITHER half of settings.mjs — the
+previous handoff's "the policy it saves is real" was wrong; it toasted
+"Policy saved." and saved nothing.** **Jeff eyeballs on deployed dev as
+Admin** (§5). `master` stays at `eec3948`.
 
 **Sixth session, second batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff ("confirmed on karen under performance"), NOT shipped:** `6db6ea8` (item 20, state §0.85) and its landing
@@ -336,21 +359,23 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 3 Sep, sixth session)
 
-Five gates green on 147 files · **505/505 unit** (17 new in
-`forecast-call.test.mjs`, 6 in `rep-deals.test.mjs`; no existing suite
-changed) · **229/229 mutations, printed green baseline** (15 added this
-session, none retired, none stale; run alone, after the unit and
-integration runs, twice) · build **2,499 kB JS**, `index-DmjjOHZE.js`,
-guard OK, `dist/` cleared · **87/87
+Five gates green on 147 files · **511/511 unit** (17 new in
+`forecast-call.test.mjs`, 6 in `rep-deals.test.mjs`, 6 in
+`honest-panels.test.mjs`; no existing suite changed) · **234/234
+mutations, printed green baseline** (20 added this session, none retired,
+none stale; run alone, after the unit and integration runs, three times) ·
+build **2,442 kB JS**, `index-Wjd4yjDA.js` (57 kB smaller than §0.85 —
+three mockups and a function gone), guard OK, `dist/` cleared · **87/87
 integration** (no function's behaviour under test changed; `users.mjs`
 still has no integration suite — the forecastCalls round trip is pinned by
 source scans and mutants only) · **no pane browser pass this session** —
 no `netlify dev` was started and the pane holds no session (a sign-in
 needs Karen's second factor, which Claude cannot enter); the Sales Manager
 tab is Admin/Manager-only in any case · dev deploys observed serving
-`index-C9mGhBOf.js` (§0.84) and `index-DmjjOHZE.js` (§0.85) · **`master`
-== `eec3948`, prod serving `index-Bsn2ZlRv.js` (seventh ship)**; dev is
-ahead of master by `9782e97`, `6db6ea8` and their docs commits · no schema change (the calls live in the
+`index-C9mGhBOf.js` (§0.84), `index-DmjjOHZE.js` (§0.85) and
+`index-Wjd4yjDA.js` (§0.86) · **`master` == `eec3948`, prod serving
+`index-Bsn2ZlRv.js` (seventh ship)**; dev is ahead of master by
+`9782e97`, `6db6ea8`, `6ec3c05` and their docs commits · no schema change (the calls live in the
 `users.profile` jsonb) · the working tree was clean after the harness run
 (`_ownership.mjs` showed modified DURING the run — the harness's first
 mutation in flight — and was restored; not a finding).
@@ -362,8 +387,33 @@ mutation in flight — and was restored; not a finding).
   expect `9782e97`, `6db6ea8` and the docs commits around them, plus
   `6af58fb` (the seventh ship's record). **Items 18 + 19 are OBSERVED (Jeff:
   "verified changes. they are working") and UNSHIPPED; item 20 is OBSERVED
-  (Jeff: "confirmed on karen under performance") and UNSHIPPED** — that is
-  the state, not a finding. **Nothing on dev is unobserved.**
+  (Jeff: "confirmed on karen under performance") and UNSHIPPED; item 21's
+  three reductions (`6ec3c05`) are UNOBSERVED and UNSHIPPED** — that is
+  the state, not a finding.
+- **Jeff eyeballs the three panels on deployed dev, as Admin:** Settings →
+  Security → Single sign-on (a Managed in Clerk chip, an info callout with
+  two links, one card, no form); → Session & password (the chip, the
+  callout, "What Accelerep adds on top", "Not available in Accelerep");
+  Settings → Data → Import → each of the four cards opens the real
+  importer over the Settings page (Leads only while leads are on). The
+  Security list's Session card reads "Session & password · Managed in
+  Clerk".
+- **Then the fourth panel — audit streaming, Jeff's "build" (state §0.87,
+  not started).** Design before code, in the state doc first: every audit
+  write (`writeAudit` in _lib.mjs and users.mjs's own `writeAudit`, the
+  audit-log POST, users-sync) is POSTed to each active destination in
+  `settings.extra.streamingDestinations` with an HMAC-SHA256 signature
+  (the webhooks.mjs `signPayload` shape, `X-Accelerep-Signature`), a
+  per-destination secret shown once, `lastDelivered` / `status` written
+  from real responses, a "Send test event" that really sends; the alerts
+  modal, "Export all 12,847 events", "Schedule recurring export", the
+  "retention 13 months" claims and the always-empty IP column are
+  inventions that option did not cover — remove them in the same batch and
+  say so. Org-scoped from the first line: a destination belongs to the org
+  whose settings row holds it and receives that org's rows only.
+- **Then item 22** — Jeff's call before code (the hand-typed card counts
+  and the 14 remaining NEW badges; the audit card's "Last 30 days · 2,418
+  events" is typed too).
 - **DONE — Jeff confirmed item 20 on deployed dev with Karen sliced.** Was
   the eyeball list, kept as the record of what "confirmed" covers: Reports → Performance,
   Grouped by → Rep, pick Karen: below the one-row leaderboard, "Won deals —
@@ -756,7 +806,15 @@ mutation in flight — and was restored; not a finding).
    and period window, and the History tab (§0.77) lists deals on real
    columns — the list wants the same row shape and the period filter the
    report already carries.
-21. **Carried (found reading for item 15, state §0.81 last paragraph):
+21. **THREE OF FOUR DONE — state §0.86, commit `6ec3c05` (3 Sep, sixth
+   session; Jeff's call per panel: SSO reduce, Session reduce, Import
+   launcher, Audit streaming BUILD).** SSO and Session & password are
+   Managed-in-Clerk panels; Import launches the real importers;
+   `import.mjs` deleted; `ssoConfig` + `importPresets` retired from both
+   halves. Found: SessionDetail's `sessionPolicy` was in neither half —
+   "Policy saved." saved nothing. 6 tests, 5 mutants. Unobserved;
+   unshipped. **The fourth — audit streaming — is NOT started (§5).** Was:
+   **Carried (found reading for item 15, state §0.81 last paragraph):
    four Settings panels are design mockups in depth.** SsoDetail's
    `SEC_SSO` (Okta URLs, "Active · 412 logins / 30d", verified domain
    `acme-corp.com`; the panel saves `settings.ssoConfig`, which nothing
@@ -861,5 +919,15 @@ was for the deals behind the bar, and the only honest source for them was
 the sets the bar already summed, so the list's total is the bar's number
 and a mutant that points it elsewhere is caught. Pure module, six tests,
 five mutants, gated, deployed, hash-checked; then Jeff sliced Karen under
-Performance and confirmed it. Three items on dev, all three seen; the ship
-is his call.
+Performance and confirmed it.
+
+Then "lets do 21" — the item the handoff had marked as his call, so the
+four panels were read end to end before a word was written and the choices
+went to him with what each really did. One of them was worse than
+recorded: the Session panel's Save had been posting a key the server never
+knew, and a toast had been calling that saved. He chose to reduce three and
+build the fourth. The three are done the MfaDetail way — say where the thing
+lives, say what the app does, say what it does not — and a function nothing
+called any more went with them. The fourth, audit streaming, is a real
+feature with a real design in front of it and is written down in §5 as not
+started. Four items on dev, three seen; the ship is his call.
