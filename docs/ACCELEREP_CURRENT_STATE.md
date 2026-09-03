@@ -3372,6 +3372,12 @@ mutations, printed green baseline** (run alone), **87/87 integration**
 session; Jeff eyeballs on deployed dev as Admin (Reports → Performance →
 Grouped by Rep).
 
+**Dev landing (`6db6ea8`, pushed 12:08 local):** accelerep.netlify.app served
+`index-DmjjOHZE.js` — the local gate build's hash — at 12:08:54 local (was
+`index-C9mGhBOf.js`), 2,559,307 bytes, `pk_test_` inlined; "Won deals —",
+"Lost deals —" and "no closed deals" present in the served bundle. Not yet
+observed by Jeff; `master` stays at `eec3948`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
