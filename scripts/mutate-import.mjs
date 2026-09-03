@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1150,6 +1150,28 @@ const mutations = [
         'src/Tabs/ReportsTab.jsx',
         "                            const d = repDeals(wonOpps, lostOpps, reportsRep);",
         "                            const d = repDeals(reportsOpps, reportsOpps, reportsRep);"],
+
+    // ── Three Settings panels reduced to what is real (0.86) ───────────────────
+    ['sso: a fabricated config constant comes back',
+        'src/Tabs/settings/security/SsoDetail.jsx',
+        "const CLERK_DASHBOARD = 'https://dashboard.clerk.com';",
+        "const CLERK_DASHBOARD = 'https://dashboard.clerk.com';\nconst SEC_SSO = { configured: false, provider: 'Okta', verifiedDomains: ['acme-corp.com'] };"],
+    ['session: the panel claims an IP allowlist it does not have',
+        'src/Tabs/settings/security/SessionDetail.jsx',
+        "                <li>An <b>IP allowlist</b>. Sign-in is not restricted by network address.</li>",
+        "                <li>An <b>IP allowlist</b> restricts sign-in to the ranges you enter below.</li>"],
+    ['import: leads are sent to the CSV modal, which cannot import them',
+        'src/Tabs/settings/data/ImportDetail.jsx',
+        "        if (key === 'leads') { setShowLeadImportModal(true); return; }",
+        ""],
+    ['settings: the unread importPresets key returns to the PUT half only',
+        'netlify/functions/settings.mjs',
+        "                streamingGlobals:      'streamingGlobals'      in data ? (data.streamingGlobals      || null) : existingExtra.streamingGlobals      || null,",
+        "                streamingGlobals:      'streamingGlobals'      in data ? (data.streamingGlobals      || null) : existingExtra.streamingGlobals      || null,\n                importPresets:  'importPresets'  in data ? (data.importPresets  || []) : existingExtra.importPresets  || [],"],
+    ['catalogue: the Session card stops saying where the policy lives',
+        'src/Tabs/settings/catalogue.js',
+        "desc:'Sessions, passwords and lockout · set in Clerk',              status:'none',    statusDetail:null, managedIn:'Clerk' },",
+        "desc:'Sessions, passwords and lockout · set in Clerk',              status:'none',    statusDetail:null },"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

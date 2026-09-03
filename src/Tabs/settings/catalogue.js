@@ -51,13 +51,13 @@ export const SETTINGS_ITEMS = [
     { id:'webhooks',         scope:'workspace', category:'Integrations', name:'Webhooks',          desc:'Subscribe to CRM events and push to endpoints',               status:'none',    statusDetail:null },
     { id:'automations',      scope:'workspace', category:'Integrations', name:'Automations',       desc:'Rules, triggers, and scheduled jobs',                         status:'ok',      statusDetail:'12 active · 3 paused',  isNew:true },
     // Security
-    { id:'sso',              scope:'workspace', category:'Security', name:'Single sign-on (SSO)',  desc:'SAML 2.0 / OIDC identity provider',                           status:'none',    statusDetail:null,           isNew:true },
+    { id:'sso',              scope:'workspace', category:'Security', name:'Single sign-on (SSO)',  desc:'SAML 2.0 / OIDC through Clerk · configured in the Clerk Dashboard', status:'none', statusDetail:null, managedIn:'Clerk', isNew:false },
     { id:'mfa',              scope:'workspace', category:'Security', name:'Multi-factor auth',     desc:'A second factor on sign-in · policy and factors set in Clerk', status:'none', statusDetail:null, managedIn:'Clerk', attention:false, isNew:false },
-    { id:'session',          scope:'workspace', category:'Security', name:'Session policy',        desc:'Idle timeout, device trust, IP allowlist',                    status:'none',    statusDetail:null },
+    { id:'session',          scope:'workspace', category:'Security', name:'Session & password',    desc:'Sessions, passwords and lockout · set in Clerk',              status:'none',    statusDetail:null, managedIn:'Clerk' },
     { id:'field-visibility', scope:'workspace', category:'Security', name:'Field-level visibility', desc:'Role-based access control for individual fields',            status:'ok',      statusDetail:'6 rules' },
     { id:'audit-log',        scope:'workspace', category:'Security', name:'Audit log',             desc:'Change history across all records and settings',               status:'ok',      statusDetail:'Last 30 days · 2,418 events' },
     // Data
-    { id:'import',           scope:'workspace', category:'Data', name:'Import',                    desc:'CSV import for accounts, contacts, leads, opportunities',     status:'none',    statusDetail:null,  isNew:true },
+    { id:'import',           scope:'workspace', category:'Data', name:'Import',                    desc:'Open the CSV importers for accounts, contacts, opportunities and leads', status:'none', statusDetail:null, isNew:false },
     { id:'export',           scope:'workspace', category:'Data', name:'Export',                    desc:'Scheduled and ad-hoc exports; GDPR data requests',            status:'none',    statusDetail:null, isNew:true },
     { id:'duplicates',       scope:'workspace', category:'Data', name:'Find & merge duplicate accounts',    desc:'Scan accounts for likely duplicates and merge them — fully reversible', status:'ok',      statusDetail:'Scan on demand', isNew:true },
     { id:'contact-duplicates', scope:'workspace', category:'Data', name:'Find & merge duplicate contacts', desc:'Scan contacts for likely duplicates and merge them — fully reversible', status:'ok',      statusDetail:'Scan on demand', isNew:true },

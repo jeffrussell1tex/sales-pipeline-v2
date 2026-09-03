@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (sixth session)
-**Verified at:** five gates green on 147 files · **505 tests** · **229/229 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,499 kB `index-DmjjOHZE.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · dev ahead of `master` by two batches (§0.84 observed, §0.85) and their docs; not yet shipped.
-**Batch:** **the Performance tab's single-rep view lists that rep's won and lost deals, with totals (§0.85, handoff item 20)** — with the Rep slicer set the leaderboard was one row and the Rep metrics table hid itself below two reps, so a manager saw an attainment bar and no deals behind it; now two panels below the leaderboard, from the SAME period-filtered sets the leaderboard sums (one number, itemised): won deals with close day, cycle and ARR and a total, lost deals with the stage each left and why and a total, the win rate the two imply, all pure in `repDeals.js`. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("confirmed on karen under performance").**
+**Verified at:** five gates green on 147 files · **511 tests** · **234/234 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,442 kB `index-Wjd4yjDA.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · dev ahead of `master` by three batches (§0.84 and §0.85 observed, §0.86) and their docs; not yet shipped.
+**Batch:** **three Settings panels reduced to what is real — SSO, Session & password, Import (§0.86, handoff item 21, Jeff's call per panel)** — SSO was a constant with a fake domain and a frozen wizard saving a key sign-in never read; Session & password was a policy form whose Save PUT a key in NEITHER half of settings.mjs (the toast said saved; nothing was) with nothing enforcing any of it; Import was a fake history and a wizard whose "Run import" posted no rows and echoed the preview back as a success. Now: two Managed-in-Clerk panels (what Clerk does, what the app does, what it does not do), an Import launcher for the real CSV and lead importers, `import.mjs` deleted, `ssoConfig` and `importPresets` retired from both halves. Audit streaming is Jeff's "build" and is the next batch (§0.87). Dev only; not yet shipped; not browser-checked — Jeff eyeballs as Admin.
+**Prior batch:** **the Performance tab's single-rep view lists that rep's won and lost deals, with totals (§0.85, handoff item 20)** — with the Rep slicer set the leaderboard was one row and the Rep metrics table hid itself below two reps, so a manager saw an attainment bar and no deals behind it; now two panels below the leaderboard, from the SAME period-filtered sets the leaderboard sums (one number, itemised): won deals with close day, cycle and ARR and a total, lost deals with the stage each left and why and a total, the win rate the two imply, all pure in `repDeals.js`. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("confirmed on karen under performance").**
 **Prior batch:** **the Forecast ledger's Commit and Best case are STORED, per fiscal quarter; the Sales Manager tab's five inert buttons reach real destinations; the tab has an export; Home's quota card is this quarter's (§0.84, handoff items 18 + 19)** — a typed Commit went through a users PUT whose `sanitize()` never carried the key (0 on refresh, §0.80), and one number per rep could never reset when the quarter turned; now `profile.forecastCalls` keyed by quarter through one pure validator on both sides (`forecastCall.js`), Best case editable for the first time with an untyped one flagged "est.", "Coach →" / "Coach" / "Open coaching" open the note dialog with the rep pre-addressed, "Pipeline" / "Their pipeline" open the Pipeline tab viewing as the rep, "Schedule 1:1" opens a new task in the rail, the ledger exports CSV, and Home's card reads the quarter's own quota, wins by close day and commit by the org's stages under the quarter's real name. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("verified changes. they are working").**
 **Prior batch:** **the coachingNotes settings key is retired (§0.83, handoff item 23)** — both orgs imported their old blob notes on 3 Sep, so the key leaves both halves of settings.mjs, the legacy POST branch leaves coaching-notes.mjs, the import button and helpers leave the Team tab and the util, and four mutants whose targets went with them are retired (218 → 214). Rows the import wrote keep `legacy: true` for the "imported" label. Dev only; not yet shipped.
 **Prior batch:** **coaching notes are ADDRESSED — to a person, several people, or a team — in their own org-scoped table (§0.82, handoff item 17)** — `coaching_notes` + `users.team_joined_at` (DDL applied to the test and app databases FIRST, guide §18c), `coaching-notes.mjs` with visibility decided by the pure `_coaching.mjs` (Jeff's two rules: a note to people is seen by author, recipients and Admins — never another manager; a team note by the team's manager and by members from their FIRST DAY, team_joined_at else created_at, resolved at read time), a house dialog with a rep/team picker replacing the typed "rep: text" prompt, the Team tab reading the table with delete for author/Admin, a "Notes from your manager" block on Home with read stamps, unread notes in the bell, an idempotent Admin import of the old settings-blob notes, and the §0.79 Manager carve-out in settings.mjs retired. Not browser-checked; Jeff eyeballs as Admin and as Karen.
@@ -3380,6 +3381,96 @@ stays at `eec3948`.
 
 **OBSERVED by Jeff on deployed dev (3 Sep), Karen sliced under Performance:
 "confirmed on karen under performance."** Unshipped; the ship is Jeff's call.
+
+### 0.86 Three Settings panels reduced to what is real: SSO, Session & password, Import (3 Sep, sixth session)
+
+**Jeff: "lets do 21."** Item 21 was his call per panel, so the four panels
+were read in full first and the choices put to him with what each really
+did. **Decisions (3 Sep):** SSO — reduce to what is real; Session — reduce
+to what is real; Import — replace with a launcher for the real importers;
+**Audit log — BUILD audit streaming** (its own batch, §0.87). This section
+is the three reductions.
+
+**What was read, and what each panel really did.** `SsoDetail.jsx` (303
+lines): every value on it was the `SEC_SSO` constant — Okta URLs, a
+verified domain `acme-corp.com`, an "Active · 412 logins / 30d" badge, a
+four-step wizard whose state started at step 2 and whose body was step 2
+whatever the stepper said; Download metadata, Test login, "+ Add domain"
+and the domain × had no handler; Save wrote `settings.ssoConfig`
+(whitelisted in both halves), which nothing in sign-in read.
+`SessionDetail.jsx` (485 lines): a policy form over the `SEC_SESSION`
+constant (idle timeout, lifetime, concurrent sessions, re-auth, password
+length / rotation / history / lockout, an IP allowlist with "HQ VPN" and
+"AWS prod NAT") whose "Save policy" PUT `{ sessionPolicy }` — **a key in
+NEITHER half of settings.mjs** (the previous handoff said "the policy it
+saves is real"; it was not: the PUT rebuilt `extra` without it, answered
+200, the toast said "Policy saved.", and the reload's
+`data.settings?.sessionPolicy` was undefined, so the typed defaults came
+back every time). Nothing in the app enforced any of it — sessions,
+passwords and lockout are Clerk's, and there is no IP allowlist anywhere
+in the code. `ImportDetail.jsx` (746 lines): the `DATA_IMPORT` constant —
+five past runs by `morgan@accelerep.com`, a "salesforce-accounts-2026-
+q1.csv" with ten mapped columns and three typed row errors — seeded a
+five-step wizard; a real file could be dropped and its headers auto-mapped,
+but "Run import now" POSTed `{ object, columns, dedupe, preview }` with NO
+rows to `/.netlify/functions/import`, whose no-rows branch returned the
+preview's own counts as `created` / `updated` / `skipped`, and the modal
+rendered "✓ Import completed successfully" over them. Nothing was ever
+imported from that panel; the importers that work are `CsvImportModal`
+(Accounts, Contacts, Pipeline tabs; `csvImportType`) and `LeadImportModal`
+(Leads tab). "Save mapping as preset" wrote `settings.importPresets`,
+which nothing read back (settings.mjs's own comment said so). The only
+caller of `import.mjs` was that panel.
+
+**What changed.** `SsoDetail.jsx` (54 lines) and `SessionDetail.jsx` (61
+lines) are the MfaDetail pattern (§0.59 / §0.65): a "Managed in Clerk" chip,
+an info callout naming where the setting lives in the Clerk Dashboard
+(SSO connections; Sessions and Password), a link, and a card of what
+Accelerep itself does — SSO: it trusts an active Clerk session however it
+was reached, roles come from the roster not the IdP, and it cannot tell
+whether a connection exists; Session: the pending-session refusal (§18b27)
+and the roster-role check on every request — plus, on the Session panel, a
+card that says plainly what does NOT exist: an IP allowlist and
+re-authentication for sensitive actions. No state, no fetch, no save on
+either. `ImportDetail.jsx` (92 lines) is a launcher: four cards —
+Accounts, Contacts, Opportunities (`setCsvImportType(key)` +
+`setShowCsvImportModal(true)`) and Leads (`setShowLeadImportModal(true)`,
+offered only while `settings.leadsEnabled !== false`) — and one card
+saying nothing is imported from the page itself. `netlify/functions/
+import.mjs` is DELETED (no caller; its no-rows branch was the fake
+success). `settings.mjs`: `ssoConfig` and `importPresets` are out of BOTH
+halves (the CLAUDE.md rule cuts both ways; an old org's stored values are
+simply never read or rewritten). `catalogue.js`: SSO reads "SAML 2.0 /
+OIDC through Clerk · configured in the Clerk Dashboard", Session is renamed
+"Session & password" with "Sessions, passwords and lockout · set in Clerk",
+both carry `managedIn:'Clerk'` (the chrome AdminView already renders for
+MFA), Import reads "Open the CSV importers…"; the two `isNew` flags on
+SSO and Import are off (they are rewritten panels, not new features — the
+other 14 badges stay item 22). `settingsCards.js`: the SSO comment no
+longer names a key that is gone.
+
+**What a user sees change:** Settings → Security → SSO and Session &
+password are short, honest panels that send an Admin to the Clerk Dashboard
+and say what the app does and does not do; Settings → Data → Import opens
+the real importers instead of a wizard that imported nothing; the Security
+list's Session card says "Session & password · Managed in Clerk".
+
+**Tests.** `tests/honest-panels.test.mjs` (6): each panel scanned for its
+ghosts (the constants, the fake domain and badge, the wizard, the
+`sessionPolicy` PUT, the "Policy saved" toast, the preview echo, the
+presets) and for its honest sentences and links; `sessionPolicy` read by
+nothing; `import.mjs` absent; `ssoConfig` / `importPresets` out of both
+halves while the streaming pair stays in both; the catalogue lines. Five
+mutants (a config constant back, the IP-allowlist claim back, leads sent
+to the CSV modal, `importPresets` back in one half, the Session card
+losing `managedIn`). Gates green on 147 files, **511/511**, **234/234
+mutations, printed green baseline** (run alone), **87/87 integration**
+(no function under test changed), build guard OK (2,442 kB,
+`index-Wjd4yjDA.js` — 57 kB smaller than §0.85), `dist/` cleared. **Not
+browser-checked:** the three panels are Admin-only and the pane has no
+session; Jeff eyeballs on deployed dev as Admin (Settings → Security →
+SSO, Session & password; Settings → Data → Import → each card opens the
+real importer).
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

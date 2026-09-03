@@ -114,10 +114,6 @@ export const handler = async (event) => {
                 // failure mode after the audit-streaming keys; see guide 18b.
                 connectedApps:  row.extra?.connectedApps  || {},
                 slackConfig:    row.extra?.slackConfig    || {},
-                // Written by ImportDetail's SavePresetModal. NOTE: nothing in the
-                // codebase reads this yet — whitelisting only stops the write being
-                // discarded. The load/apply path is still missing.
-                importPresets:  row.extra?.importPresets  || [],
                 streamingGlobals:      row.extra?.streamingGlobals      || null,
                 // Company profile detail fields
                 companyDisplayName:   row.extra?.companyDisplayName   || row.companyName || '',
@@ -144,7 +140,6 @@ export const handler = async (event) => {
                 leadScoring:          row.extra?.leadScoring          || DEFAULT_LEAD_SCORING,
                 rolePermissions:      row.extra?.rolePermissions      || null,
                 roles:      row.extra?.roles      || null,
-                ssoConfig:            row.extra?.ssoConfig            || null,
                 // Quoting (persisted via quoting settings panels)
                 approvalTiers:        row.extra?.approvalTiers        || null,
                 approvalTriggers:     row.extra?.approvalTriggers     || null,
@@ -261,7 +256,6 @@ export const handler = async (event) => {
                 streamingDestinations: 'streamingDestinations' in data ? (data.streamingDestinations || []) : existingExtra.streamingDestinations || [],
                 connectedApps:  'connectedApps'  in data ? (data.connectedApps  || {}) : existingExtra.connectedApps  || {},
                 slackConfig:    'slackConfig'    in data ? (data.slackConfig    || {}) : existingExtra.slackConfig    || {},
-                importPresets:  'importPresets'  in data ? (data.importPresets  || []) : existingExtra.importPresets  || [],
                 streamingGlobals:      'streamingGlobals'      in data ? (data.streamingGlobals      || null) : existingExtra.streamingGlobals      || null,
                 // Company profile detail fields
                 companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,
@@ -297,7 +291,6 @@ export const handler = async (event) => {
                 leadScoring:          'leadScoring'          in data ? (data.leadScoring          || null) : existingExtra.leadScoring          || null,
                 rolePermissions:      'rolePermissions'      in data ? (data.rolePermissions      || null) : existingExtra.rolePermissions      || null,
                 roles:      'roles'      in data ? (data.roles      || null) : existingExtra.roles      || null,
-                ssoConfig:            'ssoConfig'            in data ? (data.ssoConfig            || null) : existingExtra.ssoConfig            || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 buyerPersonas:        'buyerPersonas'        in data ? (data.buyerPersonas        || [])   : existingExtra.buyerPersonas        || [],
                 quotesEnabled:        'quotesEnabled'        in data ? !!data.quotesEnabled                : existingExtra.quotesEnabled        ?? true,

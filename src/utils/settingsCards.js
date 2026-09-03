@@ -105,9 +105,9 @@ export function cardStateOf(item, settings, liveCounts = {}) {
 
     // ── Security — only show what we actually know ────────────────────────────
     if (item.id === 'sso') {
-        // The panel stores settings.ssoConfig, which nothing in sign-in reads;
-        // the app cannot say whether SSO is in force. No status, no attention —
-        // a workspace without SSO is not a fault.
+        // SSO is a Clerk enterprise connection this app cannot read (§0.86); the
+        // app cannot say whether SSO is in force. No status, no attention — a
+        // workspace without SSO is not a fault.
         statusDetail = null; status = 'none'; attention = false;
     }
     if (item.id === 'mfa') {
