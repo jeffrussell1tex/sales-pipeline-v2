@@ -14,14 +14,16 @@ for real (its own table, signed delivery at every audit write, an Admin
 endpoint, a local receiver proving it in the integration suite); both
 batches on dev, deploy-verified, OBSERVED by Jeff — "Looks correct";
 then ALL of it SHIPPED to prod as the eighth ship — `master` `eec3948` →
-`ad76a38`, salespipelinetracker.com serving `index-BYLyFXw4.js`), FINAL.** Repo root. Read this first, then verify
+`ad76a38`, salespipelinetracker.com serving `index-BYLyFXw4.js`; then item
+22 — the Settings catalogue's counts from the panels' own keys and the NEW
+badges retired — on dev, deploy-verified, NOT yet observed, NOT shipped;
+"call it a day"), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.87` with a paragraph beginning **"BUILT (same day), to the design
-above"** and a paragraph beginning **"OBSERVED by Jeff on deployed dev (3
-Sep): "Looks correct.""**, and does
+`### 0.88` with a paragraph beginning **"Jeff: "lets do 22 and then call
+it a day.""** and a paragraph beginning **"Dev landing (`539eaa1`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
 beginning **"Never `window.confirm`"** (the guide did not change this
 session either)? If not, you are looking at a copy that predates this handoff.
@@ -43,7 +45,23 @@ docs). salespipelinetracker.com served `index-BYLyFXw4.js` 53 seconds after
 the push (13:48:22 local), 2,482,786 bytes (dev's size), `pk_live_` inlined,
 every new string present and the fakes absent; `audit-stream` and `users`
 answer 401 unauthenticated. `master` == `dev` == `ad76a38` at the ship; dev
-is ahead only by this ship-record docs commit. **Nothing is unshipped.**
+is ahead only by this ship-record docs commit. Nothing was unshipped at the
+ship; item 22 (next paragraph) came after it.
+
+**Sixth session, fifth batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
+observed, NOT shipped:** `539eaa1` (item 22, state §0.88) and its landing
+docs commit `9cb2d2a`. accelerep.netlify.app served `index-WThsNanc.js` —
+the local gate build's hash — 42 seconds after the push (14:02:19 local),
+2,483,334 bytes, `pk_test_` inlined, "App defaults" / "recent event" / "FY
+starts " in the served bundle, "12 KPIs configured" / "14 industries" / "Q1
+starts Feb 1" absent. What it is: the catalogue's 30 hand-typed card details
+are gone and every count is computed from the key its own panel saves, or
+is null, or says "App defaults" where the panel supplies one; two guards had
+named keys no panel writes (`customFields`, `holidays`), so "18 custom
+fields" and "12 holidays" had shown for every org always; the audit card no
+longer says "last 30d" over a 500-row cap; all 16 never-expiring NEW badges
+and two dead `moved` flags are gone. **Jeff eyeballs on deployed dev as
+Admin** (§5). `master` stays at `ad76a38`.
 
 **Sixth session, fourth batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff ("Looks correct"), NOT shipped:** `2e7a219` (audit streaming, state §0.87 — the
@@ -396,14 +414,16 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 3 Sep, sixth session)
 
-Five gates green on 147 files · **527/527 unit** (17 new in
+Five gates green on 147 files · **535/535 unit** (17 new in
 `forecast-call.test.mjs`, 6 in `rep-deals.test.mjs`, 6 in
-`honest-panels.test.mjs`, 16 in `audit-stream.test.mjs`) · **244/244
-mutations, printed green baseline** (30 added this session, none retired;
+`honest-panels.test.mjs`, 16 in `audit-stream.test.mjs`, 9 in
+`settings-counts.test.mjs`; `fetch-status`'s §0.65 `isNew:false`
+assertion became "no `isNew`") · **249/249 mutations, printed green
+baseline** (35 added this session, none retired;
 one §0.86 anchor reported STALE after §0.87 removed its line and was
 repointed to the `connectedApps` line, then caught; run alone, after the
 unit and integration runs, five times) · build **2,425 kB JS**,
-`index-BJ1VcE9y.js`, guard OK, `dist/` cleared · **94/94 integration**
+`index-WThsNanc.js`, guard OK, `dist/` cleared · **94/94 integration**
 (7 new in `audit-stream.itest.mjs`, a local http receiver; the test
 database carries `audit_stream_destinations` and the guard checks it) · (`users.mjs`
 still has no integration suite — the forecastCalls round trip is pinned by
@@ -412,9 +432,10 @@ no `netlify dev` was started and the pane holds no session (a sign-in
 needs Karen's second factor, which Claude cannot enter); the Sales Manager
 tab is Admin/Manager-only in any case · dev deploys observed serving
 `index-C9mGhBOf.js` (§0.84), `index-DmjjOHZE.js` (§0.85),
-`index-Wjd4yjDA.js` (§0.86) and `index-BJ1VcE9y.js` (§0.87) · **`master` ==
-`ad76a38`, prod serving `index-BYLyFXw4.js` (eighth ship, §1)**; dev is
-ahead of master by this ship-record docs commit only · the app database and the test database both hold
+`index-Wjd4yjDA.js` (§0.86), `index-BJ1VcE9y.js` (§0.87) and
+`index-WThsNanc.js` (§0.88) · **`master` == `ad76a38`, prod serving
+`index-BYLyFXw4.js` (eighth ship, §1)**; dev is ahead of master by the
+ship-record docs commit, `539eaa1` and its docs commits · the app database and the test database both hold
 `audit_stream_destinations` + its index (read back by the apply script) · no schema change (the calls live in the
 `users.profile` jsonb) · the working tree was clean after the harness run
 (`_ownership.mjs` showed modified DURING the run — the harness's first
@@ -430,9 +451,21 @@ mutation in flight — and was restored; not a finding).
   (Jeff: "confirmed on karen under performance") and UNSHIPPED; item 21's
   three reductions (`6ec3c05`) and audit streaming (`2e7a219`) are
   OBSERVED (Jeff: "Looks correct")** — and ALL of it is SHIPPED (the
-  eighth ship, `ad76a38`). Expect `git log --oneline origin/master..dev` to
-  list only the ship-record docs commit; anything else is unshipped code
-  and a finding.
+  eighth ship, `ad76a38`). **Item 22 (`539eaa1`) is UNOBSERVED and
+  UNSHIPPED** — that is the state, not a finding. Expect `git log --oneline
+  origin/master..dev` to list the ship-record docs commit, `539eaa1` and its
+  two docs commits; anything else is unshipped code and a finding.
+- **Jeff eyeballs item 22 on deployed dev, as Admin:** Settings → All. No
+  card wears NEW. Custom fields and Company calendar no longer assert "18"
+  and "12" for an org that set neither; KPI thresholds, Customer types,
+  Account segments and Industries read "App defaults" until the org saves
+  its own; Fiscal year reads "FY starts October 1" (UKG) — or nothing for
+  an org that never set it; Audit log reads "N recent events" (or "500+");
+  Company profile shows the company's name. A count that appears is one
+  the org's own panel saved.
+- **Then ship item 22 when Jeff says so** — `git push origin dev:master`
+  after the ancestor check, then poll salespipelinetracker.com for the
+  bundle hash; `pk_live_` inlined.
 - **DONE — Jeff: "Looks correct."** Was the walkthrough, kept as the
   record of what a full check covers (his words do not say he walked a
   destination through to a delivered row): Settings →
@@ -472,9 +505,15 @@ mutation in flight — and was restored; not a finding).
   address is not refused (only literal private hosts are); and
   `src/Tabs/settings/integrations/ConnectedAppsDetail.jsx` still carries a `morgan@accelerep.com` mock (seen in the
   served bundle after §0.87 — item 22 territory).
-- **Then item 22** — Jeff's call before code (the hand-typed card counts
-  and the 14 remaining NEW badges; the audit card's "Last 30 days · 2,418
-  events" is typed too).
+- **DONE — item 22 (§0.88).** Was: Jeff's call before code (the hand-typed
+  card counts and the 14 remaining NEW badges; the audit card's "Last 30
+  days · 2,418 events" is typed too). Jeff: "lets do 22" — and the fix
+  needed no design call: a count comes from the panel's key or is nothing.
+- **Then item 24** — Jeff's call before code: the Connected Apps panel
+  (`INT_APPS` with six apps marked connected and typed traffic, a "Morgan
+  Reyes" account row, an Authorize that closes the modal — while its Slack
+  half is real) and the Industries panel's default list with typed account
+  counts per industry (`n:118`…). Reduce or build, per panel, as item 21 was.
 - **DONE — Jeff confirmed item 20 on deployed dev with Karen sliced.** Was
   the eyeball list, kept as the record of what "confirmed" covers: Reports → Performance,
   Grouped by → Rep, pick Karen: below the one-row leaderboard, "Won deals —
@@ -888,7 +927,12 @@ mutation in flight — and was restored; not a finding).
    `morgan@accelerep.com`, a fake Salesforce file) — the real importer is
    the CSV modal, not this panel. Jeff decides per panel: remove, reduce
    to what is real, or build the feature. Not started.
-22. **Carried, same read: the hand-typed card COUNTS and the NEW badges.**
+22. **DONE — state §0.88, commit `539eaa1` (3 Sep, sixth session; Jeff:
+   "lets do 22 and then call it a day").** Every count from its panel's
+   key or null, "App defaults" where the panel supplies one, the two
+   wrong-key guards fixed, "last 30d" gone, all 16 badges and both `moved`
+   flags gone; 9 tests, 5 mutants. Unobserved; unshipped. Was: **Carried,
+   same read: the hand-typed card COUNTS and the NEW badges.**
    Where no settings key is read the catalogue's typed detail still
    shows: KPI thresholds "12 KPIs configured", Pain points "23", Customer
    types / Account segments "5 tiers", Industries "14 · 47 sub-types",
@@ -914,6 +958,19 @@ mutation in flight — and was restored; not a finding).
    SalesManagerTab, `legacyNotePayload` + `parseCoachingNote` in the util,
    and the scans that pin them (house-dialogs, coaching-notes); mutation
    entries follow. Small, mechanical, its own commit.
+
+24. **Carried (found reading for item 22, state §0.88 last paragraph):
+   two more panels are mockups in depth.** `ConnectedAppsDetail.jsx`: an
+   `INT_APPS` list with six apps marked `connected:true` and typed traffic
+   ("1,247 msgs/day", "Token refresh in 6d"), a "Morgan Reyes ·
+   morgan@accelerep.com" account row in the connect modal, and an
+   "Authorize" button that closes the modal — while its Slack half
+   (`slackConfig`, read by `send-slack.mjs`) is real and the panel loads
+   `connectedApps` from settings. `IndustriesDetail.jsx`: the default
+   industry list carries typed account counts per industry (`n:118`,
+   `n:74`…) that no query produced. Jeff decides per panel — reduce to
+   what is real (the Slack config; the industry names without counts) or
+   build — as item 21 was decided. Not started.
 
 ## 6. The thread
 
@@ -998,5 +1055,12 @@ signature and a timeout, a destination that pauses itself — and then built
 to that design, with a local receiver in the integration suite verifying
 the signatures the customer would verify. Then Jeff looked: "Looks
 correct." Five items on dev, all five seen; then "ship prod", and the
-eighth ship went as one fast-forward, verified by bundle hash. Observed,
-then written, then committed.
+eighth ship went as one fast-forward, verified by bundle hash.
+
+"Lets do 22 and then call it a day." The last of the §0.81 read turned out
+to need no decision: a count is the panel's key or it is nothing, and two
+of the guards had been reading keys no panel ever wrote, so two numbers
+had been true of every org and no org. Thirty typed details, sixteen
+badges and two dead flags left the catalogue; nine tests and five mutants
+hold the rule. Deployed, hash-checked, unobserved, and said so. Then the
+day was called. Observed, then written, then committed.
