@@ -8,16 +8,18 @@ quarter's own figures — item 19; OBSERVED by Jeff on deployed dev —
 "verified changes. they are working"; then the Performance tab's single-rep
 view listing that rep's won and lost deals with totals — item 20, OBSERVED
 by Jeff on deployed dev — "confirmed on karen under performance"; then
-item 21 decided per panel by Jeff and three of the four panels reduced to
-what is real — SSO, Session & password, Import — on dev, deploy-verified,
-NOT yet observed; the fourth, audit streaming, is Jeff's "build" and is
-NOT started; nothing shipped to prod), FINAL.** Repo root. Read this first, then verify
+item 21 decided per panel by Jeff: three panels reduced to what is real —
+SSO, Session & password, Import — and the fourth, audit streaming, BUILT
+for real (its own table, signed delivery at every audit write, an Admin
+endpoint, a local receiver proving it in the integration suite); both
+batches on dev, deploy-verified, NOT yet observed; nothing shipped to
+prod), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.86` with a paragraph beginning **"Jeff: "lets do 21.""** and a
-paragraph beginning **"Dev landing (`6ec3c05`"**, and does
+`### 0.87` with a paragraph beginning **"BUILT (same day), to the design
+above"** and a paragraph beginning **"Dev landing (`2e7a219`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
 beginning **"Never `window.confirm`"** (the guide did not change this
 session either)? If not, you are looking at a copy that predates this handoff.
@@ -31,6 +33,28 @@ their headers is Jeff's call, not done.
 ---
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
+
+**Sixth session, fourth batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
+observed, NOT shipped:** `2e7a219` (audit streaming, state §0.87 — the
+design committed first as `1ac3d64`, then the build) and its landing docs
+commit `3541d8a`. accelerep.netlify.app served `index-BJ1VcE9y.js` —
+the local gate build's hash — 52 seconds after the push (13:26:26 local),
+2,482,786 bytes, `pk_test_` inlined, "Send test event" / "Rotate secret"
+/ "the last 500 events are loaded" in the served bundle, "Streaming to
+Splunk" and "Manage alerts" absent; the deployed `audit-stream` function
+answers 401 unauthenticated. **The table `audit_stream_destinations` is in
+BOTH databases** (`db/apply-audit-stream.mjs`, read back and counted, test
+then app, before the code was committed — §18c). What it is: every audit
+row (four write sites) is POSTed to each of the org's destinations as it is
+written, HMAC-SHA256-signed over the exact body, in parallel with a 4 s
+timeout each, every attempt recorded on the row, a destination pausing
+itself after ten consecutive failures; an Admin-only endpoint creates one
+(secret shown once), sends a real test event, pauses / resumes / rotates /
+removes; the panel keeps the real stream, filters and export and drops the
+alerts modal, the typed badge, the retention claims, the inert menus and the
+IP column. The integration suite runs a local receiver and verifies real
+signatures against the real database. **Jeff eyeballs on deployed dev as
+Admin** (§5). `master` stays at `eec3948`.
 
 **Sixth session, third batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
 observed, NOT shipped:** `6ec3c05` (item 21, three of four panels, state
@@ -359,23 +383,27 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (all observed 3 Sep, sixth session)
 
-Five gates green on 147 files · **511/511 unit** (17 new in
+Five gates green on 147 files · **527/527 unit** (17 new in
 `forecast-call.test.mjs`, 6 in `rep-deals.test.mjs`, 6 in
-`honest-panels.test.mjs`; no existing suite changed) · **234/234
-mutations, printed green baseline** (20 added this session, none retired,
-none stale; run alone, after the unit and integration runs, three times) ·
-build **2,442 kB JS**, `index-Wjd4yjDA.js` (57 kB smaller than §0.85 —
-three mockups and a function gone), guard OK, `dist/` cleared · **87/87
-integration** (no function's behaviour under test changed; `users.mjs`
+`honest-panels.test.mjs`, 16 in `audit-stream.test.mjs`) · **244/244
+mutations, printed green baseline** (30 added this session, none retired;
+one §0.86 anchor reported STALE after §0.87 removed its line and was
+repointed to the `connectedApps` line, then caught; run alone, after the
+unit and integration runs, five times) · build **2,425 kB JS**,
+`index-BJ1VcE9y.js`, guard OK, `dist/` cleared · **94/94 integration**
+(7 new in `audit-stream.itest.mjs`, a local http receiver; the test
+database carries `audit_stream_destinations` and the guard checks it) · (`users.mjs`
 still has no integration suite — the forecastCalls round trip is pinned by
 source scans and mutants only) · **no pane browser pass this session** —
 no `netlify dev` was started and the pane holds no session (a sign-in
 needs Karen's second factor, which Claude cannot enter); the Sales Manager
 tab is Admin/Manager-only in any case · dev deploys observed serving
-`index-C9mGhBOf.js` (§0.84), `index-DmjjOHZE.js` (§0.85) and
-`index-Wjd4yjDA.js` (§0.86) · **`master` == `eec3948`, prod serving
-`index-Bsn2ZlRv.js` (seventh ship)**; dev is ahead of master by
-`9782e97`, `6db6ea8`, `6ec3c05` and their docs commits · no schema change (the calls live in the
+`index-C9mGhBOf.js` (§0.84), `index-DmjjOHZE.js` (§0.85),
+`index-Wjd4yjDA.js` (§0.86) and `index-BJ1VcE9y.js` (§0.87) · **`master`
+== `eec3948`, prod serving `index-Bsn2ZlRv.js` (seventh ship)**; dev is
+ahead of master by `9782e97`, `6db6ea8`, `6ec3c05`, `1ac3d64`, `2e7a219`
+and their docs commits · the app database and the test database both hold
+`audit_stream_destinations` + its index (read back by the apply script) · no schema change (the calls live in the
 `users.profile` jsonb) · the working tree was clean after the harness run
 (`_ownership.mjs` showed modified DURING the run — the harness's first
 mutation in flight — and was restored; not a finding).
@@ -388,8 +416,24 @@ mutation in flight — and was restored; not a finding).
   `6af58fb` (the seventh ship's record). **Items 18 + 19 are OBSERVED (Jeff:
   "verified changes. they are working") and UNSHIPPED; item 20 is OBSERVED
   (Jeff: "confirmed on karen under performance") and UNSHIPPED; item 21's
-  three reductions (`6ec3c05`) are UNOBSERVED and UNSHIPPED** — that is
-  the state, not a finding.
+  three reductions (`6ec3c05`) and audit streaming (`2e7a219`) are
+  UNOBSERVED and UNSHIPPED** — that is the state, not a finding.
+- **Jeff eyeballs audit streaming on deployed dev, as Admin:** Settings →
+  Security → Audit log. The badge is absent until a destination exists;
+  the subtitle says the last 500 events are loaded; no Manage alerts, no IP
+  column. "+ Add destination" → a receiver he controls (a request-bin
+  service with an https URL works; http:// and private hosts are refused
+  with the reason) → the secret appears ONCE with Copy. "Send test event"
+  → the row shows "Test delivered · 200" (or the receiver's real status)
+  and Last delivered fills in. Then do anything audited (save a user, add
+  a coaching note) and the receiver gets a signed `type:"audit"` POST —
+  `X-Accelerep-Signature` is HMAC-SHA256 of the body with the secret.
+  Pause → nothing arrives; Resume → the resume's own audit row arrives
+  first. Rotate secret → a new secret once; Remove → confirm dialog.
+  **If Add answers "Key encryption is not available"**, the site has no
+  `SETTINGS_ENCRYPTION_KEY` — the same variable the BYOK save needs; set it
+  in Netlify → Site → Environment variables (the crypto.mjs header says how
+  to generate one). Not verifiable from here.
 - **Jeff eyeballs the three panels on deployed dev, as Admin:** Settings →
   Security → Single sign-on (a Managed in Clerk chip, an info callout with
   two links, one card, no form); → Session & password (the chip, the
@@ -398,19 +442,18 @@ mutation in flight — and was restored; not a finding).
   importer over the Settings page (Leads only while leads are on). The
   Security list's Session card reads "Session & password · Managed in
   Clerk".
-- **Then the fourth panel — audit streaming, Jeff's "build" (state §0.87,
-  not started).** Design before code, in the state doc first: every audit
-  write (`writeAudit` in _lib.mjs and users.mjs's own `writeAudit`, the
-  audit-log POST, users-sync) is POSTed to each active destination in
-  `settings.extra.streamingDestinations` with an HMAC-SHA256 signature
-  (the webhooks.mjs `signPayload` shape, `X-Accelerep-Signature`), a
-  per-destination secret shown once, `lastDelivered` / `status` written
-  from real responses, a "Send test event" that really sends; the alerts
-  modal, "Export all 12,847 events", "Schedule recurring export", the
-  "retention 13 months" claims and the always-empty IP column are
-  inventions that option did not cover — remove them in the same batch and
-  say so. Org-scoped from the first line: a destination belongs to the org
-  whose settings row holds it and receives that org's rows only.
+- **DONE — audit streaming is built (§0.87, `1ac3d64` design then
+  `2e7a219`).** One deviation from the queued sketch, decided while
+  designing and recorded in §0.87: destinations live in their own table,
+  not `settings.extra` — a secret and delivery state must not round-trip
+  through the client's settings save. Carried from the build: **the site's
+  `SETTINGS_ENCRYPTION_KEY` is unverified from here** (the endpoint answers
+  503 without it); **an audited write now waits for the slowest destination,
+  at most 4 s** — if that ever hurts, a Netlify background function is the
+  next step, not a queue; a destination whose hostname RESOLVES to a private
+  address is not refused (only literal private hosts are); and
+  `src/Tabs/settings/integrations/ConnectedAppsDetail.jsx` still carries a `morgan@accelerep.com` mock (seen in the
+  served bundle after §0.87 — item 22 territory).
 - **Then item 22** — Jeff's call before code (the hand-typed card counts
   and the 14 remaining NEW badges; the audit card's "Last 30 days · 2,418
   events" is typed too).
@@ -806,9 +849,11 @@ mutation in flight — and was restored; not a finding).
    and period window, and the History tab (§0.77) lists deals on real
    columns — the list wants the same row shape and the period filter the
    report already carries.
-21. **THREE OF FOUR DONE — state §0.86, commit `6ec3c05` (3 Sep, sixth
-   session; Jeff's call per panel: SSO reduce, Session reduce, Import
-   launcher, Audit streaming BUILD).** SSO and Session & password are
+21. **DONE — all four: state §0.86 (`6ec3c05`, the three reductions) and
+   §0.87 (`1ac3d64` design, `2e7a219` build — audit streaming for real).**
+   Both unobserved; both unshipped. Was: **THREE OF FOUR DONE — state
+   §0.86, commit `6ec3c05` (3 Sep, sixth session; Jeff's call per panel:
+   SSO reduce, Session reduce, Import launcher, Audit streaming BUILD).** SSO and Session & password are
    Managed-in-Clerk panels; Import launches the real importers;
    `import.mjs` deleted; `ssoConfig` + `importPresets` retired from both
    halves. Found: SessionDetail's `sessionPolicy` was in neither half —
@@ -928,6 +973,10 @@ recorded: the Session panel's Save had been posting a key the server never
 knew, and a toast had been calling that saved. He chose to reduce three and
 build the fourth. The three are done the MfaDetail way — say where the thing
 lives, say what the app does, say what it does not — and a function nothing
-called any more went with them. The fourth, audit streaming, is a real
-feature with a real design in front of it and is written down in §5 as not
-started. Four items on dev, three seen; the ship is his call.
+called any more went with them. The fourth, audit streaming, was
+designed in the state doc and committed as a design before a line of code —
+its own table rather than the settings blob, delivery at the write with a
+signature and a timeout, a destination that pauses itself — and then built
+to that design, with a local receiver in the integration suite verifying
+the signatures the customer would verify. Five items on dev, three seen;
+the ship is his call.
