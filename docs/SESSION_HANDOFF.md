@@ -290,7 +290,9 @@ cleared at close.
    real dates; dateless tasks appear in "No due date"; the deal timeline
    labels never read "Invalid Date"; the profile panel fits a two-org
    account with a long org name (Jeff's original prod report).
-3. **Still unobserved:** as Admin after 7pm Central, a coaching note carries
+3. **OBSERVED (2 Sep, after 7pm Central):** coaching notes saved through
+   the house prompt by Jeff and by Karen both carried Sep 2 while UTC was
+   3 Sep (state §0.79). Was: **Still unobserved:** as Admin after 7pm Central, a coaching note carries
    today's date (Jeff: "I will have to check the time tonight"). **Half
    observed after 7pm on 2 Sep:** Jeff's Home header read "Good evening,
    Jeff. Wednesday, Sep 2 · Q4 · Week 10" while UTC was already 3 Sep —
@@ -385,10 +387,13 @@ cleared at close.
    SHIPPED to prod as `d63644f` (§1); Jeff's screenshot of the Security
    list confirms the tile ("2/4 enrolled · 50%", "Needs attention",
    "Managed in Clerk"). Items 13 and 14 are DONE and observed as Admin —
-   state §0.79. SHIPPED to prod as `d513b0e` (§1). Next: the Manager path
-   of the coaching note (the settings-PUT exception) is unobserved — Jeff
-   tries it signed in as a Manager, on either site. Items 15 and 16 and
-   the coaching-note half of item 3 remain.
+   state §0.79. SHIPPED to prod as `d513b0e` (§1). The Manager path of
+   the coaching note is OBSERVED: Jeff promoted Karen to Manager, signed
+   in as her, saved a note, hard-refreshed — "it all works" (state §0.79).
+   **Karen is a Manager until Jeff sets her back to User** — the rep-path
+   browser checks (CLAUDE.md) need her as a User. Next: items 15 and 16;
+   the coaching-note half of item 3 is now observed too (a note saved
+   after 7pm Central carried Sep 2).
 11. Smaller carried: the
    opportunities Manager `managedReps` branch stays name-based by intent;
    picker-format replication as surfaces get touched.

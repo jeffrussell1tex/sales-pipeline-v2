@@ -2617,8 +2617,15 @@ accelerep.netlify.app (screenshot):** after a hard refresh (his tab had
 still been running the pre-§0.79 bundle and showed the browser's own
 dialog), the house prompt saved "09.02.26 Second test coaching note." —
 no "rep:" prefix, so it renders under the author, Jeff Russell, the
-designed fallback (`n.rep || n.author`). Written as Admin; the Manager
-path is still unobserved. **Local quirk found on
+designed fallback (`n.rep || n.author`). Written as Admin. **The Manager
+path, observed by Jeff:** Karen's role changed User → Manager in
+Settings → People (user-role.mjs writes Clerk first; she left the
+coaching red flags and every rep list at once — Managers are not reps);
+signed in as Karen, Sales Manager → Team → "+ Add coaching note", saved,
+hard-refreshed: "it all works" — the settings-PUT Manager exception
+holds a note across a reload, and Jeff's Admin note was visible to her.
+Karen is to be set back to User afterwards (the rep-path checks depend
+on her). **Local quirk found on
 the way:** the first Save hit `saved-reports` → 500 "module is not
 defined in ES module scope" from
 `.netlify/functions-serve/saved-reports/saved-reports.js` — netlify
