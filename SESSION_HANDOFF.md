@@ -1,35 +1,30 @@
 # SESSION_HANDOFF.md
 
-**Session of 3 September 2026, sixth session (the Forecast ledger's Commit
-and Best case STORED, per fiscal quarter, and Best case editable for the
-first time — item 18; the Sales Manager tab's FIVE inert buttons wired to
-real destinations, the ledger's Export CSV, and Home's quota card on this
-quarter's own figures — item 19; OBSERVED by Jeff on deployed dev —
-"verified changes. they are working"; then the Performance tab's single-rep
-view listing that rep's won and lost deals with totals — item 20, OBSERVED
-by Jeff on deployed dev — "confirmed on karen under performance"; then
-item 21 decided per panel by Jeff: three panels reduced to what is real —
-SSO, Session & password, Import — and the fourth, audit streaming, BUILT
-for real (its own table, signed delivery at every audit write, an Admin
-endpoint, a local receiver proving it in the integration suite); both
-batches on dev, deploy-verified, OBSERVED by Jeff — "Looks correct";
-then ALL of it SHIPPED to prod as the eighth ship — `master` `eec3948` →
-`ad76a38`, salespipelinetracker.com serving `index-BYLyFXw4.js`; then item
-22 — the Settings catalogue's counts from the panels' own keys and the NEW
-badges retired — on dev, deploy-verified, OBSERVED by Jeff — "confirmed
-that settings cards are correct and all badges are gone" — NOT shipped;
-"call it a day"), FINAL.** Repo root. Read this first, then verify
+**Session of 3 September 2026, seventh session (Jeff: "claude, lets
+continue" — reading the two item-24 panels to put the reduce-or-build call in
+front of him found that the Connected Apps panel had rendered a component
+bound nowhere in `src/` since 11 May: `<SlackConfigModal/>`, deleted by
+`5772f63` in a cleanup, every build green, every "Configure Slack" click a
+ReferenceError into the Settings error boundary, no org able to set the
+webhook the five pipeline alerts read; restored at module scope; the
+`check:tdz` gate that exists for this never counted a JSX element name as a
+read, nor a default-exported declaration as module scope — both fixed with
+fixtures; `IntBtn` had dropped `disabled` for four callers; the Industries
+defaults' typed `n` counts, never rendered but persisted by every Save, are
+gone; the Account rail read `.name` from a taxonomy keyed `k`, so an org
+that saved its industries got NO suggestions — fixed; on dev,
+deploy-verified — NOT yet observed by Jeff, NOT shipped; item 22 still
+unshipped), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.88` with a paragraph beginning **"Jeff: "lets do 22 and then call
-it a day.""** and a paragraph beginning **"OBSERVED by Jeff on deployed dev (3
-Sep): "confirmed that settings cards"**, and does
-`docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
-beginning **"Never `window.confirm`"** (the guide did not change this
-session either)? If not, you are looking at a copy that predates this handoff.
-Check section content, never dates.
+`### 0.89` with a paragraph beginning **"Jeff: "claude, lets continue.""**
+and a paragraph beginning **"Dev landing (`95141cb`"**, and does
+`docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b29`** with a bullet
+beginning **"A capitalised JSX element name is a read"**? If not, you are
+looking at a copy that predates this handoff. Check section content, never
+dates.
 
 **On dates:** §0.58, §0.59 and the previous handoff say "2 Sep". Git carries
 every one of their commits at 1 Sep -0500, the same day as §0.56/§0.57 and
@@ -38,7 +33,34 @@ their headers is Jeff's call, not done.
 
 ---
 
-## 1. What shipped — everything is on `dev`, deploy-verified, observed
+## 1. What shipped — everything is on `dev`, deploy-verified; all but the seventh-session batch observed
+
+**Seventh session (3 Sep) — ON DEV ONLY, deploy-verified, NOT observed by
+Jeff, NOT shipped:** `95141cb` (state §0.89, guide §18b29) and the docs
+commit this handoff rides in. accelerep.netlify.app served
+`index-CEn91emU.js` — the local gate build's hash — 32 seconds after the push
+(14:57:35 local), 2,486,255 bytes in `dist/`, `pk_test_` inlined; "Configure
+Slack", "Send test message" and "Incoming Webhook URL" in the served bundle,
+"n:118" absent. What it is: **the Slack configuration modal is back.**
+`ConnectedAppsDetail.jsx` had rendered `<SlackConfigModal/>` with the name
+bound nowhere in `src/` since `5772f63` (11 May 2026) deleted it from
+SettingsTab.jsx in a cleanup; Vite bundles an unbound JSX name as a global
+read, so every build passed and every "Configure Slack" / "Configure" /
+"Configure →" click threw `SlackConfigModal is not defined` into the Settings
+error boundary — no org could enter the webhook `send-slack.mjs` and the five
+`pipeline-alerts.mjs` Slack posts read, on prod, for four months. Restored at
+module scope from the pre-deletion source (`FL` hoisted as `SlackField`).
+**The gate that exists for this had a blind spot:** `check-tdz`'s undefined
+pass walked `Identifier` nodes and a JSX element name is a `JSXIdentifier`;
+it also never collected `export default function X()` as module scope (46 in
+`src/`). Both fixed; fixtures at both sites; the whole tree scans clean and
+the scan found exactly one. Alongside: `IntBtn` honours `disabled` (four
+callers passed it into the void); the Industries defaults drop the typed
+`n:118…` that nothing rendered but every Save persisted; the Account rail's
+Industry typeahead reads the taxonomy's `k` (an org that had saved its
+industries got no suggestions at all) and skips hidden rows. **Reasoned from
+code and proven by fixture, not observed** — no pane session. `master` stays
+at `ad76a38`.
 
 **PROD SHIPPED (Jeff: "ship prod") — the eighth ship, state §0.87 last
 paragraph.** Ancestor check, then `git push origin dev:master`: `master`
@@ -416,38 +438,60 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (all observed 3 Sep, sixth session)
+## 4. Verified state at close (3 Sep, seventh session)
 
-Five gates green on 147 files · **535/535 unit** (17 new in
-`forecast-call.test.mjs`, 6 in `rep-deals.test.mjs`, 6 in
-`honest-panels.test.mjs`, 16 in `audit-stream.test.mjs`, 9 in
-`settings-counts.test.mjs`; `fetch-status`'s §0.65 `isNew:false`
-assertion became "no `isNew`") · **249/249 mutations, printed green
-baseline** (35 added this session, none retired;
-one §0.86 anchor reported STALE after §0.87 removed its line and was
-repointed to the `connectedApps` line, then caught; run alone, after the
-unit and integration runs, five times) · build **2,425 kB JS**,
-`index-WThsNanc.js`, guard OK, `dist/` cleared · **94/94 integration**
-(7 new in `audit-stream.itest.mjs`, a local http receiver; the test
-database carries `audit_stream_destinations` and the guard checks it) · (`users.mjs`
-still has no integration suite — the forecastCalls round trip is pinned by
-source scans and mutants only) · **no pane browser pass this session** —
-no `netlify dev` was started and the pane holds no session (a sign-in
-needs Karen's second factor, which Claude cannot enter); the Sales Manager
-tab is Admin/Manager-only in any case · dev deploys observed serving
-`index-C9mGhBOf.js` (§0.84), `index-DmjjOHZE.js` (§0.85),
-`index-Wjd4yjDA.js` (§0.86), `index-BJ1VcE9y.js` (§0.87) and
-`index-WThsNanc.js` (§0.88) · **`master` == `ad76a38`, prod serving
-`index-BYLyFXw4.js` (eighth ship, §1)**; dev is ahead of master by the
-ship-record docs commit, `539eaa1` and its docs commits · the app database and the test database both hold
-`audit_stream_destinations` + its index (read back by the apply script) · no schema change (the calls live in the
-`users.profile` jsonb) · the working tree was clean after the harness run
-(`_ownership.mjs` showed modified DURING the run — the harness's first
-mutation in flight — and was restored; not a finding).
+Five gates green on 147 files (`check:tdz` "No render-time TDZ issues in
+147 file(s)" AFTER the fix — it reported the Slack line first, then a false
+positive on `CoachingNoteDialogHost` rendering its file's default export,
+which was the second gate bug, then clean) · **546/546 unit** (9 new in
+`connected-apps.test.mjs`, 2 in `scanners.test.mjs`) · **261/261 mutations,
+printed green baseline** (12 added this session, none retired; run alone,
+after the unit and integration runs; the harness restored the tree — status
+clean after) · build **2,428 kB JS**, `index-CEn91emU.js`, guard OK,
+`dist/` cleared · **94/94 integration** (no function changed) · **no pane
+browser pass this session** — no `netlify dev` was started and the pane
+holds no session (a sign-in needs Karen's second factor); the crash and the
+fix are reasoned from code and the gate's fixture · dev deploy observed
+serving `index-CEn91emU.js` (§0.89) · **`master` == `ad76a38`, prod serving
+`index-BYLyFXw4.js` (eighth ship)**; dev is ahead of master by the
+ship-record docs commit, item 22 (`539eaa1` + docs) and this session's
+`95141cb` + docs · no schema change · the working tree was clean at close.
 
 ## 5. Next — start here
 
 **Next session prep, in order (Jeff: "update the next session prep"):**
+- **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
+  expect the eighth-ship record docs commit, `539eaa1` + its two docs
+  commits (item 22, OBSERVED), and `95141cb` + its docs commit (this
+  session, NOT observed). Anything else is unshipped code and a finding.
+- **Jeff eyeballs the seventh-session batch on deployed dev (state §0.89):**
+  as Admin, Settings → Integrations → Connected apps → "Configure Slack"
+  opens a modal (it was "Something went wrong" with `SlackConfigModal is not
+  defined`); paste a real Incoming Webhook URL → "Send test message" → the
+  message lands in the channel; "Save configuration" → the Slack card reads
+  Connected with a Configure link and the purple callout is gone; refresh —
+  it stays. Settings → Sales process → Industries → Distribution unchanged
+  (its counts were always the org's accounts). Accounts → an account →
+  Industry: the typeahead lists the org's saved industries if it ever saved
+  the taxonomy, the built-in list otherwise. Settings → Integrations → API
+  keys → "Create key" is greyed until a name is typed.
+- **Then ship items 22 + this batch when Jeff says so** — `git push origin
+  dev:master` after the ancestor check, then poll salespipelinetracker.com
+  for the bundle hash; `pk_live_` inlined. Prod has carried the Slack crash
+  since May; this batch is the first that removes it.
+- **Then item 24 — Jeff's call before code, with the corrected premise
+  (state §0.89 finding 6):** the Connected Apps panel's `connected:true` /
+  `traffic` fields are never rendered; what is invented is the connect
+  modal ("Morgan Reyes", fixed scopes, an Authorize that closes), the two
+  inert header buttons, thirteen catalogue apps with nothing behind them, and
+  `connectedApps.gcal`, which nothing sets (the calendar OAuth writes its own
+  tables), so Google Calendar always reads unconnected here. Industries is
+  DONE as far as it was wrong (finding 4). Reduce (Slack + a Google Calendar
+  card that reads the real connection) or build, per Jeff.
+- **Item 25 (new, Jeff's call):** `send-slack`'s handler posts a test to ANY
+  `webhookUrl` in the body behind `verifyAuth` alone — no role gate, no host
+  check; the audit-stream endpoint refuses literal private hosts and is
+  Admin-only. One line each.
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect `9782e97`, `6db6ea8` and the docs commits around them, plus
   `6af58fb` (the seventh ship's record). **Items 18 + 19 are OBSERVED (Jeff:
@@ -515,11 +559,11 @@ mutation in flight — and was restored; not a finding).
   card counts and the 14 remaining NEW badges; the audit card's "Last 30
   days · 2,418 events" is typed too). Jeff: "lets do 22" — and the fix
   needed no design call: a count comes from the panel's key or is nothing.
-- **Then item 24** — Jeff's call before code: the Connected Apps panel
-  (`INT_APPS` with six apps marked connected and typed traffic, a "Morgan
-  Reyes" account row, an Authorize that closes the modal — while its Slack
-  half is real) and the Industries panel's default list with typed account
-  counts per industry (`n:118`…). Reduce or build, per panel, as item 21 was.
+- **(Superseded — see the corrected item 24 above and state §0.89.)** Was:
+  item 24 as the sixth session recorded it — six apps "marked connected and
+  typed traffic" (never rendered) and Industries' "typed account counts"
+  (never rendered; the card computes them). The typed counts are gone; the
+  Slack half turned out to be a crash, now fixed.
 - **DONE — Jeff confirmed item 20 on deployed dev with Karen sliced.** Was
   the eyeball list, kept as the record of what "confirmed" covers: Reports → Performance,
   Grouped by → Rep, pick Karen: below the one-row leaderboard, "Won deals —
@@ -967,18 +1011,34 @@ mutation in flight — and was restored; not a finding).
    and the scans that pin them (house-dialogs, coaching-notes); mutation
    entries follow. Small, mechanical, its own commit.
 
-24. **Carried (found reading for item 22, state §0.88 last paragraph):
-   two more panels are mockups in depth.** `ConnectedAppsDetail.jsx`: an
-   `INT_APPS` list with six apps marked `connected:true` and typed traffic
-   ("1,247 msgs/day", "Token refresh in 6d"), a "Morgan Reyes ·
-   morgan@accelerep.com" account row in the connect modal, and an
-   "Authorize" button that closes the modal — while its Slack half
-   (`slackConfig`, read by `send-slack.mjs`) is real and the panel loads
-   `connectedApps` from settings. `IndustriesDetail.jsx`: the default
-   industry list carries typed account counts per industry (`n:118`,
-   `n:74`…) that no query produced. Jeff decides per panel — reduce to
-   what is real (the Slack config; the industry names without counts) or
-   build — as item 21 was decided. Not started.
+24. **Carried, premise corrected (state §0.89, findings 4–6). Half done.**
+   The sixth session recorded six apps "marked connected and typed traffic"
+   and Industries' "typed account counts that no query produced". Reading
+   both panels: `INT_APPS`'s `connected:true` and `traffic` are never
+   rendered (`liveApps` recomputes `connected` from settings; nothing reads
+   `traffic`), and the Industries Distribution card computes its counts from
+   the org's accounts — the typed `n` was dead data that every Save
+   persisted, now gone (`cloneIndustries` strips it). What remains, and is
+   Jeff's call: `ConnectAppModal` ("Morgan Reyes · morgan@accelerep.com",
+   fixed scopes, "You'll be redirected to Google", Authorize closes), "Browse
+   marketplace" and "+ Request integration" with no `onClick`, thirteen
+   catalogue apps with no integration behind them, and `connectedApps.gcal`
+   which nothing sets — the calendar OAuth callback writes
+   `user_calendar_connections` / `org_calendar_connections` — so Google
+   Calendar always reads unconnected on this panel. Reduce (Slack, which is
+   real and now configurable; a Google Calendar card reading the real
+   connection) or build. **Found underneath it and FIXED this session:** the
+   Slack modal itself was undefined (§0.89 finding 1).
+
+25. **New (state §0.89, "also noted"):** `send-slack`'s handler posts a test
+   message to any `webhookUrl` the body carries, behind `verifyAuth` alone —
+   any signed-in user can make the server POST to an arbitrary URL. The
+   audit-stream endpoint (§0.87) is Admin-only and refuses literal private
+   hosts; the same two lines here. Jeff's call.
+
+26. **New, trivial:** `tests/fixtures/scanners/dupes-jsx-attribute - Copy.jsx`
+   is a tracked, byte-identical duplicate of `dupes-jsx-attribute.jsx` from
+   `db4ef5b`. Harmless to the fixture-coverage test; not deleted (not mine).
 
 ## 6. The thread
 
@@ -1074,3 +1134,18 @@ hold the rule. Deployed, hash-checked; then Jeff looked — "confirmed that
 settings cards are correct and all badges are gone" — and the day was
 called. Six items on dev this session, all six seen, five shipped; the
 sixth is his call. Observed, then written, then committed.
+
+"Claude, lets continue." The next thing in the queue was a decision that
+belonged to Jeff, so the two panels were read end to end to put it in front
+of him honestly — and the reading found that the decision's premise was
+half wrong and that underneath it sat a crash four months old. A component
+deleted in a May cleanup, still rendered; a build that cannot tell; a gate
+written for exactly this that walked one node type and never counted a JSX
+name as a read. The fix was small and the lesson was in the gate: it now
+counts JSX names, collects default exports, and carries a fixture at both
+sites; the scan it needed found exactly one in the tree. Two more things
+fell out of the same read — a button primitive that dropped `disabled`, and
+an account form that offered no industries to any org that had saved its
+own. Twelve mutants, all caught. Deployed, hash-checked, not yet seen by
+Jeff; the ship, and item 24's real question, are his. Reasoned, then
+written, then committed.

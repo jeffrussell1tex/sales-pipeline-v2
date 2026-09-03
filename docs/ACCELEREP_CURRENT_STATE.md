@@ -3925,6 +3925,13 @@ Same class, one line each; Jeff's call — item 25. (b)
 byte-identical duplicate of its neighbour from `db4ef5b`; harmless to the
 fixture-coverage test, clutter otherwise; not deleted (not mine).
 
+**Dev landing (`95141cb`, pushed 14:57:03 local):** accelerep.netlify.app
+served `index-CEn91emU.js` — the local gate build's hash — at 14:57:35 local
+(was `index-WThsNanc.js`), `pk_test_` inlined; "Configure Slack", "Send test
+message" and "Incoming Webhook URL" present in the served bundle, "n:118"
+absent. `master` stays at `ad76a38` (the eighth ship); dev is ahead by item
+22 and this batch. **Not yet observed by Jeff.** The ship is Jeff's call.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
