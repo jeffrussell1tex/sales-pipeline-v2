@@ -5,13 +5,15 @@ and Best case STORED, per fiscal quarter, and Best case editable for the
 first time — item 18; the Sales Manager tab's FIVE inert buttons wired to
 real destinations, the ledger's Export CSV, and Home's quota card on this
 quarter's own figures — item 19; one commit, on dev, deploy-verified,
-NOT yet observed by Jeff and NOT shipped to prod), FINAL.** Repo root. Read this first, then verify
+OBSERVED by Jeff on deployed dev — "verified changes. they are working" —
+and NOT shipped to prod), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
 `### 0.84` with a paragraph beginning **"Jeff: "let's get a new session
-going"** and a paragraph beginning **"Dev landing (`9782e97`"**, and does
+going"** and a paragraph beginning **"OBSERVED by Jeff on deployed dev (3 Sep):
+"verified changes."**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b28`** with a bullet
 beginning **"Never `window.confirm`"** (the guide did not change this
 session either)? If not, you are looking at a copy that predates this handoff.
@@ -26,8 +28,8 @@ their headers is Jeff's call, not done.
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
 
-**Sixth session (3 Sep) — ON DEV ONLY, deploy-verified, NOT observed, NOT
-shipped:** `9782e97` (items 18 + 19, state §0.84) and its landing docs
+**Sixth session (3 Sep) — ON DEV ONLY, deploy-verified, OBSERVED by Jeff
+("verified changes. they are working"), NOT shipped:** `9782e97` (items 18 + 19, state §0.84) and its landing docs
 commit `3b2aba3`. accelerep.netlify.app served `index-C9mGhBOf.js` — the
 local gate build's hash — 56 seconds after the push (11:08:11 local),
 2,553,081 bytes, `pk_test_` inlined, "Forecast ledger" / "Export CSV" /
@@ -47,8 +49,8 @@ open the Pipeline tab; "Schedule 1:1" opens a new task in the rail; the
 ledger card has a header and **Export CSV**; Home's quota card is the
 quarter's own quota (`userQuotaFor`), wins by close day inside the fiscal
 quarter, commit by the org's last two open stages, labelled "Q4 FY2026".
-Every claim above is from the served bundle and the gates, not from a
-screen: **Jeff eyeballs on deployed dev** (§5). `master` stays at
+**OBSERVED by Jeff on deployed dev (3 Sep): "verified changes. they are
+working."** `master` stays at
 `eec3948`; `git log --oneline origin/master..dev` now lists this
 session's commits plus the previous ship-record docs commit — that is
 expected, not a finding.
@@ -341,9 +343,10 @@ mutation in flight — and was restored; not a finding).
 **Next session prep, in order (Jeff: "update the next session prep"):**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect `9782e97` and the docs commits after it, plus `6af58fb` (the
-  seventh ship's record). **Items 18 + 19 are UNSHIPPED and UNOBSERVED** —
-  that is the state, not a finding.
-- **Jeff eyeballs on deployed dev, as Admin, Sales Manager → Forecast:**
+  seventh ship's record). **Items 18 + 19 are OBSERVED (Jeff: "verified changes.
+  they are working") and UNSHIPPED** — that is the state, not a finding.
+- **DONE — Jeff verified on deployed dev.** Was the eyeball list, kept as
+  the record of what "working" covers: **as Admin, Sales Manager → Forecast:**
   type a Commit, refresh — it stays; the Team card / Today tab read the
   same number; click a Best case — type one, or leave it and see "est.";
   **Export CSV** downloads `forecast-2026-Q4.csv` with a Team total row;
@@ -678,7 +681,8 @@ mutation in flight — and was restored; not a finding).
    `_stage.mjs` imports stageClock.js), read by `forecastCallOf`,
    written by `withForecastCall` through the same users PUT as quotas;
    Best case editable in the same `CallCell`, an untyped one flagged as the
-   60% estimate. 17 tests, 10 mutants. Unobserved; unshipped. Was:
+   60% estimate. 17 tests, 10 mutants. **OBSERVED by Jeff on deployed dev
+   ("verified changes. they are working").** Unshipped. Was:
    **Carried (found reading for item 16, state §0.80): the Forecast
    ledger's editable Commit is never stored.** Clicking a rep's Commit
    cell calls `updateRepField(rep.id, 'commit', n)` → `saveUser` → users
@@ -700,7 +704,8 @@ mutation in flight — and was restored; not a finding).
    day in the fiscal quarter, commit by `commitFallbackStages`, labelled
    "Qn FYyyyy" (the old label was the first forecast bucket's). A standing
    scan now refuses any `<button` on the tab without an `onClick`.
-   Unobserved; unshipped. Was: **Carried, same read:** the Forecast
+   **OBSERVED by Jeff ("verified changes. they are working").** Unshipped.
+   Was: **Carried, same read:** the Forecast
    ledger's per-row "Coach →" button has no handler (the batch-6 class; Jeff removed the header's three,
    this one was found after the question was asked). HomeTab's quota card
    is `annualQuota / 4` (HomeTab.jsx ~351) — a quarterly-plan user sees a
@@ -816,5 +821,5 @@ its "annual ÷ 4", was also summing every win the rep ever had and
 labelling itself with whichever quarter held the first dated deal.
 Gated, mutated, deployed, hash-checked — and not observed: the pane has no
 session and the tab is a Manager's, so this handoff says "unobserved" in
-four places rather than once, and the first bullet of §5 is what Jeff
-should look at. Nothing in this file describes a screen that was seen.
+four places rather than once — and then Jeff looked: "verified changes.
+they are working." Recorded, committed, and the ship left as his call.
