@@ -3295,6 +3295,13 @@ gained an input. Users.mjs's PUT lets a Manager write any user's profile
 in the org, forecast calls included — the existing quota behaviour, not
 widened here, noted.
 
+**Dev landing (`9782e97`, pushed 11:07 local):** accelerep.netlify.app served
+`index-C9mGhBOf.js` — the local gate build's hash — at 11:08:11 local (was
+`index-DzhyaR_f.js`), 2,553,081 bytes, `pk_test_` inlined; "Forecast ledger",
+"Export CSV", `forecastCalls`, the estimate title and "1:1 with " all present
+in the served bundle; the deployed `users` function answers 401
+unauthenticated. Not yet observed by Jeff; `master` stays at `eec3948`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
