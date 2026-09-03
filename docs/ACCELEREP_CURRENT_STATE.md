@@ -3794,6 +3794,13 @@ button that closes the modal — while its Slack half (`slackConfig`, read by
 list carries typed account counts per industry (`n:118`, `n:74`…). Both
 are Jeff's calls: reduce or build.
 
+**Dev landing (`539eaa1`, pushed 14:01 local):** accelerep.netlify.app served
+`index-WThsNanc.js` — the local gate build's hash — at 14:02:19 local (was
+`index-BJ1VcE9y.js`), 2,483,334 bytes, `pk_test_` inlined; "App defaults",
+"recent event" and "FY starts " present in the served bundle, "12 KPIs
+configured", "14 industries" and "Q1 starts Feb 1" absent. Not yet observed
+by Jeff; `master` stays at `ad76a38` (the eighth ship).
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
