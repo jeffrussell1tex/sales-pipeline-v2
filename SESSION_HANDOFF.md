@@ -34,12 +34,13 @@ production"): `master` fast-forwarded `d513b0e` → `bdb0f3c`,
 salespipelinetracker.com serves `index-CIR6aj2A.js` (20 seconds after the
 push, `pk_live_` inlined, all four new strings present, the coaching-notes
 function 401 unauthenticated); state §0.82 last paragraph. Jeff ran the
-Admin "Import N legacy notes" button on prod: done.** **Fourth batch, dev
-only — NOT shipped:** `6bf1e6e` (the coachingNotes settings key and the
-legacy import path retired, state §0.83); accelerep.netlify.app served
-`index-DzhyaR_f.js` 40 seconds after the push. Nothing user-visible
-changes for an org that has imported; shipping it is Jeff's call. Third
-batch:
+Admin "Import N legacy notes" button on prod: done.** **Fourth batch —
+SHIPPED TO PROD as the seventh ship (Jeff: "ship to prod and update the
+docs"):** `6bf1e6e` (the coachingNotes settings key and the legacy import
+path retired, state §0.83); dev served `index-DzhyaR_f.js` 40 seconds
+after its push; `master` fast-forwarded `bdb0f3c` → `eec3948`,
+salespipelinetracker.com serves `index-Bsn2ZlRv.js` (`pk_live_` inlined, the
+coaching-notes function 401 unauthenticated). Third batch:
 `aef4b4b` (coaching notes addressed to people or a team, their own table),
 state §0.82; docs `38b7d55`. Deploy-verified: accelerep.netlify.app served
 `index-Kg6gw2rZ.js` 41 seconds after the push; the deployed
@@ -307,8 +308,8 @@ on deployed dev instead (Admin for items 16, 15, 17; Karen for 17's Home
 block and bell), each observation quoted in the state doc · dev deploys
 observed serving `index-ByAdikgx.js` (§0.80), `index-CsUn53YS.js` (§0.81),
 `index-Kg6gw2rZ.js` (§0.82), `index-DzhyaR_f.js` (§0.83) · **`master` ==
-`bdb0f3c`, prod serving `index-CIR6aj2A.js` (sixth ship, §1)**; dev is
-ahead of master by `6bf1e6e` (item 23, code) and docs · the shared app
+`eec3948`, prod serving `index-Bsn2ZlRv.js` (seventh ship, §1)**; dev is ahead of
+master by the ship-record docs commit only · the shared app
 database and the test database both hold `coaching_notes` + its index and
 `users.team_joined_at` (`db/apply-coaching-notes.mjs`, read back) · both
 orgs' `settings.extra.coachingNotes` emptied by Jeff's imports · no
@@ -319,11 +320,9 @@ build.
 
 **Next session prep, in order (Jeff: "update the next session prep"):**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect `6bf1e6e` (item 23, code) and docs commits after `bdb0f3c`;
-  anything else is unshipped code and a finding. **Item 23 is the one
-  unshipped code commit:** shipping it is Jeff's call (nothing user-visible
-  changes for an org that has imported; it removes the settings key and the
-  legacy POST branch).
+  expect only the ship-record docs commit after `eec3948`; anything else is
+  unshipped code and a finding. **Nothing is unshipped:** item 23 went to
+  prod as the seventh ship at the session's end.
 - **Then pick from items 18–22** — each starts with a read of files this
   session did not open (the Forecast Commit persistence, the inert Coach
   chips and Home's quota card, the Performance rep view, the four mockup
@@ -688,9 +687,9 @@ build.
    key is out of both halves of settings.mjs, the legacy POST branch out of
    coaching-notes.mjs, the import button and helpers out of the tab and
    the util; four mutants retired with their targets (214/214). On dev
-   only — not shipped; the ship is Jeff's call (nothing user-visible
-   changes for an org that has imported). Was: **Carried (after the prod
-   import, state §0.82): retire the `coachingNotes` settings key.** Both orgs' blobs are empty now; the key
+   only at first; **SHIPPED TO PROD the same day (seventh ship, `eec3948`,
+   `index-Bsn2ZlRv.js`)**. Was: **Carried (after the prod import, state §0.82):
+   retire the `coachingNotes` settings key.** Both orgs' blobs are empty now; the key
    remains in both halves of settings.mjs and the GET default only so the
    Admin import button can appear for an org that still holds old rows. Once
    every org has imported (dev and prod have), drop the key from settings.mjs

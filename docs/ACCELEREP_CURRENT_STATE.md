@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (fifth session, close)
-**Verified at:** five gates green on 145 files · **482 tests** · **214/214 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,489 kB `index-DzhyaR_f.js` · **prod `bdb0f3c` serving `index-CIR6aj2A.js` (sixth ship, 3 Sep)** · dev ahead of master by §0.83 (one code commit) and docs.
+**Verified at:** five gates green on 145 files · **482 tests** · **214/214 mutations, printed green baseline** · **87/87 integration** · build guard OK 2,489 kB `index-DzhyaR_f.js` · **prod `eec3948` serving `index-Bsn2ZlRv.js` (seventh ship, 3 Sep)** · `master` == `dev` at the ship; dev ahead by the ship-record docs commit only.
 **Batch:** **the coachingNotes settings key is retired (§0.83, handoff item 23)** — both orgs imported their old blob notes on 3 Sep, so the key leaves both halves of settings.mjs, the legacy POST branch leaves coaching-notes.mjs, the import button and helpers leave the Team tab and the util, and four mutants whose targets went with them are retired (218 → 214). Rows the import wrote keep `legacy: true` for the "imported" label. Dev only; not yet shipped.
 **Prior batch:** **coaching notes are ADDRESSED — to a person, several people, or a team — in their own org-scoped table (§0.82, handoff item 17)** — `coaching_notes` + `users.team_joined_at` (DDL applied to the test and app databases FIRST, guide §18c), `coaching-notes.mjs` with visibility decided by the pure `_coaching.mjs` (Jeff's two rules: a note to people is seen by author, recipients and Admins — never another manager; a team note by the team's manager and by members from their FIRST DAY, team_joined_at else created_at, resolved at read time), a house dialog with a rep/team picker replacing the typed "rep: text" prompt, the Team tab reading the table with delete for author/Admin, a "Notes from your manager" block on Home with read stamps, unread notes in the bell, an idempotent Admin import of the old settings-blob notes, and the §0.79 Manager carve-out in settings.mjs retired. Not browser-checked; Jeff eyeballs as Admin and as Karen.
 **Prior batch:** **the Settings catalogue and its panel headers carry no invented text; Workspace Health counts only what it can read (§0.81)** — 48 hand-typed footers ("Edited 2 months ago by Admin", values that never moved) gone, the two typed attention flags and five typed statuses gone, card status / attention / detail computed in one pure module (`settingsCards.js`, the block that lived inside the card component), the Needs Attention list computed from the same, the health tile's eight checks (four constants) replaced by the six that can be read with a sentence that names what failed, and 16 detail panels' typed "Last edited 3 weeks ago by Admin" removed (the shared headers render the line only when both values are real; the SSO panel's fictional "Morgan" gone). Carried: the mockup depth of the SSO / Session / Audit / Import panels and the remaining hand-typed card counts (handoff items 21–22).
@@ -3151,8 +3151,17 @@ that has imported — the button was already gone on dev and prod.
 line):** accelerep.netlify.app served `index-DzhyaR_f.js` — the local gate
 build's hash — 40 seconds after the push (10:31:25 local, was
 `index-Kg6gw2rZ.js`), 2,548,788 bytes; the deployed `coaching-notes`
-function answers 401 unauthenticated. Not shipped to prod: the ship is
-Jeff's call, and nothing user-visible changes for an org that has imported.
+function answers 401 unauthenticated.
+
+**PROD SHIP (Jeff: "ship to prod and update the docs to current state").**
+`master` fast-forwarded `bdb0f3c` → `eec3948` by `git push origin
+dev:master` after the ancestor check (7 commits: `6bf1e6e` and six docs
+commits including the session-close handoff). salespipelinetracker.com
+served `index-Bsn2ZlRv.js` at 10:46:45 local (was `index-CIR6aj2A.js`), 2,548,788
+bytes, `pk_live_` inlined; the deployed `coaching-notes` function answers
+401 unauthenticated. Nothing user-visible changed for either org — both had
+imported — and the settings key and the legacy POST branch are now gone
+from prod as well. `master` == `eec3948`.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
