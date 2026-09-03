@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
 **Updated:** September 3, 2026 (fifth session)
-**Verified at:** five gates green on 145 files · **484 tests** · **218/218 mutations, printed green baseline** · **87/87 integration** (8 new in `coaching-notes.itest.mjs`) · build guard OK 2,491 kB `index-Kg6gw2rZ.js` · prod `d513b0e` serving `index-C61hseh3.js` (fifth ship) · dev ahead of master by §0.80–§0.82 (four code commits) and docs.
+**Verified at:** five gates green on 145 files · **484 tests** · **218/218 mutations, printed green baseline** · **87/87 integration** (8 new in `coaching-notes.itest.mjs`) · build guard OK 2,491 kB `index-Kg6gw2rZ.js` · **prod `bdb0f3c` serving `index-CIR6aj2A.js` (sixth ship, 3 Sep)** · dev ahead of master by docs only.
 **Batch:** **coaching notes are ADDRESSED — to a person, several people, or a team — in their own org-scoped table (§0.82, handoff item 17)** — `coaching_notes` + `users.team_joined_at` (DDL applied to the test and app databases FIRST, guide §18c), `coaching-notes.mjs` with visibility decided by the pure `_coaching.mjs` (Jeff's two rules: a note to people is seen by author, recipients and Admins — never another manager; a team note by the team's manager and by members from their FIRST DAY, team_joined_at else created_at, resolved at read time), a house dialog with a rep/team picker replacing the typed "rep: text" prompt, the Team tab reading the table with delete for author/Admin, a "Notes from your manager" block on Home with read stamps, unread notes in the bell, an idempotent Admin import of the old settings-blob notes, and the §0.79 Manager carve-out in settings.mjs retired. Not browser-checked; Jeff eyeballs as Admin and as Karen.
 **Prior batch:** **the Settings catalogue and its panel headers carry no invented text; Workspace Health counts only what it can read (§0.81)** — 48 hand-typed footers ("Edited 2 months ago by Admin", values that never moved) gone, the two typed attention flags and five typed statuses gone, card status / attention / detail computed in one pure module (`settingsCards.js`, the block that lived inside the card component), the Needs Attention list computed from the same, the health tile's eight checks (four constants) replaced by the six that can be read with a sentence that names what failed, and 16 detail panels' typed "Last edited 3 weeks ago by Admin" removed (the shared headers render the line only when both values are real; the SSO panel's fictional "Morgan" gone). Carried: the mockup depth of the SSO / Session / Audit / Import panels and the remaining hand-typed card counts (handoff items 21–22).
 **Prior batch:** **the Sales Manager tab's quarter is the org's FISCAL quarter (§0.80)** — the header built a calendar quarter from `now.getMonth()` and never read `fiscalYearStart`, so an October-year org read "Q3 2026" in September while Home and every report said Q4; `currentQuarter()` in quarters.js is the one helper it reads now, and weeks remaining count today and are never 0 (the Today tab's Gap-to-Quota tile divides by them — "$InfinityM/wk" on a quarter's last day). The audit of the tab's totals found them on NO quarter at all (all-time closed against the annual quota); **Jeff's call, done in the second commit: Closed and Quota are quarter-to-date** (won by close day inside the fiscal quarter, against that quarter's figure), the Administration board measures fiscal-year-to-date against its annual quota, and the three inert header buttons are gone. Health labels and attainment on the Forecast, Team and Today tabs change accordingly. Carried: the Forecast ledger's editable Commit was never stored (handoff item 18); "Coach →", Home's annual ÷ 4 quota card, and the tab having no export at all (item 19).
@@ -3082,6 +3082,24 @@ and the "Import 2 legacy notes" button moving the two test notes and
 disappearing; as Karen, "Notes from your manager" unread, the bell count,
 and "Mark read" clearing both. The dev org's settings blob is now empty of
 coaching notes.
+
+**PROD SHIP (Jeff: "ship to production").** `master` fast-forwarded
+`d513b0e` → `bdb0f3c` by `git push origin dev:master` after the
+ancestor check (20 commits — §0.80, §0.81, §0.82 and the docs around them;
+the first time a ship carried a new table, and the DDL had been in the
+shared database since the morning, so no read could 500 on a missing
+object — §18c in the order it prescribes). salespipelinetracker.com served
+`index-CIR6aj2A.js` 20 seconds after the push (10:05:39 local, was
+`index-C61hseh3.js`), 2,550,612 bytes — the same size as dev's
+`index-Kg6gw2rZ.js`, a different hash because `pk_live_` is inlined
+(count 2: the key and Clerk's SDK constant; `pk_test_` count 1 is the SDK
+constant, the known false positive); "Notes from your manager", "FY
+attainment", the health sentence and "weeks remaining" all present; the
+deployed `coaching-notes` function answers 401 unauthenticated. `master`
+== `bdb0f3c`; dev is ahead by docs only. **Left for Jeff on prod:** the
+Admin "Import N legacy notes" button on Sales Manager → Team moves prod's
+old blob notes into the table; the UKG org's Sales Manager header should
+now read Q4 FY2026.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

@@ -31,7 +31,12 @@ their headers is Jeff's call, not done.
 
 ## 1. What shipped — everything is on `dev`, deploy-verified, observed
 
-**Fifth session (3 Sep), on dev only — NOT shipped to prod.** Third batch:
+**Fifth session (3 Sep) — SHIPPED TO PROD as the sixth ship (Jeff: "ship to
+production"): `master` fast-forwarded `d513b0e` → `bdb0f3c`,
+salespipelinetracker.com serves `index-CIR6aj2A.js` (20 seconds after the
+push, `pk_live_` inlined, all four new strings present, the coaching-notes
+function 401 unauthenticated); state §0.82 last paragraph. Left for Jeff on
+prod: the Admin "Import N legacy notes" button, once.** Third batch:
 `aef4b4b` (coaching notes addressed to people or a team, their own table),
 state §0.82; docs `38b7d55`. Deploy-verified: accelerep.netlify.app served
 `index-Kg6gw2rZ.js` 41 seconds after the push; the deployed
@@ -335,9 +340,9 @@ build, `.netlify/functions-serve` cleared once mid-session (CLAUDE.md).
   and a note to Karen lists with her name; as Karen, Home shows "Notes from
   your manager" unread, the bell counts it, "Mark read" clears both; the
   "Import 2 legacy notes" button moves the two test notes and disappears.
-  **OBSERVED by Jeff (3 Sep): "all cleared and worked as planned."** **Then
-  prod ship** (Jeff: "ship to production") — after the ship, Jeff imports
-  prod's legacy notes as Admin the same way.
+  **OBSERVED by Jeff (3 Sep): "all cleared and worked as planned."**
+  **SHIPPED TO PROD (`bdb0f3c`, `index-CIR6aj2A.js`).** Left for Jeff on
+  prod: the Admin "Import N legacy notes" button on Sales Manager → Team, once.
 - **Items 18 and 19 are new** (found reading for 16): the Forecast ledger's
   Commit is never stored; "Coach →" is inert; Home's quota card is annual
   ÷ 4; the tab has no export at all.
