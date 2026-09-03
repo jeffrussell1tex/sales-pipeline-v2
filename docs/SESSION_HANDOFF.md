@@ -482,7 +482,18 @@ cleared at close.
    prompt instead of a typed name, a rep-side surface (Home "on your
    plate" or a notes panel) and a notification; then migrate the blob's
    existing notes and retire the settings key and the Manager exception.
-   Not started.
+   **Two decisions from Jeff (2 Sep):** (a) a rep who joins the team
+   later sees team notes only from their first day — so a team note is
+   resolved against membership at READ time with a date floor, not
+   expanded into per-user rows at write time; the table needs the note's
+   date and the rep's join date (users.createdAt, or the date they were
+   added to the team, which the users row does not record today — the
+   team assignment carries no timestamp; decide which before the schema
+   is written). (b) Managers cannot see each other's private notes — a
+   note addressed to people is visible to its author, its recipients,
+   and Admins; NOT to other managers, not even a recipient's own manager
+   unless they wrote it. Team notes are visible to the team's members
+   (from their first day) and its managers. Not started.
 
 ## 6. The thread
 
