@@ -3949,10 +3949,14 @@ to `send-slack` and never touches settings; `handleSaveSlack` is one
 `putSettings` per Save; `dbFetch` has no retry; `IntBtn` is a plain
 `<button onClick>`; `writeAudit` inserts once; the modal closes only after
 the write lands, so a second row needs Configure reopened and Save again
-— 12 and 23 seconds apart is a hand, not a loop. What Jeff clicked each
-round is not yet stated; an open question, not a finding. Not yet fired
-against it: the five `pipeline-alerts.mjs` posts. The ship is Jeff's
-call.
+— 12 and 23 seconds apart is a hand, not a loop. Jeff on the second pair:
+"i just clicked the send test message" — so a controlled repeat: dev
+confirmed serving the §0.91 build (`index-ABUwIA60.js`, `src/` unchanged
+since `eb24dea`), baseline 4 rows at 17:40:43 UTC, Jeff: Configure → Send
+test message once, nothing else → "clicked" → read at 17:42:12: **still 4;
+no row of any kind after 17:31:47.** The test button writes nothing; the
+pairs were Save writes. Closed, not a finding. Not yet fired against it:
+the five `pipeline-alerts.mjs` posts. The ship is Jeff's call.
 
 ### 0.90 Connected apps is what exists: Slack, two calendars, email logging, and requests for the rest (3 Sep, seventh session)
 
