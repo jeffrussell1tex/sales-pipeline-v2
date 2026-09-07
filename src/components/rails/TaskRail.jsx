@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../AppContext';
+import ActivityRowText from './ActivityRowText';
 import AttachmentsStrip from '../documents/AttachmentsStrip';
 import TimeDropdown from '../ui/TimeDropdown';
 
@@ -134,7 +135,7 @@ export default function TaskRail() {
         handleDeleteTask,
         handleCompleteTask,
         handleSaveActivity,
-        setShowActivityModal, setEditingActivity, setActivityInitialContext,
+        setShowActivityModal, setEditingActivity, setActivityInitialContext, setViewingActivity,
         setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults,
         taskModalError, setTaskModalError,
         taskModalSaving,
@@ -625,12 +626,12 @@ export default function TaskRail() {
                                 <SectionHeading label={`Activity History (${taskActivities.length})`} />
                                 <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
                                     {taskActivities.map((a, idx) => (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderBottom: idx < taskActivities.length - 1 ? `1px solid ${T.border}` : 'none', background: idx % 2 === 0 ? '#fff' : T.surface }}>
+                                        <div key={idx} onClick={() => setViewingActivity(a)} title="Open" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', cursor: 'pointer', borderBottom: idx < taskActivities.length - 1 ? `1px solid ${T.border}` : 'none', background: idx % 2 === 0 ? '#fff' : T.surface }}>
                                             <span style={{ fontSize: 11, color: T.ink3, flexShrink: 0, width: 52, paddingTop: 1 }}>
                                                 {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                             </span>
                                             <span style={{ background: 'rgba(58,90,122,0.1)', color: T.ink, padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{a.type || 'Note'}</span>
-                                            <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.ink2 }}>{a.notes || a.subject || 'No details'}</div>
+                                            <div style={{ flex: 1, minWidth: 0 }}><ActivityRowText activity={a} /></div>
                                         </div>
                                     ))}
                                 </div>

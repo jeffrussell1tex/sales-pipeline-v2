@@ -24,6 +24,7 @@ import LostReasonModal from '../modals/LostReasonModal';
 import MergeReviewModal from '../modals/MergeReviewModal';
 import ContactMergeReviewModal from '../modals/ContactMergeReviewModal';
 import { CoachingNoteDialogHost } from '../modals/CoachingNoteDialog';
+import { ActivityDetailDialogHost } from '../modals/ActivityDetailDialog';
 // ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
 // Chunked bulk transport for the CSV importer.
@@ -1160,6 +1161,7 @@ export default function ModalLayer() {
             <MergeReviewModal />
             <ContactMergeReviewModal />
             <CoachingNoteDialogHost />
+            <ActivityDetailDialogHost />
         </>
     );
 }

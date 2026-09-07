@@ -54,6 +54,10 @@ export function useModalState() {
     const [editingTask, setEditingTask] = useState(null);
     const [editingContact, setEditingContact] = useState(null);
     const [editingActivity, setEditingActivity] = useState(null);
+    // The read-only activity viewer (state §0.93): the row being read, or null.
+    // Rendered by ActivityDetailDialogHost in ModalLayer; Edit hands the row to
+    // editingActivity + showActivityModal.
+    const [viewingActivity, setViewingActivity] = useState(null);
     const [activityInitialContext, setActivityInitialContext] = useState(null);
 
     const [parentAccountForSub, setParentAccountForSub] = useState(null);
@@ -120,6 +124,7 @@ export function useModalState() {
         editingTask, setEditingTask,
         editingContact, setEditingContact,
         editingActivity, setEditingActivity,
+        viewingActivity, setViewingActivity,
         activityInitialContext, setActivityInitialContext,
         parentAccountForSub, setParentAccountForSub,
         lastCreatedAccountName, setLastCreatedAccountName,

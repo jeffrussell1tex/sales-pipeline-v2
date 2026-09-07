@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1396,6 +1396,36 @@ const mutations = [
         'netlify/functions/settings.mjs',
         "            if ('slackConfig' in data && data.slackConfig && data.slackConfig.webhookUrl) {",
         '            if (false) {'],
+
+    // ── Item 26: the activity viewer (0.93) ─────────────────────────────────────
+    ['viewer: a rep may edit any rep\'s activity from the viewer',
+        'src/utils/activityView.js',
+        '    return owner === currentUserId;',
+        '    return true;'],
+    ['viewer: a read role gets an Edit button',
+        'src/utils/activityView.js',
+        "    if (!activity || !WRITE_ROLES.has(userRole)) return false;",
+        "    if (!activity) return false;"],
+    ['viewer: a Clerk id in the owner column compares equal to something',
+        'src/utils/activityView.js',
+        '    if (!isAppUserId(owner) || !isAppUserId(currentUserId)) return false;',
+        '    if (false) return false;'],
+    ['viewer: an email row stops splitting — the subject is repeated in the body',
+        'src/utils/activityView.js',
+        '    if (subject && notes.startsWith(subject + SEP)) return { subject, body: notes.slice(subject.length + SEP.length) };',
+        '    if (false) return { subject, body: notes.slice(subject.length + SEP.length) };'],
+    ['viewer: Escape no longer closes it first',
+        'src/App.jsx',
+        '                if (viewingActivity) { setViewingActivity(null); return; }',
+        ''],
+    ['viewer: the host offers Edit to everyone',
+        'src/components/modals/ActivityDetailDialog.jsx',
+        '    const canEdit = canEditActivity(a, { userRole, currentUserId });',
+        '    const canEdit = true;'],
+    ['viewer: the contact rail row stops opening it',
+        'src/components/rails/ContactRail.jsx',
+        '<div key={idx} onClick={() => setViewingActivity(a)} title="Open"',
+        '<div key={idx}'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

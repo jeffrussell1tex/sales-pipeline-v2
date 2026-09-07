@@ -186,6 +186,7 @@ function App() {
         showAccountModal, setShowAccountModal, showUserModal, setShowUserModal,
         showTaskModal, setShowTaskModal, showContactModal, setShowContactModal,
         showActivityModal, setShowActivityModal, showShortcuts, setShowShortcuts,
+        viewingActivity, setViewingActivity,
         showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
         showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal, csvImportType, setCsvImportType,
@@ -473,6 +474,7 @@ dbFetch('/.netlify/functions/users?me=true')
 
             // Escape — close topmost open thing
             if (e.key === 'Escape') {
+                if (viewingActivity) { setViewingActivity(null); return; }
                 if (showShortcuts) { setShowShortcuts(false); return; }
                 if (showActivityModal) { setShowActivityModal(false); return; }
                 if (showModal) { setShowModal(false); setEditingOpp(null); return; }
@@ -495,7 +497,7 @@ dbFetch('/.netlify/functions/users?me=true')
             // Don't fire shortcuts while typing
             if (isTyping) return;
             // Don't fire if any modal is open (except ? for help)
-            const anyModalOpen = showModal || showAccountModal || showContactModal || showTaskModal || showUserModal || showActivityModal || confirmModal || promptModal || coachingNoteModal;
+            const anyModalOpen = showModal || showAccountModal || showContactModal || showTaskModal || showUserModal || showActivityModal || confirmModal || promptModal || coachingNoteModal || viewingActivity;
 
             if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
                 e.preventDefault();
@@ -561,7 +563,7 @@ dbFetch('/.netlify/functions/users?me=true')
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [showModal, showAccountModal, showContactModal, showTaskModal, showUserModal, showActivityModal,
+    }, [showModal, showAccountModal, showContactModal, showTaskModal, showUserModal, showActivityModal, viewingActivity,
         confirmModal, promptModal, coachingNoteModal, notesPopover, undoToast, showNotifications, showSearchResults, showShortcuts]);
 
 
@@ -1360,7 +1362,7 @@ dbFetch('/.netlify/functions/users?me=true')
             showCsvImportModal || showLeadImportModal || showLeadModal ||
             showOutlookImportModal || showSpiffClaimModal ||
             confirmModal || promptModal || coachingNoteModal || blockedDeleteModal || lostReasonModal ||
-            viewingContact || viewingAccount || viewingTask ||
+            viewingContact || viewingAccount || viewingTask || viewingActivity ||
             meetingPrepOpen || logFromCalOpen || showCalConfig ||
             quickLogOpen || showNavGuard
         );
@@ -1372,7 +1374,7 @@ dbFetch('/.netlify/functions/users?me=true')
         showCsvImportModal, showLeadImportModal, showLeadModal,
         showOutlookImportModal, showSpiffClaimModal,
         confirmModal, blockedDeleteModal, lostReasonModal,
-        viewingContact, viewingAccount, viewingTask,
+        viewingContact, viewingAccount, viewingTask, viewingActivity,
         meetingPrepOpen, logFromCalOpen, showCalConfig,
         quickLogOpen, showNavGuard,
     ]);
@@ -1619,6 +1621,7 @@ dbFetch('/.netlify/functions/users?me=true')
         handleAddUser, handleEditUser, handleDeleteUser,
         showActivityModal, setShowActivityModal,
         editingActivity, setEditingActivity,
+        viewingActivity, setViewingActivity,
         activityInitialContext, setActivityInitialContext,
         activityModalError, setActivityModalError,
         activityModalSaving, setActivityModalSaving,

@@ -226,6 +226,7 @@ const StageRibbon = ({ allStages, current, onStage }) => {
 //  "See all" link
 // ─────────────────────────────────────────────────────────────
 function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, settings, contacts, activityTypeIcon, onSaveActivity, onDeleteActivity, currentUser, onClose, saving, onUpdate }) {
+    const { setViewingActivity } = useApp();   // a history row opens the read-only viewer (§0.93)
     const [showLogActivity, setShowLogActivity] = React.useState(false);
     const [newActivity, setNewActivity] = React.useState({
         type: 'Call',
@@ -296,7 +297,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
         ...oppActivities.map(a => ({
             id: a.id, kind: 'activity',
             icon: activityTypeIcon[a.type] || '📝',
-            label: a.type, date: a.date, notes: a.notes,
+            label: a.type, date: a.date, notes: a.notes, activity: a,
             onDelete: onDeleteActivity ? () => onDeleteActivity(a.id) : null,
         })),
         ...oppTasks.map(t => ({
@@ -482,7 +483,8 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {historyItems.map(item => (
-                        <div key={item.kind + '_' + item.id} style={{ display: 'flex', gap: '0.625rem', padding: '0.625rem 0.75rem', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r }}>
+                        <div key={item.kind + '_' + item.id} onClick={item.activity ? () => setViewingActivity(item.activity) : undefined} title={item.activity ? 'Open' : undefined}
+                            style={{ display: 'flex', gap: '0.625rem', padding: '0.625rem 0.75rem', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, cursor: item.activity ? 'pointer' : 'default' }}>
                             <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: T.bg, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 <span style={{ fontSize: '0.75rem' }}>{item.icon}</span>
                             </div>
@@ -494,7 +496,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                                 {item.notes && <div style={{ fontSize: '0.75rem', color: T.inkMid, marginTop: '2px', lineHeight: 1.5, fontFamily: T.sans }}>{item.notes}</div>}
                             </div>
                             {item.onDelete && (
-                                <button type="button" onClick={item.onDelete}
+                                <button type="button" onClick={e => { e.stopPropagation(); item.onDelete(); }}
                                     style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '1rem', padding: '0.125rem', lineHeight: 1, borderRadius: T.r, flexShrink: 0 }}
                                     onMouseEnter={e => e.currentTarget.style.color = T.danger}
                                     onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>
@@ -868,6 +870,7 @@ function NestedNewContactForm({ firstName, lastName, onSave, onCancel }) {
 //  Right Rail — 3 sections (AI, Contacts, Activity)
 // ─────────────────────────────────────────────────────────────
 function RightRail({ opportunity, oppActivities, contacts, settings, onOpenActivity, onOpenContact, onOpenHistory, onOpenAi, onOpenContacts }) {
+    const { setViewingActivity } = useApp();   // a recent-activity row opens the read-only viewer (§0.93)
 
     // Last touch recency → engagement level
     const engLevel = (lastActivityDate) => {
@@ -988,7 +991,7 @@ function RightRail({ opportunity, oppActivities, contacts, settings, onOpenActiv
                 ) : (
                     <div style={{ borderLeft: `1px solid ${T.border}`, paddingLeft: 14, position: 'relative' }}>
                         {recentActs.map((a, i) => (
-                            <div key={a.id} style={{ position: 'relative', paddingBottom: i < recentActs.length - 1 ? 14 : 0 }}>
+                            <div key={a.id} onClick={() => setViewingActivity(a)} title="Open" style={{ position: 'relative', paddingBottom: i < recentActs.length - 1 ? 14 : 0, cursor: 'pointer' }}>
                                 <div style={{ position: 'absolute', left: -19, top: 3, width: 10, height: 10, borderRadius: '50%',
                                     background: T.surface, border: `1.5px solid ${T.goldInk}`,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

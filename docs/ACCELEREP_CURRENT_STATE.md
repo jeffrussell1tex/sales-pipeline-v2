@@ -4305,6 +4305,85 @@ after: `send-slack` and `integration-requests` GET → 405, unauthenticated POST
 → 401 — the gate sits behind the session, so the 403 needs one; not observed
 by Jeff. `master` stays at `cf72f99`.
 
+### 0.93 An activity can be read: every row opens a viewer, emails show their subject and body (7 Sep, eighth session — item 26, option 2)
+
+**Jeff, with Karen's two test emails on the contact: "Is there anyway that we
+can have these emails clickable and a person can read the full content? As is,
+these are fairly useless because I can't see any content."** What existed: a
+logged email is one activity row whose `notes` is "<subject> — <body>" (the
+body as plain text, capped at 4,000 characters, `email-inbound.mjs`); the
+contact, account and task rails rendered that whole field in the row with no
+clamp — the two test emails were one line each, so nothing was hidden that
+day, but the first real email would have been a wall of 12px text; the deal
+History tab cut notes at 80 characters with no way to see the rest; no row
+anywhere was clickable; and no read-only view of an activity existed — the
+only activity surface was the create/edit form (`ActivityRail`). Three
+options went to Jeff: (1) click opens the existing editor; (2) a read-only
+detail dialog with Edit for those the server would let write, plus a
+two-line preview in the rows; (3) store more of the email (From/To/Cc,
+Message-ID, the cap) in an additive column. **Jeff: "do option 2 now … and we
+can make the call on option 3 with emails."**
+
+**Design.** One pure module, `src/utils/activityView.js`: `emailPartsOf`
+splits the stored notes back into subject and body when the subject is the
+prefix the inbound function wrote (a logged call keeps its notes whole);
+`previewOf` is what a row shows; `canEditActivity` mirrors the server's
+`mayMutate` — Admin and Manager always, a writing rep on their own or
+unassigned rows, never a read role, never a caller with no roster row, never
+an owner id outside the `usr_` space (18b22) — and decides only whether the
+button SHOWS; the write is still `assertOwnership`'s. One state,
+`viewingActivity` (`useModalState.js` → `App.jsx` → `appContextValue`; Escape
+closes it before anything else; the shortcut guard and the body-scroll lock
+know it). One dialog, `ActivityDetailDialog.jsx` at module scope, hosted by
+`ActivityDetailDialogHost` in `ModalLayer` beside the coaching-note host:
+type, date (`parseLocalDate`), author, the subject bold, the contact ·
+account · deal it points at, the body with `white-space: pre-wrap` in a
+scrolling pane, outcome and duration when present, Close, and Edit — which
+closes the viewer and hands the row to the existing editor
+(`editingActivity` + `showActivityModal`). `zIndex` 11000, above the rails'
+10999. One row component, `ActivityRowText.jsx`, shared by the three rails:
+the subject as a bold one-line title, the snippet clamped to two lines.
+Clickable now: the contact, account and task rails' Activity History rows;
+the deal modal's recent-activity list (`RightRail`) and its History tab
+(`DealHistoryTab`; the row's delete × stops propagation so a delete does not
+also open). Not changed: the History tab's own text (it already showed the
+whole field), the Reports timelines, what is stored — option 3 is Jeff's
+call after he has read a real email in the viewer.
+
+**Tests.** `tests/activity-view.test.mjs` (new, 5): the split over an email
+row, one with line breaks, one with no body, a subject that is not the
+prefix, a call with no subject, blank and missing input; the edit predicate
+over Admin and Manager (with and without a roster row), a rep on their own,
+another's, an unassigned and an empty-owner row, a caller with no roster row
+(the `null === null` collision, guarded), a Clerk id on either side and — the
+case the first harness run showed missing — EQUAL Clerk ids, a padded owner
+id, every read role and an unknown one; scans pinning the state, both
+App.jsx sites, Escape first, the shortcut guard, the body lock and its deps,
+the key-handler deps, the host rendered once from ModalLayer, Edit gated,
+`pre-wrap`, the z-index, no fetch in the viewer, the shared row text and the
+click on every one of the five lists. 7 mutants (a rep editing anyone's row,
+a read role offered Edit, the id-space check inert, the split inert, Escape
+gone, the host offering Edit to all, the contact rail row inert); the first
+run caught 293/294 — the id-space mutant survived because no case had equal
+Clerk ids on both sides — the case was added and the harness re-run in full.
+
+**Verified.** Five gates green on 151 files (three new); build guard OK,
+`index-C1VD4DfX.js`, 2,490.81 kB (2,437 kB JS), `pk_test_` inlined, `dist/`
+cleared; **565/565** unit (5 new); **114/114** integration (unchanged — no
+endpoint changed); **294/294 mutations, printed green baseline** (7
+added; run alone, after). **No browser pass** — the pane holds no session
+and signing in needs Jeff's credentials, which are never handled here;
+reasoned from code and pinned by scans. No schema change. **Jeff eyeballs on
+deployed dev, as Karen and as Admin:** Contacts → Jeff Russelltest → Activity
+— the two rows read "Test email" bold over "Test email for logging" and
+"Test email #2" bold over "Test email #2"; click one → the viewer with
+Email · Sep 7 · Karen Russell, the subject, "Jeff Russelltest", the body,
+Close and (for Karen, the owner, and for Admin) Edit; Escape closes it; Edit
+opens the familiar editor on that row. A deal's History tab and its Activity
+rail rows open the same viewer; the × on a History row still deletes without
+opening.
+
+
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

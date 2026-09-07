@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../AppContext';
+import ActivityRowText from './ActivityRowText';
 import { dbFetch } from '../../utils/storage';
 import RecordDocuments from '../documents/RecordDocuments';
 import AccountPicker from './AccountPicker';
@@ -130,7 +131,7 @@ export default function ContactRail() {
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
         railStack, setRailStack,
-        showActivityModal, setShowActivityModal, setActivityInitialContext,
+        showActivityModal, setShowActivityModal, setActivityInitialContext, setViewingActivity,
         handleSaveContact,
         handleDeleteContact,
         handleAddActivity,
@@ -852,13 +853,13 @@ export default function ContactRail() {
                                 {contactActivities.map((a, idx) => {
                                     const relOpp = a.opportunityId ? (opportunities || []).find(o => o.id === a.opportunityId) : null;
                                     return (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderBottom: idx < contactActivities.length - 1 ? `1px solid ${T.border}` : 'none', background: idx % 2 === 0 ? '#fff' : T.surface }}>
+                                        <div key={idx} onClick={() => setViewingActivity(a)} title="Open" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', cursor: 'pointer', borderBottom: idx < contactActivities.length - 1 ? `1px solid ${T.border}` : 'none', background: idx % 2 === 0 ? '#fff' : T.surface }}>
                                             <span style={{ fontSize: 11, color: T.ink3, flexShrink: 0, width: 52, paddingTop: 1 }}>
                                                 {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                             </span>
                                             <span style={{ background: 'rgba(58,90,122,0.1)', color: T.ink, padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{a.type || 'Note'}</span>
                                             <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontSize: 12, color: T.ink2 }}>{a.notes || a.subject || 'No details'}</div>
+                                                <ActivityRowText activity={a} />
                                                 {relOpp && <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>{relOpp.opportunityName || relOpp.account}</div>}
                                             </div>
                                         </div>
