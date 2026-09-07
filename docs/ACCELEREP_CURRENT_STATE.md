@@ -4035,7 +4035,7 @@ in the served bundle, "Morgan Reyes" and "Authorize" absent; the deployed
 `integration-requests` function answers 401 unauthenticated. `master` stays
 at `ad76a38` (the eighth ship). The ship is Jeff's call.
 
-**OBSERVED — Jeff's screenshot of deployed dev (3 Sep, as Admin), read
+**OBSERVED — Jeff's screenshot of deployed dev (7 Sep, as Admin), read
 against the code:** the panel as designed — "2 live"; Slack "Not connected"
 with only "Configure Slack"; Google Calendar "Live", "Mine ·
 jeffrussell1@gmail.com · 8/12/2026" with Disconnect, "Connected", and
@@ -4047,7 +4047,7 @@ BCC address and Copy; "Request an integration · None requested yet" and the
 ten rows, each ending in Request. Not yet seen: a Request clicked, Slack
 configured, the Karen path.
 
-### 0.91 Personal email-logging addresses, and the org address attributes by sender (3 Sep, seventh session)
+### 0.91 Personal email-logging addresses, and the org address attributes by sender (7 Sep, seventh session resumed)
 
 **Jeff, looking at the Email logging card: "Is there a way to allow individual
 accelerepo users to generate a unique address for themselves so that only
@@ -4114,6 +4114,14 @@ attribution); from an address not on the roster — unowned, visible to all.
 **Open.** A personal address is revocable only by deactivating the user or
 rotating `BCC_SECRET` (which rotates every address in every org); a per-user
 nonce column would allow rotating one — not built, not asked for.
+
+**Dev landing (`eb24dea`, pushed 10:58:06 local):** accelerep.netlify.app
+served `index-ABUwIA60.js` — the local gate build's hash — at 10:58:38 local (was
+`index-UiFDxZrS.js`), 32 seconds after the push, `pk_test_` inlined;
+"Treat this address like a password" and "personal address under their
+avatar" present in the served bundle; the deployed `email-inbound` GET
+answers 401 unauthenticated. `master` stays at `ad76a38` (the eighth
+ship). **Not yet observed by Jeff.** The ship is Jeff's call.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

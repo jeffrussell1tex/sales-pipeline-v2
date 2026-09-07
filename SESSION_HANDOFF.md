@@ -1,27 +1,26 @@
 # SESSION_HANDOFF.md
 
-**Session of 3 September 2026, seventh session (Jeff: "claude, lets
-continue" — reading the two item-24 panels found the Connected Apps panel had
-rendered a component bound nowhere in `src/` since 11 May: `<SlackConfigModal/>`,
-every build green, every "Configure Slack" click a ReferenceError into the
-Settings error boundary; restored, the `check:tdz` gate taught that a JSX name
-is a read, `IntBtn`'s dropped `disabled`, the Industries typed counts and the
-Account rail's wrong key — state §0.89, OBSERVED by Jeff on deployed dev
-("verified"); then Jeff: "can we create a list of common apps … right now
-(other than slack) they all show morgan reyes with no ability to switch" —
-the honest answer went back (three real things exist; a modal is not an
-integration) and Jeff chose **option A**: the panel is what exists — Slack,
-Google and Microsoft 365 calendars through the real OAuth, an Email-logging
-card for the BCC address that had no UI, and a ten-app catalogue whose rows
-are REQUESTS recorded on the org, audited and mailed to the owner, never a
-Connect — state §0.90, on dev, deploy-verified, NOT yet observed by Jeff;
-NOTHING from this session is shipped to prod; item 22 still unshipped), FINAL.** Repo root. Read this first, then verify
+**Session of 3 and 7 September 2026, seventh session (Jeff: "claude, lets
+continue" — the Connected Apps panel had rendered a component bound nowhere
+since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
+that a JSX name is a read — state §0.89, OBSERVED by Jeff ("verified"); then
+Jeff: "can we create a list of common apps … they all show morgan reyes" — he
+chose **option A**: the panel is what exists, Slack, Google and Microsoft 365
+calendars, an Email-logging card, and a catalogue whose rows are REQUESTS —
+state §0.90, OBSERVED by Jeff's screenshot; then Jeff: "is there a way to
+allow individual accelerepo users to generate a unique address for
+themselves" — option 1 plus From attribution: a personal `me-<user id>-<sig>`
+address whose email is OWNED by that user and shown to no other rep, the org
+address attributed to the roster member who sent it, a profile-panel tab,
+the first integration suite the inbound function ever had — state §0.91, on
+dev, deploy-verified, NOT yet observed; NOTHING from this session is shipped
+to prod; item 22 still unshipped), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.90` with a paragraph beginning **"Design (decided before code, no new
-table)."** and a paragraph beginning **"Dev landing (`e3d15f2`"**, and does
+`### 0.91` with a paragraph beginning **"Jeff, looking at the Email logging
+card:"** and a paragraph beginning **"Dev landing (`eb24dea`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b29`** and, under `## 18b7`,
 a paragraph beginning **"The mirror image (3 Sep 2026, state §0.90)"**? If
 not, you are looking at a copy that predates this handoff. Check section
@@ -30,11 +29,34 @@ content, never dates.
 **On dates:** §0.58, §0.59 and the previous handoff say "2 Sep". Git carries
 every one of their commits at 1 Sep -0500, the same day as §0.56/§0.57 and
 as this session. §0.60 uses the day git records and flags theirs; renaming
-their headers is Jeff's call, not done.
+their headers is Jeff's call, not done. **The seventh session spans two
+days:** §0.89 and §0.90 and their docs are 3 Sep -0500 in git; the §0.90
+screenshot observation (`6fbf821`) and §0.91 (`eb24dea`) are 7 Sep — the
+session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — everything is on `dev`, deploy-verified, observed (the item-24 batch by screenshot)
+## 1. What shipped — everything is on `dev`, deploy-verified; all but the third batch observed
+
+**Seventh session, third batch (7 Sep — the session resumed) — ON DEV ONLY,
+deploy-verified, NOT observed by Jeff, NOT shipped:** `eb24dea` (personal email-logging
+addresses, state §0.91) and the docs commit this handoff rides in.
+accelerep.netlify.app served `index-ABUwIA60.js` — the local gate build's hash —
+32 seconds after the push (10:58:38 local), `pk_test_` inlined; "Treat this
+address like a password" and "personal address under their avatar" in the
+served bundle; the deployed `email-inbound` GET answers 401 unauthenticated.
+What it is: **Jeff: "I like option 1. I also like the from address
+attribution."** Every roster member has a personal BCC address,
+`me-<users.id>-<sig>@…` (its own HMAC namespace; requires `users.active`),
+shown under avatar → Email logging with Copy; an email through it is logged
+OWNED by that user with their roster name as author, on any contact in the
+org, so the existing rep visibility rule shows it to them, their managers
+and admins and to no other rep. The org address stays as the fallback and is
+now attributed to the roster member whose email matches the From address
+(org-scoped), unowned otherwise. Before: every logged email was unowned and
+visible to every rep, with the raw sender in `author`. **Not observed** — no
+pane session, and the real proof is a real email. `master` stays at
+`ad76a38`.
 
 **Seventh session, second batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff's screenshot (the panel rendered; a Request click, Slack
@@ -61,7 +83,7 @@ are requests: POST → recorded at `settings.extra.integrationRequests` (both
 halves of `settings.mjs`), org-scoped, idempotent, audited as
 `integration.requested`, mailed to `INTEGRATION_REQUESTS_TO` when set. Gone:
 the "Morgan Reyes" connect modal, `INT_APPS`, "Browse marketplace", "+
-Request integration", the `gcal` flag. **OBSERVED — Jeff's screenshot of deployed dev (3 Sep, as Admin), read
+Request integration", the `gcal` flag. **OBSERVED — Jeff's screenshot of deployed dev (7 Sep, as Admin), read
 against the code:** the panel as designed — "2 live"; Slack "Not connected"
 with only "Configure Slack"; Google Calendar "Live", "Mine ·
 jeffrussell1@gmail.com · 8/12/2026" with Disconnect, "Connected", and
@@ -476,21 +498,22 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (3 Sep, seventh session, second batch)
+## 4. Verified state at close (7 Sep, seventh session, third batch)
 
-Five gates green on 148 files · **552/552 unit** (17 new this session: 15 in
-`connected-apps.test.mjs`, 2 in `scanners.test.mjs`) · **273/273 mutations, printed green baseline (12 added this batch; the first run let one survive and the test was tightened before the number was written; run alone)** ·
-build **2,429 kB JS**, `index-UiFDxZrS.js`, guard OK, `dist/` cleared · **100/100
-integration** (6 new in `integration-requests.itest.mjs`; the test database
-needed no schema change) · **no pane browser pass this session** — no
-`netlify dev` was started and the pane holds no session (a sign-in needs
-Karen's second factor); §0.89 was OBSERVED by Jeff on deployed dev, §0.90 was
-not · dev deploys observed serving `index-CEn91emU.js` (§0.89) and
-`index-UiFDxZrS.js` (§0.90) · **`master` == `ad76a38`, prod serving
-`index-BYLyFXw4.js` (eighth ship)**; dev is ahead of master by the
-ship-record docs commit, item 22 (`539eaa1` + docs), `95141cb` + `7bb3e70`,
-and `e3d15f2` + this handoff's commit · no schema change · the working tree
-was clean at close.
+Five gates green on 148 files · **555/555 unit** (20 new this session: 18 in
+`connected-apps.test.mjs`, 2 in `scanners.test.mjs`) · **280/280 mutations, printed green baseline (7 added this batch; run alone)** ·
+build **2,431 kB JS**, `index-ABUwIA60.js`, guard OK, `dist/` cleared · **108/108
+integration** (14 new this session: 6 in `integration-requests.itest.mjs`, 8
+in `email-inbound.itest.mjs`; the test database needed no schema change) ·
+**no pane browser pass this session** — no `netlify dev` was started and the
+pane holds no session; §0.89 was OBSERVED by Jeff on deployed dev, §0.90 by
+his screenshot, §0.91 not yet · dev deploys observed serving
+`index-CEn91emU.js` (§0.89), `index-UiFDxZrS.js` (§0.90) and `index-ABUwIA60.js`
+(§0.91) · **`master` == `ad76a38`, prod serving `index-BYLyFXw4.js` (eighth
+ship)**; dev is ahead of master by the ship-record docs commit, item 22
+(`539eaa1` + docs), `95141cb` + `7bb3e70`, `e3d15f2` + `4abf68c` +
+`6fbf821`, and `eb24dea` + this handoff's commit · no schema change · the
+working tree was clean at close.
 
 ## 5. Next — start here
 
@@ -498,8 +521,21 @@ was clean at close.
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect the eighth-ship record docs commit, `539eaa1` + its two docs
   commits (item 22, OBSERVED), `95141cb` + `7bb3e70` (§0.89, OBSERVED —
-  Jeff: "verified"), and `e3d15f2` + its docs commits (§0.90, OBSERVED by
-  screenshot). Anything else is unshipped code and a finding.
+  Jeff: "verified"), `e3d15f2` + its docs commits (§0.90, OBSERVED by
+  screenshot), and `eb24dea` + its docs commit (§0.91, NOT observed).
+  Anything else is unshipped code and a finding.
+- **Jeff eyeballs §0.91 on deployed dev:** avatar → the new "Email logging"
+  tab → a `me-usr_…@inbound.salespipelinetracker.com` address with Copy, as
+  Jeff and as Karen (two different addresses). **The real proof is a real
+  email:** as Karen, send one to a contact of hers with her personal address
+  in BCC → the Email activity appears on that contact for Karen and for Jeff,
+  owned by Karen, author "Karen Russell"; another rep does not see it. Then
+  the ORG address (Settings → Integrations → Connected apps → Email logging)
+  from Karen's roster email → owned by Karen too (From attribution); from an
+  address not on the roster → unowned, visible to everyone. If the address
+  tab reads "Email logging is not available on this site", the site lacks
+  `BCC_SECRET` / `INBOUND_DOMAIN` — the same variables the org card needs,
+  which the screenshot showed configured on dev.
 - **PARTLY DONE — Jeff's screenshot (3 Sep) shows the panel on deployed dev
   as designed (state §0.90's OBSERVED paragraph). Still to see:** click
   Request on a row → "Requested · <today>", refresh — it stays; Configure
@@ -524,7 +560,7 @@ was clean at close.
   not mailed (`notified:false`); and whether `GOOGLE_CLIENT_ID/SECRET` and
   `MICROSOFT_CLIENT_ID/SECRET` are set on each site decides what the two
   calendar cards offer (the Netlify reader exposes no env).
-- **Then ship item 22 + both seventh-session batches when Jeff says so** —
+- **Then ship item 22 + all three seventh-session batches when Jeff says so** —
   `git push origin dev:master` after the ancestor check, then poll
   salespipelinetracker.com for the bundle hash; `pk_live_` inlined. Prod
   has carried the Slack crash since May; this ship is the first that
@@ -1217,3 +1253,17 @@ panel and the endpoint, so the list a customer can see is exactly the list
 the server will accept. Six integration tests, twelve mutants; the first
 harness run let one survive and the test was tightened before the number was
 written. Deployed, hash-checked, not yet seen by Jeff.
+
+Then his screenshot came back reading exactly as designed, and a question
+that started at the Email logging card: could each user have their own
+address, so their email is theirs. Reading the function answered it before
+the code did — every logged email had been unowned, visible to every rep,
+with the raw sender string for an author. Two designs went to him; he chose
+the open one and the attribution with it. The address is the user id
+signed in its own namespace, so the org's signature can never pass as a
+user's; a deactivated user's address dies with their row; the org address
+now names the roster member who sent through it. A tab under the avatar; a
+sentence on the Admin card; and the first integration suite that function
+has ever had, eight cases against the real database, one of which is the
+replay the namespace exists to refuse. Seven mutants, all caught. Deployed,
+hash-checked; the proof that matters is a real email, and that is Jeff's.
