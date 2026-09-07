@@ -34,10 +34,11 @@ their headers is Jeff's call, not done.
 
 ---
 
-## 1. What shipped — everything is on `dev`, deploy-verified; all but the item-24 batch observed
+## 1. What shipped — everything is on `dev`, deploy-verified, observed (the item-24 batch by screenshot)
 
-**Seventh session, second batch (3 Sep) — ON DEV ONLY, deploy-verified, NOT
-observed by Jeff, NOT shipped:** `e3d15f2` (item 24 option A, state §0.90,
+**Seventh session, second batch (3 Sep) — ON DEV ONLY, deploy-verified,
+OBSERVED by Jeff's screenshot (the panel rendered; a Request click, Slack
+and the Karen path not yet), NOT shipped:** `e3d15f2` (item 24 option A, state §0.90,
 guide §18b7's new paragraph) and the docs commit this handoff rides in.
 accelerep.netlify.app served `index-UiFDxZrS.js` — the local gate build's hash —
 42 seconds after the push (15:29:53 local), `pk_test_` inlined; "Request an
@@ -60,8 +61,17 @@ are requests: POST → recorded at `settings.extra.integrationRequests` (both
 halves of `settings.mjs`), org-scoped, idempotent, audited as
 `integration.requested`, mailed to `INTEGRATION_REQUESTS_TO` when set. Gone:
 the "Morgan Reyes" connect modal, `INT_APPS`, "Browse marketplace", "+
-Request integration", the `gcal` flag. **Not observed** — no pane session.
-`master` stays at `ad76a38`.
+Request integration", the `gcal` flag. **OBSERVED — Jeff's screenshot of deployed dev (3 Sep, as Admin), read
+against the code:** the panel as designed — "2 live"; Slack "Not connected"
+with only "Configure Slack"; Google Calendar "Live", "Mine ·
+jeffrussell1@gmail.com · 8/12/2026" with Disconnect, "Connected", and
+"Connect company calendar" (Admin, no org connection); Microsoft 365
+Calendar "Not available on this site" with the one-line reason and no
+button — so the dev site has no Microsoft credentials, which the Company
+Calendar panel could never have said; Email logging "Live" with the org's
+BCC address and Copy; "Request an integration · None requested yet" and the
+ten rows, each ending in Request. Not yet seen: a Request clicked, Slack
+configured, the Karen path. `master` stays at `ad76a38`.
 
 **Seventh session, first batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff ("verified"), NOT shipped:** `95141cb` (state §0.89, guide
@@ -488,10 +498,13 @@ was clean at close.
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect the eighth-ship record docs commit, `539eaa1` + its two docs
   commits (item 22, OBSERVED), `95141cb` + `7bb3e70` (§0.89, OBSERVED —
-  Jeff: "verified"), and `e3d15f2` + its docs commit (§0.90, NOT
-  observed). Anything else is unshipped code and a finding.
-- **Jeff eyeballs the item-24 batch on deployed dev (state §0.90), as
-  Admin:** Settings → Integrations → Connected apps. Four cards under
+  Jeff: "verified"), and `e3d15f2` + its docs commits (§0.90, OBSERVED by
+  screenshot). Anything else is unshipped code and a finding.
+- **PARTLY DONE — Jeff's screenshot (3 Sep) shows the panel on deployed dev
+  as designed (state §0.90's OBSERVED paragraph). Still to see:** click
+  Request on a row → "Requested · <today>", refresh — it stays; Configure
+  Slack → Send test message → Save; the Karen path. Was the full list:
+  Settings → Integrations → Connected apps. Four cards under
   Integrations — Slack, Google Calendar, Microsoft 365 Calendar, Email
   logging — and ten rows under Request an integration; no Morgan Reyes
   anywhere, nothing says Connect except the calendars' own "Connect my

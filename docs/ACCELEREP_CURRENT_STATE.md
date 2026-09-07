@@ -4033,8 +4033,19 @@ served `index-UiFDxZrS.js` — the local gate build's hash — at 15:29:53 local
 "Request an integration", "Microsoft 365 Calendar" and "Email logging" present
 in the served bundle, "Morgan Reyes" and "Authorize" absent; the deployed
 `integration-requests` function answers 401 unauthenticated. `master` stays
-at `ad76a38` (the eighth ship). **Not yet observed by Jeff.** The ship is
-Jeff's call.
+at `ad76a38` (the eighth ship). The ship is Jeff's call.
+
+**OBSERVED — Jeff's screenshot of deployed dev (3 Sep, as Admin), read
+against the code:** the panel as designed — "2 live"; Slack "Not connected"
+with only "Configure Slack"; Google Calendar "Live", "Mine ·
+jeffrussell1@gmail.com · 8/12/2026" with Disconnect, "Connected", and
+"Connect company calendar" (Admin, no org connection); Microsoft 365
+Calendar "Not available on this site" with the one-line reason and no
+button — so the dev site has no Microsoft credentials, which the Company
+Calendar panel could never have said; Email logging "Live" with the org's
+BCC address and Copy; "Request an integration · None requested yet" and the
+ten rows, each ending in Request. Not yet seen: a Request clicked, Slack
+configured, the Karen path.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
