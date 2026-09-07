@@ -4383,6 +4383,14 @@ opens the familiar editor on that row. A deal's History tab and its Activity
 rail rows open the same viewer; the × on a History row still deletes without
 opening.
 
+**Dev landing (`92b6ecc`, pushed 18:14:50 UTC):** accelerep.netlify.app served
+`index-C1VD4DfX.js` — the local gate build's hash — at 18:15:17 UTC (was
+`index-ABUwIA60.js`), 27 seconds after the push; `setViewingActivity`,
+`WebkitLineClamp`, `title:"Open"` and "No details" in the served bundle.
+Jeff's first look ("it does not") was a screenshot taken at the old bundle,
+before the landing — the rows still read as one line; retest asked for after
+a hard refresh. `master` stays at `cf72f99`.
+
 
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
