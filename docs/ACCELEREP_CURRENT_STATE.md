@@ -4464,6 +4464,12 @@ with a fresh multi-line email carrying an attachment — the row shows two
 lines, the viewer every line and an "Attachments:" line, and Escape leaves the
 rail open. Unshipped.
 
+**Dev landing (`f17e835`, pushed 18:38:44 UTC):** accelerep.netlify.app served
+`index-CkYvyiY8.js` — the local gate build's hash — at 18:39:16 UTC (was
+`index-C1VD4DfX.js`), 32 seconds after the push. The function half
+(`email-inbound`, `_inboundText`) rides the same deploy. **Not yet re-run by
+Jeff.** `master` stays at `cf72f99`.
+
 
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
