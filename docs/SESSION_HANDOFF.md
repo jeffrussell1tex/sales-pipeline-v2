@@ -1,6 +1,25 @@
 # SESSION_HANDOFF.md
 
-**Session of 3 and 7 September 2026, seventh session (Jeff: "claude, lets
+**Session of 7 September 2026, eighth session (Jeff: "Hello Claude, lets pick
+up our work on Accelerep" — an observation session first: §0.91 proven on
+deployed dev BOTH ways by Karen's real emails, the org address then her
+personal one, both rows read back owned by her; §0.90's Request click and
+§0.89's Slack proven end to end against a Slack workspace Jeff created for it,
+the config read back; the "Karen path" struck — Settings is Admin-only by
+design; then **item 25 "and the endpoint gate"** — `send-slack` Admin-only
+and pinned to `hooks.slack.com/services`, `settings` refusing any other
+webhook, `integration-requests` Admin-only — state §0.92, guide §18b30,
+deploy-verified from Netlify's record, NOT observed (the 403 needs a session);
+then Jeff, at Karen's two emails on the contact: "these are fairly useless
+because I can't see any content" → **item 26, option 2** — every activity row
+opens a read-only viewer, email rows show the subject bold over a two-line
+preview — state §0.93, deploy-verified, **OBSERVED by Jeff ("works")**;
+**NOTHING SHIPPED this session** — `master` stays at `cf72f99`; dev is ahead
+by §0.92, §0.93, eight observation docs commits and the close), FINAL.** Repo
+root. Read this first, then verify every claim in it against the live repo
+before acting — **including the claims in this file**.
+
+**Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
 since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
 that a JSX name is a read — state §0.89, OBSERVED by Jeff ("verified";
@@ -22,15 +41,13 @@ logged OWNED by her — From attribution — then through her PERSONAL address,
 both rows read back; no second rep in the org for the negative check); then
 **Jeff: "ship prod" — ALL of it
 SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
-salespipelinetracker.com serving `index-DIeZb8qh.js`**), FINAL.** Repo root. Read this first, then verify
-every claim in it against the live repo before acting — **including the
-claims in this file**.
+salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.91` with a paragraph beginning **"Jeff, looking at the Email logging
-card:"** and a paragraph beginning **"Dev landing (`eb24dea`"**, and does
-`docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b29`** and, under `## 18b7`,
-a paragraph beginning **"The mirror image (3 Sep 2026, state §0.90)"**? If
+`### 0.93` with a paragraph beginning **"Jeff, with Karen's two test emails on
+the contact:"** and a paragraph beginning **"Dev landing (`92b6ecc`"**, and
+does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b30`** (after `## 18b29`)
+and, under `## 18b7`, a paragraph beginning **"The mirror image (3 Sep 2026, state §0.90)"**? If
 not, you are looking at a copy that predates this handoff. Check section
 content, never dates.
 
@@ -44,7 +61,60 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — everything is on `dev` AND on `master`, deploy-verified; all but the third batch observed
+## 1. What shipped — §0.92 and §0.93 are on `dev` ONLY (deploy-verified; §0.93 observed); everything before them is on `master`
+
+**Eighth session, second batch (7 Sep) — ON DEV ONLY, deploy-verified,
+OBSERVED by Jeff ("works"), NOT shipped:** `92b6ecc` (item 26 option 2, state
+§0.93) and its landing docs commit `5c0c94c`. accelerep.netlify.app served
+`index-C1VD4DfX.js` — the local gate build's hash — 27 seconds after the push
+(18:15:17 UTC); `setViewingActivity`, `WebkitLineClamp` and `title:"Open"` in
+the served bundle. What it is: **Jeff: "Is there anyway that we can have these
+emails clickable and a person can read the full content?"** — three options,
+he chose option 2 ("do option 2 now … we can make the call on option 3 with
+emails"). Every activity row — the contact, account and task rails, the deal
+modal's recent-activity list and its History tab — opens a read-only viewer
+(type, date, author, subject bold, contact · account · deal, the whole body
+with line breaks, Close, and Edit only where the server would let the caller
+write, `canEditActivity` mirroring `mayMutate`); rails show the subject bold
+over the body clamped to two lines instead of the unclamped dump. Jeff's
+first look was a screenshot 15 seconds before the landing ("it does not");
+after a hard refresh, "works" — which of the fourteen steps in §5 he ran is
+not stated. `master` stays at `cf72f99`.
+
+**Eighth session, first batch (7 Sep) — ON DEV ONLY, deploy-verified, NOT
+observed, NOT shipped:** `bac7387` (item 25 + the endpoint gate, state §0.92,
+guide §18b30) and its landing docs commit `de94064`. No `src/` changed, so
+the bundle hash could not show it; Netlify's deploy record did: deploy
+`6a9efbfd…`, commit `bac7387`, branch `dev`, ready 18:02:06 UTC, 73 functions
+deployed including the new `_slackWebhook`. Unauthenticated the two functions
+answer GET 405 / POST 401 before and after — the gate sits behind the session.
+What it is: `send-slack` is `requireRole(['Admin'])` before the body is read; a
+typed test URL that is not `https://hooks.slack.com/services/…` answers 400
+with the reason (the modal already shows `data.error`); `sendSlack()` itself
+refuses any other destination, so a stored non-Slack webhook posts nowhere on
+any of the five alerts; `settings.mjs` PUT refuses saving one; and
+`integration-requests` is Admin-only, because Settings is. First suite
+`send-slack` ever had (6, real handler, `fetch` mocked for every host but the
+Neon regional API host). GitHub's push protection refused the first push — a
+well-formed fake webhook literal in the unit test read as a leaked secret — so
+both suites assemble their samples at run time; the commit was amended before
+it left the machine. **Jeff's eyeball (§5).** `master` stays at `cf72f99`.
+
+**Observed this session (7 Sep), all on deployed dev, all recorded in state
+as they were seen:** §0.91 — "karen and my cc addresses are different", then
+Karen's email through the ORG address logged owned by her ("karen used the
+org address"), then through her PERSONAL address in CC ("Test email #2"), both
+rows read back, Karen seeing both on the contact; the negative check ("I did
+not see if anyone else can see the email") cannot run — the dev org has no
+second rep. §0.90 — the Gmail Request persists a hard refresh, the settings
+record and the `integration.requested` audit row read back. §0.89 — Slack
+configured against a workspace Jeff created ("worked"), the test message in
+#sales-alerts, the config read back; four paired `settings.updated` rows read
+against the code and a controlled repeat (Send test message alone: 4 before, 4
+after) closed the question. The "Karen path" on Connected apps was a wrong
+claim — Settings is Admin-only (`App.jsx`), "nor should they" — struck in
+state §0.90 and §5. A read-side trap: `@netlify/neon` on this machine parses
+a `timestamp without time zone` as local time — cast `::text` (state §0.91).
 
 **PROD SHIPPED (Jeff: "ship prod") — the ninth ship (7 Sep).** Ancestor
 check (`origin/master` an ancestor of `dev`, tree clean, `dev` ==
@@ -529,26 +599,87 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (7 Sep, seventh session, third batch)
+## 4. Verified state at close (7 Sep, eighth session)
 
-Five gates green on 148 files · **555/555 unit** (20 new this session: 18 in
-`connected-apps.test.mjs`, 2 in `scanners.test.mjs`) · **280/280 mutations, printed green baseline (7 added this batch; run alone)** ·
-build **2,431 kB JS**, `index-ABUwIA60.js`, guard OK, `dist/` cleared · **108/108
-integration** (14 new this session: 6 in `integration-requests.itest.mjs`, 8
-in `email-inbound.itest.mjs`; the test database needed no schema change) ·
-**no pane browser pass this session** — no `netlify dev` was started and the
-pane holds no session; §0.89 was OBSERVED by Jeff on deployed dev, §0.90 by
-his screenshot, §0.91 OBSERVED (eighth session, 7 Sep: two personal
-addresses, then Karen's email logged owned by her — the row read back) ·
-dev deploys observed serving
-`index-CEn91emU.js` (§0.89), `index-UiFDxZrS.js` (§0.90) and `index-ABUwIA60.js`
-(§0.91) · **`master` == `cf72f99`, prod serving `index-DIeZb8qh.js` (ninth ship,
-§1)**; dev is ahead of master only by this ship-record docs commit · no
-schema change · the working tree was clean at close.
+Five gates green on 151 files (three new) · **565/565 unit** (10 new this
+session: 5 in `slack-webhook.test.mjs`, 5 in `activity-view.test.mjs`) ·
+**294/294 mutations, printed green baseline** (14 added and 1 rewritten this
+session; run alone after each batch — the §0.93 run first caught 293/294, the
+id-space mutant survived, its case was added and the harness re-run in full) ·
+build **2,437 kB JS**, `index-C1VD4DfX.js`, guard OK, `dist/` cleared ·
+**114/114 integration** (6 new: `send-slack.itest.mjs`; +2 cases in
+`integration-requests.itest.mjs`; the test database needed no schema change) ·
+**no pane browser pass this session** — the pane holds no session and signing
+in needs Jeff's credentials; §0.93 OBSERVED by Jeff ("works"), §0.92 NOT
+observed · dev deploys observed serving `index-C1VD4DfX.js` (§0.93) and, for
+the functions-only §0.92, Netlify's deploy record (`6a9efbfd…` = `bac7387`,
+ready) · **`master` == `cf72f99`, prod serving `index-DIeZb8qh.js` (ninth
+ship)**; dev is ahead of master by the eight observation docs commits
+(`b676795` … `f6f14db`), `bac7387` + `de94064`, `92b6ecc` + `5c0c94c`, and the
+two close commits · no schema change · the working tree was clean at close.
 
 ## 5. Next — start here
 
-**Next session prep, in order (Jeff: "update the next session prep"):**
+**Eighth-session prep, in order:**
+- **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
+  expect fourteen commits after `cf72f99`: eight docs-only observation
+  commits, `bac7387` (§0.92) + `de94064`, `92b6ecc` (§0.93) + `5c0c94c`, and
+  the two close commits. Anything else is unshipped code and a finding.
+- **Jeff eyeballs §0.92 on deployed dev** (NOT yet observed — the observable
+  is a 403/400 behind a session): as Karen there is no Settings tab (by
+  design); as Admin, Settings → Integrations → Connected apps → Configure →
+  paste `https://example.com/hook` → Send test message → the modal reads
+  "Webhook URL must be a Slack Incoming Webhook
+  (https://hooks.slack.com/services/…)"; Save configuration with it → the same
+  message, nothing saved (reopen: the real URL is still there); the real
+  webhook still tests (a post in #sales-alerts) and saves.
+- **DONE — §0.93 OBSERVED ("works").** The fourteen steps, kept as the record
+  of what a full check covers: (A, as Karen) Contacts → Jeff Russelltest →
+  Activity — rows read "Test email" bold over "Test email for logging"; click
+  → the viewer (Email · Sun, Sep 7, 2026 · Karen Russell, the subject, "Jeff
+  Russelltest", the body, Close, Edit); Escape closes; click outside closes;
+  Edit opens the editor filled in. (B, as Admin) the same, Edit present. (C) a
+  real multi-line email through her personal address → the row shows the
+  subject bold and two lines only; the viewer shows every line and the blank
+  one. (D) an account's and a task's Activity History; a deal's Activity list
+  and History tab; the × on a History row deletes without opening. (E) + Log
+  Activity, + Add Task and the Reports timelines unchanged.
+- **Before shipping: read prod's stored Slack webhook.** After §0.92 a stored
+  non-Slack webhook fails silently on every alert while the card says Live.
+  Dev's is Slack (read back). Prod: one read-only SELECT of
+  `extra->'slackConfig'->>'webhookUrl'` per org on the app database; anything
+  not `https://hooks.slack.com/services/…` is a finding to raise with Jeff
+  before `git push origin dev:master`.
+- **Then ship §0.92 + §0.93 when Jeff says so** — ancestor check, `git push
+  origin dev:master`, poll salespipelinetracker.com for a NEW hash (not
+  `index-C1VD4DfX.js` — the live key is inlined), `pk_live_` inlined,
+  `setViewingActivity` and `title:"Open"` present; `send-slack` 401
+  unauthenticated. Prod has not had a functions-only landing before: the
+  Netlify deploy record is the proof for §0.92 (site `099ef621…`, the
+  `netlify-deploy-services-reader` MCP with the deploy id from
+  `get-projects`).
+- **Option 3 — item 27, Jeff's call after he has read a real email in the
+  viewer:** store From/To/Cc and the Message-ID on the row (an additive
+  nullable jsonb column on `activities`, both databases first, §18c), raise or
+  drop the 4,000-character cap, and decide on HTML (sanitised) vs the plain
+  text stored now. Not started.
+- **The five pipeline alerts have not fired against dev's webhook.**
+  `pipeline-alerts` runs hourly (`0 * * * *`, Netlify's schedule list); the
+  first qualifying deal will post to #sales-alerts on its own. Worth one look
+  at the channel next session.
+- **§0.91's negative visibility check** needs a second User in the dev org;
+  add a throwaway one if Jeff wants it seen in the browser (the row-level
+  rule is covered by `email-inbound.itest.mjs`).
+- **Small, Jeff's call:** the Connected apps panel's non-Admin branches ("An
+  Admin configures Slack", a personal-only calendar Connect) are unreachable
+  — dead code to drop in a cleanup batch. `INTEGRATION_REQUESTS_TO` is still
+  unset as far as can be seen from here (a request is recorded and audited
+  but not mailed).
+- **The state doc's per-batch summary lines under its header** (lines 4–8)
+  still describe §0.84–§0.88; the header itself was refreshed at this close.
+  Rewriting the five lines is a docs-only chore.
+
+**Previous session's prep (seventh session), kept as it stood:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect ONLY the ninth-ship record docs commit after `cf72f99`. Anything
   else is unshipped code and a finding. (§0.89 OBSERVED — Jeff: "verified";
@@ -1331,3 +1462,19 @@ never been counted, the modal that had been missing since May, the panel
 that says only what is there, the address that is a rep's own — verified by
 the bundle hash on the live domain, the live key inlined, the old strings
 gone. Prod had carried the Slack crash for four months; it does not now.
+
+The eighth session began with nothing to build. Jeff had been looking at what
+the seventh had made, and each thing he said was read back from the database
+before it was written down: two addresses that differ; an email that came in
+through the org address and belonged to Karen; a second through her own
+address that belonged to her too; a request that stayed requested; a Slack
+channel he made that afternoon, with the app's first message in it. Four audit
+rows in two pairs looked like a double write until the code and a controlled
+repeat said they were Saves. A claim about Karen reaching Settings was struck
+the moment he said a user should not. Then the two items he had left for
+himself: the endpoint that would post anywhere for anyone, closed at the one
+place that sends and at the place that saves — and refused once by GitHub,
+which read a fake webhook as a real one, so the tests now build their samples
+at run time. And the emails he could not read: every row a door now, the
+whole message behind it, Edit only for whoever the server would let edit. His
+first look was fifteen seconds ahead of the deploy; his second was "works".
