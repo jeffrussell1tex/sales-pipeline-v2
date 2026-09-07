@@ -273,6 +273,16 @@ export const handler = async (event) => {
         const fetched = await fetchReceivedEmail(mail.email_id);
         const full = fetched?.data || null;
 
+        // Diagnostic (§0.93 follow-up): the SHAPE of what the provider hands over,
+        // never its content — an Outlook message logged with no line breaks after
+        // the normaliser kept them, so this says whether they were ever there.
+        // Read in Netlify → Logs → Functions → email-inbound.
+        if (full) {
+            const nlOf = (v) => (typeof v === 'string' ? (v.match(/\n/g) || []).length : -1);
+            const att = full.attachments;
+            console.log(`email-inbound: fetched via ${fetched.endpoint}; text=${typeof full.text}/${(full.text || '').length}ch/${nlOf(full.text)}nl; html=${typeof full.html}/${(full.html || '').length}ch/${nlOf(full.html)}nl; attachments=${Array.isArray(att) ? att.length + ':' + Object.keys(att[0] || {}).join('|') : typeof att}; keys=${Object.keys(full).join(',')}`);
+        }
+
         const subject = String((full?.subject ?? mail.subject) || '').slice(0, 500);
         const rawText = full
             ? (full.text || htmlToText(full.html))

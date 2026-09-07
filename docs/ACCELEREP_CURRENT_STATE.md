@@ -4467,8 +4467,30 @@ rail open. Unshipped.
 **Dev landing (`f17e835`, pushed 18:38:44 UTC):** accelerep.netlify.app served
 `index-CkYvyiY8.js` — the local gate build's hash — at 18:39:16 UTC (was
 `index-C1VD4DfX.js`), 32 seconds after the push. The function half
-(`email-inbound`, `_inboundText`) rides the same deploy. **Not yet re-run by
-Jeff.** `master` stays at `cf72f99`.
+(`email-inbound`, `_inboundText`) rides the same deploy. `master` stays at
+`cf72f99`.
+
+**Re-run by Jeff (7 Sep, 18:45–18:48 UTC, three more emails through Karen's
+personal address — #5, #6 and #10, the last with a 217 KB PDF attached and
+four "Test" lines separated by blank lines): "still all in a line. blanlk
+lines arent captured. No indicator of attachment" — and "hitting escape
+leaves rail open".** Step 3 is fixed. Steps 7 and 9 are not, and the reason
+is NOT the fix: the stored rows for #5, #6 and #10 hold zero newlines (read
+back), and Netlify's deploy record shows `email-inbound` rebuilt at 18:39:14
+UTC with `_inboundText` beside it, nine minutes before #10 arrived — the
+function that stored #10 ran the new code, so the body it was handed had no
+line breaks and no `attachments` it could read. What Resend's receiving API
+returns for an Outlook message (a `text` already flattened? `html` only?
+attachments under another key?) cannot be seen from here — no
+`RESEND_API_KEY` locally, no function-log reader in the Netlify MCP. So a
+diagnostic, content-free by design: one `console.log` after the fetch with
+the endpoint that answered, the type/length/newline-count of `text` and of
+`html`, the attachments' count and the first one's keys, and the payload's
+top-level keys. **Jeff sends one more email, then reads Netlify → Logs →
+Functions → email-inbound and pastes the `email-inbound: fetched via …` line;
+the next fix follows from it** (if `text` is flat and `html` has breaks:
+prefer html; if attachments sit under another key: read it). The diagnostic
+comes out once the shape is known.
 
 
 
