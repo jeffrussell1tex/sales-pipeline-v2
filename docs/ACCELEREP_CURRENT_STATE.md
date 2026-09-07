@@ -4143,12 +4143,13 @@ SELECT), is what the design promised: `activities` type Email, subject
 dev org — the org address in Jeff's screenshot of accelerep.netlify.app
 carries the same id), `contact_id` → Jeff Russelltest, **`owner_id` =
 Karen's `usr_…` (role User) and `author` "Karen Russell"** — the roster
-name, not the raw sender; the id is the Message-ID hash form. The row
-cannot say which address carried it: Karen's personal address and the org
-address from her roster email both produce exactly this row, so the From
-attribution path is proven only if she used the org address (not stated).
-Not reported: the activity as seen by Jeff, and a rep who is not Karen not
-seeing it. **A read-side trap met while reading it:** `@netlify/neon` on
+name, not the raw sender; the id is the Message-ID hash form. **Jeff:
+"karen used the org address"** — so the path proven is From attribution:
+the ORG dropbox, From = Karen's roster email (`ownerFromSender`), owned by
+her. A real email through a PERSONAL address (`userFromRecipients`) has
+not been sent yet; the two addresses have been seen. Not reported: the
+activity as seen by Jeff; and the visibility check was NOT done — Jeff: "I
+did not see if anyone else can see the email". **A read-side trap met while reading it:** `@netlify/neon` on
 this machine parses a `timestamp without time zone` as LOCAL time, so
 the rows first read as 21:46 / 21:47 UTC, five hours off the app's
 `requestedAt`; `::text` on the column gave the stored value. Cast before

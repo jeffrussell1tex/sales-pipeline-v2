@@ -15,8 +15,9 @@ address whose email is OWNED by that user and shown to no other rep, the org
 address attributed to the roster member who sent it, a profile-panel tab,
 the first integration suite the inbound function ever had — state §0.91, on
 dev, deploy-verified, OBSERVED in the eighth session (7 Sep — the two
-personal addresses differ, then Karen's real email logged OWNED by her, the
-row read back); then **Jeff: "ship prod" — ALL of it
+personal addresses differ, then Karen's real email through the ORG address
+logged OWNED by her — From attribution — the row read back; a personal
+address not yet used); then **Jeff: "ship prod" — ALL of it
 SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
@@ -551,9 +552,12 @@ schema change · the working tree was clean at close.
   addresses are different", then "email sent from karen was logged against
   the contact"** — and the row read back from the database is owned by
   Karen with author "Karen Russell" on the contact Jeff Russelltest (state
-  §0.91, landing paragraph). Which address carried it is not stated, so the
-  org-address From attribution is proven only if it was the org address;
-  a rep who is not Karen not seeing it was not reported. CC works
+  §0.91, landing paragraph). Jeff: "karen used the org address" — the
+  From attribution is proven; **a real email through a PERSONAL address is
+  still to send** (as Karen, her `me-usr_…` address in CC or BCC → the same
+  row shape, owned by her); the visibility check was NOT done (Jeff: "I
+  did not see if anyone else can see the email") — as another rep, or as
+  Jeff at least, open the contact. CC works
   the same as BCC — `email-inbound` unions `to`, `cc` and `bcc` before
   looking for a dropbox address. Was: avatar → the new "Email logging"
   tab → a `me-usr_…@inbound.salespipelinetracker.com` address with Copy, as
