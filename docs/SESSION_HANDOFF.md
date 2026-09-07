@@ -13,7 +13,11 @@ deploy-verified from Netlify's record, NOT observed (the 403 needs a session);
 then Jeff, at Karen's two emails on the contact: "these are fairly useless
 because I can't see any content" → **item 26, option 2** — every activity row
 opens a read-only viewer, email rows show the subject bold over a two-line
-preview — state §0.93, deploy-verified, **OBSERVED by Jeff ("works")**;
+preview — state §0.93, deploy-verified, **OBSERVED by Jeff ("works")**, then
+his fourteen-step report: three findings, two fixed the same hour (Escape
+closed the rail too; the stored email body had lost its newlines and never
+named an attachment — `f17e835`, deploy-verified, NOT yet re-run), one opened
+as item 28 (a contact owned by its creator displays as unassigned);
 **NOTHING SHIPPED this session** — `master` stays at `cf72f99`; dev is ahead
 by §0.92, §0.93, eight observation docs commits and the close), FINAL.** Repo
 root. Read this first, then verify every claim in it against the live repo
@@ -63,8 +67,30 @@ session resumed after four days. Headers say which.
 
 ## 1. What shipped — §0.92 and §0.93 are on `dev` ONLY (deploy-verified; §0.93 observed); everything before them is on `master`
 
+**Eighth session, third batch (7 Sep) — ON DEV ONLY, deploy-verified, NOT yet
+re-run by Jeff, NOT shipped:** `f17e835` (the §0.93 follow-up) and its landing
+docs commit. accelerep.netlify.app served `index-CkYvyiY8.js` — the local gate
+build's hash — 32 seconds after the push (18:39:16 UTC). What it is: Jeff's
+report on the fourteen steps — 3 "when i hit escape the dialog closes but so
+does the rail"; 7 and 9 "All lines are truncated into one long running
+paragraph … it does not indicate that I included an attachment"; 6 "the jeff
+russelltest contact is not showing up … formally unassigned". Read against
+the code and the row: each rail had its own Escape listener beside App.jsx's
+(now it yields while the viewer is open); `email-inbound.mjs` had collapsed
+every newline to a space before storing — the stored "Test email #4" holds
+zero newlines — so the body now goes through `_inboundText.mjs`
+(newlines kept, HTML blocks become breaks, "Attachments: …" appended from
+whatever names the payload carries; the files are not stored; whether
+Resend's receiving API carries an `attachments` array is unverified — the
+code is defensive); and the contact is owned by Karen underneath
+(`stampOwnerId` at creation) with a blank "Assigned Rep" on screen, hidden
+by the Contacts tab's remembered "Mine" scope — not a viewer bug, item 28.
+`tests/inbound-text.test.mjs` (5), `email-inbound.itest.mjs` +2 against the
+real database, 5 mutants. `master` stays at `cf72f99`.
+
 **Eighth session, second batch (7 Sep) — ON DEV ONLY, deploy-verified,
-OBSERVED by Jeff ("works"), NOT shipped:** `92b6ecc` (item 26 option 2, state
+OBSERVED by Jeff ("works"; then the fourteen-step report — the third batch
+above), NOT shipped:** `92b6ecc` (item 26 option 2, state
 §0.93) and its landing docs commit `5c0c94c`. accelerep.netlify.app served
 `index-C1VD4DfX.js` — the local gate build's hash — 27 seconds after the push
 (18:15:17 UTC); `setViewingActivity`, `WebkitLineClamp` and `title:"Open"` in
@@ -601,30 +627,35 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (7 Sep, eighth session)
 
-Five gates green on 151 files (three new) · **565/565 unit** (10 new this
-session: 5 in `slack-webhook.test.mjs`, 5 in `activity-view.test.mjs`) ·
-**294/294 mutations, printed green baseline** (14 added and 1 rewritten this
-session; run alone after each batch — the §0.93 run first caught 293/294, the
-id-space mutant survived, its case was added and the harness re-run in full) ·
-build **2,437 kB JS**, `index-C1VD4DfX.js`, guard OK, `dist/` cleared ·
-**114/114 integration** (6 new: `send-slack.itest.mjs`; +2 cases in
-`integration-requests.itest.mjs`; the test database needed no schema change) ·
+Five gates green on 151 files (four new files this session) · **570/570 unit**
+(15 new this session: 5 in `slack-webhook.test.mjs`, 5 in
+`activity-view.test.mjs`, 5 in `inbound-text.test.mjs`) · **299/299 mutations,
+printed green baseline** (19 added and 1 rewritten this session; run alone
+after each batch — the §0.93 run first caught 293/294, the id-space mutant
+survived, its case was added and the harness re-run in full) · build
+**2,437 kB JS**, `index-CkYvyiY8.js`, guard OK, `dist/` cleared · **116/116
+integration** (8 new: 6 in `send-slack.itest.mjs`, 2 in
+`email-inbound.itest.mjs`; +2 cases in `integration-requests.itest.mjs`; the
+test database needed no schema change) ·
 **no pane browser pass this session** — the pane holds no session and signing
 in needs Jeff's credentials; §0.93 OBSERVED by Jeff ("works"), §0.92 NOT
-observed · dev deploys observed serving `index-C1VD4DfX.js` (§0.93) and, for
+observed, the §0.93 follow-up NOT yet re-run · dev deploys observed serving
+`index-C1VD4DfX.js` (§0.93), `index-CkYvyiY8.js` (its follow-up) and, for
 the functions-only §0.92, Netlify's deploy record (`6a9efbfd…` = `bac7387`,
 ready) · **`master` == `cf72f99`, prod serving `index-DIeZb8qh.js` (ninth
 ship)**; dev is ahead of master by the eight observation docs commits
-(`b676795` … `f6f14db`), `bac7387` + `de94064`, `92b6ecc` + `5c0c94c`, and the
-two close commits · no schema change · the working tree was clean at close.
+(`b676795` … `f6f14db`), `bac7387` + `de94064`, `92b6ecc` + `5c0c94c`, the
+first close pair (`62efc7b`, `3a3c0bc`), `f17e835` + its landing, and this
+close · no schema change · the working tree was clean at close.
 
 ## 5. Next — start here
 
 **Eighth-session prep, in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect fourteen commits after `cf72f99`: eight docs-only observation
-  commits, `bac7387` (§0.92) + `de94064`, `92b6ecc` (§0.93) + `5c0c94c`, and
-  the two close commits. Anything else is unshipped code and a finding.
+  expect seventeen commits after `cf72f99`: eight docs-only observation
+  commits, `bac7387` (§0.92) + `de94064`, `92b6ecc` (§0.93) + `5c0c94c`,
+  `62efc7b` + `3a3c0bc` (the first close), `f17e835` (the §0.93 follow-up) +
+  its landing, and this close. Anything else is unshipped code and a finding.
 - **Jeff eyeballs §0.92 on deployed dev** (NOT yet observed — the observable
   is a 403/400 behind a session): as Karen there is no Settings tab (by
   design); as Admin, Settings → Integrations → Connected apps → Configure →
@@ -633,7 +664,18 @@ two close commits · no schema change · the working tree was clean at close.
   (https://hooks.slack.com/services/…)"; Save configuration with it → the same
   message, nothing saved (reopen: the real URL is still there); the real
   webhook still tests (a post in #sales-alerts) and saves.
-- **DONE — §0.93 OBSERVED ("works").** The fourteen steps, kept as the record
+- **Jeff re-runs steps 3, 7 and 9 on deployed dev** (the follow-up `f17e835`,
+  NOT yet seen): as Karen, send Jeff Russelltest a NEW email with five or six
+  lines, a blank line in the middle and an attachment, her personal address
+  in CC → the row shows the subject bold and two lines only; click → every
+  line and the blank one, then "Attachments: <name>"; Escape closes the
+  viewer and the contact rail stays open. "Test email #4" itself stays one
+  paragraph — stored before the fix. If the Attachments line is missing on a
+  real send, Resend's receiving payload does not carry names — a finding for
+  item 27, not a regression.
+- **DONE — §0.93 OBSERVED ("works"), then reported step by step: 1, 2, 4, 5,
+  8, 10, 12–14 Pass; 3, 7, 9 fixed above; 6 is item 28; 11 not applicable.**
+  The fourteen steps, kept as the record
   of what a full check covers: (A, as Karen) Contacts → Jeff Russelltest →
   Activity — rows read "Test email" bold over "Test email for logging"; click
   → the viewer (Email · Sun, Sep 7, 2026 · Karen Russell, the subject, "Jeff
@@ -663,6 +705,13 @@ two close commits · no schema change · the working tree was clean at close.
   nullable jsonb column on `activities`, both databases first, §18c), raise or
   drop the 4,000-character cap, and decide on HTML (sanitised) vs the plain
   text stored now. Not started.
+- **Item 28 — Jeff's call before code (his step 6):** a contact created
+  without naming a rep is OWNED by its creator (`stampOwnerId`) but its
+  "Assigned Rep" reads blank, so the Contacts tab's remembered "Mine" scope
+  hides it from an Admin who reads it as unassigned. Either show the owner's
+  roster name when `assignedRep` is blank, or fill `assignedRep` with the
+  caller at creation; the same question exists on every Tier 1 table. A
+  product call, then one batch.
 - **The five pipeline alerts have not fired against dev's webhook.**
   `pipeline-alerts` runs hourly (`0 * * * *`, Netlify's schedule list); the
   first qualifying deal will post to #sales-alerts on its own. Worth one look
@@ -1478,3 +1527,12 @@ which read a fake webhook as a real one, so the tests now build their samples
 at run time. And the emails he could not read: every row a door now, the
 whole message behind it, Edit only for whoever the server would let edit. His
 first look was fifteen seconds ahead of the deploy; his second was "works".
+
+Then he did what "works" never says: the steps, one by one. Nine passed. One
+was a task that has no such thing yet. Three were real, and none of them
+was the viewer. A second Escape listener under the first; a body stored
+with its newlines pressed out months ago, invisible until something tried
+to show them; a contact owned by the person who made it and labelled
+nobody's. Two were fixed inside the hour and proven against the real
+database; the third is a question about what a row should say about
+itself, and that is his to answer.
