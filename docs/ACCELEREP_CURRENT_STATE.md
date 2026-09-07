@@ -4045,6 +4045,17 @@ button — so the dev site has no Microsoft credentials, which the Company
 Calendar panel could never have said; Email logging "Live" with the org's
 BCC address and Copy; "Request an integration · None requested yet" and the
 ten rows, each ending in Request. Not yet seen: a Request clicked, Slack
+configured, the Karen path. **Eighth session (7 Sep), Jeff's second
+screenshot of deployed dev as Admin: "request to link app persists after
+hard refresh"** — the Gmail row reads "Requested · 9/7/2026" with no
+button, the section header "1 requested by this workspace", the other nine
+rows still end in Request. Read back from the app database (read-only
+SELECT): `settings.extra.integrationRequests.gmail` = `{ requestedAt
+2026-09-07T16:47:55.714Z, byName "Jeff Russell", note null }` and one
+`integration.requested` audit row, entity `gmail` / "Gmail", user_name
+"Jeff Russell", timestamp 16:47:55.724 — the same instant, ten
+milliseconds apart. Whether the request was mailed (`notified`) is not
+in the row; `INTEGRATION_REQUESTS_TO` is Jeff's. Still not seen: Slack
 configured, the Karen path.
 
 ### 0.91 Personal email-logging addresses, and the org address attributes by sender (7 Sep, seventh session resumed)
@@ -4120,14 +4131,28 @@ served `index-ABUwIA60.js` — the local gate build's hash — at 10:58:38 local
 `index-UiFDxZrS.js`), 32 seconds after the push, `pk_test_` inlined;
 "Treat this address like a password" and "personal address under their
 avatar" present in the served bundle; the deployed `email-inbound` GET
-answers 401 unauthenticated. **PARTLY OBSERVED by Jeff (eighth session, 7
-Sep; site not stated — dev and prod both carry §0.91): "karen and my cc
-addresses are different"** — the Email logging tab renders a personal
-address for each of the two roster members and the two differ. Not yet
-seen: a real email through a personal address landing on a contact owned
-by the sender, and the org address's From attribution. CC and BCC are the
-same to the function: `email-inbound` unions `to`, `cc` and `bcc` before
-looking for a dropbox address.
+answers 401 unauthenticated. **OBSERVED by Jeff on deployed dev (eighth
+session, 7 Sep), in two steps.** First: "karen and my cc addresses are
+different" — the Email logging tab renders a personal address for each of
+the two roster members and the two differ. (CC and BCC are the same to the
+function: `email-inbound` unions `to`, `cc` and `bcc` before looking for a
+dropbox address.) Then: **"email sent from karen was logged against the
+contact"** — and the row, read back from the app database (read-only
+SELECT), is what the design promised: `activities` type Email, subject
+"Test email", `created_at` 2026-09-07 16:46:36 UTC, org `org_3BDQ…` (the
+dev org — the org address in Jeff's screenshot of accelerep.netlify.app
+carries the same id), `contact_id` → Jeff Russelltest, **`owner_id` =
+Karen's `usr_…` (role User) and `author` "Karen Russell"** — the roster
+name, not the raw sender; the id is the Message-ID hash form. The row
+cannot say which address carried it: Karen's personal address and the org
+address from her roster email both produce exactly this row, so the From
+attribution path is proven only if she used the org address (not stated).
+Not reported: the activity as seen by Jeff, and a rep who is not Karen not
+seeing it. **A read-side trap met while reading it:** `@netlify/neon` on
+this machine parses a `timestamp without time zone` as LOCAL time, so
+the rows first read as 21:46 / 21:47 UTC, five hours off the app's
+`requestedAt`; `::text` on the column gave the stored value. Cast before
+comparing an ad-hoc SELECT's timestamp with anything the app wrote.
 
 **PROD SHIPPED (Jeff: "ship prod") — the ninth ship (7 Sep).** Ancestor
 check (`origin/master` an ancestor of `dev`, tree clean, `dev` ==

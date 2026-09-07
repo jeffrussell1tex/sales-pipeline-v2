@@ -7,14 +7,16 @@ that a JSX name is a read — state §0.89, OBSERVED by Jeff ("verified"); then
 Jeff: "can we create a list of common apps … they all show morgan reyes" — he
 chose **option A**: the panel is what exists, Slack, Google and Microsoft 365
 calendars, an Email-logging card, and a catalogue whose rows are REQUESTS —
-state §0.90, OBSERVED by Jeff's screenshot; then Jeff: "is there a way to
+state §0.90, OBSERVED by Jeff's screenshot (and, eighth session, a Request
+that persists a hard refresh); then Jeff: "is there a way to
 allow individual accelerepo users to generate a unique address for
 themselves" — option 1 plus From attribution: a personal `me-<user id>-<sig>`
 address whose email is OWNED by that user and shown to no other rep, the org
 address attributed to the roster member who sent it, a profile-panel tab,
 the first integration suite the inbound function ever had — state §0.91, on
-dev, deploy-verified, PARTLY OBSERVED in the eighth session (7 Sep — the two
-personal addresses differ; the real email not yet); then **Jeff: "ship prod" — ALL of it
+dev, deploy-verified, OBSERVED in the eighth session (7 Sep — the two
+personal addresses differ, then Karen's real email logged OWNED by her, the
+row read back); then **Jeff: "ship prod" — ALL of it
 SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
@@ -56,7 +58,7 @@ POST-only (405 on GET, 401 on an unauthenticated POST). `master` == `dev`
 Prod no longer carries the Slack crash it had carried since 11 May.
 
 **Seventh session, third batch (7 Sep — the session resumed) — ON DEV ONLY,
-deploy-verified, PARTLY OBSERVED by Jeff (eighth session, 7 Sep — §5),
+deploy-verified, OBSERVED by Jeff (eighth session, 7 Sep — §5),
 SHIPPED in the ninth ship:** `eb24dea` (personal email-logging
 addresses, state §0.91) and the docs commit this handoff rides in.
 accelerep.netlify.app served `index-ABUwIA60.js` — the local gate build's hash —
@@ -77,8 +79,9 @@ pane session, and the real proof is a real email. `master` stays at
 `ad76a38`.
 
 **Seventh session, second batch (3 Sep) — ON DEV ONLY, deploy-verified,
-OBSERVED by Jeff's screenshot (the panel rendered; a Request click, Slack
-and the Karen path not yet), NOT shipped:** `e3d15f2` (item 24 option A, state §0.90,
+OBSERVED by Jeff's screenshot (the panel rendered; eighth session: a
+Request click persists a hard refresh; Slack and the Karen path not yet),
+NOT shipped:** `e3d15f2` (item 24 option A, state §0.90,
 guide §18b7's new paragraph) and the docs commit this handoff rides in.
 accelerep.netlify.app served `index-UiFDxZrS.js` — the local gate build's hash —
 42 seconds after the push (15:29:53 local), `pk_test_` inlined; "Request an
@@ -110,8 +113,11 @@ Calendar "Not available on this site" with the one-line reason and no
 button — so the dev site has no Microsoft credentials, which the Company
 Calendar panel could never have said; Email logging "Live" with the org's
 BCC address and Copy; "Request an integration · None requested yet" and the
-ten rows, each ending in Request. Not yet seen: a Request clicked, Slack
-configured, the Karen path. `master` stays at `ad76a38`.
+ten rows, each ending in Request. Eighth session (7 Sep): Gmail Request
+clicked → "Requested · 9/7/2026", persists a hard refresh; the settings
+record and the `integration.requested` audit row read back (state §0.90,
+last paragraph). Not yet seen: Slack configured, the Karen path. `master`
+stays at `ad76a38`.
 
 **Seventh session, first batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff ("verified"), NOT shipped:** `95141cb` (state §0.89, guide
@@ -525,8 +531,9 @@ integration** (14 new this session: 6 in `integration-requests.itest.mjs`, 8
 in `email-inbound.itest.mjs`; the test database needed no schema change) ·
 **no pane browser pass this session** — no `netlify dev` was started and the
 pane holds no session; §0.89 was OBSERVED by Jeff on deployed dev, §0.90 by
-his screenshot, §0.91 partly (eighth session, 7 Sep: the two personal
-addresses differ) · dev deploys observed serving
+his screenshot, §0.91 OBSERVED (eighth session, 7 Sep: two personal
+addresses, then Karen's email logged owned by her — the row read back) ·
+dev deploys observed serving
 `index-CEn91emU.js` (§0.89), `index-UiFDxZrS.js` (§0.90) and `index-ABUwIA60.js`
 (§0.91) · **`master` == `cf72f99`, prod serving `index-DIeZb8qh.js` (ninth ship,
 §1)**; dev is ahead of master only by this ship-record docs commit · no
@@ -538,12 +545,15 @@ schema change · the working tree was clean at close.
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect ONLY the ninth-ship record docs commit after `cf72f99`. Anything
   else is unshipped code and a finding. (§0.89 OBSERVED — Jeff: "verified";
-  §0.90 OBSERVED by screenshot; §0.91 PARTLY observed in the eighth session
-  — all three shipped.)
-- **PARTLY DONE — Jeff (eighth session, 7 Sep): "karen and my cc addresses
-  are different"** — the Email logging tab shows a personal address for
-  each of the two roster members and they differ (site not stated; dev and
-  prod both carry §0.91). **Still to see: the real email**, below. CC works
+  §0.90 OBSERVED by screenshot; §0.91 OBSERVED in the eighth session — all
+  three shipped.)
+- **DONE — Jeff (eighth session, 7 Sep, deployed dev): "karen and my cc
+  addresses are different", then "email sent from karen was logged against
+  the contact"** — and the row read back from the database is owned by
+  Karen with author "Karen Russell" on the contact Jeff Russelltest (state
+  §0.91, landing paragraph). Which address carried it is not stated, so the
+  org-address From attribution is proven only if it was the org address;
+  a rep who is not Karen not seeing it was not reported. CC works
   the same as BCC — `email-inbound` unions `to`, `cc` and `bcc` before
   looking for a dropbox address. Was: avatar → the new "Email logging"
   tab → a `me-usr_…@inbound.salespipelinetracker.com` address with Copy, as
@@ -557,8 +567,15 @@ schema change · the working tree was clean at close.
   tab reads "Email logging is not available on this site", the site lacks
   `BCC_SECRET` / `INBOUND_DOMAIN` — the same variables the org card needs,
   which the screenshot showed configured on dev.
-- **PARTLY DONE — Jeff's screenshot (3 Sep) shows the panel on deployed dev
-  as designed (state §0.90's OBSERVED paragraph). Still to see:** click
+- **PARTLY DONE — Jeff's screenshot (7 Sep, per git and state §0.90 — this
+  bullet had said 3 Sep) shows the panel on deployed dev as designed (state
+  §0.90's OBSERVED paragraph); eighth session (7 Sep): Gmail Request →
+  "Requested · 9/7/2026", persists a hard refresh (Jeff: "request to link
+  app persists after hard refresh"), "1 requested by this workspace"; the
+  settings record and the `integration.requested` audit row read back,
+  16:47:55 UTC, Jeff Russell; whether it was mailed depends on
+  `INTEGRATION_REQUESTS_TO`, Jeff's. Still to see:** Configure Slack →
+  Send test message → Save; the Karen path. Was: click
   Request on a row → "Requested · <today>", refresh — it stays; Configure
   Slack → Send test message → Save; the Karen path. Was the full list:
   Settings → Integrations → Connected apps. Four cards under
