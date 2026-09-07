@@ -4146,10 +4146,21 @@ Karen's `usr_…` (role User) and `author` "Karen Russell"** — the roster
 name, not the raw sender; the id is the Message-ID hash form. **Jeff:
 "karen used the org address"** — so the path proven is From attribution:
 the ORG dropbox, From = Karen's roster email (`ownerFromSender`), owned by
-her. A real email through a PERSONAL address (`userFromRecipients`) has
-not been sent yet; the two addresses have been seen. Not reported: the
-activity as seen by Jeff; and the visibility check was NOT done — Jeff: "I
-did not see if anyone else can see the email". **A read-side trap met while reading it:** `@netlify/neon` on
+her. **Then the PERSONAL address (`userFromRecipients`) — Jeff: "sent a new
+one as Karen and used cc"** (after "let me redo it": a first attempt had
+left the count at one — nothing logged, which is the function's answer to
+an email with no valid dropbox recipient): a second row, "Test email #2",
+`created_at` 17:08:29 UTC, same contact, **`owner_id` Karen, `author`
+"Karen Russell"** — the same shape as the org-address row, the address in
+CC. Both paths proven. **Karen's own view seen:** Jeff's screenshot signed
+in as Karen (no Sales Manager or Settings tab) — Contacts → Jeff
+Russelltest → Activity, "ACTIVITY HISTORY (1)", "Sep 7 · Email · Test email
+— Test email for logging" (taken between the two sends). Not seen: the
+activity as Jeff (Admin). **The negative check cannot run in the dev org as
+rostered:** Jeff (Admin), Karen (User), two Technicians — no second rep to
+sign in as (Jeff: "I did not see if anyone else can see the email"); the
+rule that hides it is the existing `!r.ownerId || r.ownerId === callerId`
+read, covered by `email-inbound.itest.mjs` only at the row level. **A read-side trap met while reading it:** `@netlify/neon` on
 this machine parses a `timestamp without time zone` as LOCAL time, so
 the rows first read as 21:46 / 21:47 UTC, five hours off the app's
 `requestedAt`; `::text` on the column gave the stored value. Cast before

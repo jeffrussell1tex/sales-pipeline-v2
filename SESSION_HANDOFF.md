@@ -16,8 +16,9 @@ address attributed to the roster member who sent it, a profile-panel tab,
 the first integration suite the inbound function ever had — state §0.91, on
 dev, deploy-verified, OBSERVED in the eighth session (7 Sep — the two
 personal addresses differ, then Karen's real email through the ORG address
-logged OWNED by her — From attribution — the row read back; a personal
-address not yet used); then **Jeff: "ship prod" — ALL of it
+logged OWNED by her — From attribution — then through her PERSONAL address,
+both rows read back; no second rep in the org for the negative check); then
+**Jeff: "ship prod" — ALL of it
 SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
@@ -553,11 +554,14 @@ schema change · the working tree was clean at close.
   the contact"** — and the row read back from the database is owned by
   Karen with author "Karen Russell" on the contact Jeff Russelltest (state
   §0.91, landing paragraph). Jeff: "karen used the org address" — the
-  From attribution is proven; **a real email through a PERSONAL address is
-  still to send** (as Karen, her `me-usr_…` address in CC or BCC → the same
-  row shape, owned by her); the visibility check was NOT done (Jeff: "I
-  did not see if anyone else can see the email") — as another rep, or as
-  Jeff at least, open the contact. CC works
+  From attribution is proven; then "sent a new one as Karen and used cc" —
+  her PERSONAL address, "Test email #2" at 17:08 UTC, owned by Karen, the
+  row read back: **both paths proven.** Karen sees her own two on the
+  contact (screenshot as Karen, taken between the sends). Not seen: the
+  activity as Jeff. The negative check ("I did not see if anyone else can
+  see the email") cannot run as the dev org is rostered — Admin, Karen,
+  two Technicians, no second rep; add a throwaway User if Jeff wants it
+  proven in the browser. CC works
   the same as BCC — `email-inbound` unions `to`, `cc` and `bcc` before
   looking for a dropbox address. Was: avatar → the new "Email logging"
   tab → a `me-usr_…@inbound.salespipelinetracker.com` address with Copy, as
