@@ -85,7 +85,8 @@ pane session, and the real proof is a real email. `master` stays at
 **Seventh session, second batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff's screenshot (the panel rendered; eighth session: a
 Request click persists a hard refresh, and Slack configured against a real
-workspace; the Karen path not yet), NOT shipped:** `e3d15f2` (item 24 option A, state §0.90,
+workspace; the "Karen path" was a wrong claim — Settings is Admin-only),
+NOT shipped:** `e3d15f2` (item 24 option A, state §0.90,
 guide §18b7's new paragraph) and the docs commit this handoff rides in.
 accelerep.netlify.app served `index-UiFDxZrS.js` — the local gate build's hash —
 42 seconds after the push (15:29:53 local), `pk_test_` inlined; "Request an
@@ -121,7 +122,8 @@ ten rows, each ending in Request. Eighth session (7 Sep): Gmail Request
 clicked → "Requested · 9/7/2026", persists a hard refresh; the settings
 record and the `integration.requested` audit row read back (state §0.90,
 last paragraph); Slack configured, the test message seen in #sales-alerts
-(state §0.89, last paragraph). Not yet seen: the Karen path. `master`
+(state §0.89, last paragraph). The "Karen path" never existed — Settings
+is Admin-only by design (state §0.90, struck sentence). `master`
 stays at `ad76a38`.
 
 **Seventh session, first batch (3 Sep) — ON DEV ONLY, deploy-verified,
@@ -588,7 +590,10 @@ schema change · the working tree was clean at close.
   `INTEGRATION_REQUESTS_TO`, Jeff's; Configure Slack → Send test message →
   Save DONE against a Slack workspace Jeff created for it — the test
   message in #sales-alerts, the config read back (state §0.89, last
-  paragraph). Still to see:** the Karen path. Was: click
+  paragraph); the "Karen path" struck — Jeff: "a user does not have access
+  to settings", "nor should they", and `App.jsx` renders the Settings tab
+  and content only when `isAdmin`. NOTHING of §0.90 remains unseen; this
+  bullet is DONE. Was: click
   Request on a row → "Requested · <today>", refresh — it stays; Configure
   Slack → Send test message → Save; the Karen path. Was the full list:
   Settings → Integrations → Connected apps. Four cards under
@@ -602,9 +607,10 @@ schema change · the working tree was clean at close.
   credentials. Email logging: the BCC address with Copy, or "Not available
   on this site" if the inbound domain is unset. Click Request on any row →
   "Requested · <today>", refresh — it stays, the button is gone for that
-  app; Settings → Security → Audit log shows `integration.requested`. **As
+  app; Settings → Security → Audit log shows `integration.requested`. ~~**As
   Karen:** same panel, no Slack Configure (Admin only), her own calendar
-  Connect, no company Connect, Request works.
+  Connect, no company Connect, Request works.~~ (Wrong — a User cannot open
+  Settings at all. Left struck so the next reader does not re-plan it.)
 - **Two env vars are Jeff's, not verifiable from here:** set
   `INTEGRATION_REQUESTS_TO` in Netlify (dev and prod) to the address that
   should receive requests — until then a request is recorded and audited but

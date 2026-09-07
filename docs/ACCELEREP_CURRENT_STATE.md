@@ -4041,9 +4041,19 @@ Company Calendar panel's existing Connect would 503 too in that case);
 Microsoft 365 Calendar the same; Email logging shows the BCC address with
 Copy, or "Not available on this site"; Request on any row → "Requested ·
 <today>", refresh — it stays; a second click is impossible; Settings →
-Security → Audit log shows `integration.requested`. **As Karen:** the same
+Security → Audit log shows `integration.requested`. ~~**As Karen:** the same
 panel with no Slack Configure (Admin only), her own calendar Connect, no
-company Connect.
+company Connect.~~ **Wrong, and struck (eighth session, 7 Sep — Jeff:
+"Karen is a user and does not have access to connected apss", "a user does
+not have access to settings", "nor should they"):** the Settings tab and
+its content are both rendered only when `isAdmin` (`App.jsx`, `userRole
+=== 'Admin'`), by design, so no User or Manager ever reaches this panel.
+The panel's own non-Admin branches — "An Admin configures Slack", a
+personal-only calendar Connect — are unreachable; harmless, dead. A User
+connects their own calendar from the avatar panel or Home, where it always
+was. `integration-requests.mjs` has no role gate beyond `verifyAuth`, so a
+direct POST from a User would record a request the UI never offers them —
+harmless, inconsistent; one line if Jeff wants it Admin-only.
 
 **Open, Jeff's:** (a) set `INTEGRATION_REQUESTS_TO` in Netlify (both sites)
 to the address that should receive requests — until then requests are
@@ -4082,7 +4092,8 @@ SELECT): `settings.extra.integrationRequests.gmail` = `{ requestedAt
 "Jeff Russell", timestamp 16:47:55.724 — the same instant, ten
 milliseconds apart. Whether the request was mailed (`notified`) is not
 in the row; `INTEGRATION_REQUESTS_TO` is Jeff's. Slack configured: §0.89's
-last paragraph (eighth session). Still not seen: the Karen path.
+last paragraph (eighth session). The "Karen path" is void — Settings is
+Admin-only (the struck sentence above). Nothing of §0.90 remains unseen.
 
 ### 0.91 Personal email-logging addresses, and the org address attributes by sender (7 Sep, seventh session resumed)
 
