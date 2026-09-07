@@ -13,7 +13,8 @@ themselves" — option 1 plus From attribution: a personal `me-<user id>-<sig>`
 address whose email is OWNED by that user and shown to no other rep, the org
 address attributed to the roster member who sent it, a profile-panel tab,
 the first integration suite the inbound function ever had — state §0.91, on
-dev, deploy-verified, NOT yet observed; then **Jeff: "ship prod" — ALL of it
+dev, deploy-verified, PARTLY OBSERVED in the eighth session (7 Sep — the two
+personal addresses differ; the real email not yet); then **Jeff: "ship prod" — ALL of it
 SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
@@ -55,7 +56,8 @@ POST-only (405 on GET, 401 on an unauthenticated POST). `master` == `dev`
 Prod no longer carries the Slack crash it had carried since 11 May.
 
 **Seventh session, third batch (7 Sep — the session resumed) — ON DEV ONLY,
-deploy-verified, NOT observed by Jeff, NOT shipped:** `eb24dea` (personal email-logging
+deploy-verified, PARTLY OBSERVED by Jeff (eighth session, 7 Sep — §5),
+SHIPPED in the ninth ship:** `eb24dea` (personal email-logging
 addresses, state §0.91) and the docs commit this handoff rides in.
 accelerep.netlify.app served `index-ABUwIA60.js` — the local gate build's hash —
 32 seconds after the push (10:58:38 local), `pk_test_` inlined; "Treat this
@@ -523,7 +525,8 @@ integration** (14 new this session: 6 in `integration-requests.itest.mjs`, 8
 in `email-inbound.itest.mjs`; the test database needed no schema change) ·
 **no pane browser pass this session** — no `netlify dev` was started and the
 pane holds no session; §0.89 was OBSERVED by Jeff on deployed dev, §0.90 by
-his screenshot, §0.91 not yet · dev deploys observed serving
+his screenshot, §0.91 partly (eighth session, 7 Sep: the two personal
+addresses differ) · dev deploys observed serving
 `index-CEn91emU.js` (§0.89), `index-UiFDxZrS.js` (§0.90) and `index-ABUwIA60.js`
 (§0.91) · **`master` == `cf72f99`, prod serving `index-DIeZb8qh.js` (ninth ship,
 §1)**; dev is ahead of master only by this ship-record docs commit · no
@@ -535,8 +538,14 @@ schema change · the working tree was clean at close.
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect ONLY the ninth-ship record docs commit after `cf72f99`. Anything
   else is unshipped code and a finding. (§0.89 OBSERVED — Jeff: "verified";
-  §0.90 OBSERVED by screenshot; §0.91 NOT yet observed — all three shipped.)
-- **Jeff eyeballs §0.91 on deployed dev:** avatar → the new "Email logging"
+  §0.90 OBSERVED by screenshot; §0.91 PARTLY observed in the eighth session
+  — all three shipped.)
+- **PARTLY DONE — Jeff (eighth session, 7 Sep): "karen and my cc addresses
+  are different"** — the Email logging tab shows a personal address for
+  each of the two roster members and they differ (site not stated; dev and
+  prod both carry §0.91). **Still to see: the real email**, below. CC works
+  the same as BCC — `email-inbound` unions `to`, `cc` and `bcc` before
+  looking for a dropbox address. Was: avatar → the new "Email logging"
   tab → a `me-usr_…@inbound.salespipelinetracker.com` address with Copy, as
   Jeff and as Karen (two different addresses). **The real proof is a real
   email:** as Karen, send one to a contact of hers with her personal address

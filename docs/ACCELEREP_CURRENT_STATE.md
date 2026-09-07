@@ -4120,7 +4120,14 @@ served `index-ABUwIA60.js` — the local gate build's hash — at 10:58:38 local
 `index-UiFDxZrS.js`), 32 seconds after the push, `pk_test_` inlined;
 "Treat this address like a password" and "personal address under their
 avatar" present in the served bundle; the deployed `email-inbound` GET
-answers 401 unauthenticated. **Not yet observed by Jeff on dev.**
+answers 401 unauthenticated. **PARTLY OBSERVED by Jeff (eighth session, 7
+Sep; site not stated — dev and prod both carry §0.91): "karen and my cc
+addresses are different"** — the Email logging tab renders a personal
+address for each of the two roster members and the two differ. Not yet
+seen: a real email through a personal address landing on a contact owned
+by the sender, and the org address's From attribution. CC and BCC are the
+same to the function: `email-inbound` unions `to`, `cc` and `bcc` before
+looking for a dropbox address.
 
 **PROD SHIPPED (Jeff: "ship prod") — the ninth ship (7 Sep).** Ancestor
 check (`origin/master` an ancestor of `dev`, tree clean, `dev` ==
