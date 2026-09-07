@@ -4047,6 +4047,74 @@ BCC address and Copy; "Request an integration · None requested yet" and the
 ten rows, each ending in Request. Not yet seen: a Request clicked, Slack
 configured, the Karen path.
 
+### 0.91 Personal email-logging addresses, and the org address attributes by sender (3 Sep, seventh session)
+
+**Jeff, looking at the Email logging card: "Is there a way to allow individual
+accelerepo users to generate a unique address for themselves so that only
+their emails are copied to their clients."** What existed: one BCC address per
+org; a received email matched a contact by its To/Cc/From and became an Email
+activity with the raw sender in `author` and **no `ownerId`** — unassigned,
+so every rep saw it on that contact and nothing tied it to the rep who sent
+it; and one shared secret per org, revocable for nobody. Two designs went
+back — (1) a personal address logs against ANY contact in the org, owned by
+the sender; (2) only against the rep's own or unassigned contacts — plus
+attributing the org address by matching the From address to the roster.
+**Jeff: "I like option 1. I also like the from address attribution."**
+
+**Design.** A personal address is `me-<users.id>-<sig>@<INBOUND_DOMAIN>`
+with `sig` = HMAC-SHA256(`'user:' + users.id`, `BCC_SECRET`)[0..16] — its
+own HMAC namespace, so an org signature can never be replayed as a user's
+and vice versa. The app user id (`usr_<uuid>`, globally unique) names BOTH
+the org and the owner; the lookup requires `users.active`, so a deactivated
+user's address stops working without any table. An email through it is
+inserted with `ownerId` = that user and `author` = their roster name,
+whoever the From address is; any contact in the org may match (option 1).
+The org address stays as the shared fallback: its email is owned by the
+roster member whose `users.email` equals the From address (org-scoped,
+active, case-insensitive) and unowned otherwise. The existing rep visibility
+rule (`!r.ownerId || r.ownerId === callerId`, Admin/Manager see all) then
+does the rest: a rep's logged email shows for them, their managers and
+admins, and for no other rep. The GET returns `myAddress` for the caller,
+resolved through `resolveCaller` (`users.clerk_user_id`, org-scoped) — null
+when the caller has no roster row. No schema change.
+
+**What changed.** `email-inbound.mjs` (`userSig`, `userAddress`,
+`userFromRecipients`, `ownerFromSender`; the dropbox-address exclusion is
+by inbound DOMAIN when it is known, so a contact named `me-…@theirs.com` is
+still a contact; `ownerId` on the row; `ownerId` in the POST response).
+`AppHeader.jsx`: a fourth profile-panel tab, "Email logging" — the caller's
+address with Copy, loaded only when the tab opens like the calendar record;
+"Treat this address like a password"; a no-roster-row and a not-configured
+state. `ConnectedAppsDetail.jsx`: the Admin card says the org address is
+attributed to the sender and every user has a personal address under their
+avatar. Tests: `connected-apps.test.mjs` +3 scans;
+`tests/integration/email-inbound.itest.mjs` (new, 8 — the first suite this
+function has ever had: GET hands the caller their own address and a stranger
+none; org address + roster sender → owned and authored by name; + unknown
+sender → unowned, raw sender; + deactivated sender → unowned; personal
+address → owned whoever sent it, on any org contact; forged signature,
+deactivated user and an org-namespace replay all refused with nothing
+logged; a personal address never reaches another org's contacts; a replayed
+Message-ID deduplicates). 7 mutants.
+
+**Verified.** Five gates green on 148 files; **555/555** unit (3 new); build
+guard OK, `index-ABUwIA60.js`, 2,489,559 bytes, `pk_test_` inlined — "Treat this address like a password"
+and "personal address under their avatar" in the bundle; **108/108**
+integration (8 new); **280/280 mutations, printed green baseline (7 added; run alone, after the unit and integration runs)**; `dist/` cleared. **Not
+browser-checked** — no pane session. **Jeff eyeballs on deployed dev:** avatar
+→ Email logging tab → a `me-usr_…` address with Copy (as Admin and as Karen —
+different addresses); Settings → Integrations → Connected apps → the Email
+logging card's new sentence. **The real proof needs a real email:** as Karen,
+send one to a contact of hers with her personal address in BCC; the activity
+appears on the contact for Karen and for Jeff, owned by Karen, author "Karen
+Russell"; sign in as another rep — it does not appear. Then the same with the
+ORG address from Karen's roster email — owned by Karen too (From
+attribution); from an address not on the roster — unowned, visible to all.
+
+**Open.** A personal address is revocable only by deactivating the user or
+rotating `BCC_SECRET` (which rotates every address in every org); a per-user
+nonce column would allow rotating one — not built, not asked for.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it

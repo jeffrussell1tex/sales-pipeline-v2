@@ -228,7 +228,7 @@ const BccCard = ({ bcc }) => {
         <IntegrationCard
             tile={<AppTile name="Email logging" color="#5b6b3a" emoji="📨" size={36}/>}
             name="Email logging" category="Email"
-            desc="BCC this address on any email you send and it is logged as an Email activity on the matching contact and their account. Works from any mail client — nothing to install."
+            desc="BCC this workspace address on any email and it is logged as an Email activity on the matching contact and their account, attributed to the sender when they are on the roster. Every user also has a personal address under their avatar → Email logging; email sent with it is owned by them. Works from any mail client — nothing to install."
             pill={bcc == null ? null : configured ? <Pill tone="ok">Live</Pill> : <Pill tone="muted">Not available on this site</Pill>}
             foot={bcc == null ? <span style={{ fontSize:11.5, color:T.inkMuted }}>Loading…</span> : configured ? (
                 <>

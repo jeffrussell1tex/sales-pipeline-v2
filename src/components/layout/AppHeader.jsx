@@ -215,6 +215,29 @@ export default function AppHeader({
         if (showProfilePanel && profilePanelTab === 'calendar' && !calConnLoaded) loadCalConnection();
     }, [showProfilePanel, profilePanelTab, calConnLoaded, loadCalConnection]);
 
+    // The caller's personal email-logging address (state §0.91): BCC it and the
+    // email is logged as an activity owned by them. Fetched only when the tab is
+    // opened, like the calendar record above. { address, myAddress, configured }.
+    const [myBcc, setMyBcc] = useState(null);
+    const [myBccLoaded, setMyBccLoaded] = useState(false);
+    const [myBccCopied, setMyBccCopied] = useState(false);
+    const loadMyBcc = React.useCallback(async () => {
+        try {
+            const res = await dbFetch('/.netlify/functions/email-inbound');
+            const data = await res.json().catch(() => ({}));
+            setMyBcc(res.ok ? data : { configured: false, myAddress: null, error: data.error || `HTTP ${res.status}` });
+        } catch (e) { setMyBcc({ configured: false, myAddress: null, error: e.message }); }
+        setMyBccLoaded(true);
+    }, []);
+    useEffect(() => {
+        if (showProfilePanel && profilePanelTab === 'email' && !myBccLoaded) loadMyBcc();
+    }, [showProfilePanel, profilePanelTab, myBccLoaded, loadMyBcc]);
+    const copyMyBcc = async () => {
+        if (!myBcc?.myAddress) return;
+        try { await navigator.clipboard.writeText(myBcc.myAddress); setMyBccCopied(true); setTimeout(() => setMyBccCopied(false), 1800); }
+        catch { setMyBccCopied(false); }
+    };
+
     const disconnectCalendar = async () => {
         if (!calConn) return;
         setDisconnecting(true);
@@ -501,6 +524,7 @@ export default function AppHeader({
                                 {panelTabBtn('profile','👤 Profile')}
                                 {panelTabBtn('notifications','🔔 Notifications')}
                                 {panelTabBtn('calendar','📅 Calendar')}
+                                {panelTabBtn('email','✉️ Email logging')}
                             </div>
 
                             <div style={{ padding: '1.25rem 1.5rem', maxHeight: 560, overflowY: 'auto', background: T.surface }}>
@@ -645,6 +669,36 @@ export default function AppHeader({
                                     toggles that were local state, saved nowhere and read by
                                     nothing; controls that do not do anything are worse than
                                     absent ones. */}
+                                {profilePanelTab === 'email' && (
+                                    <div>
+                                        <p style={{ fontSize: '0.8125rem', color: T.inkMid, margin: '0 0 1rem', lineHeight: 1.5, fontFamily: T.sans }}>
+                                            BCC your personal address on any email you send. It is logged as an Email activity on the matching contact and their account, owned by you — so it shows for you, your manager and admins, and for no other rep. Works from any mail client; nothing to install.
+                                        </p>
+                                        {!myBccLoaded ? (
+                                            <div style={{ fontSize: '0.8125rem', color: T.inkMuted, fontFamily: T.sans }}>Loading…</div>
+                                        ) : myBcc?.configured && myBcc.myAddress ? (
+                                            <>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 0.875rem',
+                                                    background: T.bg, borderRadius: T.r, border: `1px solid ${T.border}`, marginBottom: '0.75rem' }}>
+                                                    <code style={{ flex: 1, minWidth: 0, fontSize: '0.75rem', color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{myBcc.myAddress}</code>
+                                                    <button onClick={copyMyBcc}
+                                                        style={{ padding: '0.375rem 0.75rem', background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r,
+                                                            fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                                                        {myBccCopied ? 'Copied' : 'Copy'}
+                                                    </button>
+                                                </div>
+                                                <div style={{ fontSize: '0.6875rem', color: T.inkMuted, lineHeight: 1.5, fontFamily: T.sans }}>
+                                                    Treat this address like a password: anyone who has it can log email into your account. It stops working if your account is deactivated.
+                                                </div>
+                                            </>
+                                        ) : myBcc?.configured && !myBcc.myAddress ? (
+                                            <div style={{ fontSize: '0.8125rem', color: T.inkMuted, fontFamily: T.sans }}>Your account has no roster row in this workspace yet, so it has no address. An Admin can add you under Settings → Team.</div>
+                                        ) : (
+                                            <div style={{ fontSize: '0.8125rem', color: T.inkMuted, fontFamily: T.sans }}>{myBcc?.error ? `Could not load your address — ${myBcc.error}` : 'Email logging is not available on this site.'}</div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {profilePanelTab === 'calendar' && (
                                     <div>
                                         <p style={{ fontSize: '0.8125rem', color: T.inkMid, margin: '0 0 1rem', lineHeight: 1.5, fontFamily: T.sans }}>

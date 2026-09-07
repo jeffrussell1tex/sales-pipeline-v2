@@ -1,9 +1,9 @@
 import crypto from 'crypto';
 import { db } from '../../db/index.js';
-import { activities, contacts } from '../../db/schema.js';
+import { activities, contacts, users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, resolveCaller } from './_lib.mjs';
 
 // ── BCC email dropbox ────────────────────────────────────────────────────────
 // Each org gets a unique, unguessable BCC address. A rep BCCs it on any email;
@@ -15,8 +15,24 @@ import { serverErrorBody } from './_lib.mjs';
 // Stateless: no token table; the signature both identifies and authenticates
 // the org, so a guessed/forged address fails verification.
 //
+// Personal addresses (state §0.91, Jeff: "option 1 … I also like the from
+// address attribution"):  me-<users.id>-<sig>@<INBOUND_DOMAIN>
+//   sig = first 16 hex chars of HMAC-SHA256('user:' + users.id, BCC_SECRET)
+// The user id (app-owned usr_<uuid>, globally unique) names BOTH the org and
+// the owner: an email logged through it is inserted with ownerId = that user,
+// so the rep's own visibility rule shows it to them, their managers and
+// admins, and to no other rep. A deactivated user's address stops working —
+// the lookup requires users.active. Any contact in the org may match (Jeff's
+// option 1): a rep emailing a colleague's client still produces a true record,
+// and the owner says who sent it.
+// The org address stays as the shared fallback; an email through it is
+// attributed by matching the From address to the org's roster (users.email),
+// and is unowned when nothing matches.
+//
 // Endpoints:
-//   GET  (Clerk-authed)  -> { address } for the caller's org, for display in Settings.
+//   GET  (Clerk-authed)  -> { address, configured, myAddress } — the org's
+//                           address and the caller's personal one (null when the
+//                           caller has no roster row).
 //   POST (webhook)       -> verified via Svix signature (RESEND_INBOUND_SECRET)
 //                           or ?secret=<INBOUND_SHARED_SECRET> for other providers.
 //
@@ -32,6 +48,49 @@ const orgSig = (orgId) =>
 
 const orgAddress = (orgId) =>
     `log-${orgId}-${orgSig(orgId)}@${process.env.INBOUND_DOMAIN || ''}`;
+
+// Personal address: keyed on the app user id, in its own HMAC namespace so an
+// org signature can never be replayed as a user's and vice versa.
+const userSig = (userId) =>
+    crypto.createHmac('sha256', process.env.BCC_SECRET || '')
+        .update('user:' + userId).digest('hex').slice(0, 16);
+
+const userAddress = (userId) =>
+    `me-${userId}-${userSig(userId)}@${process.env.INBOUND_DOMAIN || ''}`;
+
+const sigMatches = (expected, given) => {
+    try { return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(String(given).toLowerCase())); }
+    catch { return false; }
+};
+
+// Parse "me-<users.id>-<sig>@domain" out of any recipient; verify sig; return the
+// ACTIVE roster row it names, or null. The row carries the org and the owner.
+async function userFromRecipients(addresses) {
+    for (const raw of addresses) {
+        const m = String(raw || '').match(/(?:^|<|\s)me-(usr_[0-9a-fA-F-]{36})-([a-fA-F0-9]{16})@/);
+        if (!m) continue;
+        const [, userId, sig] = m;
+        if (!sigMatches(userSig(userId), sig)) continue;
+        const [row] = await db
+            .select({ id: users.id, orgId: users.orgId, name: users.name, active: users.active })
+            .from(users)
+            .where(eq(users.id, userId));
+        if (row && row.active !== false) return row;
+    }
+    return null;
+}
+
+// From-address attribution for the ORG address: the sender is a roster member
+// of THIS org (never another's), matched on users.email, case-insensitively.
+async function ownerFromSender(orgId, fromEmail) {
+    if (!fromEmail) return null;
+    const rows = await db
+        .select({ id: users.id, name: users.name, email: users.email, active: users.active })
+        .from(users)
+        .where(eq(users.orgId, orgId));
+    const hit = rows.find(u => u.active !== false && String(u.email || '').trim().toLowerCase() === fromEmail);
+    return hit ? { id: hit.id, name: hit.name } : null;
+}
 
 // Parse "log-<orgId>-<sig>@domain" out of any recipient; verify sig; return orgId.
 function orgFromRecipients(addresses) {
@@ -183,9 +242,13 @@ export const handler = async (event) => {
             const auth = await verifyAuth(event);
             if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
             if (!process.env.BCC_SECRET || !process.env.INBOUND_DOMAIN) {
-                return { statusCode: 200, headers, body: JSON.stringify({ address: null, configured: false }) };
+                return { statusCode: 200, headers, body: JSON.stringify({ address: null, myAddress: null, configured: false }) };
             }
-            return { statusCode: 200, headers, body: JSON.stringify({ address: orgAddress(auth.orgId), configured: true }) };
+            // The caller's personal address needs their roster row (app id), which
+            // resolveCaller finds through users.clerk_user_id, org-scoped.
+            const caller = await resolveCaller(auth.userId, auth.orgId);
+            const myAddress = caller?.id ? userAddress(caller.id) : null;
+            return { statusCode: 200, headers, body: JSON.stringify({ address: orgAddress(auth.orgId), myAddress, configured: true }) };
         }
 
         if (event.httpMethod !== 'POST') {
@@ -206,7 +269,10 @@ export const handler = async (event) => {
         const from = mail.from?.email || mail.from || '';
         const toList = [].concat(mail.to || [], mail.cc || [], mail.bcc || [])
             .map(r => (r && typeof r === 'object') ? (r.email || '') : r);
-        const orgId = orgFromRecipients(toList);
+        // A personal address names the org AND the owner; the org address names
+        // the org, and the owner is whoever the From address matches on the roster.
+        const viaUser = await userFromRecipients(toList);
+        const orgId = viaUser ? viaUser.orgId : orgFromRecipients(toList);
         if (!orgId) {
             // Unknown/forged dropbox address — acknowledge so the provider doesn't retry.
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: false, reason: 'no valid dropbox recipient' }) };
@@ -228,7 +294,11 @@ export const handler = async (event) => {
         // dropbox). The header To/Cc are NOT in `full.to` — that's the envelope, i.e.
         // our own dropbox address — so we read `full.headers`, with a raw-MIME fallback.
         const fromEmail = emailOnly(from);
-        const isExternal = (e) => e && !e.startsWith('log-');
+        // Our own dropbox addresses are never contact candidates. With the inbound
+        // domain known, exclude by domain (a contact named me-…@theirs.com is a
+        // contact); without it, by the two prefixes.
+        const inboundDomain = String(process.env.INBOUND_DOMAIN || '').toLowerCase();
+        const isExternal = (e) => e && !(inboundDomain ? e.endsWith('@' + inboundDomain) : /^(log|me)-/.test(e));
 
         // Structured fields too (defensive: tolerate string OR { email } entry shapes).
         const structured = full
@@ -285,6 +355,7 @@ export const handler = async (event) => {
         // activity. With a Message-ID we get exact-once logging; without one (rare,
         // non-conformant senders) we fall back to a random id and accept the small
         // duplicate risk rather than dropping the activity.
+        const owner = viaUser ? { id: viaUser.id, name: viaUser.name } : await ownerFromSender(orgId, fromEmail);
         const messageId = String((full && full.message_id) || mail.message_id || '').trim();
         const activityId = messageId
             ? 'id_' + crypto.createHash('sha256').update(orgId + '|' + messageId).digest('hex').slice(0, 36)
@@ -304,7 +375,11 @@ export const handler = async (event) => {
             contactIds: [matched.id],
             accountId: matched.accountId || null,
             leadId: null,
-            author: fromEmail || null,
+            // Owned by the rep the address or the sender names; the author is their
+            // roster name so lists read like every other activity. Unowned when
+            // neither matched — visible to everyone, attributed to the raw sender.
+            ownerId: owner?.id || null,
+            author: owner?.name || fromEmail || null,
             createdAt: new Date(),
             orgId,
         };
@@ -315,7 +390,7 @@ export const handler = async (event) => {
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: true, deduped: true, activityId }) };
         }
 
-        return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: true, activityId: inserted.id }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ ok: true, matched: true, activityId: inserted.id, ownerId: owner?.id || null }) };
     } catch (error) {
         console.error('email-inbound error:', error);
         return { statusCode: 500, headers, body: serverErrorBody(error) };

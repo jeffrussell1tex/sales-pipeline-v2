@@ -166,6 +166,36 @@ test('the catalogue is a frozen list of requestable ids, and the settings card n
     assert.doesNotMatch(cat, /Gmail, Outlook, Zoom, Docusign, LinkedIn/);
 });
 
+// ── Personal BCC addresses + From attribution (state §0.91) ──────────────────
+
+test('email-inbound: a personal address names an ACTIVE roster row and owns the activity; the org address attributes by sender', () => {
+    const s = code(read('netlify/functions/email-inbound.mjs'));
+    assert.ok(s.includes(".update('user:' + userId)"), 'the user HMAC is in its own namespace');
+    assert.ok(s.includes("match(/(?:^|<|\\s)me-(usr_[0-9a-fA-F-]{36})-([a-fA-F0-9]{16})@/)"), 'the personal address is parsed on the app user id');
+    assert.ok(s.includes('if (row && row.active !== false) return row;'), 'a deactivated user\'s address stops working');
+    assert.ok(s.includes('const orgId = viaUser ? viaUser.orgId : orgFromRecipients(toList);'), 'the personal address names the org');
+    assert.ok(s.includes('const owner = viaUser ? { id: viaUser.id, name: viaUser.name } : await ownerFromSender(orgId, fromEmail);'));
+    assert.ok(s.includes('.where(eq(users.orgId, orgId));'), 'sender attribution is org-scoped');
+    assert.ok(s.includes('ownerId: owner?.id || null,'), 'the activity carries the owner');
+    assert.ok(s.includes('author: owner?.name || fromEmail || null,'));
+    assert.ok(s.includes('const myAddress = caller?.id ? userAddress(caller.id) : null;'), 'the GET resolves the caller through resolveCaller');
+    assert.ok(s.includes("import { serverErrorBody, resolveCaller } from './_lib.mjs';"));
+});
+
+test('the profile panel has an Email logging tab that loads the address lazily and copies it', () => {
+    const s = code(read('src/components/layout/AppHeader.jsx'));
+    assert.ok(s.includes("{panelTabBtn('email','✉️ Email logging')}"));
+    assert.ok(s.includes("if (showProfilePanel && profilePanelTab === 'email' && !myBccLoaded) loadMyBcc();"), 'loaded only when the tab opens');
+    assert.ok(s.includes("dbFetch('/.netlify/functions/email-inbound')"));
+    assert.ok(s.includes('navigator.clipboard.writeText(myBcc.myAddress)'));
+    assert.ok(s.includes('Treat this address like a password'));
+});
+
+test('the Admin card says every user has a personal address', () => {
+    const s = code(read(CA));
+    assert.ok(s.includes('Every user also has a personal address under their avatar → Email logging; email sent with it is owned by them.'));
+});
+
 test('the Account rail reads the taxonomy primary from k and skips hidden rows', () => {
     const s = code(read(RAIL));
     assert.ok(s.includes("m.k || m.name || ''"), 'k first');
