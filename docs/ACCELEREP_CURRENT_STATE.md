@@ -3930,7 +3930,29 @@ served `index-CEn91emU.js` — the local gate build's hash — at 14:57:35 local
 (was `index-WThsNanc.js`), `pk_test_` inlined; "Configure Slack", "Send test
 message" and "Incoming Webhook URL" present in the served bundle, "n:118"
 absent. `master` stays at `ad76a38` (the eighth ship); dev is ahead by item
-22 and this batch. **Not yet observed by Jeff.** The ship is Jeff's call.
+22 and this batch. **OBSERVED by Jeff (3 Sep: "verified" — nothing in the
+browser described). Eighth session (7 Sep), the full walk on deployed dev
+as Admin, against a Slack workspace Jeff created for it ("I dont have
+access to any slack environments" → "creating a slack account" →
+"worked"):** Configure Slack → an Incoming Webhook URL from a fresh Slack
+app → Send test message → Slack's #sales-alerts shows "Accelerep Linker ·
+APP · 12:27 PM · ✅ Accelerep is connected to Slack. Pipeline alerts and
+digests will post here." (Jeff's screenshot) → Save. Read back from the
+settings row (read-only SELECT, URL masked): `extra.slackConfig` = `{
+webhookUrl https://hooks.slack.com/services/T0…, channel "#sales-alerts",
+enabled true }`, `extra.connectedApps.slack` true, updated 17:26:36 UTC.
+**Four `settings.updated` audit rows, all "Updated: slackConfig,
+connectedApps", in two pairs — 17:26:24 / 17:26:36, then, after Jeff "just
+sent a second test message for you to see if you get 2 again", 17:30:48 /
+17:31:11.** Read for a double write and not found: Send test message POSTs
+to `send-slack` and never touches settings; `handleSaveSlack` is one
+`putSettings` per Save; `dbFetch` has no retry; `IntBtn` is a plain
+`<button onClick>`; `writeAudit` inserts once; the modal closes only after
+the write lands, so a second row needs Configure reopened and Save again
+— 12 and 23 seconds apart is a hand, not a loop. What Jeff clicked each
+round is not yet stated; an open question, not a finding. Not yet fired
+against it: the five `pipeline-alerts.mjs` posts. The ship is Jeff's
+call.
 
 ### 0.90 Connected apps is what exists: Slack, two calendars, email logging, and requests for the rest (3 Sep, seventh session)
 
@@ -4055,8 +4077,8 @@ SELECT): `settings.extra.integrationRequests.gmail` = `{ requestedAt
 `integration.requested` audit row, entity `gmail` / "Gmail", user_name
 "Jeff Russell", timestamp 16:47:55.724 — the same instant, ten
 milliseconds apart. Whether the request was mailed (`notified`) is not
-in the row; `INTEGRATION_REQUESTS_TO` is Jeff's. Still not seen: Slack
-configured, the Karen path.
+in the row; `INTEGRATION_REQUESTS_TO` is Jeff's. Slack configured: §0.89's
+last paragraph (eighth session). Still not seen: the Karen path.
 
 ### 0.91 Personal email-logging addresses, and the org address attributes by sender (7 Sep, seventh session resumed)
 

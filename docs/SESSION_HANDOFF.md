@@ -3,7 +3,9 @@
 **Session of 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
 since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
-that a JSX name is a read — state §0.89, OBSERVED by Jeff ("verified"); then
+that a JSX name is a read — state §0.89, OBSERVED by Jeff ("verified";
+eighth session: configured against a real Slack workspace, the test message
+seen in the channel); then
 Jeff: "can we create a list of common apps … they all show morgan reyes" — he
 chose **option A**: the panel is what exists, Slack, Google and Microsoft 365
 calendars, an Email-logging card, and a catalogue whose rows are REQUESTS —
@@ -82,8 +84,8 @@ pane session, and the real proof is a real email. `master` stays at
 
 **Seventh session, second batch (3 Sep) — ON DEV ONLY, deploy-verified,
 OBSERVED by Jeff's screenshot (the panel rendered; eighth session: a
-Request click persists a hard refresh; Slack and the Karen path not yet),
-NOT shipped:** `e3d15f2` (item 24 option A, state §0.90,
+Request click persists a hard refresh, and Slack configured against a real
+workspace; the Karen path not yet), NOT shipped:** `e3d15f2` (item 24 option A, state §0.90,
 guide §18b7's new paragraph) and the docs commit this handoff rides in.
 accelerep.netlify.app served `index-UiFDxZrS.js` — the local gate build's hash —
 42 seconds after the push (15:29:53 local), `pk_test_` inlined; "Request an
@@ -118,7 +120,8 @@ BCC address and Copy; "Request an integration · None requested yet" and the
 ten rows, each ending in Request. Eighth session (7 Sep): Gmail Request
 clicked → "Requested · 9/7/2026", persists a hard refresh; the settings
 record and the `integration.requested` audit row read back (state §0.90,
-last paragraph). Not yet seen: Slack configured, the Karen path. `master`
+last paragraph); Slack configured, the test message seen in #sales-alerts
+(state §0.89, last paragraph). Not yet seen: the Karen path. `master`
 stays at `ad76a38`.
 
 **Seventh session, first batch (3 Sep) — ON DEV ONLY, deploy-verified,
@@ -582,8 +585,10 @@ schema change · the working tree was clean at close.
   app persists after hard refresh"), "1 requested by this workspace"; the
   settings record and the `integration.requested` audit row read back,
   16:47:55 UTC, Jeff Russell; whether it was mailed depends on
-  `INTEGRATION_REQUESTS_TO`, Jeff's. Still to see:** Configure Slack →
-  Send test message → Save; the Karen path. Was: click
+  `INTEGRATION_REQUESTS_TO`, Jeff's; Configure Slack → Send test message →
+  Save DONE against a Slack workspace Jeff created for it — the test
+  message in #sales-alerts, the config read back (state §0.89, last
+  paragraph). Still to see:** the Karen path. Was: click
   Request on a row → "Requested · <today>", refresh — it stays; Configure
   Slack → Send test message → Save; the Karen path. Was the full list:
   Settings → Integrations → Connected apps. Four cards under
