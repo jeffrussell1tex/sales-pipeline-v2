@@ -3,7 +3,7 @@
 // 24 — Jeff: "option a"). Proves: a request is recorded on the org's settings
 // row under integrationRequests and audited; a second request for the same app
 // is idempotent (first timestamp kept, no second audit row); an id outside the
-// catalogue is refused; a ReadOnly caller is refused; a workspace with no
+// catalogue is refused; every role but Admin is refused (§0.92); a workspace with no
 // settings row gets one; the mail is skipped (notified:false) when
 // INTEGRATION_REQUESTS_TO is unset and attempted through the mailer when it is
 // set; and org B sees nothing of org A.
@@ -118,11 +118,13 @@ test('a second request for the same app is idempotent — first timestamp kept, 
     assert.equal((await auditsOf(ORG_A)).length, 1);
 });
 
-test('an app outside the catalogue is refused, and so is a read-only caller', async () => {
+test('an app outside the catalogue is refused, and so is every role but Admin', async () => {
     assert.equal(parse(await call(ORG_A, { appId: 'morgan-reyes' })).status, 400);
     assert.equal(parse(await call(ORG_A, { appId: '' })).status, 400);
     assert.equal(parse(await call(ORG_A, { appId: 'zoom' }, { role: 'ReadOnly' })).status, 403);
     assert.equal(parse(await call(ORG_A, { appId: 'zoom' }, { role: 'Technician' })).status, 403);
+    assert.equal(parse(await call(ORG_A, { appId: 'zoom' }, { role: 'User' })).status, 403, '§0.92: a User cannot open Settings, so cannot request');
+    assert.equal(parse(await call(ORG_A, { appId: 'zoom' }, { role: 'Manager' })).status, 403, '§0.92: nor a Manager');
     assert.equal((await extraOf(ORG_A)).integrationRequests.zoom, undefined);
 });
 

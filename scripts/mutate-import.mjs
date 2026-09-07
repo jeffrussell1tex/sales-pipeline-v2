@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1300,9 +1300,9 @@ const mutations = [
         'netlify/functions/integration-requests.mjs',
         "    if (!app) return json(400, { error: 'Unknown integration. Only apps in the catalogue can be requested.' });",
         "    if (!app && false) return json(400, { error: 'Unknown integration. Only apps in the catalogue can be requested.' });"],
-    ['requests: the write gate is skipped — a ReadOnly caller can request',
+    ['requests: the Admin gate is skipped — a User can request (0.92; was the write gate)',
         'netlify/functions/integration-requests.mjs',
-        '    const forbidden = requireWrite(auth, event, HEADERS);',
+        "    const forbidden = requireRole(auth, ['Admin'], HEADERS);",
         '    const forbidden = null;'],
     ['requests: a second request overwrites the first (not idempotent)',
         'netlify/functions/integration-requests.mjs',
@@ -1366,6 +1366,36 @@ const mutations = [
         'src/components/layout/AppHeader.jsx',
         "        if (showProfilePanel && profilePanelTab === 'email' && !myBccLoaded) loadMyBcc();",
         "        if (showProfilePanel && !myBccLoaded) loadMyBcc();"],
+
+    // ── Item 25: send-slack is Admin-only and pinned to Slack (0.92) ────────────
+    ['slack: the handler trusts membership alone again — any user posts a test to any URL',
+        'netlify/functions/send-slack.mjs',
+        "    const forbidden = requireRole(auth, ['Admin'], HEADERS);",
+        '    const forbidden = null;'],
+    ['slack: the typed test URL is not checked — the 400 never fires',
+        'netlify/functions/send-slack.mjs',
+        '            if (!checked.ok) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: checked.error }) };',
+        '            if (!checked.ok && false) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: checked.error }) };'],
+    ['slack: sendSlack posts to whatever it is handed — a stored non-Slack URL is hit on every alert',
+        'netlify/functions/send-slack.mjs',
+        "    if (!checked.ok) throw new Error('sendSlack: ' + checked.error);",
+        "    if (false) throw new Error('sendSlack: ' + checked.error);"],
+    ['slack: the validator accepts any host',
+        'netlify/functions/_slackWebhook.mjs',
+        '    if (u.hostname.toLowerCase() !== SLACK_WEBHOOK_HOST)',
+        '    if (false)'],
+    ['slack: the validator accepts http',
+        'netlify/functions/_slackWebhook.mjs',
+        "    if (u.protocol !== 'https:')",
+        '    if (false)'],
+    ['slack: the validator accepts a hooks.slack.com URL outside /services/',
+        'netlify/functions/_slackWebhook.mjs',
+        '    if (!u.pathname.startsWith(SLACK_WEBHOOK_PATH))',
+        '    if (false)'],
+    ['slack: the settings PUT stores an unchecked webhook — the card reads Live over a URL sendSlack refuses',
+        'netlify/functions/settings.mjs',
+        "            if ('slackConfig' in data && data.slackConfig && data.slackConfig.webhookUrl) {",
+        '            if (false) {'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

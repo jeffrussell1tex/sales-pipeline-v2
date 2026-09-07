@@ -20,12 +20,18 @@
  *   });
  *
  * Or use sendSlackToOrg() which reads the webhook URL from the org settings automatically.
+ *
+ * Gate (state §0.92, handoff item 25): the handler is Admin-only, and every URL
+ * this module POSTs to — typed into the test, or stored by an Admin — must be
+ * a Slack Incoming Webhook (_slackWebhook.mjs). Before: verifyAuth alone, and
+ * the server would POST to any URL a signed-in user put in the body.
  */
 
 import { db }      from '../../db/index.js';
 import { settings } from '../../db/schema.js';
 import { eq }      from 'drizzle-orm';
 import { serverErrorBody } from './_lib.mjs';
+import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
 
 // ── Core send function ────────────────────────────────────────────────────────
 /**
@@ -34,10 +40,15 @@ import { serverErrorBody } from './_lib.mjs';
  */
 export async function sendSlack({ webhookUrl, text, blocks }) {
     if (!webhookUrl) throw new Error('sendSlack: webhookUrl is required');
+    // Fail closed on the destination itself, so a stored URL that is not Slack
+    // (saved before §0.92, or by hand) is refused here too — sendSlackToOrg
+    // logs and returns false, the alert is skipped, nothing leaves the server.
+    const checked = validateSlackWebhookUrl(webhookUrl);
+    if (!checked.ok) throw new Error('sendSlack: ' + checked.error);
 
     const payload = { text, ...(blocks ? { blocks } : {}) };
 
-    const res = await fetch(webhookUrl, {
+    const res = await fetch(checked.value, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
@@ -253,7 +264,7 @@ export const slackTemplates = {
 
 // ── HTTP handler — POST /.netlify/functions/send-slack ────────────────────────
 // Allows the frontend to send a test message or trigger ad-hoc Slack posts.
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireRole } from './auth.mjs';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -269,6 +280,10 @@ export const handler = async (event) => {
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers: HEADERS, body: JSON.stringify({ error: auth.error }) };
     const { orgId } = auth;
+    // Admin-only: the only client caller is the Configure Slack modal, which
+    // only an Admin can open; the endpoint had trusted membership alone (§0.92).
+    const forbidden = requireRole(auth, ['Admin'], HEADERS);
+    if (forbidden) return forbidden;
 
     try {
         const { type, webhookUrl, text, blocks } = JSON.parse(event.body || '{}');
@@ -276,6 +291,8 @@ export const handler = async (event) => {
         // If explicit webhookUrl provided (e.g. testing a new config), use it directly
         const url = webhookUrl || null;
         if (url) {
+            const checked = validateSlackWebhookUrl(url);
+            if (!checked.ok) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: checked.error }) };
             await sendSlack({ webhookUrl: url, text: text || slackTemplates.test({}).text, blocks });
         } else {
             // Otherwise look up the org's stored webhook

@@ -131,12 +131,13 @@ test('integrationRequests is carried by BOTH halves of settings.mjs (18b12)', ()
     assert.ok(s.includes("integrationRequests: 'integrationRequests' in data ? (data.integrationRequests || {}) : existingExtra.integrationRequests || {},"), 'PUT read-then-merge');
 });
 
-test('integration-requests accepts only the catalogue, is a write, audits, and mails only when an owner address is set', () => {
+test('integration-requests accepts only the catalogue, is Admin-only, audits, and mails only when an owner address is set', () => {
     const s = code(read('netlify/functions/integration-requests.mjs'));
     assert.ok(s.includes("import { requestableApp, cleanNote } from '../../src/utils/integrationCatalog.js';"), 'one catalogue for both sides');
     assert.ok(s.includes('const app = requestableApp(body.appId);'));
     assert.ok(s.includes("if (!app) return json(400, { error: 'Unknown integration. Only apps in the catalogue can be requested.' });"));
-    assert.ok(s.includes('const forbidden = requireWrite(auth, event, HEADERS);'));
+    assert.ok(s.includes("const forbidden = requireRole(auth, ['Admin'], HEADERS);"), 'Admin-only (§0.92) — Settings is Admin-only, so the endpoint is too');
+    assert.ok(!s.includes('requireWrite'), 'the write gate went with it');
     assert.ok(s.includes("if (existing[app.id]?.requestedAt) {"), 'idempotent');
     assert.ok(s.includes("action: 'integration.requested', entityType: 'integration', entityId: app.id, entityName: app.name,"));
     assert.ok(s.includes('const to = process.env.INTEGRATION_REQUESTS_TO;'));

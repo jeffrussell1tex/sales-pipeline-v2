@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { settings } from '../../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAdmin } from './auth.mjs';
+import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
 import { encrypt, decrypt } from './crypto.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 import { DEFAULT_LEAD_SCORING } from './score-lead.mjs';
@@ -189,6 +190,14 @@ export const handler = async (event) => {
             if (forbidden) return forbidden;
 
             const data = body;
+
+            // A stored webhook is a URL this server POSTs to on every pipeline
+            // alert (send-slack.mjs). Pin it to Slack at save time so the card
+            // never reads "Live" over a destination sendSlack will refuse (§0.92).
+            if ('slackConfig' in data && data.slackConfig && data.slackConfig.webhookUrl) {
+                const checked = validateSlackWebhookUrl(data.slackConfig.webhookUrl);
+                if (!checked.ok) return { statusCode: 400, headers, body: JSON.stringify({ error: checked.error }) };
+            }
 
             // Read existing row first so we can merge extra fields safely.
             const existing = await db.select().from(settings).where(eq(settings.orgId, orgId))

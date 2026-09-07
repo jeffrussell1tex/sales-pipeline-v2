@@ -4218,6 +4218,80 @@ POST-only (405 on GET, 401 on an unauthenticated POST). `master` == `dev`
 == `cf72f99` at the ship; dev is ahead only by this ship-record docs commit.
 Prod no longer carries the Slack crash it had carried since 11 May.
 
+### 0.92 send-slack is Admin-only and pinned to Slack; integration-requests is Admin-only (7 Sep, eighth session — handoff item 25, "and the endpoint gate")
+
+**Jeff: "item 25" … "and the endpoint gate".** What existed: `send-slack.mjs`'s
+handler took any `webhookUrl` in the body and POSTed to it behind `verifyAuth`
+alone — no role gate, no host check — so any signed-in member of any org could
+make the server POST a message to any URL on the internet, or to whatever sits
+beside the function; `sendSlack()` itself posted to whatever it was handed, so
+a stored webhook (`settings.extra.slackConfig.webhookUrl`, never validated on
+save) was hit on every pipeline alert whatever host it named; and
+`integration-requests.mjs` gated on `requireWrite`, while the only panel that
+offers a request lives under Settings, which `App.jsx` renders for Admins only
+— so a User could record, by direct POST, a request the UI never offered them.
+Found reading for §0.89, listed as item 25, demonstrated live in this session
+when Jeff's own Slack test went out (§0.89, last paragraph).
+
+**Design.** One pure module, `_slackWebhook.mjs` — `validateSlackWebhookUrl`:
+https, host exactly `hooks.slack.com`, a `/services/` path, no credentials, no
+port → `{ ok, value }` or `{ ok, error }` — reachable by `node --test` like
+`_auditPayload.mjs`; and three thin uses of it. `sendSlack()` validates before
+it fetches and throws otherwise, so `sendSlackToOrg` (the five alerts) logs,
+returns false and posts nowhere for a stored non-Slack URL. The handler is
+`requireRole(auth, ['Admin'])` after `verifyAuth` and before the body is read;
+a typed test URL answers 400 with the reason, which the modal already shows
+(`data.error`), so an Admin reads "Webhook URL must be a Slack Incoming Webhook
+(https://hooks.slack.com/services/…)" in the dialog. `settings.mjs` PUT refuses
+a `slackConfig.webhookUrl` that fails the same check (400) before reading the
+row, so the card can never read "Live" over a destination `sendSlack` would
+refuse; Disconnect saves `slackConfig: {}` and passes. `integration-requests.mjs`:
+`requireWrite` → `requireRole(auth, ['Admin'])`. Not changed: the org path's
+shape, the five alert call sites, anything in `src/` (the bundle hash is
+unchanged), and the panel's unreachable non-Admin branches (§0.90's struck
+sentence).
+
+**Tests.** `tests/slack-webhook.test.mjs` (new, 5): the validator over twenty
+inputs — a suffix-spoofed and a prefix-spoofed host, http, credentials, a
+port, a private host, localhost, the Web API path, a non-string; scans pinning
+both Admin gates, both validation sites, the fetch of `checked.value` (nothing
+fetches the raw input), the save-time check before the row read, the untouched
+merge half (18b12), the five alerts still routed through `sendSlackToOrg`, and
+`App.jsx` rendering Settings only for Admins.
+`tests/integration/send-slack.itest.mjs` (new, 6 — the first this function has
+ever had): the real handler against the real settings table, `globalThis.fetch`
+mocked for every host but the database's — **the Neon HTTP driver does not
+POST to the connection string's host; it posts to the regional
+`api.<region>….neon.tech/sql` host, which shares every label but the first with
+the endpoint host** (found when the guard failed under the mock; the mock passes
+any host under the endpoint's suffix through): every role but Admin → 403 with
+nothing fetched; five non-Slack typed URLs → 400 with nothing fetched; a Slack
+URL fetched exactly once with a text body and the stored row untouched; the org
+path posts to the org's own stored webhook; a stored non-Slack webhook → 400
+"Slack is not configured for this workspace" and nothing fetched; no row → 400.
+`integration-requests.itest.mjs` +2 (User and Manager → 403);
+`connected-apps.test.mjs`'s scan repointed from `requireWrite` to the Admin
+gate. 7 mutants added and 1 rewritten (the write-gate mutant became the
+Admin-gate mutant); `tests/slack-webhook.test.mjs` joined the harness's suites.
+
+**Verified.** Five gates green on 148 files; build guard OK,
+`index-ABUwIA60.js` — unchanged, no `src/` change — `dist/` cleared;
+**560/560** unit (5 new); **114/114** integration (6 new; the test database
+needed no schema change); **287/287 mutations, printed green baseline** (7
+added, 1 rewritten; run alone, after). No browser pass: nothing in the UI
+changed; the observable is a 403 or a 400 from the function, and the modal's
+existing error line. No schema change.
+
+**Open.** A webhook saved before §0.92 that is not Slack would now fail on
+every alert (logged server-side, `sendSlackToOrg` returns false) while the card
+still read "Live" — dev's stored webhook is Slack (read back, §0.89); prod's is
+Jeff's to read (one read-only SELECT of `extra->'slackConfig'->>'webhookUrl'`
+per org). The five pipeline alerts have still not fired against the dev
+webhook. `send-slack`'s org path (no `webhookUrl` in the body) has no client
+caller at all — the alerts call `sendSlackToOrg` directly — and is now
+Admin-only with the rest of the handler.
+
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it

@@ -3025,3 +3025,49 @@ read. The check written to find the class found exactly one in the tree.
   it", read the gate before believing it — the gate's own fixture suite
   (`tests/scanners.test.mjs`) exists because three of the four had a
   false-negative class found only by a bug reaching production.
+
+## 18b30. A URL The Client Hands The Server Is A Destination — Pin It (hard rule)
+
+Origin (7 Sep 2026, state §0.92, handoff item 25): `send-slack.mjs`'s handler
+POSTed a test message to any `webhookUrl` in the request body behind
+`verifyAuth` alone. No role gate, no host check — any signed-in member of any
+org could make the server POST to any URL on the internet, or to whatever sat
+beside the function. The same module's `sendSlack()` posted to whatever it
+was handed, so the webhook an Admin saved — never validated on save — was hit
+on every pipeline alert whatever host it named. The audit-stream endpoint
+built five days earlier (§0.87) had refused http, credentials and private
+hosts, and was Admin-only; the older endpoint beside it had neither. Listed
+while reading for §0.89; seen live the day Jeff's own test went out.
+
+- **A server that fetches a URL a client supplied — in the body, or from a
+  setting a client saved — is a proxy.** Gate the role, and validate the
+  destination at the ONE place that sends, failing closed (throw; the caller
+  that swallows it logs and skips). Validating only at the handler leaves the
+  stored path open; validating only on save leaves the typed path open.
+  Validate on save AS WELL, so the UI can never say "Live" over a destination
+  the sender will refuse.
+- **When the provider has one URL shape, that shape is the allowlist.** A
+  Slack Incoming Webhook is `https://hooks.slack.com/services/…` and nothing
+  else: exact host (not a suffix — `hooks.slack.com.evil.example` ends with
+  it), a path prefix, no credentials, no port. When there is no shape (a
+  customer's own receiver), the floor is https, no credentials, no literal
+  private host (`_auditPayload.mjs`'s `isPrivateHost`).
+- **The validator is a pure module; the endpoint is thin over it.**
+  `_slackWebhook.mjs` beside `_auditPayload.mjs`: reachable by `node --test`
+  with no database, mutated in the harness (host, scheme, path), scanned into
+  its three call sites.
+- **A refusal test asserts the absence of the side effect, not the status
+  code.** 403 and 400 prove the gate ran; "nothing fetched" proves nothing
+  left the server. The integration suite mocks `globalThis.fetch`, records
+  every call, and asserts zero on every refusal and exactly one on the send.
+- **The Neon HTTP driver goes through `fetch` too — to the regional
+  `api.<region>….neon.tech/sql` host, not the connection string's endpoint
+  host.** A test that mocks `fetch` must pass the database through by that
+  suffix, or the schema guard fails with "Could not read the test database
+  schema" and the real cause (`we.json is not a function`) is three layers
+  down. Recorded so the next mock does not rediscover it.
+- **Reachability is not authorization.** `integration-requests` gated on the
+  write roles because "any member can ask"; the only panel that asks lives
+  under Settings, which `App.jsx` renders for Admins alone. An endpoint's gate
+  matches the narrowest UI that reaches it, or a role the UI never offers can
+  act by direct POST.

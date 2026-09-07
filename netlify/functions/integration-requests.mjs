@@ -10,7 +10,12 @@
 //
 //   POST /.netlify/functions/integration-requests   { appId, note? }
 //     → 200 { request: { appId, requestedAt, byUserId, note }, already, notified }
-//     400 unknown appId · 403 read-only / technician · 401 no session
+//     400 unknown appId · 403 any role but Admin · 401 no session
+//
+// Admin-only (state §0.92): the panel that offers a request lives under
+// Settings, which App.jsx renders only for Admins; the endpoint had gated on
+// the write roles alone, so a User could record a request the UI never
+// offered them.
 //
 // Storage: settings.extra.integrationRequests = { [appId]: { requestedAt,
 // byUserId, byName, note } } — one entry per app per org; a second request for
@@ -23,7 +28,7 @@
 import { db } from '../../db/index.js';
 import { settings, users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { verifyAuth, requireWrite } from './auth.mjs';
+import { verifyAuth, requireRole } from './auth.mjs';
 import { writeAudit, serverErrorBody } from './_lib.mjs';
 import { sendEmail } from './send-email.mjs';
 import { requestableApp, cleanNote } from '../../src/utils/integrationCatalog.js';
@@ -89,7 +94,7 @@ export const handler = async (event) => {
 
     const auth = await verifyAuth(event);
     if (auth.error) return json(auth.status || 401, { error: auth.error });
-    const forbidden = requireWrite(auth, event, HEADERS);
+    const forbidden = requireRole(auth, ['Admin'], HEADERS);
     if (forbidden) return forbidden;
     const { userId, orgId } = auth;
 
