@@ -1,6 +1,6 @@
 # ACCELEREP — Current State
-**Updated:** September 3, 2026 (sixth session, close)
-**Verified at:** five gates green on 147 files · **535 tests** · **249/249 mutations, printed green baseline** · **94/94 integration** · build guard OK 2,425 kB `index-WThsNanc.js` · **prod `ad76a38` serving `index-BYLyFXw4.js` (eighth ship, 3 Sep)** · dev ahead of `master` by §0.88 and its docs; not yet shipped. The app database and the test database both hold `audit_stream_destinations`.
+**Updated:** September 7, 2026 (eighth session, close)
+**Verified at:** five gates green on 151 files · **565 tests** · **294/294 mutations, printed green baseline** · **114/114 integration** · build guard OK 2,437 kB `index-C1VD4DfX.js` · **prod `cf72f99` serving `index-DIeZb8qh.js` (ninth ship, 7 Sep)** · dev ahead of `master` by §0.92 and §0.93 and their docs; not yet shipped. The app database and the test database both hold `audit_stream_destinations`. (This header had read "sixth session" from 3 Sep until the eighth session's close; the per-batch lines under it are older still — the sections are the record.)
 **Batch:** **the Settings catalogue's counts come from the panels' own keys; the NEW badges retire (§0.88, handoff item 22)** — 30 hand-typed card details ("12 KPIs configured", "14 industries · 47 sub-types", "18 custom fields", "Q1 starts Feb 1", "Complete"…) are gone from the catalogue; every count is computed from the key its own panel saves, or is null, or says "App defaults" where the panel supplies one; two guards had named keys no panel writes, so their numbers had shown for every org always; the audit card no longer says "last 30 days" over a 500-row cap; all 16 never-expiring NEW badges and two dead `moved` flags are gone. Carried as item 24: Connected Apps and the Industries defaults are mockups in depth. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("confirmed that settings cards are correct and all badges are gone").**
 **Prior batch:** **audit streaming, built for real (§0.87, item 21's fourth panel — Jeff's "build")** — every audit row is POSTed, HMAC-SHA256-signed, to each of the org's destinations as it is written (four write sites), from a new org-scoped `audit_stream_destinations` table (DDL in both databases first), through an Admin-only `audit-stream` endpoint that shows a secret once, sends a real test event, pauses / resumes / rotates / removes, and records every attempt; a dead endpoint pauses itself after ten failures; the panel keeps what was real and drops the alerts modal, the typed badge and retention claims, the inert menus and the IP column. Proven against a local receiver in the integration suite. **OBSERVED by Jeff on deployed dev ("Looks correct"); SHIPPED to prod as the eighth ship (`ad76a38`, `index-BYLyFXw4.js`) with §0.84–§0.86.**
 **Prior batch:** **three Settings panels reduced to what is real — SSO, Session & password, Import (§0.86, handoff item 21, Jeff's call per panel)** — SSO was a constant with a fake domain and a frozen wizard saving a key sign-in never read; Session & password was a policy form whose Save PUT a key in NEITHER half of settings.mjs (the toast said saved; nothing was) with nothing enforcing any of it; Import was a fake history and a wizard whose "Run import" posted no rows and echoed the preview back as a success. Now: two Managed-in-Clerk panels (what Clerk does, what the app does, what it does not do), an Import launcher for the real CSV and lead importers, `import.mjs` deleted, `ssoConfig` and `importPresets` retired from both halves. Audit streaming is Jeff's "build" and is §0.87. Dev only; not yet shipped; **OBSERVED by Jeff on deployed dev ("Looks correct").**
@@ -4390,6 +4390,11 @@ opening.
 Jeff's first look ("it does not") was a screenshot taken at the old bundle,
 before the landing — the rows still read as one line; retest asked for after
 a hard refresh. `master` stays at `cf72f99`.
+
+**OBSERVED by Jeff on deployed dev (7 Sep, after the hard refresh): "works".**
+His word covers what he ran of the fourteen steps handed to him (handoff §5
+keeps the list); which steps, and whether as Karen or as Admin, is not
+stated. Unshipped.
 
 
 
