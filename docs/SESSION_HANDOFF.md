@@ -13,8 +13,9 @@ themselves" — option 1 plus From attribution: a personal `me-<user id>-<sig>`
 address whose email is OWNED by that user and shown to no other rep, the org
 address attributed to the roster member who sent it, a profile-panel tab,
 the first integration suite the inbound function ever had — state §0.91, on
-dev, deploy-verified, NOT yet observed; NOTHING from this session is shipped
-to prod; item 22 still unshipped), FINAL.** Repo root. Read this first, then verify
+dev, deploy-verified, NOT yet observed; then **Jeff: "ship prod" — ALL of it
+SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
+salespipelinetracker.com serving `index-DIeZb8qh.js`**), FINAL.** Repo root. Read this first, then verify
 every claim in it against the live repo before acting — **including the
 claims in this file**.
 
@@ -36,7 +37,22 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — everything is on `dev`, deploy-verified; all but the third batch observed
+## 1. What shipped — everything is on `dev` AND on `master`, deploy-verified; all but the third batch observed
+
+**PROD SHIPPED (Jeff: "ship prod") — the ninth ship (7 Sep).** Ancestor
+check (`origin/master` an ancestor of `dev`, tree clean, `dev` ==
+`origin/dev`), then `git push origin dev:master`: `master` `ad76a38` →
+`cf72f99` (12 commits — item 22, §0.89, §0.90, §0.91 and their docs), pushed
+11:21:58 local. salespipelinetracker.com observed serving `index-DIeZb8qh.js` at 11:29:23
+local, 2,489,558 bytes (dev's size), `pk_live_` inlined — a different hash
+from dev's `index-ABUwIA60.js` because the live key is inlined, as on every
+ship; "Configure Slack", "Request an integration", "Microsoft 365 Calendar"
+and "Treat this address like a password" present, "Morgan Reyes" and
+"n:118" absent; the one `pk_test_` string in the bundle is Clerk's SDK prefix check (`pk_test_` appears nowhere in `src/`), not a key; the poll was watching for dev's hash, so the landing minute was not captured — observed serving by 11:29:23. `email-inbound` and `calendar-connections`
+answer 401 unauthenticated; `integration-requests` and `send-slack` are
+POST-only (405 on GET, 401 on an unauthenticated POST). `master` == `dev`
+== `cf72f99` at the ship; dev is ahead only by this ship-record docs commit.
+Prod no longer carries the Slack crash it had carried since 11 May.
 
 **Seventh session, third batch (7 Sep — the session resumed) — ON DEV ONLY,
 deploy-verified, NOT observed by Jeff, NOT shipped:** `eb24dea` (personal email-logging
@@ -509,21 +525,17 @@ in `email-inbound.itest.mjs`; the test database needed no schema change) ·
 pane holds no session; §0.89 was OBSERVED by Jeff on deployed dev, §0.90 by
 his screenshot, §0.91 not yet · dev deploys observed serving
 `index-CEn91emU.js` (§0.89), `index-UiFDxZrS.js` (§0.90) and `index-ABUwIA60.js`
-(§0.91) · **`master` == `ad76a38`, prod serving `index-BYLyFXw4.js` (eighth
-ship)**; dev is ahead of master by the ship-record docs commit, item 22
-(`539eaa1` + docs), `95141cb` + `7bb3e70`, `e3d15f2` + `4abf68c` +
-`6fbf821`, and `eb24dea` + this handoff's commit · no schema change · the
-working tree was clean at close.
+(§0.91) · **`master` == `cf72f99`, prod serving `index-DIeZb8qh.js` (ninth ship,
+§1)**; dev is ahead of master only by this ship-record docs commit · no
+schema change · the working tree was clean at close.
 
 ## 5. Next — start here
 
 **Next session prep, in order (Jeff: "update the next session prep"):**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect the eighth-ship record docs commit, `539eaa1` + its two docs
-  commits (item 22, OBSERVED), `95141cb` + `7bb3e70` (§0.89, OBSERVED —
-  Jeff: "verified"), `e3d15f2` + its docs commits (§0.90, OBSERVED by
-  screenshot), and `eb24dea` + its docs commit (§0.91, NOT observed).
-  Anything else is unshipped code and a finding.
+  expect ONLY the ninth-ship record docs commit after `cf72f99`. Anything
+  else is unshipped code and a finding. (§0.89 OBSERVED — Jeff: "verified";
+  §0.90 OBSERVED by screenshot; §0.91 NOT yet observed — all three shipped.)
 - **Jeff eyeballs §0.91 on deployed dev:** avatar → the new "Email logging"
   tab → a `me-usr_…@inbound.salespipelinetracker.com` address with Copy, as
   Jeff and as Karen (two different addresses). **The real proof is a real
@@ -560,11 +572,12 @@ working tree was clean at close.
   not mailed (`notified:false`); and whether `GOOGLE_CLIENT_ID/SECRET` and
   `MICROSOFT_CLIENT_ID/SECRET` are set on each site decides what the two
   calendar cards offer (the Netlify reader exposes no env).
-- **Then ship item 22 + all three seventh-session batches when Jeff says so** —
-  `git push origin dev:master` after the ancestor check, then poll
-  salespipelinetracker.com for the bundle hash; `pk_live_` inlined. Prod
-  has carried the Slack crash since May; this ship is the first that
-  removes it.
+- **DONE — shipped (Jeff: "ship prod"), the ninth ship, §1.** Was: ship item
+  22 + all three seventh-session batches when Jeff says so. Prod carried the
+  Slack crash from 11 May to 7 Sep; `cf72f99` is the first prod build
+  without it. **On prod now, Jeff's to observe:** the same three eyeball
+  lists as dev (§0.89 Slack modal, §0.90 panel, §0.91 personal address) —
+  prod's own env decides what the calendar and email-logging cards offer.
 - **Item 24 is DONE (§0.90, option A).** What it did NOT do, by Jeff's
   choice: build any third-party integration. Option B — naming the first
   real one — is open; Zapier or a generic signed webhook-out reaches the
@@ -1267,3 +1280,9 @@ sentence on the Admin card; and the first integration suite that function
 has ever had, eight cases against the real database, one of which is the
 replay the namespace exists to refuse. Seven mutants, all caught. Deployed,
 hash-checked; the proof that matters is a real email, and that is Jeff's.
+
+"Ship prod." Twelve commits went as one fast-forward — the count that had
+never been counted, the modal that had been missing since May, the panel
+that says only what is there, the address that is a rep's own — verified by
+the bundle hash on the live domain, the live key inlined, the old strings
+gone. Prod had carried the Slack crash for four months; it does not now.

@@ -4120,8 +4120,22 @@ served `index-ABUwIA60.js` — the local gate build's hash — at 10:58:38 local
 `index-UiFDxZrS.js`), 32 seconds after the push, `pk_test_` inlined;
 "Treat this address like a password" and "personal address under their
 avatar" present in the served bundle; the deployed `email-inbound` GET
-answers 401 unauthenticated. `master` stays at `ad76a38` (the eighth
-ship). **Not yet observed by Jeff.** The ship is Jeff's call.
+answers 401 unauthenticated. **Not yet observed by Jeff on dev.**
+
+**PROD SHIPPED (Jeff: "ship prod") — the ninth ship (7 Sep).** Ancestor
+check (`origin/master` an ancestor of `dev`, tree clean, `dev` ==
+`origin/dev`), then `git push origin dev:master`: `master` `ad76a38` →
+`cf72f99` (12 commits — item 22, §0.89, §0.90, §0.91 and their docs), pushed
+11:21:58 local. salespipelinetracker.com observed serving `index-DIeZb8qh.js` at 11:29:23
+local, 2,489,558 bytes (dev's size), `pk_live_` inlined — a different hash
+from dev's `index-ABUwIA60.js` because the live key is inlined, as on every
+ship; "Configure Slack", "Request an integration", "Microsoft 365 Calendar"
+and "Treat this address like a password" present, "Morgan Reyes" and
+"n:118" absent; the one `pk_test_` string in the bundle is Clerk's SDK prefix check (`pk_test_` appears nowhere in `src/`), not a key; the poll was watching for dev's hash, so the landing minute was not captured — observed serving by 11:29:23. `email-inbound` and `calendar-connections`
+answer 401 unauthenticated; `integration-requests` and `send-slack` are
+POST-only (405 on GET, 401 on an unauthenticated POST). `master` == `dev`
+== `cf72f99` at the ship; dev is ahead only by this ship-record docs commit.
+Prod no longer carries the Slack crash it had carried since 11 May.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
