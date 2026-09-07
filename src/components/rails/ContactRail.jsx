@@ -131,7 +131,7 @@ export default function ContactRail() {
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
         railStack, setRailStack,
-        showActivityModal, setShowActivityModal, setActivityInitialContext, setViewingActivity,
+        showActivityModal, setShowActivityModal, setActivityInitialContext, setViewingActivity, viewingActivity,
         handleSaveContact,
         handleDeleteContact,
         handleAddActivity,
@@ -376,10 +376,12 @@ export default function ContactRail() {
     // ESC key closes
     useEffect(() => {
         if (!isOpen) return;
-        const onKey = (e) => { if (e.key === 'Escape' && !isEditing) closeRail(); };
+        // The activity viewer (§0.93) sits above the rail and App.jsx closes it on
+        // Escape first; without this guard the rail's own listener closed too.
+        const onKey = (e) => { if (e.key === 'Escape' && !isEditing && !viewingActivity) closeRail(); };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [isOpen, isEditing]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isOpen, isEditing, viewingActivity]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!isOpen) return null;
 

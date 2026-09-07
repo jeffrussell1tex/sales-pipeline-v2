@@ -4391,10 +4391,78 @@ Jeff's first look ("it does not") was a screenshot taken at the old bundle,
 before the landing — the rows still read as one line; retest asked for after
 a hard refresh. `master` stays at `cf72f99`.
 
-**OBSERVED by Jeff on deployed dev (7 Sep, after the hard refresh): "works".**
-His word covers what he ran of the fourteen steps handed to him (handoff §5
-keeps the list); which steps, and whether as Karen or as Admin, is not
-stated. Unshipped.
+**OBSERVED by Jeff on deployed dev (7 Sep, after the hard refresh): "works" —
+then, asked for the steps, his full report, step by step:** 1, 2, 4, 5, 8, 10,
+12, 13, 14 Pass; **3** — "when i hit escape the dialog closes but so does the
+rail"; **6** — "the jeff russelltest contact is not showing up. I created it
+as Karen but it is formally unassigned"; **7** — "It logged. All lines are
+truncated into one long running paragraph. In addition it does not indicate
+that I included an attachment"; **9** — "line breaks not preserved. It is one
+long running paragraph"; **11** — "A task so far is a single activity that is
+open or completed. Not sure this is a test for now." Three findings, read
+against the code and the database before anything was touched:
+
+- **Step 3 — two Escape listeners.** `App.jsx` closes the viewer and
+  returns, but each rail (`ContactRail`, `AccountRail`, `TaskRail`) registers
+  its own `document` keydown listener that calls `closeRail()` on Escape; both
+  fired. **Fixed:** the rails' listener yields while `viewingActivity` is set
+  (`!isEditing && !viewingActivity`), with `viewingActivity` in the effect's
+  deps so the listener re-binds when the viewer opens or closes.
+- **Steps 7 and 9 — the body was stored without its newlines.**
+  `email-inbound.mjs` line 290: `String(rawText || '').replace(/\s+/g, ' ')` —
+  every run of whitespace, newlines included, became one space before the
+  row was written; read back, the stored notes of "Test email #4" hold zero
+  newlines. The viewer built to keep line breaks had nothing to keep.
+  Attachments were never looked at. **Fixed:** the pure half moved to
+  `_inboundText.mjs` — `normaliseBodyText` (CRLF → LF; runs of spaces, tabs
+  and NBSP → one space; no space hugging a newline; at most one blank line;
+  trimmed), `htmlToText` (a `<br>` and the end of a paragraph, div, list
+  item, table row, heading or blockquote become newlines before tags are
+  stripped; `<style>`/`<script>` bodies dropped; the common entities decoded;
+  a data: URI decoded first), `attachmentNamesOf` (filename or name from
+  whatever array the provider hands over, bounded at 50 — the FILES are not
+  stored), and `notesOf` ("<subject> — <body>", then "Attachments: a, b",
+  within `NOTES_MAX`). The function reads `full.attachments` from the fetched
+  Resend message, or `mail.attachments` from a flat payload — whether Resend's
+  receiving API carries an `attachments` array is NOT verified from here (the
+  code is defensive: no array, no line). "Test email #4" itself stays one
+  paragraph — it was stored before the fix; the next email keeps its lines.
+- **Step 6 — owned underneath, unassigned on screen (item 28, Jeff's call).**
+  The row: `owner_id` = Karen's `usr_…` (stamped at creation — `stampOwnerId`
+  makes the creator the owner when no rep is named), `assigned_rep` null. The
+  Contacts tab remembers a "Mine" scope (§0.52) that, for Jeff, shows
+  unassigned rows and his own, so a Karen-owned row hides; All shows it. Not
+  a viewer bug; a real inconsistency: `ownerId` decides visibility and
+  authorisation, the display-name column `assignedRep` decides what the rail's
+  "Assigned Rep" says, and a row created without naming a rep is owned by one
+  and displayed as nobody's. Two honest fixes, either a product call: show the
+  owner's roster name when `assignedRep` is blank, or fill `assignedRep` with
+  the caller's name at creation. Not built.
+- **Step 11** — agreed; a task carries one activity today.
+
+**Tests (follow-up).** `tests/inbound-text.test.mjs` (new, 5): the normaliser
+over CRLF paragraphs, runs of spaces and tabs, a space hugging a newline,
+five blank lines, NBSP, null and undefined, and the one-line §0.91 body
+unchanged; `htmlToText` over `<br>`, paragraphs, divs, a list, style and
+script bodies, the entities and a data: URI; `attachmentNamesOf` over objects,
+strings, junk and 80 entries; `notesOf` with and without a subject and at the
+cap; scans pinning the function's import and use of the module, the
+whitespace collapse gone, `htmlToText` defined once, and the three rails'
+Escape guard with its deps. `email-inbound.itest.mjs` +2 against the real
+database: a five-line CRLF body with two attachments reads back with its
+newlines and "Attachments: quote.pdf, sheet.xlsx"; a one-line body with none
+reads back exactly as §0.91 stored it. 5 mutants (the rail guard removed,
+newlines collapsed in the normaliser, `<br>` no longer a break, the
+Attachments line dropped, the function collapsing again).
+
+**Verified (follow-up).** Five gates green on 151 files; build guard OK,
+`index-CkYvyiY8.js`, 2,490.93 kB (2,437 kB JS), `pk_test_` inlined, `dist/`
+cleared; **570/570** unit (5 new); **116/116** integration (2 new);
+**299/299 mutations, printed green baseline** (5 added; run alone, after). No
+browser pass (as above). No schema change. **Jeff re-runs steps 3, 7 and 9**
+with a fresh multi-line email carrying an attachment — the row shows two
+lines, the viewer every line and an "Attachments:" line, and Escape leaves the
+rail open. Unshipped.
 
 
 

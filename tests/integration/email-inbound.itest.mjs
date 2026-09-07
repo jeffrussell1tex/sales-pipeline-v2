@@ -64,10 +64,10 @@ const userAddr = (id)  => `me-${id}-${sig16('user:' + id)}@${process.env.INBOUND
 
 const get = (org, user) => handler({ httpMethod: 'GET', headers: { 'x-test-org': org, 'x-test-user': user }, queryStringParameters: {} });
 let seq = 0;
-const post = (dropbox, { from, to = ['carl@client.test'], subject = 'Hello', text = 'Body', message_id } = {}) => handler({
+const post = (dropbox, { from, to = ['carl@client.test'], subject = 'Hello', text = 'Body', message_id, attachments } = {}) => handler({
     httpMethod: 'POST', headers: {},
     queryStringParameters: { secret: process.env.INBOUND_SHARED_SECRET },
-    body: JSON.stringify({ from, to: [dropbox], cc: to, subject, text, message_id: message_id || `<m${++seq}@itest>` }),
+    body: JSON.stringify({ from, to: [dropbox], cc: to, subject, text, message_id: message_id || `<m${++seq}@itest>`, ...(attachments ? { attachments } : {}) }),
 });
 const parse = (r) => ({ status: r.statusCode, body: JSON.parse(r.body || '{}') });
 const activitiesOf = (org) => db.select().from(activities).where(eq(activities.orgId, org));
@@ -165,4 +165,19 @@ test('a replayed Message-ID is deduplicated, not logged twice', async () => {
     assert.equal(first.body.matched, true);
     assert.equal(again.body.deduped, true);
     assert.equal(again.body.activityId, first.body.activityId);
+});
+
+test("the body keeps its line breaks and the attachment names are recorded (§0.93, Jeff's steps 7 and 9)", async () => {
+    const text = 'Jeff\r\n\r\nThis is a test email with an attachment\r\nIt is for your use only\r\n\r\nThanks,\r\nKaren';
+    const { body } = parse(await post(orgAddr(ORG_A), { from: 'ada@alpha.test', subject: 'Test email #4', text, attachments: [{ filename: 'quote.pdf', size: 12 }, { name: 'sheet.xlsx' }] }));
+    assert.equal(body.matched, true);
+    const [a] = (await activitiesOf(ORG_A)).filter(x => x.id === body.activityId);
+    assert.equal(a.notes, 'Test email #4 — Jeff\n\nThis is a test email with an attachment\nIt is for your use only\n\nThanks,\nKaren\n\nAttachments: quote.pdf, sheet.xlsx');
+    assert.equal(a.subject, 'Test email #4');
+});
+
+test('a one-line body with no attachments stores exactly as before (the §0.91 shape)', async () => {
+    const { body } = parse(await post(orgAddr(ORG_A), { from: 'ada@alpha.test', subject: 'Test email', text: 'Test email for logging' }));
+    const [a] = (await activitiesOf(ORG_A)).filter(x => x.id === body.activityId);
+    assert.equal(a.notes, 'Test email — Test email for logging');
 });

@@ -4,6 +4,7 @@ import { activities, contacts, users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody, resolveCaller } from './_lib.mjs';
+import { normaliseBodyText, htmlToText, attachmentNamesOf, notesOf } from './_inboundText.mjs';
 
 // ── BCC email dropbox ────────────────────────────────────────────────────────
 // Each org gets a unique, unguessable BCC address. A rep BCCs it on any email;
@@ -216,19 +217,8 @@ async function fetchReceivedEmail(emailId) {
     }
 }
 
-// The retrieved html can arrive as a data URI (html_format: 'data_uri') —
-// decode it before stripping tags.
-function htmlToText(html) {
-    let h = String(html || '');
-    if (h.startsWith('data:')) {
-        const comma = h.indexOf(',');
-        const meta = h.slice(0, comma);
-        const payload = h.slice(comma + 1);
-        try { h = meta.includes('base64') ? Buffer.from(payload, 'base64').toString('utf8') : decodeURIComponent(payload); }
-        catch { h = ''; }
-    }
-    return h.replace(/<[^>]+>/g, ' ');
-}
+// htmlToText, the body normaliser and the attachment-name reader live in
+// _inboundText.mjs (state §0.93) so they can be tested without a database.
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -287,7 +277,11 @@ export const handler = async (event) => {
         const rawText = full
             ? (full.text || htmlToText(full.html))
             : (mail.text || htmlToText(mail.html));
-        const text = String(rawText || '').replace(/\s+/g, ' ').trim();
+        // Line breaks survive (§0.93 — every run of whitespace, newlines included,
+        // had been collapsed to one space, so the viewer had nothing to show).
+        const text = normaliseBodyText(rawText);
+        // Names only; the files are not stored. Whichever payload carried them.
+        const attachmentNames = attachmentNamesOf(full ? full.attachments : mail.attachments);
 
         // Match a contact: prefer the real header recipients (a rep BCCs us on mail
         // addressed TO the contact), then the sender (inbound mail forwarded to the
@@ -367,7 +361,7 @@ export const handler = async (event) => {
             type: 'Email',
             date: today,
             subject: subject || null,
-            notes: ((subject ? subject + ' \u2014 ' : '') + text).slice(0, NOTES_MAX) || 'Email (no body captured)',
+            notes: notesOf({ subject, body: text, attachmentNames }, NOTES_MAX) || 'Email (no body captured)',
             outcome: null,
             duration: null,
             opportunityId: null,
