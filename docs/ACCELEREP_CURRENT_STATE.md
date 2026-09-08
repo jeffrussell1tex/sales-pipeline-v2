@@ -4932,6 +4932,13 @@ same card reads "Google Calendar connected — your calendar is live." and
 Live; a refresh shows neither line. As Karen from Home: the same, landing in
 her profile panel's Calendar tab.
 
+**Landed on dev (`282c16c`, pushed 21:44:54 UTC 8 Sep):** accelerep.netlify.app
+served `index-lFOC0BmK.js` — the local gate build's hash — at 21:45:28 UTC,
+34 seconds after the push, 2,501,027 bytes; "was not connected — ",
+`calconnect` and `company-calendar` in the served bundle; the deployed
+`calendar-oauth-start` answers 400 to a bare GET as before. `master` stays at
+`cf72f99`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
