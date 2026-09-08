@@ -4858,6 +4858,14 @@ until `git status` shows only the batch's own files.** Not browser-checked
 here; Jeff eyeballs (§5): Configure → five ticked boxes → untick one → Save →
 the card reads "4 of 5 alerts" and a refresh keeps it.
 
+**Landed on dev (`adc5780`, pushed 21:31:18 UTC 8 Sep):** accelerep.netlify.app
+served `index-Dz4BAypy.js` — the local gate build's hash — at 21:31:52 UTC,
+34 seconds after the push, 2,497,378 bytes; "AI score dropped below
+threshold" and "the pipeline alerts ticked here" in the served bundle. (The
+phrase "deal silent, stuck in stage, close date lapsed" is still there: it is
+the Slack CARD's description, unchanged; the modal's static sentence is
+gone.) `master` stays at `cf72f99`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
