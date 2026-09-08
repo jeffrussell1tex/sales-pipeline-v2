@@ -86,14 +86,14 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
     const [webhookUrl, setWebhookUrl] = useState(existing?.webhookUrl || '');
     const [channel,    setChannel]    = useState(existing?.channel    || '#sales-alerts');
     const [testing,    setTesting]    = useState(false);
-    const [testMsg,    setTestMsg]    = useState(null);
+    const [msg,        setMsg]        = useState(null);   // Send test message AND Save report here
     const [saving,     setSaving]     = useState(false);
 
     // send-slack.mjs posts to an explicit webhookUrl when one is in the body —
     // the org's stored one is not touched until Save.
     const handleTest = async () => {
         if (!webhookUrl.trim()) return;
-        setTesting(true); setTestMsg(null);
+        setTesting(true); setMsg(null);
         try {
             const res  = await dbFetch('/.netlify/functions/send-slack', {
                 method: 'POST',
@@ -101,17 +101,26 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Test failed');
-            setTestMsg({ ok: true, text: 'Message sent — check your Slack channel.' });
+            setMsg({ ok: true, text: 'Message sent — check your Slack channel.' });
         } catch (e) {
-            setTestMsg({ ok: false, text: e.message });
+            setMsg({ ok: false, text: e.message });
         } finally { setTesting(false); }
     };
 
+    // A refused Save (400 from settings PUT — not a Slack URL; 403 — not an
+    // Admin) is shown HERE, under the field the user is looking at. It used to
+    // land in the panel's banner behind this open dialog (state §0.92, Jeff's
+    // screenshot). onSave restores the panel's snapshot and rethrows; on
+    // success the panel closes the modal and this component is gone.
     const handleSave = async () => {
         if (!webhookUrl.trim()) return;
-        setSaving(true);
-        await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true });
-        setSaving(false);
+        setSaving(true); setMsg(null);
+        try {
+            await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true });
+        } catch (e) {
+            setMsg({ ok: false, text: 'Not saved — ' + e.message });
+            setSaving(false);
+        }
     };
 
     return (
@@ -135,9 +144,9 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
                 <div style={{ padding:'12px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid, fontFamily:T.sans, marginBottom:14 }}>
                     <b style={{ color:T.info }}>What posts to Slack:</b> the pipeline alerts this workspace has on — deal silent, stuck in stage, close date lapsed, deal momentum, score drop — alongside their emails.
                 </div>
-                {testMsg && (
-                    <div style={{ padding:'10px 14px', background: testMsg.ok ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)', borderLeft:`3px solid ${testMsg.ok ? T.ok : T.danger}`, borderRadius:4, fontSize:12, color: testMsg.ok ? T.ok : T.danger, fontFamily:T.sans, marginBottom:14 }}>
-                        {testMsg.text}
+                {msg && (
+                    <div style={{ padding:'10px 14px', background: msg.ok ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)', borderLeft:`3px solid ${msg.ok ? T.ok : T.danger}`, borderRadius:4, fontSize:12, color: msg.ok ? T.ok : T.danger, fontFamily:T.sans, marginBottom:14 }}>
+                        {msg.text}
                     </div>
                 )}
             </div>
@@ -342,7 +351,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
         } catch (e) {
             setSlackConfig(cfgSnap);
             setConnectedApps(appSnap);
-            setError(`Slack settings not saved — ${e.message}`);
+            throw e;                       // the modal shows it under the field — a banner here sits behind the open dialog
         }
     };
     const handleDisconnectSlack = async () => {

@@ -51,6 +51,17 @@ test('a Slack Incoming Webhook is https, hooks.slack.com, /services/, credential
     assert.equal(SLACK_WEBHOOK_PATH, '/services/');
 });
 
+test('a scheme-less paste is told to start with https:// — not "not a valid URL" (Jeff typed hooks.slack.com/services/)', () => {
+    for (const input of ['hooks.slack.com/services/', 'hooks.slack.com/services/T/B/x', 'www.hooks.slack.com/services/T/B/x']) {
+        const r = validateSlackWebhookUrl(input);
+        assert.equal(r.ok, false, input);
+        assert.match(r.error, /must start with https:\/\//, input);
+        assert.doesNotMatch(r.error, /not a valid URL/, input);
+    }
+    assert.match(validateSlackWebhookUrl('https://not a url').error, /not a valid URL/, 'a scheme with garbage after it is still the parser\'s call');
+    assert.match(validateSlackWebhookUrl('http://hooks.slack.com/services/T/B/x').error, /must use https/, 'http keeps its own message');
+});
+
 // ── source scans ─────────────────────────────────────────────────────────────
 
 test('send-slack: the handler is Admin-only, and a typed test URL is checked before anything is sent', () => {

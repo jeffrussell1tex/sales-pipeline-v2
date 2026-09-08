@@ -63,6 +63,19 @@ test('the panel still saves slackConfig and marks slack connected in one PUT', (
     assert.ok(s.includes('setSlackModal(false);          // only close once the write has landed'));
 });
 
+// §0.92 observed (ninth session, 8 Sep): Jeff saved a scheme-less URL and the
+// refusal appeared as a page banner BEHIND the open modal. A refused Save is
+// reported where the user is looking — in the modal, under the field.
+test('a refused Save is shown inside the modal, under the field — not in the panel banner behind it', () => {
+    const s = code(read(CA));
+    assert.ok(s.includes("            setMsg({ ok: false, text: 'Not saved — ' + e.message });"), 'the modal catches what onSave throws and shows it');
+    assert.ok(s.includes('            throw e;                       // the modal shows it under the field'), 'the panel restores its snapshot and rethrows');
+    assert.ok(s.indexOf('setSlackConfig(cfgSnap);') < s.indexOf('            throw e;'), 'the snapshot is restored before the rethrow');
+    assert.ok(!s.includes('Slack settings not saved'), 'the banner text is gone');
+    assert.ok(s.includes('setSaving(true); setMsg(null);'), 'a stale test message is cleared when Save starts');
+    assert.doesNotMatch(s, /testMsg/, 'one message slot serves Send test message and Save');
+});
+
 test('send-slack posts to an explicit webhookUrl when the body carries one', () => {
     const s = code(read('netlify/functions/send-slack.mjs'));
     assert.ok(s.includes('const { type, webhookUrl, text, blocks } = JSON.parse(event.body || \'{}\');'));

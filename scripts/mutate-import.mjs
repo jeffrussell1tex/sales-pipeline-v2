@@ -1396,6 +1396,19 @@ const mutations = [
         'netlify/functions/settings.mjs',
         "            if ('slackConfig' in data && data.slackConfig && data.slackConfig.webhookUrl) {",
         '            if (false) {'],
+    // §0.92 observed (ninth session): a refused Save is shown in the modal, not behind it
+    ['slack: a refused Save goes back to the panel banner behind the open modal',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        '            throw e;                       // the modal shows it under the field — a banner here sits behind the open dialog',
+        "            setError('Slack settings not saved — ' + e.message);"],
+    ['slack: the modal swallows a refused Save — the dialog stays open and says nothing',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        "            setMsg({ ok: false, text: 'Not saved — ' + e.message });",
+        '            setMsg(null);'],
+    ['slack: a scheme-less paste is "not a valid URL" again',
+        'netlify/functions/_slackWebhook.mjs',
+        "    if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) return { ok: false, error: `Webhook URL must start with https:// (${SHAPE}).` };",
+        ''],
 
     // ── Item 26: the activity viewer (0.93) ─────────────────────────────────────
     ['viewer: a rep may edit any rep\'s activity from the viewer',

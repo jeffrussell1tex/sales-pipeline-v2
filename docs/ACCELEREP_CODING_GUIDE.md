@@ -3113,3 +3113,40 @@ run once.
   `BCC_SECRET` on both sites let prod validate dev's addresses. That is by
   design today (one product, two deployments) and is exactly why the
   target check above is a rule and not a habit.
+
+## 18b32. An Error Is Shown Where The User Is Looking (hard rule)
+
+Origin (8 Sep 2026, state §0.92): the Configure Slack modal's Save went
+through the panel's handler, which on a refused PUT restored its snapshot
+and wrote the reason into the panel's error banner — rendered at the top of
+Connected apps, behind the modal that was still open. Jeff's screenshot: the
+dialog with his typed URL, and a red banner above the Integrations heading,
+saying the settings were not saved. The modal's own message box served only
+Send test message. Both paths were "handled"; one was handled where nobody
+was looking. The gate itself had worked — the card behind the dialog still
+read Connected with the real webhook — and §0.92's own text had said "the
+modal already shows `data.error`", which was true of the test button alone.
+
+The rule: **a refusal is rendered in the surface that asked.** A dialog that
+submits shows its own outcome under the control that submitted, before
+anything behind it may say a word. Concretely:
+
+- A modal's Save handler owns the error path: `try { await onSave(...) }
+  catch (e) { setMsg(...) }`. The host's `onSave` restores whatever
+  optimistic state it applied and RETHROWS — it does not both swallow and
+  banner, because the banner is behind the dialog.
+- One message slot per dialog, cleared when the next action starts. A test
+  message and a save refusal are the same kind of thing to the reader: the
+  outcome of the button they just pressed.
+- A host-level banner is for host-level actions — Disconnect, a fetch that
+  failed on open — things with no dialog in front of them.
+- The message names what to do, not only what went wrong. "Webhook URL is
+  not a valid URL." is `new URL()` talking; "must start with https://" is
+  the app talking. Where the parser's message is the only one available,
+  check the obvious omission (a scheme, a host) first and say it.
+
+The check, whenever a dialog gets a submit path: refuse it on purpose (a bad
+value, a non-Admin session) and look at the screen with the dialog still
+open. If the reason is anywhere but inside the dialog, it is not shown.
+"Deploy-verified" for a refusal means the status code; "observed" means a
+person read the reason where they were looking.

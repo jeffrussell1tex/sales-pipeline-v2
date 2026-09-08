@@ -16,6 +16,10 @@ const NOT_SLACK = `Webhook URL must be a Slack Incoming Webhook (${SHAPE}).`;
 export function validateSlackWebhookUrl(raw) {
     const s = typeof raw === 'string' ? raw.trim() : '';
     if (!s) return { ok: false, error: 'Webhook URL is required.' };
+    // A pasted "hooks.slack.com/services/…" has no scheme: new URL() would call
+    // it "not a valid URL", which says nothing about what to do (state §0.92,
+    // Jeff's screenshot). Name the missing https:// instead.
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) return { ok: false, error: `Webhook URL must start with https:// (${SHAPE}).` };
     let u;
     try { u = new URL(s); } catch { return { ok: false, error: 'Webhook URL is not a valid URL.' }; }
     if (u.protocol !== 'https:') return { ok: false, error: 'Webhook URL must use https://.' };
