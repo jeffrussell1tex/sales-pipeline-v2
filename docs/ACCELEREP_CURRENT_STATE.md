@@ -5098,6 +5098,15 @@ shows two groups, seven boxes, "7 of 7 alerts" on the card. Supersedes
 §0.96's last sentence ("the rep's own preference still decides whether the
 signal fires at all").
 
+**Landed on dev (`fbaf8ae`, pushed 22:28:35 UTC 8 Sep):** accelerep.netlify.app
+served `index-B-DxPVK_.js` — the local gate build's hash — at 22:29:16 UTC,
+41 seconds after the push, 2,504,539 bytes; "Posted the moment it happens",
+"Deal closed won", "2+ stages within 14 days" and "the company's choice" in
+the served bundle, the old "when the rep the deal belongs to" sentence
+absent; Netlify's current deploy `6aa08c15…` carries the rebuilt
+`opportunities`, `send-slack` and `pipeline-alerts`. The 23:00 UTC run is
+the first on the decoupled signals. `master` stays at `cf72f99`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
