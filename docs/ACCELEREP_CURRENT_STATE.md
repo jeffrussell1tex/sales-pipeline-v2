@@ -4714,6 +4714,16 @@ toast/banner" that nothing sets or reads. The fix wants a routing decision —
 land back on Connected apps with the provider named in the redirect — Jeff's
 call before code.
 
+**Landed on dev (`e77d841`, pushed 20:54:26 UTC 8 Sep):** accelerep.netlify.app
+served `index-DhQ2fFJ5.js` — the local gate build's hash — at 20:54:55 UTC, 29
+seconds after the push. In the served bundle: "Not requested — ", "Not
+disconnected — ", "could not be loaded — ", "Copy failed — " and "Settings
+could not be loaded — " present; the panel's old banner strings ("not
+requested — ", "Slack not disconnected") absent. "Calendar not disconnected"
+is still in the bundle: it is `CompanyCalendarDetail.jsx`'s own message
+(`setCalError`, shown in that panel), not this one's. `master` stays at
+`cf72f99`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
