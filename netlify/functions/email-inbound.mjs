@@ -277,10 +277,12 @@ export const handler = async (event) => {
         // never its content — an Outlook message logged with no line breaks after
         // the normaliser kept them, so this says whether they were ever there.
         // Read in Netlify → Logs → Functions → email-inbound.
-        if (full) {
+        {
             const nlOf = (v) => (typeof v === 'string' ? (v.match(/\n/g) || []).length : -1);
-            const att = full.attachments;
-            console.log(`email-inbound: fetched via ${fetched.endpoint}; text=${typeof full.text}/${(full.text || '').length}ch/${nlOf(full.text)}nl; html=${typeof full.html}/${(full.html || '').length}ch/${nlOf(full.html)}nl; attachments=${Array.isArray(att) ? att.length + ':' + Object.keys(att[0] || {}).join('|') : typeof att}; keys=${Object.keys(full).join(',')}`);
+            const shape = (o) => `text=${typeof o.text}/${(o.text || '').length}ch/${nlOf(o.text)}nl; html=${typeof o.html}/${(o.html || '').length}ch/${nlOf(o.html)}nl; attachments=${Array.isArray(o.attachments) ? o.attachments.length + ':' + Object.keys(o.attachments[0] || {}).join('|') : typeof o.attachments}; keys=${Object.keys(o).join(',')}`;
+            console.log(full
+                ? `email-inbound: fetched via ${fetched.endpoint}; ${shape(full)}`
+                : `email-inbound: NOT fetched (key set: ${!!process.env.RESEND_API_KEY}; email_id present: ${!!mail.email_id}; body.type: ${body.type}); webhook payload: ${shape(mail)}`);
         }
 
         const subject = String((full?.subject ?? mail.subject) || '').slice(0, 500);
