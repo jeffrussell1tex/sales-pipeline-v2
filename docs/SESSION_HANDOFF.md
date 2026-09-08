@@ -109,6 +109,35 @@ of resend.com/webhooks at the close: the dev endpoint
 endpoint (`salespipelinetracker.com/…`, 3mo ago) Disabled — unchanged from
 his "confirmed" at the open.**
 
+**Tenth session (8 September 2026, Jeff: "claude, lets continue") — CLOSE.**
+The ritual passed (dev ahead of `master` by the four ship-record docs
+commits, both fingerprints, copies identical, tree clean). The shared
+heartbeat row read at 23:04 UTC: `pipeline-alerts` ok at 23:00:38 — prod's
+first fixed run since April succeeded — but `ok_count` 2, one tick from each
+site, indistinguishable: item 34 in the data. **Item 34 built as §0.100
+(`79890f3`)**: a NEW additive table `site_job_heartbeats` keyed by (site,
+job) — not a new key on the old table, because swapping a live table's
+primary key is not additive and would have broken prod's still-running
+stamps until the ship (guide §18c's new bullet); applied to both databases
+and read back first; `siteKey(env)` from Netlify's URL host; the wrapper
+stamps (site, job); `job-status` returns only its own site's rows with
+`site` in the body; the client unchanged. Five gates, **607/607 unit**,
+**124/124 integration** (two sites of the suite's own, one never reads the
+other's row), **333/333 mutations** (the harness died once mid-mutant on a
+Windows file-open error and left `forecastCall.js` mutated on disk —
+`git status` caught it, the file restored from HEAD, the re-run clean; the
+second time this has happened, item 35). **The bundle hash did not change**
+(`index-B-DxPVK_.js`, byte-identical to the served dev bundle — nothing the
+client bundles changed), so the landing proof was Netlify's deploy record
+(`6aa09929…` = `79890f3`, 76 functions, the two function digests changed)
+and **the first per-site row, read back at 23:26:06 UTC: `accelerep.netlify.app`
+/ `task-reminders` ok, `ok_count` 1** — while prod's old function stamped
+the legacy row in the same second, alone. Found: the state header still said
+the Resend webhook "targets DEV at the ship" and carried a "2,438 kB" build
+figure from §0.94 — both corrected. **ON DEV ONLY, NOT shipped** — `master`
+stays at `5a306e3`; the legacy `job_heartbeats` table is dropped by Jeff's
+hand after the eleventh ship, never by a script.
+
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
 since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
@@ -134,10 +163,10 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.99` with a paragraph beginning **"Landed on dev (`fbaf8ae`"** and
-`### 0.98` with a paragraph beginning **"Landed on dev (`5bca4fd`"**, and does
-`docs/ACCELEREP_CODING_GUIDE.md` under `## 18b33` carry the words **"every
-scheduled handler is `withHeartbeat('<job>', run)`"**? If not, you are
+`### 0.100` with a paragraph beginning **"Landed on dev (`79890f3`"** and
+`### 0.99` with a paragraph beginning **"Landed on dev (`fbaf8ae`"**, and does
+`docs/ACCELEREP_CODING_GUIDE.md` under `## 18c` carry a bullet beginning
+**"A key change is not additive (§0.100, 8 Sep)."**? If not, you are
 looking at a copy that predates this handoff. Check section
 content, never dates.
 
@@ -151,7 +180,32 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the tenth ship put §0.92 through §0.99 on `master` (8 Sep 22:36 UTC); nothing is on `dev` only but the ship-record docs
+## 1. What shipped — the tenth ship put §0.92 through §0.99 on `master` (8 Sep 22:36 UTC); §0.100 is on `dev` only
+
+**Tenth session (8 Sep) — ON DEV ONLY, deploy-verified, PROVEN by the first
+per-site row, NOT shipped:** `79890f3` (item 34, state §0.100, guide §18c's
+new bullet) and its landing docs commit `5c9af24`. No hash could show it —
+`src/` changed only by a server-only export that Vite tree-shakes, so the
+gate build's `index-B-DxPVK_.js` is §0.99's hash and byte-identical to the
+served dev bundle (2,504,539 bytes both). Netlify's deploy record did: deploy
+`6aa09929…`, commit `79890f3`, branch `dev`, published 23:25:16 UTC (51
+seconds after the 23:24:23 push), 76 functions, the `_heartbeat` and
+`job-status` digests changed, secret scan clean; the deployed `job-status`
+answers 401 unauthenticated. **Then the row: a read-only poll of
+`site_job_heartbeats` on the app database — zero rows at 23:24:41, 23:25:13
+and 23:25:45; at 23:26:06 one row, `site` `accelerep.netlify.app`, job
+`task-reminders`, started 23:26:04.102, finished 23:26:04.481, `ok`,
+summary `{ sent: 0, skipped: 0 }`, `ok_count` 1** — and the LEGACY
+`job_heartbeats.task-reminders` row stamped at 23:26:04.638 (`ok_count`
+135) by prod's pre-§0.100 function, now that table's only writer. What it
+is: `job_heartbeats` was keyed by `job` alone on a database two sites
+share; now `site_job_heartbeats` (site, job) — a NEW table because a key
+change on the live table is not additive (guide §18c) — `siteKey(env)` in
+`jobHealth.js` (URL host → `SITE_NAME` → `local`), the wrapper stamping
+(site, job) with the finish keyed by both, `job-status` returning
+`{ now, site, jobs }` for its own site only, the client unchanged, the old
+table declared LEGACY in `schema.ts` until Jeff drops it after the
+eleventh ship. `master` stays at `5a306e3`.
 
 **PROD SHIPPED (Jeff: "ship prod") — the tenth ship (8 Sep, ninth session).**
 Ancestor check (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor
@@ -759,35 +813,88 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (8 Sep, ninth session — after items 29, 30, 32 and 33)
+## 4. Verified state at close (8 Sep, tenth session — after item 34)
 
-Five gates green on 154 files · **606/606 unit** (36 new this session;
-`slack-alerts.test.mjs` rewritten for seven types) · **330/330 mutations,
-printed green baseline** (31 added this session) · build **2,438 kB JS**,
-`index-B-DxPVK_.js`, guard OK, `dist/` cleared · **123/123 integration** (7
-new this session) · **no pane browser pass** — the pane holds no session;
-§0.92's follow-up OBSERVED by Jeff (second screenshot); §0.96's card OBSERVED
-("slack card working as stated"); §0.99's Closed Won post OBSERVED (Jeff's
-screenshot, 22:33 UTC); §0.94, §0.95, §0.97 NOT observed;
-§0.98 PROVEN by the first heartbeat row · dev deploys observed serving
-`index-BRrOppU7.js`, `index-DhQ2fFJ5.js`, `index-Dz4BAypy.js`,
-`index-lFOC0BmK.js`, `index-LNt1yblV.js`, `index-B-DxPVK_.js`, and Netlify's
-deploy records for §0.95 and §0.98 · **`master` == `5a306e3`, prod serving
-`index-JJdhJmyd.js` (the TENTH ship, 22:36 UTC)**; before the ship dev was
-ahead of master by 49 commits: the
-eighth session's 26, then `8666737`, `08de43d`, `0163cd1`, `2b28a24`,
-`b1c4769`, `e77d841`, `1c8ce78`, `b5da1a7`, `2049a4a`, `9fc662f`, `adc5780`,
-`b5a9f5c`, `282c16c`, `7d4b406`, `5bca4fd`, `1e47b13`, `7979fde`, `e852d58`,
-`fbaf8ae`, `ed41796`, `13815d9`, `4d22ba5` and `5a306e3` — all now on
-`master`; after the ship dev is ahead only by the ship-record docs commit
-(`0603ad5`) and this close · **one schema change:
-`job_heartbeats`, additive, in BOTH databases** · **the Resend inbound
-webhook targets PROD again; dev's endpoint is Disabled — Jeff's screenshot
-after the ship** ·
-**prod's `pipeline-alerts` is the fixed code since 22:36 UTC — its first run
-is 23:00** · the working tree was clean at close.
+Five gates green on 154 files · **607/607 unit** (1 new this session:
+`siteKey`) · **333/333 mutations, printed green baseline** (3 added this
+session; the first run died mid-mutant on a Windows file-open error and left
+a mutant on disk — restored, re-run clean) · build **2,446 kB JS**,
+`index-B-DxPVK_.js` (UNCHANGED from §0.99 — nothing the client bundles
+changed; the guard's 2,446 kB is this hash's real figure, the header's old
+"2,438 kB" was carried from §0.94), guard OK, `dist/` cleared · **124/124
+integration** (1 new this session) · **no pane browser pass** — the pane
+holds no session; §0.100 PROVEN by the first per-site row (above), NOT
+eyeballed · dev deploy verified from Netlify's record (`6aa09929…` =
+`79890f3`, 76 functions) · **`master` == `5a306e3`, prod serving
+`index-JJdhJmyd.js` (the tenth ship)**; dev is ahead of `master` by the
+four ship-record docs commits (`0603ad5`, `9d7f578`, `1a55ef8`,
+`77c4b77`), `79890f3`, `5c9af24` and this close — seven commits · **one
+schema change: `site_job_heartbeats`, additive (CREATE TABLE IF NOT EXISTS,
+PRIMARY KEY (site, job)), in BOTH databases, read back**; `job_heartbeats`
+still exists in both, prod-written until the ship, LEGACY · **the Resend
+inbound webhook targets PROD — Jeff's screenshot after the tenth ship; not
+re-read this session (no email work)** · prod's shared heartbeat row read at
+23:04 UTC: `pipeline-alerts` ok at 23:00:38 — the first successful prod
+run since April · the working tree was clean at close.
 
 ## 5. Next — start here
+
+**Tenth-session prep (read at the eleventh), in order:**
+- **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
+  expect SEVEN commits after `5a306e3` (§4 lists them). Anything else is
+  unshipped code and a finding. **Then read Resend → Webhooks** — prod
+  Enabled, dev Disabled at the tenth ship (Jeff's screenshot); not re-read
+  this session. Every email observation is prod's; if that has changed, say
+  so before trusting one (§18b31).
+- **Read `site_job_heartbeats` (read-only) before anything else:** expect
+  one site, `accelerep.netlify.app`, with all four jobs after 06:00 UTC 9
+  Sep (`task-reminders` every minute, `pipeline-alerts` and `digest` from
+  00:00, `score-leads-batch` from 06:00), every `last_status` `ok`. A
+  second site there before the eleventh ship is a finding. The legacy
+  `job_heartbeats` rows keep moving — that is prod's old function, expected.
+- **Jeff eyeballs §0.100 on deployed dev, as Admin:** Settings → Workspace
+  Health reads "Scheduled jobs running" once all four have run (before 06:00
+  UTC: "Scheduled jobs: Lead scoring has not run" — correct); Connected apps
+  → Slack reads "Alerts job: Last ran Nm ago · ok" after 00:00 UTC. Nothing
+  visibly new — the observable is that dev's tile now describes DEV's jobs
+  alone; on prod (until the ship) the tile reads the legacy table, which is
+  now prod's alone by accident of dev no longer writing there.
+- **DONE — item 34 is §0.100 (`79890f3`), PROVEN by the first per-site row.**
+  Left for after the ship: **the legacy `job_heartbeats` table — Jeff's
+  hand, never a script's** (hard rule: no destructive command against the
+  shared database). Once prod runs §0.100 and its four rows appear under
+  `salespipelinetracker.com`, read the legacy rows once more, then Jeff
+  runs `DROP TABLE job_heartbeats` in the Neon console for the app database
+  and the test database; then delete the LEGACY block from `schema.ts`,
+  `db/apply-job-heartbeats.mjs`, and the two "legacy" scan assertions in
+  `tests/job-heartbeat.test.mjs`.
+- **Ship §0.100 when Jeff says so:** ancestor check, `git push origin
+  dev:master`. **The prod hash will NOT change** (`index-JJdhJmyd.js` stays —
+  the client bundle is identical); the proof is Netlify's record for the
+  PROD site (`sales-pipeline-v2`, id `ef1f2af9…` — `get-projects`, then
+  `get-deploy-for-site` with its `currentDeploy.id`: commit = the pushed
+  sha, 76 functions, `_heartbeat` and `job-status` digests changed), then
+  a read-only SELECT of `site_job_heartbeats` for a `salespipelinetracker.com`
+  / `task-reminders` row within a minute. The table is already in the shared
+  database (§18c), so prod's functions may land in any order. Nothing to
+  flip: the Resend webhook is already on prod.
+- **Item 35 — the mutation harness, one small batch:** twice now
+  (`§0.96`, and this session on `forecastCall.js`) the harness has died
+  mid-mutant — this time `writeFileSync` threw `UNKNOWN errno -4094` on the
+  mutant write, a transient Windows file lock — and left the mutant on disk
+  for `git status` to catch. Wrap each mutant in try/finally that restores
+  the original from memory, and register a `process.on('exit')` restore, so
+  a crash can never leave a mutant behind. Read `scripts/mutate-import.mjs`'s
+  apply/restore loop first; the fix is a few lines and its own test is a
+  simulated throw.
+- **Carried, unchanged:** item 31 (the four manager copies in
+  `pipeline-alerts.mjs` read `manager.profile || {}`, not the flat prefs —
+  one line per call site, Jeff's call), item 27 (From/To/Cc + Message-ID on
+  email rows), item 28 (a creator-owned contact shows a blank Assigned Rep),
+  the Connected apps non-Admin dead branches, `INTEGRATION_REQUESTS_TO`
+  unset, the bulk stage-move endpoint not posting to Slack (Jeff's call on a
+  summary line), the `check-tdz` blind spot for lowercase helpers in
+  function files.
 
 **Ninth-session prep (read at the tenth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
@@ -814,7 +921,10 @@ is 23:00** · the working tree was clean at close.
   by Jeff (his screenshot). On prod, his to observe: the same eyeball lists as dev (§0.92–§0.99); the
   first prod alert since April can post at 23:00 UTC if a deal qualifies;
   prod's Workspace Health reads the shared heartbeat row (item 34).**
-- **Item 34 — one batch, Jeff's call on timing:** `job_heartbeats` is keyed
+- **DONE (tenth session) — item 34 is §0.100 (`79890f3`), a NEW table
+  `site_job_heartbeats` rather than a new key (guide §18c); the first
+  per-site row read back at 23:26 UTC.** Was: **Item 34 — one batch, Jeff's
+  call on timing:** `job_heartbeats` is keyed
   by job alone and the database is shared, so dev and prod write the SAME
   row; it says the job ran somewhere, not where. A prod job stalled while
   dev's runs would read ok on both tiles. Fix: a site column
