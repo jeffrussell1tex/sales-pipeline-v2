@@ -83,7 +83,7 @@ test('a refused Save is shown inside the modal, under the field — not in the p
 // screen to say it.
 test('every card and row action reports on its own surface — the page banner is for the settings load only', () => {
     const s = code(read(CA));
-    assert.match(s, /^const CardNote = \(\{ text \}\) => text \? \(/m, 'module-scope note');
+    assert.match(s, /^const CardNote = \(\{ text, tone = 'danger' \}\) => text \? \(/m, 'module-scope note (tone: danger for a refusal, ok for a landed Connect — §0.97)');
     assert.equal((s.match(/setError\(/g) || []).length, 1, 'setError is called once — the settings load');
     assert.ok(s.includes('setError(`Settings could not be loaded — ${e.message}`)'), 'and it says what failed');
     assert.ok(s.includes("note('slack', `Not disconnected — ${e.message}`)"), 'Slack Disconnect → the Slack card');

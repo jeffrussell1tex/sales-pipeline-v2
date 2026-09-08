@@ -31,6 +31,7 @@ import { T } from '../shared/tokens.js';
 import { useApp } from '../../../AppContext';
 import { REQUESTABLE_APPS } from '../../../utils/integrationCatalog.js';
 import { SLACK_ALERT_TYPES, cleanSlackAlerts, slackAlertsOnCount } from '../../../utils/slackAlerts.js';
+import { calendarReturnMessage } from '../../../utils/calendarReturn.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter } from './shared.jsx';
 
 const AppTile = ({ name, color='#3a5a7a', size=36, emoji }) => (
@@ -68,8 +69,8 @@ const fmtDay = (iso) => { const d = iso ? new Date(iso) : null; return d && !isN
 // the row whose Request was sent — never in a banner at the top of the page,
 // which is off-screen for a row at the bottom of the catalogue and behind any
 // open dialog. Renders nothing for an empty text.
-const CardNote = ({ text }) => text ? (
-    <div style={{ padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:11.5, color:T.danger, fontFamily:T.sans, lineHeight:1.4 }}>{text}</div>
+const CardNote = ({ text, tone = 'danger' }) => text ? (
+    <div style={{ padding:'8px 12px', background: tone === 'ok' ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)', borderLeft:`3px solid ${tone === 'ok' ? T.ok : T.danger}`, borderRadius:4, fontSize:11.5, color: tone === 'ok' ? T.ok : T.danger, fontFamily:T.sans, lineHeight:1.4 }}>{text}</div>
 ) : null;
 
 // ── Slack configuration ──────────────────────────────────────────────────────
@@ -204,8 +205,10 @@ const CALENDARS = [
 // the existing OAuth start — a browser redirect, so the identity goes in the
 // query the same way HomeTab and CompanyCalendarDetail send it; the callback
 // re-checks the Admin claim before storing an org connection.
-const CalendarCard = ({ cal, configured, orgConn, userConn, isAdmin, onConnect, onDisconnect, busy, note, loadError }) => {
+const CalendarCard = ({ cal, configured, orgConn, userConn, isAdmin, onConnect, onDisconnect, busy, note, loadError, returned }) => {
     const any = !!(orgConn || userConn);
+    // `returned` is the outcome of a Connect that started on THIS card (state §0.97, item 30) — one line, ok or danger.
+    const returnNote = returned && returned.provider === cal.provider ? calendarReturnMessage(returned) : '';
     return (
         <IntegrationCard
             tile={<AppTile name={cal.name} color={cal.color} emoji={cal.emoji} size={36}/>}
@@ -226,6 +229,7 @@ const CalendarCard = ({ cal, configured, orgConn, userConn, isAdmin, onConnect, 
                     </div>
                 </>
             )}>
+            <CardNote text={returnNote} tone={returned?.status === 'success' ? 'ok' : 'danger'}/>
             <CardNote text={note}/>
             {configured !== false && (orgConn || userConn) && (
                 <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
@@ -301,7 +305,10 @@ const RequestRow = ({ app, request, onRequest, busy, last, note }) => (
 );
 
 export const ConnectedAppsDetail = ({ onBack }) => {
-    const { userRole } = useApp();
+    const { userRole, calConnectResult, setCalConnectResult } = useApp();
+    // A Connect that started here comes back here (state §0.97): the outcome is
+    // shown on that provider's card and cleared when the panel closes.
+    useEffect(() => () => { if (calConnectResult) setCalConnectResult(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
     const { userId, orgId } = useAuth();
     const isAdmin = userRole === 'Admin';
 
@@ -408,7 +415,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
 
     // ── Calendars ──────────────────────────────────────────────────────────
     const connectCalendar = (provider, scope) => {
-        const qs = new URLSearchParams({ provider, scope, userId: userId || '', orgId: orgId || '', userRole: userRole || 'User' });
+        const qs = new URLSearchParams({ provider, scope, userId: userId || '', orgId: orgId || '', userRole: userRole || 'User', from: 'apps' });
         window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
     };
     const disconnectCalendar = async (id, scope, provider) => {
@@ -484,7 +491,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                             orgConn={connByProvider(cal?.orgConnections, c.provider)}
                             userConn={connByProvider(cal?.userConnections, c.provider)}
                             isAdmin={isAdmin} busy={busy === 'cal'}
-                            note={notes['cal:' + c.provider]} loadError={cal?.error}
+                            note={notes['cal:' + c.provider]} loadError={cal?.error} returned={calConnectResult}
                             onConnect={connectCalendar} onDisconnect={disconnectCalendar}/>
                     ))}
                     <BccCard bcc={bcc}/>

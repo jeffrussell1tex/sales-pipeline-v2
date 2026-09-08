@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 8, 2026 (eighth session, third close; header refreshed at the ninth session's open)
 **Verified at:** five gates green on 151 files · **570 tests** · **299/299 mutations, printed green baseline** · **116/116 integration** · build guard OK 2,437 kB `index-Bz_vDa_T.js` · **prod `cf72f99` serving `index-DIeZb8qh.js` (ninth ship, 7 Sep)** · dev ahead of `master` by 26 commits — §0.92, §0.93 and its follow-up, the 8 Sep diagnostics and their removal, and their docs; not yet shipped. **The Resend inbound webhook targets DEV and prod's endpoint is disabled (8 Sep, Jeff) — flip it back at the ship (guide §18b31); until then prod logs no email.** The app database and the test database both hold `audit_stream_destinations`. (This header and the per-batch lines under it were refreshed at the ninth session's open; before that the lines had described §0.80–§0.88 since 3 Sep and the header still carried the first close's counts — the sections are the record.)
-**Batch:** **an org chooses which of the five pipeline alerts post to Slack (§0.96, handoff item 29 — Jeff: "Can we add an option that enables me to select what actions get posted")** — five checkboxes in the Configure Slack modal saved as `slackConfig.alerts`, normalised to five booleans by settings.mjs, asked by `sendSlackToOrg` before every post (a config saved before the key posts everything; an unknown type fails closed; the untyped digest and test are not gated); the card reads "n of 5 alerts". One pure module (`src/utils/slackAlerts.js`) shared by the modal, settings.mjs and send-slack.mjs; the keys are the rep-side preference keys. Dev only; not yet shipped; not observed.
+**Batch:** **a calendar Connect lands back where it started and says how it went (§0.97, handoff item 30)** — the OAuth callback had redirected to a query nothing read, so a failed Connect landed on Home in silence; now the start carries `from` through the provider in `state`, the callback's six exits go through one allowlisted `calendarReturnUrl` (status, provider, scope, from, reason — never free text), App.jsx reads it once when Clerk's user is present, cleans the URL, and lands the user on Connected apps / Company calendar (an Admin, that panel opened through `settingsOpenPanel`) or the profile panel's Calendar tab, where one line says "Google Calendar connected" or "was not connected — <why>". One pure module (`src/utils/calendarReturn.js`) shared by both sides. Dev only; not yet shipped; not observed.
+**Prior batch:** **an org chooses which of the five pipeline alerts post to Slack (§0.96, handoff item 29 — Jeff: "Can we add an option that enables me to select what actions get posted")** — five checkboxes in the Configure Slack modal saved as `slackConfig.alerts`, normalised to five booleans by settings.mjs, asked by `sendSlackToOrg` before every post (a config saved before the key posts everything; an unknown type fails closed; the untyped digest and test are not gated); the card reads "n of 5 alerts". One pure module (`src/utils/slackAlerts.js`) shared by the modal, settings.mjs and send-slack.mjs; the keys are the rep-side preference keys. Dev only; not yet shipped; not observed.
 **Prior batch:** **the pipeline-alerts job had thrown on its first deal since 7 April — no alert of any kind (email, SMS, Slack) has gone out for five months (§0.95, ninth session)** — `bf4a3c5` renamed the parameter of `wantsAlert` and `wantsSms` to `resolvedProfile` and left both bodies reading `profile`, a name bound only inside the deal loop; the first call threw, the outer catch answered 500, hourly, on every site. Found reading the job to answer Jeff's "how do I choose what gets posted to Slack". Two lines fixed; the helpers are lifted out of the source and RUN by a new suite (3 mutants; the suite registered in the harness after its first run let all three survive). No gate covers a lowercase helper in a function file — guide §18b33. Functions-only, dev only; not yet shipped.
 **Prior batch:** **every Connected-apps action reports on its own card or row (§0.94, ninth session — Jeff: "make sure the error codes will show in the correct place for the rest of the connected apps")** — Slack Disconnect, both calendars' Disconnect and every catalogue Request had written their failures into one banner at the top of the page (off-screen for a row at the bottom); a failed calendar fetch sat under the grid while the cards said "Not connected"; a failed email-logging fetch read "Not available on this site"; a Copy failure showed nothing. Now one module-scope `CardNote` and a per-surface `notes` map: each action clears and writes its own key, each card and row renders it where the click was, a failed fetch is reported as a failed fetch, and the page banner is for the settings load alone (guide §18b32 extended). Open, Jeff's call: a failed calendar OAuth Connect lands on Home with no message (item 30). Dev only; not yet shipped; not observed.
 **Prior batch:** **every activity row opens a read-only viewer; a logged email keeps its line breaks and names its attachments (§0.93, handoff item 26 option 2, and its follow-up)** — Jeff, at Karen's two test emails on the contact: "these are fairly useless because I can't see any content"; now every activity row in the contact, account and task rails, the deal modal's activity list and its History tab opens a viewer (type, date, author, subject bold, contact · account · deal, the whole body with its line breaks, Close, and Edit only where the server would let the caller write — `canEditActivity` mirrors `mayMutate`), and rails show the subject bold over a two-line clamp instead of the unclamped dump. His fourteen-step report found three things: Escape closed the rail along with the viewer (each rail's own listener now yields while the viewer is open); the stored body had every newline collapsed to a space and never named an attachment (`_inboundText.mjs`: newlines kept, HTML blocks become breaks, "Attachments: …" appended from the payload's names — the files are not stored); and a contact owned by its creator shows a blank Assigned Rep, hidden by the Contacts tab's remembered "Mine" scope (item 28, Jeff's call). Then a day of "same result" with the fix live, until a diagnostic written onto the row itself came back WITHOUT it: the Resend webhook had delivered to PROD all along, whose pre-fix function wrote every row into the shared database (guide §18b31); Jeff repointed it at dev, and the fix was **PROVEN 8 Sep 19:26 UTC** — "#14 Test Email" stored with ten line breaks and "Attachments: Lumen.pdf", seen in the viewer; the diagnostic removed (`173948a`). Dev only; not yet shipped; **OBSERVED by Jeff ("works"); the follow-up PROVEN by a real email.**
@@ -4865,6 +4866,71 @@ threshold" and "the pipeline alerts ticked here" in the served bundle. (The
 phrase "deal silent, stuck in stage, close date lapsed" is still there: it is
 the Slack CARD's description, unchanged; the modal's static sentence is
 gone.) `master` stays at `cf72f99`.
+
+### 0.97 A calendar Connect lands back where it started, and says how it went (8 Sep, ninth session — handoff item 30)
+
+**Jeff: "lets do 29, 30 and 32."** What existed (§0.94, last paragraph):
+Connect is a browser redirect out to the provider's consent screen and back
+through `calendar-oauth-callback.mjs`, which sent the browser to
+`/?tab=settings&subtab=calendar&calconnect=success|error` — a URL nothing
+read: App.jsx read `calconnect=success` only (to refetch events), nothing
+read `tab` or `subtab`, `useCalendarState.calConnectResult` ("used to show a
+toast/banner") was set and read by nothing. So a failed Connect landed on
+Home with no message, and a successful one landed on Home too and said
+nothing; the only evidence was the card reading Live on the next visit.
+
+**Design — the round trip carries where it started and how it went, from
+allowlists only.** `src/utils/calendarReturn.js` (pure, shared by both sides
+like `slackAlerts.js`): `CALENDAR_RETURN_FROM` (`apps` — Connected apps;
+`profile` — the avatar panel's Calendar tab; `home` — Home's own Connect;
+`company` — the Company calendar panel), the provider and scope lists, six
+`CALENDAR_RETURN_REASONS` (`provider_denied`, `missing_code`, `bad_state`,
+`not_admin`, `no_refresh_token`, `server_error`) each with its sentence,
+`cleanCalendarReturnFrom` (anything else is `home`), `calendarReturnUrl(appUrl,
+{ status, provider, scope, from, reason })` (unknown provider or scope
+dropped, unknown reason → `server_error`, no reason on success — the query
+can carry nothing the app did not define), `readCalendarReturn(search)` (null
+unless `calconnect` is `success` or `error`; every field from its list),
+`calendarReturnMessage(r)` ("Google Calendar connected — your company
+calendar is live." / "Google Calendar was not connected — you cancelled at
+the provider's consent screen, or the provider refused."). The four callers
+pass their `from`; `calendar-oauth-start.mjs` allowlists it and carries it in
+`state`; the callback parses `state` BEFORE the provider-error branch (a
+provider echoes `state` on its own refusal), so even a refusal names the
+provider, and every one of its six exits goes through one `back(status,
+reason)` — the two unread `_REDIRECT` literals are gone. App.jsx, once
+Clerk's user is present (the role is read from `publicMetadata` directly —
+the `userRole` state is one render behind it), reads the return once,
+stores it in `calConnectResult`, cleans the URL with `history.replaceState`
+so a refresh cannot replay it, and lands the user: an Admin who started on
+Connected apps or Company calendar goes to Settings with that panel opened
+(`settingsOpenPanel` in `useModalState` → `SettingsTab` → `AdminView`, which
+opens the catalogue item and clears the request); everyone else gets the
+profile panel, whose Calendar tab is selected for the line. Each surface
+renders `calendarReturnMessage` — the provider's own card on Connected apps
+(`CardNote` gained a `tone`: ok for a landed Connect), the Calendar tab of the
+profile panel, the Company calendar panel — and clears the result when it
+closes. Nothing else in the OAuth flow changed: the exchange, the storage,
+the Admin re-check are as they were.
+
+**Verified:** five gates (the TDZ gate caught `useEffect` unimported in
+AdminView on the first run — the gate working, fixed), build guard OK
+`index-lFOC0BmK.js`, **594/594 unit** (9 new in
+`tests/calendar-return.test.mjs`: the pure module, a round trip through
+`calendarReturnUrl` → `readCalendarReturn`, and source scans of the start,
+the callback's six exits, App.jsx's landing, the wiring file, SettingsTab,
+AdminView, the four callers and the three surfaces), **118/118 integration**
+(unchanged — no suite drives the OAuth redirect; the callback's exits are
+pinned by scan), **320/320 mutations, printed green baseline** (6 new: an
+unknown status lands; free text in the redirect; the denied exit loses its
+reason; the URL is not cleaned; Settings ignores the request; `from` drops
+out of state). Not browser-checked here. **Jeff eyeballs (§5):** Settings →
+Connected apps → Google Calendar → "Connect my calendar" → cancel at Google
+→ the browser lands back on Connected apps with the Google card reading
+"Google Calendar was not connected — you cancelled…"; connect for real → the
+same card reads "Google Calendar connected — your calendar is live." and
+Live; a refresh shows neither line. As Karen from Home: the same, landing in
+her profile panel's Calendar tab.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

@@ -16,6 +16,7 @@
 
 import { neon } from '@netlify/neon';
 import { encrypt } from './crypto.mjs';
+import { calendarReturnUrl } from '../../src/utils/calendarReturn.js';
 
 // Use raw SQL to avoid Drizzle ORM cold-start issues in redirect callbacks
 function getDb() {
@@ -24,9 +25,10 @@ function getDb() {
 
 const APP_URL = process.env.URL || 'https://salespipelinetracker.com';
 const CALLBACK_URL = `${APP_URL}/.netlify/functions/calendar-oauth-callback`;
-// After storing the token, redirect user back to the Calendar settings tab
-const SUCCESS_REDIRECT = `${APP_URL}/?tab=settings&subtab=calendar&calconnect=success`;
-const ERROR_REDIRECT   = `${APP_URL}/?tab=settings&subtab=calendar&calconnect=error`;
+// After the exchange the browser goes back to the surface the user clicked
+// Connect on, with the outcome in the query (state §0.97, item 30 —
+// calendarReturnUrl builds it from allowlists; App.jsx reads it). Until §0.97
+// this was `/?tab=settings&subtab=calendar&calconnect=…`, which nothing read.
 
 // Token exchange endpoints
 const TOKEN_URLS = {
@@ -96,32 +98,39 @@ export const handler = async (event) => {
 
     const { code, state, error } = event.queryStringParameters || {};
 
+    // Restore context from state FIRST (providers echo `state` on their own
+    // error responses too), so even a refusal goes back to the right surface
+    // with the right provider named. A state that will not parse is null.
+    let stateData = null;
+    if (state) {
+        try { stateData = JSON.parse(Buffer.from(state, 'base64').toString('utf8')); }
+        catch { console.error('Failed to parse OAuth state'); }
+    }
+    const back = (status, reason) => ({
+        statusCode: 302,
+        headers: { Location: calendarReturnUrl(APP_URL, { status, provider: stateData?.provider, scope: stateData?.scope, from: stateData?.from, reason }) },
+        body: '',
+    });
+
     // Provider denied access
     if (error) {
         console.error('OAuth provider returned error:', error);
-        return { statusCode: 302, headers: { Location: ERROR_REDIRECT }, body: '' };
+        return back('error', 'provider_denied');
     }
 
     if (!code || !state) {
         console.error('Missing code or state. code present:', !!code, 'state present:', !!state);
-        return { statusCode: 302, headers: { Location: ERROR_REDIRECT }, body: '' };
+        return back('error', 'missing_code');
     }
 
-    // Restore context from state
-    let stateData;
-    try {
-        stateData = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
-    } catch {
-        console.error('Failed to parse OAuth state');
-        return { statusCode: 302, headers: { Location: ERROR_REDIRECT }, body: '' };
-    }
+    if (!stateData) return back('error', 'bad_state');
 
     const { userId, orgId, provider, scope, userRole } = stateData;
 
     // Re-enforce admin check for org scope — state is user-controlled so we validate again
     if (scope === 'org' && userRole !== 'Admin') {
         console.error('Non-admin attempted org calendar connection');
-        return { statusCode: 302, headers: { Location: ERROR_REDIRECT }, body: '' };
+        return back('error', 'not_admin');
     }
 
     try {
@@ -133,7 +142,7 @@ export const handler = async (event) => {
             // This can happen if the user already granted access and `prompt=consent`
             // wasn't honoured. Shouldn't happen in normal flow but guard against it.
             console.error(`No refresh token returned by ${provider}`);
-            return { statusCode: 302, headers: { Location: `${ERROR_REDIRECT}&reason=no_refresh_token` }, body: '' };
+            return back('error', 'no_refresh_token');
         }
 
         // Encrypt the refresh token before storing
@@ -204,11 +213,11 @@ export const handler = async (event) => {
             }
         }
 
-        // Redirect back to the app — the Settings Calendar tab will refresh connections
-        return { statusCode: 302, headers: { Location: SUCCESS_REDIRECT }, body: '' };
+        // Back to the surface the user came from; it refreshes its own connections
+        return back('success');
 
     } catch (err) {
         console.error('calendar-oauth-callback error:', err.message);
-        return { statusCode: 302, headers: { Location: ERROR_REDIRECT }, body: '' };
+        return back('error', 'server_error');
     }
 };

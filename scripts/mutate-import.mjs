@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1462,6 +1462,32 @@ const mutations = [
         'netlify/functions/settings.mjs',
         '                data.slackConfig = { ...data.slackConfig, alerts: cleanSlackAlerts(data.slackConfig.alerts) };',
         ''],
+
+    // ── §0.97 (item 30): the calendar Connect round trip lands where it started ──
+    ['calendar return: an unknown status is a landing',
+        'src/utils/calendarReturn.js',
+        '    if (!CALENDAR_RETURN_STATUS.includes(status)) return null;',
+        '    if (!status) return null;'],
+    ['calendar return: the redirect carries the raw reason (free text in the URL)',
+        'src/utils/calendarReturn.js',
+        "    if (q.get('calconnect') === 'error') q.set('reason', Object.hasOwn(CALENDAR_RETURN_REASONS, reason) ? reason : 'server_error');",
+        "    if (q.get('calconnect') === 'error') q.set('reason', reason || 'server_error');"],
+    ['calendar return: the provider-denied exit loses its reason',
+        'netlify/functions/calendar-oauth-callback.mjs',
+        "        return back('error', 'provider_denied');",
+        "        return back('error');"],
+    ['calendar return: App.jsx stops cleaning the URL — a refresh replays the landing',
+        'src/App.jsx',
+        "        window.history.replaceState(null, '', window.location.pathname);",
+        ''],
+    ['calendar return: Settings ignores the requested panel',
+        'src/Tabs/AdminView.jsx',
+        '        if (it) setActiveItem(it);',
+        '        if (false) setActiveItem(it);'],
+    ['calendar return: the start drops `from` from state — everyone lands on Home',
+        'netlify/functions/calendar-oauth-start.mjs',
+        "const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole, from })).toString('base64');",
+        "const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole })).toString('base64');"],
 
     // ── Item 26: the activity viewer (0.93) ─────────────────────────────────────
     ['viewer: a rep may edit any rep\'s activity from the viewer',

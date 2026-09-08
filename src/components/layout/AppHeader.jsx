@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { OrganizationSwitcher, useOrganizationList, useAuth } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
+import { calendarReturnMessage } from '../../utils/calendarReturn.js';
 
 // ── Design tokens ────────────────────────────────────────────
 const T = {
@@ -67,6 +68,7 @@ export default function AppHeader({
         setCsvImportType, setShowCsvImportModal,
         quickLogOpen, setQuickLogOpen,
         calendarConnected, calendarEvents, calendarLoading, calendarError, fetchCalendarEvents,
+        calConnectResult, setCalConnectResult,
     } = useApp();
 
     const isAdmin    = userRole === 'Admin';
@@ -188,6 +190,7 @@ export default function AppHeader({
             provider: 'google', scope: 'user',
             userId: clerkUserId || '', orgId: clerkOrgId || '',
             userRole: userRole || 'User',
+            from: 'profile',
         });
         window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
     };
@@ -214,6 +217,17 @@ export default function AppHeader({
     useEffect(() => {
         if (showProfilePanel && profilePanelTab === 'calendar' && !calConnLoaded) loadCalConnection();
     }, [showProfilePanel, profilePanelTab, calConnLoaded, loadCalConnection]);
+
+    // Landing back from a calendar Connect that started on Home or in this panel
+    // (state §0.97, item 30): App.jsx opens the panel; this selects the Calendar
+    // tab so the outcome line is in view, and clears it once the panel closes.
+    const returnedHere = calConnectResult && (calConnectResult.from === 'profile' || calConnectResult.from === 'home');
+    useEffect(() => {
+        if (returnedHere && showProfilePanel) setProfilePanelTab('calendar');
+    }, [returnedHere, showProfilePanel]);
+    useEffect(() => {
+        if (returnedHere && !showProfilePanel && calConnLoaded) setCalConnectResult(null);
+    }, [returnedHere, showProfilePanel, calConnLoaded, setCalConnectResult]);
 
     // The caller's personal email-logging address (state §0.91): BCC it and the
     // email is logged as an activity owned by them. Fetched only when the tab is
@@ -744,6 +758,11 @@ export default function AppHeader({
                                         {(calendarError || calActionError) && (
                                             <div style={{ fontSize: '0.75rem', color: T.danger, marginBottom: '0.875rem', fontWeight: 600, fontFamily: T.sans }}>
                                                 {calActionError || calendarError}
+                                            </div>
+                                        )}
+                                        {returnedHere && (
+                                            <div style={{ fontSize: '0.75rem', color: calConnectResult.status === 'success' ? T.ok : T.danger, marginBottom: '0.875rem', fontWeight: 600, fontFamily: T.sans }}>
+                                                {calendarReturnMessage(calConnectResult)}
                                             </div>
                                         )}
 

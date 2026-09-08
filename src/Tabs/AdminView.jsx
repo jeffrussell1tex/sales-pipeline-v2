@@ -1,5 +1,5 @@
 // AdminView.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../utils/storage';
 import DuplicateScanView from './DuplicateScanView';
 import ContactDuplicateScanView from './ContactDuplicateScanView';
@@ -130,10 +130,20 @@ const LeaveGuardModal = ({ saving, canSave, failed, onStay, onSave, onDiscard })
     </div>
 );
 
-export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, settingsDirty, setSettingsDirty, settingsSaveRef }) => {
+export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, settingsDirty, setSettingsDirty, settingsSaveRef, openPanelId = null, onOpenedPanel }) => {
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
     const [activeItem, setActiveItem] = useState(null); // detail panel state
+
+    // Open a catalogue item on request (state §0.97, item 30): App.jsx asks for
+    // 'apps' or 'company-calendar' when the calendar OAuth callback lands the
+    // user back here, then the request is cleared so it runs once.
+    useEffect(() => {
+        if (!openPanelId) return;
+        const it = SETTINGS_ITEMS.find(i => i.id === openPanelId);
+        if (it) setActiveItem(it);
+        if (onOpenedPanel) onOpenedPanel();
+    }, [openPanelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Unsaved-changes guard for leaving a settings panel. `go` is the navigation
     // that was intercepted; it runs on Discard, or after a successful Save.

@@ -33,6 +33,7 @@ import { useModalState } from './hooks/useModalState';
 import { useMerge } from './hooks/useMerge';
 import { useUIState } from './hooks/useUIState';
 import { useCalendarState } from './hooks/useCalendarState';
+import { readCalendarReturn } from './utils/calendarReturn.js';
 import { useUserHandlers } from './hooks/useUserHandlers';
 import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
@@ -216,11 +217,13 @@ function App() {
         dismissedReminders, setDismissedReminders,
         mergeModal, setMergeModal,
         contactMergeModal, setContactMergeModal,
+        settingsOpenPanel, setSettingsOpenPanel,
     } = modalState;
 
     const {
         calendarEvents, setCalendarEvents, calendarLoading, setCalendarLoading,
         calendarError, setCalendarError, calendarConnected, setCalendarConnected,
+        calConnectResult, setCalConnectResult,
         calView, setCalView, calOffset, setCalOffset, showCalConfig, setShowCalConfig,
         calShowGcal, setCalShowGcal, calShowCalls, setCalShowCalls,
         calShowMeetings, setCalShowMeetings, calShowWeekends, setCalShowWeekends,
@@ -614,6 +617,31 @@ dbFetch('/.netlify/functions/users?me=true')
     const isAdmin = userRole === 'Admin';
     const isManager = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
+
+    // Landing back from a calendar OAuth Connect (state §0.97, item 30). The
+    // callback sends `?calconnect=success|error&provider=&scope=&from=&reason=`
+    // (allowlisted, readCalendarReturn drops anything else); the outcome goes
+    // into calConnectResult for the surface that offered Connect, the URL is
+    // cleaned so a refresh does not replay it, and the browser lands on that
+    // surface: Connected apps or Company calendar for an Admin who started
+    // there, the profile panel's Calendar tab otherwise. The role is read from
+    // Clerk's metadata directly — the `userRole` state is one render behind it.
+    const calReturnHandled = useRef(false);
+    useEffect(() => {
+        if (!clerkUser || calReturnHandled.current) return;
+        const r = readCalendarReturn(window.location.search);
+        if (!r) return;
+        calReturnHandled.current = true;
+        setCalConnectResult(r);
+        window.history.replaceState(null, '', window.location.pathname);
+        const adminHere = (clerkUser.publicMetadata?.role || 'User') === 'Admin';
+        if (adminHere && (r.from === 'apps' || r.from === 'company')) {
+            setSettingsOpenPanel(r.from === 'apps' ? 'apps' : 'company-calendar');
+            setActiveTab('settings');
+        } else {
+            setShowProfilePanel(true);
+        }
+    }, [clerkUser]); // eslint-disable-line react-hooks/exhaustive-deps
     const canEdit = !isReadOnly;
     const canSeeAll = isAdmin || isManager;
     const canManageSettings = isAdmin;
@@ -1557,6 +1585,7 @@ dbFetch('/.netlify/functions/users?me=true')
         meetingPrepOpen, setMeetingPrepOpen,
         meetingPrepOppId, setMeetingPrepOppId,
         calendarEvents, setCalendarEvents, calendarConnected, setCalendarConnected, calendarLoading, setCalendarLoading, calendarError, setCalendarError,
+        calConnectResult, setCalConnectResult, settingsOpenPanel, setSettingsOpenPanel,
         fetchCalendarEvents,
         // Navigation
         activeTab, setActiveTab,

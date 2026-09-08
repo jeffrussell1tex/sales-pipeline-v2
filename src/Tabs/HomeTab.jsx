@@ -180,7 +180,7 @@ export default function HomeTab() {
     const { userId, orgId } = useAuth();
     const [calSrc, setCalSrc] = React.useState('all'); // 'all' | 'user' | 'org'
     const connectMyCalendar = () => {
-        const qs = new URLSearchParams({ provider: 'google', scope: 'user', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User' });
+        const qs = new URLSearchParams({ provider: 'google', scope: 'user', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User', from: 'home' });
         window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
     };
 

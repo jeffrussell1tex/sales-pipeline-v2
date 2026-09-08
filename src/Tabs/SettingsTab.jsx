@@ -10,6 +10,7 @@ export default function SettingsTab() {
         setActiveTab, setAccountsDeepFilter,
         settingsDirty = false,
         setSettingsDirty = () => {}, settingsSaveRef = { current: null },
+        settingsOpenPanel = null, setSettingsOpenPanel = () => {},
     } = useApp();
 
     return (
@@ -31,7 +32,8 @@ export default function SettingsTab() {
                 live here was unreachable — as was the `canAdmin` split, since Managers
                 cannot open the tab either. Personal preferences live behind the avatar
                 menu for every user. */}
-            <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} settingsDirty={settingsDirty} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>
+            <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} settingsDirty={settingsDirty} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}
+                openPanelId={settingsOpenPanel} onOpenedPanel={() => setSettingsOpenPanel(null)}/>
         </div>
     );
 }

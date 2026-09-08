@@ -8,6 +8,7 @@ import { LIcon } from '../shared/ui.jsx';
 import { MONTHS_SHORT, MONTHS_FULL } from './constants.js';
 import { useApp } from '../../../AppContext';
 import { useAuth } from '@clerk/clerk-react';
+import { calendarReturnMessage } from '../../../utils/calendarReturn.js';
 
 const FEDERAL_HOLIDAYS = [
     { date:'Jan 1',  name:"New Year's Day",                source:'US · Federal', type:'observed' },
@@ -55,7 +56,7 @@ const MonthGrid = ({ m, year, allHolidays }) => {
 };
 
 export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
-    const { userRole } = useApp();
+    const { userRole, calConnectResult, setCalConnectResult } = useApp();
     const { userId, orgId } = useAuth();
     const isAdmin = userRole === 'Admin';
     const [orgCals, setOrgCals]       = useState([]);
@@ -94,9 +95,11 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     useEffect(() => { loadOrgCals(); /* eslint-disable-next-line */ }, []);
 
     const connectCorporateCalendar = () => {
-        const qs = new URLSearchParams({ provider: 'google', scope: 'org', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User' });
+        const qs = new URLSearchParams({ provider: 'google', scope: 'org', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User', from: 'company' });
         window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
     };
+    // The outcome of a Connect that started here (state §0.97): shown once, cleared when the panel closes.
+    useEffect(() => () => { if (calConnectResult) setCalConnectResult(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
     const disconnectCorporateCalendar = async (id) => {
         setCalError('');
         // The server requires isAdmin for scope=org. A non-admin used to see the
@@ -211,6 +214,14 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                     border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger,
                     fontSize:12.5, fontFamily:T.sans }}>
                     {calError}
+                </div>
+            )}
+            {calConnectResult && calConnectResult.from === 'company' && (
+                <div style={{ padding:'10px 14px', marginBottom:14,
+                    background: calConnectResult.status === 'success' ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)',
+                    border:`1px solid ${calConnectResult.status === 'success' ? T.ok : T.danger}`, borderRadius:T.r,
+                    color: calConnectResult.status === 'success' ? T.ok : T.danger, fontSize:12.5, fontFamily:T.sans }}>
+                    {calendarReturnMessage(calConnectResult)}
                 </div>
             )}
 

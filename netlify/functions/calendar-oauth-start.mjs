@@ -13,9 +13,11 @@
 // org-wide calendar. `scope=org` requires Admin role — enforced here and again
 // in the callback.
 //
-// State parameter encodes: { userId, orgId, provider, scope, userRole }
+// State parameter encodes: { userId, orgId, provider, scope, userRole, from }
 // encoded as base64 JSON so the callback can restore context after the redirect.
+// `from` (state §0.97) is the surface the user clicked Connect on, allowlisted.
 
+import { cleanCalendarReturnFrom } from '../../src/utils/calendarReturn.js';
 
 const APP_URL = process.env.URL || 'https://salespipelinetracker.com';
 const CALLBACK_URL = `${APP_URL}/.netlify/functions/calendar-oauth-callback`;
@@ -65,7 +67,12 @@ export const handler = async (event) => {
         userId,
         orgId,
         userRole = 'User',
+        from: fromRaw,
     } = event.queryStringParameters || {};
+    // Where the user clicked Connect (state §0.97, item 30): carried through the
+    // provider in `state` so the callback can send them back to that surface.
+    // Allowlisted; anything else is 'home'.
+    const from = cleanCalendarReturnFrom(fromRaw);
 
     if (!userId || !orgId) {
         return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'userId and orgId are required' }) };
@@ -101,7 +108,7 @@ export const handler = async (event) => {
     }
 
     // Encode state — restored by the callback to know who/what to store
-    const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole })).toString('base64');
+    const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole, from })).toString('base64');
 
     // Build the authorization URL
     const params = new URLSearchParams({

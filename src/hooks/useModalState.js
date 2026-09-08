@@ -17,6 +17,10 @@ export function useModalState() {
     const [csvImportType, setCsvImportType] = useState('contacts');
     const [mergeModal, setMergeModal] = useState(null); // { aId, bId } | null
     const [contactMergeModal, setContactMergeModal] = useState(null); // { aId, bId } | null
+    // A Settings catalogue id to open on the next Settings render (state §0.97):
+    // App.jsx sets it when the calendar OAuth callback lands the user back on
+    // a Settings panel; AdminView opens that item and clears it.
+    const [settingsOpenPanel, setSettingsOpenPanel] = useState(null);
 
     // ── Contact Rail ──────────────────────────────────────────────────────────
     // contactRailId: null (closed) | string id (view/edit existing) | 'new' (create)
@@ -106,6 +110,7 @@ export function useModalState() {
         csvImportType, setCsvImportType,
         mergeModal, setMergeModal,
         contactMergeModal, setContactMergeModal,
+        settingsOpenPanel, setSettingsOpenPanel,
         // Rail state
         taskRailId,      setTaskRailId,
         taskRailMode,    setTaskRailMode,
