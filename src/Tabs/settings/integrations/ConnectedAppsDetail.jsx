@@ -62,6 +62,15 @@ const linkBtn = (color) => ({ fontSize:12, fontWeight:600, color, background:'no
 
 const fmtDay = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleDateString() : ''; };
 
+// A card's or a row's own outcome line (state §0.94, guide §18b32): a refusal
+// is rendered in the surface that asked — the card whose button was clicked,
+// the row whose Request was sent — never in a banner at the top of the page,
+// which is off-screen for a row at the bottom of the catalogue and behind any
+// open dialog. Renders nothing for an empty text.
+const CardNote = ({ text }) => text ? (
+    <div style={{ padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:11.5, color:T.danger, fontFamily:T.sans, lineHeight:1.4 }}>{text}</div>
+) : null;
+
 // ── Slack configuration ──────────────────────────────────────────────────────
 // This modal was defined in SettingsTab.jsx until `5772f63` (11 May 2026) deleted
 // it in a cleanup while the panel kept rendering <SlackConfigModal/>. Vite bundles
@@ -184,15 +193,18 @@ const CALENDARS = [
 // the existing OAuth start — a browser redirect, so the identity goes in the
 // query the same way HomeTab and CompanyCalendarDetail send it; the callback
 // re-checks the Admin claim before storing an org connection.
-const CalendarCard = ({ cal, configured, orgConn, userConn, isAdmin, onConnect, onDisconnect, busy }) => {
+const CalendarCard = ({ cal, configured, orgConn, userConn, isAdmin, onConnect, onDisconnect, busy, note, loadError }) => {
     const any = !!(orgConn || userConn);
     return (
         <IntegrationCard
             tile={<AppTile name={cal.name} color={cal.color} emoji={cal.emoji} size={36}/>}
             name={cal.name} category="Calendar"
             desc={`Meetings from a connected ${cal.vendor} calendar show on Home. A company calendar is visible to everyone; a personal one only to you.`}
-            pill={configured === false ? <Pill tone="muted">Not available on this site</Pill> : any ? <Pill tone="ok">Live</Pill> : null}
-            foot={configured === false ? (
+            pill={loadError ? null : configured === false ? <Pill tone="muted">Not available on this site</Pill> : any ? <Pill tone="ok">Live</Pill> : null}
+            foot={loadError ? (
+                // The fetch failed: say so on the card. "Not connected" here would be a claim the panel cannot make.
+                <span style={{ fontSize:11.5, color:T.danger, fontFamily:T.sans }}>Calendar connections could not be loaded — {loadError}</span>
+            ) : configured === false ? (
                 <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>This site has no {cal.vendor} sign-in credentials configured. Nothing to do here until it does.</span>
             ) : (
                 <>
@@ -203,18 +215,19 @@ const CalendarCard = ({ cal, configured, orgConn, userConn, isAdmin, onConnect, 
                     </div>
                 </>
             )}>
+            <CardNote text={note}/>
             {configured !== false && (orgConn || userConn) && (
                 <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                     {orgConn && (
                         <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, fontFamily:T.sans }}>
                             <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}><b style={{ color:T.ink }}>Company</b> · <span style={{ color:T.inkMid }}>{orgConn.calendarEmail || orgConn.calendarName || 'connected'}</span>{orgConn.connectedAt && <span style={{ color:T.inkMuted }}> · {fmtDay(orgConn.connectedAt)}</span>}</span>
-                            {isAdmin && <button disabled={busy} onClick={() => onDisconnect(orgConn.id, 'org')} style={{ ...linkBtn(T.danger), opacity: busy ? 0.5 : 1 }}>Disconnect</button>}
+                            {isAdmin && <button disabled={busy} onClick={() => onDisconnect(orgConn.id, 'org', cal.provider)} style={{ ...linkBtn(T.danger), opacity: busy ? 0.5 : 1 }}>Disconnect</button>}
                         </div>
                     )}
                     {userConn && (
                         <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, fontFamily:T.sans }}>
                             <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}><b style={{ color:T.ink }}>Mine</b> · <span style={{ color:T.inkMid }}>{userConn.calendarEmail || 'connected'}</span>{userConn.connectedAt && <span style={{ color:T.inkMuted }}> · {fmtDay(userConn.connectedAt)}</span>}</span>
-                            <button disabled={busy} onClick={() => onDisconnect(userConn.id, 'user')} style={{ ...linkBtn(T.danger), opacity: busy ? 0.5 : 1 }}>Disconnect</button>
+                            <button disabled={busy} onClick={() => onDisconnect(userConn.id, 'user', cal.provider)} style={{ ...linkBtn(T.danger), opacity: busy ? 0.5 : 1 }}>Disconnect</button>
                         </div>
                     )}
                 </div>
@@ -227,36 +240,44 @@ const CalendarCard = ({ cal, configured, orgConn, userConn, isAdmin, onConnect, 
 // and authenticates the org (email-inbound.mjs), so there is nothing to
 // connect — only something to copy.
 const BccCard = ({ bcc }) => {
-    const [copied, setCopied] = useState(false);
+    const [copied,  setCopied]  = useState(false);
+    const [copyErr, setCopyErr] = useState('');
     const copy = async () => {
+        setCopyErr('');
         try { await navigator.clipboard.writeText(bcc.address); setCopied(true); setTimeout(() => setCopied(false), 1800); }
-        catch { setCopied(false); }
+        catch { setCopied(false); setCopyErr('Copy failed — select the address and copy it yourself.'); }
     };
     const configured = bcc?.configured === true && !!bcc.address;
+    const failed     = !!bcc?.error;   // the fetch failed — not the same thing as "not available on this site"
     return (
         <IntegrationCard
             tile={<AppTile name="Email logging" color="#5b6b3a" emoji="📨" size={36}/>}
             name="Email logging" category="Email"
             desc="BCC this workspace address on any email and it is logged as an Email activity on the matching contact and their account, attributed to the sender when they are on the roster. Every user also has a personal address under their avatar → Email logging; email sent with it is owned by them. Works from any mail client — nothing to install."
-            pill={bcc == null ? null : configured ? <Pill tone="ok">Live</Pill> : <Pill tone="muted">Not available on this site</Pill>}
-            foot={bcc == null ? <span style={{ fontSize:11.5, color:T.inkMuted }}>Loading…</span> : configured ? (
+            pill={bcc == null || failed ? null : configured ? <Pill tone="ok">Live</Pill> : <Pill tone="muted">Not available on this site</Pill>}
+            foot={bcc == null ? <span style={{ fontSize:11.5, color:T.inkMuted }}>Loading…</span> : failed ? (
+                <span style={{ fontSize:11.5, color:T.danger, fontFamily:T.sans }}>The email logging address could not be loaded — {bcc.error}</span>
+            ) : configured ? (
                 <>
                     <code style={{ fontSize:11.5, color:T.ink, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'3px 7px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>{bcc.address}</code>
                     <button onClick={copy} style={linkBtn(T.info)}>{copied ? 'Copied' : 'Copy address'}</button>
                 </>
             ) : (
                 <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>This site has no inbound mail domain configured. Nothing to do here until it does.</span>
-            )}/>
+            )}>
+            <CardNote text={copyErr}/>
+        </IntegrationCard>
     );
 };
 
 // A catalogue row is a REQUEST. It never says Connect and never opens a modal.
-const RequestRow = ({ app, request, onRequest, busy, last }) => (
+const RequestRow = ({ app, request, onRequest, busy, last, note }) => (
     <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom: last ? 'none' : `1px solid ${T.border}` }}>
         <AppTile name={app.name} color={app.color} emoji={app.emoji} size={32}/>
         <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{app.name}</div>
             <div style={{ fontSize:11.5, color:T.inkMuted }}>{app.desc}</div>
+            {note && <div style={{ fontSize:11.5, fontWeight:600, color:T.danger, marginTop:3, fontFamily:T.sans }}>{note}</div>}
         </div>
         <span style={{ fontSize:11.5, color:T.inkMuted, marginRight:8, whiteSpace:'nowrap' }}>{app.category}</span>
         {request?.requestedAt
@@ -280,8 +301,13 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     const [cal,           setCal]           = useState(null); // { userConnections, orgConnections, providers }
     const [bcc,           setBcc]           = useState(null); // { address, configured }
     const [loading,       setLoading]       = useState(true);
-    const [error,         setError]         = useState('');
+    const [error,         setError]         = useState('');   // the settings load only — nothing else on screen to say it
     const [busy,          setBusy]          = useState(null); // 'slack' | 'cal' | appId
+    // Per-surface outcome lines (guide §18b32): 'slack', 'cal:<provider>', or an
+    // app id from the catalogue. Each action clears its own key when it starts
+    // and writes it on failure; the card or row renders it where the click was.
+    const [notes,         setNotes]         = useState({});
+    const note = (key, text) => setNotes(prev => ({ ...prev, [key]: text }));
 
     // Three reads, one panel. Settings carries Slack and the requests;
     // calendar-connections the real calendar state; email-inbound the address.
@@ -299,7 +325,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                 setSlackConfig(data.settings?.slackConfig || {});
                 setRequests(data.settings?.integrationRequests || {});
             } catch (e) {
-                if (!cancelled) setError(e.message);
+                if (!cancelled) setError(`Settings could not be loaded — ${e.message}`);
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -322,8 +348,9 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                 if (cancelled) return;
                 if (!res.ok) throw new Error(data.error || 'Failed to load the email logging address');
                 setBcc({ address: data.address || null, configured: data.configured === true });
-            } catch {
-                if (!cancelled) setBcc({ address: null, configured: false });
+            } catch (e) {
+                // A failed fetch is not "not available on this site" — the card says which.
+                if (!cancelled) setBcc({ address: null, configured: false, error: e.message });
             }
         };
         load(); loadCal(); loadBcc();
@@ -344,7 +371,6 @@ export const ConnectedAppsDetail = ({ onBack }) => {
         const nextApps = { ...connectedApps, slack: true };
         setSlackConfig(config);
         setConnectedApps(nextApps);
-        setError('');
         try {
             await putSettings({ slackConfig: config, connectedApps: nextApps });
             setSlackModal(false);          // only close once the write has landed
@@ -356,14 +382,14 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     };
     const handleDisconnectSlack = async () => {
         const appSnap = connectedApps, cfgSnap = slackConfig;
-        setBusy('slack'); setError('');
+        setBusy('slack'); note('slack', '');
         setConnectedApps({ ...connectedApps, slack: false });
         setSlackConfig({});
         try {
             await putSettings({ connectedApps: { ...connectedApps, slack: false }, slackConfig: {} });
         } catch (e) {
             setConnectedApps(appSnap); setSlackConfig(cfgSnap);
-            setError(`Slack not disconnected — ${e.message}`);
+            note('slack', `Not disconnected — ${e.message}`);
         }
         setBusy(null);
     };
@@ -374,17 +400,17 @@ export const ConnectedAppsDetail = ({ onBack }) => {
         const qs = new URLSearchParams({ provider, scope, userId: userId || '', orgId: orgId || '', userRole: userRole || 'User' });
         window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
     };
-    const disconnectCalendar = async (id, scope) => {
-        setBusy('cal'); setError('');
+    const disconnectCalendar = async (id, scope, provider) => {
+        setBusy('cal'); note('cal:' + provider, '');
         const r = await dbWrite(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=${scope}`, { method: 'DELETE' });
-        if (!r.ok) setError(`Calendar not disconnected — ${r.error}`);
+        if (!r.ok) note('cal:' + provider, `Not disconnected — ${r.error}`);
         await reloadCal();
         setBusy(null);
     };
 
     // ── Requests ───────────────────────────────────────────────────────────
     const requestApp = async (app) => {
-        setBusy(app.id); setError('');
+        setBusy(app.id); note(app.id, '');
         try {
             const res  = await dbFetch('/.netlify/functions/integration-requests', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -394,7 +420,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
             if (!res.ok) throw new Error(data.error || `The server returned ${res.status}.`);
             setRequests(prev => ({ ...prev, [app.id]: data.request }));
         } catch (e) {
-            setError(`${app.name} not requested — ${e.message}`);
+            note(app.id, `Not requested — ${e.message}`);
         }
         setBusy(null);
     };
@@ -438,18 +464,20 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                                 {isAdmin && slackConnected && <button disabled={busy === 'slack'} onClick={handleDisconnectSlack} style={{ ...linkBtn(T.danger), opacity: busy === 'slack' ? 0.5 : 1 }}>{busy === 'slack' ? 'Disconnecting…' : 'Disconnect'}</button>}
                                 {!isAdmin && <span style={{ fontSize:11.5, color:T.inkMuted }}>An Admin configures Slack</span>}
                             </div>
-                        </>}/>
+                        </>}>
+                        <CardNote text={notes.slack}/>
+                    </IntegrationCard>
                     {CALENDARS.map(c => (
                         <CalendarCard key={c.provider} cal={c}
                             configured={cal?.providers ? cal.providers[c.provider] !== false : undefined}
                             orgConn={connByProvider(cal?.orgConnections, c.provider)}
                             userConn={connByProvider(cal?.userConnections, c.provider)}
                             isAdmin={isAdmin} busy={busy === 'cal'}
+                            note={notes['cal:' + c.provider]} loadError={cal?.error}
                             onConnect={connectCalendar} onDisconnect={disconnectCalendar}/>
                     ))}
                     <BccCard bcc={bcc}/>
                 </div>
-                {cal?.error && <div style={{ marginTop:10, fontSize:11.5, color:T.inkMuted }}>Calendar connections could not be loaded — {cal.error}</div>}
             </div>
 
             {/* ── Request an integration ── */}
@@ -463,7 +491,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                 </div>
                 <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
                     {REQUESTABLE_APPS.map((app, i) => (
-                        <RequestRow key={app.id} app={app} request={requests[app.id]} onRequest={requestApp} busy={busy} last={i === REQUESTABLE_APPS.length - 1}/>
+                        <RequestRow key={app.id} app={app} request={requests[app.id]} onRequest={requestApp} busy={busy} note={notes[app.id]} last={i === REQUESTABLE_APPS.length - 1}/>
                     ))}
                 </div>
             </div>

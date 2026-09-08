@@ -1409,6 +1409,23 @@ const mutations = [
         'netlify/functions/_slackWebhook.mjs',
         "    if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) return { ok: false, error: `Webhook URL must start with https:// (${SHAPE}).` };",
         ''],
+    // §0.94: every Connected-apps action reports on its own card or row
+    ['panel: a failed Request goes back to the page banner — off-screen for a row at the bottom',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        '            note(app.id, `Not requested — ${e.message}`);',
+        '            setError(`${app.name} not requested — ${e.message}`);'],
+    ['panel: a failed Slack Disconnect is swallowed',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        "            note('slack', `Not disconnected — ${e.message}`);",
+        ''],
+    ['panel: a failed email-logging fetch reads as "not available on this site"',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        '                if (!cancelled) setBcc({ address: null, configured: false, error: e.message });',
+        '                if (!cancelled) setBcc({ address: null, configured: false });'],
+    ['panel: a failed calendar fetch reads as "Not connected"',
+        'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
+        '            foot={loadError ? (',
+        '            foot={false ? ('],
 
     // ── Item 26: the activity viewer (0.93) ─────────────────────────────────────
     ['viewer: a rep may edit any rep\'s activity from the viewer',

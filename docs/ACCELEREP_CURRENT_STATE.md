@@ -1,8 +1,9 @@
 # ACCELEREP — Current State
 **Updated:** September 8, 2026 (eighth session, third close; header refreshed at the ninth session's open)
 **Verified at:** five gates green on 151 files · **570 tests** · **299/299 mutations, printed green baseline** · **116/116 integration** · build guard OK 2,437 kB `index-Bz_vDa_T.js` · **prod `cf72f99` serving `index-DIeZb8qh.js` (ninth ship, 7 Sep)** · dev ahead of `master` by 26 commits — §0.92, §0.93 and its follow-up, the 8 Sep diagnostics and their removal, and their docs; not yet shipped. **The Resend inbound webhook targets DEV and prod's endpoint is disabled (8 Sep, Jeff) — flip it back at the ship (guide §18b31); until then prod logs no email.** The app database and the test database both hold `audit_stream_destinations`. (This header and the per-batch lines under it were refreshed at the ninth session's open; before that the lines had described §0.80–§0.88 since 3 Sep and the header still carried the first close's counts — the sections are the record.)
-**Batch:** **every activity row opens a read-only viewer; a logged email keeps its line breaks and names its attachments (§0.93, handoff item 26 option 2, and its follow-up)** — Jeff, at Karen's two test emails on the contact: "these are fairly useless because I can't see any content"; now every activity row in the contact, account and task rails, the deal modal's activity list and its History tab opens a viewer (type, date, author, subject bold, contact · account · deal, the whole body with its line breaks, Close, and Edit only where the server would let the caller write — `canEditActivity` mirrors `mayMutate`), and rails show the subject bold over a two-line clamp instead of the unclamped dump. His fourteen-step report found three things: Escape closed the rail along with the viewer (each rail's own listener now yields while the viewer is open); the stored body had every newline collapsed to a space and never named an attachment (`_inboundText.mjs`: newlines kept, HTML blocks become breaks, "Attachments: …" appended from the payload's names — the files are not stored); and a contact owned by its creator shows a blank Assigned Rep, hidden by the Contacts tab's remembered "Mine" scope (item 28, Jeff's call). Then a day of "same result" with the fix live, until a diagnostic written onto the row itself came back WITHOUT it: the Resend webhook had delivered to PROD all along, whose pre-fix function wrote every row into the shared database (guide §18b31); Jeff repointed it at dev, and the fix was **PROVEN 8 Sep 19:26 UTC** — "#14 Test Email" stored with ten line breaks and "Attachments: Lumen.pdf", seen in the viewer; the diagnostic removed (`173948a`). Dev only; not yet shipped; **OBSERVED by Jeff ("works"); the follow-up PROVEN by a real email.**
-**Prior batch:** **send-slack is Admin-only and pinned to Slack; a stored webhook is validated on save; integration-requests is Admin-only (§0.92, handoff item 25 "and the endpoint gate", guide §18b30)** — the handler had POSTed a test message to any URL a signed-in user put in the body, `sendSlack()` posted every pipeline alert to whatever host the saved webhook named, and a User could record by direct POST an integration request that Settings never offered them; now `requireRole(['Admin'])` before the body is read, one pure validator (`_slackWebhook.mjs`: https, `hooks.slack.com`, a `/services/` path, no credentials, no port) refuses anything else at test, at send and at `settings` PUT with the reason shown in the modal, and `integration-requests` is Admin-only because Settings is. The first suite `send-slack` ever had (6, real handler, `fetch` mocked). Dev only; deploy-verified from Netlify's record (functions-only, no bundle change). **OBSERVED by Jeff (8 Sep, screenshot: a scheme-less URL refused on Save, the card still Connected) — and the refusal had appeared in the panel's banner BEHIND the open modal; the same-hour follow-up shows it inside the modal under the field, and a scheme-less paste is told to start with https:// (guide §18b32).** Not yet shipped. Pre-ship read done (8 Sep, end of §0.92): the shared database's five settings rows store ONE webhook, the dev org's, on `hooks.slack.com` — no org's alerts start failing silently at the ship.
+**Batch:** **every Connected-apps action reports on its own card or row (§0.94, ninth session — Jeff: "make sure the error codes will show in the correct place for the rest of the connected apps")** — Slack Disconnect, both calendars' Disconnect and every catalogue Request had written their failures into one banner at the top of the page (off-screen for a row at the bottom); a failed calendar fetch sat under the grid while the cards said "Not connected"; a failed email-logging fetch read "Not available on this site"; a Copy failure showed nothing. Now one module-scope `CardNote` and a per-surface `notes` map: each action clears and writes its own key, each card and row renders it where the click was, a failed fetch is reported as a failed fetch, and the page banner is for the settings load alone (guide §18b32 extended). Open, Jeff's call: a failed calendar OAuth Connect lands on Home with no message (item 30). Dev only; not yet shipped; not observed.
+**Prior batch:** **every activity row opens a read-only viewer; a logged email keeps its line breaks and names its attachments (§0.93, handoff item 26 option 2, and its follow-up)** — Jeff, at Karen's two test emails on the contact: "these are fairly useless because I can't see any content"; now every activity row in the contact, account and task rails, the deal modal's activity list and its History tab opens a viewer (type, date, author, subject bold, contact · account · deal, the whole body with its line breaks, Close, and Edit only where the server would let the caller write — `canEditActivity` mirrors `mayMutate`), and rails show the subject bold over a two-line clamp instead of the unclamped dump. His fourteen-step report found three things: Escape closed the rail along with the viewer (each rail's own listener now yields while the viewer is open); the stored body had every newline collapsed to a space and never named an attachment (`_inboundText.mjs`: newlines kept, HTML blocks become breaks, "Attachments: …" appended from the payload's names — the files are not stored); and a contact owned by its creator shows a blank Assigned Rep, hidden by the Contacts tab's remembered "Mine" scope (item 28, Jeff's call). Then a day of "same result" with the fix live, until a diagnostic written onto the row itself came back WITHOUT it: the Resend webhook had delivered to PROD all along, whose pre-fix function wrote every row into the shared database (guide §18b31); Jeff repointed it at dev, and the fix was **PROVEN 8 Sep 19:26 UTC** — "#14 Test Email" stored with ten line breaks and "Attachments: Lumen.pdf", seen in the viewer; the diagnostic removed (`173948a`). Dev only; not yet shipped; **OBSERVED by Jeff ("works"); the follow-up PROVEN by a real email.**
+**Prior batch:** **send-slack is Admin-only and pinned to Slack; a stored webhook is validated on save; integration-requests is Admin-only (§0.92, handoff item 25 "and the endpoint gate", guide §18b30)** — the handler had POSTed a test message to any URL a signed-in user put in the body, `sendSlack()` posted every pipeline alert to whatever host the saved webhook named, and a User could record by direct POST an integration request that Settings never offered them; now `requireRole(['Admin'])` before the body is read, one pure validator (`_slackWebhook.mjs`: https, `hooks.slack.com`, a `/services/` path, no credentials, no port) refuses anything else at test, at send and at `settings` PUT with the reason shown in the modal, and `integration-requests` is Admin-only because Settings is. The first suite `send-slack` ever had (6, real handler, `fetch` mocked). Dev only; deploy-verified from Netlify's record (functions-only, no bundle change). **OBSERVED by Jeff (8 Sep, screenshot: a scheme-less URL refused on Save, the card still Connected) — and the refusal had appeared in the panel's banner BEHIND the open modal; the same-hour follow-up shows it inside the modal under the field, and a scheme-less paste is told to start with https:// (guide §18b32) — OBSERVED by his second screenshot minutes after the landing.** Not yet shipped. Pre-ship read done (8 Sep, end of §0.92): the shared database's five settings rows store ONE webhook, the dev org's, on `hooks.slack.com` — no org's alerts start failing silently at the ship.
 **Prior batch:** **personal email-logging addresses, and the org address attributes by sender (§0.91, seventh session resumed)** — every roster member has a personal BCC address, `me-<users.id>-<sig>@<INBOUND_DOMAIN>`, under avatar → Email logging with Copy; an email through it is logged OWNED by that user with their roster name as author, on any contact in the org, so the existing rep visibility rule shows it to them, their managers and Admins and to no other rep; the org address stays as the fallback and is attributed to the roster member whose email matches the From address (org-scoped), unowned otherwise. The first integration suite `email-inbound` ever had. **OBSERVED by Jeff (7 Sep: Karen's real emails through the org address and then through her personal one, both rows read back owned by her); SHIPPED to prod in the ninth ship (`cf72f99`).** Learned 8 Sep: those 7 Sep proofs were written by prod's function — the same code on both sites that day, so the observation stands (§0.93).
 **Prior batch:** **Connected apps is what exists — Slack, Google and Microsoft 365 calendars, Email logging, and requests for the rest (§0.90, handoff item 24, option A)** — the "Morgan Reyes" connect modal, `INT_APPS`, "Browse marketplace" and the inert "+ Request integration" are gone; the panel renders Slack, the two calendars from `calendar-connections` (Outlook offered in the UI for the first time; "Not available on this site" when the GET's new `providers` map says the site has no credentials for that provider), an Email-logging card for the org's BCC address, and ten catalogue rows from one shared module whose Request is recorded at `settings.extra.integrationRequests` (both halves of settings.mjs), audited as `integration.requested` and mailed when `INTEGRATION_REQUESTS_TO` is set. Settings is Admin-only, so there is no User path. **OBSERVED by Jeff (screenshot; a Gmail Request persists a hard refresh, the settings record and the audit row read back); SHIPPED to prod in the ninth ship (`cf72f99`).**
 **Prior batch:** **the Slack modal comes back after four months; a JSX name is a reference (§0.89, guide §18b29)** — `ConnectedAppsDetail.jsx` had rendered `<SlackConfigModal/>` with the name bound nowhere in `src/` since 11 May; Vite bundles an unbound JSX name as a global read, so every gate was green while every Configure click threw into the Settings error boundary and no org could enter the webhook the five pipeline alerts read; restored at module scope from the pre-deletion source, and `check-tdz` now walks `JSXIdentifier` names and collects `export default function` as module scope (fixtures at both sites; the whole tree scans clean). Alongside: `IntBtn` honours `disabled`, the Industries defaults drop a typed `n:` nothing rendered, the Account rail's Industry typeahead reads the taxonomy's `k`. **OBSERVED by Jeff ("verified"; then configured against a real Slack workspace, the test message seen in #sales-alerts, the config read back); SHIPPED to prod in the ninth ship (`cf72f99`) — prod carried the crash from 11 May to 7 Sep.**
@@ -4358,6 +4359,16 @@ unauthenticated. The validator's new message is server-side and cannot show
 in the bundle; Jeff's re-run of the same Save is the observation. `master`
 stays at `cf72f99`.
 
+**OBSERVED by Jeff (8 Sep, minutes after the landing — his second
+screenshot):** the same `hooks.slack.com/services/` typed, Save clicked, and
+the dialog itself reads "Not saved — Webhook URL must start with https://
+(https://hooks.slack.com/services/…)." in the message box under the channel
+field; no banner anywhere on the page behind it; the Slack card still
+"Connected · #sales-alerts". §0.92 and its follow-up are both observed. With
+it, Jeff: "would you make sure the error codes will show in the correct place
+for the rest of the connected apps — both currently connected apps and the
+request ones" — §0.94.
+
 ### 0.93 An activity can be read: every row opens a viewer, emails show their subject and body (7 Sep, eighth session — item 26, option 2)
 
 **Jeff, with Karen's two test emails on the contact: "Is there anyway that we
@@ -4643,6 +4654,65 @@ forced a horizontal scrollbar (no spaces to wrap on), so that line now wraps
 `master` stays at `cf72f99`.
 
 
+
+### 0.94 Every Connected-apps action reports on its own card or row (8 Sep, ninth session — Jeff: "make sure the error codes will show in the correct place for the rest of the connected apps")
+
+**Jeff, after reading the §0.92 refusal inside the Slack dialog: "would you
+make sure the error codes will show in the correct place for the rest of the
+connected apps — both currently connected apps and the request ones."** What
+existed, read from `ConnectedAppsDetail.jsx` in full: one `error` string for
+the whole panel, rendered as a banner above the Integrations heading; Slack
+Disconnect, both calendars' Disconnect and every catalogue row's Request wrote
+their failures into it — so a refused Request on the last row (Stripe, a
+screen and a half down) put its reason at the top of the page, off-screen; a
+failed `calendar-connections` fetch was a muted line UNDER the grid while each
+calendar card said "Not connected" over it; a failed `email-inbound` fetch was
+swallowed into `{ configured:false }`, so the Email logging card read "Not
+available on this site" for a 500 or a 401 — a claim about the site made from
+a failed request (§18b7's class); and a clipboard refusal on Copy address
+showed nothing. Calendar Connect is a browser redirect into OAuth; its
+failures come back as `?calconnect=error` on the app root, which nothing in
+`src/` reads for the error case — recorded below as open, not changed here.
+
+**Design (guide §18b32, extended in the same commit): a refusal is rendered in
+the surface that asked.** One module-scope `CardNote` (a danger box; nothing
+for an empty text); a `notes` map in the panel keyed `'slack'`,
+`'cal:<provider>'` or the catalogue app id, each action clearing its own key
+when it starts and writing it on failure; the Slack card renders
+`notes.slack`; each `CalendarCard` renders its provider's note (Disconnect now
+names its provider) and, when the fetch failed, "Calendar connections could
+not be loaded — <reason>" in place of "Not connected", with no pill; `BccCard`
+keeps the fetch error and says "The email logging address could not be loaded
+— <reason>" instead of "Not available on this site", and a Copy failure reads
+"Copy failed — select the address and copy it yourself." on the card; each
+`RequestRow` takes a `note` and renders "Not requested — <reason>" under its
+description. The page banner remains for exactly one thing — the settings
+load, when nothing else is on screen to say it — and reads "Settings could not
+be loaded — <reason>"; `setError(` is called once in the file, pinned. The
+Slack save handler's leftover `setError('')` went with it.
+
+**Verified:** five gates, build guard OK 2,438 kB `index-DhQ2fFJ5.js`,
+**574/574 unit** (2 new in
+`connected-apps.test.mjs`: every action's surface; a failed fetch is reported
+as a failed fetch), **116/116 integration** (unchanged — no server change),
+**306/306 mutations, printed green baseline** (4 new: a Request failure back
+to the banner; a Slack Disconnect failure swallowed; a BCC fetch failure
+reading as "not available"; a calendar fetch failure reading as "Not
+connected"). Not browser-checked here (the pane holds no session). The
+observable for Jeff is the unchanged happy path — the panel as before, no
+banner, Request still records; a refusal needs a failing server, and Karen's
+session cannot reach Settings, so the negative is carried by the source scan
+and the four mutants.
+
+**Open — calendar Connect's failure has no surface (handoff item 30).**
+`calendar-oauth-callback.mjs` redirects a failed OAuth to
+`/?tab=settings&subtab=calendar&calconnect=error[&reason=…]`; App.jsx reads
+`calconnect=success` only (to refetch events), nothing reads `tab` or
+`subtab`, so a user whose Connect fails lands on Home with no message.
+`useCalendarState` carries a `calConnectResult` state "used to show a
+toast/banner" that nothing sets or reads. The fix wants a routing decision —
+land back on Connected apps with the provider named in the redirect — Jeff's
+call before code.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

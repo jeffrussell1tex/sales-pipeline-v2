@@ -76,6 +76,39 @@ test('a refused Save is shown inside the modal, under the field — not in the p
     assert.doesNotMatch(s, /testMsg/, 'one message slot serves Send test message and Save');
 });
 
+// §0.94 (ninth session, Jeff: "make sure the error codes will show in the
+// correct place for the rest of the connected apps — both currently connected
+// apps and the request ones"): every action reports on its own card or row;
+// the page banner is for the settings load alone, when nothing else is on
+// screen to say it.
+test('every card and row action reports on its own surface — the page banner is for the settings load only', () => {
+    const s = code(read(CA));
+    assert.match(s, /^const CardNote = \(\{ text \}\) => text \? \(/m, 'module-scope note');
+    assert.equal((s.match(/setError\(/g) || []).length, 1, 'setError is called once — the settings load');
+    assert.ok(s.includes('setError(`Settings could not be loaded — ${e.message}`)'), 'and it says what failed');
+    assert.ok(s.includes("note('slack', `Not disconnected — ${e.message}`)"), 'Slack Disconnect → the Slack card');
+    assert.ok(s.includes("note('cal:' + provider, `Not disconnected — ${r.error}`)"), 'calendar Disconnect → that calendar card');
+    assert.ok(s.includes('note(app.id, `Not requested — ${e.message}`)'), 'Request → that row');
+    assert.ok(s.includes("setBusy('slack'); note('slack', '');"), 'each action clears its own note when it starts');
+    assert.ok(s.includes("setBusy('cal'); note('cal:' + provider, '');"));
+    assert.ok(s.includes("setBusy(app.id); note(app.id, '');"));
+    assert.ok(s.includes('<CardNote text={notes.slack}/>'), 'rendered on the Slack card');
+    assert.ok(s.includes("note={notes['cal:' + c.provider]} loadError={cal?.error}"), 'rendered on each calendar card');
+    assert.ok(s.includes('note={notes[app.id]}'), 'rendered on each request row');
+    assert.ok(s.includes("onDisconnect(orgConn.id, 'org', cal.provider)") && s.includes("onDisconnect(userConn.id, 'user', cal.provider)"), 'Disconnect names its provider');
+    assert.ok(s.includes('{note && <div style={{ fontSize:11.5, fontWeight:600, color:T.danger'), 'the row renders its note under the description');
+});
+
+test('a failed fetch is reported as a failed fetch — never as "not available on this site" or "Not connected"', () => {
+    const s = code(read(CA));
+    assert.ok(s.includes('setBcc({ address: null, configured: false, error: e.message })'), 'the BCC fetch keeps its error');
+    assert.ok(s.includes('The email logging address could not be loaded — {bcc.error}'));
+    assert.ok(s.includes('Calendar connections could not be loaded — {loadError}'), 'on the calendar card, not under the grid');
+    assert.ok(s.includes('foot={loadError ? ('), 'the foot yields to the load error before "Not connected"');
+    assert.ok(s.includes('pill={loadError ? null : configured === false'), 'no pill over a failed fetch');
+    assert.ok(s.includes("setCopyErr('Copy failed — select the address and copy it yourself.')"), 'a clipboard refusal is said on the card');
+});
+
 test('send-slack posts to an explicit webhookUrl when the body carries one', () => {
     const s = code(read('netlify/functions/send-slack.mjs'));
     assert.ok(s.includes('const { type, webhookUrl, text, blocks } = JSON.parse(event.body || \'{}\');'));

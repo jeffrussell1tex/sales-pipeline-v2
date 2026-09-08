@@ -3138,8 +3138,15 @@ anything behind it may say a word. Concretely:
 - One message slot per dialog, cleared when the next action starts. A test
   message and a save refusal are the same kind of thing to the reader: the
   outcome of the button they just pressed.
-- A host-level banner is for host-level actions — Disconnect, a fetch that
-  failed on open — things with no dialog in front of them.
+- A card's action reports on the card; a row's on the row (state §0.94: a
+  Request refused on the last catalogue row had put its reason a screen and
+  a half up, at the top of the page). A page-level banner is for the one
+  failure with no surface of its own — the panel's own load, when nothing
+  else is on screen to say it.
+- A failed fetch is reported as a failed fetch. "Not available on this site"
+  and "Not connected" are claims about the world; a 500 or a 401 supports
+  neither (§18b7). Keep the error on the state and let the card say "could
+  not be loaded — <reason>".
 - The message names what to do, not only what went wrong. "Webhook URL is
   not a valid URL." is `new URL()` talking; "must start with https://" is
   the app talking. Where the parser's message is the only one available,
