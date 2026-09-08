@@ -32,7 +32,7 @@ import { settings } from '../../db/schema.js';
 import { eq }      from 'drizzle-orm';
 import { serverErrorBody } from './_lib.mjs';
 import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
-import { slackAlertEnabled } from '../../src/utils/slackAlerts.js';
+import { slackAlertEnabled, dealSlackEvents } from '../../src/utils/slackAlerts.js';
 
 // ── Core send function ────────────────────────────────────────────────────────
 /**
@@ -49,10 +49,13 @@ export async function sendSlack({ webhookUrl, text, blocks }) {
 
     const payload = { text, ...(blocks ? { blocks } : {}) };
 
+    // Four seconds, like the audit stream: an event post now sits inside the
+    // deal save (state §0.99), and a hung Slack must not hang the save.
     const res = await fetch(checked.value, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
+        signal:  AbortSignal.timeout(4000),
     });
 
     if (!res.ok) {
@@ -90,6 +93,23 @@ export async function sendSlackToOrg(orgId, { text, blocks }, alertType) {
         console.error('sendSlackToOrg error:', err.message);
         return false;
     }
+}
+
+// ── Event posts from a deal save (state §0.99, handoff item 33) ───────────────
+/**
+ * Post what a deal save changed — a stage change, or a win — the moment it
+ * happens, per the org's own selection (slackConfig.alerts). Jeff: the
+ * company decides what posts; a rep's preferences never gate it. Never throws;
+ * returns the types that posted. `before` may be null for a create.
+ */
+export async function postDealEvents(orgId, { before, after, mover } = {}) {
+    const posted = [];
+    for (const ev of dealSlackEvents({ before, after })) {
+        const ctx = { mover: mover || after?.salesRep || 'Someone', repName: after?.salesRep || '—', dealName: after?.opportunityName || after?.account || 'Unnamed deal', account: after?.account || '—', arr: after?.arr, fromStage: ev.from, toStage: ev.to };
+        const msg = ev.type === 'dealClosedWon' ? slackTemplates.dealWon(ctx) : slackTemplates.stageChanged(ctx);
+        if (await sendSlackToOrg(orgId, msg, ev.type)) posted.push(ev.type);
+    }
+    return posted;
 }
 
 // ── Message templates ─────────────────────────────────────────────────────────
@@ -223,6 +243,58 @@ export const slackTemplates = {
                 type: 'actions',
                 elements: [
                     { type: 'button', text: { type: 'plain_text', text: 'Review deal →' }, url: APP_URL, action_id: 'view_deal' },
+                ],
+            },
+        ],
+    }),
+
+    // A deal changed stage — posted from the save (state §0.99)
+    stageChanged: ({ mover, repName, dealName, account, arr, fromStage, toStage }) => ({
+        text: `➡️ *${dealName}* moved to ${toStage}${fromStage ? ` (from ${fromStage})` : ''}`,
+        blocks: [
+            {
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: `➡️ *Stage changed*\n*${dealName}* (${account}) — ${fromStage ? `*${fromStage}* → ` : ''}*${toStage}*`,
+                },
+            },
+            {
+                type: 'context',
+                elements: [
+                    { type: 'mrkdwn', text: `Moved by *${mover}* · Rep: *${repName}* · ARR: *${fmtArr(arr)}*` },
+                ],
+            },
+            {
+                type: 'actions',
+                elements: [
+                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: APP_URL, action_id: 'view_deal' },
+                ],
+            },
+        ],
+    }),
+
+    // A deal was won — posted from the save (state §0.99)
+    dealWon: ({ mover, repName, dealName, account, arr, fromStage }) => ({
+        text: `🏆 *${dealName}* closed won — ${fmtArr(arr)} ARR (${repName})`,
+        blocks: [
+            {
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: `🏆 *Closed Won*\n*${dealName}* (${account}) — *${fmtArr(arr)}* ARR${fromStage ? ` · from ${fromStage}` : ''}`,
+                },
+            },
+            {
+                type: 'context',
+                elements: [
+                    { type: 'mrkdwn', text: `Rep: *${repName}* · Closed by *${mover}*` },
+                ],
+            },
+            {
+                type: 'actions',
+                elements: [
+                    { type: 'button', text: { type: 'plain_text', text: 'View deal →' }, url: APP_URL, action_id: 'view_deal' },
                 ],
             },
         ],

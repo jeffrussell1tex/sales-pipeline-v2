@@ -273,18 +273,23 @@ const run = async () => {
             const stageCount     = (opp.stageHistory || []).length;
 
             // ── Signal 1: Silent deal (14+ days no activity) ──────────────────
-            if (daysSilent !== null && daysSilent >= 14 && wantsAlert(resolvedProfile, 'dealSilent')) {
+            if (daysSilent !== null && daysSilent >= 14) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'stale');
                 if (!alerted) {
                     try {
-                        await sendEmail({
-                            to: repUser.email,
-                            ...emailTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent, opportunityId: opp.id }),
-                        });
-                        emailsSent++;
-                        if (wantsSms(resolvedProfile) && smsPhone) {
-                            await trySendSms(smsPhone, smsTemplates.dealSilent({ dealName: name, daysSilent }), `dealSilent/${repName}`);
-                            smsSent++;
+                        // The rep's own preference gates the rep's email and SMS only (state
+                        // §0.99): the log, the company's Slack post and the manager copy
+                        // follow the signal itself.
+                        if (wantsAlert(resolvedProfile, 'dealSilent')) {
+                            await sendEmail({
+                                to: repUser.email,
+                                ...emailTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent, opportunityId: opp.id }),
+                            });
+                            emailsSent++;
+                            if (wantsSms(resolvedProfile) && smsPhone) {
+                                await trySendSms(smsPhone, smsTemplates.dealSilent({ dealName: name, daysSilent }), `dealSilent/${repName}`);
+                                smsSent++;
+                            }
                         }
                         await logAlert(orgId, repName, 'stale', opp, `No activity in ${daysSilent} days`);
                         await sendSlackToOrg(orgId, slackTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent }), 'dealSilent');
@@ -312,18 +317,20 @@ const run = async () => {
             }
 
             // ── Signal 2: Stuck in stage ──────────────────────────────────────
-            if (daysInStage !== null && daysInStage >= stuckThreshold && daysInStage >= 14 && wantsAlert(resolvedProfile, 'dealStuck')) {
+            if (daysInStage !== null && daysInStage >= stuckThreshold && daysInStage >= 14) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'stuck');
                 if (!alerted) {
                     try {
-                        await sendEmail({
-                            to: repUser.email,
-                            ...emailTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage, opportunityId: opp.id }),
-                        });
-                        emailsSent++;
-                        if (wantsSms(resolvedProfile) && smsPhone) {
-                            await trySendSms(smsPhone, smsTemplates.dealStuck({ dealName: name, stage: opp.stage, daysInStage }), `dealStuck/${repName}`);
-                            smsSent++;
+                        if (wantsAlert(resolvedProfile, 'dealStuck')) {
+                            await sendEmail({
+                                to: repUser.email,
+                                ...emailTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage, opportunityId: opp.id }),
+                            });
+                            emailsSent++;
+                            if (wantsSms(resolvedProfile) && smsPhone) {
+                                await trySendSms(smsPhone, smsTemplates.dealStuck({ dealName: name, stage: opp.stage, daysInStage }), `dealStuck/${repName}`);
+                                smsSent++;
+                            }
                         }
                         await logAlert(orgId, repName, 'stuck', opp, `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`);
                         await sendSlackToOrg(orgId, slackTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage }), 'dealStuck');
@@ -352,18 +359,20 @@ const run = async () => {
             }
 
             // ── Signal 3: Close date lapsed ───────────────────────────────────
-            if (daysLapsed !== null && daysLapsed > 0 && wantsAlert(resolvedProfile, 'closeLapsed')) {
+            if (daysLapsed !== null && daysLapsed > 0) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'lapsed');
                 if (!alerted) {
                     try {
-                        await sendEmail({
-                            to: repUser.email,
-                            ...emailTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate, opportunityId: opp.id }),
-                        });
-                        emailsSent++;
-                        if (wantsSms(resolvedProfile) && smsPhone) {
-                            await trySendSms(smsPhone, smsTemplates.closeDateLapsed({ dealName: name, daysLapsed }), `closeLapsed/${repName}`);
-                            smsSent++;
+                        if (wantsAlert(resolvedProfile, 'closeLapsed')) {
+                            await sendEmail({
+                                to: repUser.email,
+                                ...emailTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate, opportunityId: opp.id }),
+                            });
+                            emailsSent++;
+                            if (wantsSms(resolvedProfile) && smsPhone) {
+                                await trySendSms(smsPhone, smsTemplates.closeDateLapsed({ dealName: name, daysLapsed }), `closeLapsed/${repName}`);
+                                smsSent++;
+                            }
                         }
                         await logAlert(orgId, repName, 'lapsed', opp, `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`);
                         await sendSlackToOrg(orgId, slackTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate }), 'closeLapsed');
@@ -393,17 +402,18 @@ const run = async () => {
             // ── Signal 4: High-velocity deal (positive) ───────────────────────
             if (
                 createdDays !== null && createdDays <= 14 && stageCount >= 2 &&
-                !['Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'].includes(opp.stage) &&
-                wantsAlert(resolvedProfile, 'dealMomentum')
+                !['Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'].includes(opp.stage)
             ) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'velocity');
                 if (!alerted) {
                     try {
-                        await sendEmail({
-                            to: repUser.email,
-                            ...emailTemplates.dealMomentum({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays, opportunityId: opp.id }),
-                        });
-                        emailsSent++;
+                        if (wantsAlert(resolvedProfile, 'dealMomentum')) {
+                            await sendEmail({
+                                to: repUser.email,
+                                ...emailTemplates.dealMomentum({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays, opportunityId: opp.id }),
+                            });
+                            emailsSent++;
+                        }
                         await logAlert(orgId, repName, 'velocity', opp, `${stageCount} stages in ${createdDays} days`);
                         await sendSlackToOrg(orgId, slackTemplates.dealMomentum({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays }), 'dealMomentum');
                         console.log(`dealMomentum → ${repUser.email} (${name})`);
@@ -416,14 +426,15 @@ const run = async () => {
             // ── Signal 5: AI score dropped below threshold ──────────────────────
             if (
                 opp.aiScore?.score !== undefined &&
-                opp.aiScore.score < 40 &&
-                wantsAlert(resolvedProfile, 'scoreDropAlert')
+                opp.aiScore.score < 40
             ) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'scoreDrop');
                 if (!alerted) {
                     try {
                         const verdictLabel = opp.aiScore.verdict || 'At Risk';
                         const headline = opp.aiScore.headline || 'Deal health has declined';
+                        // The rep's preference gates the rep's email only (state §0.99); the block closes before logAlert.
+                        if (wantsAlert(resolvedProfile, 'scoreDropAlert')) {
                         await sendEmail({
                             to: repUser.email,
                             subject: `⚠️ AI Score Alert: ${name} scored ${opp.aiScore.score}/100 (${verdictLabel})`,
@@ -460,6 +471,7 @@ const run = async () => {
                             </div></body></html>`,
                         });
                         emailsSent++;
+                        }
                         await logAlert(orgId, repName, 'scoreDrop', opp, `AI score ${opp.aiScore.score} (${verdictLabel})`);
                         await sendSlackToOrg(orgId, slackTemplates.scoreDrop({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, score: opp.aiScore.score, verdict: verdictLabel }), 'scoreDropAlert');
                         console.log(`scoreDropAlert → ${repUser.email} (${name}, score ${opp.aiScore.score})`);

@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 8, 2026 (eighth session, third close; header refreshed at the ninth session's open)
 **Verified at:** five gates green on 151 files · **570 tests** · **299/299 mutations, printed green baseline** · **116/116 integration** · build guard OK 2,437 kB `index-Bz_vDa_T.js` · **prod `cf72f99` serving `index-DIeZb8qh.js` (ninth ship, 7 Sep)** · dev ahead of `master` by 26 commits — §0.92, §0.93 and its follow-up, the 8 Sep diagnostics and their removal, and their docs; not yet shipped. **The Resend inbound webhook targets DEV and prod's endpoint is disabled (8 Sep, Jeff) — flip it back at the ship (guide §18b31); until then prod logs no email.** The app database and the test database both hold `audit_stream_destinations`. (This header and the per-batch lines under it were refreshed at the ninth session's open; before that the lines had described §0.80–§0.88 since 3 Sep and the header still carried the first close's counts — the sections are the record.)
-**Batch:** **every scheduled job leaves a heartbeat, and Settings reads it (§0.98, handoff item 32)** — a new site-wide `job_heartbeats` table (applied to both databases and read back first, §18c), `withHeartbeat()` around all four scheduled handlers (start and finish stamps, ok/error from the result or the throw, the handler's counts as the summary, never breaking the job), an Admin-only `job-status` endpoint, and a pure `jobHealth` verdict — ok / stalled / error / never — behind a new Workspace Health check and an "Alerts job: Last ran …" line on the Slack card. Five months of hourly 500s (§0.95) would have been red from the first hour. Dev only; not yet shipped; not observed.
+**Batch:** **the company decides what posts to Slack (§0.99, handoff item 33 — Jeff: "I don't want to have to rely on users to pick the correct items by themselves")** — two event posts from the deal save the moment they happen (stage changed, closed won — who moved it, the rep, the ARR), the five hourly signals posted on the org's checkboxes alone with the rep's own preference gating only that rep's email and SMS, seven checkboxes in two groups, honest labels, a 4-second cap on the Slack fetch inside the save. Dev only; not yet shipped; not observed.
+**Prior batch:** **every scheduled job leaves a heartbeat, and Settings reads it (§0.98, handoff item 32)** — a new site-wide `job_heartbeats` table (applied to both databases and read back first, §18c), `withHeartbeat()` around all four scheduled handlers (start and finish stamps, ok/error from the result or the throw, the handler's counts as the summary, never breaking the job), an Admin-only `job-status` endpoint, and a pure `jobHealth` verdict — ok / stalled / error / never — behind a new Workspace Health check and an "Alerts job: Last ran …" line on the Slack card. Five months of hourly 500s (§0.95) would have been red from the first hour. Dev only; not yet shipped; not observed.
 **Prior batch:** **a calendar Connect lands back where it started and says how it went (§0.97, handoff item 30)** — the OAuth callback had redirected to a query nothing read, so a failed Connect landed on Home in silence; now the start carries `from` through the provider in `state`, the callback's six exits go through one allowlisted `calendarReturnUrl` (status, provider, scope, from, reason — never free text), App.jsx reads it once when Clerk's user is present, cleans the URL, and lands the user on Connected apps / Company calendar (an Admin, that panel opened through `settingsOpenPanel`) or the profile panel's Calendar tab, where one line says "Google Calendar connected" or "was not connected — <why>". One pure module (`src/utils/calendarReturn.js`) shared by both sides. Dev only; not yet shipped; not observed.
 **Prior batch:** **an org chooses which of the five pipeline alerts post to Slack (§0.96, handoff item 29 — Jeff: "Can we add an option that enables me to select what actions get posted")** — five checkboxes in the Configure Slack modal saved as `slackConfig.alerts`, normalised to five booleans by settings.mjs, asked by `sendSlackToOrg` before every post (a config saved before the key posts everything; an unknown type fails closed; the untyped digest and test are not gated); the card reads "n of 5 alerts". One pure module (`src/utils/slackAlerts.js`) shared by the modal, settings.mjs and send-slack.mjs; the keys are the rep-side preference keys. Dev only; not yet shipped; not observed.
 **Prior batch:** **the pipeline-alerts job had thrown on its first deal since 7 April — no alert of any kind (email, SMS, Slack) has gone out for five months (§0.95, ninth session)** — `bf4a3c5` renamed the parameter of `wantsAlert` and `wantsSms` to `resolvedProfile` and left both bodies reading `profile`, a name bound only inside the deal loop; the first call threw, the outer catch answered 500, hourly, on every site. Found reading the job to answer Jeff's "how do I choose what gets posted to Slack". Two lines fixed; the helpers are lifted out of the source and RUN by a new suite (3 mutants; the suite registered in the harness after its first run let all three survive). No gate covers a lowercase helper in a function file — guide §18b33. Functions-only, dev only; not yet shipped.
@@ -4841,7 +4842,10 @@ webhook; the Slack card's status reads "Connected · #channel · n of 5
 alerts". Org-scoped: the selection lives in the org's own settings row and is
 read per org at send time. Nothing else changed — the rep's own preference
 still decides whether the signal fires at all; this decides whether a fired
-signal reaches Slack.
+signal reaches Slack. **Superseded the same day by §0.99:** the rep's
+preference no longer gates the company's post at all — it gates only that
+rep's own email and SMS — and two event posts (stage changed, closed won)
+joined the five, making seven.
 
 **Verified:** five gates, build guard OK `index-Dz4BAypy.js`, **585/585 unit**
 (8 new in `tests/slack-alerts.test.mjs`: the pure module and source scans of
@@ -5025,6 +5029,74 @@ return), `ok_count` 2 (the 22:01 and 22:02 ticks), `error_count` 0.** The
 first run of a scheduled job this app has ever recorded. `pipeline-alerts`
 and `digest` stamp at 23:00 UTC, `score-leads-batch` at 06:00. `master`
 stays at `cf72f99`.
+
+### 0.99 The company decides what posts to Slack: stage changed and closed won the moment they happen, the five hourly signals on the org's selection alone (8 Sep, ninth session — handoff item 33)
+
+**Jeff, after "slack card working as stated": "i changed an opportunities
+status and it did not show up in slack."** Read from the code: nothing posted
+on a status change; the only Slack posts were the hourly job's five signals,
+each gated by the deal owner's OWN notification preference before the
+company's selection was even asked, and the modal's "Deal momentum (stage
+advance)" label — copied from the rep-side preference labels — invited the
+reading he had. Two options went back (an event post, or the label alone);
+Jeff first asked for "Deal Closed Won" the hourly way, then: **"actually move
+it all to an event post. I don't want to have to rely on users to pick the
+correct items by themselves to enable alerts the company wants to post to
+slack."**
+
+**Design — the company decides.** The Admin's checkboxes in Configure Slack
+are the only gate on the org's channel; a rep's preferences decide what that
+rep is emailed or texted, never what the company posts. Seven types in
+`src/utils/slackAlerts.js`, each with a `kind`: two **event** posts —
+`stageChanged` ("Deal stage changed") and `dealClosedWon` ("Deal closed won")
+— and the five **hourly** signals with labels that say what they are
+("Deal momentum (2+ stages within 14 days of creation)"). `dealSlackEvents({
+before, after })` (pure): into Closed Won from anything else is a win; any
+other stage change, Closed Lost included, is a stage change; a deal created
+already won counts, one created in a stage is not "changed"; no change is
+nothing. `send-slack.mjs`: two templates (`stageChanged` — "*Acme* moved to
+Negotiation (from Proposal)", who moved it, the rep, the ARR; `dealWon` —
+"🏆 Closed Won", the ARR, the rep, who closed it), `postDealEvents(orgId, {
+before, after, mover })` which asks the org's selection per type through the
+same `sendSlackToOrg` gate and never throws, and **a 4-second cap on the
+Slack fetch** (`AbortSignal.timeout`), because the post now sits inside the
+deal save and a hung Slack must not hang it. `opportunities.mjs` PUT: inside
+the existing `if (stageChanged)` branch, beside the webhooks and before the
+automations, `postDealEvents(orgId, { before: { stage: previousStage },
+after: upserted, mover: await getCallerName(userId, orgId) })`. The bulk
+stage-move endpoint does not post (one post per deal would flood; open).
+`pipeline-alerts.mjs`: the five signal conditions no longer carry `&&
+wantsAlert(resolvedProfile, …)`; inside each, the rep's preference wraps the
+rep's own email and SMS only, and the dedupe log, the company's Slack post
+and the manager copy (gated by the manager's own preference, as before)
+follow the signal itself — so a rep who turned "Deal gone silent" off for
+their inbox no longer silences the company's channel. The modal renders the
+seven in two groups, "Posted the moment it happens" and "Checked every
+hour", and says the company decides; the card reads "n of 7 alerts". A
+config saved before today has no entry for the two event keys — absent is
+on, so they post. Org-scoped throughout: the selection is the org's own
+settings row, read at post time.
+
+**Verified:** five gates, build guard OK `index-B-DxPVK_.js`, the three
+functions parse, **606/606 unit** (`slack-alerts.test.mjs` rewritten for
+seven types and `dealSlackEvents`, plus scans: the poster and both templates,
+the deal save's call inside the stage-changed branch, and — for each of the
+five signals — the condition without the rep gate, the rep's email behind
+it, then the log, then the Slack post, in that order), **123/123
+integration** (1 new in `send-slack.itest.mjs`, against the real rows: a win
+posts to D's webhook naming the deal, the closer and the rep; a plain stage
+change is unticked for D and posts nothing; org A, saved before the keys
+existed, posts it; no change posts nothing; an org with no row posts nothing
+and does not throw), **330/330 mutations, printed green baseline** (4 new: a
+win posts as a plain stage change; the deal save stops posting; the rep's
+preference gates the silent-deal post again; the fetch waits forever). Not
+browser-checked here. **Jeff eyeballs (§5):** move a deal's stage → a
+"➡️ Stage changed" post in #sales-alerts within seconds naming him as the
+mover; move one to Closed Won → "🏆 Closed Won" with the ARR; untick "Deal
+stage changed" in Configure Slack → Save → move another → nothing; the modal
+shows two groups, seven boxes, "7 of 7 alerts" on the card. Supersedes
+§0.96's last sentence ("the rep's own preference still decides whether the
+signal fires at all").
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

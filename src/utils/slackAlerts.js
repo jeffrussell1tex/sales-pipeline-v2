@@ -1,27 +1,40 @@
-// slackAlerts.js — which pipeline alerts an org posts to Slack (state §0.96,
-// handoff item 29; Jeff: "Can we add an option that enables me to select what
-// actions get posted").
+// slackAlerts.js — what an org posts to Slack (state §0.96 and §0.99, handoff
+// items 29 and 33; Jeff: "I don't want to have to rely on users to pick the
+// correct items by themselves to enable alerts the company wants to post to
+// slack").
 //
-// Shared by both sides the way integrationCatalog.js is: the Configure Slack
-// modal renders SLACK_ALERT_TYPES as checkboxes and saves `slackConfig.alerts`;
-// settings.mjs normalises what is saved through cleanSlackAlerts(); and
-// send-slack.mjs's sendSlackToOrg() asks slackAlertEnabled() before it posts.
-// The keys are the rep-side notification-preference keys (pipeline-alerts.mjs
-// DEFAULT_PREFS), so an Admin and a rep name the same alert the same way.
+// THE COMPANY DECIDES. The Admin's checkboxes in Configure Slack are the only
+// gate on what reaches the org's channel. A rep's own notification preferences
+// (avatar → Notifications) decide what THAT rep is emailed or texted — never
+// what the company posts. Two kinds of alert:
 //
-// A config saved before this key existed has no `alerts` at all — that means
-// EVERYTHING posts, as it always did. Absent is on; only an explicit false is
-// off. Pure: no React, no db, reachable by `node --test`.
+//   event  — posted the moment it happens, from the deal save itself
+//            (stageChanged, dealClosedWon; opportunities.mjs → postDealEvents)
+//   hourly — a condition the scheduled job detects on each run
+//            (pipeline-alerts.mjs, the five signals, once per deal per week)
+//
+// Shared by both sides the way integrationCatalog.js is: the modal renders
+// SLACK_ALERT_TYPES as checkboxes and saves `slackConfig.alerts`; settings.mjs
+// normalises what is saved through cleanSlackAlerts(); send-slack.mjs's
+// sendSlackToOrg() asks slackAlertEnabled() before it posts. A config saved
+// before a key existed has no entry for it — absent is on; only an explicit
+// false is off. Pure: no React, no db, reachable by `node --test`.
 
 export const SLACK_ALERT_TYPES = Object.freeze([
-    Object.freeze({ key: 'dealSilent',     label: 'Deal gone silent (no activity 14d)' }),
-    Object.freeze({ key: 'dealStuck',      label: 'Deal stuck in stage too long' }),
-    Object.freeze({ key: 'closeLapsed',    label: 'Close date lapsed' }),
-    Object.freeze({ key: 'dealMomentum',   label: 'Deal momentum (stage advance)' }),
-    Object.freeze({ key: 'scoreDropAlert', label: 'AI score dropped below threshold' }),
+    // Posted when it happens
+    Object.freeze({ key: 'stageChanged',   kind: 'event',  label: 'Deal stage changed' }),
+    Object.freeze({ key: 'dealClosedWon',  kind: 'event',  label: 'Deal closed won' }),
+    // Checked every hour by the pipeline-alerts job
+    Object.freeze({ key: 'dealSilent',     kind: 'hourly', label: 'Deal gone silent (no activity for 14 days)' }),
+    Object.freeze({ key: 'dealStuck',      kind: 'hourly', label: 'Deal stuck in a stage past the average' }),
+    Object.freeze({ key: 'closeLapsed',    kind: 'hourly', label: 'Close date lapsed' }),
+    Object.freeze({ key: 'dealMomentum',   kind: 'hourly', label: 'Deal momentum (2+ stages within 14 days of creation)' }),
+    Object.freeze({ key: 'scoreDropAlert', kind: 'hourly', label: 'AI score dropped below threshold' }),
 ]);
 
-export const SLACK_ALERT_KEYS = Object.freeze(SLACK_ALERT_TYPES.map(t => t.key));
+export const SLACK_ALERT_KEYS  = Object.freeze(SLACK_ALERT_TYPES.map(t => t.key));
+export const SLACK_EVENT_KEYS  = Object.freeze(SLACK_ALERT_TYPES.filter(t => t.kind === 'event').map(t => t.key));
+export const SLACK_HOURLY_KEYS = Object.freeze(SLACK_ALERT_TYPES.filter(t => t.kind === 'hourly').map(t => t.key));
 
 /**
  * Normalise whatever was saved: every known key becomes a boolean, an absent
@@ -36,7 +49,7 @@ export function cleanSlackAlerts(raw) {
 
 /**
  * Should this org's Slack receive this alert type?
- *   - no alertType (the digest, the test message): yes — the switch is for the five pipeline alerts
+ *   - no alertType (the digest, the test message): yes — the switches are for the alerts above
  *   - an unknown alertType: no — fail closed, a typo at a call site never posts
  *   - no `alerts` saved: yes — a pre-existing config posts everything
  *   - otherwise: only an explicit false is off
@@ -49,7 +62,26 @@ export function slackAlertEnabled(slackConfig, alertType) {
     return alerts[alertType] !== false;
 }
 
-/** How many of the five are on — for the card's "n of 5 alerts". */
+/** How many of the types are on — for the card's "n of N alerts". */
 export function slackAlertsOnCount(slackConfig) {
     return Object.values(cleanSlackAlerts(slackConfig?.alerts)).filter(Boolean).length;
+}
+
+/**
+ * The event posts a deal save produces, from the row before and after. Pure;
+ * the poster (send-slack.mjs postDealEvents) asks the org's selection per type.
+ *   - into 'Closed Won' from anything else → one dealClosedWon
+ *   - any other stage change (Closed Lost included) → one stageChanged
+ *   - no stage change, or no `after` → nothing
+ * A deal CREATED already won (no `before`) counts as won; created in a stage
+ * is not "changed".
+ */
+export function dealSlackEvents({ before, after } = {}) {
+    const to = typeof after?.stage === 'string' ? after.stage : null;
+    if (!to) return [];
+    const from = typeof before?.stage === 'string' ? before.stage : null;
+    if (from === to) return [];
+    if (to === 'Closed Won') return [{ type: 'dealClosedWon', from, to }];
+    if (from === null) return [];
+    return [{ type: 'stageChanged', from, to }];
 }

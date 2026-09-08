@@ -1463,6 +1463,24 @@ const mutations = [
         '                data.slackConfig = { ...data.slackConfig, alerts: cleanSlackAlerts(data.slackConfig.alerts) };',
         ''],
 
+    // ── §0.99 (item 33): the company decides; event posts from the deal save ────
+    ['slack events: a win posts as a plain stage change',
+        'src/utils/slackAlerts.js',
+        "    if (to === 'Closed Won') return [{ type: 'dealClosedWon', from, to }];",
+        ''],
+    ['slack events: the deal save stops posting',
+        'netlify/functions/opportunities.mjs',
+        '                await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId) });',
+        ''],
+    ["slack events: the rep's preference gates the company's silent-deal post again",
+        'netlify/functions/pipeline-alerts.mjs',
+        '            if (daysSilent !== null && daysSilent >= 14) {',
+        "            if (daysSilent !== null && daysSilent >= 14 && wantsAlert(resolvedProfile, 'dealSilent')) {"],
+    ['slack events: the Slack fetch waits forever inside the deal save',
+        'netlify/functions/send-slack.mjs',
+        '        signal:  AbortSignal.timeout(4000),',
+        ''],
+
     // ── §0.97 (item 30): the calendar Connect round trip lands where it started ──
     ['calendar return: an unknown status is a landing',
         'src/utils/calendarReturn.js',

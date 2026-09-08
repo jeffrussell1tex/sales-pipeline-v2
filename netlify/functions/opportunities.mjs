@@ -4,6 +4,7 @@ import { eq, asc, and, inArray } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isManager, isReadOnly, requireRole, requireWrite } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
+import { postDealEvents } from './send-slack.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import {
     serverErrorBody, writeAudit, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
@@ -469,6 +470,10 @@ export const handler = async (event) => {
                 } else {
                     await dispatchWebhook(orgId, 'opportunity.stage_changed', { ...webhookBase, from_stage: previousStage, to_stage: upserted.stage });
                 }
+                // The company's Slack post — stage changed, or closed won — the
+                // moment it happens, per the org's selection; never the rep's
+                // preferences (state §0.99, item 33). Never throws; 4 s cap.
+                await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId) });
                 const autoEvt = upserted.stage === 'Closed Won' ? 'opportunity.won' : upserted.stage === 'Closed Lost' ? 'opportunity.lost' : 'opportunity.stage_changed';
                 dispatchAutomations(orgId, autoEvt, {
                     id: upserted.id, account: upserted.account, sales_rep: upserted.salesRep,

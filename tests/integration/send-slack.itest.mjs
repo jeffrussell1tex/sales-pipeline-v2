@@ -49,7 +49,7 @@ const fetchMock = mock.method(globalThis, 'fetch', async (url, opts) => {
     return { ok: true, status: 200, text: async () => 'ok' };
 });
 
-const { handler, sendSlackToOrg } = await import('../../netlify/functions/send-slack.mjs');
+const { handler, sendSlackToOrg, postDealEvents } = await import('../../netlify/functions/send-slack.mjs');
 const { db } = await import('../../db/index.js');
 const { settings } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
@@ -83,7 +83,30 @@ before(async () => {
     await cleanup();
     await db.insert(settings).values({ id: ORG_A, orgId: ORG_A, extra: { slackConfig: { webhookUrl: SLACK_A, channel: '#a', enabled: true } }, updatedAt: new Date() });
     await db.insert(settings).values({ id: ORG_B, orgId: ORG_B, extra: { slackConfig: { webhookUrl: 'https://example.test/not-slack', enabled: true } }, updatedAt: new Date() });
-    await db.insert(settings).values({ id: ORG_D, orgId: ORG_D, extra: { slackConfig: { webhookUrl: SLACK_D, channel: '#d', enabled: true, alerts: { dealSilent: false } } }, updatedAt: new Date() });
+    await db.insert(settings).values({ id: ORG_D, orgId: ORG_D, extra: { slackConfig: { webhookUrl: SLACK_D, channel: '#d', enabled: true, alerts: { dealSilent: false, stageChanged: false } } }, updatedAt: new Date() });
+});
+
+// ── item 33: event posts from a deal save, against the real row ─────────────
+
+test("a win posts to the org's webhook the moment it happens; a plain stage change is unticked for D and posts nothing; the org's own settings row decides", async () => {
+    calls.length = 0;
+    const after = { opportunityName: 'Acme renewal', account: 'Acme', arr: 120000, salesRep: 'Karen Russell', stage: 'Closed Won' };
+    assert.deepEqual(await postDealEvents(ORG_D, { before: { stage: 'Negotiation/Review' }, after, mover: 'Jeff Russell' }), ['dealClosedWon']);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, SLACK_D);
+    const sent = JSON.parse(calls[0].opts.body);
+    assert.match(sent.text, /Acme renewal/);
+    assert.match(sent.text, /closed won/i);
+    assert.match(JSON.stringify(sent.blocks), /Jeff Russell/, 'names who closed it');
+    assert.match(JSON.stringify(sent.blocks), /Karen Russell/, 'and whose deal it is');
+    assert.deepEqual(await postDealEvents(ORG_D, { before: { stage: 'Proposal' }, after: { ...after, stage: 'Negotiation/Review' }, mover: 'Jeff Russell' }), [], 'stageChanged is unticked for D');
+    assert.equal(calls.length, 1, 'nothing more fetched');
+    assert.deepEqual(await postDealEvents(ORG_A, { before: { stage: 'Proposal' }, after: { ...after, stage: 'Negotiation/Review' }, mover: 'Jeff Russell' }), ['stageChanged'], "A saved before the key existed — it posts");
+    assert.equal(calls[1].url, SLACK_A);
+    assert.match(JSON.parse(calls[1].opts.body).text, /moved to Negotiation\/Review/);
+    assert.deepEqual(await postDealEvents(ORG_A, { before: { stage: 'Proposal' }, after: { ...after, stage: 'Proposal' } }), [], 'no change, no post');
+    assert.deepEqual(await postDealEvents(ORG_C, { before: { stage: 'Proposal' }, after }), [], 'no settings row: nothing, no throw');
+    assert.equal(calls.length, 2);
 });
 
 // ── item 29: the org's own selection, against the real row ──────────────────

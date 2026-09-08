@@ -155,16 +155,21 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
                         style={{ ...slackInputStyle, fontFamily: T.sans }}/>
                 </SlackField>
                 <div style={{ padding:'12px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid, fontFamily:T.sans, marginBottom:14 }}>
-                    <b style={{ color:T.info }}>What posts to Slack:</b> the pipeline alerts ticked here, when the rep the deal belongs to has that alert on — alongside their emails.
-                    <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:10 }}>
-                        {SLACK_ALERT_TYPES.map(t => (
-                            <label key={t.key} style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', color:T.ink }}>
-                                <input type="checkbox" checked={alerts[t.key] !== false}
-                                    onChange={e => setAlerts(a => ({ ...a, [t.key]: e.target.checked }))}/>
-                                {t.label}
-                            </label>
-                        ))}
-                    </div>
+                    <b style={{ color:T.info }}>What posts to Slack:</b> the alerts ticked here — the company's choice. A user's own notification preferences decide what they are emailed or texted, never what posts to the channel.
+                    {[['event', 'Posted the moment it happens'], ['hourly', 'Checked every hour']].map(([kind, heading]) => (
+                        <div key={kind} style={{ marginTop:10 }}>
+                            <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6 }}>{heading}</div>
+                            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                                {SLACK_ALERT_TYPES.filter(t => t.kind === kind).map(t => (
+                                    <label key={t.key} style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', color:T.ink }}>
+                                        <input type="checkbox" checked={alerts[t.key] !== false}
+                                            onChange={e => setAlerts(a => ({ ...a, [t.key]: e.target.checked }))}/>
+                                        {t.label}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
                 </div>
                 {msg && (
                     <div style={{ padding:'10px 14px', background: msg.ok ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)', borderLeft:`3px solid ${msg.ok ? T.ok : T.danger}`, borderRadius:4, fontSize:12, color: msg.ok ? T.ok : T.danger, fontFamily:T.sans, marginBottom:14 }}>
