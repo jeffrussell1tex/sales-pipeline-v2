@@ -5220,6 +5220,33 @@ are CRLF on disk under `core.autocrlf=true` (git stores LF): the edit script
 matched on LF and wrote each file back in its own EOL, asserted from disk.
 Not browser-checked here — the observable is a row, read below.
 
+**Landed on dev (`79890f3`, pushed 23:24:23 UTC 8 Sep) — and PROVEN by the
+first per-site row.** The bundle could not show it (above): Netlify's deploy
+record did — deploy `6aa09929…`, commit `79890f3`, branch `dev`, created
+23:24:25, published 23:25:16 UTC (51 seconds after the push), **76
+functions**, the `_heartbeat` and `job-status` function digests changed
+from the previous deploy's (`6aa092c4…` = `77c4b77`), secret scan 0
+matches over 376 files; the deployed `job-status` answers 401
+unauthenticated. Then a read-only poll of `site_job_heartbeats` on the app
+database every five seconds from 23:24:41: zero rows at 23:24:41, 23:25:13
+and 23:25:45; **at 23:26:06 one row — `site` `accelerep.netlify.app`, job
+`task-reminders`, schedule `* * * * *`, started 23:26:04.102, finished
+23:26:04.481, status `ok`, no error, summary `{ "sent": 0, "skipped": 0 }`,
+`ok_count` 1, `error_count` 0** — the site key resolved to the host of
+Netlify's URL exactly as designed (the site's primary URL is plain
+`http://accelerep.netlify.app`; the scheme is dropped). In the same second
+the LEGACY `job_heartbeats.task-reminders` row was stamped too — finished
+23:26:04.638, `ok_count` 135 — by prod's pre-§0.100 function, now the only
+writer of that table: from here the legacy row climbs by one a minute, the
+per-site row by one a minute, each its own site's. `pipeline-alerts` and
+`digest` write their per-site rows at 00:00 UTC, `score-leads-batch` at
+06:00; until each first runs, dev's Workspace Health reads "Scheduled jobs:
+Pipeline alerts has not run, Daily digest has not run, Lead scoring has not
+run" — correct, the table is new — and the Slack card "Alerts job: Has not
+run yet". Prod's tile keeps reading the legacy table (its own rows only, by
+accident of dev no longer writing there) until the eleventh ship. `master`
+stays at `5a306e3`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
