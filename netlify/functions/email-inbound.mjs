@@ -189,6 +189,13 @@ async function rawRecipients(full) {
     }
 }
 
+// What the Received emails API returns for a real Outlook message (read back
+// from a row on 8 Sep 2026, state §0.93): keys object,id,to,from,created_at,
+// subject,message_id,bcc,cc,reply_to,html,html_format,text,headers,
+// received_for,raw,attachments — `text` WITH its line breaks, `html` too, and
+// `attachments` as [{ id, filename, content_type, content_id,
+// content_disposition, size }]. The normaliser and attachmentNamesOf in
+// _inboundText.mjs are written to that shape.
 // Resend's email.received webhook payload contains ONLY metadata plus the SMTP
 // envelope recipient in `to` (i.e. the dropbox address itself) — the real header
 // To/Cc and the body are NOT included and must be fetched back by email_id via
@@ -272,19 +279,6 @@ export const handler = async (event) => {
         // message for the real header To/Cc (contact matching) and the body (notes).
         const fetched = await fetchReceivedEmail(mail.email_id);
         const full = fetched?.data || null;
-
-        // Diagnostic (§0.93 follow-up): the SHAPE of what the provider hands over,
-        // never its content — an Outlook message logged with no line breaks after
-        // the normaliser kept them, so this says whether they were ever there.
-        // Read in Netlify → Logs → Functions → email-inbound.
-        // Netlify surfaces no console output for this function (8 Sep: three
-        // request rows, zero lines, with a filter), so the same shape — never
-        // content — rides the activity row's `outcome` (varchar 255) until read.
-        const nlOf = (v) => (typeof v === 'string' ? (v.match(/\n/g) || []).length : -1);
-        const shape = (o) => `t=${typeof o.text}/${(o.text || '').length}/${nlOf(o.text)} h=${typeof o.html}/${(o.html || '').length}/${nlOf(o.html)} a=${Array.isArray(o.attachments) ? o.attachments.length + ':' + Object.keys(o.attachments[0] || {}).join('|') : typeof o.attachments} k=${Object.keys(o).join(',')}`;
-        const diag = (full
-            ? `diag via=${fetched.endpoint} ${shape(full)}`
-            : `diag NOT-fetched key=${!!process.env.RESEND_API_KEY} email_id=${!!mail.email_id} type=${body.type} ${shape(mail)}`).slice(0, 255);
 
         const subject = String((full?.subject ?? mail.subject) || '').slice(0, 500);
         const rawText = full
@@ -375,7 +369,7 @@ export const handler = async (event) => {
             date: today,
             subject: subject || null,
             notes: notesOf({ subject, body: text, attachmentNames }, NOTES_MAX) || 'Email (no body captured)',
-            outcome: diag,   // temporary diagnostic (state §0.93) — null again once the shape is known
+            outcome: null,
             duration: null,
             opportunityId: null,
             contactId: matched.id,

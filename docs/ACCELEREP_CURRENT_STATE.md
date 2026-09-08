@@ -4549,6 +4549,34 @@ seen here), and the prod endpoint DISABLED, not deleted — one target at a
 time. Prod logs no email until the prod endpoint is enabled again. This
 commit exists to redeploy dev so the function reads the new secret.
 
+**PROVEN on deployed dev (8 Sep, 19:26:45 UTC) — the fix's first real run.**
+Redeploy `f44a8db` ready 17:52:36 UTC (every function rebuilt, as an
+env-var change needs); Jeff: "#14 Test Email", five lines separated by
+blank lines, `Lumen.pdf` (217 KB) attached, Karen's personal address in CC.
+The row, read back: **ten newlines**, notes `"#14 Test Email — Test\n\nTest
+\n\nThis is a test\n\nThere is an attachment\n\nJeff\n\nAttachments: Lumen.pdf"`,
+and the diagnostic in `outcome`: `via=receiving t=string/59/10
+h=string/2829/33 a=1:id|filename|content_type|content_id|content_disposition|size
+k=object,id,to,from,created_at,subject,message_id,bcc,cc,reply_to,html,
+html_format,text,headers,received_for,raw,attachments`. **So Resend's
+Received emails API hands over `text` WITH its line breaks (59 chars, 10
+newlines), `html` (2,829 chars, 33 newlines), and `attachments` as
+`[{ id, filename, content_type, content_id, content_disposition, size }]`** —
+exactly the shape `_inboundText.mjs` was written to; nothing in the fix
+needed changing. Every "same result" since 7 Sep 18:45 was prod's old
+function. The diagnostic came out in the same commit as this paragraph
+(`outcome: null` again; the payload shape now lives in the fetch comment in
+`email-inbound.mjs` as knowledge, not as a probe). Verified for the removal:
+five gates, build guard OK, 570/570 unit, 116/116 integration, 299/299
+mutations. **Jeff eyeballs #14 in the viewer after a refresh:** the row
+shows "#14 Test Email" bold over two lines; the viewer shows every line,
+the blank ones, and "Attachments: Lumen.pdf"; the "Outcome:" line under
+the body is the diagnostic on that one row and stays on it (rows are not
+rewritten); new emails carry none. **The webhook stays on dev until the
+ship** — at ship time, re-enable the prod endpoint in Resend and disable
+the dev one (two live endpoints would race; the Message-ID dedupe would
+make the loser a no-op, but one target is the rule — §18b31).
+
 
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies

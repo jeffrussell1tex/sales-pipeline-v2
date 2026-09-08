@@ -56,7 +56,7 @@ export default function ActivityDetailDialog({ activity, contactName = '', accou
                         {body || <span style={{ color: T.inkMuted, fontStyle: 'italic' }}>No details</span>}
                     </div>
                     {(activity?.outcome || activity?.duration) && (
-                        <div style={{ marginTop: 14, fontSize: 11.5, color: T.inkMid, borderTop: `1px solid ${T.border}`, paddingTop: 10 }}>
+                        <div style={{ marginTop: 14, fontSize: 11.5, color: T.inkMid, borderTop: `1px solid ${T.border}`, paddingTop: 10, overflowWrap: 'anywhere' }}>
                             {activity.outcome && <span>Outcome: {activity.outcome}</span>}
                             {activity.outcome && activity.duration ? <span> · </span> : null}
                             {activity.duration ? <span>Duration: {activity.duration} min</span> : null}
