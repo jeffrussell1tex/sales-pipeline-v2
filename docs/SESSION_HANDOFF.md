@@ -31,36 +31,41 @@ root. Read this first, then verify every claim in it against the live repo
 before acting — **including the claims in this file**.
 
 **Ninth session (8 September 2026, Jeff: "claude, lets continue the effort on
-Accelrep") — OPEN, in progress.** The ritual passed: 26 commits
-after `cf72f99`, `dev` == `origin/dev` at `2c28b74`, both staleness
-fingerprints present, handoff copies identical, tree clean. Found: the state
-doc's header still carried the first close's counts (565 / 294 / 114,
-`index-C1VD4DfX.js`, "September 7") against §4's 570 / 299 / 116 and
-`index-Bz_vDa_T.js` — the previous handoff's "the header itself was refreshed
-at this close" was true of the first close only. Done, docs only (`8666737`):
-the header refreshed; the per-batch lines now describe §0.89–§0.93 and the
-§0.82–§0.88 lines name the ship that carried each (five had still said "not
-yet shipped"); and **the pre-ship Slack-webhook read is DONE** — one read-only
-SELECT over the shared app database's five `settings` rows found ONE stored
-webhook, the dev org's, on `hooks.slack.com` and valid, the other four orgs
-none (recorded at the end of state §0.92). Nothing to raise before a ship.
-Then Jeff: "1. confirmed" — the Resend targets stand (dev Enabled, prod
-Disabled) — and, at "what is the point of this test", his screenshot:
-`hooks.slack.com/services/` (no scheme) typed into the modal, Save clicked,
-refused, the card behind still "Connected · #sales-alerts" — **§0.92
-OBSERVED** — with the refusal rendered as the PANEL's banner behind the open
-dialog, circled, reading "not a valid URL". **Fixed the same hour, `0163cd1`:**
-the modal shows "Not saved — <reason>" under the field (one message slot for
-Send test message and Save; the panel restores its snapshot and rethrows),
-and a scheme-less paste is told "must start with https://" — guide §18b32,
-state §0.92 (two new paragraphs). Verified: five gates, build guard OK,
-572/572 unit (2 new), 116/116 integration, 302/302 mutations green baseline
-(3 new); dev served `index-BRrOppU7.js` 34 seconds after the push (20:31:27
-UTC, `2b28a24` records it). **Not yet observed:** the message inside the
-dialog — Jeff re-runs the same Save. **Waiting on Jeff:** that re-run, "ship
-prod", items 27 and 28, the Connected-apps dead-branch cleanup, and a look at
-#sales-alerts for the hourly pipeline alerts. `master` stays at `cf72f99`;
-dev is ahead by 31 commits.
+Accelrep") — CLOSE.** The ritual passed (26 commits after `cf72f99`, both
+fingerprints, copies identical, tree clean). Found: the state header still
+carried the FIRST close's counts — refreshed, the per-batch lines rewritten
+for §0.89–§0.93, five stale "not yet shipped" claims corrected (`8666737`);
+**the pre-ship Slack-webhook read DONE** (five settings rows in the shared
+database, ONE webhook, the dev org's, on `hooks.slack.com`; end of state
+§0.92). Jeff: "1. confirmed" — Resend: dev Enabled, prod Disabled. Then, at
+"what is the point of this test", his screenshot: `hooks.slack.com/services/`
+(no scheme) refused on Save, the card behind still Connected — **§0.92
+OBSERVED** — with the refusal rendered in the panel banner BEHIND the open
+modal → **`0163cd1`**: the modal shows "Not saved — <reason>" under the
+field, a scheme-less paste is told to start with https:// (guide §18b32);
+landed `index-BRrOppU7.js`; **OBSERVED by his second screenshot** (the
+message inside the dialog, no banner). Then Jeff: "make sure the error codes
+will show in the correct place for the rest of the connected apps — both
+currently connected apps and the request ones" → **`e77d841`, state §0.94**:
+every card and row action reports on its own surface, a failed fetch is
+reported as a failed fetch, the page banner is for the settings load alone;
+landed `index-DhQ2fFJ5.js`; NOT observed (a refusal needs a failing server).
+Then Jeff: "How do I choose what gets posted to slack (or other connected
+apps)? Can we add an option that enables me to select what actions get
+posted" — and reading `pipeline-alerts.mjs` to answer found **the hourly
+alert job had thrown on its first deal since 7 April**: `bf4a3c5` renamed a
+parameter of `wantsAlert` and `wantsSms` and left both bodies reading the
+old name, bound only inside the deal loop — ReferenceError, 500 from the
+outer catch, every hour, every site; no email, SMS or Slack alert has gone
+out for five months → **`b5da1a7`, state §0.95, guide §18b33**: two lines
+fixed, the helpers lifted out of the source and RUN by a new suite (3
+mutants; the harness's first run let all three SURVIVE because the suite was
+not in its `SUITES` list — registered, 309/309); landed from Netlify's deploy
+record (`6aa078b6…` = `b5da1a7`, ready 21:06:26 UTC, `pipeline-alerts`
+rebuilt). The answer to his question is **item 29** — there is no org-level
+selection today; the proposal is five checkboxes in the Slack modal. **NOTHING
+SHIPPED this session** — `master` stays at `cf72f99`; dev is ahead by 36
+commits (§4).
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -87,12 +92,12 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.93` with a paragraph beginning **"Jeff, with Karen's two test emails on
-the contact:"** and a paragraph beginning **"PROVEN on deployed dev (8 Sep,
-19:26:45 UTC)"**, and does `docs/ACCELEREP_CODING_GUIDE.md` carry
-**`## 18b31`** (after `## 18b30` and `## 18b29`)
-and, under `## 18b7`, a paragraph beginning **"The mirror image (3 Sep 2026, state §0.90)"**? If
-not, you are looking at a copy that predates this handoff. Check section
+`### 0.95` with a paragraph beginning **"Found reading `pipeline-alerts.mjs`
+to answer Jeff's question"** and a paragraph beginning **"Landed on dev
+(`b5da1a7`"**, and `### 0.94` with a paragraph beginning **"Open — calendar
+Connect's failure has no surface"**; and does `docs/ACCELEREP_CODING_GUIDE.md`
+carry **`## 18b33`** (after `## 18b32` and `## 18b31`)? If not, you are
+looking at a copy that predates this handoff. Check section
 content, never dates.
 
 **On dates:** §0.58, §0.59 and the previous handoff say "2 Sep". Git carries
@@ -697,36 +702,91 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (8 Sep, eighth session, third close)
+## 4. Verified state at close (8 Sep, ninth session)
 
-Five gates green on 151 files (four new files this session) · **570/570 unit**
-(15 new this session: 5 in `slack-webhook.test.mjs`, 5 in
-`activity-view.test.mjs`, 5 in `inbound-text.test.mjs`) · **299/299 mutations,
-printed green baseline** (19 added and 1 rewritten this session; run alone
-after each batch — the §0.93 run first caught 293/294, the id-space mutant
-survived, its case was added and the harness re-run in full) · build
-**2,437 kB JS**, `index-Bz_vDa_T.js`, guard OK, `dist/` cleared · **116/116
-integration** (8 new: 6 in `send-slack.itest.mjs`, 2 in
-`email-inbound.itest.mjs`; +2 cases in `integration-requests.itest.mjs`; the
-test database needed no schema change) ·
-**no pane browser pass this session** — the pane holds no session and signing
-in needs Jeff's credentials; §0.93 OBSERVED by Jeff ("works"), its follow-up
-PROVEN by a real email on 8 Sep (the row read back, Jeff's screenshot of the
-viewer), §0.92 NOT observed · dev deploys observed serving `index-C1VD4DfX.js`
-(§0.93), `index-CkYvyiY8.js` (its follow-up), `index-Bz_vDa_T.js` (the
-diagnostic removed) and, for
-the functions-only §0.92, Netlify's deploy record (`6a9efbfd…` = `bac7387`,
-ready) · **`master` == `cf72f99`, prod serving `index-DIeZb8qh.js` (ninth
-ship)**; dev is ahead of master by the eight observation docs commits
-(`b676795` … `f6f14db`), `bac7387` + `de94064`, `92b6ecc` + `5c0c94c`, the
-first close pair (`62efc7b`, `3a3c0bc`), `f17e835` + its landing + the second
-close pair, then 8 Sep: three diagnostics (`d1fcf44`, `c4ccdbb`, `696b85b`),
-four docs (`1a776e6`, `b707a78`, `f44a8db`, and the 173948a landing), the
-removal `173948a`, and this close — 26 in all · no schema change · **the
-Resend inbound webhook now targets DEV; prod's endpoint is disabled** · the
-working tree was clean at close.
+Five gates green on 151 files (one new test file) · **577/577 unit** (7 new
+this session: 1 in `slack-webhook.test.mjs`, 3 in `connected-apps.test.mjs`, 3
+in `pipeline-alerts.test.mjs`) · **309/309 mutations, printed green baseline**
+(10 added: 3 for §0.92's follow-up, 4 for §0.94, 3 for §0.95;
+`tests/pipeline-alerts.test.mjs` added to the harness's `SUITES` after its
+first run let its three mutants survive) · build **2,438 kB JS**,
+`index-DhQ2fFJ5.js`, guard OK, `dist/` cleared · **116/116 integration**
+(unchanged) · **no pane browser pass** — the pane holds no session; §0.92's
+follow-up OBSERVED by Jeff (second screenshot), §0.94 and §0.95 NOT observed ·
+dev deploys observed serving `index-BRrOppU7.js` (20:31:27 UTC) and
+`index-DhQ2fFJ5.js` (20:54:55 UTC), and for the functions-only §0.95 Netlify's
+deploy record (`6aa078b6…` = `b5da1a7`, ready 21:06:26 UTC) · **`master` ==
+`cf72f99`, prod serving `index-DIeZb8qh.js` (ninth ship)**; dev is ahead of
+master by 36 commits: the eighth session's 26, then `8666737`, `08de43d`,
+`0163cd1`, `2b28a24`, `b1c4769`, `e77d841`, `1c8ce78`, `b5da1a7`, `2049a4a`,
+and this close · no schema change · **the Resend inbound webhook targets
+DEV; prod's endpoint is disabled (Jeff: "confirmed")** · **prod's
+`pipeline-alerts` is still the April code — it sends nothing until the ship**
+· the working tree was clean at close.
 
 ## 5. Next — start here
+
+**Ninth-session prep (read at the tenth), in order:**
+- **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
+  expect thirty-six commits after `cf72f99` (§4 lists them). Anything else is
+  unshipped code and a finding. **Then read Resend → Webhooks** — dev
+  Enabled, prod Disabled (Jeff, 8 Sep: "confirmed"); if that has changed, say
+  so before trusting any email observation (§18b31).
+- **Look at #sales-alerts.** The first hourly `pipeline-alerts` run that can
+  get past its first deal on dev was 22:00 UTC 8 Sep (state §0.95). A post
+  there is the first alert in five months; none is not a finding by itself —
+  it needs a qualifying deal (14 days silent, stuck past the stage average,
+  a lapsed close date…) and the rep's preference on. To prove it on purpose:
+  a deal of Karen's with no activity for 14 days, then the next top of the
+  hour.
+- **Jeff eyeballs §0.94 on deployed dev, as Admin:** Connected apps looks as
+  before — no banner; Request on a row still records "Requested · <today>"
+  (persists a refresh); Copy address still copies. Nothing new is visible
+  unless a server refuses: the observable is the ABSENCE of a banner. Karen
+  cannot reach Settings; the negatives are the source scan and four mutants.
+- **Before shipping: nothing new to read** — the pre-ship Slack-webhook read
+  is done (one webhook, dev's). **Ship §0.92–§0.95 when Jeff says so:**
+  ancestor check, `git push origin dev:master`, poll salespipelinetracker.com
+  for a NEW hash (not `index-DhQ2fFJ5.js` — the live key is inlined),
+  `pk_live_` inlined, "Not saved — " / "Not requested — " / `title:"Open"`
+  present, `send-slack` 401 unauthenticated; prod's `pipeline-alerts` needs
+  Netlify's deploy record (functions-only proof: the deploy id from
+  `get-projects`, then `get-deploy-for-site`), and its first run after the
+  ship is the first prod alert since April. **At the same time flip the
+  Resend webhook back** — enable prod, disable dev (§18b31). Until then prod
+  logs no email and sends no alert.
+- **Item 29 — Jeff's call (his question, 8 Sep: "How do I choose what gets
+  posted to slack … Can we add an option that enables me to select what
+  actions get posted"):** today the choice is per REP — each signal fires
+  when that rep's own preference is on (avatar → Notifications, the "Pipeline
+  health alerts" rows) — and every fired signal goes to the one webhook,
+  gated only by `slackConfig.enabled`. Proposal: five checkboxes in the
+  Configure Slack modal (deal silent, stuck, close lapsed, momentum, score
+  drop) saved as `slackConfig.alerts` (default all on; the existing `settings`
+  PUT stores `slackConfig` whole and validates the URL), read by
+  `sendSlackToOrg(orgId, msg, alertType)`. One batch, org-scoped. No other
+  connected app posts anything (calendars read, email logging is inbound, the
+  audit stream chooses per destination already).
+- **Item 30 — Jeff's call:** a failed calendar OAuth Connect lands on Home
+  with no message — `calendar-oauth-callback.mjs` redirects to
+  `?calconnect=error`, which nothing reads; `useCalendarState.calConnectResult`
+  is set and read by nothing (state §0.94, last paragraph). Decide where the
+  browser should land (Connected apps, with the provider in the redirect),
+  then one batch across the callback, App.jsx and the panel.
+- **Item 31 — one line per call site, Jeff's call:** the four manager copies
+  in `pipeline-alerts.mjs` read `manager.profile || {}`, not the top-level
+  prefs the profile panel saves flat on the row (state §0.95); a manager who
+  turned "Manager escalation alerts" off may still get them.
+- **Item 32 — design first:** a last-success stamp per scheduled job
+  (`pipeline-alerts`, `digest`, `task-reminders`, `score-leads-batch`) that
+  the Settings health tile can read — five months of hourly 500s were
+  visible nowhere the app shows (guide §18b33). Table or `settings.extra`
+  key, Jeff's call; org-neutral (the jobs are site-wide).
+- **Carried, unchanged:** item 27 (From/To/Cc + Message-ID on email rows),
+  item 28 (a creator-owned contact shows a blank Assigned Rep), the Connected
+  apps non-Admin dead branches, `INTEGRATION_REQUESTS_TO` unset, the
+  `check-tdz` blind spot for lowercase helpers in function files (§18b33 —
+  a test per helper for now).
 
 **Eighth-session prep, in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
@@ -741,7 +801,8 @@ working tree was clean at close.
   `index-BRrOppU7.js`. Jeff re-runs the same Save and reads "Not saved —
   Webhook URL must start with https:// (…)" INSIDE the dialog; with
   `https://example.com/hook` the message is the "must be a Slack Incoming
-  Webhook" one. That re-run is the one observation still owed.** Was:
+  Webhook" one. DONE — his second screenshot: the message inside the dialog,
+  no banner (state §0.92).** Was:
   **Jeff eyeballs §0.92 on deployed dev** (NOT yet observed — the observable
   is a 403/400 behind a session): as Karen there is no Settings tab (by
   design); as Admin, Settings → Integrations → Connected apps → Configure →
