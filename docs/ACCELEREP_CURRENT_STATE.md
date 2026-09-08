@@ -5139,9 +5139,11 @@ at 22:38:51 UTC — `task-reminders` `ok_count` 40 where dev alone had ticked
 wrapper is live on prod. Prod's `pipeline-alerts` runs the fixed code for
 the first time at 23:00 UTC — the first prod alert since 7 April, if a deal
 qualifies. `master` == `dev` == `5a306e3` at the ship; dev is ahead only by
-this ship-record docs commit and the close. **Jeff's, at the same time:
-flip the Resend webhook back — enable the prod endpoint, disable the dev
-one (§18b31); until then prod logs no email.**
+this ship-record docs commit and the close. **The Resend webhook is back on
+prod — Jeff's screenshot minutes after the ship: the
+`salespipelinetracker.com/…/email-inbound` endpoint Enabled, the
+`accelerep.netlify.app` one Disabled (§18b31). Inbound email is logged by
+prod's function again, now the same code as dev's.**
 
 **Found at the ship (handoff item 34):** `job_heartbeats` is keyed by job
 alone, and dev and prod share the database — so one row serves both sites,
