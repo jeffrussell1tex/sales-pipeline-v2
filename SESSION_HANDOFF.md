@@ -1,6 +1,6 @@
 # SESSION_HANDOFF.md
 
-**Session of 7 September 2026, eighth session (Jeff: "Hello Claude, lets pick
+**Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
 deployed dev BOTH ways by Karen's real emails, the org address then her
 personal one, both rows read back owned by her; §0.90's Request click and
@@ -16,10 +16,17 @@ opens a read-only viewer, email rows show the subject bold over a two-line
 preview — state §0.93, deploy-verified, **OBSERVED by Jeff ("works")**, then
 his fourteen-step report: three findings, two fixed the same hour (Escape
 closed the rail too; the stored email body had lost its newlines and never
-named an attachment — `f17e835`, deploy-verified, NOT yet re-run), one opened
-as item 28 (a contact owned by its creator displays as unassigned);
+named an attachment — `f17e835`), one opened as item 28 (a contact owned by
+its creator displays as unassigned); **then a day of "same result"** — seven
+real emails still stored flat with the fix live — until a diagnostic written
+onto the row itself came back WITHOUT it: **the Resend webhook had delivered
+to PROD all along**, whose pre-fix function wrote every row into the shared
+database (guide §18b31); the webhook repointed at dev (Jeff), and the fix
+**PROVEN 8 Sep 19:26 UTC** — "#14 Test Email" stored with its ten line breaks
+and "Attachments: Lumen.pdf", the diagnostic removed in `173948a`;
 **NOTHING SHIPPED this session** — `master` stays at `cf72f99`; dev is ahead
-by §0.92, §0.93, eight observation docs commits and the close), FINAL.** Repo
+by 26 commits: §0.92, §0.93 and its follow-up, the 8 Sep diagnostics and
+their removal, and the docs), FINAL.** Repo
 root. Read this first, then verify every claim in it against the live repo
 before acting — **including the claims in this file**.
 
@@ -49,8 +56,9 @@ salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
 `### 0.93` with a paragraph beginning **"Jeff, with Karen's two test emails on
-the contact:"** and a paragraph beginning **"Dev landing (`92b6ecc`"**, and
-does `docs/ACCELEREP_CODING_GUIDE.md` carry **`## 18b30`** (after `## 18b29`)
+the contact:"** and a paragraph beginning **"PROVEN on deployed dev (8 Sep,
+19:26:45 UTC)"**, and does `docs/ACCELEREP_CODING_GUIDE.md` carry
+**`## 18b31`** (after `## 18b30` and `## 18b29`)
 and, under `## 18b7`, a paragraph beginning **"The mirror image (3 Sep 2026, state §0.90)"**? If
 not, you are looking at a copy that predates this handoff. Check section
 content, never dates.
@@ -67,8 +75,39 @@ session resumed after four days. Headers say which.
 
 ## 1. What shipped — §0.92 and §0.93 are on `dev` ONLY (deploy-verified; §0.93 observed); everything before them is on `master`
 
-**Eighth session, third batch (7 Sep) — ON DEV ONLY, deploy-verified, NOT yet
-re-run by Jeff, NOT shipped:** `f17e835` (the §0.93 follow-up) and its landing
+**Eighth session, day two (8 Sep) — the root cause, and the proof. ON DEV
+ONLY, NOT shipped.** Jeff re-ran steps 3, 7 and 9: Escape fixed; the body
+still flat, no attachment line — and again, and again, seven emails over a
+day, every one stored with zero newlines while Netlify's deploy record said
+the fixed function was live. Three diagnostics went out (`d1fcf44` a console
+line on the fetched path; `c4ccdbb` both paths; `696b85b` the shape written
+onto the row's `outcome`, because the function log showed request rows and no
+console output at all). The third came back EMPTY on "#13 Test email" — a row
+the dev function cannot write — and prod's copy (`cf72f99`, the pre-fix code)
+fit every symptom. **Jeff's Resend dashboard: one webhook,
+`https://salespipelinetracker.com/.netlify/functions/email-…`, created three
+months ago.** Dev and prod share one Neon `main`, the dropbox secret is the
+same on both, the roster row is shared — prod's old function validated the
+address, matched the contact and wrote every row, and dev's screen showed
+it. §0.91's 7 Sep proofs were prod's function too (same code both sites that
+day; the observation stands, the site was prod). Jeff: "1" — a NEW Resend
+endpoint at `https://accelerep.netlify.app/.netlify/functions/email-inbound`,
+its signing secret set as `RESEND_INBOUND_SECRET` on the dev site, the prod
+endpoint DISABLED; `f44a8db` redeployed dev so the function reads the new
+secret (every function rebuilt, 17:52:36 UTC). **"#14 Test Email", 19:26:45
+UTC: ten newlines, "Attachments: Lumen.pdf", and the diagnostic — Resend's
+Received emails API hands over `text` WITH line breaks, `html`, and
+`attachments` as `[{ id, filename, content_type, content_id,
+content_disposition, size }]`.** The fix needed no change. `173948a` removed
+the diagnostic (`outcome: null` again; the shape lives in the fetch comment)
+and let the viewer's outcome line wrap; dev served `index-Bz_vDa_T.js` 38
+seconds after the push. Jeff's screenshot of #14 in the viewer: every line,
+the blank ones, the attachment line. **The webhook stays on dev until the
+ship** (§5). Guide §18b31 carries the rule: a shared database does not say
+which site wrote the row; read the provider's target first.
+
+**Eighth session, third batch (7 Sep) — ON DEV ONLY, deploy-verified, PROVEN
+on 8 Sep (above), NOT shipped:** `f17e835` (the §0.93 follow-up) and its landing
 docs commit. accelerep.netlify.app served `index-CkYvyiY8.js` — the local gate
 build's hash — 32 seconds after the push (18:39:16 UTC). What it is: Jeff's
 report on the fourteen steps — 3 "when i hit escape the dialog closes but so
@@ -80,9 +119,10 @@ the code and the row: each rail had its own Escape listener beside App.jsx's
 every newline to a space before storing — the stored "Test email #4" holds
 zero newlines — so the body now goes through `_inboundText.mjs`
 (newlines kept, HTML blocks become breaks, "Attachments: …" appended from
-whatever names the payload carries; the files are not stored; whether
-Resend's receiving API carries an `attachments` array is unverified — the
-code is defensive); and the contact is owned by Karen underneath
+whatever names the payload carries; the files are not stored; Resend's
+receiving API carries `attachments` as `[{ id, filename, content_type,
+content_id, content_disposition, size }]` — verified 8 Sep); and the contact
+is owned by Karen underneath
 (`stampOwnerId` at creation) with a blank "Assigned Rep" on screen, hidden
 by the Contacts tab's remembered "Mine" scope — not a viewer bug, item 28.
 `tests/inbound-text.test.mjs` (5), `email-inbound.itest.mjs` +2 against the
@@ -625,7 +665,7 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (7 Sep, eighth session)
+## 4. Verified state at close (8 Sep, eighth session, third close)
 
 Five gates green on 151 files (four new files this session) · **570/570 unit**
 (15 new this session: 5 in `slack-webhook.test.mjs`, 5 in
@@ -633,29 +673,35 @@ Five gates green on 151 files (four new files this session) · **570/570 unit**
 printed green baseline** (19 added and 1 rewritten this session; run alone
 after each batch — the §0.93 run first caught 293/294, the id-space mutant
 survived, its case was added and the harness re-run in full) · build
-**2,437 kB JS**, `index-CkYvyiY8.js`, guard OK, `dist/` cleared · **116/116
+**2,437 kB JS**, `index-Bz_vDa_T.js`, guard OK, `dist/` cleared · **116/116
 integration** (8 new: 6 in `send-slack.itest.mjs`, 2 in
 `email-inbound.itest.mjs`; +2 cases in `integration-requests.itest.mjs`; the
 test database needed no schema change) ·
 **no pane browser pass this session** — the pane holds no session and signing
-in needs Jeff's credentials; §0.93 OBSERVED by Jeff ("works"), §0.92 NOT
-observed, the §0.93 follow-up NOT yet re-run · dev deploys observed serving
-`index-C1VD4DfX.js` (§0.93), `index-CkYvyiY8.js` (its follow-up) and, for
+in needs Jeff's credentials; §0.93 OBSERVED by Jeff ("works"), its follow-up
+PROVEN by a real email on 8 Sep (the row read back, Jeff's screenshot of the
+viewer), §0.92 NOT observed · dev deploys observed serving `index-C1VD4DfX.js`
+(§0.93), `index-CkYvyiY8.js` (its follow-up), `index-Bz_vDa_T.js` (the
+diagnostic removed) and, for
 the functions-only §0.92, Netlify's deploy record (`6a9efbfd…` = `bac7387`,
 ready) · **`master` == `cf72f99`, prod serving `index-DIeZb8qh.js` (ninth
 ship)**; dev is ahead of master by the eight observation docs commits
 (`b676795` … `f6f14db`), `bac7387` + `de94064`, `92b6ecc` + `5c0c94c`, the
-first close pair (`62efc7b`, `3a3c0bc`), `f17e835` + its landing, and this
-close · no schema change · the working tree was clean at close.
+first close pair (`62efc7b`, `3a3c0bc`), `f17e835` + its landing + the second
+close pair, then 8 Sep: three diagnostics (`d1fcf44`, `c4ccdbb`, `696b85b`),
+four docs (`1a776e6`, `b707a78`, `f44a8db`, and the 173948a landing), the
+removal `173948a`, and this close — 26 in all · no schema change · **the
+Resend inbound webhook now targets DEV; prod's endpoint is disabled** · the
+working tree was clean at close.
 
 ## 5. Next — start here
 
 **Eighth-session prep, in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect seventeen commits after `cf72f99`: eight docs-only observation
-  commits, `bac7387` (§0.92) + `de94064`, `92b6ecc` (§0.93) + `5c0c94c`,
-  `62efc7b` + `3a3c0bc` (the first close), `f17e835` (the §0.93 follow-up) +
-  its landing, and this close. Anything else is unshipped code and a finding.
+  expect twenty-six commits after `cf72f99` (§4 lists them). Anything else is
+  unshipped code and a finding. **Then read Resend → Webhooks:** the dev
+  endpoint should be Enabled and the prod one Disabled (8 Sep, Jeff); if that
+  has changed, say so before trusting any email observation (§18b31).
 - **Jeff eyeballs §0.92 on deployed dev** (NOT yet observed — the observable
   is a 403/400 behind a session): as Karen there is no Settings tab (by
   design); as Admin, Settings → Integrations → Connected apps → Configure →
@@ -664,15 +710,11 @@ close · no schema change · the working tree was clean at close.
   (https://hooks.slack.com/services/…)"; Save configuration with it → the same
   message, nothing saved (reopen: the real URL is still there); the real
   webhook still tests (a post in #sales-alerts) and saves.
-- **Jeff re-runs steps 3, 7 and 9 on deployed dev** (the follow-up `f17e835`,
-  NOT yet seen): as Karen, send Jeff Russelltest a NEW email with five or six
-  lines, a blank line in the middle and an attachment, her personal address
-  in CC → the row shows the subject bold and two lines only; click → every
-  line and the blank one, then "Attachments: <name>"; Escape closes the
-  viewer and the contact rail stays open. "Test email #4" itself stays one
-  paragraph — stored before the fix. If the Attachments line is missing on a
-  real send, Resend's receiving payload does not carry names — a finding for
-  item 27, not a regression.
+- **DONE — steps 3, 7 and 9 PROVEN on dev (8 Sep):** Escape leaves the rail
+  open; "#14 Test Email" stored with its line breaks and "Attachments:
+  Lumen.pdf", seen in the viewer. It took a day because the Resend webhook
+  was delivering to prod (§1, day two). Rows stored before 8 Sep 19:26 UTC
+  stay flat — nothing rewrites old rows.
 - **DONE — §0.93 OBSERVED ("works"), then reported step by step: 1, 2, 4, 5,
   8, 10, 12–14 Pass; 3, 7, 9 fixed above; 6 is item 28; 11 not applicable.**
   The fourteen steps, kept as the record
@@ -692,14 +734,17 @@ close · no schema change · the working tree was clean at close.
   `extra->'slackConfig'->>'webhookUrl'` per org on the app database; anything
   not `https://hooks.slack.com/services/…` is a finding to raise with Jeff
   before `git push origin dev:master`.
-- **Then ship §0.92 + §0.93 when Jeff says so** — ancestor check, `git push
-  origin dev:master`, poll salespipelinetracker.com for a NEW hash (not
-  `index-C1VD4DfX.js` — the live key is inlined), `pk_live_` inlined,
+- **Then ship §0.92 + §0.93 + the follow-up when Jeff says so** — ancestor
+  check, `git push origin dev:master`, poll salespipelinetracker.com for a NEW
+  hash (not `index-Bz_vDa_T.js` — the live key is inlined), `pk_live_` inlined,
   `setViewingActivity` and `title:"Open"` present; `send-slack` 401
   unauthenticated. Prod has not had a functions-only landing before: the
   Netlify deploy record is the proof for §0.92 (site `099ef621…`, the
   `netlify-deploy-services-reader` MCP with the deploy id from
-  `get-projects`).
+  `get-projects`). **At the same time, flip the Resend webhook back:** enable
+  the prod endpoint, disable the dev one — one target (§18b31). Until then
+  prod logs no email. Prod's `RESEND_INBOUND_SECRET` is unchanged (its
+  endpoint keeps its own secret).
 - **Option 3 — item 27, Jeff's call after he has read a real email in the
   viewer:** store From/To/Cc and the Message-ID on the row (an additive
   nullable jsonb column on `activities`, both databases first, §18c), raise or
@@ -1536,3 +1581,14 @@ to show them; a contact owned by the person who made it and labelled
 nobody's. Two were fixed inside the hour and proven against the real
 database; the third is a question about what a row should say about
 itself, and that is his to answer.
+
+Day two was a day of the same result. Seven emails, each stored flat, while
+every record said the fixed function was live. Three diagnostics printed
+nothing, and the fourth — written onto the row, where it could be read back
+— came back blank, which was the answer: the row had been written by
+something that could not have been the function under test. One webhook,
+three months old, pointing at prod. The shared database had been saying yes
+to both sites all along. Jeff added an endpoint for dev, disabled the old
+one, and the next email came through with every line it was sent with and
+the name of the file attached. The fix had been right since the afternoon
+before. Nothing had run it.
