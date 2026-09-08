@@ -4492,6 +4492,27 @@ the next fix follows from it** (if `text` is flat and `html` has breaks:
 prefer html; if attachments sit under another key: read it). The diagnostic
 comes out once the shape is known.
 
+**8 Sep, the re-run (Jeff, "tet email 11", personal address in CC, a PDF
+attached): stored 14:53:42 UTC, owned by Karen, zero newlines, no
+Attachments line — "same result" — and the Netlify function log showed the
+three request rows (two of them this session's own probes) and NO console
+output at all**, not even the pre-existing `email-inbound: GET … -> status`
+line the fetch prints when it fails. The first diagnostic sat inside
+`if (full)`, so its silence says the fetch never produced a message: either
+`RESEND_API_KEY` is unset on the site (Jeff: "there is a resend api key") or
+the webhook payload carries no `email_id` where the code looks for it, and
+the body was taken from the webhook payload itself. The invocation's 502 ms
+fits a run with no Resend round trips. **Widened (`c4ccdbb`):** the same
+line now prints on BOTH paths — fetched: endpoint + shape; not fetched: key
+set?, `email_id` present?, `body.type`, and the webhook payload's own
+text/html/attachments shape and keys. Never content. Also possible: Netlify
+routes console output to Logs & metrics → Observability rather than the
+function log; Jeff looks there too. **One transient in the chain:**
+`audit-stream.itest.mjs` "a paused destination receives nothing…" failed once
+at 21.6 s inside the full `test:int` run and passed alone at 0.6 s — the
+local receiver under a slow test database, not the code (115/116 then 7/7);
+recorded, not chased.
+
 
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
