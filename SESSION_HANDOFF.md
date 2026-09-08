@@ -63,9 +63,26 @@ mutants; the harness's first run let all three SURVIVE because the suite was
 not in its `SUITES` list — registered, 309/309); landed from Netlify's deploy
 record (`6aa078b6…` = `b5da1a7`, ready 21:06:26 UTC, `pipeline-alerts`
 rebuilt). The answer to his question is **item 29** — there is no org-level
-selection today; the proposal is five checkboxes in the Slack modal. **NOTHING
-SHIPPED this session** — `master` stays at `cf72f99`; dev is ahead by 36
-commits (§4).
+selection today; the proposal is five checkboxes in the Slack modal. Then
+Jeff: **"lets do 29, 30 and 32 while I reset the webhook"** — three batches,
+each verified, landed and recorded before the next: **§0.96 `adc5780`** —
+five checkboxes in Configure Slack saved as `slackConfig.alerts`, asked by
+`sendSlackToOrg` before every post (a config saved before the key posts
+everything), the card reading "n of 5 alerts"; **§0.97 `282c16c`** — the
+calendar OAuth round trip carries where Connect was clicked and how it went
+(allowlists only), App.jsx lands the user back on that surface with one
+line; **§0.98 `5bca4fd`** — a site-wide `job_heartbeats` table (both
+databases first), every scheduled handler wrapped in `withHeartbeat`, an
+Admin-only `job-status`, a "Scheduled jobs running" health check and an
+"Alerts job" line on the Slack card — **PROVEN by the first heartbeat row
+ever recorded** (task-reminders, ok, 22:02:03 UTC, `ok_count` 2, read back
+from the app database). Along the way: the harness once died mid-mutant and
+left a mutant on disk (`git status` caught it — §0.96), the TDZ gate caught
+an unimported `useEffect` (§0.97), the org-scoping scan flagged the
+site-wide table and got its exemption with the reason beside it (§0.98).
+**NOTHING SHIPPED this session** — `master` stays at `cf72f99`; dev is ahead
+by 43 commits (§4). **The Resend webhook's target after Jeff's reset is NOT
+recorded here** — read the dashboard first (§5).
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -92,11 +109,10 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.95` with a paragraph beginning **"Found reading `pipeline-alerts.mjs`
-to answer Jeff's question"** and a paragraph beginning **"Landed on dev
-(`b5da1a7`"**, and `### 0.94` with a paragraph beginning **"Open — calendar
-Connect's failure has no surface"**; and does `docs/ACCELEREP_CODING_GUIDE.md`
-carry **`## 18b33`** (after `## 18b32` and `## 18b31`)? If not, you are
+`### 0.98` with a paragraph beginning **"Landed on dev (`5bca4fd`"** and
+`### 0.97` with a paragraph beginning **"Landed on dev (`282c16c`"**, and does
+`docs/ACCELEREP_CODING_GUIDE.md` under `## 18b33` carry the words **"every
+scheduled handler is `withHeartbeat('<job>', run)`"**? If not, you are
 looking at a copy that predates this handoff. Check section
 content, never dates.
 
@@ -702,36 +718,44 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (8 Sep, ninth session)
+## 4. Verified state at close (8 Sep, ninth session — after items 29, 30, 32)
 
-Five gates green on 151 files (one new test file) · **577/577 unit** (7 new
-this session: 1 in `slack-webhook.test.mjs`, 3 in `connected-apps.test.mjs`, 3
-in `pipeline-alerts.test.mjs`) · **309/309 mutations, printed green baseline**
-(10 added: 3 for §0.92's follow-up, 4 for §0.94, 3 for §0.95;
-`tests/pipeline-alerts.test.mjs` added to the harness's `SUITES` after its
-first run let its three mutants survive) · build **2,438 kB JS**,
-`index-DhQ2fFJ5.js`, guard OK, `dist/` cleared · **116/116 integration**
-(unchanged) · **no pane browser pass** — the pane holds no session; §0.92's
-follow-up OBSERVED by Jeff (second screenshot), §0.94 and §0.95 NOT observed ·
-dev deploys observed serving `index-BRrOppU7.js` (20:31:27 UTC) and
-`index-DhQ2fFJ5.js` (20:54:55 UTC), and for the functions-only §0.95 Netlify's
-deploy record (`6aa078b6…` = `b5da1a7`, ready 21:06:26 UTC) · **`master` ==
+Five gates green on 154 files (five new source files this session: three
+pure `src/utils` modules, `_heartbeat.mjs`, `job-status.mjs`) · **603/603
+unit** (33 new this session: 1 slack-webhook, 3 connected-apps, 3
+pipeline-alerts, 8 slack-alerts, 9 calendar-return, 9 job-heartbeat) ·
+**326/326 mutations, printed green baseline** (27 added this session; four
+new suites registered in the harness's `SUITES`) · build **2,438 kB JS**,
+`index-LNt1yblV.js`, guard OK, `dist/` cleared · **122/122 integration** (6
+new: 2 send-slack, 4 job-heartbeat; `job-heartbeat.itest.mjs` added to
+package.json's `test:int` list) · **no pane browser pass** — the pane holds
+no session; §0.92's follow-up OBSERVED by Jeff (second screenshot); §0.94,
+§0.95, §0.96, §0.97 NOT observed; §0.98 PROVEN by the first heartbeat row
+read back from the app database · dev deploys observed serving
+`index-BRrOppU7.js`, `index-DhQ2fFJ5.js`, `index-Dz4BAypy.js`,
+`index-lFOC0BmK.js`, `index-LNt1yblV.js`, and Netlify's deploy records for
+§0.95 (`6aa078b6…`) and §0.98 (`6aa08537…`, 76 functions) · **`master` ==
 `cf72f99`, prod serving `index-DIeZb8qh.js` (ninth ship)**; dev is ahead of
-master by 36 commits: the eighth session's 26, then `8666737`, `08de43d`,
+master by 43 commits: the eighth session's 26, then `8666737`, `08de43d`,
 `0163cd1`, `2b28a24`, `b1c4769`, `e77d841`, `1c8ce78`, `b5da1a7`, `2049a4a`,
-and this close · no schema change · **the Resend inbound webhook targets
-DEV; prod's endpoint is disabled (Jeff: "confirmed")** · **prod's
-`pipeline-alerts` is still the April code — it sends nothing until the ship**
-· the working tree was clean at close.
+`9fc662f`, `adc5780`, `b5a9f5c`, `282c16c`, `7d4b406`, `5bca4fd`, `1e47b13`,
+and this close · **one schema change: `job_heartbeats`, additive, in BOTH
+databases** (applied and read back before the code was committed) · **the
+Resend inbound webhook: Jeff said "while I reset the webhook" at 21:2x UTC;
+which endpoint is Enabled now is not recorded — read the dashboard** ·
+**prod's `pipeline-alerts` is still the April code — it sends nothing until
+the ship** · the working tree was clean at close.
 
 ## 5. Next — start here
 
 **Ninth-session prep (read at the tenth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect thirty-six commits after `cf72f99` (§4 lists them). Anything else is
-  unshipped code and a finding. **Then read Resend → Webhooks** — dev
-  Enabled, prod Disabled (Jeff, 8 Sep: "confirmed"); if that has changed, say
-  so before trusting any email observation (§18b31).
+  expect forty-three commits after `cf72f99` (§4 lists them). Anything else
+  is unshipped code and a finding. **Then read Resend → Webhooks** — Jeff
+  said "while I reset the webhook" (8 Sep, 21:2x UTC) and the result is NOT
+  recorded: if the prod endpoint is Enabled again, every inbound email is
+  written by prod's pre-§0.93 function and dev's code never runs on it;
+  say which before trusting any email observation (§18b31).
 - **Look at #sales-alerts.** The first hourly `pipeline-alerts` run that can
   get past its first deal on dev was 22:00 UTC 8 Sep (state §0.95). A post
   there is the first alert in five months; none is not a finding by itself —
@@ -745,9 +769,12 @@ DEV; prod's endpoint is disabled (Jeff: "confirmed")** · **prod's
   unless a server refuses: the observable is the ABSENCE of a banner. Karen
   cannot reach Settings; the negatives are the source scan and four mutants.
 - **Before shipping: nothing new to read** — the pre-ship Slack-webhook read
-  is done (one webhook, dev's). **Ship §0.92–§0.95 when Jeff says so:**
+  is done (one webhook, dev's). **Ship §0.92–§0.98 when Jeff says so:**
   ancestor check, `git push origin dev:master`, poll salespipelinetracker.com
-  for a NEW hash (not `index-DhQ2fFJ5.js` — the live key is inlined),
+  for a NEW hash (not `index-LNt1yblV.js` — the live key is inlined); the
+  `job_heartbeats` table is already in the shared database (§18c), so prod's
+  functions may land in any order and prod's first heartbeat (task-reminders)
+  appears within a minute of the ship — a read-only SELECT proves it;
   `pk_live_` inlined, "Not saved — " / "Not requested — " / `title:"Open"`
   present, `send-slack` 401 unauthenticated; prod's `pipeline-alerts` needs
   Netlify's deploy record (functions-only proof: the deploy id from
@@ -755,7 +782,12 @@ DEV; prod's endpoint is disabled (Jeff: "confirmed")** · **prod's
   ship is the first prod alert since April. **At the same time flip the
   Resend webhook back** — enable prod, disable dev (§18b31). Until then prod
   logs no email and sends no alert.
-- **Item 29 — Jeff's call (his question, 8 Sep: "How do I choose what gets
+- **DONE — item 29 is §0.96 (`adc5780`), landed `index-Dz4BAypy.js`; NOT
+  observed. Jeff eyeballs, as Admin: Connected apps → Slack → Configure →
+  five ticked boxes under "What posts to Slack" → untick one → Save
+  configuration → the card reads "Connected · #sales-alerts · 4 of 5
+  alerts"; refresh — it stays; reopen — the box is still unticked.** Was:
+  **Item 29 — Jeff's call (his question, 8 Sep: "How do I choose what gets
   posted to slack … Can we add an option that enables me to select what
   actions get posted"):** today the choice is per REP — each signal fires
   when that rep's own preference is on (avatar → Notifications, the "Pipeline
@@ -767,7 +799,16 @@ DEV; prod's endpoint is disabled (Jeff: "confirmed")** · **prod's
   `sendSlackToOrg(orgId, msg, alertType)`. One batch, org-scoped. No other
   connected app posts anything (calendars read, email logging is inbound, the
   audit stream chooses per destination already).
-- **Item 30 — Jeff's call:** a failed calendar OAuth Connect lands on Home
+- **DONE — item 30 is §0.97 (`282c16c`), landed `index-lFOC0BmK.js`; NOT
+  observed. Jeff eyeballs, as Admin: Connected apps → Google Calendar →
+  "Connect my calendar" → cancel at Google's consent screen → the browser
+  lands back on Connected apps with the Google card reading "Google Calendar
+  was not connected — you cancelled at the provider's consent screen, or the
+  provider refused."; connect for real → the same card reads "Google
+  Calendar connected — your calendar is live." and Live; a refresh shows
+  neither line. As Karen, from Home's Connect: the same two outcomes, landing
+  in her profile panel's Calendar tab.** Was: **Item 30 — Jeff's call:** a
+  failed calendar OAuth Connect lands on Home
   with no message — `calendar-oauth-callback.mjs` redirects to
   `?calconnect=error`, which nothing reads; `useCalendarState.calConnectResult`
   is set and read by nothing (state §0.94, last paragraph). Decide where the
@@ -777,7 +818,15 @@ DEV; prod's endpoint is disabled (Jeff: "confirmed")** · **prod's
   in `pipeline-alerts.mjs` read `manager.profile || {}`, not the top-level
   prefs the profile panel saves flat on the row (state §0.95); a manager who
   turned "Manager escalation alerts" off may still get them.
-- **Item 32 — design first:** a last-success stamp per scheduled job
+- **DONE — item 32 is §0.98 (`5bca4fd`), landed `index-LNt1yblV.js`, PROVEN
+  by the first heartbeat row (task-reminders, ok, 22:02 UTC, read back).
+  Jeff eyeballs after 23:00 UTC, as Admin: Settings → Workspace Health has
+  one more check, "Scheduled jobs running" — until 06:00 UTC it will instead
+  read "Scheduled jobs: Lead scoring has not run" (its first daily tick), which
+  is correct; Connected apps → Slack reads "Alerts job: Last ran Nm ago · ok".
+  If "Pipeline alerts error" appears there, the row's `last_error` is the
+  first thing to read (a read-only SELECT of `job_heartbeats`).** Was:
+  **Item 32 — design first:** a last-success stamp per scheduled job
   (`pipeline-alerts`, `digest`, `task-reminders`, `score-leads-batch`) that
   the Settings health tile can read — five months of hourly 500s were
   visible nowhere the app shows (guide §18b33). Table or `settings.extra`
