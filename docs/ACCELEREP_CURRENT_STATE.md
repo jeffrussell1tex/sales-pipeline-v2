@@ -4577,6 +4577,18 @@ ship** — at ship time, re-enable the prod endpoint in Resend and disable
 the dev one (two live endpoints would race; the Message-ID dedupe would
 make the loser a no-op, but one target is the rule — §18b31).
 
+**Dev landing (`173948a`, pushed 19:34:11 UTC):** accelerep.netlify.app served
+`index-Bz_vDa_T.js` — the local gate build's hash — at 19:34:49 UTC (was
+`index-CkYvyiY8.js`), 38 seconds after the push; the diagnostic-free
+`email-inbound` rides the same deploy. **Jeff's screenshot of #14 in the
+viewer (19:3x UTC, before this landing):** "#14 Test Email" bold over two
+lines in the rail; the viewer showing Test / Test / This is a test / There is
+an attachment / Jeff, each on its own line with the blank lines between, then
+"Attachments: Lumen.pdf", then the diagnostic as an "Outcome:" line — which
+forced a horizontal scrollbar (no spaces to wrap on), so that line now wraps
+(`overflowWrap: 'anywhere'` on the outcome/duration row, in `173948a`).
+`master` stays at `cf72f99`.
+
 
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
