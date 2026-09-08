@@ -81,8 +81,11 @@ left a mutant on disk (`git status` caught it — §0.96), the TDZ gate caught
 an unimported `useEffect` (§0.97), the org-scoping scan flagged the
 site-wide table and got its exemption with the reason beside it (§0.98).
 **NOTHING SHIPPED this session** — `master` stays at `cf72f99`; dev is ahead
-by 43 commits (§4). **The Resend webhook's target after Jeff's reset is NOT
-recorded here** — read the dashboard first (§5).
+by 43 commits (§4). **The Resend webhook after Jeff's reset — his screenshot
+of resend.com/webhooks at the close: the dev endpoint
+(`accelerep.netlify.app/…/email-inbound`, created 4h ago) Enabled, the prod
+endpoint (`salespipelinetracker.com/…`, 3mo ago) Disabled — unchanged from
+his "confirmed" at the open.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -741,8 +744,8 @@ master by 43 commits: the eighth session's 26, then `8666737`, `08de43d`,
 `9fc662f`, `adc5780`, `b5a9f5c`, `282c16c`, `7d4b406`, `5bca4fd`, `1e47b13`,
 and this close · **one schema change: `job_heartbeats`, additive, in BOTH
 databases** (applied and read back before the code was committed) · **the
-Resend inbound webhook: Jeff said "while I reset the webhook" at 21:2x UTC;
-which endpoint is Enabled now is not recorded — read the dashboard** ·
+Resend inbound webhook targets DEV; prod's endpoint is Disabled — Jeff's
+screenshot of the Webhooks page at the close** ·
 **prod's `pipeline-alerts` is still the April code — it sends nothing until
 the ship** · the working tree was clean at close.
 
@@ -751,11 +754,10 @@ the ship** · the working tree was clean at close.
 **Ninth-session prep (read at the tenth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
   expect forty-three commits after `cf72f99` (§4 lists them). Anything else
-  is unshipped code and a finding. **Then read Resend → Webhooks** — Jeff
-  said "while I reset the webhook" (8 Sep, 21:2x UTC) and the result is NOT
-  recorded: if the prod endpoint is Enabled again, every inbound email is
-  written by prod's pre-§0.93 function and dev's code never runs on it;
-  say which before trusting any email observation (§18b31).
+  is unshipped code and a finding. **Then read Resend → Webhooks** — at the
+  ninth session's close Jeff's screenshot showed the dev endpoint Enabled and
+  the prod one Disabled; if that has changed, say so before trusting any
+  email observation (§18b31). It flips back to prod at the ship.
 - **Look at #sales-alerts.** The first hourly `pipeline-alerts` run that can
   get past its first deal on dev was 22:00 UTC 8 Sep (state §0.95). A post
   there is the first alert in five months; none is not a finding by itself —
