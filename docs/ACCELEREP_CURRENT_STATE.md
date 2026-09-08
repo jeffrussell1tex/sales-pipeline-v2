@@ -4541,6 +4541,14 @@ unanswered. Jeff's call: repoint the webhook at
 the temporary `outcome` diagnostic comes out and the prod Slack-webhook
 read. Guide §18b31 carries the rule.
 
+**Jeff: "1" (8 Sep, ~17:45 UTC).** Resend's menu offers no edit, so: a NEW
+webhook for `email.received` at
+`https://accelerep.netlify.app/.netlify/functions/email-inbound`, its signing
+secret set as `RESEND_INBOUND_SECRET` on the dev site (Jeff's hands; never
+seen here), and the prod endpoint DISABLED, not deleted — one target at a
+time. Prod logs no email until the prod endpoint is enabled again. This
+commit exists to redeploy dev so the function reads the new secret.
+
 
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
