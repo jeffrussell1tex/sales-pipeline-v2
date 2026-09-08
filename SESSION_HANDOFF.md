@@ -31,7 +31,7 @@ root. Read this first, then verify every claim in it against the live repo
 before acting — **including the claims in this file**.
 
 **Ninth session (8 September 2026, Jeff: "claude, lets continue the effort on
-Accelrep") — OPEN, in progress; no code yet.** The ritual passed: 26 commits
+Accelrep") — OPEN, in progress.** The ritual passed: 26 commits
 after `cf72f99`, `dev` == `origin/dev` at `2c28b74`, both staleness
 fingerprints present, handoff copies identical, tree clean. Found: the state
 doc's header still carried the first close's counts (565 / 294 / 114,
@@ -44,10 +44,23 @@ yet shipped"); and **the pre-ship Slack-webhook read is DONE** — one read-only
 SELECT over the shared app database's five `settings` rows found ONE stored
 webhook, the dev org's, on `hooks.slack.com` and valid, the other four orgs
 none (recorded at the end of state §0.92). Nothing to raise before a ship.
-**Waiting on Jeff:** the Resend webhook targets (his dashboard: dev Enabled,
-prod Disabled?), the §0.92 eyeball, "ship prod", items 27 and 28, the
-Connected-apps dead-branch cleanup, and a look at #sales-alerts for the hourly
-pipeline alerts. `master` stays at `cf72f99`.
+Then Jeff: "1. confirmed" — the Resend targets stand (dev Enabled, prod
+Disabled) — and, at "what is the point of this test", his screenshot:
+`hooks.slack.com/services/` (no scheme) typed into the modal, Save clicked,
+refused, the card behind still "Connected · #sales-alerts" — **§0.92
+OBSERVED** — with the refusal rendered as the PANEL's banner behind the open
+dialog, circled, reading "not a valid URL". **Fixed the same hour, `0163cd1`:**
+the modal shows "Not saved — <reason>" under the field (one message slot for
+Send test message and Save; the panel restores its snapshot and rethrows),
+and a scheme-less paste is told "must start with https://" — guide §18b32,
+state §0.92 (two new paragraphs). Verified: five gates, build guard OK,
+572/572 unit (2 new), 116/116 integration, 302/302 mutations green baseline
+(3 new); dev served `index-BRrOppU7.js` 34 seconds after the push (20:31:27
+UTC, `2b28a24` records it). **Not yet observed:** the message inside the
+dialog — Jeff re-runs the same Save. **Waiting on Jeff:** that re-run, "ship
+prod", items 27 and 28, the Connected-apps dead-branch cleanup, and a look at
+#sales-alerts for the hourly pipeline alerts. `master` stays at `cf72f99`;
+dev is ahead by 31 commits.
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -721,7 +734,15 @@ working tree was clean at close.
   unshipped code and a finding. **Then read Resend → Webhooks:** the dev
   endpoint should be Enabled and the prod one Disabled (8 Sep, Jeff); if that
   has changed, say so before trusting any email observation (§18b31).
-- **Jeff eyeballs §0.92 on deployed dev** (NOT yet observed — the observable
+  **Ninth session, Jeff: "confirmed."**
+- **DONE by screenshot (ninth session, 8 Sep) — §0.92 OBSERVED: a scheme-less
+  URL refused on Save, the card still Connected. It found the refusal in the
+  panel banner BEHIND the modal — fixed in `0163cd1` (guide §18b32), landed
+  `index-BRrOppU7.js`. Jeff re-runs the same Save and reads "Not saved —
+  Webhook URL must start with https:// (…)" INSIDE the dialog; with
+  `https://example.com/hook` the message is the "must be a Slack Incoming
+  Webhook" one. That re-run is the one observation still owed.** Was:
+  **Jeff eyeballs §0.92 on deployed dev** (NOT yet observed — the observable
   is a 403/400 behind a session): as Karen there is no Settings tab (by
   design); as Admin, Settings → Integrations → Connected apps → Configure →
   paste `https://example.com/hook` → Send test message → the modal reads
