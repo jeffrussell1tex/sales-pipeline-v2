@@ -4795,6 +4795,18 @@ by `sendSlackToOrg(orgId, msg, alertType)` — org-scoped, one batch. No other
 connected app posts anything: the calendars are read-only, email logging is
 inbound, the audit stream already chooses per destination.
 
+**Landed on dev (`b5da1a7`, pushed 21:05:57 UTC 8 Sep) — read from Netlify's
+deploy record, since no `src/` changed:** deploy `6aa078b6…`, commit
+`b5da1a7`, branch `dev`, state ready, published 21:06:26 UTC (29 seconds
+after the push), "All files already uploaded" (the bundle is unchanged —
+`index-DhQ2fFJ5.js`), 74 functions deployed, `pipeline-alerts` rebuilt at
+21:06:25 (its digest changed; every other function's is the earlier one),
+secret scan 0 matches over 365 files. The next hourly run (`0 * * * *`,
+22:00 UTC) is the first in five months that can get past its first deal on
+dev; prod's copy is the April code until the ship. Whether it posts depends
+on a qualifying deal and the rep's preferences — Jeff looks at #sales-alerts
+after 22:00 UTC. `master` stays at `cf72f99`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
