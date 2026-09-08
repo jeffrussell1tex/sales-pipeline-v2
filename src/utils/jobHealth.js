@@ -2,8 +2,9 @@
 //
 // Origin: pipeline-alerts answered 500 every hour for five months (§0.95) and
 // nothing the app shows said so. Now every scheduled function stamps a
-// job_heartbeats row through _heartbeat.mjs, job-status.mjs (Admin-only)
-// returns the rows, and this module — pure, shared by the server wrapper (for
+// site_job_heartbeats row through _heartbeat.mjs (one per site AND job — dev
+// and prod share the database, item 34), job-status.mjs (Admin-only) returns
+// its own site's rows, and this module — pure, shared by the server wrapper (for
 // the cron it records) and the client (for the Settings health tile and the
 // Slack card) — turns rows into a verdict.
 //
@@ -21,6 +22,22 @@ export const SCHEDULED_JOBS = Object.freeze([
 ]);
 
 export const HEARTBEAT_GRACE_MS = 10 * 60 * 1000;   // a run may be slow, and Netlify's cron is not to the second
+
+/**
+ * Which deployment this process is (item 34): the host of Netlify's `URL` —
+ * "accelerep.netlify.app", "salespipelinetracker.com" — else `SITE_NAME`, else
+ * "local". Dev and prod share one database, so a heartbeat row is keyed by this
+ * AND the job; job-status returns only its own site's rows. Pure over the env
+ * it is handed (the callers pass process.env), so a test can name a site.
+ */
+export function siteKey(env) {
+    const url = typeof env?.URL === 'string' ? env.URL.trim() : '';
+    if (url) {
+        try { const h = new URL(url).host; if (h) return h; } catch { /* not a URL: fall through */ }
+    }
+    const name = typeof env?.SITE_NAME === 'string' ? env.SITE_NAME.trim() : '';
+    return name || 'local';
+}
 
 const toMs = (v) => {
     if (!v) return null;

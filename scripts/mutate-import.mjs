@@ -1532,6 +1532,19 @@ const mutations = [
         'src/utils/settingsCards.js',
         '        if (c) checks.push(c);',
         '        if (false) checks.push(c);'],
+    // ── §0.100 (item 34): one heartbeat row per SITE and job ───────────────────
+    ['heartbeat: job-status answers with every site\'s rows — a prod Admin reads dev\'s jobs',
+        'netlify/functions/job-status.mjs',
+        '        const rows = await db.select().from(siteJobHeartbeats).where(eq(siteJobHeartbeats.site, site));',
+        '        const rows = await db.select().from(siteJobHeartbeats);'],
+    ['heartbeat: every deployment stamps the same site key',
+        'src/utils/jobHealth.js',
+        '        try { const h = new URL(url).host; if (h) return h; } catch { /* not a URL: fall through */ }',
+        '        try { const h = new URL(url).host; if (false) return h; } catch { /* not a URL: fall through */ }'],
+    ['heartbeat: the finish stamp writes the job\'s row on every site',
+        'netlify/functions/_heartbeat.mjs',
+        '        .where(and(eq(siteJobHeartbeats.site, site), eq(siteJobHeartbeats.job, job)));',
+        '        .where(eq(siteJobHeartbeats.job, job));'],
 
     // ── Item 26: the activity viewer (0.93) ─────────────────────────────────────
     ['viewer: a rep may edit any rep\'s activity from the viewer',

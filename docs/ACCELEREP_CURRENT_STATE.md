@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
-**Updated:** September 8, 2026 (ninth session — the tenth ship)
-**Verified at:** five gates green on 154 files · **606 tests** · **330/330 mutations, printed green baseline** · **123/123 integration** · build guard OK 2,438 kB `index-B-DxPVK_.js` (dev) · **prod `5a306e3` serving `index-JJdhJmyd.js` (tenth ship, 8 Sep 22:36 UTC — §0.92 through §0.99)** · dev ahead of `master` only by the ship-record docs commits. **The Resend inbound webhook: targets DEV at the ship; Jeff flips it back to prod (guide §18b31) — until he does, prod logs no email.** The app database and the test database both hold `audit_stream_destinations` and `job_heartbeats`. (This header and the per-batch lines under it were refreshed at the ninth session's open and again at the tenth ship — the sections are the record.)
-**Batch:** **the company decides what posts to Slack (§0.99, handoff item 33 — Jeff: "I don't want to have to rely on users to pick the correct items by themselves")** — two event posts from the deal save the moment they happen (stage changed, closed won — who moved it, the rep, the ARR), the five hourly signals posted on the org's checkboxes alone with the rep's own preference gating only that rep's email and SMS, seven checkboxes in two groups, honest labels, a 4-second cap on the Slack fetch inside the save. SHIPPED to prod in the tenth ship (`5a306e3`, `index-JJdhJmyd.js`, 8 Sep 22:36 UTC); **the Closed Won post OBSERVED by Jeff's screenshot of #sales-alerts (22:33 UTC) — the first real Slack post the app has made.**
+**Updated:** September 8, 2026 (tenth session — §0.100, one heartbeat row per site and job)
+**Verified at:** five gates green on 154 files · **607 tests** · **333/333 mutations, printed green baseline** · **124/124 integration** · build guard OK 2,446 kB `index-B-DxPVK_.js` (dev — the SAME hash as §0.99, byte-identical to the served dev bundle at 2,504,539 bytes: §0.100 changes nothing the client bundles; this header had carried "2,438 kB" from §0.94 — the guard prints 2,446 for this hash) · **prod `5a306e3` serving `index-JJdhJmyd.js` (tenth ship, 8 Sep 22:36 UTC — §0.92 through §0.99)** · dev ahead of `master` by the ship-record docs commits and §0.100. **The Resend inbound webhook targets PROD again — Jeff's screenshot after the tenth ship (this line had still said "targets DEV at the ship").** The app database and the test database both hold `audit_stream_destinations`, `job_heartbeats` (legacy, dropped by hand after the eleventh ship) and `site_job_heartbeats`. (This header and the per-batch lines under it were refreshed at the ninth session's open, at the tenth ship, and at §0.100 — the sections are the record.)
+**Batch:** **one heartbeat row per SITE and job — Settings reads its own deployment (§0.100, handoff item 34)** — `job_heartbeats` was keyed by job alone on a database dev and prod share, so one row served both sites and said a job ran SOMEWHERE (at this session's open: `pipeline-alerts` ok at 23:00:38 UTC, `ok_count` 2 — one tick each from dev and prod, indistinguishable); now a NEW additive table `site_job_heartbeats` keyed by (site, job) — a new table rather than a new key on the old one, because swapping a live table's primary key is not additive and would have broken prod's still-running stamps until the ship (guide §18c) — applied to both databases and read back first; `siteKey(env)` names the deployment from Netlify's URL host; the wrapper stamps (site, job) and `job-status` returns only its own site's rows with `site` in the response; the client is unchanged. ON DEV; the legacy table stays until prod ships and Jeff drops it by hand.
+**Prior batch:** **the company decides what posts to Slack (§0.99, handoff item 33 — Jeff: "I don't want to have to rely on users to pick the correct items by themselves")** — two event posts from the deal save the moment they happen (stage changed, closed won — who moved it, the rep, the ARR), the five hourly signals posted on the org's checkboxes alone with the rep's own preference gating only that rep's email and SMS, seven checkboxes in two groups, honest labels, a 4-second cap on the Slack fetch inside the save. SHIPPED to prod in the tenth ship (`5a306e3`, `index-JJdhJmyd.js`, 8 Sep 22:36 UTC); **the Closed Won post OBSERVED by Jeff's screenshot of #sales-alerts (22:33 UTC) — the first real Slack post the app has made.**
 **Prior batch:** **every scheduled job leaves a heartbeat, and Settings reads it (§0.98, handoff item 32)** — a new site-wide `job_heartbeats` table (applied to both databases and read back first, §18c), `withHeartbeat()` around all four scheduled handlers (start and finish stamps, ok/error from the result or the throw, the handler's counts as the summary, never breaking the job), an Admin-only `job-status` endpoint, and a pure `jobHealth` verdict — ok / stalled / error / never — behind a new Workspace Health check and an "Alerts job: Last ran …" line on the Slack card. Five months of hourly 500s (§0.95) would have been red from the first hour. SHIPPED to prod in the tenth ship (`5a306e3`, `index-JJdhJmyd.js`, 8 Sep 22:36 UTC); not observed.
 **Prior batch:** **a calendar Connect lands back where it started and says how it went (§0.97, handoff item 30)** — the OAuth callback had redirected to a query nothing read, so a failed Connect landed on Home in silence; now the start carries `from` through the provider in `state`, the callback's six exits go through one allowlisted `calendarReturnUrl` (status, provider, scope, from, reason — never free text), App.jsx reads it once when Clerk's user is present, cleans the URL, and lands the user on Connected apps / Company calendar (an Admin, that panel opened through `settingsOpenPanel`) or the profile panel's Calendar tab, where one line says "Google Calendar connected" or "was not connected — <why>". One pure module (`src/utils/calendarReturn.js`) shared by both sides. SHIPPED to prod in the tenth ship (`5a306e3`, `index-JJdhJmyd.js`, 8 Sep 22:36 UTC); not observed.
 **Prior batch:** **an org chooses which of the five pipeline alerts post to Slack (§0.96, handoff item 29 — Jeff: "Can we add an option that enables me to select what actions get posted")** — five checkboxes in the Configure Slack modal saved as `slackConfig.alerts`, normalised to five booleans by settings.mjs, asked by `sendSlackToOrg` before every post (a config saved before the key posts everything; an unknown type fails closed; the untyped digest and test are not gated); the card reads "n of 5 alerts". One pure module (`src/utils/slackAlerts.js`) shared by the modal, settings.mjs and send-slack.mjs; the keys are the rep-side preference keys. Superseded in part by §0.99 (the rep's preference no longer gates the company's post; seven types). SHIPPED to prod in the tenth ship (`5a306e3`, `index-JJdhJmyd.js`, 8 Sep 22:36 UTC); **the card OBSERVED by Jeff ("slack card working as stated").**
@@ -5151,7 +5152,73 @@ and it says the job ran SOMEWHERE, not where. A prod job that stalled while
 dev's kept running would read ok on both sites' health tiles. The fix is a
 site column (`process.env.URL`, or the site id) in the key and in
 `job-status`'s filter, one batch; until then the tile's verdict is
-"the job runs on at least one site".
+"the job runs on at least one site". **Done in §0.100 — as a NEW table, not
+a new key on the old one (guide §18c).**
+
+### 0.100 One heartbeat row per site and job — Settings reads its own deployment (8 Sep, tenth session — handoff item 34)
+
+**Origin (item 34, found at the tenth ship):** §0.98's `job_heartbeats` is
+keyed by `job` alone, and dev and prod share one Neon `main` — so the two
+sites wrote the SAME row, and it said the job ran somewhere, not where. At the
+ship, `ok_count` 40 where dev alone had ticked 38 times. At this session's
+open (23:04 UTC) the shared row read `pipeline-alerts` ok, started 23:00:38
+UTC, `ok_count` 2 — one tick from dev and one from prod, indistinguishable;
+`task-reminders` `ok_count` 92 (both sites every minute). A prod job that
+stalled while dev's kept running would have read ok on both Workspace Health
+tiles; prod's Slack card would have shown dev's alert run.
+
+**Design — a NEW table, not a new key (guide §18c's new bullet).** The
+obvious fix, `site` added to the key of `job_heartbeats`, is not additive:
+the moment a composite key replaced `(job)`, prod's pre-§0.100 functions —
+still running until the eleventh ship — would have had no `(job)` unique
+constraint left for their `ON CONFLICT (job)` upsert, and their finish
+`UPDATE … WHERE job = x` would have written every site's row. Wrong data on
+both tiles for the whole window. So: `site_job_heartbeats` — the same ten
+columns plus `site text NOT NULL`, `PRIMARY KEY (site, job)`
+(`db/apply-site-job-heartbeats.mjs`, `CREATE TABLE IF NOT EXISTS` only,
+applied to the TEST database and then the shared APP database and read back —
+eleven columns, the constraint text `PRIMARY KEY (site, job)`, zero rows —
+before any code was written; the test-schema guard lists it). The old table
+overlaps nothing: prod keeps stamping `job_heartbeats` until the ship, dev
+stamps the new one, and after the ship the old table is dead — declared
+LEGACY in `schema.ts` (it still exists in both databases) until Jeff drops
+it by hand, a read of its rows first; then the declaration and the old apply
+script go. The bundle hash CANNOT show this batch: nothing that reaches the
+client changed (the one `src/` edit, a server-only export in
+`jobHealth.js`, is tree-shaken — `index-B-DxPVK_.js` again, byte-identical
+to the served dev bundle); the landing proof is Netlify's deploy record and
+the first `site_job_heartbeats` row.
+
+**What changed.** `siteKey(env)` in `src/utils/jobHealth.js` (pure over
+the env it is handed): the host of Netlify's `URL` — `accelerep.netlify.app`,
+`salespipelinetracker.com`, `localhost:8888` under netlify dev — else
+`SITE_NAME`, else `local`; the callers pass `process.env`, a test passes a
+site of its own. `_heartbeat.mjs` reads the site once per run, upserts on
+`(site, job)`, and the finish stamp is keyed by both — a mutant that drops
+`site` from that WHERE rewrites every site's row and is caught by the scan.
+`job-status.mjs` returns `{ now, site, jobs }` — its OWN site's rows only.
+The client is untouched: `jobHealth(rows, now)` never keyed on site, the tile
+and the Slack card read the same shape. The org-scoping scan's exemption for
+the wrapper keeps its reason, now naming the new table.
+
+**Verified:** five gates, build guard OK `index-B-DxPVK_.js` (unchanged —
+above), **607/607 unit** (1 new: `siteKey` — URL wins over SITE_NAME, the
+port survives, a path is dropped, an unreadable URL falls through, and dev's
+and prod's keys can never be equal; the wrapper, endpoint, schema, apply-
+script and guard scans rewritten for the new table and its key — "the legacy
+shared-row table is not written"), **124/124 integration** (the suite
+rewritten per site with two deployments of its own: an ok run's row is keyed
+by the site the process belongs to; the same job run on site B is its OWN
+row and touches nothing of site A's count or summary; job-status on A lists
+A's three rows once each with A's counts and `site` in the body, on B lists
+B's one row and nothing of A's; 403 for a User and a Manager, 401 with no
+session — the suite sets and restores `process.env.URL` around each call),
+**333/333 mutations, printed green baseline** (3 new: job-status answers
+with every site's rows; every deployment stamps the same site key; the
+finish stamp writes the job's row on every site). Five of the edited files
+are CRLF on disk under `core.autocrlf=true` (git stores LF): the edit script
+matched on LF and wrote each file back in its own EOL, asserted from disk.
+Not browser-checked here — the observable is a row, read below.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

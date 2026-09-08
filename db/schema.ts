@@ -1,5 +1,5 @@
 import {
-    pgTable, text, integer, boolean, timestamp, jsonb, varchar, decimal, index, uniqueIndex
+    pgTable, text, integer, boolean, timestamp, jsonb, varchar, decimal, index, uniqueIndex, primaryKey
 } from 'drizzle-orm/pg-core';
 // ── USERS ─────────────────────────────────────────────────────────────────────
 // Sales reps, managers, admins — one row per user account
@@ -1254,23 +1254,51 @@ export const documentVersions = pgTable('document_versions', {
     index('document_versions_org_doc_idx').on(t.orgId, t.documentId),
 ]);
 
-// ── Scheduled-job heartbeats (state §0.98, handoff item 32) ───────────────────
-// One row per scheduled function (pipeline-alerts, digest, task-reminders,
-// score-leads-batch), stamped by _heartbeat.mjs at the start and end of every
-// run. Deliberately SITE-wide, not org-scoped: a job is a property of the
-// deployment, it runs once for every org, and the row carries counts and an
-// error message — never a tenant's data. Read by job-status.mjs (Admin-only)
+// ── Scheduled-job heartbeats, per site (state §0.100, handoff item 34) ────────
+// One row per (site, scheduled function): pipeline-alerts, digest,
+// task-reminders and score-leads-batch, stamped by _heartbeat.mjs at the start
+// and end of every run, where `site` is the deployment that ran it (the host
+// of Netlify's URL — accelerep.netlify.app, salespipelinetracker.com — see
+// siteKey() in src/utils/jobHealth.js). Deliberately site-scoped, not
+// org-scoped: a job is a property of the deployment, it runs once for every
+// org, and the row carries counts and an error message — never a tenant's
+// data. Read by job-status.mjs (Admin-only), which returns its OWN site's rows,
 // for the Settings health tile and the Slack card. Additive; nothing else
 // references it. Origin: five months of hourly 500s from pipeline-alerts were
-// visible nowhere the app shows (guide §18b33).
-export const jobHeartbeats = pgTable('job_heartbeats', {
-    job:            text('job').primaryKey(),                       // the function name
+// visible nowhere the app shows (guide §18b33); then §0.98's job_heartbeats,
+// keyed by job alone on a database two sites share, said a job ran SOMEWHERE
+// (handoff item 34). A new table rather than a new key on the old one because
+// a key change is not additive (guide §18c).
+export const siteJobHeartbeats = pgTable('site_job_heartbeats', {
+    site:           text('site').notNull(),                         // the deployment: siteKey(process.env)
+    job:            text('job').notNull(),                          // the function name
     schedule:       text('schedule'),                               // its cron, as declared to the wrapper
     lastStartedAt:  timestamp('last_started_at'),
     lastFinishedAt: timestamp('last_finished_at'),
     lastStatus:     varchar('last_status', { length: 10 }),         // 'running' | 'ok' | 'error'
     lastError:      text('last_error'),
     lastSummary:    jsonb('last_summary'),                          // the handler's own counts, as it returned them
+    okCount:        integer('ok_count').notNull().default(0),
+    errorCount:     integer('error_count').notNull().default(0),
+    updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+    primaryKey({ name: 'site_job_heartbeats_pk', columns: [t.site, t.job] }),
+]);
+
+// ── LEGACY: job_heartbeats (state §0.98) — superseded by site_job_heartbeats ──
+// Keyed by `job` alone, so dev and prod (one database) wrote the SAME row.
+// Nothing in this repo reads or writes it after §0.100; production's pre-§0.100
+// functions keep stamping it until the eleventh ship, after which it is dead.
+// Declared here only because it still exists in both databases; DROP it by
+// hand after the ship (a read of its rows first), then delete this block.
+export const jobHeartbeats = pgTable('job_heartbeats', {
+    job:            text('job').primaryKey(),
+    schedule:       text('schedule'),
+    lastStartedAt:  timestamp('last_started_at'),
+    lastFinishedAt: timestamp('last_finished_at'),
+    lastStatus:     varchar('last_status', { length: 10 }),
+    lastError:      text('last_error'),
+    lastSummary:    jsonb('last_summary'),
     okCount:        integer('ok_count').notNull().default(0),
     errorCount:     integer('error_count').notNull().default(0),
     updatedAt:      timestamp('updated_at').notNull().defaultNow(),

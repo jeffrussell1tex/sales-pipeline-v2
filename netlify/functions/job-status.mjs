@@ -1,19 +1,24 @@
 /**
- * job-status.mjs — the scheduled jobs' heartbeats (state §0.98, handoff item 32).
+ * job-status.mjs — the scheduled jobs' heartbeats (state §0.98, handoff item 32;
+ * per site since §0.100, handoff item 34).
  *
  * GET /.netlify/functions/job-status
- *   → { now, jobs: [{ job, schedule, lastStartedAt, lastFinishedAt, lastStatus,
- *                     lastError, lastSummary, okCount, errorCount }] }
+ *   → { now, site, jobs: [{ site, job, schedule, lastStartedAt, lastFinishedAt, lastStatus,
+ *                           lastError, lastSummary, okCount, errorCount }] }
  *
- * Admin-only. The rows are SITE-wide (one per function, no tenant data — see
- * the schema note): every org's Admin sees the same four rows, which is the
- * point — a stalled job is stalled for everyone. The verdict is the client's
- * (src/utils/jobHealth.js), so this returns the rows as stored.
+ * Admin-only. The rows are SITE-wide (one per function on THIS deployment, no
+ * tenant data — see the schema note): every org's Admin on a site sees the same
+ * four rows, which is the point — a stalled job is stalled for everyone on
+ * that site. Only this site's rows: dev and prod share the database, and a
+ * prod Admin must read prod's jobs, not dev's (item 34). The verdict is the
+ * client's (src/utils/jobHealth.js), so this returns the rows as stored.
  */
 import { db } from '../../db/index.js';
-import { jobHeartbeats } from '../../db/schema.js';
+import { siteJobHeartbeats } from '../../db/schema.js';
+import { eq } from 'drizzle-orm';
 import { verifyAuth, requireRole } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
+import { siteKey } from '../../src/utils/jobHealth.js';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -32,8 +37,9 @@ export const handler = async (event) => {
     if (forbidden) return forbidden;
 
     try {
-        const rows = await db.select().from(jobHeartbeats);
-        return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ now: new Date().toISOString(), jobs: rows }) };
+        const site = siteKey(process.env);
+        const rows = await db.select().from(siteJobHeartbeats).where(eq(siteJobHeartbeats.site, site));
+        return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ now: new Date().toISOString(), site, jobs: rows }) };
     } catch (err) {
         return { statusCode: 500, headers: HEADERS, body: JSON.stringify(serverErrorBody(err, 'job-status')) };
     }

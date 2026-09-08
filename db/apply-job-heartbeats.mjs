@@ -1,3 +1,9 @@
+// SUPERSEDED (state §0.100, handoff item 34): job_heartbeats was keyed by job
+// alone and dev and prod share the database, so one row served both sites. The
+// live table is site_job_heartbeats (db/apply-site-job-heartbeats.mjs). This
+// script is kept as the record of the legacy table until Jeff drops it by hand
+// after the eleventh ship; do not run it.
+//
 // One-shot, ADDITIVE-ONLY, idempotent DDL for job_heartbeats (state §0.98,
 // handoff item 32). Mirrors db/schema.ts exactly. Safe on the shared Neon main
 // branch: CREATE TABLE IF NOT EXISTS only — no DROP, no ALTER, and a second run

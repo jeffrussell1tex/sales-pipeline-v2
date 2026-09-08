@@ -2,9 +2,10 @@
 //
 // State §0.98, handoff item 32. pipeline-alerts answered 500 every hour for
 // five months (§0.95) and nothing the app shows said so. Now every scheduled
-// function runs through withHeartbeat(), which stamps a job_heartbeats row
-// (site-wide, one per job, no tenant data) at start and finish; job-status.mjs
-// (Admin-only) returns the rows; jobHealth() turns them into a verdict for the
+// function runs through withHeartbeat(), which stamps a site_job_heartbeats row
+// (one per SITE and job since §0.100, item 34 — dev and prod share the database;
+// no tenant data) at start and finish; job-status.mjs (Admin-only) returns its
+// own site's rows; jobHealth() turns them into a verdict for the
 // Settings health tile and the Slack card. The pure module is exercised here;
 // the wrapper against the real database is tests/integration/job-heartbeat.itest.mjs;
 // the source scans pin the wiring.
@@ -12,7 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import {
-    SCHEDULED_JOBS, HEARTBEAT_GRACE_MS, stallAfterMs, jobHealth, agoLabel, jobLine, jobsCheck, finishValues,
+    SCHEDULED_JOBS, HEARTBEAT_GRACE_MS, stallAfterMs, jobHealth, agoLabel, jobLine, jobsCheck, finishValues, siteKey,
 } from '../src/utils/jobHealth.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -82,6 +83,19 @@ test('agoLabel, jobLine and jobsCheck say it in words', () => {
         { id: 'jobs', label: 'Scheduled jobs: Pipeline alerts error, Daily digest has not run', ok: false });
 });
 
+test('siteKey names the deployment from its URL, then SITE_NAME, then "local" — never the same for two sites', () => {
+    assert.equal(siteKey({ URL: 'https://accelerep.netlify.app' }), 'accelerep.netlify.app');
+    assert.equal(siteKey({ URL: 'https://salespipelinetracker.com', SITE_NAME: 'ignored' }), 'salespipelinetracker.com', 'URL wins');
+    assert.equal(siteKey({ URL: 'http://localhost:8888' }), 'localhost:8888', 'netlify dev keeps its port');
+    assert.equal(siteKey({ URL: ' https://a.example.com/ ' }), 'a.example.com', 'trimmed, path dropped');
+    assert.equal(siteKey({ URL: 'not a url', SITE_NAME: 'accelerep' }), 'accelerep', 'an unreadable URL falls to SITE_NAME');
+    assert.equal(siteKey({ SITE_NAME: 'accelerep' }), 'accelerep');
+    assert.equal(siteKey({ URL: '', SITE_NAME: ' ' }), 'local');
+    assert.equal(siteKey({}), 'local');
+    assert.equal(siteKey(undefined), 'local');
+    assert.notEqual(siteKey({ URL: 'https://accelerep.netlify.app' }), siteKey({ URL: 'https://salespipelinetracker.com' }), 'REGRESSION (item 34): dev and prod must never share a row');
+});
+
 test('finishValues: a throw or a 400+ is an error, the body is the summary, parsed when JSON', () => {
     assert.deepEqual(finishValues({ statusCode: 200, body: JSON.stringify({ emailsSent: 2, smsSent: 0, skipped: 5 }) }), { ok: true, error: null, summary: { emailsSent: 2, smsSent: 0, skipped: 5 } });
     assert.deepEqual(finishValues({ statusCode: 200, body: 'Digest complete' }), { ok: true, error: null, summary: { body: 'Digest complete' } });
@@ -108,47 +122,57 @@ test('every scheduled function runs through withHeartbeat, exported as `handler`
 
 test('the wrapper stamps start and finish, never breaks the job, and returns or rethrows exactly', () => {
     const s = code(read('netlify/functions/_heartbeat.mjs'));
-    assert.ok(s.includes("import { SCHEDULED_JOBS, finishValues } from '../../src/utils/jobHealth.js';"), 'the classifier is the shared pure one');
+    assert.ok(s.includes("import { SCHEDULED_JOBS, finishValues, siteKey } from '../../src/utils/jobHealth.js';"), 'the classifier and the site key are the shared pure ones');
     // The org-scoping scan exempts this file (tests/org-scoping.test.mjs SKIP) because
-    // it writes only the site-wide job_heartbeats table. Keep that true.
-    assert.ok(s.includes("import { jobHeartbeats } from '../../db/schema.js';"), 'the one table it may touch');
+    // it writes only the site-scoped site_job_heartbeats table. Keep that true.
+    assert.ok(s.includes("import { siteJobHeartbeats } from '../../db/schema.js';"), 'the one table it may touch');
+    assert.ok(!s.includes('jobHeartbeats }') && !s.includes("'job_heartbeats'"), 'the legacy shared-row table is not written');
     assert.equal((s.match(/from '\.\.\/\.\.\/db\/schema\.js'/g) || []).length, 1, 'no other schema import');
     assert.ok(!/\b(users|accounts|contacts|opportunities|tasks|activities|leads|settings)\b/.test(s), 'no tenant table is named anywhere in the wrapper');
     const scan = read('tests/org-scoping.test.mjs');
     assert.ok(scan.includes("'_heartbeat.mjs']"), 'the exemption is declared beside its reason');
-    assert.ok(s.includes("try { await stampStart(job, startedAt); } catch (e) { console.error(`heartbeat(${job}): start stamp failed:`, e.message); }"), 'a failed start stamp is logged, not thrown');
+    assert.ok(s.includes('        const site = siteKey(process.env);'), 'the site is read per run, from the env the process runs in');
+    assert.ok(s.includes("try { await stampStart(site, job, startedAt); } catch (e) { console.error(`heartbeat(${job}@${site}): start stamp failed:`, e.message); }"), 'a failed start stamp is logged, not thrown');
     assert.ok(s.includes('        try { res = await run(event, context); }'));
     assert.ok(s.includes('        catch (err) { thrown = err; }'));
     assert.ok(s.includes('        const fin = finishValues(res, thrown);'));
-    assert.ok(s.includes("try { await stampFinish(job, new Date(), fin); } catch (e) { console.error(`heartbeat(${job}): finish stamp failed:`, e.message); }"));
+    assert.ok(s.includes("try { await stampFinish(site, job, new Date(), fin); } catch (e) { console.error(`heartbeat(${job}@${site}): finish stamp failed:`, e.message); }"));
     assert.ok(s.includes('        if (thrown) throw thrown;'), 'a throw is still a throw');
     assert.ok(s.includes('        return res;'), 'the result is the handler\'s own');
-    assert.ok(s.includes('.onConflictDoUpdate({ target: jobHeartbeats.job,'), 'one row per job');
-    assert.ok(s.includes('okCount:    ok ? sql`${jobHeartbeats.okCount} + 1` : jobHeartbeats.okCount,'), 'counts are incremented in the database, not read-modify-written');
+    assert.ok(s.includes('.onConflictDoUpdate({ target: [siteJobHeartbeats.site, siteJobHeartbeats.job],'), 'one row per site AND job');
+    assert.ok(s.includes('        .where(and(eq(siteJobHeartbeats.site, site), eq(siteJobHeartbeats.job, job)));'), 'REGRESSION (item 34): the finish stamp is keyed by site too, or one site\'s finish rewrites every site\'s row');
+    assert.ok(s.includes('okCount:    ok ? sql`${siteJobHeartbeats.okCount} + 1` : siteJobHeartbeats.okCount,'), 'counts are incremented in the database, not read-modify-written');
 });
 
-test('job-status is Admin-only and returns the rows as stored', () => {
+test('job-status is Admin-only and returns THIS site\'s rows as stored', () => {
     const s = code(read('netlify/functions/job-status.mjs'));
     assert.ok(s.includes("import { verifyAuth, requireRole } from './auth.mjs';"));
     assert.ok(s.includes("    const forbidden = requireRole(auth, ['Admin'], HEADERS);"));
     assert.ok(s.includes('    if (forbidden) return forbidden;'));
-    assert.ok(s.includes('        const rows = await db.select().from(jobHeartbeats);'));
-    assert.ok(s.includes("body: JSON.stringify({ now: new Date().toISOString(), jobs: rows })"), 'the server clock rides along for the verdict');
+    assert.ok(s.includes("import { siteKey } from '../../src/utils/jobHealth.js';"));
+    assert.ok(s.includes('        const site = siteKey(process.env);'));
+    assert.ok(s.includes('        const rows = await db.select().from(siteJobHeartbeats).where(eq(siteJobHeartbeats.site, site));'), 'REGRESSION (item 34): only this deployment\'s rows — dev and prod share the database');
+    assert.ok(s.includes("body: JSON.stringify({ now: new Date().toISOString(), site, jobs: rows })"), 'the server clock and the site ride along for the verdict');
     assert.ok(!s.includes('orgId'), 'site-wide: no org filter, no org data');
 });
 
-test('the schema, its apply script, and the test-schema guard all carry job_heartbeats', () => {
+test('the schema, its apply script, and the test-schema guard all carry site_job_heartbeats, keyed by site and job', () => {
     const schema = read('db/schema.ts');
-    assert.ok(schema.includes("export const jobHeartbeats = pgTable('job_heartbeats', {"));
-    for (const col of ['job', 'schedule', 'last_started_at', 'last_finished_at', 'last_status', 'last_error', 'last_summary', 'ok_count', 'error_count', 'updated_at']) {
+    assert.ok(schema.includes("export const siteJobHeartbeats = pgTable('site_job_heartbeats', {"));
+    assert.ok(schema.includes("    site:           text('site').notNull(),"));
+    assert.ok(schema.includes("    primaryKey({ name: 'site_job_heartbeats_pk', columns: [t.site, t.job] }),"), 'the key is (site, job)');
+    assert.ok(schema.includes("export const jobHeartbeats = pgTable('job_heartbeats', {"), 'the legacy table stays declared until it is dropped by hand');
+    for (const col of ['site', 'job', 'schedule', 'last_started_at', 'last_finished_at', 'last_status', 'last_error', 'last_summary', 'ok_count', 'error_count', 'updated_at']) {
         assert.ok(schema.includes(`'${col}'`), `schema column ${col}`);
     }
-    const apply = read('db/apply-job-heartbeats.mjs');
-    assert.ok(apply.includes('CREATE TABLE IF NOT EXISTS "job_heartbeats"'));
-    assert.ok(!/\b(DROP|ALTER|TRUNCATE|DELETE)\b/.test(code(apply)), 'additive only');
-    assert.ok(apply.includes("if (cols.length !== 10) throw new Error"), 'reads back what it wrote');
+    const apply = read('db/apply-site-job-heartbeats.mjs');
+    assert.ok(apply.includes('CREATE TABLE IF NOT EXISTS "site_job_heartbeats"'));
+    assert.ok(apply.includes('CONSTRAINT "site_job_heartbeats_pk" PRIMARY KEY ("site", "job")'));
+    assert.ok(!/\b(DROP|ALTER|TRUNCATE|DELETE)\b/.test(code(apply)), 'additive only — a key change on the live table is not (guide §18c)');
+    assert.ok(apply.includes("if (cols.length !== 11) throw new Error"), 'reads back what it wrote');
+    assert.ok(apply.includes("pk[0].def !== 'PRIMARY KEY (site, job)'"), 'reads back the key too');
     const guard = read('tests/integration/_schema-guard.mjs');
-    assert.ok(guard.includes("['job_heartbeats', 'job'],"));
+    assert.ok(guard.includes("['site_job_heartbeats', 'site'],"));
 });
 
 test('the health tile counts the jobs check once the rows are read; Settings fetches them; the Slack card says when alerts last ran', () => {

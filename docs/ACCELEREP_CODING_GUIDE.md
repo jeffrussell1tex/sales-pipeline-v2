@@ -1164,6 +1164,7 @@ Drizzle's `db.select()` with no projection expands to an explicit column list bu
 - Run the `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` first, verify, then deploy.
 - This is also why dev and production sharing one Neon branch is tolerable: production gets nullable columns before production code reads them.
 - Symptom to recognise: a single endpoint 500ing immediately after a deploy that added a column. Check the DB before debugging the code.
+- **A key change is not additive (§0.100, 8 Sep).** `job_heartbeats` was keyed by `job` alone on a database two sites share, so one row served dev and prod and said the job ran SOMEWHERE; the fix was `site` in the key. Swapping a live table's primary key is neither additive nor nullable: the moment a composite key replaces `(job)`, the OLD code still running on the other site has no `(job)` unique constraint left for its `ON CONFLICT (job)`, and its `UPDATE … WHERE job = x` writes every site's row — wrong data on both tiles until the ship. The additive move is a NEW table with the new key (`site_job_heartbeats`): the old code keeps its old table untouched until the ship, nothing overlaps, and the orphaned table is dropped later by hand — a read of its rows first, then Jeff's DROP, never a script's.
 
 ---
 
