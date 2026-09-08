@@ -92,7 +92,10 @@ hourly signals post on the org's checkboxes alone, the rep's preference
 gating only that rep's email and SMS; seven checkboxes in two groups with
 honest labels; a 4-second cap on the Slack fetch inside the save; proven
 against the real rows in the integration suite. Landed `index-B-DxPVK_.js`;
-NOT observed. **NOTHING SHIPPED this session** — `master` stays at
+**OBSERVED four minutes later — Jeff's screenshot of #sales-alerts: "🏆
+Closed Won — ZZFX Cinder New Logo — $210K ARR · from Negotiation/Review ·
+Rep: Karen Russell · Closed by Jeff Russell", 22:33 UTC — the first real
+post the app has ever made to Slack.** **NOTHING SHIPPED this session** — `master` stays at
 `cf72f99`; dev is ahead by 47 commits (§4). **The Resend webhook after Jeff's reset — his screenshot
 of resend.com/webhooks at the close: the dev endpoint
 (`accelerep.netlify.app/…/email-inbound`, created 4h ago) Enabled, the prod
@@ -741,7 +744,8 @@ printed green baseline** (31 added this session) · build **2,438 kB JS**,
 `index-B-DxPVK_.js`, guard OK, `dist/` cleared · **123/123 integration** (7
 new this session) · **no pane browser pass** — the pane holds no session;
 §0.92's follow-up OBSERVED by Jeff (second screenshot); §0.96's card OBSERVED
-("slack card working as stated"); §0.94, §0.95, §0.97, §0.99 NOT observed;
+("slack card working as stated"); §0.99's Closed Won post OBSERVED (Jeff's
+screenshot, 22:33 UTC); §0.94, §0.95, §0.97 NOT observed;
 §0.98 PROVEN by the first heartbeat row · dev deploys observed serving
 `index-BRrOppU7.js`, `index-DhQ2fFJ5.js`, `index-Dz4BAypy.js`,
 `index-lFOC0BmK.js`, `index-LNt1yblV.js`, `index-B-DxPVK_.js`, and Netlify's
@@ -791,8 +795,12 @@ the ship** · the working tree was clean at close.
   ship is the first prod alert since April. **At the same time flip the
   Resend webhook back** — enable prod, disable dev (§18b31). Until then prod
   logs no email and sends no alert.
-- **DONE — item 33 is §0.99 (`fbaf8ae`), landed `index-B-DxPVK_.js`; NOT
-  observed. Jeff eyeballs, as Admin, with #sales-alerts open: move a deal's
+- **DONE — item 33 is §0.99 (`fbaf8ae`), landed `index-B-DxPVK_.js`; the
+  Closed Won post OBSERVED (Jeff's screenshot, 22:33 UTC: ZZFX Cinder New
+  Logo, $210K, from Negotiation/Review, rep Karen, closed by Jeff — the
+  first real Slack post ever). Still to see: a plain stage change, the
+  unticked-box negative, any hourly signal. Jeff eyeballs, as Admin, with
+  #sales-alerts open: move a deal's
   stage → a "➡️ Stage changed" post within seconds naming him as the mover,
   the rep and the ARR; move one to Closed Won → "🏆 Closed Won" with the
   ARR; Configure Slack → two groups, seven boxes, "7 of 7 alerts" on the
