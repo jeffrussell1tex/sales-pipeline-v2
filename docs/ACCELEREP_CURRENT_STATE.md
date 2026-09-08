@@ -5008,6 +5008,24 @@ running" (or names the one that is not) — and Connected apps → Slack reads
 "Alerts job: Last ran Nm ago · ok". Until the first run after this lands,
 every job reads "has not run" and the check is red: the table is new.
 
+**Landed on dev (`5bca4fd`, pushed 21:59:17 UTC 8 Sep) — and PROVEN by the
+first heartbeat.** accelerep.netlify.app served `index-LNt1yblV.js` — the
+local gate build's hash — at 22:00:09 UTC, 52 seconds after the push,
+2,503,817 bytes; "Scheduled jobs running", "Alerts job: " and "Has not run
+yet" in the served bundle; the deployed `job-status` answers 401
+unauthenticated. Netlify's deploy record: `6aa08537…`, commit `5bca4fd`,
+branch `dev`, ready, published 22:00:07 UTC, **76 functions** (74 +
+`_heartbeat` + `job-status`), the four scheduled functions rebuilt at
+22:00:00, secret scan 0 matches over 375 files. Then a read-only SELECT of
+`job_heartbeats` on the app database: at 22:00:55 zero rows (the 22:00 tick
+fell on the landing itself); **at 22:02:27 one row — `task-reminders`,
+schedule `* * * * *`, started 22:02:03.771, finished 22:02:03.912, status
+`ok`, no error, summary `{ "sent": 0, "skipped": 0 }` (the handler's own
+return), `ok_count` 2 (the 22:01 and 22:02 ticks), `error_count` 0.** The
+first run of a scheduled job this app has ever recorded. `pipeline-alerts`
+and `digest` stamp at 23:00 UTC, `score-leads-batch` at 06:00. `master`
+stays at `cf72f99`.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
