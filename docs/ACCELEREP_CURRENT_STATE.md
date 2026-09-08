@@ -4350,6 +4350,14 @@ is removed). Not browser-checked here (the pane holds no session); Jeff
 re-runs the same Save on deployed dev and reads the message inside the
 dialog.
 
+**Landed on dev (`0163cd1`, pushed 20:30:53 UTC 8 Sep):** accelerep.netlify.app
+served `index-BRrOppU7.js` — the local gate build's hash — at 20:31:27 UTC,
+34 seconds after the push, 2,495,452 bytes; "Not saved — " in the served
+bundle, "Slack settings not saved" absent; `send-slack` POST → 401
+unauthenticated. The validator's new message is server-side and cannot show
+in the bundle; Jeff's re-run of the same Save is the observation. `master`
+stays at `cf72f99`.
+
 ### 0.93 An activity can be read: every row opens a viewer, emails show their subject and body (7 Sep, eighth session — item 26, option 2)
 
 **Jeff, with Karen's two test emails on the contact: "Is there anyway that we
