@@ -102,7 +102,8 @@ push, 76 functions, prod's wrapper stamping the shared heartbeat row within
 two minutes (state §0.99, last paragraphs).** Found at the ship: the
 heartbeat row is per job, not per site — item 34. `master` == `dev` ==
 `5a306e3` at the ship; dev is ahead only by the ship-record docs commits.
-**Jeff flips the Resend webhook back to prod** (§5). **The Resend webhook after Jeff's reset — his screenshot
+**The Resend webhook is back on prod — Jeff's screenshot after the ship:
+prod Enabled, dev Disabled.** **The Resend webhook after Jeff's reset — his screenshot
 of resend.com/webhooks at the close: the dev endpoint
 (`accelerep.netlify.app/…/email-inbound`, created 4h ago) Enabled, the prod
 endpoint (`salespipelinetracker.com/…`, 3mo ago) Disabled — unchanged from
@@ -163,8 +164,9 @@ branch `master`, 76 functions, secret scan clean; `send-slack`, `job-status`,
 `email-inbound`, `calendar-connections` answer 401 unauthenticated; prod's
 `task-reminders` stamped the heartbeat row within two minutes (state §0.99,
 "PROD SHIPPED"). Prod's `pipeline-alerts` runs the fixed code for the first
-time at 23:00 UTC. **The Resend webhook still targets dev at the ship — Jeff
-flips it back.** The paragraphs below are the batches as they were recorded
+time at 23:00 UTC. **The Resend webhook is back on prod — Jeff's screenshot
+minutes after the ship: prod Enabled, dev Disabled.** The paragraphs below
+are the batches as they were recorded
 before the ship; each is now on `master`.
 
 **Eighth session, day two (8 Sep) — the root cause, and the proof. ON DEV
@@ -780,7 +782,8 @@ eighth session's 26, then `8666737`, `08de43d`, `0163cd1`, `2b28a24`,
 `master`; after the ship dev is ahead only by the ship-record docs commit
 (`0603ad5`) and this close · **one schema change:
 `job_heartbeats`, additive, in BOTH databases** · **the Resend inbound
-webhook targets DEV; prod's endpoint is Disabled — Jeff's screenshot** ·
+webhook targets PROD again; dev's endpoint is Disabled — Jeff's screenshot
+after the ship** ·
 **prod's `pipeline-alerts` is the fixed code since 22:36 UTC — its first run
 is 23:00** · the working tree was clean at close.
 
@@ -791,10 +794,10 @@ is 23:00** · the working tree was clean at close.
   expect forty-seven commits after `cf72f99` (§4 lists them). Anything else
   is unshipped code and a finding. **Then read Resend → Webhooks** — at the
   ninth session's close Jeff's screenshot showed the dev endpoint Enabled and
-  the prod one Disabled; the tenth ship has happened and Jeff was asked to
-  flip it back to prod — read the dashboard: if prod is Enabled, every email
-  observation is prod's (now the same code); if dev is still Enabled, prod
-  logs no email (§18b31).
+  the prod one Disabled; after the tenth ship Jeff flipped it back — his
+  screenshot: prod Enabled, dev Disabled. Every email observation is now
+  prod's, running the same code as dev; if that has changed, say so before
+  trusting one (§18b31).
 - **Look at #sales-alerts.** The first hourly `pipeline-alerts` run that can
   get past its first deal on dev was 22:00 UTC 8 Sep (state §0.95). A post
   there is the first alert in five months; none is not a finding by itself —
@@ -807,10 +810,8 @@ is 23:00** · the working tree was clean at close.
   (persists a refresh); Copy address still copies. Nothing new is visible
   unless a server refuses: the observable is the ABSENCE of a banner. Karen
   cannot reach Settings; the negatives are the source scan and four mutants.
-- **DONE — the tenth ship (§1). What is left of it is Jeff's: flip the
-  Resend webhook back (enable `salespipelinetracker.com/…/email-inbound`,
-  disable the `accelerep.netlify.app` one); until then prod logs no email.
-  On prod, his to observe: the same eyeball lists as dev (§0.92–§0.99); the
+- **DONE — the tenth ship (§1), and the Resend webhook flipped back to prod
+  by Jeff (his screenshot). On prod, his to observe: the same eyeball lists as dev (§0.92–§0.99); the
   first prod alert since April can post at 23:00 UTC if a deal qualifies;
   prod's Workspace Health reads the shared heartbeat row (item 34).**
 - **Item 34 — one batch, Jeff's call on timing:** `job_heartbeats` is keyed
