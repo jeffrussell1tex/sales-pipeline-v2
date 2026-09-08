@@ -1253,3 +1253,25 @@ export const documentVersions = pgTable('document_versions', {
 }, (t) => [
     index('document_versions_org_doc_idx').on(t.orgId, t.documentId),
 ]);
+
+// ── Scheduled-job heartbeats (state §0.98, handoff item 32) ───────────────────
+// One row per scheduled function (pipeline-alerts, digest, task-reminders,
+// score-leads-batch), stamped by _heartbeat.mjs at the start and end of every
+// run. Deliberately SITE-wide, not org-scoped: a job is a property of the
+// deployment, it runs once for every org, and the row carries counts and an
+// error message — never a tenant's data. Read by job-status.mjs (Admin-only)
+// for the Settings health tile and the Slack card. Additive; nothing else
+// references it. Origin: five months of hourly 500s from pipeline-alerts were
+// visible nowhere the app shows (guide §18b33).
+export const jobHeartbeats = pgTable('job_heartbeats', {
+    job:            text('job').primaryKey(),                       // the function name
+    schedule:       text('schedule'),                               // its cron, as declared to the wrapper
+    lastStartedAt:  timestamp('last_started_at'),
+    lastFinishedAt: timestamp('last_finished_at'),
+    lastStatus:     varchar('last_status', { length: 10 }),         // 'running' | 'ok' | 'error'
+    lastError:      text('last_error'),
+    lastSummary:    jsonb('last_summary'),                          // the handler's own counts, as it returned them
+    okCount:        integer('ok_count').notNull().default(0),
+    errorCount:     integer('error_count').notNull().default(0),
+    updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});

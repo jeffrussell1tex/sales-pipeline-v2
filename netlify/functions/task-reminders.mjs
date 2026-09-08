@@ -26,6 +26,7 @@ import { db } from '../../db/index.js';
 import { tasks, users, recommendationLog } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
+import { withHeartbeat } from './_heartbeat.mjs';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,8 @@ async function logReminderSent(orgId, repName, task) {
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
-export const handler = async () => {
+// The run itself; `handler` (at the bottom) is this wrapped in a heartbeat stamp (state §0.98).
+const run = async () => {
     const now = new Date();
     console.log('task-reminders: running at', now.toISOString());
 
@@ -236,3 +238,5 @@ export const handler = async () => {
         return { statusCode: 500, body: err.message };
     }
 };
+
+export const handler = withHeartbeat('task-reminders', run);

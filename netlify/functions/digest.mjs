@@ -16,6 +16,7 @@ import { users, opportunities, tasks, activities } from '../../db/schema.js';
 import { gte, eq, and } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
+import { withHeartbeat } from './_heartbeat.mjs';
 
 const DEFAULT_PREFS = {
     stageChanged:        { enabled: true,  mode: 'instant' },
@@ -107,7 +108,8 @@ function localHourToUtc(localHour, timezone) {
     }
 }
 
-export const handler = async () => {
+// The run itself; `handler` (at the bottom) is this wrapped in a heartbeat stamp (state §0.98).
+const run = async () => {
     const now       = new Date();
     const nowHour   = now.getUTCHours();
     const nowMinute = now.getUTCMinutes();
@@ -492,3 +494,5 @@ export const handler = async () => {
         return { statusCode: 500, body: err.message };
     }
 };
+
+export const handler = withHeartbeat('digest', run);

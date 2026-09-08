@@ -1,6 +1,7 @@
 // AdminView.jsx
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../utils/storage';
+import { jobHealth } from '../utils/jobHealth.js';
 import DuplicateScanView from './DuplicateScanView';
 import ContactDuplicateScanView from './ContactDuplicateScanView';
 import { T, eb } from './settings/shared/tokens.js';
@@ -307,13 +308,14 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         let cancelled = false;
         const fetchCounts = async () => {
             try {
-                const [keysRes, webhooksRes, autosRes, auditRes, backupRes, mfaRes] = await Promise.allSettled([
+                const [keysRes, webhooksRes, autosRes, auditRes, backupRes, mfaRes, jobsRes] = await Promise.allSettled([
                     dbFetch('/.netlify/functions/api-keys'),
                     dbFetch('/.netlify/functions/webhooks'),
                     dbFetch('/.netlify/functions/automations'),
                     dbFetch('/.netlify/functions/audit-log'),
                     dbFetch('/.netlify/functions/backup'),
                     dbFetch('/.netlify/functions/clerk-mfa-status'),
+                    dbFetch('/.netlify/functions/job-status'),
                 ]);
                 if (cancelled) return;
                 const counts = {};
@@ -356,6 +358,12 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
                 if (mfaRes.status === 'fulfilled' && mfaRes.value.ok) {
                     const d = await mfaRes.value.json().catch(() => ({}));
                     if (typeof d.total === 'number') counts.mfa = { enrolled: d.enrolled, total: d.total };
+                }
+                // Admin-only, site-wide: the four scheduled jobs' heartbeats (§0.98). The
+                // verdict is computed here from the rows, against the server's clock.
+                if (jobsRes.status === 'fulfilled' && jobsRes.value.ok) {
+                    const d = await jobsRes.value.json().catch(() => ({}));
+                    if (Array.isArray(d.jobs)) counts.jobs = jobHealth(d.jobs, d.now ? new Date(d.now).getTime() : Date.now());
                 }
                 setLiveCounts(counts);
             } catch (e) { /* silent — badges just stay empty */ }

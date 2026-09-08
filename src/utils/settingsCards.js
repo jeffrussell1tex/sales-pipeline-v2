@@ -20,6 +20,7 @@
 // status and attention from the same fetch; a health check that cannot be READ
 // is not in the denominator.
 import { mfaCardOf } from './fetchStatus.js';
+import { jobsCheck } from './jobHealth.js';
 
 // ── counting helpers (state §0.88) ───────────────────────────────────────────
 // Every count below reads the key the card's OWN panel saves. The catalogue
@@ -243,6 +244,11 @@ export function healthChecksOf(settings, liveCounts = {}, isHidden = () => false
     if (liveCounts.backupChecked) {
         // Daily schedule: a snapshot older than two days, or none at all, is not "running".
         checks.push({ id: 'backup', label: 'Backups running', ok: typeof liveCounts.backupLastHours === 'number' && liveCounts.backupLastHours <= 48 });
+    }
+    if (liveCounts.jobs && !isHidden('jobs')) {
+        // The four scheduled jobs' heartbeats (§0.98): ok only when every one ran on time and cleanly.
+        const c = jobsCheck(liveCounts.jobs);
+        if (c) checks.push(c);
     }
     checks.push({ id: 'pipelines', label: 'Default pipeline set', ok: pipelines.length > 0 });
     checks.push({ id: 'teams', label: 'Team members assigned', ok: users.filter(u => u.team).length === users.filter(u => u.name).length });

@@ -32,6 +32,7 @@ import { useApp } from '../../../AppContext';
 import { REQUESTABLE_APPS } from '../../../utils/integrationCatalog.js';
 import { SLACK_ALERT_TYPES, cleanSlackAlerts, slackAlertsOnCount } from '../../../utils/slackAlerts.js';
 import { calendarReturnMessage } from '../../../utils/calendarReturn.js';
+import { jobHealth, jobLine } from '../../../utils/jobHealth.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter } from './shared.jsx';
 
 const AppTile = ({ name, color='#3a5a7a', size=36, emoji }) => (
@@ -318,6 +319,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     const [requests,      setRequests]      = useState({});   // { [appId]: { requestedAt, byUserId, byName, note } }
     const [cal,           setCal]           = useState(null); // { userConnections, orgConnections, providers }
     const [bcc,           setBcc]           = useState(null); // { address, configured }
+    const [jobs,          setJobs]          = useState(null); // jobHealth() rows — the Slack card says when alerts last ran (§0.98)
     const [loading,       setLoading]       = useState(true);
     const [error,         setError]         = useState('');   // the settings load only — nothing else on screen to say it
     const [busy,          setBusy]          = useState(null); // 'slack' | 'cal' | appId
@@ -371,7 +373,15 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                 if (!cancelled) setBcc({ address: null, configured: false, error: e.message });
             }
         };
-        load(); loadCal(); loadBcc();
+        const loadJobs = async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/job-status');
+                const data = await res.json();
+                if (cancelled) return;
+                if (res.ok && Array.isArray(data.jobs)) setJobs(jobHealth(data.jobs, data.now ? new Date(data.now).getTime() : Date.now()));
+            } catch { /* the line stays absent — the card claims nothing it could not read */ }
+        };
+        load(); loadCal(); loadBcc(); loadJobs();
         return () => { cancelled = true; };
     }, []);
 
@@ -448,6 +458,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
         + CALENDARS.filter(c => connByProvider(cal?.orgConnections, c.provider) || connByProvider(cal?.userConnections, c.provider)).length
         + (bcc?.configured ? 1 : 0);
     const requestedCount = Object.values(requests).filter(r => r?.requestedAt).length;
+    const alertsJob = jobs ? jobs.find(j => j.job === 'pipeline-alerts') || null : null;
 
     if (loading) return (
         <div style={{ fontFamily:T.sans }}>
@@ -484,6 +495,11 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                             </div>
                         </>}>
                         <CardNote text={notes.slack}/>
+                        {alertsJob && (
+                            <div style={{ fontSize:11.5, color: alertsJob.ok ? T.inkMuted : T.danger, fontFamily:T.sans }}>
+                                Alerts job: {jobLine(alertsJob)}
+                            </div>
+                        )}
                     </IntegrationCard>
                     {CALENDARS.map(c => (
                         <CalendarCard key={c.provider} cal={c}

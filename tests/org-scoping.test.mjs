@@ -14,7 +14,11 @@ import { dirname, join } from 'node:path';
 const FN_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'netlify', 'functions');
 
 // Files that legitimately don't touch tenant tables (pure helpers, scoring engine, mailers…)
-const SKIP = new Set(['auth.mjs', '_lib.mjs', 'score-lead.mjs', 'send-email.mjs', 'send-sms.mjs', 'crypto.mjs', 'webhooks.mjs', 'dispatch-automations.mjs', 'quote-pdf.mjs']);
+// _heartbeat.mjs (state §0.98) writes ONLY job_heartbeats — one row per
+// scheduled function, site-wide by design, no org column and no tenant data.
+// tests/job-heartbeat.test.mjs pins that it imports no other table, so this
+// exemption cannot quietly widen.
+const SKIP = new Set(['auth.mjs', '_lib.mjs', 'score-lead.mjs', 'send-email.mjs', 'send-sms.mjs', 'crypto.mjs', 'webhooks.mjs', 'dispatch-automations.mjs', 'quote-pdf.mjs', '_heartbeat.mjs']);
 
 // Extract the full JS statement starting at `start` (balances () [] {} and skips
 // '…' "…" `…` strings), stopping at the first top-level ';'.

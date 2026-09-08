@@ -10,8 +10,10 @@ import { db } from '../../db/index.js';
 import { leads, settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { scoreLead, DEFAULT_LEAD_SCORING, leadFeatures, computeSourceWinRate, trainLeadModel } from './score-lead.mjs';
+import { withHeartbeat } from './_heartbeat.mjs';
 
-export const handler = async () => {
+// The run itself; `handler` (at the bottom) is this wrapped in a heartbeat stamp (state §0.98).
+const run = async () => {
     const started = Date.now();
     let orgsProcessed = 0, leadsUpdated = 0, modelsTrained = 0;
     try {
@@ -77,3 +79,5 @@ export const handler = async () => {
         return { statusCode: 500, body: JSON.stringify({ error: 'batch failed' }) };
     }
 };
+
+export const handler = withHeartbeat('score-leads-batch', run);

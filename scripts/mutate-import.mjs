@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1488,6 +1488,32 @@ const mutations = [
         'netlify/functions/calendar-oauth-start.mjs',
         "const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole, from })).toString('base64');",
         "const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole })).toString('base64');"],
+
+    // ── §0.98 (item 32): scheduled-job heartbeats ───────────────────────────────
+    ['heartbeat: a job that stopped running reads ok forever',
+        'src/utils/jobHealth.js',
+        "        else if (ageMs > stallAfterMs(def.cadenceMs)) status = 'stalled';",
+        "        else if (false) status = 'stalled';"],
+    ['heartbeat: a 500 is recorded as ok — the April outage invisible again',
+        'src/utils/jobHealth.js',
+        '    const ok = !Number.isFinite(status) || status < 400;',
+        '    const ok = true;'],
+    ['heartbeat: pipeline-alerts runs unwrapped',
+        'netlify/functions/pipeline-alerts.mjs',
+        "export const handler = withHeartbeat('pipeline-alerts', run);",
+        'export const handler = run;'],
+    ['heartbeat: the wrapper swallows a throw — the job reads ok to Netlify',
+        'netlify/functions/_heartbeat.mjs',
+        '        if (thrown) throw thrown;',
+        ''],
+    ['heartbeat: job-status answers any signed-in user',
+        'netlify/functions/job-status.mjs',
+        "    const forbidden = requireRole(auth, ['Admin'], HEADERS);",
+        '    const forbidden = null;'],
+    ['heartbeat: the health tile drops the jobs check',
+        'src/utils/settingsCards.js',
+        '        if (c) checks.push(c);',
+        '        if (false) checks.push(c);'],
 
     // ── Item 26: the activity viewer (0.93) ─────────────────────────────────────
     ['viewer: a rep may edit any rep\'s activity from the viewer',

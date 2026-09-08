@@ -25,6 +25,7 @@ import { eq, and, gte } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
 import { sendSlackToOrg, slackTemplates }             from './send-slack.mjs';
+import { withHeartbeat }                              from './_heartbeat.mjs';
 
 const DEDUP_DAYS = 7;
 const today = new Date();
@@ -184,7 +185,9 @@ async function logAlert(orgId, repName, actionType, opp, signal) {
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
-export const handler = async () => {
+// The run itself; `handler` (at the bottom) is this wrapped in a heartbeat
+// stamp (state §0.98), so a run that throws or answers 500 is on record.
+const run = async () => {
     const now     = new Date();
     const nowHour = now.getUTCHours();
     console.log('pipeline-alerts: starting at', now.toISOString(), `(UTC hour ${nowHour})`);
@@ -486,3 +489,5 @@ export const handler = async () => {
         return { statusCode: 500, body: err.message };
     }
 };
+
+export const handler = withHeartbeat('pipeline-alerts', run);

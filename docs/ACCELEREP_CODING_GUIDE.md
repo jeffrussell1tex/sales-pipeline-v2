@@ -3185,8 +3185,14 @@ The rule:
   sidecar (`_slackWebhook.mjs`, `_inboundText.mjs`) so a test imports it
   plain.
 - **A scheduled job needs a heartbeat that someone reads.** The 500s were
-  visible in Netlify's function log and nowhere else. Open (handoff item
-  32): a last-success stamp per job that the Settings health tile can read.
+  visible in Netlify's function log and nowhere else. Done the same day
+  (state §0.98): every scheduled handler is `withHeartbeat('<job>', run)`
+  (`_heartbeat.mjs`), the row is site-wide by design (`job_heartbeats`,
+  exempt from the org-scoping scan with the reason beside it), and the
+  Settings health tile carries a "Scheduled jobs running" check whose label
+  names the job that is not. A NEW scheduled function is not done until it
+  is wrapped and listed in `SCHEDULED_JOBS` (`src/utils/jobHealth.js`) —
+  the unit test that pins the four against netlify.toml will say so.
 
 The check: `node --test` a suite that calls the helper with the shapes the
 job passes; and the mutation harness's `SUITES` list must name the suite, or

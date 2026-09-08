@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 8, 2026 (eighth session, third close; header refreshed at the ninth session's open)
 **Verified at:** five gates green on 151 files · **570 tests** · **299/299 mutations, printed green baseline** · **116/116 integration** · build guard OK 2,437 kB `index-Bz_vDa_T.js` · **prod `cf72f99` serving `index-DIeZb8qh.js` (ninth ship, 7 Sep)** · dev ahead of `master` by 26 commits — §0.92, §0.93 and its follow-up, the 8 Sep diagnostics and their removal, and their docs; not yet shipped. **The Resend inbound webhook targets DEV and prod's endpoint is disabled (8 Sep, Jeff) — flip it back at the ship (guide §18b31); until then prod logs no email.** The app database and the test database both hold `audit_stream_destinations`. (This header and the per-batch lines under it were refreshed at the ninth session's open; before that the lines had described §0.80–§0.88 since 3 Sep and the header still carried the first close's counts — the sections are the record.)
-**Batch:** **a calendar Connect lands back where it started and says how it went (§0.97, handoff item 30)** — the OAuth callback had redirected to a query nothing read, so a failed Connect landed on Home in silence; now the start carries `from` through the provider in `state`, the callback's six exits go through one allowlisted `calendarReturnUrl` (status, provider, scope, from, reason — never free text), App.jsx reads it once when Clerk's user is present, cleans the URL, and lands the user on Connected apps / Company calendar (an Admin, that panel opened through `settingsOpenPanel`) or the profile panel's Calendar tab, where one line says "Google Calendar connected" or "was not connected — <why>". One pure module (`src/utils/calendarReturn.js`) shared by both sides. Dev only; not yet shipped; not observed.
+**Batch:** **every scheduled job leaves a heartbeat, and Settings reads it (§0.98, handoff item 32)** — a new site-wide `job_heartbeats` table (applied to both databases and read back first, §18c), `withHeartbeat()` around all four scheduled handlers (start and finish stamps, ok/error from the result or the throw, the handler's counts as the summary, never breaking the job), an Admin-only `job-status` endpoint, and a pure `jobHealth` verdict — ok / stalled / error / never — behind a new Workspace Health check and an "Alerts job: Last ran …" line on the Slack card. Five months of hourly 500s (§0.95) would have been red from the first hour. Dev only; not yet shipped; not observed.
+**Prior batch:** **a calendar Connect lands back where it started and says how it went (§0.97, handoff item 30)** — the OAuth callback had redirected to a query nothing read, so a failed Connect landed on Home in silence; now the start carries `from` through the provider in `state`, the callback's six exits go through one allowlisted `calendarReturnUrl` (status, provider, scope, from, reason — never free text), App.jsx reads it once when Clerk's user is present, cleans the URL, and lands the user on Connected apps / Company calendar (an Admin, that panel opened through `settingsOpenPanel`) or the profile panel's Calendar tab, where one line says "Google Calendar connected" or "was not connected — <why>". One pure module (`src/utils/calendarReturn.js`) shared by both sides. Dev only; not yet shipped; not observed.
 **Prior batch:** **an org chooses which of the five pipeline alerts post to Slack (§0.96, handoff item 29 — Jeff: "Can we add an option that enables me to select what actions get posted")** — five checkboxes in the Configure Slack modal saved as `slackConfig.alerts`, normalised to five booleans by settings.mjs, asked by `sendSlackToOrg` before every post (a config saved before the key posts everything; an unknown type fails closed; the untyped digest and test are not gated); the card reads "n of 5 alerts". One pure module (`src/utils/slackAlerts.js`) shared by the modal, settings.mjs and send-slack.mjs; the keys are the rep-side preference keys. Dev only; not yet shipped; not observed.
 **Prior batch:** **the pipeline-alerts job had thrown on its first deal since 7 April — no alert of any kind (email, SMS, Slack) has gone out for five months (§0.95, ninth session)** — `bf4a3c5` renamed the parameter of `wantsAlert` and `wantsSms` to `resolvedProfile` and left both bodies reading `profile`, a name bound only inside the deal loop; the first call threw, the outer catch answered 500, hourly, on every site. Found reading the job to answer Jeff's "how do I choose what gets posted to Slack". Two lines fixed; the helpers are lifted out of the source and RUN by a new suite (3 mutants; the suite registered in the harness after its first run let all three survive). No gate covers a lowercase helper in a function file — guide §18b33. Functions-only, dev only; not yet shipped.
 **Prior batch:** **every Connected-apps action reports on its own card or row (§0.94, ninth session — Jeff: "make sure the error codes will show in the correct place for the rest of the connected apps")** — Slack Disconnect, both calendars' Disconnect and every catalogue Request had written their failures into one banner at the top of the page (off-screen for a row at the bottom); a failed calendar fetch sat under the grid while the cards said "Not connected"; a failed email-logging fetch read "Not available on this site"; a Copy failure showed nothing. Now one module-scope `CardNote` and a per-surface `notes` map: each action clears and writes its own key, each card and row renders it where the click was, a failed fetch is reported as a failed fetch, and the page banner is for the settings load alone (guide §18b32 extended). Open, Jeff's call: a failed calendar OAuth Connect lands on Home with no message (item 30). Dev only; not yet shipped; not observed.
@@ -4938,6 +4939,74 @@ served `index-lFOC0BmK.js` — the local gate build's hash — at 21:45:28 UTC,
 `calconnect` and `company-calendar` in the served bundle; the deployed
 `calendar-oauth-start` answers 400 to a bare GET as before. `master` stays at
 `cf72f99`.
+
+### 0.98 Every scheduled job leaves a heartbeat, and Settings reads it (8 Sep, ninth session — handoff item 32)
+
+**Jeff: "lets do 29, 30 and 32."** Origin (§0.95): `pipeline-alerts` answered
+500 every hour for five months and the only record was Netlify's function
+log, which nothing in the app reads. Four functions run on a schedule
+(netlify.toml): `pipeline-alerts` and `digest` hourly, `task-reminders`
+every minute, `score-leads-batch` daily at 06:00 UTC. None left a trace the
+app could show.
+
+**Design — database first (§18c), then code.** A new table `job_heartbeats`
+(`db/apply-job-heartbeats.mjs`, `CREATE TABLE IF NOT EXISTS` only, applied to
+the TEST database and then the shared APP database and read back column by
+column — ten columns, zero rows — before any code was committed; the
+test-schema guard lists it): one row per job — `schedule`, `last_started_at`,
+`last_finished_at`, `last_status` (`running` | `ok` | `error`),
+`last_error`, `last_summary` (the handler's own counts), `ok_count`,
+`error_count`. **Deliberately site-wide, not org-scoped**: a job is a property
+of the deployment, runs once for every org, and the row carries counts and an
+error string, never a tenant's data — recorded in the schema, and
+`_heartbeat.mjs` is on the org-scoping scan's exemption list with its reason
+beside it, pinned by a test that the wrapper imports no other table.
+`netlify/functions/_heartbeat.mjs`: `withHeartbeat(job, run)` stamps start
+(upsert, `running`), runs the handler, stamps finish (`ok` or `error` from
+`finishValues` — a throw or a status of 400+ is an error, the body is the
+summary, parsed when JSON; counts incremented in the database), and returns
+exactly what the handler returned or rethrows exactly what it threw; a failed
+stamp is logged and never breaks the job. Each of the four handlers is now
+`const run = async () => {…}` with `export const handler =
+withHeartbeat('<job>', run);` at the bottom — Netlify's schedule binds to
+`handler` as before. `job-status.mjs` GET, Admin-only, returns the rows with
+the server clock. `src/utils/jobHealth.js` (pure, shared): `SCHEDULED_JOBS`
+(the four, with crons pinned against netlify.toml), `jobHealth(rows, now)` —
+`ok` when the last finish was clean and within two cadences plus ten minutes,
+`stalled` past that (or started long ago and never finished), `error` when
+the last run failed, `never` when no row — `jobLine` ("Last ran 12m ago ·
+ok" / "Last run failed 3h ago — profile is not defined" / "Stalled — last
+finished 3d ago" / "Has not run yet"), `jobsCheck` (the health-tile check,
+its label naming what is not ok), `finishValues`. AdminView fetches
+`job-status` with the other live counts (a 403 or 500 leaves the check out
+of the denominator, like the others) and `healthChecksOf` adds "Scheduled
+jobs running" — or "Scheduled jobs: Pipeline alerts error, Daily digest has
+not run"; the Slack card on Connected apps reads "Alerts job: Last ran 12m
+ago · ok" under its status, in red when it is not ok.
+
+**Verified:** five gates, build guard OK `index-LNt1yblV.js`, **603/603
+unit** (9 new in `tests/job-heartbeat.test.mjs`: the pure module, the
+classifier — "REGRESSION: the April failure, on record" — and scans of the
+four handlers, the wrapper, the endpoint, the schema, the apply script, the
+guard, the tile, Settings and the card), **122/122 integration** (4 new in
+`job-heartbeat.itest.mjs`, against the real table: an ok run's row, counts
+and summary, and the handler's result returned exactly; a 500 recorded as an
+error with the body as the reason; a throw recorded AND rethrown; job-status
+200 for an Admin with the server clock, 403 for a User and a Manager, 401
+with no session — the suite owns `itest_hb_*` job names and deletes them;
+the driver's local-time parse of a naive timestamp (§0.91's trap) is read
+around with `::text`), **326/326 mutations, printed green baseline** (6 new:
+stall detection off; a 500 recorded as ok; pipeline-alerts unwrapped; the
+wrapper swallows a throw; job-status open to any role; the tile drops the
+check). Found while wiring: the org-scoping scan flagged the wrapper's two
+writes — the gate working; the exemption is the design decision made
+explicit, not a bypass. The integration runner names its suites in
+package.json; the new one is added there (the harness's `SUITES` the same).
+Not browser-checked here. **Jeff eyeballs (§5):** after the next top of the
+hour, Settings → Workspace Health reads one more check — "Scheduled jobs
+running" (or names the one that is not) — and Connected apps → Slack reads
+"Alerts job: Last ran Nm ago · ok". Until the first run after this lands,
+every job reads "has not run" and the check is red: the table is new.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
