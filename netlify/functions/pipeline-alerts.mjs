@@ -40,8 +40,13 @@ const DEFAULT_PREFS = {
     scoreDropAlert: { enabled: true  },
 };
 
+// bf4a3c5 (7 Apr 2026) renamed this parameter from `profile` and left the body
+// reading `profile` — a name bound only inside the handler's deal loop, so the
+// first call threw ReferenceError, the outer catch answered 500, and the hourly
+// job sent no alert of any kind for five months (state §0.95). Both helpers
+// are lifted out of this file and run by tests/pipeline-alerts.test.mjs.
 function wantsAlert(resolvedProfile, alertType) {
-    const prefs = profile?.notificationPrefs || {};
+    const prefs = resolvedProfile?.notificationPrefs || {};
     const pref  = prefs[alertType] ?? DEFAULT_PREFS[alertType] ?? { enabled: false };
     return pref.enabled === true;
 }
@@ -59,7 +64,7 @@ function wantsAlert(resolvedProfile, alertType) {
  *   }
  */
 function wantsSms(resolvedProfile) {
-    const smsPrefs = profile?.smsNotifications || {};
+    const smsPrefs = resolvedProfile?.smsNotifications || {};
     return smsPrefs.enabled === true && smsPrefs.pipelineAlerts === true;
 }
 

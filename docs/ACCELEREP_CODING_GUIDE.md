@@ -3157,3 +3157,38 @@ value, a non-Admin session) and look at the screen with the dialog still
 open. If the reason is anywhere but inside the dialog, it is not shown.
 "Deploy-verified" for a refusal means the status code; "observed" means a
 person read the reason where they were looking.
+
+## 18b33. A Helper's Body Reads Only Its Own Parameters — And A Function File Has No Scanner (hard rule)
+
+Origin (8 Sep 2026, state §0.95): `bf4a3c5` (7 Apr 2026) renamed the
+parameter of two module-scope helpers in `pipeline-alerts.mjs` from
+`profile` to `resolvedProfile` and left both bodies reading `profile`. The
+name still existed in the file — `const profile` inside the handler's deal
+loop — so the eye found it, esbuild bundled it, `function-imports.test.mjs`
+imported it, and Netlify ran it: a ReferenceError on the first deal, a 500
+from the outer catch, every hour, on every site, for five months. Nothing
+told anyone that the alerts had stopped; the previous handoff had noted only
+that "the five pipeline alerts have not fired against dev's webhook".
+
+The rule:
+
+- **A rename is applied to the body.** When a parameter or binding is
+  renamed, grep the body for the OLD name before the commit. A hit that
+  resolves to some OTHER binding in the file is the dangerous one — it
+  parses, it bundles, and it throws only when called.
+- **A lowercase helper in `netlify/functions` is outside every scanner.**
+  `check-tdz`'s undefined pass inspects Capitalised components under `src/`;
+  its whole-file pass is JSX. A pure helper in a function file gets a unit
+  test that RUNS it: lift it out of the source with a regex and `new
+  Function` (the pattern in `tests/pipeline-alerts.test.mjs`) when the
+  module's imports make importing it impossible, or move it to a `_name.mjs`
+  sidecar (`_slackWebhook.mjs`, `_inboundText.mjs`) so a test imports it
+  plain.
+- **A scheduled job needs a heartbeat that someone reads.** The 500s were
+  visible in Netlify's function log and nowhere else. Open (handoff item
+  32): a last-success stamp per job that the Settings health tile can read.
+
+The check: `node --test` a suite that calls the helper with the shapes the
+job passes; and the mutation harness's `SUITES` list must name the suite, or
+its mutants survive silently — the first run here printed three SURVIVED
+lines for exactly that reason, which is the harness working.
