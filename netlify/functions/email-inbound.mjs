@@ -277,13 +277,14 @@ export const handler = async (event) => {
         // never its content — an Outlook message logged with no line breaks after
         // the normaliser kept them, so this says whether they were ever there.
         // Read in Netlify → Logs → Functions → email-inbound.
-        {
-            const nlOf = (v) => (typeof v === 'string' ? (v.match(/\n/g) || []).length : -1);
-            const shape = (o) => `text=${typeof o.text}/${(o.text || '').length}ch/${nlOf(o.text)}nl; html=${typeof o.html}/${(o.html || '').length}ch/${nlOf(o.html)}nl; attachments=${Array.isArray(o.attachments) ? o.attachments.length + ':' + Object.keys(o.attachments[0] || {}).join('|') : typeof o.attachments}; keys=${Object.keys(o).join(',')}`;
-            console.log(full
-                ? `email-inbound: fetched via ${fetched.endpoint}; ${shape(full)}`
-                : `email-inbound: NOT fetched (key set: ${!!process.env.RESEND_API_KEY}; email_id present: ${!!mail.email_id}; body.type: ${body.type}); webhook payload: ${shape(mail)}`);
-        }
+        // Netlify surfaces no console output for this function (8 Sep: three
+        // request rows, zero lines, with a filter), so the same shape — never
+        // content — rides the activity row's `outcome` (varchar 255) until read.
+        const nlOf = (v) => (typeof v === 'string' ? (v.match(/\n/g) || []).length : -1);
+        const shape = (o) => `t=${typeof o.text}/${(o.text || '').length}/${nlOf(o.text)} h=${typeof o.html}/${(o.html || '').length}/${nlOf(o.html)} a=${Array.isArray(o.attachments) ? o.attachments.length + ':' + Object.keys(o.attachments[0] || {}).join('|') : typeof o.attachments} k=${Object.keys(o).join(',')}`;
+        const diag = (full
+            ? `diag via=${fetched.endpoint} ${shape(full)}`
+            : `diag NOT-fetched key=${!!process.env.RESEND_API_KEY} email_id=${!!mail.email_id} type=${body.type} ${shape(mail)}`).slice(0, 255);
 
         const subject = String((full?.subject ?? mail.subject) || '').slice(0, 500);
         const rawText = full
@@ -374,7 +375,7 @@ export const handler = async (event) => {
             date: today,
             subject: subject || null,
             notes: notesOf({ subject, body: text, attachmentNames }, NOTES_MAX) || 'Email (no body captured)',
-            outcome: null,
+            outcome: diag,   // temporary diagnostic (state §0.93) — null again once the shape is known
             duration: null,
             opportunityId: null,
             contactId: matched.id,
