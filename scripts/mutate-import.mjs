@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1256,8 +1256,8 @@ const mutations = [
         "            if (false) throw new Error(data.error || 'Test failed');"],
     ['slack: saved without enabled — send-slack still sends (enabled !== false), but the shape is the contract',
         'src/Tabs/settings/integrations/ConnectedAppsDetail.jsx',
-        "        await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true });",
-        "        await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim() });"],
+        "            await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true, alerts: cleanSlackAlerts(alerts) });",
+        "            await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), alerts: cleanSlackAlerts(alerts) });"],
     ['IntBtn: disabled is dropped on the floor again',
         'src/Tabs/settings/integrations/shared.jsx',
         '<button onClick={onClick} disabled={disabled}',
@@ -1440,6 +1440,28 @@ const mutations = [
         'netlify/functions/pipeline-alerts.mjs',
         '    return pref.enabled === true;',
         '    return true;'],
+
+    // ── §0.96 (item 29): the org chooses which alerts post to Slack ─────────────
+    ['slack alerts: an unticked alert posts anyway',
+        'src/utils/slackAlerts.js',
+        '    return alerts[alertType] !== false;',
+        '    return true;'],
+    ['slack alerts: a typo at a call site posts instead of failing closed',
+        'src/utils/slackAlerts.js',
+        '    if (!SLACK_ALERT_KEYS.includes(alertType)) return false;',
+        '    if (!SLACK_ALERT_KEYS.includes(alertType)) return true;'],
+    ['slack alerts: the org path stops asking the selection',
+        'netlify/functions/send-slack.mjs',
+        '        if (!slackAlertEnabled(slackConfig, alertType)) return false;',
+        ''],
+    ['slack alerts: the deal-silent call site drops its type — that alert can no longer be turned off',
+        'netlify/functions/pipeline-alerts.mjs',
+        "stage: opp.stage, daysSilent }), 'dealSilent');",
+        'stage: opp.stage, daysSilent }));'],
+    ['slack alerts: settings stores whatever shape the client sent',
+        'netlify/functions/settings.mjs',
+        '                data.slackConfig = { ...data.slackConfig, alerts: cleanSlackAlerts(data.slackConfig.alerts) };',
+        ''],
 
     // ── Item 26: the activity viewer (0.93) ─────────────────────────────────────
     ['viewer: a rep may edit any rep\'s activity from the viewer',

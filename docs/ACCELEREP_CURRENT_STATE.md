@@ -1,7 +1,8 @@
 # ACCELEREP — Current State
 **Updated:** September 8, 2026 (eighth session, third close; header refreshed at the ninth session's open)
 **Verified at:** five gates green on 151 files · **570 tests** · **299/299 mutations, printed green baseline** · **116/116 integration** · build guard OK 2,437 kB `index-Bz_vDa_T.js` · **prod `cf72f99` serving `index-DIeZb8qh.js` (ninth ship, 7 Sep)** · dev ahead of `master` by 26 commits — §0.92, §0.93 and its follow-up, the 8 Sep diagnostics and their removal, and their docs; not yet shipped. **The Resend inbound webhook targets DEV and prod's endpoint is disabled (8 Sep, Jeff) — flip it back at the ship (guide §18b31); until then prod logs no email.** The app database and the test database both hold `audit_stream_destinations`. (This header and the per-batch lines under it were refreshed at the ninth session's open; before that the lines had described §0.80–§0.88 since 3 Sep and the header still carried the first close's counts — the sections are the record.)
-**Batch:** **the pipeline-alerts job had thrown on its first deal since 7 April — no alert of any kind (email, SMS, Slack) has gone out for five months (§0.95, ninth session)** — `bf4a3c5` renamed the parameter of `wantsAlert` and `wantsSms` to `resolvedProfile` and left both bodies reading `profile`, a name bound only inside the deal loop; the first call threw, the outer catch answered 500, hourly, on every site. Found reading the job to answer Jeff's "how do I choose what gets posted to Slack". Two lines fixed; the helpers are lifted out of the source and RUN by a new suite (3 mutants; the suite registered in the harness after its first run let all three survive). No gate covers a lowercase helper in a function file — guide §18b33. Functions-only, dev only; not yet shipped.
+**Batch:** **an org chooses which of the five pipeline alerts post to Slack (§0.96, handoff item 29 — Jeff: "Can we add an option that enables me to select what actions get posted")** — five checkboxes in the Configure Slack modal saved as `slackConfig.alerts`, normalised to five booleans by settings.mjs, asked by `sendSlackToOrg` before every post (a config saved before the key posts everything; an unknown type fails closed; the untyped digest and test are not gated); the card reads "n of 5 alerts". One pure module (`src/utils/slackAlerts.js`) shared by the modal, settings.mjs and send-slack.mjs; the keys are the rep-side preference keys. Dev only; not yet shipped; not observed.
+**Prior batch:** **the pipeline-alerts job had thrown on its first deal since 7 April — no alert of any kind (email, SMS, Slack) has gone out for five months (§0.95, ninth session)** — `bf4a3c5` renamed the parameter of `wantsAlert` and `wantsSms` to `resolvedProfile` and left both bodies reading `profile`, a name bound only inside the deal loop; the first call threw, the outer catch answered 500, hourly, on every site. Found reading the job to answer Jeff's "how do I choose what gets posted to Slack". Two lines fixed; the helpers are lifted out of the source and RUN by a new suite (3 mutants; the suite registered in the harness after its first run let all three survive). No gate covers a lowercase helper in a function file — guide §18b33. Functions-only, dev only; not yet shipped.
 **Prior batch:** **every Connected-apps action reports on its own card or row (§0.94, ninth session — Jeff: "make sure the error codes will show in the correct place for the rest of the connected apps")** — Slack Disconnect, both calendars' Disconnect and every catalogue Request had written their failures into one banner at the top of the page (off-screen for a row at the bottom); a failed calendar fetch sat under the grid while the cards said "Not connected"; a failed email-logging fetch read "Not available on this site"; a Copy failure showed nothing. Now one module-scope `CardNote` and a per-surface `notes` map: each action clears and writes its own key, each card and row renders it where the click was, a failed fetch is reported as a failed fetch, and the page banner is for the settings load alone (guide §18b32 extended). Open, Jeff's call: a failed calendar OAuth Connect lands on Home with no message (item 30). Dev only; not yet shipped; not observed.
 **Prior batch:** **every activity row opens a read-only viewer; a logged email keeps its line breaks and names its attachments (§0.93, handoff item 26 option 2, and its follow-up)** — Jeff, at Karen's two test emails on the contact: "these are fairly useless because I can't see any content"; now every activity row in the contact, account and task rails, the deal modal's activity list and its History tab opens a viewer (type, date, author, subject bold, contact · account · deal, the whole body with its line breaks, Close, and Edit only where the server would let the caller write — `canEditActivity` mirrors `mayMutate`), and rails show the subject bold over a two-line clamp instead of the unclamped dump. His fourteen-step report found three things: Escape closed the rail along with the viewer (each rail's own listener now yields while the viewer is open); the stored body had every newline collapsed to a space and never named an attachment (`_inboundText.mjs`: newlines kept, HTML blocks become breaks, "Attachments: …" appended from the payload's names — the files are not stored); and a contact owned by its creator shows a blank Assigned Rep, hidden by the Contacts tab's remembered "Mine" scope (item 28, Jeff's call). Then a day of "same result" with the fix live, until a diagnostic written onto the row itself came back WITHOUT it: the Resend webhook had delivered to PROD all along, whose pre-fix function wrote every row into the shared database (guide §18b31); Jeff repointed it at dev, and the fix was **PROVEN 8 Sep 19:26 UTC** — "#14 Test Email" stored with ten line breaks and "Attachments: Lumen.pdf", seen in the viewer; the diagnostic removed (`173948a`). Dev only; not yet shipped; **OBSERVED by Jeff ("works"); the follow-up PROVEN by a real email.**
 **Prior batch:** **send-slack is Admin-only and pinned to Slack; a stored webhook is validated on save; integration-requests is Admin-only (§0.92, handoff item 25 "and the endpoint gate", guide §18b30)** — the handler had POSTed a test message to any URL a signed-in user put in the body, `sendSlack()` posted every pipeline alert to whatever host the saved webhook named, and a User could record by direct POST an integration request that Settings never offered them; now `requireRole(['Admin'])` before the body is read, one pure validator (`_slackWebhook.mjs`: https, `hooks.slack.com`, a `/services/` path, no credentials, no port) refuses anything else at test, at send and at `settings` PUT with the reason shown in the modal, and `integration-requests` is Admin-only because Settings is. The first suite `send-slack` ever had (6, real handler, `fetch` mocked). Dev only; deploy-verified from Netlify's record (functions-only, no bundle change). **OBSERVED by Jeff (8 Sep, screenshot: a scheme-less URL refused on Save, the card still Connected) — and the refusal had appeared in the panel's banner BEHIND the open modal; the same-hour follow-up shows it inside the modal under the field, and a scheme-less paste is told to start with https:// (guide §18b32) — OBSERVED by his second screenshot minutes after the landing.** Not yet shipped. Pre-ship read done (8 Sep, end of §0.92): the shared database's five settings rows store ONE webhook, the dev org's, on `hooks.slack.com` — no org's alerts start failing silently at the ship.
@@ -4806,6 +4807,56 @@ secret scan 0 matches over 365 files. The next hourly run (`0 * * * *`,
 dev; prod's copy is the April code until the ship. Whether it posts depends
 on a qualifying deal and the rep's preferences — Jeff looks at #sales-alerts
 after 22:00 UTC. `master` stays at `cf72f99`.
+
+### 0.96 An org chooses which pipeline alerts post to Slack (8 Sep, ninth session — handoff item 29; Jeff: "lets do 29, 30 and 32")
+
+**Jeff: "How do I choose what gets posted to slack (or other connected apps)?
+Can we add an option that enables me to select what actions get posted" —
+then "lets do 29, 30 and 32 while I reset the webhook."** What existed (§0.95,
+last paragraph): each of the five signals fired when the deal's rep had that
+alert on in their own preferences, and `sendSlackToOrg` posted every fired
+signal to the org's one webhook, gated only by `slackConfig.enabled`. No
+org-level choice; the modal's info box listed the five as a static sentence.
+
+**Design.** One pure module shared by both sides the way
+`integrationCatalog.js` is — `src/utils/slackAlerts.js`: `SLACK_ALERT_TYPES`
+(five `{ key, label }`, the keys being the rep-side `DEFAULT_PREFS` keys —
+`dealSilent`, `dealStuck`, `closeLapsed`, `dealMomentum`, `scoreDropAlert` —
+so an Admin and a rep name the same alert the same way, pinned by test),
+`cleanSlackAlerts(raw)` (every key → boolean, absent → true, unknown dropped,
+garbage → all on), `slackAlertEnabled(slackConfig, alertType)` (no type → not
+gated, so the digest and the test message are untouched; unknown type →
+false, fail closed on a typo; no `alerts` saved → true, so **a config saved
+before this key existed posts everything, as it always did**; otherwise only
+an explicit false is off), `slackAlertsOnCount`. `sendSlackToOrg(orgId, msg,
+alertType)` asks it after the enabled check and before the post; the five
+call sites in `pipeline-alerts.mjs` pass their key; `settings.mjs` PUT stores
+`slackConfig.alerts` as five booleans whatever the client sent (inside the
+existing webhook guard, so Disconnect's `slackConfig: {}` is untouched); the
+Configure Slack modal replaces the static sentence with five checkboxes
+seeded from the stored config (absent = ticked) and saves them with the
+webhook; the Slack card's status reads "Connected · #channel · n of 5
+alerts". Org-scoped: the selection lives in the org's own settings row and is
+read per org at send time. Nothing else changed — the rep's own preference
+still decides whether the signal fires at all; this decides whether a fired
+signal reaches Slack.
+
+**Verified:** five gates, build guard OK `index-Dz4BAypy.js`, **585/585 unit**
+(8 new in `tests/slack-alerts.test.mjs`: the pure module and source scans of
+all four touching files), **118/118 integration** (2 new in
+`send-slack.itest.mjs`, against the real row: an org with `dealSilent: false`
+posts nothing for that type and still posts `dealStuck` and the untyped
+digest, an unknown type posts nothing; an org saved before the key posts
+every type), **314/314 mutations, printed green baseline** (5 new: the
+unticked alert posts anyway; a typo posts instead of failing closed; the org
+path stops asking; a call site drops its type; settings stores the raw
+shape). A harness run earlier in this batch died mid-mutant and left one of
+its own mutants on disk (`integration-requests.mjs`, `if (!to && false)`);
+`git status` showed a file this batch never touched, the file was restored
+from the index, the harness re-run in full — **a harness run is not over
+until `git status` shows only the batch's own files.** Not browser-checked
+here; Jeff eyeballs (§5): Configure → five ticked boxes → untick one → Save →
+the card reads "4 of 5 alerts" and a refresh keeps it.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 

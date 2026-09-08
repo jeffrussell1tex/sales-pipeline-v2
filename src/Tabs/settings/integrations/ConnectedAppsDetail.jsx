@@ -30,6 +30,7 @@ import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { useApp } from '../../../AppContext';
 import { REQUESTABLE_APPS } from '../../../utils/integrationCatalog.js';
+import { SLACK_ALERT_TYPES, cleanSlackAlerts, slackAlertsOnCount } from '../../../utils/slackAlerts.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter } from './shared.jsx';
 
 const AppTile = ({ name, color='#3a5a7a', size=36, emoji }) => (
@@ -94,6 +95,7 @@ const SlackField = ({ label, hint, children }) => (
 const SlackConfigModal = ({ existing, onClose, onSave }) => {
     const [webhookUrl, setWebhookUrl] = useState(existing?.webhookUrl || '');
     const [channel,    setChannel]    = useState(existing?.channel    || '#sales-alerts');
+    const [alerts,     setAlerts]     = useState(() => cleanSlackAlerts(existing?.alerts));   // item 29: which of the five post
     const [testing,    setTesting]    = useState(false);
     const [msg,        setMsg]        = useState(null);   // Send test message AND Save report here
     const [saving,     setSaving]     = useState(false);
@@ -125,7 +127,7 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
         if (!webhookUrl.trim()) return;
         setSaving(true); setMsg(null);
         try {
-            await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true });
+            await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true, alerts: cleanSlackAlerts(alerts) });
         } catch (e) {
             setMsg({ ok: false, text: 'Not saved — ' + e.message });
             setSaving(false);
@@ -151,7 +153,16 @@ const SlackConfigModal = ({ existing, onClose, onSave }) => {
                         style={{ ...slackInputStyle, fontFamily: T.sans }}/>
                 </SlackField>
                 <div style={{ padding:'12px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid, fontFamily:T.sans, marginBottom:14 }}>
-                    <b style={{ color:T.info }}>What posts to Slack:</b> the pipeline alerts this workspace has on — deal silent, stuck in stage, close date lapsed, deal momentum, score drop — alongside their emails.
+                    <b style={{ color:T.info }}>What posts to Slack:</b> the pipeline alerts ticked here, when the rep the deal belongs to has that alert on — alongside their emails.
+                    <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:10 }}>
+                        {SLACK_ALERT_TYPES.map(t => (
+                            <label key={t.key} style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', color:T.ink }}>
+                                <input type="checkbox" checked={alerts[t.key] !== false}
+                                    onChange={e => setAlerts(a => ({ ...a, [t.key]: e.target.checked }))}/>
+                                {t.label}
+                            </label>
+                        ))}
+                    </div>
                 </div>
                 {msg && (
                     <div style={{ padding:'10px 14px', background: msg.ok ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)', borderLeft:`3px solid ${msg.ok ? T.ok : T.danger}`, borderRadius:4, fontSize:12, color: msg.ok ? T.ok : T.danger, fontFamily:T.sans, marginBottom:14 }}>
@@ -458,7 +469,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                         desc="Pipeline alerts — deal silent, stuck in stage, close date lapsed, deal momentum, score drop — posted to a channel through an Incoming Webhook, alongside their emails."
                         pill={slackConnected ? <Pill tone="ok">Live</Pill> : null}
                         foot={<>
-                            <StatusDot tone={slackConnected ? 'ok' : 'muted'} label={slackConnected ? `Connected${slackConfig.channel ? ' · ' + slackConfig.channel : ''}` : 'Not connected'}/>
+                            <StatusDot tone={slackConnected ? 'ok' : 'muted'} label={slackConnected ? `Connected${slackConfig.channel ? ' · ' + slackConfig.channel : ''} · ${slackAlertsOnCount(slackConfig)} of ${SLACK_ALERT_TYPES.length} alerts` : 'Not connected'}/>
                             <div style={{ display:'flex', gap:12 }}>
                                 {isAdmin && <button onClick={() => setSlackModal(true)} style={linkBtn(T.info)}>{slackConnected ? 'Configure' : 'Configure Slack'}</button>}
                                 {isAdmin && slackConnected && <button disabled={busy === 'slack'} onClick={handleDisconnectSlack} style={{ ...linkBtn(T.danger), opacity: busy === 'slack' ? 0.5 : 1 }}>{busy === 'slack' ? 'Disconnecting…' : 'Disconnect'}</button>}

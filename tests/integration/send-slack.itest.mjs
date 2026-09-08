@@ -49,7 +49,7 @@ const fetchMock = mock.method(globalThis, 'fetch', async (url, opts) => {
     return { ok: true, status: 200, text: async () => 'ok' };
 });
 
-const { handler } = await import('../../netlify/functions/send-slack.mjs');
+const { handler, sendSlackToOrg } = await import('../../netlify/functions/send-slack.mjs');
 const { db } = await import('../../db/index.js');
 const { settings } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
@@ -58,11 +58,13 @@ const { assertTestSchema } = await import('./_schema-guard.mjs');
 const ORG_A = 'itest_slack_A';   // a Slack webhook stored
 const ORG_B = 'itest_slack_B';   // a NON-Slack webhook stored (the pre-§0.92 shape)
 const ORG_C = 'itest_slack_C';   // no settings row at all
+const ORG_D = 'itest_slack_D';   // a Slack webhook with dealSilent unticked (state §0.96, item 29)
 // Assembled at run time: a literal in the Slack shape trips GitHub's push
 // protection (it reads as a leaked webhook, which it is not).
 const slackUrl = (t, b, k) => ['https://hooks.slack.com', 'services', t, b, k].join('/');
 const SLACK_A = slackUrl('T0ITESTA', 'B0ITESTA', 'a'.repeat(24));
 const SLACK_B = slackUrl('T0ITESTB', 'B0ITESTB', 'b'.repeat(24));
+const SLACK_D = slackUrl('T0ITESTD', 'B0ITESTD', 'd'.repeat(24));
 
 const call = (org, body, { role } = {}) => handler({
     httpMethod: 'POST',
@@ -73,7 +75,7 @@ const parse = (r) => ({ status: r.statusCode, body: JSON.parse(r.body || '{}') }
 const storedOf = async (org) => (await db.select().from(settings).where(eq(settings.orgId, org)))[0]?.extra?.slackConfig;
 
 const cleanup = async () => {
-    for (const o of [ORG_A, ORG_B, ORG_C]) await db.delete(settings).where(eq(settings.orgId, o));
+    for (const o of [ORG_A, ORG_B, ORG_C, ORG_D]) await db.delete(settings).where(eq(settings.orgId, o));
 };
 
 before(async () => {
@@ -81,6 +83,30 @@ before(async () => {
     await cleanup();
     await db.insert(settings).values({ id: ORG_A, orgId: ORG_A, extra: { slackConfig: { webhookUrl: SLACK_A, channel: '#a', enabled: true } }, updatedAt: new Date() });
     await db.insert(settings).values({ id: ORG_B, orgId: ORG_B, extra: { slackConfig: { webhookUrl: 'https://example.test/not-slack', enabled: true } }, updatedAt: new Date() });
+    await db.insert(settings).values({ id: ORG_D, orgId: ORG_D, extra: { slackConfig: { webhookUrl: SLACK_D, channel: '#d', enabled: true, alerts: { dealSilent: false } } }, updatedAt: new Date() });
+});
+
+// ── item 29: the org's own selection, against the real row ──────────────────
+
+test("an unticked alert type posts nowhere for that org; a ticked one still posts; the digest (no type) is not gated", async () => {
+    calls.length = 0;
+    assert.equal(await sendSlackToOrg(ORG_D, { text: 'silent' }, 'dealSilent'), false, 'dealSilent is off for D');
+    assert.equal(calls.length, 0, 'nothing fetched');
+    assert.equal(await sendSlackToOrg(ORG_D, { text: 'stuck' }, 'dealStuck'), true, 'dealStuck is absent = on');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, SLACK_D);
+    assert.equal(await sendSlackToOrg(ORG_D, { text: 'digest' }), true, 'no type: not gated');
+    assert.equal(calls.length, 2);
+    assert.equal(await sendSlackToOrg(ORG_D, { text: 'typo' }, 'notAType'), false, 'an unknown type fails closed');
+    assert.equal(calls.length, 2);
+});
+
+test("an org that saved before item 29 has no `alerts` and posts every type", async () => {
+    calls.length = 0;
+    assert.equal(await sendSlackToOrg(ORG_A, { text: 'silent' }, 'dealSilent'), true);
+    assert.equal(await sendSlackToOrg(ORG_A, { text: 'drop' }, 'scoreDropAlert'), true);
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every(c => c.url === SLACK_A), "A's webhook, never D's");
 });
 after(async () => { await cleanup(); fetchMock.mock.restore(); });
 

@@ -53,7 +53,7 @@ test('the modal tests the URL the user typed and saves it enabled', () => {
     const s = code(read(CA));
     assert.ok(s.includes("dbFetch('/.netlify/functions/send-slack', {"), 'the test posts to send-slack');
     assert.ok(s.includes('body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),'), 'with the typed URL, so the stored one is untouched');
-    assert.ok(s.includes('await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true });'), 'saved enabled — send-slack treats enabled !== false as on');
+    assert.ok(s.includes('await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true, alerts: cleanSlackAlerts(alerts) });'), 'saved enabled — send-slack treats enabled !== false as on — with the five-alert selection (item 29)');
     assert.ok(s.includes("if (!res.ok) throw new Error(data.error || 'Test failed');"), 'a non-2xx test is a failure, not a success toast');
 });
 

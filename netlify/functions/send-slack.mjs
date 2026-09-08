@@ -32,6 +32,7 @@ import { settings } from '../../db/schema.js';
 import { eq }      from 'drizzle-orm';
 import { serverErrorBody } from './_lib.mjs';
 import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
+import { slackAlertEnabled } from '../../src/utils/slackAlerts.js';
 
 // ── Core send function ────────────────────────────────────────────────────────
 /**
@@ -68,7 +69,7 @@ export async function sendSlack({ webhookUrl, text, blocks }) {
  * Returns false silently if Slack is not configured for this org.
  * Never throws — Slack is always supplementary to email.
  */
-export async function sendSlackToOrg(orgId, { text, blocks }) {
+export async function sendSlackToOrg(orgId, { text, blocks }, alertType) {
     try {
         const rows = await db.select().from(settings).where(eq(settings.orgId, orgId));
         if (!rows.length) return false;
@@ -78,6 +79,10 @@ export async function sendSlackToOrg(orgId, { text, blocks }) {
         const enabled     = slackConfig.enabled !== false; // default true if configured
 
         if (!webhookUrl || !enabled) return false;
+        // The org's own selection (state §0.96, item 29): a pipeline alert the
+        // Admin unticked in Configure Slack posts nowhere. No alertType (the
+        // digest, the test) is not gated; a config with no `alerts` posts all.
+        if (!slackAlertEnabled(slackConfig, alertType)) return false;
 
         await sendSlack({ webhookUrl, text, blocks });
         return true;

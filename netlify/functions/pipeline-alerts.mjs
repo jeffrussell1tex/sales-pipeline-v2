@@ -284,7 +284,7 @@ export const handler = async () => {
                             smsSent++;
                         }
                         await logAlert(orgId, repName, 'stale', opp, `No activity in ${daysSilent} days`);
-                        await sendSlackToOrg(orgId, slackTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent }));
+                        await sendSlackToOrg(orgId, slackTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent }), 'dealSilent');
                         console.log(`dealSilent → ${repUser.email} (${name}, ${daysSilent}d)`);
 
                         // Manager copy for very stale (21+ days)
@@ -323,7 +323,7 @@ export const handler = async () => {
                             smsSent++;
                         }
                         await logAlert(orgId, repName, 'stuck', opp, `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`);
-                        await sendSlackToOrg(orgId, slackTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage }));
+                        await sendSlackToOrg(orgId, slackTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage }), 'dealStuck');
                         console.log(`dealStuck → ${repUser.email} (${name}, ${daysInStage}d)`);
 
                         // Manager copy if 3× over average
@@ -363,7 +363,7 @@ export const handler = async () => {
                             smsSent++;
                         }
                         await logAlert(orgId, repName, 'lapsed', opp, `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`);
-                        await sendSlackToOrg(orgId, slackTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate }));
+                        await sendSlackToOrg(orgId, slackTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate }), 'closeLapsed');
                         console.log(`closeLapsed → ${repUser.email} (${name}, ${daysLapsed}d overdue)`);
 
                         // Always CC manager on lapsed close date
@@ -402,7 +402,7 @@ export const handler = async () => {
                         });
                         emailsSent++;
                         await logAlert(orgId, repName, 'velocity', opp, `${stageCount} stages in ${createdDays} days`);
-                        await sendSlackToOrg(orgId, slackTemplates.dealMomentum({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays }));
+                        await sendSlackToOrg(orgId, slackTemplates.dealMomentum({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays }), 'dealMomentum');
                         console.log(`dealMomentum → ${repUser.email} (${name})`);
                     } catch (err) {
                         console.error(`dealMomentum error (${name}):`, err.message);
@@ -458,7 +458,7 @@ export const handler = async () => {
                         });
                         emailsSent++;
                         await logAlert(orgId, repName, 'scoreDrop', opp, `AI score ${opp.aiScore.score} (${verdictLabel})`);
-                        await sendSlackToOrg(orgId, slackTemplates.scoreDrop({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, score: opp.aiScore.score, verdict: verdictLabel }));
+                        await sendSlackToOrg(orgId, slackTemplates.scoreDrop({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, score: opp.aiScore.score, verdict: verdictLabel }), 'scoreDropAlert');
                         console.log(`scoreDropAlert → ${repUser.email} (${name}, score ${opp.aiScore.score})`);
 
                         // Escalate to manager if Critical
