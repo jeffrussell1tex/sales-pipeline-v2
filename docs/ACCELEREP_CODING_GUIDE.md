@@ -3071,3 +3071,45 @@ while reading for §0.89; seen live the day Jeff's own test went out.
   under Settings, which `App.jsx` renders for Admins alone. An endpoint's gate
   matches the narrowest UI that reaches it, or a role the UI never offers can
   act by direct POST.
+
+## 18b31. A Shared Database Does Not Say Which Site Wrote The Row (hard rule)
+
+Origin (8 Sep 2026, state §0.93): a fix to how an inbound email's body is
+stored was deployed to dev, verified by Netlify's deploy record, and
+exercised by seven real emails over a day — every one stored flat, exactly
+as before. Three diagnostics went out chasing the function; none printed.
+The fourth wrote its diagnostic onto the row itself, and the row came back
+without it: the row had been written by a function that could not have
+been dev's. Resend's single webhook pointed at prod. Prod and dev share
+one Neon `main`, the dropbox secret was the same on both sites, and the
+roster row was in the shared table — so prod's old function accepted the
+address, matched the contact and wrote the row, and dev's screen showed
+it. Seven observations, a whole day, and the code under test had never
+run once.
+
+- **A row in the shared database proves a row was written, not who wrote
+  it.** Before verifying any function on dev through data that an external
+  system delivers — an email webhook, a payment callback, a calendar push,
+  a cron the provider runs — read the provider's configured target FIRST
+  and say which site it names. If it names prod, dev's function is a
+  bystander, whatever the deploy record says.
+- **A deploy record proves the code is deployed, not that it is invoked.**
+  Netlify's "rebuilt at 18:39:14" answered the question that was asked and
+  not the one that mattered. The question that matters is "what invoked
+  the function that wrote this row" — and a webhook has exactly one target.
+- **Make the write say which deployment made it, when two can.** The
+  diagnostic that finally worked wrote a marker into the row; its ABSENCE
+  was the finding. Anything two deployments can both write should carry
+  something only one of them would write — or the shared database will
+  keep answering "yes" to both.
+- **Silence in a log is not evidence until the log is known to speak.**
+  Two diagnostics stayed on `console.log` while the function's log page
+  showed request rows and nothing else; whether Netlify surfaces this
+  function's console output was never established, and the silence was
+  read as "not fetched" when it meant "not invoked". Put the diagnostic
+  where it can be READ BACK (a row, a response body) before drawing
+  conclusions from where it might not appear.
+- **Shared secrets widen the blast radius of a shared database.** The same
+  `BCC_SECRET` on both sites let prod validate dev's addresses. That is by
+  design today (one product, two deployments) and is exactly why the
+  target check above is a rule and not a habit.

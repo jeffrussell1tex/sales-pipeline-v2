@@ -4513,6 +4513,34 @@ at 21.6 s inside the full `test:int` run and passed alone at 0.6 s — the
 local receiver under a slow test database, not the code (115/116 then 7/7);
 recorded, not chased.
 
+**Root cause (8 Sep, 17:29 UTC) — the Resend webhook delivers to PROD.** The
+diagnostic moved onto the row (`696b85b`: `outcome` = the payload shape on
+every email the dev function stores), Jeff sent "#13 Test email" two hours
+after that deploy, and the row came back with `outcome` NULL — a row the
+dev function cannot write. Prod's copy (`master` = `cf72f99`) is the pre-fix
+function: the `/\s+/` collapse, no attachments, `outcome: null`. Jeff's
+Resend dashboard → Webhooks: **one endpoint,
+`https://salespipelinetracker.com/.netlify/functions/email-…`, Enabled,
+created three months ago.** Dev and prod share one Neon `main`, the
+dropbox secret is the same on both sites, Karen's roster row is in the
+shared table — so prod's old function validated the address, matched the
+contact and wrote every row, and dev's screen showed it. **Every email
+since 7 Sep 18:45 UTC — #4, #5, #6, #10, "tet email 11", "Email Test #12",
+"#13 Test email" — was logged by prod.** The line-break fix (`f17e835`) has
+never handled a real email; nothing about it is disproven, and nothing about
+it is proven either. §0.91's two proofs on 7 Sep (the org address, then the
+personal one) were ALSO prod's function writing — the row shape was the
+same on both sites that day, so the observation stands, but the site that
+made it was prod. The dev invocation at 14:53:09 UTC on 8 Sep (502 ms) is
+unexplained — not Resend, which has one target. The three diagnostics
+(`d1fcf44`, `c4ccdbb`, `696b85b`) were chasing a function that was never
+invoked; the console-output question about Netlify's log page is moot and
+unanswered. Jeff's call: repoint the webhook at
+`https://accelerep.netlify.app/.netlify/functions/email-inbound` to test
+(prod stops logging until it is pointed back), or ship dev to prod — after
+the temporary `outcome` diagnostic comes out and the prod Slack-webhook
+read. Guide §18b31 carries the rule.
+
 
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
