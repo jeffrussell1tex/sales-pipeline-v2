@@ -95,8 +95,14 @@ against the real rows in the integration suite. Landed `index-B-DxPVK_.js`;
 **OBSERVED four minutes later — Jeff's screenshot of #sales-alerts: "🏆
 Closed Won — ZZFX Cinder New Logo — $210K ARR · from Negotiation/Review ·
 Rep: Karen Russell · Closed by Jeff Russell", 22:33 UTC — the first real
-post the app has ever made to Slack.** **NOTHING SHIPPED this session** — `master` stays at
-`cf72f99`; dev is ahead by 47 commits (§4). **The Resend webhook after Jeff's reset — his screenshot
+post the app has ever made to Slack.** Then **Jeff: "ship prod" — the TENTH
+SHIP, §0.92 through §0.99: `master` `cf72f99` → `5a306e3` (49 commits),
+salespipelinetracker.com serving `index-JJdhJmyd.js` 50 seconds after the
+push, 76 functions, prod's wrapper stamping the shared heartbeat row within
+two minutes (state §0.99, last paragraphs).** Found at the ship: the
+heartbeat row is per job, not per site — item 34. `master` == `dev` ==
+`5a306e3` at the ship; dev is ahead only by the ship-record docs commits.
+**Jeff flips the Resend webhook back to prod** (§5). **The Resend webhook after Jeff's reset — his screenshot
 of resend.com/webhooks at the close: the dev endpoint
 (`accelerep.netlify.app/…/email-inbound`, created 4h ago) Enabled, the prod
 endpoint (`salespipelinetracker.com/…`, 3mo ago) Disabled — unchanged from
@@ -144,7 +150,22 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — §0.92 and §0.93 are on `dev` ONLY (deploy-verified; §0.93 observed); everything before them is on `master`
+## 1. What shipped — the tenth ship put §0.92 through §0.99 on `master` (8 Sep 22:36 UTC); nothing is on `dev` only but the ship-record docs
+
+**PROD SHIPPED (Jeff: "ship prod") — the tenth ship (8 Sep, ninth session).**
+Ancestor check (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor
+of `dev`), then `git push origin dev:master`: `master` `cf72f99` → `5a306e3`
+(49 commits — §0.92 through §0.99 and their docs), pushed 22:36:01 UTC.
+salespipelinetracker.com served `index-JJdhJmyd.js` at 22:36:51 UTC (50
+seconds), dev's byte size, `pk_live_` inlined, every new string present, the
+old banner string absent; Netlify's record: deploy `6aa08dd3…` = `5a306e3`,
+branch `master`, 76 functions, secret scan clean; `send-slack`, `job-status`,
+`email-inbound`, `calendar-connections` answer 401 unauthenticated; prod's
+`task-reminders` stamped the heartbeat row within two minutes (state §0.99,
+"PROD SHIPPED"). Prod's `pipeline-alerts` runs the fixed code for the first
+time at 23:00 UTC. **The Resend webhook still targets dev at the ship — Jeff
+flips it back.** The paragraphs below are the batches as they were recorded
+before the ship; each is now on `master`.
 
 **Eighth session, day two (8 Sep) — the root cause, and the proof. ON DEV
 ONLY, NOT shipped.** Jeff re-ran steps 3, 7 and 9: Escape fixed; the body
@@ -749,16 +770,19 @@ screenshot, 22:33 UTC); §0.94, §0.95, §0.97 NOT observed;
 §0.98 PROVEN by the first heartbeat row · dev deploys observed serving
 `index-BRrOppU7.js`, `index-DhQ2fFJ5.js`, `index-Dz4BAypy.js`,
 `index-lFOC0BmK.js`, `index-LNt1yblV.js`, `index-B-DxPVK_.js`, and Netlify's
-deploy records for §0.95 and §0.98 · **`master` == `cf72f99`, prod serving
-`index-DIeZb8qh.js` (ninth ship)**; dev is ahead of master by 47 commits: the
+deploy records for §0.95 and §0.98 · **`master` == `5a306e3`, prod serving
+`index-JJdhJmyd.js` (the TENTH ship, 22:36 UTC)**; before the ship dev was
+ahead of master by 49 commits: the
 eighth session's 26, then `8666737`, `08de43d`, `0163cd1`, `2b28a24`,
 `b1c4769`, `e77d841`, `1c8ce78`, `b5da1a7`, `2049a4a`, `9fc662f`, `adc5780`,
 `b5a9f5c`, `282c16c`, `7d4b406`, `5bca4fd`, `1e47b13`, `7979fde`, `e852d58`,
-`fbaf8ae`, its landing docs commit, and this close · **one schema change:
+`fbaf8ae`, `ed41796`, `13815d9`, `4d22ba5` and `5a306e3` — all now on
+`master`; after the ship dev is ahead only by the ship-record docs commit
+(`0603ad5`) and this close · **one schema change:
 `job_heartbeats`, additive, in BOTH databases** · **the Resend inbound
 webhook targets DEV; prod's endpoint is Disabled — Jeff's screenshot** ·
-**prod's `pipeline-alerts` is still the April code — it sends nothing until
-the ship** · the working tree was clean at close.
+**prod's `pipeline-alerts` is the fixed code since 22:36 UTC — its first run
+is 23:00** · the working tree was clean at close.
 
 ## 5. Next — start here
 
@@ -767,8 +791,10 @@ the ship** · the working tree was clean at close.
   expect forty-seven commits after `cf72f99` (§4 lists them). Anything else
   is unshipped code and a finding. **Then read Resend → Webhooks** — at the
   ninth session's close Jeff's screenshot showed the dev endpoint Enabled and
-  the prod one Disabled; if that has changed, say so before trusting any
-  email observation (§18b31). It flips back to prod at the ship.
+  the prod one Disabled; the tenth ship has happened and Jeff was asked to
+  flip it back to prod — read the dashboard: if prod is Enabled, every email
+  observation is prod's (now the same code); if dev is still Enabled, prod
+  logs no email (§18b31).
 - **Look at #sales-alerts.** The first hourly `pipeline-alerts` run that can
   get past its first deal on dev was 22:00 UTC 8 Sep (state §0.95). A post
   there is the first alert in five months; none is not a finding by itself —
@@ -781,7 +807,21 @@ the ship** · the working tree was clean at close.
   (persists a refresh); Copy address still copies. Nothing new is visible
   unless a server refuses: the observable is the ABSENCE of a banner. Karen
   cannot reach Settings; the negatives are the source scan and four mutants.
-- **Before shipping: nothing new to read** — the pre-ship Slack-webhook read
+- **DONE — the tenth ship (§1). What is left of it is Jeff's: flip the
+  Resend webhook back (enable `salespipelinetracker.com/…/email-inbound`,
+  disable the `accelerep.netlify.app` one); until then prod logs no email.
+  On prod, his to observe: the same eyeball lists as dev (§0.92–§0.99); the
+  first prod alert since April can post at 23:00 UTC if a deal qualifies;
+  prod's Workspace Health reads the shared heartbeat row (item 34).**
+- **Item 34 — one batch, Jeff's call on timing:** `job_heartbeats` is keyed
+  by job alone and the database is shared, so dev and prod write the SAME
+  row; it says the job ran somewhere, not where. A prod job stalled while
+  dev's runs would read ok on both tiles. Fix: a site column
+  (`process.env.URL` or the site id) in the key, `job-status` filtering to
+  its own site, the apply script additive (a new column plus a new primary
+  key needs care — read §18c first). Found at the ship: `ok_count` 40 where
+  dev alone had ticked 38 times.
+- **Before shipping (kept for the next ship): nothing new to read** — the pre-ship Slack-webhook read
   is done (one webhook, dev's). **Ship §0.92–§0.99 when Jeff says so:**
   ancestor check, `git push origin dev:master`, poll salespipelinetracker.com
   for a NEW hash (not `index-B-DxPVK_.js` — the live key is inlined); the
