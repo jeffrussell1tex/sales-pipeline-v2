@@ -5107,6 +5107,17 @@ absent; Netlify's current deploy `6aa08c15…` carries the rebuilt
 `opportunities`, `send-slack` and `pipeline-alerts`. The 23:00 UTC run is
 the first on the decoupled signals. `master` stays at `cf72f99`.
 
+**OBSERVED by Jeff (8 Sep, 22:33 UTC — his screenshot of #sales-alerts,
+four minutes after the landing):** "🏆 Closed Won — ZZFX Cinder New Logo
+(ZZFX Cinder Logistics) — $210K ARR · from Negotiation/Review — Rep: Karen
+Russell · Closed by Jeff Russell — View deal →", posted by the Accelerep
+Linker app at 5:33 PM his time. **The first real post the app has ever made
+to Slack**: every earlier line in the channel is the "connected" test
+message from Configure Slack (three of them, yesterday). The event post,
+the mover, the rep, the ARR and the from-stage all as designed. Not yet
+seen: a plain stage change post, the unticked-box negative, and any hourly
+signal.
+
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
 > Five roles. Eight lists. One of them enforced. The other seven disagreed with it
