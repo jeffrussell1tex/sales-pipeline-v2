@@ -30,6 +30,25 @@ their removal, and the docs), FINAL.** Repo
 root. Read this first, then verify every claim in it against the live repo
 before acting — **including the claims in this file**.
 
+**Ninth session (8 September 2026, Jeff: "claude, lets continue the effort on
+Accelrep") — OPEN, in progress; no code yet.** The ritual passed: 26 commits
+after `cf72f99`, `dev` == `origin/dev` at `2c28b74`, both staleness
+fingerprints present, handoff copies identical, tree clean. Found: the state
+doc's header still carried the first close's counts (565 / 294 / 114,
+`index-C1VD4DfX.js`, "September 7") against §4's 570 / 299 / 116 and
+`index-Bz_vDa_T.js` — the previous handoff's "the header itself was refreshed
+at this close" was true of the first close only. Done, docs only (`8666737`):
+the header refreshed; the per-batch lines now describe §0.89–§0.93 and the
+§0.82–§0.88 lines name the ship that carried each (five had still said "not
+yet shipped"); and **the pre-ship Slack-webhook read is DONE** — one read-only
+SELECT over the shared app database's five `settings` rows found ONE stored
+webhook, the dev org's, on `hooks.slack.com` and valid, the other four orgs
+none (recorded at the end of state §0.92). Nothing to raise before a ship.
+**Waiting on Jeff:** the Resend webhook targets (his dashboard: dev Enabled,
+prod Disabled?), the §0.92 eyeball, "ship prod", items 27 and 28, the
+Connected-apps dead-branch cleanup, and a look at #sales-alerts for the hourly
+pipeline alerts. `master` stays at `cf72f99`.
+
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
 since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
@@ -728,7 +747,11 @@ working tree was clean at close.
   one. (D) an account's and a task's Activity History; a deal's Activity list
   and History tab; the × on a History row deletes without opening. (E) + Log
   Activity, + Add Task and the Reports timelines unchanged.
-- **Before shipping: read prod's stored Slack webhook.** After §0.92 a stored
+- **DONE (ninth session, 8 Sep, `8666737`): five settings rows in the shared
+  app database, ONE stored webhook — the dev org's, `hooks.slack.com`,
+  `valid=true`, `#sales-alerts`, enabled — the other four orgs store none;
+  nothing to raise (state §0.92, last paragraph).** Was: **Before shipping:
+  read prod's stored Slack webhook.** After §0.92 a stored
   non-Slack webhook fails silently on every alert while the card says Live.
   Dev's is Slack (read back). Prod: one read-only SELECT of
   `extra->'slackConfig'->>'webhookUrl'` per org on the app database; anything
@@ -769,7 +792,9 @@ working tree was clean at close.
   — dead code to drop in a cleanup batch. `INTEGRATION_REQUESTS_TO` is still
   unset as far as can be seen from here (a request is recorded and audited
   but not mailed).
-- **The state doc's per-batch summary lines under its header** (lines 4–8)
+- **DONE (ninth session, 8 Sep, `8666737`) — and the header itself had NOT
+  been refreshed at the third close: it carried the first close's counts.**
+  Was: **The state doc's per-batch summary lines under its header** (lines 4–8)
   still describe §0.84–§0.88; the header itself was refreshed at this close.
   Rewriting the five lines is a docs-only chore.
 
