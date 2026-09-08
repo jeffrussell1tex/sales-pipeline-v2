@@ -80,8 +80,20 @@ from the app database). Along the way: the harness once died mid-mutant and
 left a mutant on disk (`git status` caught it — §0.96), the TDZ gate caught
 an unimported `useEffect` (§0.97), the org-scoping scan flagged the
 site-wide table and got its exemption with the reason beside it (§0.98).
-**NOTHING SHIPPED this session** — `master` stays at `cf72f99`; dev is ahead
-by 43 commits (§4). **The Resend webhook after Jeff's reset — his screenshot
+Then Jeff, the Slack card seen working: **"i changed an opportunities status
+and it did not show up in slack"** — nothing posted on a status change, and
+the five signals asked the REP's preference before the company's selection;
+after two options and a change of mind: **"actually move it all to an event
+post. I don't want to have to rely on users to pick the correct items by
+themselves to enable alerts the company wants to post to slack."** →
+**§0.99 `fbaf8ae`, item 33**: stage changed and closed won post from the deal
+save the moment they happen (who moved it, the rep, the ARR); the five
+hourly signals post on the org's checkboxes alone, the rep's preference
+gating only that rep's email and SMS; seven checkboxes in two groups with
+honest labels; a 4-second cap on the Slack fetch inside the save; proven
+against the real rows in the integration suite. Landed `index-B-DxPVK_.js`;
+NOT observed. **NOTHING SHIPPED this session** — `master` stays at
+`cf72f99`; dev is ahead by 47 commits (§4). **The Resend webhook after Jeff's reset — his screenshot
 of resend.com/webhooks at the close: the dev endpoint
 (`accelerep.netlify.app/…/email-inbound`, created 4h ago) Enabled, the prod
 endpoint (`salespipelinetracker.com/…`, 3mo ago) Disabled — unchanged from
@@ -112,8 +124,8 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.98` with a paragraph beginning **"Landed on dev (`5bca4fd`"** and
-`### 0.97` with a paragraph beginning **"Landed on dev (`282c16c`"**, and does
+`### 0.99` with a paragraph beginning **"Landed on dev (`fbaf8ae`"** and
+`### 0.98` with a paragraph beginning **"Landed on dev (`5bca4fd`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` under `## 18b33` carry the words **"every
 scheduled handler is `withHeartbeat('<job>', run)`"**? If not, you are
 looking at a copy that predates this handoff. Check section
@@ -721,31 +733,26 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (8 Sep, ninth session — after items 29, 30, 32)
+## 4. Verified state at close (8 Sep, ninth session — after items 29, 30, 32 and 33)
 
-Five gates green on 154 files (five new source files this session: three
-pure `src/utils` modules, `_heartbeat.mjs`, `job-status.mjs`) · **603/603
-unit** (33 new this session: 1 slack-webhook, 3 connected-apps, 3
-pipeline-alerts, 8 slack-alerts, 9 calendar-return, 9 job-heartbeat) ·
-**326/326 mutations, printed green baseline** (27 added this session; four
-new suites registered in the harness's `SUITES`) · build **2,438 kB JS**,
-`index-LNt1yblV.js`, guard OK, `dist/` cleared · **122/122 integration** (6
-new: 2 send-slack, 4 job-heartbeat; `job-heartbeat.itest.mjs` added to
-package.json's `test:int` list) · **no pane browser pass** — the pane holds
-no session; §0.92's follow-up OBSERVED by Jeff (second screenshot); §0.94,
-§0.95, §0.96, §0.97 NOT observed; §0.98 PROVEN by the first heartbeat row
-read back from the app database · dev deploys observed serving
+Five gates green on 154 files · **606/606 unit** (36 new this session;
+`slack-alerts.test.mjs` rewritten for seven types) · **330/330 mutations,
+printed green baseline** (31 added this session) · build **2,438 kB JS**,
+`index-B-DxPVK_.js`, guard OK, `dist/` cleared · **123/123 integration** (7
+new this session) · **no pane browser pass** — the pane holds no session;
+§0.92's follow-up OBSERVED by Jeff (second screenshot); §0.96's card OBSERVED
+("slack card working as stated"); §0.94, §0.95, §0.97, §0.99 NOT observed;
+§0.98 PROVEN by the first heartbeat row · dev deploys observed serving
 `index-BRrOppU7.js`, `index-DhQ2fFJ5.js`, `index-Dz4BAypy.js`,
-`index-lFOC0BmK.js`, `index-LNt1yblV.js`, and Netlify's deploy records for
-§0.95 (`6aa078b6…`) and §0.98 (`6aa08537…`, 76 functions) · **`master` ==
-`cf72f99`, prod serving `index-DIeZb8qh.js` (ninth ship)**; dev is ahead of
-master by 43 commits: the eighth session's 26, then `8666737`, `08de43d`,
-`0163cd1`, `2b28a24`, `b1c4769`, `e77d841`, `1c8ce78`, `b5da1a7`, `2049a4a`,
-`9fc662f`, `adc5780`, `b5a9f5c`, `282c16c`, `7d4b406`, `5bca4fd`, `1e47b13`,
-and this close · **one schema change: `job_heartbeats`, additive, in BOTH
-databases** (applied and read back before the code was committed) · **the
-Resend inbound webhook targets DEV; prod's endpoint is Disabled — Jeff's
-screenshot of the Webhooks page at the close** ·
+`index-lFOC0BmK.js`, `index-LNt1yblV.js`, `index-B-DxPVK_.js`, and Netlify's
+deploy records for §0.95 and §0.98 · **`master` == `cf72f99`, prod serving
+`index-DIeZb8qh.js` (ninth ship)**; dev is ahead of master by 47 commits: the
+eighth session's 26, then `8666737`, `08de43d`, `0163cd1`, `2b28a24`,
+`b1c4769`, `e77d841`, `1c8ce78`, `b5da1a7`, `2049a4a`, `9fc662f`, `adc5780`,
+`b5a9f5c`, `282c16c`, `7d4b406`, `5bca4fd`, `1e47b13`, `7979fde`, `e852d58`,
+`fbaf8ae`, its landing docs commit, and this close · **one schema change:
+`job_heartbeats`, additive, in BOTH databases** · **the Resend inbound
+webhook targets DEV; prod's endpoint is Disabled — Jeff's screenshot** ·
 **prod's `pipeline-alerts` is still the April code — it sends nothing until
 the ship** · the working tree was clean at close.
 
@@ -753,7 +760,7 @@ the ship** · the working tree was clean at close.
 
 **Ninth-session prep (read at the tenth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect forty-three commits after `cf72f99` (§4 lists them). Anything else
+  expect forty-seven commits after `cf72f99` (§4 lists them). Anything else
   is unshipped code and a finding. **Then read Resend → Webhooks** — at the
   ninth session's close Jeff's screenshot showed the dev endpoint Enabled and
   the prod one Disabled; if that has changed, say so before trusting any
@@ -771,9 +778,9 @@ the ship** · the working tree was clean at close.
   unless a server refuses: the observable is the ABSENCE of a banner. Karen
   cannot reach Settings; the negatives are the source scan and four mutants.
 - **Before shipping: nothing new to read** — the pre-ship Slack-webhook read
-  is done (one webhook, dev's). **Ship §0.92–§0.98 when Jeff says so:**
+  is done (one webhook, dev's). **Ship §0.92–§0.99 when Jeff says so:**
   ancestor check, `git push origin dev:master`, poll salespipelinetracker.com
-  for a NEW hash (not `index-LNt1yblV.js` — the live key is inlined); the
+  for a NEW hash (not `index-B-DxPVK_.js` — the live key is inlined); the
   `job_heartbeats` table is already in the shared database (§18c), so prod's
   functions may land in any order and prod's first heartbeat (task-reminders)
   appears within a minute of the ship — a read-only SELECT proves it;
@@ -784,11 +791,21 @@ the ship** · the working tree was clean at close.
   ship is the first prod alert since April. **At the same time flip the
   Resend webhook back** — enable prod, disable dev (§18b31). Until then prod
   logs no email and sends no alert.
-- **DONE — item 29 is §0.96 (`adc5780`), landed `index-Dz4BAypy.js`; NOT
-  observed. Jeff eyeballs, as Admin: Connected apps → Slack → Configure →
-  five ticked boxes under "What posts to Slack" → untick one → Save
-  configuration → the card reads "Connected · #sales-alerts · 4 of 5
-  alerts"; refresh — it stays; reopen — the box is still unticked.** Was:
+- **DONE — item 33 is §0.99 (`fbaf8ae`), landed `index-B-DxPVK_.js`; NOT
+  observed. Jeff eyeballs, as Admin, with #sales-alerts open: move a deal's
+  stage → a "➡️ Stage changed" post within seconds naming him as the mover,
+  the rep and the ARR; move one to Closed Won → "🏆 Closed Won" with the
+  ARR; Configure Slack → two groups, seven boxes, "7 of 7 alerts" on the
+  card → untick "Deal stage changed" → Save → move another deal → nothing
+  posts; tick it back. The five hourly signals now post on the org's
+  selection regardless of any rep's own preferences — the 23:00 UTC run is
+  the first on that rule. Not done: the bulk stage-move endpoint does not
+  post (one post per deal would flood a channel; Jeff's call whether it
+  should post one summary line).**
+- **DONE — item 29 is §0.96 (`adc5780`; superseded in part by §0.99 — the
+  rep's preference no longer gates the company's post), card OBSERVED by
+  Jeff ("slack card working as stated"). The checkbox round trip is covered
+  by the item 33 eyeball above.** Was:
   **Item 29 — Jeff's call (his question, 8 Sep: "How do I choose what gets
   posted to slack … Can we add an option that enables me to select what
   actions get posted"):** today the choice is per REP — each signal fires
