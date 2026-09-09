@@ -198,7 +198,17 @@ UTC, salespipelinetracker.com serving `index-DcLtbkSJ.js` 68 seconds later,
 Netlify record `6aa1aabe…`, 76 functions; PROVEN at 18:54:17 UTC by prod's
 first per-site row — `salespipelinetracker.com` / `task-reminders` ok,
 `ok_count` 2 — and the legacy row stopped at 18:52:02, the old code's last
-minute. Prod alone runs the jobs now.** 621/621 unit, 345/345 mutations,
+minute. Prod alone runs the jobs now.** **Then Jeff: "Lets do these items" —
+items 28 and 27, one verified tree, `dfcdee4`: §0.104 (`stampOwnerId`
+stamps the owner id AND the display name from one roster row when the caller
+becomes owner by default — a contact created without naming a rep had read as
+nobody's and could vanish from a Manager's name-keyed scope; the rail names
+the owner of an older row; `db/backfill-owner-names.mjs` for the four legacy
+rows, Jeff's hand) and §0.105 (four nullable `activities.email_*` columns
+applied to BOTH databases first, `envelopeOf` with the header To/Cc winning
+over the SMTP envelope, the viewer showing From/To/Cc and the Message-ID).
+Landed `index-De0DMnrV.js` at 19:26:03 UTC (record `6aa1b288…`). NOT
+shipped; NOT observed.** 629/621 unit, 345/345 mutations,
 125/125 integration.
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
@@ -226,11 +236,12 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
+`### 0.105` (the email envelope) and `### 0.104` (owner and display name stamped together), `### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
 beginning **"Landed on dev (`cab9b92`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` under `## 18b23` carry a heading beginning
 **"### 3. The harness's own death must not leave a mutant on disk (§0.102,
-9 Sep)"** and under `## 18b33` a bullet beginning **"A rename lands in every
+9 Sep)"**, under `## 18b22` a heading beginning **"### The display name rides
+with the owner (§0.104, 9 Sep"** and under `## 18b33` a bullet beginning **"A rename lands in every
 file the commit touched (§0.101, 9 Sep)."**? If not, you are looking at a
 copy that predates this handoff. Check section content, never dates.
 
@@ -244,7 +255,23 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the ELEVENTH ship put §0.100 through §0.103 on `master` (9 Sep 18:51 UTC); nothing is on `dev` alone but this ship-record
+## 1. What shipped — the ELEVENTH ship put §0.100 through §0.103 on `master` (9 Sep 18:51 UTC); §0.104 and §0.105 are on `dev` only
+
+**Eleventh session, fourth batch (9 Sep) — ON DEV ONLY, deploy-verified, NOT
+observed, NOT shipped:** `dfcdee4` (state §0.104 item 28 and §0.105 item 27,
+guide §18b22's new part) and its landing docs commit `73a13b6`.
+accelerep.netlify.app served `index-De0DMnrV.js` — the local gate build's
+hash — at 19:26:03 UTC (69 seconds after the 19:24:54 push); Netlify's record
+`6aa1b288…` = `dfcdee4`, published 19:25:59 UTC, 76 functions, secret scan
+clean; "Message-ID: " and `emailMessageId` in the served bundle (the rail's
+helper name is minified away); `email-inbound` 401 unauthenticated. **Schema: four nullable columns on
+`activities` (`email_from`, `email_to`, `email_cc`, `email_message_id`) are
+in BOTH databases, applied and read back BEFORE the code (§18c)** — prod's
+function never names them. What it is: a record created without naming a
+rep now carries the creator's name beside the creator's id (every
+single-create endpoint, through `stampOwnerId`); the contact rail names the
+owner of a pre-§0.104 row; a logged email's From, To, Cc and Message-ID are
+on the row and in the viewer. `master` stays at `a9d2d08`.
 
 **PROD SHIPPED — the eleventh ship (9 Sep, Jeff: "done").** Ancestor check
 (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`),
@@ -933,21 +960,22 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (9 Sep, eleventh session — after the ELEVENTH ship)
+## 4. Verified state at close (9 Sep, eleventh session — after the ELEVENTH ship and §0.104/§0.105)
 
-Five gates green on 154 files · **621/621 unit** (14 new this session:
-`digest-prefs` 4, `mutant-restore` 8, `job-heartbeat` 2) · **345/345
-mutations, printed green baseline** (12 added: 4 on `digest.mjs`, 3 on the
-sidecar, 5 on the jobs flag) · build `index-CghUEQTb.js` (a NEW hash — §0.103
-changes `jobHealth.js`, AdminView and the Slack card; §0.99–§0.102 had all
-left `index-B-DxPVK_.js`), guard OK, `dist/` cleared · **125/125
-integration** (1 new: a disabled site never calls the handler) · **no pane
+Five gates green on 154 files · **629/629 unit** (22 new this session:
+`digest-prefs` 4, `mutant-restore` 8, `job-heartbeat` 2, `inbound-text` 5,
+`activity-view` 2, `ownership-registry` 1) · **351/351 mutations, printed
+green baseline** (18 added this session) · build `index-De0DMnrV.js` (2,447
+kB; the fourth new hash of the session), guard OK, `dist/` cleared ·
+**127/127 integration** (3 new this session) · **no pane
 browser pass** — the pane holds no session; §0.103's tile copy is a source
 scan and Jeff's eyeball · dev deploys verified from Netlify's record
 (`6aa18e68…` = `cab9b92`; `6aa197ca…` = `67d5554`) · **`master` ==
 `a9d2d08`, prod serving `index-DcLtbkSJ.js` (the ELEVENTH ship, 18:52:48
-UTC)**; dev is ahead of `master` only by the ship-record docs commit
-(`a2cd4b8`) and the handoff commit carrying this line · **no schema change** ·
+UTC)**; dev is ahead of `master` by the ship-record and observation docs
+commits, `dfcdee4` (§0.104 + §0.105), its landing docs commit (`73a13b6`) and
+the handoff commits · **one schema change: four nullable `activities.email_*`
+columns, additive, in BOTH databases, read back** ·
 **dev's scheduled jobs are OFF (no `JOBS_ENABLED` on `accelerep`, by
 design); prod's run the shipped code with the flag on — its first per-site
 row read back within a minute** · the legacy `job_heartbeats` table has no
@@ -964,7 +992,7 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Eleventh-session prep (read at the twelfth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect only DOCS commits after `a9d2d08` (the ship record, observations,
+  expect `dfcdee4` and docs commits after `a9d2d08` (the ship record, observations,
   handoffs) — a CODE commit there is
   unshipped code and a finding.
 - **DONE — the ELEVENTH ship (§1): `JOBS_ENABLED` set on `sales-pipeline-v2`
@@ -1063,8 +1091,19 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   literal newline (caught by `node --check`). Write any file that carries
   backslashes with the Write tool; keep edit scripts backslash-free or build
   the backslash with `String.fromCharCode(92)`.
-- **Carried, unchanged:** item 27 (From/To/Cc + Message-ID on email rows),
-  item 28 (a creator-owned contact shows a blank Assigned Rep), the Connected
+- **DONE — item 28 is §0.104 and item 27 is §0.105 (`dfcdee4`, one tree).**
+  Jeff's eyeball, on dev, as Admin then as Karen: Karen creates a contact
+  and leaves "Assigned Rep" empty → the rail reads "Assigned Rep: Karen
+  Russell" and the row appears in Jeff's "All" (his "Mine" is his own plus
+  unassigned — a Karen-owned row is neither, by design). **Jeff's hand:**
+  `node --env-file=.env db/backfill-owner-names.mjs` prints the four legacy
+  rows (two contacts of Karen's, two accounts of Jeff's, dev org); `--apply`
+  fills them. §0.105's observation needs a real email — the Resend webhook
+  targets prod, so the envelope shows on prod after the next ship (the four
+  columns are already in the shared database), or on dev if the webhook is
+  flipped for a test and back. Not built: nothing in the viewer for Bcc (the
+  provider does not carry it in the headers map).
+- **Carried, unchanged:** the Connected
   apps non-Admin dead branches, `INTEGRATION_REQUESTS_TO` unset, the bulk
   stage-move endpoint not posting to Slack (Jeff's call on a summary line),
   the `check-tdz` blind spot for lowercase helpers in function files.
