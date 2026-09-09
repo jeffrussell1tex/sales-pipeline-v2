@@ -215,7 +215,17 @@ Netlify record `6aa1b72e…`, 76 functions; prod's jobs never paused
 (`task-reminders` ticking through the deploy, the 19:00 run its first
 `digest` and `pipeline-alerts` rows). Jeff on the four legacy rows: "dont
 worry about blank name on those 4. this is all demo data - nothing real" —
-the backfill stays unrun.** 629/621 unit, 345/345 mutations,
+the backfill stays unrun.** **Then Jeff: "lets resolve these from your list"
+— five items, two batches: §0.106 `50a6cf7` (the CSV import that moves deals
+posts ONE Slack line under the org's stage-changed switch — moved, wins, by
+destination, who imported — never one per deal; item 31 struck, Jeff agreed;
+the Connected-apps line non-Admins could never reach removed;
+`INTEGRATION_REQUESTS_TO` Jeff's hand; landed `index--5aHcCr_.js` 38 s after
+the push) and §0.107 `b02c3df` (`check:fnscope` — a lexical-scope walk over
+every function file that reports a name read with no binding in reach; run
+against `bf4a3c5` it flags every line of §0.95 and §0.101; the SIXTH gate in
+the chain, tooling only). 640/640 unit, 358/358 mutations,
+127/127 integration. NOT shipped; NOT observed.** 629/621 unit, 345/345 mutations,
 125/125 integration.
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
@@ -243,7 +253,7 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.105` (the email envelope) and `### 0.104` (owner and display name stamped together), `### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
+`### 0.107` (check:fnscope), `### 0.106` (the bulk stage move posts one line), `### 0.105` (the email envelope) and `### 0.104` (owner and display name stamped together), `### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
 beginning **"Landed on dev (`cab9b92`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` under `## 18b23` carry a heading beginning
 **"### 3. The harness's own death must not leave a mutant on disk (§0.102,
@@ -262,7 +272,25 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the TWELFTH ship put §0.104 and §0.105 on `master` (9 Sep 19:44 UTC), an hour after the eleventh put §0.100–§0.103 there; nothing is on `dev` alone but this ship-record
+## 1. What shipped — the TWELFTH ship put §0.104 and §0.105 on `master` (9 Sep 19:44 UTC); §0.106 and §0.107 are on `dev` only
+
+**Eleventh session, fifth and sixth batches (9 Sep) — ON DEV ONLY,
+deploy-verified, NOT observed, NOT shipped:** `50a6cf7` (state §0.106) and
+`b02c3df` (state §0.107, guide §18b33's bullet rewritten, CLAUDE.md's chain),
+with their landing docs commit `7d89efd`. accelerep.netlify.app served
+`index--5aHcCr_.js` — the local gate build's hash — at 20:26:54 UTC (38
+seconds after the 20:26:16 push); Netlify's record `6aa1c0ea…` = `50a6cf7`,
+76 functions, the `opportunities` and `send-slack` digests changed. §0.107
+changes nothing that deploys (scripts, tests, package.json, CLAUDE.md, the
+guide) — its proof is the gate itself: `npm run check:fnscope` reads "No
+unbound reads in 83 function file(s)" on the tree and, run against
+`bf4a3c5`'s two files, names every line of §0.95 and §0.101. What §0.106 is:
+the CSV import's array POST moves deals through `applyStageChanges` and had
+posted nothing to Slack (one post per deal would flood a channel); now ONE
+line for the batch under the org's "Deal stage changed" switch, beside the
+batch audit, naming who imported. Jeff's eyeball: a CSV import that moves at
+least one deal, with #sales-alerts open — one post, "Stages moved in bulk".
+`master` stays at `901ad12`.
 
 **PROD SHIPPED — the TWELFTH ship (Jeff: "ship prod", 9 Sep).** Ancestor check
 (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`),
@@ -989,20 +1017,23 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (9 Sep, eleventh session — after the TWELFTH ship)
+## 4. Verified state at close (9 Sep, eleventh session — after the TWELFTH ship, §0.106 and §0.107)
 
-Five gates green on 154 files · **629/629 unit** (22 new this session:
+SIX gates green (`check:fnscope` since §0.107: 83 function files, no unbound
+reads; the five on 154 files) · **640/640 unit** (30 new this session:
 `digest-prefs` 4, `mutant-restore` 8, `job-heartbeat` 2, `inbound-text` 5,
-`activity-view` 2, `ownership-registry` 1) · **351/351 mutations, printed
-green baseline** (18 added this session) · build `index-De0DMnrV.js` (2,447
-kB; the fourth new hash of the session), guard OK, `dist/` cleared ·
-**127/127 integration** (3 new this session) · **no pane
+`activity-view` 2, `ownership-registry` 1, `slack-alerts` 2,
+`check-fnscope` 6) · **358/358 mutations, printed green baseline** (25
+added this session) · build `index--5aHcCr_.js` (2,447 kB; the fifth new
+hash of the session), guard OK, `dist/` cleared · **127/127
+integration** (3 new this session) · **no pane
 browser pass** — the pane holds no session; §0.103's tile copy is a source
 scan and Jeff's eyeball · dev deploys verified from Netlify's record
 (`6aa18e68…` = `cab9b92`; `6aa197ca…` = `67d5554`) · **`master` ==
 `901ad12`, prod serving `index-DowJRBZt.js` (the TWELFTH ship, 19:45:52
-UTC)**; dev is ahead of `master` only by the ship-record docs commit
-(`ede995d`) and the handoff commit carrying this line · **one schema change: four nullable `activities.email_*`
+UTC)**; dev is ahead of `master` by the ship-record docs commits, `50a6cf7`
+(§0.106), `b02c3df` (§0.107), their landing docs commit (`7d89efd`) and the
+handoff commits · **one schema change: four nullable `activities.email_*`
 columns, additive, in BOTH databases, read back** ·
 **dev's scheduled jobs are OFF (no `JOBS_ENABLED` on `accelerep`, by
 design); prod's run the shipped code with the flag on — its first per-site
@@ -1020,7 +1051,7 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Eleventh-session prep (read at the twelfth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect only DOCS commits after `901ad12` (the ship record, observations,
+  expect `50a6cf7`, `b02c3df` and docs commits after `901ad12` (the ship record, observations,
   handoffs) — a CODE commit there is
   unshipped code and a finding.
 - **DONE — the ELEVENTH ship (§1): `JOBS_ENABLED` set on `sales-pipeline-v2`
@@ -1130,6 +1161,18 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   open it in the viewer on salespipelinetracker.com — From, To and Cc under
   the subject, the Message-ID in the footer. Not built: nothing in the viewer for Bcc (the
   provider does not carry it in the headers map).
+- **DONE — Jeff's five ("lets resolve these from your list"), as §0.106 and
+  §0.107:** the bulk stage move posts one line (his eyeball: a CSV import
+  that moves a deal, #sales-alerts open); item 31 struck; the dead
+  Connected-apps line gone; `check:fnscope` in the chain. **Still Jeff's
+  hand:** `INTEGRATION_REQUESTS_TO` on the Netlify sites (Site
+  configuration → Environment variables, the inbox that should receive
+  integration requests) — unset, so requests are recorded and audited but
+  never mailed; Claude's env-var writes are refused by the classifier.
+- **Ship §0.106 and §0.107 when Jeff says so:** ancestor check, `git push
+  origin dev:master`; the prod hash changes (§0.106 is in the bundle); the
+  proof is the new hash on salespipelinetracker.com, Netlify's prod record,
+  and prod's `task-reminders` row still ticking.
 - **Carried, unchanged:** the Connected
   apps non-Admin dead branches, `INTEGRATION_REQUESTS_TO` unset, the bulk
   stage-move endpoint not posting to Slack (Jeff's call on a summary line),
