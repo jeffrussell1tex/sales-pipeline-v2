@@ -282,6 +282,37 @@ scan clean; accelerep.netlify.app serving `index-BlthEjPa.js` at 21:53:01
 UTC. **NOTHING SHIPPED — two CODE commits sit on `dev` alone; no browser
 pass (the pane holds no session).**
 
+**Twelfth session, second half (Jeff: "these improvements were suggested by you
+in a different conversation. I would like to do these (minus the tech mobile
+experience)" — four strategic dispatch items; read against the tree, then
+Jeff's picks by question: maintenance agreements FIRST, renewals told to the
+dispatcher in the queue AND by email/Slack; customer notifications email-first
+with SMS behind the same switch; quote → job → invoice before QuickBooks, since
+he has no Intuit developer account yet) — CLOSE.** **§0.110 `a3fa3e2`**: the
+recurrence arithmetic moved out of DispatchTab into `src/utils/planVisits.js`
+and is shared with the hourly job; `dispatch_plan_visits` (new table, both
+databases first, §18c) records a SKIPPED occurrence (retired without a job) or
+a DEFERRED one (new due date, SAME grid date — a job for it stamps the
+original `planDueDate`); plans carry `renewalLeadDays` (null → 60); the
+Service Due queue gains Skip/Defer with an inline editor, undo, a skipped list,
+and an **Agreement renewals** section with "Renew 12 months" (anniversary
+kept); `pipeline-alerts` Signal 6 emails the org's Admins and Managers behind
+a new `agreementRenewal` preference and posts to Slack under a new company
+switch, weekly per customer through the alert ledger, which the Reports read
+now excludes. Six gates, 672/672 unit (+20), 379/379 mutations (+10), 139/139
+integration (+6), build guard OK `index-5Gkq-AHb.js`. Dev deploy READ
+(record `6aa1e1d5…` = `a3fa3e2`, published 22:47:36 UTC, **78 functions**,
+`dispatch-plan-visits` new, secret scan clean) and the queue OBSERVED in the
+pane as Karen (22:49–22:53 UTC): Defer to 2026-09-20 → "deferred from
+2026-08-01", due in 11 days, undo; Skip with a reason → the queue empties,
+"Show 1 skipped occurrence" names her and the reason, Undo skip; the
+customer's end date set to 2026-10-15 → **Agreement renewals** lists it as
+Expiring in 36 days; Renew 12 months → the confirm names 2027-10-15 → PUT
+200 → the list empties; the end date restored to 2027-07-31 and every
+plan-visit row deleted by the undos (read back read-only: zero rows). The
+plan panel's Renewal reminder field is Admin-only and NOT observed. **NOT
+shipped.**
+
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
 since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
@@ -307,6 +338,7 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
+`### 0.110` with a paragraph beginning **"The arithmetic moves out."**,
 `### 0.109` with a paragraph beginning **"Seed data — struck by a read-only query."** and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry `## 18b34. A Self-Service Endpoint Takes An Allowlist Of Fields`; does the state doc contain
 `### 0.108` with a paragraph beginning **"PROD SHIPPED — the FOURTEENTH ship"**, `### 0.107` with a paragraph beginning **"PROD SHIPPED — the THIRTEENTH ship"**, `### 0.106` (the bulk stage move posts one line), `### 0.105` (the email envelope) and `### 0.104` (owner and display name stamped together), `### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
@@ -328,10 +360,14 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); `dev` is now ahead by TWO CODE commits (§0.109 `29a6e7e`, the prioColor2 collapse `9996c1c`) — NOT shipped
+## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); `dev` is now ahead by THREE CODE commits (§0.109 `29a6e7e`, the prioColor2 collapse `9996c1c`, §0.110 `a3fa3e2`) — NOT shipped
 
-**Twelfth session — NOTHING SHIPPED.** `master` stays at `59116be`. On `dev`
-alone: `29a6e7e` (§0.109 — the self-profile allowlist, the three settings
+**Twelfth session — NOTHING SHIPPED.** `master` stays at `59116be`. The third
+CODE commit, `a3fa3e2` (§0.110 — maintenance agreements: a NEW function
+`dispatch-plan-visits.mjs`, so the next ship is functions AND bundle, 78
+functions; the schema change is ALREADY in both databases, §18c), joins the two
+below; the bundle hash after it is `index-5Gkq-AHb.js`. On `dev`
+alone before it: `29a6e7e` (§0.109 — the self-profile allowlist, the three settings
 banners, two inert dispatch buttons gone, the §9 backlog struck by reading;
 `_selfProfile.mjs` is a NEW function file, so the next ship is functions AND
 bundle) and `9996c1c` (`prioColor2` collapsed — bundle only), plus the docs
@@ -1125,9 +1161,41 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (9 Sep, twelfth session — §0.109 and the alias collapse on `dev`, NOT shipped)
+## 4. Verified state at close (9 Sep, twelfth session — §0.109, the alias collapse and §0.110 on `dev`, NOT shipped)
 
-SIX gates green (`check:fnscope`: 84 function files — `_selfProfile.mjs` is
+SIX gates green (`check:fnscope`: 86 function files — `_selfProfile.mjs` and
+`dispatch-plan-visits.mjs` are new; the five on 155 files) · **672/672
+unit** (30 new this session: `self-profile` 4, `settings-cascade-errors` 4,
+`dispatch-stubs` 2, `plan-visits` 13, `agreement-renewals` 8; three pinned
+counts raised for the sixth signal) · **379/379 mutations, printed green
+baseline** (18 added this session — 7 in `29a6e7e`, 1 in `9996c1c`, 10 in
+`a3fa3e2`; every run 100% caught, no STALE) · build `index-5Gkq-AHb.js`
+(2,458 kB; the third new hash of the session), guard OK, `dist/` cleared
+after each build · **139/139 integration** (11 new: `users-self` 5,
+`dispatch-plan-visits` 6) · **browser pass DONE for §0.109 as Karen (see
+below) AND for §0.110's queue as Karen (22:49–22:53 UTC): Defer to
+2026-09-20 rendered "deferred from 2026-08-01" due in 11 days and undo
+restored the overdue row; Skip with a reason emptied the queue, the skipped
+list read "Pane test: unit replaced · by Karen Russell", Undo skip restored
+it; the customer's end date set to 2026-10-15 listed her under Agreement
+renewals as Expiring in 36 days, Renew 12 months confirmed "through
+2027-10-15" and the list emptied; every value restored (end date
+2027-07-31; zero `dispatch_plan_visits` rows and zero renewal ledger rows,
+read back read-only). NOT observed: the plan panel's Renewal reminder field
+(Admin-only)** · **ONE schema change:**
+`dispatch_service_plans.renewal_lead_days` (integer NULL) and the
+`dispatch_plan_visits` table, additive, applied to BOTH databases by
+`db/apply-plan-visits.mjs` before any code read them and read back (11
+columns, the unique occurrence index) · **dev's deploy of `a3fa3e2` READ from
+Netlify's record:** `6aa1e1d5…`, branch `dev`, published 22:47:36 UTC 9 Sep,
+**78 functions** (`dispatch-plan-visits` new, created 22:47:22; every other
+function rebuilt too, since `db/schema.ts` changed), secret scan clean over
+398 files, the served hash `index-5Gkq-AHb.js` at 22:47:38 UTC by curl ·
+**`master` == `59116be`; `dev` ahead by the three CODE commits and the
+docs commits after them** · the working tree was clean at close, this
+handoff commit the last.
+
+**Earlier in the twelfth session (§0.109's close):** SIX gates green (`check:fnscope`: 84 function files — `_selfProfile.mjs` is
 new; the five on 154 files) · **652/652 unit** (10 new this session:
 `self-profile` 4, `settings-cascade-errors` 4, `dispatch-stubs` 2) ·
 **369/369 mutations, printed green baseline** (8 added this session — 7 in
@@ -1142,15 +1210,15 @@ across a hard refresh, the row read back read-only, both restored to what
 Jeff left — state §0.109's last paragraph; the new banners themselves need a
 REFUSED settings PUT, which an Admin's delete does not produce · found in
 passing: three GETs (`coaching-notes`, `calendar-events`, `spiff-claims`)
-401 before the Clerk token then 200, every load — §9, unread** · **no schema change** · **dev's deploy READ from Netlify's record:**
+401 before the Clerk token then 200, every load — §9, unread** ·
+**no schema change** · **dev's deploy READ from Netlify's record:**
 `6aa1d50a…` = `8a02cba` (the handoff commit carrying both CODE commits),
 branch `dev`, published 21:52:43 UTC 9 Sep, **77 functions** (`_selfProfile`
 new, created 21:52:42; the `users` digest changed and no other function's),
 secret scan clean over 392 files; the served hash `index-BlthEjPa.js` at
-21:53:01 UTC by curl · **`master` == `59116be`; `dev` ahead by the two
-CODE commits and the docs commits after them** · the read-only seed query
-(9 Sep): one `@test.com` row in the whole database, linked to Clerk · the
-working tree was clean at close, this handoff commit the last.
+21:53:01 UTC by curl · **`master` == `59116be`;** `dev` ahead by the two
+CODE commits and the docs commits after them · the read-only seed query
+(9 Sep): one `@test.com` row in the whole database, linked to Clerk.
 
 **Eleventh session's close, kept for the record:** SIX gates green (`check:fnscope` since §0.107: 83 function files, no unbound
 reads; the five on 154 files) · **642/642 unit** (32 new this session:
@@ -1183,10 +1251,32 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Twelfth-session prep (read at the thirteenth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect the docs commits after `59116be` PLUS two CODE commits, `29a6e7e`
-  (§0.109) and `9996c1c` (prioColor2), and the docs commits after them. Those
-  two are UNSHIPPED CODE by design (Jeff has not said ship); anything else is
-  a finding.
+  expect the docs commits after `59116be` PLUS three CODE commits, `29a6e7e`
+  (§0.109), `9996c1c` (prioColor2) and `a3fa3e2` (§0.110), and the docs
+  commits after them. Those three are UNSHIPPED CODE by design (Jeff has not
+  said ship); anything else is a finding.
+- **DONE — §0.110's dev deploy READ (`6aa1e1d5…` = `a3fa3e2`, 22:47:36 UTC,
+  78 functions, `dispatch-plan-visits` new) and the queue OBSERVED in the
+  pane as Karen (§4):** Defer/undo, Skip/undo (the skipped list names her
+  and the reason), a customer's end date inside the window listed under
+  Agreement renewals, Renew 12 months → 2027-10-15 → the list empties;
+  everything restored and read back read-only (zero plan-visit rows).
+  **Remaining, Admin-only, NOT observed:** Settings → Dispatch → Service
+  plans → a plan's new **Renewal reminder** field saves (the dev plan's
+  `renewal_lead_days` is null — the default 60 produced the 36-day
+  "expiring" above); Jeff's eyeball, or the pane signed in as Jeff.
+- **§0.110's alert proof is PROD-only** (`JOBS_ENABLED` is set on prod alone,
+  §0.103): after the ship, a prod customer with an agreement end date inside
+  its plan's window → at Jeff's alert hour (08:00 Chicago = 13:00 UTC) the
+  "Maintenance agreement expires in N days" email, and one #sales-alerts post
+  at the first hourly run (the switch is on by default; Configure Slack lists
+  it). Read the ledger rows (`recommendation_log`, `action_type`
+  'renewal' and 'renewal-slack', read-only) and confirm Reports →
+  recommendations does NOT list them.
+- **Then Jeff's remaining picks, one session each (state §9 "Then"):**
+  customer notifications email-first; quote → job → invoice, QuickBooks after
+  the Intuit app exists (Jeff's hand: developer account, app, redirect URIs
+  for both sites, sandbox company).
 - **DONE — dev's deploy READ (§4): `6aa1d50a…` = `8a02cba`, 77 functions,
   `index-BlthEjPa.js` served. DONE — OBSERVED by Jeff as Karen on dev
   (9 Sep ~22:00 UTC, "all test passed"): the profile title save and a
