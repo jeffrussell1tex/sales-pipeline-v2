@@ -178,7 +178,19 @@ shipped** — `master` stays at `5a306e3`. **New open item 36:** both sites
 run every scheduled job against the one database — since the tenth ship a
 qualifying pipeline alert goes out twice (one per site: email, SMS, and the
 Slack post), and after the next ship so will every digest; Jeff's call on
-the shape (§5).
+the shape (§5). **Then Jeff: "ship the manager digest / add the per site env
+flag" → §0.103 `67d5554`:** `jobsEnabled(env)` — a job runs only where
+`JOBS_ENABLED` is exactly "true" in that site's Netlify env, the heartbeat
+wrapper the one gate (no run, no stamp, a 200 that says skipped anywhere
+else), `job-status` carrying `enabled`, and the tile reading "Scheduled jobs
+not enabled on this site (JOBS_ENABLED)" as a FAILING check so a forgotten
+flag on prod can never read as healthy; unset means off. Landed on dev
+(`index-CghUEQTb.js`, 17:31:33 UTC, Netlify record `6aa197ca…`) — dev's jobs are now
+OFF by design. **The write of the flag onto the prod site through the
+Netlify tool was REFUSED by the permission classifier, so the ship STOPPED
+there: Jeff sets `JOBS_ENABLED` = `true` on `sales-pipeline-v2` by hand,
+then the ship (§5).** 621/621 unit, 345/345 mutations,
+125/125 integration.
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -205,7 +217,7 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
+`### 0.103` (one site runs the jobs), `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
 beginning **"Landed on dev (`cab9b92`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` under `## 18b23` carry a heading beginning
 **"### 3. The harness's own death must not leave a mutant on disk (§0.102,
@@ -223,9 +235,27 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the tenth ship put §0.92 through §0.99 on `master` (8 Sep 22:36 UTC); §0.100, §0.101 and §0.102 are on `dev` only
+## 1. What shipped — the tenth ship put §0.92 through §0.99 on `master` (8 Sep 22:36 UTC); §0.100 through §0.103 are on `dev` only, the ship waiting on `JOBS_ENABLED`
 
-**Eleventh session (9 Sep) — ON DEV ONLY, deploy-verified, NOT yet proven by
+**Eleventh session, third batch (9 Sep) — ON DEV ONLY, deploy-verified, NOT
+shipped — THE SHIP WAITS ON JEFF'S HAND:** `67d5554` (state §0.103, item 36,
+guide §18b33's new bullet) and this close. accelerep.netlify.app served
+`index-CghUEQTb.js` — the local gate build's hash — at 17:31:33 UTC (Netlify record
+`6aa197ca…` = `67d5554`, 76 functions, the `_heartbeat` and `job-status`
+digests changed). What it is: dev and prod had both run every scheduled job
+against the one database since the tenth ship; now `JOBS_ENABLED` per site,
+strict "true", unset OFF, the wrapper the one gate, the tile honest and
+failing where the jobs are off. **From this landing dev's four jobs are OFF**
+(the flag is not set on `accelerep`, by design) — `site_job_heartbeats` for
+`accelerep.netlify.app` freezes at its last stamps, and Settings → Workspace
+Health on dev reads the failing "not enabled on this site" check. **Jeff
+sets `JOBS_ENABLED` = `true` on the PROD site (`sales-pipeline-v2`, Site
+configuration → Environment variables, all contexts and scopes) before the
+ship** — Claude's write through the Netlify tool was refused by the
+permission classifier; shipping without it stops prod's alerts, digests, task
+reminders and lead scoring until it is set. `master` stays at `5a306e3`.
+
+**Eleventh session, first two batches (9 Sep) — ON DEV ONLY, deploy-verified, NOT yet proven by
 a row, NOT shipped:** `cab9b92` (state §0.101 — the digest job fixed; guide
 §18b33 two new bullets), its landing docs commit `6efd70b`, and `64fb934`
 (state §0.102 — item 35, the mutation harness restores on any exit; guide
@@ -877,22 +907,24 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (9 Sep, eleventh session — after §0.101 and §0.102)
+## 4. Verified state at close (9 Sep, eleventh session — after §0.101, §0.102 and §0.103)
 
-Five gates green on 154 files · **619/619 unit** (12 new this session:
-`digest-prefs` 4, `mutant-restore` 8) · **340/340 mutations, printed
-green baseline** (7 added: 4 on `digest.mjs`, 3 on the sidecar; the harness
-now grades its own sidecar through the sidecar — the running process holds
-the unmutated module, the spawned children read the mutant from disk) ·
-build **2,446 kB JS**, `index-B-DxPVK_.js` (UNCHANGED from §0.99 — neither
-batch touches what the client bundles), guard OK, `dist/` cleared · **124/124
-integration** (unchanged) · **no pane browser pass** — nothing this session
-renders; the digest's observable is an email and a heartbeat row · dev deploy
-verified from Netlify's record (`6aa18e68…` = `cab9b92`, 76 functions, the
-`digest` digest changed) · **`master` == `5a306e3`, prod serving
-`index-JJdhJmyd.js` (the tenth ship)**; dev is ahead of `master` by the
-seven commits §4 listed at the tenth close, `cab9b92`, `6efd70b`, `64fb934`
-and this close — eleven commits · **no schema change** · `job_heartbeats`
+Five gates green on 154 files · **621/621 unit** (14 new this session:
+`digest-prefs` 4, `mutant-restore` 8, `job-heartbeat` 2) · **345/345
+mutations, printed green baseline** (12 added: 4 on `digest.mjs`, 3 on the
+sidecar, 5 on the jobs flag) · build `index-CghUEQTb.js` (a NEW hash — §0.103
+changes `jobHealth.js`, AdminView and the Slack card; §0.99–§0.102 had all
+left `index-B-DxPVK_.js`), guard OK, `dist/` cleared · **125/125
+integration** (1 new: a disabled site never calls the handler) · **no pane
+browser pass** — the pane holds no session; §0.103's tile copy is a source
+scan and Jeff's eyeball · dev deploys verified from Netlify's record
+(`6aa18e68…` = `cab9b92`; `6aa197ca…` = `67d5554`) · **`master` ==
+`5a306e3`, prod serving `index-JJdhJmyd.js` (the tenth ship)**; dev is ahead
+of `master` by the seven commits §4 listed at the tenth close, `cab9b92`,
+`6efd70b`, `64fb934`, `563fbfb`, `67d5554` and this close — thirteen commits ·
+**no schema change** · **dev's scheduled jobs are OFF since `67d5554` landed
+(no `JOBS_ENABLED` on `accelerep`, by design); prod's run the old code
+until the ship** · `job_heartbeats`
 still exists in both databases, prod-written until the ship, LEGACY · **the
 Resend inbound webhook targets PROD — Jeff's screenshot after the tenth
 ship; not re-read this session (no email work)** · `site_job_heartbeats`
@@ -904,21 +936,41 @@ copy of the same bug) · the working tree was clean at close.
 
 **Eleventh-session prep (read at the twelfth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect ELEVEN commits after `5a306e3` (§4 lists them). Anything else is
-  unshipped code and a finding. **Then read Resend → Webhooks** — prod
+  expect THIRTEEN commits after `5a306e3` (§4 lists them). Anything else is
+  unshipped code and a finding.
+- **THE SHIP IS WAITING ON ONE THING — `JOBS_ENABLED` on the prod site.**
+  Jeff: "ship the manager digest / add the per site env flag" (9 Sep). §0.103
+  is built and on dev; Claude's write of the flag through the Netlify tool
+  was refused by the permission classifier. **Before `git push origin
+  dev:master`:** Jeff sets `JOBS_ENABLED` = `true` on `sales-pipeline-v2`
+  (Netlify → Site configuration → Environment variables; all contexts, all
+  scopes) and says so. The old prod code ignores the flag, so it is safe
+  any time before the ship; shipping WITHOUT it stops prod's alerts,
+  digests, task reminders and lead scoring, and prod's tile turns red with
+  "Scheduled jobs not enabled on this site". Then the ship (below), then the
+  first proof is prod's `salespipelinetracker.com` / `task-reminders` row
+  climbing within a minute and `digest` at the next 08:00 or 13:00 UTC with
+  `error_count` 0 — and Monday 14 Sep 13:00 UTC the first manager digest,
+  from prod alone.
+- **Dev's jobs are OFF now, by design.** Dev's per-site rows freeze; dev's
+  Workspace Health reads the failing "not enabled on this site" check and the
+  Slack card "Alerts job: Not enabled on this site (JOBS_ENABLED)" — Jeff's
+  eyeball of §0.103. To run dev's jobs for a test, set the flag on `accelerep`
+  and remove it after (§18b33's new bullet). §0.101's row proof therefore
+  moves to PROD after the ship (next bullet is now prod's, not dev's). **Then read Resend → Webhooks** — prod
   Enabled, dev Disabled at the tenth ship (Jeff's screenshot); not re-read
   for two sessions. Every email observation is prod's.
-- **Read `site_job_heartbeats` (read-only) before anything else — this is
-  §0.101's proof:** the `accelerep.netlify.app` / `digest` row after 08:00
-  UTC 10 Sep, and again after 13:00, with `error_count` STILL 6 and
-  `ok_count` one higher each time, `last_status` `ok`, `last_summary`
-  `{ body: "Digest complete" }`. If `error_count` is 7 or more, read
-  `last_error` at once — it survives only until the next ok hour — and read
-  the code path it names before anything else. The legacy row's `digest`
-  keeps climbing six a day: prod's copy of the bug, expected until the ship.
-  A second site under `site_job_heartbeats` before the ship is a finding.
+- **Read `site_job_heartbeats` (read-only) after the ship — this is
+  §0.101's proof, on PROD now:** the `salespipelinetracker.com` / `digest`
+  row after the first 08:00 or 13:00 UTC following the ship, `error_count` 0,
+  `ok_count` climbing, `last_status` `ok`, `last_summary` `{ body: "Digest
+  complete" }`. If `error_count` is 1 or more, read `last_error` at once —
+  it survives only until the next ok hour. Until the ship the legacy row's
+  `digest` keeps climbing six a day (prod's copy of the bug); dev's per-site
+  rows are frozen (jobs off). After the ship the legacy table stops moving
+  altogether — then Jeff's DROP (below).
 - **Then the email — Jeff's inbox, not a row:** Jeff is Admin, Chicago,
-  08:00, so dev's 13:00 UTC run sends him a task digest if he has tasks due
+  08:00, so prod's 13:00 UTC run (after the ship) sends him a task digest if he has tasks due
   that day, an overdue nudge if any are overdue, and a deal digest if a deal
   of his changed in the last 24 hours (each on its own preference under
   avatar → Notifications, digest mode). None is not a finding by itself — it
@@ -935,23 +987,28 @@ copy of the same bug) · the working tree was clean at close.
   per user (Notifications → the manager digest row) or the batch waits.
 - **DONE — item 35 is §0.102 (`64fb934`).** `git status` after every harness
   run stays a step (guide §18b23 part 3).
-- **Ship §0.100–§0.102 when Jeff says so:** ancestor check, `git push origin
-  dev:master`. **The prod hash will NOT change** (`index-JJdhJmyd.js` stays);
-  the proof is Netlify's record for the PROD site (`sales-pipeline-v2`, id
-  `ef1f2af9…` — `get-projects`, then `get-deploy-for-site` with its
-  `currentDeploy.id`: commit = the pushed sha, 76 functions, the
-  `_heartbeat`, `job-status` and `digest` digests changed), then a read-only
-  SELECT of `site_job_heartbeats` for a `salespipelinetracker.com` /
-  `task-reminders` row within a minute, and prod's `digest` row at the next
-  08:00 or 13:00 UTC with `error_count` 0. Nothing to flip: the Resend
-  webhook is already on prod. **Then the legacy `job_heartbeats` table —
+- **Ship §0.100–§0.103 once the flag is set (Jeff has already said "ship the
+  manager digest"):** ancestor check, `git push origin dev:master`. **The prod
+  hash WILL change this time** (§0.103 is in the bundle): poll
+  salespipelinetracker.com for a hash that is neither `index-JJdhJmyd.js` nor
+  dev's `index-CghUEQTb.js` (the live key is inlined), then Netlify's record for the
+  PROD site (`sales-pipeline-v2`, id `ef1f2af9-1510-4f95-87fd-8aaf705bd107`
+  — `get-projects`, then `get-deploy-for-site` with its `currentDeploy.id`:
+  commit = the pushed sha, 76 functions, the `_heartbeat`, `job-status` and
+  `digest` digests changed), then a read-only SELECT of `site_job_heartbeats`
+  for a `salespipelinetracker.com` / `task-reminders` row within a minute —
+  **if none appears in two minutes the flag is not on prod: say so, do not
+  guess** — and prod's `digest` row at the next 08:00 or 13:00 UTC with
+  `error_count` 0. Prod's tile must read "Scheduled jobs running" once all
+  four have run. Nothing to flip: the Resend webhook is already on prod. **Then the legacy `job_heartbeats` table —
   Jeff's hand, never a script's:** once prod's four rows appear under
   `salespipelinetracker.com`, read the legacy rows once more, then Jeff runs
   `DROP TABLE job_heartbeats` in the Neon console for the app database and
   the test database; then delete the LEGACY block from `schema.ts`,
   `db/apply-job-heartbeats.mjs`, and the two "legacy" scan assertions in
   `tests/job-heartbeat.test.mjs`.
-- **Item 36 — design first, Jeff's call: one database, two sites, every
+- **DONE — item 36 is §0.103 (`67d5554`), option (a), the ship gated on the
+  flag above.** Was: **Item 36 — design first, Jeff's call: one database, two sites, every
   scheduled job running on both.** Since the tenth ship prod's
   `pipeline-alerts` runs the fixed code beside dev's, both reading the same
   orgs, deals, preferences and Slack webhook: a qualifying signal at the top
