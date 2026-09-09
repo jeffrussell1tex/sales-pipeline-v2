@@ -1135,9 +1135,14 @@ new; the five on 154 files) · **652/652 unit** (10 new this session:
 `index-BlthEjPa.js` (2,447 kB; the second new hash of the session —
 `index-CRtPA764.js` after `29a6e7e`, this one after `9996c1c`), guard OK,
 `dist/` cleared after each build · **133/133 integration** (5 new:
-`users-self.itest`) · **no browser pass** — the pane holds no session; the
-new banners need a REFUSED settings PUT, which an Admin's delete does not
-produce · **no schema change** · **dev's deploy READ from Netlify's record:**
+`users-self.itest`) · **browser pass DONE in the pane as Karen (Jeff signed
+in; 22:03–22:07 UTC): title save and a notification toggle each PUT 200
+with the administrative fields intact in the response, both persisted
+across a hard refresh, the row read back read-only, both restored to what
+Jeff left — state §0.109's last paragraph; the new banners themselves need a
+REFUSED settings PUT, which an Admin's delete does not produce · found in
+passing: three GETs (`coaching-notes`, `calendar-events`, `spiff-claims`)
+401 before the Clerk token then 200, every load — §9, unread** · **no schema change** · **dev's deploy READ from Netlify's record:**
 `6aa1d50a…` = `8a02cba` (the handoff commit carrying both CODE commits),
 branch `dev`, published 21:52:43 UTC 9 Sep, **77 functions** (`_selfProfile`
 new, created 21:52:42; the `users` digest changed and no other function's),
@@ -1188,7 +1193,8 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   notification toggle persist across a hard refresh; her row read back
   read-only at 22:02 UTC — `updated_at` 22:00:19 UTC, title "Account
   Executive", prefs populated, role/team/territory/annualQuota/active
-  intact (state §0.109's last paragraph).** Was: signed in as
+  intact (state §0.109's last paragraph). Then DONE AGAIN by Claude in the
+  pane with Jeff signed in as Karen — every step, both values restored.** Was: signed in as
   KAREN (role User) on accelerep.netlify.app: avatar → Profile, change her
   title, Save; avatar → Notifications, flip one toggle; hard-refresh — both
   persist. Then a read-only SELECT of her `users` row: quota, team, territory,
