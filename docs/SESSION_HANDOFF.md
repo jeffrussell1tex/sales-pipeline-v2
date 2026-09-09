@@ -1183,20 +1183,23 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   two are UNSHIPPED CODE by design (Jeff has not said ship); anything else is
   a finding.
 - **DONE — dev's deploy READ (§4): `6aa1d50a…` = `8a02cba`, 77 functions,
-  `index-BlthEjPa.js` served.** Next, signed in as
+  `index-BlthEjPa.js` served. DONE — OBSERVED by Jeff as Karen on dev
+  (9 Sep ~22:00 UTC, "all test passed"): the profile title save and a
+  notification toggle persist across a hard refresh; her row read back
+  read-only at 22:02 UTC — `updated_at` 22:00:19 UTC, title "Account
+  Executive", prefs populated, role/team/territory/annualQuota/active
+  intact (state §0.109's last paragraph).** Was: signed in as
   KAREN (role User) on accelerep.netlify.app: avatar → Profile, change her
   title, Save; avatar → Notifications, flip one toggle; hard-refresh — both
-  persist. That is the allowlist's live proof from the client side (every
-  key the panel sends is pinned on the list by test, but observe it once).
-  Then a read-only SELECT of her `users` row: quota, team, territory,
+  persist. Then a read-only SELECT of her `users` row: quota, team, territory,
   active unchanged by those saves.
 - **Ship when Jeff says so** — functions AND bundle. After the ship, the same
   two checks on salespipelinetracker.com as Jeff (Admin): a profile save and
   a preference toggle persist; his row's quota/team unchanged (read-only).
-- **The banners (§0.109) have no Admin-visible trigger:** a refused settings
-  PUT needs a non-Admin, and non-Admins cannot reach Settings; a 500 or a
-  network failure is the only path. Observe instead that an Admin's team
-  delete still clears its members with nothing in the console.
+- **DONE per Jeff ("all test passed") — the Admin team-delete check.** The
+  banners (§0.109) have no Admin-visible trigger: a refused settings PUT
+  needs a non-Admin, and non-Admins cannot reach Settings; a 500 or a
+  network failure is the only path.
 - **Open, restated in state §9 by this session's reading:** drag-to-reschedule
   on the dispatch week grid (nothing is draggable); the New Job flow is three
   client-side writes and cannot be one transaction without one server
