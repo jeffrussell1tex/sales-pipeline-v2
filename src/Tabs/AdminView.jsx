@@ -363,7 +363,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
                 // verdict is computed here from the rows, against the server's clock.
                 if (jobsRes.status === 'fulfilled' && jobsRes.value.ok) {
                     const d = await jobsRes.value.json().catch(() => ({}));
-                    if (Array.isArray(d.jobs)) counts.jobs = jobHealth(d.jobs, d.now ? new Date(d.now).getTime() : Date.now());
+                    if (Array.isArray(d.jobs)) counts.jobs = jobHealth(d.jobs, d.now ? new Date(d.now).getTime() : Date.now(), { enabled: d.enabled !== false });
                 }
                 setLiveCounts(counts);
             } catch (e) { /* silent — badges just stay empty */ }

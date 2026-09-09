@@ -3220,6 +3220,20 @@ The rule:
   names the job that is not. A NEW scheduled function is not done until it
   is wrapped and listed in `SCHEDULED_JOBS` (`src/utils/jobHealth.js`) —
   the unit test that pins the four against netlify.toml will say so.
+- **One site runs the jobs (§0.103, 9 Sep — item 36).** Dev and prod share
+  one database, so with both sites running every scheduled job a qualifying
+  pipeline alert went out twice — one email, one SMS, one Slack post per
+  site — and every digest would have. The wrapper is the one gate: a job runs
+  only where `JOBS_ENABLED` is exactly `"true"` in that site's Netlify env
+  (`jobsEnabled(env)` in `jobHealth.js`); anywhere else the handler is not
+  called, nothing is stamped, and the run answers 200 `{ skipped: true }`.
+  `job-status` carries `enabled`, and the tile reads "Scheduled jobs not
+  enabled on this site (JOBS_ENABLED)" as a FAILING check — on dev that is the
+  truth, and on prod a forgotten flag must never read as healthy, which would
+  be the §0.95 silence again. Unset means OFF: a new site, a branch deploy, a
+  preview never double-sends by default. The flag is set on the production
+  site alone, by hand in Netlify; a test that needs the jobs on sets
+  `process.env.JOBS_ENABLED = 'true'` around the call and puts it back.
 
 - **A rename lands in every file the commit touched (§0.101, 9 Sep).**
   `bf4a3c5` changed TWO files. §0.95 read `pipeline-alerts.mjs`, fixed it,

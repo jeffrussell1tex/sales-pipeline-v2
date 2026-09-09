@@ -383,7 +383,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                 const res  = await dbFetch('/.netlify/functions/job-status');
                 const data = await res.json();
                 if (cancelled) return;
-                if (res.ok && Array.isArray(data.jobs)) setJobs(jobHealth(data.jobs, data.now ? new Date(data.now).getTime() : Date.now()));
+                if (res.ok && Array.isArray(data.jobs)) setJobs(jobHealth(data.jobs, data.now ? new Date(data.now).getTime() : Date.now(), { enabled: data.enabled !== false }));
             } catch { /* the line stays absent — the card claims nothing it could not read */ }
         };
         load(); loadCal(); loadBcc(); loadJobs();

@@ -39,6 +39,21 @@ export function siteKey(env) {
     return name || 'local';
 }
 
+/**
+ * Does THIS deployment run its scheduled jobs? (state §0.103, handoff item 36)
+ * Dev and prod share one database, so with both sites running every job a
+ * qualifying alert or digest went out twice — one email, one SMS, one Slack
+ * post per site. A job now runs only where JOBS_ENABLED is exactly "true" — a
+ * per-site Netlify env var, set on production alone; anywhere else the wrapper
+ * answers "skipped" without a stamp, and job-status says enabled:false so the
+ * tile can say so. Unset means OFF: a new site never double-sends by default.
+ * Pure over the env it is handed.
+ */
+export function jobsEnabled(env) {
+    const v = env?.JOBS_ENABLED;
+    return typeof v === 'string' && v.trim().toLowerCase() === 'true';
+}
+
 const toMs = (v) => {
     if (!v) return null;
     const t = v instanceof Date ? v.getTime() : new Date(v).getTime();
@@ -52,11 +67,14 @@ export function stallAfterMs(cadenceMs) {
 
 /**
  * One verdict per declared job. `rows` are job_heartbeats rows (any subset,
- * any order); unknown rows are ignored; `now` is a ms timestamp.
- * → [{ job, label, cron, status: 'ok'|'error'|'stalled'|'never', ok, lastFinishedAt, lastStartedAt,
+ * any order); unknown rows are ignored; `now` is a ms timestamp; `enabled`
+ * is job-status's word on whether this site runs its jobs at all (item 36) —
+ * false makes every verdict 'disabled' whatever the rows say, since old rows
+ * from before the flag would otherwise read as stalled.
+ * → [{ job, label, cron, status: 'ok'|'error'|'stalled'|'never'|'disabled', ok, lastFinishedAt, lastStartedAt,
  *      lastError, lastSummary, okCount, errorCount, ageMs }]
  */
-export function jobHealth(rows, now = Date.now()) {
+export function jobHealth(rows, now = Date.now(), { enabled = true } = {}) {
     const byJob = new Map();
     for (const r of Array.isArray(rows) ? rows : []) if (r && typeof r.job === 'string') byJob.set(r.job, r);
     return SCHEDULED_JOBS.map(def => {
@@ -65,7 +83,8 @@ export function jobHealth(rows, now = Date.now()) {
         const started  = toMs(r?.lastStartedAt);
         const ageMs = finished == null ? null : Math.max(0, now - finished);
         let status;
-        if (!r) status = 'never';
+        if (enabled === false) status = 'disabled';
+        else if (!r) status = 'never';
         else if (r.lastStatus === 'error') status = 'error';
         else if (finished == null) status = started != null && now - started > stallAfterMs(def.cadenceMs) ? 'stalled' : 'never';
         else if (ageMs > stallAfterMs(def.cadenceMs)) status = 'stalled';
@@ -98,6 +117,7 @@ export function agoLabel(ageMs) {
 /** One line for a card: "Last ran 12m ago · ok" / "Last run failed 3h ago — <error>" / "Stalled — last finished 3d ago" / "Has not run yet". */
 export function jobLine(j) {
     if (!j) return '';
+    if (j.status === 'disabled') return 'Not enabled on this site (JOBS_ENABLED)';
     if (j.status === 'never') return 'Has not run yet';
     if (j.status === 'error') return `Last run failed ${agoLabel(j.ageMs)}${j.lastError ? ' — ' + j.lastError : ''}`;
     if (j.status === 'stalled') return `Stalled — last finished ${agoLabel(j.ageMs)}`;
@@ -128,6 +148,9 @@ export function jobsCheck(health) {
     const list = Array.isArray(health) ? health : [];
     const bad = list.filter(j => !j.ok);
     if (!list.length) return null;
+    // Deliberately NOT ok: on dev it is the truth, and on prod a forgotten flag
+    // must never read as healthy — that silence is the §0.95 class again.
+    if (list.every(j => j.status === 'disabled')) return { id: 'jobs', label: 'Scheduled jobs not enabled on this site (JOBS_ENABLED)', ok: false };
     if (!bad.length) return { id: 'jobs', label: 'Scheduled jobs running', ok: true };
     const words = bad.map(j => `${j.label} ${j.status === 'never' ? 'has not run' : j.status}`);
     return { id: 'jobs', label: `Scheduled jobs: ${words.join(', ')}`, ok: false };

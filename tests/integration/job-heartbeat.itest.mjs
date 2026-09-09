@@ -33,15 +33,20 @@ const { and, eq, like, sql } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 
 // Two deployments of this suite's own. The wrapper and job-status read the
-// site from process.env.URL at call time, so a test sets it around each call
-// and puts back whatever the shell had.
+// site from process.env.URL and the flag from process.env.JOBS_ENABLED at call
+// time (item 36), so a test sets both around each call and puts back whatever
+// the shell had. Both suite sites are ENABLED unless a test says otherwise.
 const SITE_A_URL = 'https://itest-hb-a.example.com', SITE_A = 'itest-hb-a.example.com';
 const SITE_B_URL = 'https://itest-hb-b.example.com', SITE_B = 'itest-hb-b.example.com';
-const onSite = async (url, fn) => {
-    const prev = process.env.URL;
+const onSite = async (url, fn, { enabled = true } = {}) => {
+    const prev = process.env.URL, prevFlag = process.env.JOBS_ENABLED;
     process.env.URL = url;
+    if (enabled) process.env.JOBS_ENABLED = 'true'; else delete process.env.JOBS_ENABLED;
     try { return await fn(); }
-    finally { if (prev === undefined) delete process.env.URL; else process.env.URL = prev; }
+    finally {
+        if (prev === undefined) delete process.env.URL; else process.env.URL = prev;
+        if (prevFlag === undefined) delete process.env.JOBS_ENABLED; else process.env.JOBS_ENABLED = prevFlag;
+    }
 };
 
 // The driver hands a `timestamp without time zone` back as a Date parsed in
@@ -116,12 +121,29 @@ test('a run that throws is stamped as an error and STILL throws', async () => {
     assert.equal(row.errorCount, 1);
 });
 
-test('job-status: an Admin reads every row OF THIS SITE and none of another\'s; a User is 403; no session is 401; the response names the site and carries the server clock', async () => {
+test('REGRESSION (item 36): a site whose JOBS_ENABLED is not "true" does not call the handler and stamps nothing — and job-status says enabled:false there', async () => {
+    let called = 0;
+    const wrapped = withHeartbeat('itest_hb_disabled', async () => { called++; return { statusCode: 200, body: 'ran' }; });
+    const res = await onSite(SITE_B_URL, () => wrapped({}, {}), { enabled: false });
+    assert.equal(called, 0, 'the handler never ran');
+    assert.deepEqual(res, { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'JOBS_ENABLED is not "true" on this site' }) }, 'a 200 that says why');
+    assert.equal(await rowOf(SITE_B, 'itest_hb_disabled'), undefined, 'no row — a disabled site leaves no heartbeat');
+    const off = JSON.parse((await onSite(SITE_B_URL, () => status('itest_hb_org'), { enabled: false })).body);
+    assert.equal(off.enabled, false, 'job-status reports the flag');
+    assert.equal(off.site, SITE_B);
+    const onAgain = await onSite(SITE_B_URL, () => wrapped({}, {}));
+    assert.equal(called, 1, 'with the flag on, the same wrapper runs');
+    assert.equal(onAgain.body, 'ran');
+    assert.equal((await rowOf(SITE_B, 'itest_hb_disabled')).okCount, 1);
+});
+
+test('job-status: an Admin reads every row OF THIS SITE and none of another\'s; a User is 403; no session is 401; the response names the site, the flag and the server clock', async () => {
     const ok = await onSite(SITE_A_URL, () => status('itest_hb_org'));
     assert.equal(ok.statusCode, 200);
     const body = JSON.parse(ok.body);
     assert.ok(typeof body.now === 'string' && !Number.isNaN(Date.parse(body.now)));
     assert.equal(body.site, SITE_A, 'the response says which deployment it describes');
+    assert.equal(body.enabled, true, 'and whether it runs its jobs (item 36)');
     const jobs = body.jobs.map(j => j.job);
     for (const j of [JOB_OK, JOB_500, JOB_THROW]) assert.ok(jobs.includes(j), j);
     assert.equal(jobs.filter(j => j === JOB_OK).length, 1, 'REGRESSION (item 34): site B\'s row for the same job is not in site A\'s answer');
@@ -131,8 +153,8 @@ test('job-status: an Admin reads every row OF THIS SITE and none of another\'s; 
     assert.ok(body.jobs.every(j => j.site === SITE_A), 'every row is this site\'s');
     const onB = JSON.parse((await onSite(SITE_B_URL, () => status('itest_hb_org'))).body);
     assert.equal(onB.site, SITE_B);
-    const bJobs = onB.jobs.filter(j => j.job.startsWith('itest_hb_'));
-    assert.deepEqual(bJobs.map(j => [j.job, j.okCount]), [[JOB_OK, 1]], 'site B sees its one row and nothing of site A\'s');
+    const bJobs = onB.jobs.filter(j => j.job.startsWith('itest_hb_')).sort((x, y) => x.job.localeCompare(y.job));
+    assert.deepEqual(bJobs.map(j => [j.job, j.okCount]), [['itest_hb_disabled', 1], [JOB_OK, 1]], 'site B sees its two rows (its ok run, and the flag test\'s enabled run) and nothing of site A\'s');
     assert.equal((await onSite(SITE_A_URL, () => status('itest_hb_org', 'User'))).statusCode, 403);
     assert.equal((await onSite(SITE_A_URL, () => status('itest_hb_org', 'Manager'))).statusCode, 403);
     assert.equal((await onSite(SITE_A_URL, () => status(null))).statusCode, 401);

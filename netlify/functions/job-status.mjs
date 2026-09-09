@@ -3,8 +3,9 @@
  * per site since §0.100, handoff item 34).
  *
  * GET /.netlify/functions/job-status
- *   → { now, site, jobs: [{ site, job, schedule, lastStartedAt, lastFinishedAt, lastStatus,
- *                           lastError, lastSummary, okCount, errorCount }] }
+ *   → { now, site, enabled, jobs: [{ site, job, schedule, lastStartedAt, lastFinishedAt, lastStatus,
+ *                                    lastError, lastSummary, okCount, errorCount }] }
+ *   `enabled` is jobsEnabled(process.env) — whether this site runs its jobs (item 36).
  *
  * Admin-only. The rows are SITE-wide (one per function on THIS deployment, no
  * tenant data — see the schema note): every org's Admin on a site sees the same
@@ -18,7 +19,7 @@ import { siteJobHeartbeats } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { verifyAuth, requireRole } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
-import { siteKey } from '../../src/utils/jobHealth.js';
+import { jobsEnabled, siteKey } from '../../src/utils/jobHealth.js';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -39,7 +40,9 @@ export const handler = async (event) => {
     try {
         const site = siteKey(process.env);
         const rows = await db.select().from(siteJobHeartbeats).where(eq(siteJobHeartbeats.site, site));
-        return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ now: new Date().toISOString(), site, jobs: rows }) };
+        // `enabled` (item 36): whether THIS site runs its jobs at all — the client's
+        // verdict is 'disabled' for every job when it is false, whatever the rows say.
+        return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ now: new Date().toISOString(), site, enabled: jobsEnabled(process.env), jobs: rows }) };
     } catch (err) {
         return { statusCode: 500, headers: HEADERS, body: JSON.stringify(serverErrorBody(err, 'job-status')) };
     }

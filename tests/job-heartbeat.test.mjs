@@ -13,7 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import {
-    SCHEDULED_JOBS, HEARTBEAT_GRACE_MS, stallAfterMs, jobHealth, agoLabel, jobLine, jobsCheck, finishValues, siteKey,
+    SCHEDULED_JOBS, HEARTBEAT_GRACE_MS, stallAfterMs, jobHealth, agoLabel, jobLine, jobsCheck, finishValues, siteKey, jobsEnabled,
 } from '../src/utils/jobHealth.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -96,6 +96,37 @@ test('siteKey names the deployment from its URL, then SITE_NAME, then "local" �
     assert.notEqual(siteKey({ URL: 'https://accelerep.netlify.app' }), siteKey({ URL: 'https://salespipelinetracker.com' }), 'REGRESSION (item 34): dev and prod must never share a row');
 });
 
+// ── item 36 (§0.103): one site runs the jobs ─────────────────────────────────
+
+test('jobsEnabled: exactly "true" (trimmed, any case) and nothing else — unset is OFF, so a new site never double-sends', () => {
+    assert.equal(jobsEnabled({ JOBS_ENABLED: 'true' }), true);
+    assert.equal(jobsEnabled({ JOBS_ENABLED: ' TRUE ' }), true, 'trimmed, case-insensitive');
+    assert.equal(jobsEnabled({ JOBS_ENABLED: 'false' }), false);
+    assert.equal(jobsEnabled({ JOBS_ENABLED: '1' }), false, '"1" is not the word');
+    assert.equal(jobsEnabled({ JOBS_ENABLED: 'yes' }), false);
+    assert.equal(jobsEnabled({ JOBS_ENABLED: '' }), false);
+    assert.equal(jobsEnabled({ JOBS_ENABLED: true }), false, 'a boolean is not an env string');
+    assert.equal(jobsEnabled({}), false, 'REGRESSION (item 36): unset means OFF');
+    assert.equal(jobsEnabled(undefined), false);
+    assert.equal(jobsEnabled({ URL: 'https://salespipelinetracker.com' }), false, 'the host alone does not enable anything — only the flag does');
+});
+
+test('jobHealth with enabled:false is "disabled" for every job whatever the rows say; the tile check is NOT ok; the card line says so', () => {
+    const fresh = [
+        { job: 'pipeline-alerts',   lastStartedAt: at(5 * MIN), lastFinishedAt: at(4 * MIN), lastStatus: 'ok', okCount: 3, errorCount: 0 },
+        { job: 'task-reminders',    lastStartedAt: at(MIN),     lastFinishedAt: at(MIN),     lastStatus: 'ok', okCount: 9, errorCount: 0 },
+    ];
+    const h = jobHealth(fresh, NOW, { enabled: false });
+    assert.equal(h.length, 4);
+    assert.ok(h.every(j => j.status === 'disabled' && j.ok === false), 'REGRESSION (item 36): old rows would otherwise read ok or stalled on a site that no longer runs anything');
+    assert.equal(h[0].okCount, 3, 'the row\'s counts still ride along');
+    assert.deepEqual(jobsCheck(h), { id: 'jobs', label: 'Scheduled jobs not enabled on this site (JOBS_ENABLED)', ok: false }, 'REGRESSION: a forgotten flag on prod must never read as healthy');
+    assert.equal(jobLine(h[0]), 'Not enabled on this site (JOBS_ENABLED)');
+    assert.equal(jobHealth(fresh, NOW, { enabled: true })[0].status, 'ok', 'enabled:true is the ordinary verdict');
+    assert.equal(jobHealth(fresh, NOW)[0].status, 'ok', 'the option defaults to enabled (an older server that does not say)');
+    assert.equal(jobHealth(fresh, NOW, {})[0].status, 'ok');
+});
+
 test('finishValues: a throw or a 400+ is an error, the body is the summary, parsed when JSON', () => {
     assert.deepEqual(finishValues({ statusCode: 200, body: JSON.stringify({ emailsSent: 2, smsSent: 0, skipped: 5 }) }), { ok: true, error: null, summary: { emailsSent: 2, smsSent: 0, skipped: 5 } });
     assert.deepEqual(finishValues({ statusCode: 200, body: 'Digest complete' }), { ok: true, error: null, summary: { body: 'Digest complete' } });
@@ -122,7 +153,12 @@ test('every scheduled function runs through withHeartbeat, exported as `handler`
 
 test('the wrapper stamps start and finish, never breaks the job, and returns or rethrows exactly', () => {
     const s = code(read('netlify/functions/_heartbeat.mjs'));
-    assert.ok(s.includes("import { SCHEDULED_JOBS, finishValues, siteKey } from '../../src/utils/jobHealth.js';"), 'the classifier and the site key are the shared pure ones');
+    assert.ok(s.includes("import { SCHEDULED_JOBS, finishValues, jobsEnabled, siteKey } from '../../src/utils/jobHealth.js';"), 'the classifier, the site key and the flag are the shared pure ones');
+    // Item 36: the flag is the first thing after the site — before any stamp, before the run.
+    assert.ok(s.includes('        if (!jobsEnabled(process.env)) {'), 'REGRESSION (item 36): the wrapper gates on JOBS_ENABLED, or both sites run every job against the one database');
+    assert.ok(s.includes("            return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'JOBS_ENABLED is not \"true\" on this site' }) };"), 'a disabled site answers 200 and says why');
+    assert.ok(s.indexOf('if (!jobsEnabled(process.env))') < s.indexOf('const startedAt = new Date();'), 'the gate is before the start stamp — a disabled site leaves no row');
+    assert.ok(s.indexOf('if (!jobsEnabled(process.env))') < s.indexOf('await run(event, context)'), 'and before the run');
     // The org-scoping scan exempts this file (tests/org-scoping.test.mjs SKIP) because
     // it writes only the site-scoped site_job_heartbeats table. Keep that true.
     assert.ok(s.includes("import { siteJobHeartbeats } from '../../db/schema.js';"), 'the one table it may touch');
@@ -149,10 +185,10 @@ test('job-status is Admin-only and returns THIS site\'s rows as stored', () => {
     assert.ok(s.includes("import { verifyAuth, requireRole } from './auth.mjs';"));
     assert.ok(s.includes("    const forbidden = requireRole(auth, ['Admin'], HEADERS);"));
     assert.ok(s.includes('    if (forbidden) return forbidden;'));
-    assert.ok(s.includes("import { siteKey } from '../../src/utils/jobHealth.js';"));
+    assert.ok(s.includes("import { jobsEnabled, siteKey } from '../../src/utils/jobHealth.js';"));
     assert.ok(s.includes('        const site = siteKey(process.env);'));
     assert.ok(s.includes('        const rows = await db.select().from(siteJobHeartbeats).where(eq(siteJobHeartbeats.site, site));'), 'REGRESSION (item 34): only this deployment\'s rows — dev and prod share the database');
-    assert.ok(s.includes("body: JSON.stringify({ now: new Date().toISOString(), site, jobs: rows })"), 'the server clock and the site ride along for the verdict');
+    assert.ok(s.includes("body: JSON.stringify({ now: new Date().toISOString(), site, enabled: jobsEnabled(process.env), jobs: rows })"), 'the server clock, the site and the flag ride along for the verdict (item 36)');
     assert.ok(!s.includes('orgId'), 'site-wide: no org filter, no org data');
 });
 
@@ -185,9 +221,10 @@ test('the health tile counts the jobs check once the rows are read; Settings fet
     assert.ok(av.includes("import { jobHealth } from '../utils/jobHealth.js';"));
     assert.ok(av.includes("                    dbFetch('/.netlify/functions/job-status'),"));
     assert.ok(av.includes("                if (jobsRes.status === 'fulfilled' && jobsRes.value.ok) {"), 'a 403 or a 500 leaves the check out of the denominator');
-    assert.ok(av.includes('counts.jobs = jobHealth(d.jobs, d.now ? new Date(d.now).getTime() : Date.now());'));
+    assert.ok(av.includes('counts.jobs = jobHealth(d.jobs, d.now ? new Date(d.now).getTime() : Date.now(), { enabled: d.enabled !== false });'), 'item 36: the tile hears whether this site runs its jobs');
     const ca = code(read('src/Tabs/settings/integrations/ConnectedAppsDetail.jsx'));
     assert.ok(ca.includes("import { jobHealth, jobLine } from '../../../utils/jobHealth.js';"));
+    assert.ok(ca.includes('setJobs(jobHealth(data.jobs, data.now ? new Date(data.now).getTime() : Date.now(), { enabled: data.enabled !== false }));'), 'item 36: so does the Slack card');
     assert.ok(ca.includes("const alertsJob = jobs ? jobs.find(j => j.job === 'pipeline-alerts') || null : null;"));
     assert.ok(ca.includes('Alerts job: {jobLine(alertsJob)}'));
 });

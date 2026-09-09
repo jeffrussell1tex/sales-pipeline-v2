@@ -16,10 +16,14 @@
 // breaks the job: a failed stamp is logged and the run continues; the wrapper
 // returns exactly what the handler returned, and rethrows exactly what it
 // threw. Site-scoped, never org-scoped, by design — see the schema note.
+// Since §0.103 (item 36) the wrapper is also the one gate on WHETHER a site
+// runs its jobs: JOBS_ENABLED must be "true" in that site's env, else the
+// handler is not called at all (both sites share the database — two runners
+// meant two of every alert and digest).
 import { db } from '../../db/index.js';
 import { siteJobHeartbeats } from '../../db/schema.js';
 import { and, eq, sql } from 'drizzle-orm';
-import { SCHEDULED_JOBS, finishValues, siteKey } from '../../src/utils/jobHealth.js';
+import { SCHEDULED_JOBS, finishValues, jobsEnabled, siteKey } from '../../src/utils/jobHealth.js';
 
 const cronOf = (job) => SCHEDULED_JOBS.find(j => j.job === job)?.cron || null;
 
@@ -48,6 +52,13 @@ export function withHeartbeat(job, run) {
     if (typeof run !== 'function') throw new Error('withHeartbeat: a handler is required');
     return async (event, context) => {
         const site = siteKey(process.env);   // read per run: the deployment this process belongs to
+        // Item 36 (state §0.103): dev and prod share one database, so only the site
+        // whose JOBS_ENABLED is "true" runs the job at all. Anywhere else: no run,
+        // no stamp, a 200 that says so — the tile reads "not enabled on this site".
+        if (!jobsEnabled(process.env)) {
+            console.log(`heartbeat(${job}@${site}): skipped — JOBS_ENABLED is not "true" on this site`);
+            return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'JOBS_ENABLED is not "true" on this site' }) };
+        }
         const startedAt = new Date();
         try { await stampStart(site, job, startedAt); } catch (e) { console.error(`heartbeat(${job}@${site}): start stamp failed:`, e.message); }
         let res, thrown = null;
