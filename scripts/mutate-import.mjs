@@ -1816,6 +1816,10 @@ const mutations = [
         'src/Tabs/DispatchTab.jsx',
         '        () => buildVisitQueue(customers, servicePlans, jobs, todayYmd, planVisits),',
         '        () => buildVisitQueue(customers, servicePlans, jobs, todayYmd),'],
+    ['dispatch: a deferral past the lead window vanishes with no way to undo it (Jeff\'s finding)',
+        'src/Tabs/DispatchTab.jsx',
+        "    const hidden = (exceptions || []).filter(e => e.visit.action === 'skipped' || !queued.has(exceptionKey(e)));",
+        "    const hidden = (exceptions || []).filter(e => e.visit.action === 'skipped');"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

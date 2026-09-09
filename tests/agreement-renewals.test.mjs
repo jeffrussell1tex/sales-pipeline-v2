@@ -67,7 +67,13 @@ test('DispatchTab: the queue reads the recorded exceptions, a deferred visit sta
     assert.ok(s.includes('const st = planVisitState(c, plan, jobs, todayStr, planVisits);'), 'so do the customer list\'s overdue counts');
     assert.ok(s.includes('            planDueDate:   row.occurrence || row.due,'), 'a job for a deferred occurrence stamps the grid date');
     assert.ok(s.includes('() => buildRenewalQueue(customers, servicePlans, todayYmd),'));
-    assert.ok(s.includes('<ServiceDueView rows={visitQueue} renewals={renewalQueue} skipped={skippedVisits} today={todayYmd}'));
+    assert.ok(s.includes('<ServiceDueView rows={visitQueue} renewals={renewalQueue} exceptions={exceptionVisits} today={todayYmd}'));
+    // Jeff deferred the test visit three weeks out and it "became unviewable": a
+    // deferral past the lead window is 'upcoming', which the queue excludes by
+    // design — so every exception the queue does not show is listed under it, with undo.
+    assert.ok(s.includes("const hidden = (exceptions || []).filter(e => e.visit.action === 'skipped' || !queued.has(exceptionKey(e)));"),
+        'skips and out-of-window deferrals are listed under the queue');
+    assert.ok(s.includes("{deferred ? 'Undo deferral' : 'Undo skip'}"), 'each can be undone from the list');
     assert.ok(s.includes('onSkip={skipVisit} onDefer={deferVisit} onUndo={undoVisit} onRenew={renewAgreement}'));
     // Each action writes first and adopts the server's row; a refusal is shown above the queue.
     assert.ok(s.includes("setVisitActionError(data.error || `The visit was not ${action} (HTTP ${res.status}).`);"));

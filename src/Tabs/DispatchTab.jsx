@@ -1757,14 +1757,21 @@ const VISIT_TONE = {
     scheduled: { bg: 'ok',     label: 'Scheduled' },
 };
 
-const ServiceDueView = ({ rows, renewals, skipped, today, onStart, onOpenJob, onOpenCustomer, onSkip, onDefer, onUndo, onRenew, actionError }) => {
+const ServiceDueView = ({ rows, renewals, exceptions, today, onStart, onOpenJob, onOpenCustomer, onSkip, onDefer, onUndo, onRenew, actionError }) => {
     const tone = (k) => ({ danger: T.danger, warn: T.warn, ok: T.ok }[k] || T.inkMuted);
     const outstanding = rows.filter(r => r.state === 'overdue' || r.state === 'due');
     const booked      = rows.filter(r => r.state === 'scheduled');
     // One inline editor at a time: { key, mode: 'skip' | 'defer', date, reason }.
     const [pending, setPending] = useState(null);
-    const [showSkipped, setShowSkipped] = useState(false);
+    const [showHidden, setShowHidden] = useState(false);
     const rowKey = (r) => `${r.customer.id}:${r.plan.id}:${r.occurrence || r.due}`;
+    // Recorded exceptions the queue itself does not show: every skip (retired),
+    // and a deferral whose new date is outside the plan's lead window — Jeff
+    // deferred the test visit three weeks out and it "became unviewable"
+    // (state §0.110). A deferral still in the queue is shown on its row instead.
+    const exceptionKey = (e) => `${e.visit.customerId}:${e.visit.planId}:${e.visit.dueDate}`;
+    const queued = new Set(rows.map(rowKey));
+    const hidden = (exceptions || []).filter(e => e.visit.action === 'skipped' || !queued.has(exceptionKey(e)));
 
     const smallBtn = { padding: '6px 10px', background: T.surface, border: `1px solid ${T.borderStrong}`,
         borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' };
@@ -1893,25 +1900,32 @@ const ServiceDueView = ({ rows, renewals, skipped, today, onStart, onOpenJob, on
                 );
             })}
 
-            {skipped.length > 0 && (
+            {hidden.length > 0 && (
                 <div style={{ marginTop: 6, marginBottom: 18 }}>
-                    <button onClick={() => setShowSkipped(v => !v)}
+                    <button onClick={() => setShowHidden(v => !v)}
                         style={{ background: 'none', border: 'none', padding: 0, fontSize: 11.5, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, textDecoration: 'underline' }}>
-                        {showSkipped ? 'Hide' : 'Show'} {skipped.length} skipped occurrence{skipped.length === 1 ? '' : 's'}
+                        {showHidden ? 'Hide' : 'Show'} {hidden.length} skipped or deferred occurrence{hidden.length === 1 ? '' : 's'} not in the queue
                     </button>
-                    {showSkipped && skipped.map(s => (
-                        <div key={s.visit.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', marginTop: 6,
-                            border: `1px dashed ${T.border}`, borderRadius: T.r, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
-                            <span style={{ flex: 1 }}>
-                                <strong style={{ color: T.ink }}>{s.customer?.name || s.visit.customerId}</strong>
-                                {s.plan ? ` · ${s.plan.name}` : ''}
-                                <span style={{ fontFamily: T.mono, marginLeft: 8 }}>{s.visit.dueDate}</span>
-                                {s.visit.reason ? ` · ${s.visit.reason}` : ''}
-                                {s.visit.byName ? ` · by ${s.visit.byName}` : ''}
-                            </span>
-                            {onUndo && <button onClick={() => onUndo(null, s.visit)} style={smallBtn}>Undo skip</button>}
-                        </div>
-                    ))}
+                    {showHidden && hidden.map(s => {
+                        const deferred = s.visit.action === 'deferred';
+                        const lead = Number.isFinite(parseInt(s.plan?.leadDays, 10)) ? parseInt(s.plan.leadDays, 10) : 14;
+                        return (
+                            <div key={s.visit.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', marginTop: 6,
+                                border: `1px dashed ${T.border}`, borderRadius: T.r, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
+                                <span style={{ flex: 1 }}>
+                                    <strong style={{ color: T.ink }}>{s.customer?.name || s.visit.customerId}</strong>
+                                    {s.plan ? ` · ${s.plan.name}` : ''}
+                                    <span style={{ fontFamily: T.mono, marginLeft: 8 }}>{s.visit.dueDate}</span>
+                                    {deferred
+                                        ? <> · deferred to <span style={{ fontFamily: T.mono }}>{s.visit.deferredTo}</span> — back in the queue {lead} day{lead === 1 ? '' : 's'} before</>
+                                        : ' · skipped'}
+                                    {s.visit.reason ? ` · ${s.visit.reason}` : ''}
+                                    {s.visit.byName ? ` · by ${s.visit.byName}` : ''}
+                                </span>
+                                {onUndo && <button onClick={() => onUndo(null, s.visit)} style={smallBtn}>{deferred ? 'Undo deferral' : 'Undo skip'}</button>}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 
@@ -4521,9 +4535,9 @@ export default function DispatchTab() {
     const renewalQueue = useMemo(
         () => buildRenewalQueue(customers, servicePlans, todayYmd),
         [customers, servicePlans, todayYmd]);
-    // Skipped occurrences, joined to their customer and plan, so a wrong skip can be undone.
-    const skippedVisits = useMemo(() => planVisits
-        .filter(v => v.action === 'skipped')
+    // Every recorded exception, joined to its customer and plan, so a wrong skip
+    // or deferral can be undone even when the queue no longer shows the visit.
+    const exceptionVisits = useMemo(() => planVisits
         .map(v => ({ visit: v, customer: customers.find(c => c.id === v.customerId) || null, plan: servicePlans.find(p => p.id === v.planId) || null }))
         .sort((a, b) => (b.visit.createdAt || '').localeCompare(a.visit.createdAt || '')),
         [planVisits, customers, servicePlans]);
@@ -5451,7 +5465,7 @@ export default function DispatchTab() {
                             });
                         }}/>
                 ) : view === 'due' ? (
-                    <ServiceDueView rows={visitQueue} renewals={renewalQueue} skipped={skippedVisits} today={todayYmd}
+                    <ServiceDueView rows={visitQueue} renewals={renewalQueue} exceptions={exceptionVisits} today={todayYmd}
                         onStart={startPlanVisit}
                         onSkip={skipVisit} onDefer={deferVisit} onUndo={undoVisit} onRenew={renewAgreement}
                         actionError={visitActionError}
