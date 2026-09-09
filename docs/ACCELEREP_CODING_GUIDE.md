@@ -3221,9 +3221,14 @@ The rule:
   is wrapped and listed in `SCHEDULED_JOBS` (`src/utils/jobHealth.js`) —
   the unit test that pins the four against netlify.toml will say so.
 - **One site runs the jobs (§0.103, 9 Sep — item 36).** Dev and prod share
-  one database, so with both sites running every scheduled job a qualifying
-  pipeline alert went out twice — one email, one SMS, one Slack post per
-  site — and every digest would have. The wrapper is the one gate: a job runs
+  one database, so with both sites running every scheduled job every digest,
+  every task reminder and the lead-scoring batch ran twice — one per site —
+  and each digest email would have gone out twice. (The five hourly pipeline
+  signals happen not to: `wasRecentlyAlerted` reads `recommendation_log` for
+  the same org, rep, deal and signal within seven days, so the second site's
+  run finds the first's record — the first hourly alert ever, 13:00 UTC 9 Sep,
+  posted once with both sites running. That is a per-signal accident, not a
+  design; nothing else has such a record.) The wrapper is the one gate: a job runs
   only where `JOBS_ENABLED` is exactly `"true"` in that site's Netlify env
   (`jobsEnabled(env)` in `jobHealth.js`); anywhere else the handler is not
   called, nothing is stamped, and the run answers 200 `{ skipped: true }`.
