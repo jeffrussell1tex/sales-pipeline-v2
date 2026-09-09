@@ -930,13 +930,14 @@ Resend inbound webhook targets PROD — Jeff's screenshot after the tenth
 ship; not re-read this session (no email work)** · `site_job_heartbeats`
 read at 16:35 UTC: `accelerep.netlify.app` alone, four jobs, all `ok`,
 `digest` `error_count` 6 (the finding; the legacy row 6 as well — prod's
-copy of the same bug) · the working tree was clean at close · **ordering slip, corrected here:** the §0.103 landing docs commit (`8a6edc8`) landed AFTER the first handoff commit `34b843c` because the landing script's anchor missed on first apply (a typo in its own text); this line was written last, after that commit — FOURTEEN commits ahead of `master`, not thirteen.
+copy of the same bug) · the working tree was clean at close · **ordering slip, corrected here:** the §0.103 landing docs commit (`8a6edc8`) landed AFTER the first handoff commit `34b843c` because the landing script's anchor missed on first apply (a typo in its own text); this line was written last, after that commit — SIXTEEN commits ahead of `master` counting the handoff commits themselves, the last of them the one carrying this line.
 
 ## 5. Next — start here
 
 **Eleventh-session prep (read at the twelfth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect THIRTEEN commits after `5a306e3` (§4 lists them). Anything else is
+  expect SIXTEEN commits after `5a306e3`, the last being the handoff commit
+  that carries this line (§4 lists the rest). Anything else is
   unshipped code and a finding.
 - **THE SHIP IS WAITING ON ONE THING — `JOBS_ENABLED` on the prod site.**
   Jeff: "ship the manager digest / add the per site env flag" (9 Sep). §0.103
