@@ -275,9 +275,12 @@ legacy tech fields, "Save draft", five salesProcess stubs; the "ten
 read). Then, as its own commit as the §9 entry asked, **`9996c1c`** collapsed
 `prioColor2` into `prioColor`. Six gates, 652/652 unit (+10), 369/369
 mutations (+8, printed green baseline), 133/133 integration (+5), build
-guard OK `index-BlthEjPa.js`, `dist/` cleared. **NOTHING SHIPPED — two
-CODE commits sit on `dev` alone; no browser pass (the pane holds no
-session).**
+guard OK `index-BlthEjPa.js`, `dist/` cleared. Landed on dev and READ
+from Netlify's record: deploy `6aa1d50a…` = `8a02cba`, published 21:52:43
+UTC, 77 functions (`_selfProfile` new, the `users` digest changed), secret
+scan clean; accelerep.netlify.app serving `index-BlthEjPa.js` at 21:53:01
+UTC. **NOTHING SHIPPED — two CODE commits sit on `dev` alone; no browser
+pass (the pane holds no session).**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -1134,9 +1137,12 @@ new; the five on 154 files) · **652/652 unit** (10 new this session:
 `dist/` cleared after each build · **133/133 integration** (5 new:
 `users-self.itest`) · **no browser pass** — the pane holds no session; the
 new banners need a REFUSED settings PUT, which an Admin's delete does not
-produce · **no schema change** · **no deploy verified this session** — dev's
-deploy of `29a6e7e`/`9996c1c` was NOT read from Netlify's record (the session
-closed at the commit) · **`master` == `59116be`; `dev` ahead by the two
+produce · **no schema change** · **dev's deploy READ from Netlify's record:**
+`6aa1d50a…` = `8a02cba` (the handoff commit carrying both CODE commits),
+branch `dev`, published 21:52:43 UTC 9 Sep, **77 functions** (`_selfProfile`
+new, created 21:52:42; the `users` digest changed and no other function's),
+secret scan clean over 392 files; the served hash `index-BlthEjPa.js` at
+21:53:01 UTC by curl · **`master` == `59116be`; `dev` ahead by the two
 CODE commits and the docs commits after them** · the read-only seed query
 (9 Sep): one `@test.com` row in the whole database, linked to Clerk · the
 working tree was clean at close, this handoff commit the last.
@@ -1176,11 +1182,8 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   (§0.109) and `9996c1c` (prioColor2), and the docs commits after them. Those
   two are UNSHIPPED CODE by design (Jeff has not said ship); anything else is
   a finding.
-- **Read dev's deploy from Netlify's record first** — this session closed at
-  the commit without reading it: the deploy for `9996c1c` (or the handoff
-  commit after it) must show `index-BlthEjPa.js` and 77 functions
-  (`_selfProfile.mjs` is new — the function-import graph test passed, but
-  the bundle guard does not count function files). Then, signed in as
+- **DONE — dev's deploy READ (§4): `6aa1d50a…` = `8a02cba`, 77 functions,
+  `index-BlthEjPa.js` served.** Next, signed in as
   KAREN (role User) on accelerep.netlify.app: avatar → Profile, change her
   title, Save; avatar → Notifications, flip one toggle; hard-refresh — both
   persist. That is the allowlist's live proof from the client side (every
