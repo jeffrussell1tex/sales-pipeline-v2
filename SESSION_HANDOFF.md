@@ -138,6 +138,48 @@ figure from §0.94 — both corrected. **ON DEV ONLY, NOT shipped** — `master`
 stays at `5a306e3`; the legacy `job_heartbeats` table is dropped by Jeff's
 hand after the eleventh ship, never by a script.
 
+**Eleventh session (9 September 2026, Jeff: "lets continue working on the to
+do list for accelerep") — CLOSE.** The ritual passed (seven commits after
+`5a306e3`, both fingerprints, copies identical, tree clean). **The first
+read of the per-site heartbeat rows was the session's finding:** one site,
+four jobs, every `last_status` `ok` — and `digest` with `error_count` 6 on
+dev's row and 6 on prod's legacy row, `last_error` already null. Read
+against the code: **`bf4a3c5` had touched TWO files, and §0.95 fixed one.**
+`digest.mjs` carried the identical rename — `wantsDigest` and `wantsSms`
+reading `profile`, bound only inside the user loop — and threw on the first
+user whose digest hour matched the clock: every roster member is 08:00 local
+in Chicago or UTC, so 13:00 and 08:00 UTC daily, a 500, two Netlify retries
+(six stamps a day on each site — the arithmetic in state §0.101), and no
+digest email or SMS to anyone since 7 April. Two more in the Monday manager
+block: managers selected by `u.userType` (the users table has `role`;
+`userType` is a profile-jsonb key, undefined on a `db.select()` row — no
+manager had ever matched) and the rep loop's `resolvedProfile` read out of
+scope. **§0.101 `cab9b92`**: six lines, a suite that lifts the helpers out of
+the source and RUNS them (4; its `userType` scan caught a third read the
+hand missed), 4 mutants, guide §18b33 two new bullets (a rename lands in every
+file the commit touched — `git show --stat` first; a row has the schema's
+columns and nothing else); landed from Netlify's record (`6aa18e68…`, 36
+seconds after the push, only the `digest` digest changed) — **not yet
+proven by a row: the proof is 08:00 and 13:00 UTC on 10 Sep.** The same
+reading found **item 31 is not a bug** (`manager.profile || {}` IS where a
+row's preferences live). Then **item 35 as §0.102 `64fb934`**: a sidecar
+`scripts/_mutant.mjs` — the original registered BEFORE the mutant write,
+restored in a finally and again from an exit/signal/uncaught-exception hook,
+an async run refused, a failed restore rethrown — the harness rewired
+through it with no `writeFileSync` of its own, 8 tests including the crash
+class itself (a child process calling `process.exit()` inside the run, the
+file back afterwards), 3 mutants on the sidecar, guide §18b23 part 3. Along
+the way the harness's own new mutant entry broke the harness at startup (a
+literal newline inside a quoted anchor — the Bash tool's heredocs halve
+doubled backslashes; §5 carries the working note). Five gates, **619/619
+unit**, **340/340 mutations**, **124/124 integration**, the bundle hash
+unchanged by both batches (functions-only, tooling-only). **ON DEV ONLY, NOT
+shipped** — `master` stays at `5a306e3`. **New open item 36:** both sites
+run every scheduled job against the one database — since the tenth ship a
+qualifying pipeline alert goes out twice (one per site: email, SMS, and the
+Slack post), and after the next ship so will every digest; Jeff's call on
+the shape (§5).
+
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
 since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
@@ -163,12 +205,13 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.100` with a paragraph beginning **"Landed on dev (`79890f3`"** and
-`### 0.99` with a paragraph beginning **"Landed on dev (`fbaf8ae`"**, and does
-`docs/ACCELEREP_CODING_GUIDE.md` under `## 18c` carry a bullet beginning
-**"A key change is not additive (§0.100, 8 Sep)."**? If not, you are
-looking at a copy that predates this handoff. Check section
-content, never dates.
+`### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
+beginning **"Landed on dev (`cab9b92`"**, and does
+`docs/ACCELEREP_CODING_GUIDE.md` under `## 18b23` carry a heading beginning
+**"### 3. The harness's own death must not leave a mutant on disk (§0.102,
+9 Sep)"** and under `## 18b33` a bullet beginning **"A rename lands in every
+file the commit touched (§0.101, 9 Sep)."**? If not, you are looking at a
+copy that predates this handoff. Check section content, never dates.
 
 **On dates:** §0.58, §0.59 and the previous handoff say "2 Sep". Git carries
 every one of their commits at 1 Sep -0500, the same day as §0.56/§0.57 and
@@ -180,7 +223,28 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the tenth ship put §0.92 through §0.99 on `master` (8 Sep 22:36 UTC); §0.100 is on `dev` only
+## 1. What shipped — the tenth ship put §0.92 through §0.99 on `master` (8 Sep 22:36 UTC); §0.100, §0.101 and §0.102 are on `dev` only
+
+**Eleventh session (9 Sep) — ON DEV ONLY, deploy-verified, NOT yet proven by
+a row, NOT shipped:** `cab9b92` (state §0.101 — the digest job fixed; guide
+§18b33 two new bullets), its landing docs commit `6efd70b`, and `64fb934`
+(state §0.102 — item 35, the mutation harness restores on any exit; guide
+§18b23 part 3) with this close. No hash could show either: §0.101 changes one
+Netlify function, §0.102 changes only `scripts/` and `tests/` — the gate
+build's `index-B-DxPVK_.js` is §0.99's hash still. Netlify's record showed
+§0.101: deploy `6aa18e68…`, commit `cab9b92`, branch `dev`, published
+16:51:23 UTC (36 seconds after the 16:50:47 push), 76 functions, the `digest`
+digest changed and no other, secret scan clean. What it is: the digest job
+had thrown at 08:00 and 13:00 UTC every day since 7 April (§0.101's arithmetic
+from the heartbeat counts: two failing hours, each retried twice); both helper
+bodies now read `resolvedProfile`, the Monday manager block reads `role` and
+the manager's own `profile`. **The proof is a row:** on 10 Sep after 08:00
+UTC, and again after 13:00, `site_job_heartbeats` for
+`accelerep.netlify.app` / `digest` shows `error_count` still 6 and
+`ok_count` one higher, `last_summary` `{ body: "Digest complete" }`; and a
+user with tasks due today, overdue tasks or a deal updated in 24 hours gets
+the email from dev. §0.102 deploys nothing; its proof is the harness's own
+suite and the printed `340/340`. `master` stays at `5a306e3`.
 
 **Tenth session (8 Sep) — ON DEV ONLY, deploy-verified, PROVEN by the first
 per-site row, NOT shipped:** `79890f3` (item 34, state §0.100, guide §18c's
@@ -813,31 +877,114 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (8 Sep, tenth session — after item 34)
+## 4. Verified state at close (9 Sep, eleventh session — after §0.101 and §0.102)
 
-Five gates green on 154 files · **607/607 unit** (1 new this session:
-`siteKey`) · **333/333 mutations, printed green baseline** (3 added this
-session; the first run died mid-mutant on a Windows file-open error and left
-a mutant on disk — restored, re-run clean) · build **2,446 kB JS**,
-`index-B-DxPVK_.js` (UNCHANGED from §0.99 — nothing the client bundles
-changed; the guard's 2,446 kB is this hash's real figure, the header's old
-"2,438 kB" was carried from §0.94), guard OK, `dist/` cleared · **124/124
-integration** (1 new this session) · **no pane browser pass** — the pane
-holds no session; §0.100 PROVEN by the first per-site row (above), NOT
-eyeballed · dev deploy verified from Netlify's record (`6aa09929…` =
-`79890f3`, 76 functions) · **`master` == `5a306e3`, prod serving
+Five gates green on 154 files · **619/619 unit** (12 new this session:
+`digest-prefs` 4, `mutant-restore` 8) · **340/340 mutations, printed
+green baseline** (7 added: 4 on `digest.mjs`, 3 on the sidecar; the harness
+now grades its own sidecar through the sidecar — the running process holds
+the unmutated module, the spawned children read the mutant from disk) ·
+build **2,446 kB JS**, `index-B-DxPVK_.js` (UNCHANGED from §0.99 — neither
+batch touches what the client bundles), guard OK, `dist/` cleared · **124/124
+integration** (unchanged) · **no pane browser pass** — nothing this session
+renders; the digest's observable is an email and a heartbeat row · dev deploy
+verified from Netlify's record (`6aa18e68…` = `cab9b92`, 76 functions, the
+`digest` digest changed) · **`master` == `5a306e3`, prod serving
 `index-JJdhJmyd.js` (the tenth ship)**; dev is ahead of `master` by the
-four ship-record docs commits (`0603ad5`, `9d7f578`, `1a55ef8`,
-`77c4b77`), `79890f3`, `5c9af24` and this close — seven commits · **one
-schema change: `site_job_heartbeats`, additive (CREATE TABLE IF NOT EXISTS,
-PRIMARY KEY (site, job)), in BOTH databases, read back**; `job_heartbeats`
-still exists in both, prod-written until the ship, LEGACY · **the Resend
-inbound webhook targets PROD — Jeff's screenshot after the tenth ship; not
-re-read this session (no email work)** · prod's shared heartbeat row read at
-23:04 UTC: `pipeline-alerts` ok at 23:00:38 — the first successful prod
-run since April · the working tree was clean at close.
+seven commits §4 listed at the tenth close, `cab9b92`, `6efd70b`, `64fb934`
+and this close — eleven commits · **no schema change** · `job_heartbeats`
+still exists in both databases, prod-written until the ship, LEGACY · **the
+Resend inbound webhook targets PROD — Jeff's screenshot after the tenth
+ship; not re-read this session (no email work)** · `site_job_heartbeats`
+read at 16:35 UTC: `accelerep.netlify.app` alone, four jobs, all `ok`,
+`digest` `error_count` 6 (the finding; the legacy row 6 as well — prod's
+copy of the same bug) · the working tree was clean at close.
 
 ## 5. Next — start here
+
+**Eleventh-session prep (read at the twelfth), in order:**
+- **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
+  expect ELEVEN commits after `5a306e3` (§4 lists them). Anything else is
+  unshipped code and a finding. **Then read Resend → Webhooks** — prod
+  Enabled, dev Disabled at the tenth ship (Jeff's screenshot); not re-read
+  for two sessions. Every email observation is prod's.
+- **Read `site_job_heartbeats` (read-only) before anything else — this is
+  §0.101's proof:** the `accelerep.netlify.app` / `digest` row after 08:00
+  UTC 10 Sep, and again after 13:00, with `error_count` STILL 6 and
+  `ok_count` one higher each time, `last_status` `ok`, `last_summary`
+  `{ body: "Digest complete" }`. If `error_count` is 7 or more, read
+  `last_error` at once — it survives only until the next ok hour — and read
+  the code path it names before anything else. The legacy row's `digest`
+  keeps climbing six a day: prod's copy of the bug, expected until the ship.
+  A second site under `site_job_heartbeats` before the ship is a finding.
+- **Then the email — Jeff's inbox, not a row:** Jeff is Admin, Chicago,
+  08:00, so dev's 13:00 UTC run sends him a task digest if he has tasks due
+  that day, an overdue nudge if any are overdue, and a deal digest if a deal
+  of his changed in the last 24 hours (each on its own preference under
+  avatar → Notifications, digest mode). None is not a finding by itself — it
+  needs a qualifying row; to prove it on purpose, a task due today assigned
+  to himself before 13:00 UTC. Dev sends through the same `RESEND_API_KEY`
+  and `MAIL_FROM` as prod (per-site env; not compared this session).
+- **Jeff's call before the ship — Monday 14 Sep is the first manager digest
+  ever:** with `role` read correctly, dev's 13:00 UTC run on a Monday emails
+  every active Admin and Manager whose `managerTeamDigest` is on (the
+  DEFAULT is on) a "Weekly team health" summary of the reps they can see
+  (all reps for an Admin, the team's for a Manager) — across every org in
+  the database, since dev and prod share it. That is the designed feature and
+  it has never once run. If that is not wanted on the 14th, the switch is
+  per user (Notifications → the manager digest row) or the batch waits.
+- **DONE — item 35 is §0.102 (`64fb934`).** `git status` after every harness
+  run stays a step (guide §18b23 part 3).
+- **Ship §0.100–§0.102 when Jeff says so:** ancestor check, `git push origin
+  dev:master`. **The prod hash will NOT change** (`index-JJdhJmyd.js` stays);
+  the proof is Netlify's record for the PROD site (`sales-pipeline-v2`, id
+  `ef1f2af9…` — `get-projects`, then `get-deploy-for-site` with its
+  `currentDeploy.id`: commit = the pushed sha, 76 functions, the
+  `_heartbeat`, `job-status` and `digest` digests changed), then a read-only
+  SELECT of `site_job_heartbeats` for a `salespipelinetracker.com` /
+  `task-reminders` row within a minute, and prod's `digest` row at the next
+  08:00 or 13:00 UTC with `error_count` 0. Nothing to flip: the Resend
+  webhook is already on prod. **Then the legacy `job_heartbeats` table —
+  Jeff's hand, never a script's:** once prod's four rows appear under
+  `salespipelinetracker.com`, read the legacy rows once more, then Jeff runs
+  `DROP TABLE job_heartbeats` in the Neon console for the app database and
+  the test database; then delete the LEGACY block from `schema.ts`,
+  `db/apply-job-heartbeats.mjs`, and the two "legacy" scan assertions in
+  `tests/job-heartbeat.test.mjs`.
+- **Item 36 — design first, Jeff's call: one database, two sites, every
+  scheduled job running on both.** Since the tenth ship prod's
+  `pipeline-alerts` runs the fixed code beside dev's, both reading the same
+  orgs, deals, preferences and Slack webhook: a qualifying signal at the top
+  of the hour goes out TWICE — one email, one SMS and one Slack post per
+  site. After the next ship the same for every digest. Not observed (no
+  signal has qualified since; the 22:33 UTC Closed Won post was an event
+  post from the deal save, one site). The shapes: (a) the jobs run only where
+  `siteKey(process.env)` is the production host, with a per-site env flag
+  (`JOBS_ENABLED=true`, set on prod alone) so dev can be switched on for a
+  test and off again — smallest, and the heartbeat tile on dev would read
+  "not enabled on this site" rather than "has not run"; (b) an idempotency
+  row per (org, signal, target, hour) in a site-wide table so whichever site
+  runs second finds it done — more code, both sites stay live. (a) is the
+  recommendation; the tile's copy needs a fifth state. One batch either way.
+- **Item 31 — struck by this session's reading (Jeff to confirm):** the four
+  manager copies in `pipeline-alerts.mjs` read `manager.profile || {}`, and
+  the profile jsonb IS where `users.mjs` `sanitize()` stores every
+  preference (the users table has no `notificationPrefs` column; the GET
+  spreads the profile flat, a `db.select()` row does not). A manager who
+  turned "Manager escalation alerts" off is honoured. The rep path's
+  top-level-first read is the dead half, harmless.
+- **Working note for Claude (this session, twice):** the Bash tool's
+  heredocs hand a file `\\(` as `\(` — a doubled backslash arrives single
+  — while a single `\n` arrives intact. A test regex lost its escapes once
+  (caught when the suite failed at import), and a harness anchor took a
+  literal newline (caught by `node --check`). Write any file that carries
+  backslashes with the Write tool; keep edit scripts backslash-free or build
+  the backslash with `String.fromCharCode(92)`.
+- **Carried, unchanged:** item 27 (From/To/Cc + Message-ID on email rows),
+  item 28 (a creator-owned contact shows a blank Assigned Rep), the Connected
+  apps non-Admin dead branches, `INTEGRATION_REQUESTS_TO` unset, the bulk
+  stage-move endpoint not posting to Slack (Jeff's call on a summary line),
+  the `check-tdz` blind spot for lowercase helpers in function files.
 
 **Tenth-session prep (read at the eleventh), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
