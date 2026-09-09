@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1618,6 +1618,20 @@ const mutations = [
         'netlify/functions/digest.mjs',
         "                (u.role === 'Manager' || u.role === 'Admin')",
         "                (u.userType === 'Manager' || u.userType === 'Admin')"],
+    // ── §0.108: first sign-in provisioning of the roster row ──
+    ['roster: the self-profile GET no longer provisions a missing row (a fresh workspace stays unowned)',
+        'netlify/functions/users.mjs',
+        '                if (!row) row = await ensureRosterRow({ clerkUserId: userId, orgId, userRole, clerkUser });',
+        '                /* no provisioning */'],
+    ['roster: an integration request from an unrostered user records no name again',
+        'netlify/functions/integration-requests.mjs',
+        '        const made = await ensureRosterRow({ clerkUserId, orgId });',
+        '        const made = null;'],
+    ['roster: the provisioned role is copied from Clerk unvalidated',
+        'netlify/functions/_lib.mjs',
+        "        const role = ok(rawRole) ? rawRole : ok(userRole) ? userRole : 'User';",
+        "        const role = rawRole || userRole || 'User';"],
+
     // ── §0.107: check:fnscope — every name a function file reads is bound ──
     ['fnscope: the scanner stops reporting (every read counts as bound)',
         'scripts/fnscope.mjs',

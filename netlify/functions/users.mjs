@@ -3,7 +3,7 @@ import { users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
-import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName } from './_lib.mjs';
+import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName, ensureRosterRow } from './_lib.mjs';
 import { randomUUID } from 'crypto';
 // Pure, shared with the Sales Manager tab (the _stage.mjs / stageClock.js
 // arrangement): one validator decides the forecast-call shape on both sides.
@@ -293,6 +293,11 @@ export const handler = async (event) => {
                         console.warn('users.mjs: link update failed:', linkErr.message);
                     }
                 }
+                // Nothing matched: a member of this org with NO roster row — the first
+                // sign-in into a fresh workspace (state §0.108). Provision one from Clerk
+                // now, in the shape users-sync.mjs creates, so the user owns what they
+                // create and is named on it from this request on.
+                if (!row) row = await ensureRosterRow({ clerkUserId: userId, orgId, userRole, clerkUser });
             }
 
             return { statusCode: 200, headers, body: JSON.stringify({ user: row ? flatten(row) : null }) };

@@ -493,3 +493,54 @@ export async function assertOwnership({ table, entity, id, orgId, userId, userRo
 
     return { statusCode: 403, headers, body: JSON.stringify({ error: OWNERSHIP_FORBIDDEN }) };
 }
+
+// ── First sign-in provisioning (state §0.108) ────────────────────────────────
+//
+// Origin: the production workspace had NO roster rows at all — nothing created
+// one until an Admin pressed Sync in Settings — so its Admin's integration
+// request recorded no name and everything they created was unowned (an
+// unresolvable caller stamps null, §18b20). Now a signed-in member of an org
+// with no roster row gets one, from Clerk's own record, in the shape
+// users-sync.mjs creates: our usr_ id, the Clerk id in its own column, the
+// role VALIDATED (Clerk's publicMetadata.role when it is one of ours, else the
+// verified role, else 'User'), profile { status, userType }.
+//
+// Idempotent: an existing row by Clerk id, else by email in this org, is
+// returned untouched — LINKING a pending (invited) row to a Clerk identity
+// stays users.mjs's job. `clerkUser` may be handed in by a caller that has
+// already fetched it; otherwise it is fetched. isAppRole is imported lazily
+// so a test that mocks auth.mjs without it still loads this module. Never
+// throws; null when Clerk cannot be read.
+export async function ensureRosterRow({ clerkUserId, orgId, userRole, clerkUser } = {}) {
+    if (!clerkUserId || !orgId) return null;
+    try {
+        const [byId] = await db.select().from(users).where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));
+        if (byId) return byId;
+        let cu = clerkUser;
+        if (!cu) {
+            const { createClerkClient } = await import('@clerk/backend');
+            cu = await createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY }).users.getUser(clerkUserId);
+        }
+        const email = String(cu?.emailAddresses?.[0]?.emailAddress || cu?.primaryEmailAddress?.emailAddress || '').trim().toLowerCase();
+        if (email) {
+            const [byEmail] = await db.select().from(users).where(and(eq(users.email, email), eq(users.orgId, orgId)));
+            if (byEmail) return byEmail;   // an invited row: users.mjs ?me=true links it
+        }
+        const { isAppRole } = await import('./auth.mjs');
+        const ok = (r) => typeof isAppRole === 'function' && isAppRole(r);
+        const rawRole = cu?.publicMetadata?.role;
+        const role = ok(rawRole) ? rawRole : ok(userRole) ? userRole : 'User';
+        const name = ((cu?.firstName || '') + ' ' + (cu?.lastName || '')).trim() || email || clerkUserId;
+        const [row] = await db.insert(users).values({
+            id: 'usr_' + randomUUID(), clerkUserId, orgId, name, email: email || `${clerkUserId}@no-email.invalid`, role,
+            active: true, profile: { status: 'Active', userType: role }, updatedAt: new Date(),
+        }).onConflictDoNothing().returning();
+        invalidateRoster(orgId);
+        if (row) { console.log(`_lib.ensureRosterRow: provisioned ${row.id} for ${clerkUserId} in ${orgId}`); return row; }
+        const [raced] = await db.select().from(users).where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));
+        return raced || null;
+    } catch (e) {
+        console.warn('_lib.ensureRosterRow:', e.message);
+        return null;
+    }
+}

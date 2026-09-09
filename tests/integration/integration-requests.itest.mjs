@@ -30,6 +30,7 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
         canSeeAll:    (role) => role === 'Admin' || role === 'Manager',
         isReadOnly:   (role) => role === 'ReadOnly',
         isTechnician: (role) => role === 'Technician',
+        isAppRole:    (r) => ['Admin', 'Manager', 'User', 'ReadOnly', 'Technician'].includes(r),
         requireRole: (auth, allowedRoles, headers) => (
             allowedRoles.includes(auth?.userRole) ? null
                 : { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: insufficient role' }) }
@@ -164,4 +165,34 @@ test('a note is plain, short text', async () => {
     const { body } = parse(await call(ORG_B, { appId: 'gmail', note: long }));
     assert.equal(body.request.note.length, 500);
     assert.doesNotMatch(body.request.note, /[\u0000-\u001f\u007f]/);
+});
+
+test('first sign-in provisioning (§0.108): a member with no roster row gets one from Clerk, idempotently; the role is validated; an invited row by email is returned, not duplicated; and a request from that member carries their name', async () => {
+    const { ensureRosterRow } = await import('../../netlify/functions/_lib.mjs');
+    const cu = { firstName: 'Bea', lastName: 'New', emailAddresses: [{ emailAddress: 'Bea@Beta.test' }], publicMetadata: { role: 'Admin' } };
+    const made = await ensureRosterRow({ clerkUserId: 'clerk_bea_new', orgId: ORG_B, userRole: 'User', clerkUser: cu });
+    assert.ok(made && made.id.startsWith('usr_'), 'our id');
+    assert.equal(made.clerkUserId, 'clerk_bea_new');
+    assert.equal(made.email, 'bea@beta.test', 'lower-cased');
+    assert.equal(made.name, 'Bea New');
+    assert.equal(made.role, 'Admin', 'Clerk\'s role, being one of ours');
+    assert.equal(made.active, true);
+    assert.deepEqual(made.profile, { status: 'Active', userType: 'Admin' }, 'the sync\'s shape');
+    const again = await ensureRosterRow({ clerkUserId: 'clerk_bea_new', orgId: ORG_B, clerkUser: cu });
+    assert.equal(again.id, made.id, 'idempotent by Clerk id');
+    const odd = await ensureRosterRow({ clerkUserId: 'clerk_odd', orgId: ORG_B, userRole: 'Manager', clerkUser: { firstName: 'Odd', lastName: 'Role', emailAddresses: [{ emailAddress: 'odd@beta.test' }], publicMetadata: { role: 'superuser' } } });
+    assert.equal(odd.role, 'Manager', 'REGRESSION: a role Clerk holds that is not one of ours is not copied — the verified role is used');
+    const plain = await ensureRosterRow({ clerkUserId: 'clerk_plain', orgId: ORG_B, clerkUser: { emailAddresses: [{ emailAddress: 'plain@beta.test' }] } });
+    assert.equal(plain.role, 'User'); assert.equal(plain.name, 'plain@beta.test', 'no name in Clerk: the email is the name');
+    await db.insert(users).values({ id: 'usr_intreq_pending', orgId: ORG_B, name: 'Pending Person', email: 'pending@beta.test', role: 'User' });
+    const pend = await ensureRosterRow({ clerkUserId: 'clerk_pending', orgId: ORG_B, clerkUser: { firstName: 'P', lastName: 'P', emailAddresses: [{ emailAddress: 'Pending@beta.test' }] } });
+    assert.equal(pend.id, 'usr_intreq_pending', 'the invited row is returned, not duplicated');
+    assert.equal(pend.clerkUserId, null, 'and not linked here — that is users.mjs\'s job');
+    assert.equal((await db.select().from(users).where(eq(users.orgId, ORG_B))).length, 4, 'three provisioned, one pending, no duplicates');
+    assert.equal(await ensureRosterRow({ clerkUserId: '', orgId: ORG_B }), null, 'nothing to provision without an identity');
+    assert.equal((await db.select().from(users).where(eq(users.orgId, ORG_A))).length, 1, 'org A untouched');
+    // The request path: the provisioned member's request records their name.
+    const r = parse(await call(ORG_B, { appId: 'hubspot' }, { user: 'clerk_bea_new' }));
+    assert.equal(r.status, 200);
+    assert.equal((await extraOf(ORG_B)).integrationRequests.hubspot.byName, 'Bea New', 'REGRESSION (§0.108): the record names the requester');
 });

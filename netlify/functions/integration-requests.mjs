@@ -29,7 +29,7 @@ import { db } from '../../db/index.js';
 import { settings, users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireRole } from './auth.mjs';
-import { writeAudit, serverErrorBody } from './_lib.mjs';
+import { writeAudit, serverErrorBody, ensureRosterRow } from './_lib.mjs';
 import { sendEmail } from './send-email.mjs';
 import { requestableApp, cleanNote } from '../../src/utils/integrationCatalog.js';
 
@@ -52,7 +52,11 @@ async function requesterOf(orgId, clerkUserId) {
             .from(users)
             .where(and(eq(users.orgId, orgId), eq(users.clerkUserId, clerkUserId)))
             .limit(1);
-        return rows[0] || null;
+        if (rows[0]) return rows[0];
+        // No roster row yet — a fresh workspace whose Admin has not pressed Sync
+        // (state §0.108): provision it now, so the mail and the record carry a name.
+        const made = await ensureRosterRow({ clerkUserId, orgId });
+        return made ? { name: made.name, email: made.email } : null;
     } catch { return null; }
 }
 
