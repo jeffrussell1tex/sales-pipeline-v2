@@ -962,8 +962,8 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Eleventh-session prep (read at the twelfth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect TWO commits after `a9d2d08` (the ship-record docs commit and the
-  handoff commit that carries this line). Anything else is
+  expect only DOCS commits after `a9d2d08` (the ship record, observations,
+  handoffs) — a CODE commit there is
   unshipped code and a finding.
 - **DONE — the ELEVENTH ship (§1): `JOBS_ENABLED` set on `sales-pipeline-v2`
   by Jeff ("done"), `master` at `a9d2d08`, prod's first per-site
@@ -977,7 +977,9 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   read "Scheduled jobs running" once all four have run — Jeff's eyeball, as
   Admin, on salespipelinetracker.com; on dev the same tile reads the failing
   "not enabled on this site" check, by design.
-- **Dev's jobs are OFF now, by design.** Dev's per-site rows freeze; dev's
+- **DONE — OBSERVED by Jeff's screenshot (9 Sep, after the ship): dev's
+  Workspace Health lists "Scheduled jobs not enabled on this site
+  (JOBS_ENABLED)" among its not-passing checks.** Was: **Dev's jobs are OFF now, by design.** Dev's per-site rows freeze; dev's
   Workspace Health reads the failing "not enabled on this site" check and the
   Slack card "Alerts job: Not enabled on this site (JOBS_ENABLED)" — Jeff's
   eyeball of §0.103. To run dev's jobs for a test, set the flag on `accelerep`
