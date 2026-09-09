@@ -930,7 +930,7 @@ Resend inbound webhook targets PROD — Jeff's screenshot after the tenth
 ship; not re-read this session (no email work)** · `site_job_heartbeats`
 read at 16:35 UTC: `accelerep.netlify.app` alone, four jobs, all `ok`,
 `digest` `error_count` 6 (the finding; the legacy row 6 as well — prod's
-copy of the same bug) · the working tree was clean at close.
+copy of the same bug) · the working tree was clean at close · **ordering slip, corrected here:** the §0.103 landing docs commit (`8a6edc8`) landed AFTER the first handoff commit `34b843c` because the landing script's anchor missed on first apply (a typo in its own text); this line was written last, after that commit — FOURTEEN commits ahead of `master`, not thirteen.
 
 ## 5. Next — start here
 
