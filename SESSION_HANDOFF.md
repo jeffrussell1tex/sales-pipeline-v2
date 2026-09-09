@@ -310,8 +310,13 @@ customer's end date set to 2026-10-15 → **Agreement renewals** lists it as
 Expiring in 36 days; Renew 12 months → the confirm names 2027-10-15 → PUT
 200 → the list empties; the end date restored to 2027-07-31 and every
 plan-visit row deleted by the undos (read back read-only: zero rows). The
-plan panel's Renewal reminder field is Admin-only and NOT observed. **NOT
-shipped.**
+plan panel's Renewal reminder field is Admin-only and NOT observed. **Then
+Jeff: "well i deferred the test and it is now unviewable"** — he deferred it
+21 days out, past the 14-day lead window, so it became 'upcoming', which the
+queue excludes by design, and its only undo was on the row that vanished;
+**`1866158`**: the list under the queue now holds every exception the queue
+does not show (skips AND out-of-window deferrals) with Undo deferral / Undo
+skip; +1 mutant, 380/380, `index-CxVhrH5t.js`. **NOT shipped.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -360,13 +365,15 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); `dev` is now ahead by THREE CODE commits (§0.109 `29a6e7e`, the prioColor2 collapse `9996c1c`, §0.110 `a3fa3e2`) — NOT shipped
+## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); `dev` is now ahead by FOUR CODE commits (§0.109 `29a6e7e`, the prioColor2 collapse `9996c1c`, §0.110 `a3fa3e2`, its deferred-list correction `1866158`) — NOT shipped
 
 **Twelfth session — NOTHING SHIPPED.** `master` stays at `59116be`. The third
 CODE commit, `a3fa3e2` (§0.110 — maintenance agreements: a NEW function
 `dispatch-plan-visits.mjs`, so the next ship is functions AND bundle, 78
-functions; the schema change is ALREADY in both databases, §18c), joins the two
-below; the bundle hash after it is `index-5Gkq-AHb.js`. On `dev`
+functions; the schema change is ALREADY in both databases, §18c) and the
+fourth, `1866158` (Jeff's finding — a deferral past the lead window had no
+visible undo; the list under the queue now shows it; bundle only), join the
+two below; the bundle hash after all four is `index-CxVhrH5t.js`. On `dev`
 alone before it: `29a6e7e` (§0.109 — the self-profile allowlist, the three settings
 banners, two inert dispatch buttons gone, the §9 backlog struck by reading;
 `_selfProfile.mjs` is a NEW function file, so the next ship is functions AND
@@ -1167,11 +1174,11 @@ SIX gates green (`check:fnscope`: 86 function files — `_selfProfile.mjs` and
 `dispatch-plan-visits.mjs` are new; the five on 155 files) · **672/672
 unit** (30 new this session: `self-profile` 4, `settings-cascade-errors` 4,
 `dispatch-stubs` 2, `plan-visits` 13, `agreement-renewals` 8; three pinned
-counts raised for the sixth signal) · **379/379 mutations, printed green
-baseline** (18 added this session — 7 in `29a6e7e`, 1 in `9996c1c`, 10 in
-`a3fa3e2`; every run 100% caught, no STALE) · build `index-5Gkq-AHb.js`
-(2,458 kB; the third new hash of the session), guard OK, `dist/` cleared
-after each build · **139/139 integration** (11 new: `users-self` 5,
+counts raised for the sixth signal) · **380/380 mutations, printed green
+baseline** (19 added this session — 7 in `29a6e7e`, 1 in `9996c1c`, 10 in
+`a3fa3e2`, 1 in `1866158`; every run 100% caught, no STALE) · build
+`index-CxVhrH5t.js` (2,459 kB; the fourth new hash of the session — the
+deferred-list correction), guard OK, `dist/` cleared after each build · **139/139 integration** (11 new: `users-self` 5,
 `dispatch-plan-visits` 6) · **browser pass DONE for §0.109 as Karen (see
 below) AND for §0.110's queue as Karen (22:49–22:53 UTC): Defer to
 2026-09-20 rendered "deferred from 2026-08-01" due in 11 days and undo
@@ -1251,10 +1258,15 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Twelfth-session prep (read at the thirteenth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect the docs commits after `59116be` PLUS three CODE commits, `29a6e7e`
-  (§0.109), `9996c1c` (prioColor2) and `a3fa3e2` (§0.110), and the docs
-  commits after them. Those three are UNSHIPPED CODE by design (Jeff has not
-  said ship); anything else is a finding.
+  expect the docs commits after `59116be` PLUS four CODE commits, `29a6e7e`
+  (§0.109), `9996c1c` (prioColor2), `a3fa3e2` (§0.110) and `1866158` (its
+  deferred-list correction), and the docs commits after them. Those four are
+  UNSHIPPED CODE by design (Jeff has not said ship); anything else is a finding.
+- **Jeff's finding on §0.110, fixed in `1866158`:** a deferral past the lead
+  window left the queue with no visible undo. The list under the queue now
+  shows every skip and every out-of-window deferral with its undo. Read on
+  dev: Jeff's own deferral (2026-08-01 → 2026-09-30) listed there; the
+  deferred visit returns to the queue on 2026-09-16 (14 days before).
 - **DONE — §0.110's dev deploy READ (`6aa1e1d5…` = `a3fa3e2`, 22:47:36 UTC,
   78 functions, `dispatch-plan-visits` new) and the queue OBSERVED in the
   pane as Karen (§4):** Defer/undo, Skip/undo (the skipped list names her
