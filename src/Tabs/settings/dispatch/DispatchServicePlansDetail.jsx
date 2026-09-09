@@ -122,6 +122,15 @@ const PlanForm = ({ draft, set, templates, jobTypes, holders, busy, error, onSav
                     <span style={{ fontSize: 12.5, color: T.inkMid, fontFamily: T.sans }}>days before it is due</span>
                 </div>
             </Field>
+            <Field label="Renewal reminder" hint="How far ahead of a customer's agreement end date the renewal appears in Dispatch → Service Due and alerts Admins and Managers (state §0.110).">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input type="number" min={0} max={365} value={draft.renewalLeadDays ?? 60}
+                        onChange={e => set('renewalLeadDays', e.target.value)}
+                        onBlur={e => set('renewalLeadDays', commitNumber(e.target.value, { min: 0, max: 365, fallback: 60, integer: true }))}
+                        style={{ ...inputSt, width: 90 }}/>
+                    <span style={{ fontSize: 12.5, color: T.inkMid, fontFamily: T.sans }}>days before the agreement ends</span>
+                </div>
+            </Field>
             <Field label="Interval counts from"
                 hint={draft.anchorMode === 'rolling'
                     ? 'Elapsed time since the unit was actually serviced. A late visit pushes everything after it.'
@@ -386,7 +395,7 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                     cadence: <span style={{ fontSize: 12, color: T.inkMid }}>{cadenceLabel(p.cadence)}</span>,
                     visits:  <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{p.visitsPerYear ?? '—'}</span>,
                     lead:    <span style={{ fontSize: 12, color: T.inkMid }} title={p.anchorMode === 'rolling' ? 'Rolling from last completed visit' : 'Fixed contract grid'}>
-                                 {(p.leadDays ?? 14)}d early{p.anchorMode === 'rolling' ? ' · rolling' : ''}
+                                 {(p.leadDays ?? 14)}d early{p.anchorMode === 'rolling' ? ' · rolling' : ''} · renew {(p.renewalLeadDays ?? 60)}d out
                              </span>,
                     tmpl:    <span style={{ fontSize: 12, color: T.inkMid }}>
                                  {p.visitTemplateId
@@ -419,7 +428,7 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
                             onCancel={() => { setDraft(null); setError(''); }}/>
                     </div>
                 ) : (
-                    <button onClick={() => { setDraft({ id: 'plan_' + crypto.randomUUID(), _isNew: true, name: '', cadence: 'annual', active: true, coveredJobTypes: [], leadDays: 14, anchorMode: 'fixed' }); setError(''); }}
+                    <button onClick={() => { setDraft({ id: 'plan_' + crypto.randomUUID(), _isNew: true, name: '', cadence: 'annual', active: true, coveredJobTypes: [], leadDays: 14, renewalLeadDays: 60, anchorMode: 'fixed' }); setError(''); }}
                         style={{ ...btnGhost, marginTop: 12, color: T.ink }}>+ New plan</button>
                 )}
             </CSectionCard>

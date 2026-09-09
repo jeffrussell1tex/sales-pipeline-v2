@@ -136,6 +136,40 @@ const fmtArr = (v) => {
 
 export const slackTemplates = {
 
+    // A dispatch customer's maintenance agreement is inside its renewal window
+    // or has expired (state §0.110) — posted under the org's 'agreementRenewal' switch
+    agreementRenewal: ({ customerName, customerNumber, planName, expiry, daysLeft, expired }) => {
+        const n = Math.abs(daysLeft);
+        const when = expired ? `expired ${n} day${n === 1 ? '' : 's'} ago`
+            : daysLeft === 0 ? 'expires today'
+            : `expires in ${n} day${n === 1 ? '' : 's'}`;
+        const icon = expired ? '🔴' : '🔔';
+        return {
+            text: `${icon} Maintenance agreement ${when} — *${customerName}*`,
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `${icon} *Agreement ${expired ? 'expired' : 'renewal due'}*\n*${customerName}*${customerNumber ? ` (${customerNumber})` : ''} — ${when}`,
+                    },
+                },
+                {
+                    type: 'context',
+                    elements: [
+                        { type: 'mrkdwn', text: `Plan: *${planName}* · Agreement ends: *${expiry}*` },
+                    ],
+                },
+                {
+                    type: 'actions',
+                    elements: [
+                        { type: 'button', text: { type: 'plain_text', text: 'Open Dispatch →' }, url: APP_URL, action_id: 'view_dispatch' },
+                    ],
+                },
+            ],
+        };
+    },
+
     // Deal has gone silent (no activity in 14+ days)
     dealSilent: ({ repName, dealName, account, arr, stage, daysSilent }) => ({
         text: `⚠️ *${dealName}* has gone silent — ${daysSilent} days without activity`,

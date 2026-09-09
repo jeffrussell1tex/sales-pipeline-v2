@@ -30,6 +30,7 @@ export const SLACK_ALERT_TYPES = Object.freeze([
     Object.freeze({ key: 'closeLapsed',    kind: 'hourly', label: 'Close date lapsed' }),
     Object.freeze({ key: 'dealMomentum',   kind: 'hourly', label: 'Deal momentum (2+ stages within 14 days of creation)' }),
     Object.freeze({ key: 'scoreDropAlert', kind: 'hourly', label: 'AI score dropped below threshold' }),
+    Object.freeze({ key: 'agreementRenewal', kind: 'hourly', label: 'Maintenance agreement expiring or expired (Dispatch)' }),
 ]);
 
 export const SLACK_ALERT_KEYS  = Object.freeze(SLACK_ALERT_TYPES.map(t => t.key));

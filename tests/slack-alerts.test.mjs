@@ -22,9 +22,9 @@ const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//'))
 
 // ── the pure module ──────────────────────────────────────────────────────────
 
-test('seven alert types: two events, five hourly signals, frozen, each labelled for what it is', () => {
+test('eight alert types: two events, six hourly signals, frozen, each labelled for what it is', () => {
     assert.deepEqual([...SLACK_EVENT_KEYS], ['stageChanged', 'dealClosedWon']);
-    assert.deepEqual([...SLACK_HOURLY_KEYS], ['dealSilent', 'dealStuck', 'closeLapsed', 'dealMomentum', 'scoreDropAlert']);
+    assert.deepEqual([...SLACK_HOURLY_KEYS], ['dealSilent', 'dealStuck', 'closeLapsed', 'dealMomentum', 'scoreDropAlert', 'agreementRenewal']);
     assert.deepEqual([...SLACK_ALERT_KEYS], [...SLACK_EVENT_KEYS, ...SLACK_HOURLY_KEYS]);
     assert.ok(Object.isFrozen(SLACK_ALERT_TYPES) && Object.isFrozen(SLACK_ALERT_KEYS));
     for (const t of SLACK_ALERT_TYPES) assert.ok(['event', 'hourly'].includes(t.kind) && t.label.length > 0, t.key);
@@ -57,9 +57,9 @@ test('slackAlertEnabled: no type is not gated, an unknown type never posts, no s
 });
 
 test('slackAlertsOnCount counts the ticked types', () => {
-    assert.equal(slackAlertsOnCount({}), 7);
-    assert.equal(slackAlertsOnCount({ alerts: { dealSilent: false, scoreDropAlert: false } }), 5);
-    assert.equal(slackAlertsOnCount(null), 7);
+    assert.equal(slackAlertsOnCount({}), 8);
+    assert.equal(slackAlertsOnCount({ alerts: { dealSilent: false, scoreDropAlert: false } }), 6);
+    assert.equal(slackAlertsOnCount(null), 8);
 });
 
 test('dealSlackEvents: a win is a win, any other stage change is a stage change, nothing else is anything', () => {

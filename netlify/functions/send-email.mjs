@@ -148,6 +148,31 @@ function formatCurrency(val) {
 export const emailTemplates = {
 
     /**
+     * A dispatch customer's maintenance agreement is inside its renewal window
+     * or has expired (state §0.110). Sent to the org's Admins and Managers.
+     * @param {{ recipientName, customerName, customerNumber, planName, expiry, daysLeft, expired }} data
+     */
+    agreementRenewal({ recipientName, customerName, customerNumber, planName, expiry, daysLeft, expired }) {
+        const n = Math.abs(daysLeft);
+        const when = expired ? `expired ${n} day${n === 1 ? '' : 's'} ago`
+            : daysLeft === 0 ? 'expires today'
+            : `expires in ${n} day${n === 1 ? '' : 's'}`;
+        const subject = `${expired ? '🔴' : '🔔'} Maintenance agreement ${when}: ${customerName}`;
+        const html = layout(subject, `
+            <h2>${expired ? 'Agreement expired' : 'Agreement renewal due'}</h2>
+            <p>Hi ${recipientName}, the maintenance agreement for <strong>${customerName}</strong> ${when}.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Customer</span><span>${customerName}${customerNumber ? ` · ${customerNumber}` : ''}</span></div>
+                <div class="detail-row"><span class="detail-label">Plan</span><span>${planName}</span></div>
+                <div class="detail-row"><span class="detail-label">Agreement ends</span><span>${expiry}</span></div>
+            </div>
+            <p>Renew it from Dispatch → Service Due, or edit the customer's agreement end date.</p>
+            <a class="btn" href="${appUrl}">Open Dispatch →</a>
+        `);
+        return { subject, html };
+    },
+
+    /**
      * Sent when a deal is assigned to a rep.
      * @param {{ repName, dealName, account, arr, stage, assignedBy, opportunityId }} data
      */

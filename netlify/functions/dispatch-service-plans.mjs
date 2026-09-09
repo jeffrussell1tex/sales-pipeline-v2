@@ -64,6 +64,8 @@ function normalise(row) {
         visitsPerYear:   row.visitsPerYear   ?? row.visits_per_year   ?? null,
         visitTemplateId: row.visitTemplateId ?? row.visit_template_id ?? null,
         leadDays:        row.leadDays        ?? row.lead_days         ?? 14,
+        // How early the agreement renewal surfaces (state §0.110); null reads as 60 in planVisits.js.
+        renewalLeadDays: row.renewalLeadDays ?? row.renewal_lead_days ?? null,
         anchorMode:      row.anchorMode      ?? row.anchor_mode       ?? 'fixed',
         coveredJobTypes: row.coveredJobTypes ?? row.covered_job_types ?? [],
         includedHours:   row.includedHours   ?? row.included_hours    ?? null,
@@ -115,6 +117,7 @@ export const handler = async (event) => {
                 visitsPerYear:   deriveVisits(cadence, deriveInterval(cadence, data.intervalDays)),
                 visitTemplateId: data.visitTemplateId ?? null,
                 leadDays:        Number.isFinite(parseInt(data.leadDays, 10)) ? parseInt(data.leadDays, 10) : 14,
+                renewalLeadDays: Number.isFinite(parseInt(data.renewalLeadDays, 10)) ? Math.max(0, parseInt(data.renewalLeadDays, 10)) : null,
                 anchorMode:      data.anchorMode === 'rolling' ? 'rolling' : 'fixed',
                 coveredJobTypes: JSON.stringify(data.coveredJobTypes ?? []),
                 includedHours:   data.includedHours   ?? null,
@@ -153,6 +156,10 @@ export const handler = async (event) => {
                 'responseHours', 'discountPercent', 'price', 'billingPeriod', 'active', 'notes',
                 'leadDays', 'anchorMode',
             ].forEach(f => { if (f in data) updates[f] = data[f]; });
+            if ('renewalLeadDays' in data) {
+                const n = parseInt(data.renewalLeadDays, 10);
+                updates.renewalLeadDays = Number.isFinite(n) ? Math.max(0, n) : null;
+            }
 
             if ('coveredJobTypes' in data) updates.coveredJobTypes = JSON.stringify(data.coveredJobTypes);
 

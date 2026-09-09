@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { recommendationLog, opportunities, activities, tasks } from '../../db/schema.js';
-import { eq, and, desc, gte } from 'drizzle-orm';
+import { eq, and, desc, gte, notLike } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
 
@@ -99,9 +99,17 @@ export const handler = async (event) => {
             const days    = parseInt(event.queryStringParameters?.days || '90');
             const since   = new Date(); since.setDate(since.getDate() - days);
 
-            const query = repName
-                ? db.select().from(recommendationLog).where(and(eq(recommendationLog.orgId, orgId), eq(recommendationLog.repName, repName), gte(recommendationLog.dismissedAt, since))).orderBy(desc(recommendationLog.dismissedAt))
-                : db.select().from(recommendationLog).where(and(eq(recommendationLog.orgId, orgId), gte(recommendationLog.dismissedAt, since))).orderBy(desc(recommendationLog.dismissedAt));
+            // Agreement-renewal alerts (state §0.110) dedupe through this ledger
+            // too, keyed on a dispatch customer rather than a deal. They are not
+            // recommendations and never resolve, so the report never sees them.
+            const base = [
+                eq(recommendationLog.orgId, orgId),
+                gte(recommendationLog.dismissedAt, since),
+                notLike(recommendationLog.actionType, 'renewal%'),
+            ];
+            const query = db.select().from(recommendationLog)
+                .where(and(...base, ...(repName ? [eq(recommendationLog.repName, repName)] : [])))
+                .orderBy(desc(recommendationLog.dismissedAt));
 
             const logs = await query;
 

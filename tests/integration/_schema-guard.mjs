@@ -27,6 +27,8 @@ import { sql } from 'drizzle-orm';
 // [table, column] pairs the suites need. Newest first -- the most recently added
 // column is the one most likely to be missing.
 const REQUIRED = [
+    ['dispatch_plan_visits', 'id'],                 // §0.110: skipped/deferred plan occurrences (db/apply-plan-visits.mjs --test)
+    ['dispatch_service_plans', 'renewal_lead_days'], // §0.110: how early a renewal surfaces (same script)
     ['activities', 'email_message_id'],  // §0.105: a logged email's From/To/Cc/Message-ID (db/apply-email-headers.mjs --test)
     ['site_job_heartbeats', 'site'],       // §0.100: scheduled-job heartbeats, per site (db/apply-site-job-heartbeats.mjs --test)
     ['audit_stream_destinations', 'id'],   // §0.87: audit streaming destinations (db/apply-audit-stream.mjs --test)

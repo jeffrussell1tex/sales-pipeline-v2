@@ -1011,12 +1011,41 @@ export const dispatchServicePlans = pgTable('dispatch_service_plans', {
     discountPercent:  decimal('discount_percent', { precision: 5, scale: 2 }),  // on work outside the plan
     price:            decimal('price', { precision: 10, scale: 2 }),
     billingPeriod:    varchar('billing_period', { length: 20 }).default('annual'),
+    // How early this plan's agreement renewal surfaces, in days before the
+    // customer's agreementExpiry (state §0.110). Nullable; code reads null as 60
+    // (planVisits.js DEFAULT_RENEWAL_LEAD_DAYS). Added to both databases by
+    // db/apply-plan-visits.mjs before any code read it (§18c).
+    renewalLeadDays:  integer('renewal_lead_days'),
     active:           boolean('active').notNull().default(true),
     notes:            text('notes'),
     createdAt:        timestamp('created_at').notNull().defaultNow(),
     updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
     index('dispatch_service_plans_org_id_idx').on(t.orgId),
+]);
+
+// ── DISPATCH PLAN VISITS ──────────────────────────────────────────────────────
+// What a dispatcher recorded about ONE service-plan occurrence (state §0.110).
+// Visits are computed from the plan (planVisits.js); this table holds only the
+// exceptions: 'skipped' retires an occurrence without a job, 'deferred' keeps
+// its grid date but makes it fall due on deferred_to. One row per occurrence per
+// customer per plan per org — a second decision about the same date replaces
+// the first. Created by db/apply-plan-visits.mjs (§18c: database first).
+export const dispatchPlanVisits = pgTable('dispatch_plan_visits', {
+    id:          text('id').primaryKey(),                              // pv_<uuid>
+    orgId:       text('org_id').notNull(),
+    customerId:  text('customer_id').notNull(),                        // FK → dispatch_customers.id
+    planId:      text('plan_id').notNull(),                            // FK → dispatch_service_plans.id
+    dueDate:     varchar('due_date', { length: 20 }).notNull(),        // the occurrence's grid date — what a job stamps as planDueDate
+    action:      varchar('action', { length: 10 }).notNull(),          // 'skipped' | 'deferred'
+    deferredTo:  varchar('deferred_to', { length: 20 }),               // when a deferred occurrence falls due
+    reason:      text('reason'),
+    byUserId:    text('by_user_id'),                                   // users.id (usr_…) of the dispatcher
+    byName:      varchar('by_name', { length: 255 }),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+    uniqueIndex('dispatch_plan_visits_occurrence_uq').on(t.orgId, t.customerId, t.planId, t.dueDate),
+    index('dispatch_plan_visits_org_id_idx').on(t.orgId),
 ]);
 
 // ── DISPATCH SERVICE LOCATIONS ────────────────────────────────────────────────

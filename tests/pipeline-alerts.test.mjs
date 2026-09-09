@@ -52,7 +52,9 @@ test('REGRESSION: wantsSms reads the profile it is handed', () => {
 test('neither helper names the loop-scoped binding, and every rep-side call hands them resolvedProfile', () => {
     assert.doesNotMatch(fnSrc('wantsAlert'), /\bprofile\b/, 'wantsAlert reads only its parameter');
     assert.doesNotMatch(fnSrc('wantsSms'),   /\bprofile\b/, 'wantsSms reads only its parameter');
-    assert.equal((src.match(/wantsAlert\(resolvedProfile, '/g) || []).length, 5, 'the five signals check the rep\'s resolved profile');
+    // Five deal signals plus the agreement-renewal pass (state §0.110), which
+    // resolves each Admin/Manager recipient's profile the same way.
+    assert.equal((src.match(/wantsAlert\(resolvedProfile, '/g) || []).length, 6, 'the five deal signals and the renewal pass check the recipient\'s resolved profile');
     assert.equal((src.match(/if \(wantsSms\(resolvedProfile\) && smsPhone\)/g) || []).length, 3, 'signals 1–3 (silent, stuck, lapsed) check the rep\'s SMS preference; momentum and score drop send no SMS');
     assert.equal((src.match(/wantsSms\(manager\.profile \|\| \{\}\)/g) || []).length, 3, 'and their manager copies check the manager\'s');
     assert.equal((src.match(/wantsAlert\(manager\.profile \|\| \{\}, 'managerAlerts'\)/g) || []).length, 4, 'the four manager copies read the manager\'s profile blob (top-level prefs not consulted — noted in §0.95)');

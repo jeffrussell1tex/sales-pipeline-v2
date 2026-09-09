@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
-import { dbFetch, waitForToken } from '../utils/storage';
+import { dbFetch, dbWrite, waitForToken } from '../utils/storage';
+// Plan recurrence and agreement renewals — pure, shared with the hourly
+// pipeline-alerts job (state §0.110).
+import { planVisitState, buildVisitQueue, buildRenewalQueue, renewedExpiry } from '../utils/planVisits.js';
 import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -1737,95 +1740,12 @@ const buildWonBridgeJobs = ({ opportunities, jobs, customers, accounts, template
 };
 
 // ── Service plan recurrence ──────────────────────────────────────────────────
-// Visits are COMPUTED, not generated. Nothing is written until a dispatcher acts
-// on a due visit, so a plan running for years costs one pass over that customer's
-// plan jobs rather than a table full of speculative future rows.
-//
-// `leadDays` on the plan is the only thing that decides when work becomes
-// visible: an occurrence surfaces in the Service Due queue once it is within that
-// many days of falling due.
-const MAX_OCCURRENCES = 400;   // guard against a pathological interval, not a real limit
-
-const planVisitState = (customer, plan, jobs, todayStr) => {
-    if (!plan)                 return { state: 'none' };
-    if (plan.active === false) return { state: 'inactive' };
-    if (customer.doNotService) return { state: 'blocked', reason: 'Customer is marked do-not-service' };
-
-    const interval = parseInt(plan.intervalDays, 10);
-    if (!Number.isFinite(interval) || interval <= 0)
-        return { state: 'unconfigured', reason: 'This plan has no visit interval' };
-    if (!customer.planStartDate)
-        return { state: 'unconfigured', reason: 'No plan start date on this customer' };
-
-    const mine = (jobs || []).filter(j =>
-        j.customerId === customer.id && j.servicePlanId === plan.id && j.status !== 'cancelled');
-
-    // Only a COMPLETED job retires an occurrence. A scheduled one means the visit
-    // is in hand but still outstanding — retiring it would advance the pointer and
-    // hide the very visit that is about to happen.
-    const doneOn = new Set(mine.filter(j => j.status === 'completed').map(j => j.planDueDate).filter(Boolean));
-    const openOn = new Map();
-    mine.filter(j => j.status !== 'completed' && j.planDueDate).forEach(j => {
-        if (!openOn.has(j.planDueDate)) openOn.set(j.planDueDate, j);
-    });
-
-    const coverageEnd = customer.agreementExpiry || null;
-    let due;
-    let missed = 0;
-
-    if (plan.anchorMode === 'rolling') {
-        // Interval runs from when the unit was actually serviced, so a late visit
-        // pushes everything after it. Only ever one outstanding occurrence.
-        const completed = mine.filter(j => j.status === 'completed' && j.scheduledDate)
-            .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
-        const last = completed[completed.length - 1];
-        due = last ? addDaysStr(last.scheduledDate, interval) : customer.planStartDate;
-    } else {
-        // Fixed contract grid: occurrences sit on planStart + n x interval whatever
-        // actually happened, so four visits a contract year stay four. Missed ones
-        // accumulate and are counted rather than silently skipped.
-        let cur = customer.planStartDate;
-        const outstanding = [];
-        for (let i = 0; i < MAX_OCCURRENCES; i++) {
-            if (!doneOn.has(cur)) {
-                outstanding.push(cur);
-                if (cur > todayStr) break;
-            }
-            if (coverageEnd && cur > coverageEnd) break;
-            cur = addDaysStr(cur, interval);
-        }
-        if (!outstanding.length) return { state: 'upToDate' };
-        due    = outstanding[0];
-        missed = Math.max(0, outstanding.filter(d => d < todayStr).length - 1);
-    }
-
-    if (coverageEnd && due > coverageEnd) return { state: 'ended', due, coverageEnd };
-
-    const open = openOn.get(due);
-    if (open) return { state: 'scheduled', due, job: open, missed };
-
-    const lead = Number.isFinite(parseInt(plan.leadDays, 10)) ? parseInt(plan.leadDays, 10) : 14;
-    const daysUntil = daysBetween(todayStr, due);
-    if (daysUntil < 0)     return { state: 'overdue',  due, daysUntil, missed };
-    if (daysUntil <= lead) return { state: 'due',      due, daysUntil, missed };
-    return { state: 'upcoming', due, daysUntil, missed };
-};
-
-// Only these reach the queue. 'upcoming' is deliberately excluded — that is the
-// whole point of leadDays; surfacing everything would make the queue a customer
-// list rather than a work list.
-const ACTIONABLE_VISIT_STATES = ['overdue', 'due'];
-
-const buildVisitQueue = (customers, plans, jobs, todayStr) =>
-    (customers || [])
-        .map(c => {
-            const plan = (plans || []).find(p => p.id === c.servicePlanId);
-            if (!plan) return null;
-            const st = planVisitState(c, plan, jobs, todayStr);
-            return { customer: c, plan, ...st };
-        })
-        .filter(r => r && (ACTIONABLE_VISIT_STATES.includes(r.state) || r.state === 'scheduled'))
-        .sort((a, b) => (a.due || '').localeCompare(b.due || ''));
+// Visits are COMPUTED, not generated. planVisitState and buildVisitQueue live in
+// src/utils/planVisits.js (state §0.110) so the Service Due queue, the customer
+// list's overdue counts and the hourly renewal alert share one arithmetic — and
+// so a recorded exception (a skipped or deferred occurrence, dispatch_plan_visits)
+// is honoured everywhere at once. `leadDays` on the plan is still the only thing
+// that decides when work becomes visible.
 
 // ── Service Due ──────────────────────────────────────────────────────────────
 // Plan visits inside their lead window, plus any already scheduled so the queue
@@ -1837,10 +1757,31 @@ const VISIT_TONE = {
     scheduled: { bg: 'ok',     label: 'Scheduled' },
 };
 
-const ServiceDueView = ({ rows, today, onStart, onOpenJob, onOpenCustomer }) => {
+const ServiceDueView = ({ rows, renewals, skipped, today, onStart, onOpenJob, onOpenCustomer, onSkip, onDefer, onUndo, onRenew, actionError }) => {
     const tone = (k) => ({ danger: T.danger, warn: T.warn, ok: T.ok }[k] || T.inkMuted);
     const outstanding = rows.filter(r => r.state === 'overdue' || r.state === 'due');
     const booked      = rows.filter(r => r.state === 'scheduled');
+    // One inline editor at a time: { key, mode: 'skip' | 'defer', date, reason }.
+    const [pending, setPending] = useState(null);
+    const [showSkipped, setShowSkipped] = useState(false);
+    const rowKey = (r) => `${r.customer.id}:${r.plan.id}:${r.occurrence || r.due}`;
+
+    const smallBtn = { padding: '6px 10px', background: T.surface, border: `1px solid ${T.borderStrong}`,
+        borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' };
+    const inkBtn = { padding: '6px 12px', background: T.ink, color: '#fbf8f3', border: 'none',
+        borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' };
+    const inp = { padding: '5px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, color: T.ink,
+        background: T.surface, fontFamily: T.sans };
+
+    const submitPending = async () => {
+        if (!pending) return;
+        const row = rows.find(r => rowKey(r) === pending.key);
+        if (!row) { setPending(null); return; }
+        const ok = pending.mode === 'skip'
+            ? await onSkip(row, { reason: pending.reason })
+            : await onDefer(row, { deferredTo: pending.date, reason: pending.reason });
+        if (ok) setPending(null);
+    };
 
     return (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
@@ -1852,8 +1793,15 @@ const ServiceDueView = ({ rows, today, onStart, onOpenJob, onOpenCustomer }) => 
             </div>
             <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans, marginBottom: 14 }}>
                 A visit appears here once it is within its plan&rsquo;s lead window. Change how early that happens
-                under Settings &rarr; Dispatch &rarr; Service plans.
+                under Settings &rarr; Dispatch &rarr; Service plans. Skip an occurrence the customer declined; defer one to a new date.
             </div>
+
+            {actionError && (
+                <div style={{ padding: '10px 14px', marginBottom: 14, background: 'rgba(156,58,46,0.08)',
+                    border: `1px solid ${T.danger}`, borderRadius: T.r, color: T.danger, fontSize: 12.5, fontFamily: T.sans }}>
+                    {actionError}
+                </div>
+            )}
 
             {rows.length === 0 && (
                 <div style={{ padding: '18px 2px', fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>
@@ -1863,15 +1811,135 @@ const ServiceDueView = ({ rows, today, onStart, onOpenJob, onOpenCustomer }) => 
 
             {rows.map(r => {
                 const t = VISIT_TONE[r.state] || VISIT_TONE.due;
+                const key = rowKey(r);
+                const editing = pending && pending.key === key ? pending : null;
                 const when = r.state === 'overdue'
                     ? `${Math.abs(r.daysUntil)} day${Math.abs(r.daysUntil) === 1 ? '' : 's'} overdue`
                     : r.state === 'due'
                         ? (r.daysUntil === 0 ? 'due today' : `in ${r.daysUntil} day${r.daysUntil === 1 ? '' : 's'}`)
                         : 'booked';
                 return (
-                    <div key={`${r.customer.id}:${r.due}`}
+                    <div key={key}
+                        style={{ padding: '11px 12px', border: `1px solid ${T.border}`, borderLeft: `3px solid ${tone(t.bg)}`,
+                            borderRadius: T.r, marginBottom: 8, background: T.surface }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <span onClick={onOpenCustomer}
+                                        style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans, cursor: 'pointer' }}>
+                                        {r.customer.name}
+                                    </span>
+                                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, fontWeight: 700,
+                                        background: `${tone(t.bg)}14`, color: tone(t.bg), fontFamily: T.sans }}>{t.label}</span>
+                                    {r.missed > 0 && (
+                                        <span title="Earlier occurrences on this plan were never completed"
+                                            style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, fontWeight: 700,
+                                                background: `${T.danger}14`, color: T.danger, fontFamily: T.sans }}>
+                                            {r.missed} earlier visit{r.missed === 1 ? '' : 's'} missed
+                                        </span>
+                                    )}
+                                    {r.deferredFrom && (
+                                        <span title="This occurrence was deferred from its plan date"
+                                            style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, fontWeight: 700,
+                                                background: `${T.info}14`, color: T.info, fontFamily: T.sans }}>
+                                            deferred from {r.deferredFrom}
+                                            {onUndo && r.state !== 'scheduled' && (
+                                                <span onClick={() => onUndo(r)} style={{ marginLeft: 6, textDecoration: 'underline', cursor: 'pointer' }}>undo</span>
+                                            )}
+                                        </span>
+                                    )}
+                                </div>
+                                <div style={{ marginTop: 3, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                    {r.plan.name}
+                                    <span style={{ fontFamily: T.mono, marginLeft: 8 }}>due {r.due}</span>
+                                    <span style={{ marginLeft: 8 }}>· {when}</span>
+                                    {r.customer.customerNumber && (
+                                        <span style={{ fontFamily: T.mono, marginLeft: 8, opacity: 0.7 }}>{r.customer.customerNumber}</span>
+                                    )}
+                                </div>
+                            </div>
+                            {r.state === 'scheduled' ? (
+                                <button onClick={() => onOpenJob(r.job.id)} style={smallBtn}>Open job</button>
+                            ) : (
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    <button onClick={() => setPending(editing?.mode === 'skip' ? null : { key, mode: 'skip', date: '', reason: '' })}
+                                        style={smallBtn} title="Retire this occurrence without a visit">Skip</button>
+                                    <button onClick={() => setPending(editing?.mode === 'defer' ? null : { key, mode: 'defer', date: '', reason: '' })}
+                                        style={smallBtn} title="Make this occurrence fall due on another date">Defer</button>
+                                    <button onClick={() => onStart(r)} style={inkBtn}>Create visit</button>
+                                </div>
+                            )}
+                        </div>
+                        {editing && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.border}` }}>
+                                <span style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans }}>
+                                    {editing.mode === 'skip' ? 'Skip this occurrence' : 'Defer this occurrence to'}
+                                </span>
+                                {editing.mode === 'defer' && (
+                                    <input type="date" value={editing.date} min={today}
+                                        onChange={e => setPending(p => ({ ...p, date: e.target.value }))} style={inp}/>
+                                )}
+                                <input type="text" value={editing.reason} placeholder="Reason (optional)"
+                                    onChange={e => setPending(p => ({ ...p, reason: e.target.value }))} style={{ ...inp, flex: 1, minWidth: 160 }}/>
+                                <button onClick={submitPending}
+                                    disabled={editing.mode === 'defer' && (!editing.date || editing.date === (r.occurrence || r.due))}
+                                    style={{ ...inkBtn, opacity: (editing.mode === 'defer' && (!editing.date || editing.date === (r.occurrence || r.due))) ? 0.5 : 1 }}>
+                                    {editing.mode === 'skip' ? 'Confirm skip' : 'Confirm defer'}
+                                </button>
+                                <button onClick={() => setPending(null)} style={smallBtn}>Cancel</button>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+
+            {skipped.length > 0 && (
+                <div style={{ marginTop: 6, marginBottom: 18 }}>
+                    <button onClick={() => setShowSkipped(v => !v)}
+                        style={{ background: 'none', border: 'none', padding: 0, fontSize: 11.5, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, textDecoration: 'underline' }}>
+                        {showSkipped ? 'Hide' : 'Show'} {skipped.length} skipped occurrence{skipped.length === 1 ? '' : 's'}
+                    </button>
+                    {showSkipped && skipped.map(s => (
+                        <div key={s.visit.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', marginTop: 6,
+                            border: `1px dashed ${T.border}`, borderRadius: T.r, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
+                            <span style={{ flex: 1 }}>
+                                <strong style={{ color: T.ink }}>{s.customer?.name || s.visit.customerId}</strong>
+                                {s.plan ? ` · ${s.plan.name}` : ''}
+                                <span style={{ fontFamily: T.mono, marginLeft: 8 }}>{s.visit.dueDate}</span>
+                                {s.visit.reason ? ` · ${s.visit.reason}` : ''}
+                                {s.visit.byName ? ` · by ${s.visit.byName}` : ''}
+                            </span>
+                            {onUndo && <button onClick={() => onUndo(null, s.visit)} style={smallBtn}>Undo skip</button>}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Agreement renewals (state §0.110): inside the plan's renewal window, or past it. */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 22, marginBottom: 4 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Agreement renewals</span>
+                <span style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                    {renewals.length === 0 ? 'none due' : `${renewals.filter(r => r.state === 'expired').length} expired · ${renewals.filter(r => r.state === 'expiring').length} expiring`}
+                </span>
+            </div>
+            <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans, marginBottom: 14 }}>
+                A customer appears here once their agreement is within the plan&rsquo;s renewal window. Renewing keeps the
+                anniversary: twelve months from the current end date.
+            </div>
+            {renewals.length === 0 && (
+                <div style={{ padding: '10px 2px 18px', fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>
+                    No agreements are up for renewal.
+                </div>
+            )}
+            {renewals.map(r => {
+                const expired = r.state === 'expired';
+                const n = Math.abs(r.daysLeft);
+                const when = expired ? `expired ${n} day${n === 1 ? '' : 's'} ago` : r.daysLeft === 0 ? 'expires today' : `expires in ${n} day${n === 1 ? '' : 's'}`;
+                const k = expired ? 'danger' : 'warn';
+                return (
+                    <div key={`renew:${r.customer.id}`}
                         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px',
-                            border: `1px solid ${T.border}`, borderLeft: `3px solid ${tone(t.bg)}`,
+                            border: `1px solid ${T.border}`, borderLeft: `3px solid ${tone(k)}`,
                             borderRadius: T.r, marginBottom: 8, background: T.surface }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1880,39 +1948,21 @@ const ServiceDueView = ({ rows, today, onStart, onOpenJob, onOpenCustomer }) => 
                                     {r.customer.name}
                                 </span>
                                 <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, fontWeight: 700,
-                                    background: `${tone(t.bg)}14`, color: tone(t.bg), fontFamily: T.sans }}>{t.label}</span>
-                                {r.missed > 0 && (
-                                    <span title="Earlier occurrences on this plan were never completed"
-                                        style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, fontWeight: 700,
-                                            background: `${T.danger}14`, color: T.danger, fontFamily: T.sans }}>
-                                        {r.missed} earlier visit{r.missed === 1 ? '' : 's'} missed
-                                    </span>
-                                )}
+                                    background: `${tone(k)}14`, color: tone(k), fontFamily: T.sans }}>{expired ? 'Expired' : 'Expiring'}</span>
                             </div>
                             <div style={{ marginTop: 3, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
-                                {r.plan.name}
-                                <span style={{ fontFamily: T.mono, marginLeft: 8 }}>due {r.due}</span>
+                                {r.plan ? r.plan.name : (r.customer.serviceAgreement || 'Agreement')}
+                                <span style={{ fontFamily: T.mono, marginLeft: 8 }}>ends {r.expiry}</span>
                                 <span style={{ marginLeft: 8 }}>· {when}</span>
                                 {r.customer.customerNumber && (
                                     <span style={{ fontFamily: T.mono, marginLeft: 8, opacity: 0.7 }}>{r.customer.customerNumber}</span>
                                 )}
                             </div>
                         </div>
-                        {r.state === 'scheduled' ? (
-                            <button onClick={() => onOpenJob(r.job.id)}
-                                style={{ padding: '6px 12px', background: T.surface, border: `1px solid ${T.borderStrong}`,
-                                    borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.inkMid,
-                                    cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
-                                Open job
-                            </button>
-                        ) : (
-                            <button onClick={() => onStart(r)}
-                                style={{ padding: '6px 12px', background: T.ink, color: '#fbf8f3', border: 'none',
-                                    borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                                    fontFamily: T.sans, whiteSpace: 'nowrap' }}>
-                                Create visit
-                            </button>
-                        )}
+                        <div style={{ display: 'flex', gap: 6 }}>
+                            <button onClick={onOpenCustomer} style={smallBtn}>Open customer</button>
+                            <button onClick={() => onRenew(r)} style={inkBtn}>Renew 12 months</button>
+                        </div>
                     </div>
                 );
             })}
@@ -2367,7 +2417,7 @@ const CustomerEditForm = ({ draft, set, accounts, techs, plans, propertyTypes, p
     </div>
 );
 
-const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes, onSaved, onScheduleJob, onGoToDue, confirmDiscard }) => {
+const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, propertyTypes, onSaved, onScheduleJob, onGoToDue, confirmDiscard }) => {
     const [query,      setQuery]      = React.useState('');
     const [selectedId, setSelectedId] = React.useState(null);
     const [draft,      setDraft]      = React.useState(null);
@@ -2399,11 +2449,11 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, propertyTypes,
         (customers || []).forEach(c => {
             const plan = (plans || []).find(p => p.id === c.servicePlanId);
             if (!plan) { m[c.id] = 0; return; }
-            const st = planVisitState(c, plan, jobs, todayStr);
+            const st = planVisitState(c, plan, jobs, todayStr, planVisits);
             m[c.id] = st.state === 'overdue' ? 1 + (st.missed || 0) : (st.missed || 0);
         });
         return m;
-    }, [customers, plans, jobs, todayStr]);
+    }, [customers, plans, jobs, todayStr, planVisits]);
 
     const presentation = React.useMemo(() => planPresentation(plans, customers), [plans, customers]);
     const presOf = (c) => presentationFor(c, presentation);
@@ -4411,6 +4461,10 @@ export default function DispatchTab() {
     const [massProg,   setMassProg]   = useState({ done: 0, total: 0, failed: 0 });
     const [equipment,  setEquipment]  = useState([]);   // dispatch_equipment rows — one per physical unit
     const [servicePlans, setServicePlans] = useState([]);
+    // Recorded exceptions to the plan grid — a skipped or deferred occurrence
+    // (dispatch_plan_visits, state §0.110). Visits themselves stay computed.
+    const [planVisits, setPlanVisits] = useState([]);
+    const [visitActionError, setVisitActionError] = useState('');
     const [customers,  setCustomers]  = useState([]);
     const [loading,    setLoading]    = useState(true);
     const [loadError,  setLoadError]  = useState('');
@@ -4460,9 +4514,72 @@ export default function DispatchTab() {
     // Recomputed from jobs, so completing a visit moves the queue on immediately
     // without anything having to be written back to the customer or the plan.
     const visitQueue = useMemo(
-        () => buildVisitQueue(customers, servicePlans, jobs, todayYmd),
-        [customers, servicePlans, jobs, todayYmd]);
+        () => buildVisitQueue(customers, servicePlans, jobs, todayYmd, planVisits),
+        [customers, servicePlans, jobs, todayYmd, planVisits]);
     const visitsActionable = visitQueue.filter(r => r.state === 'overdue' || r.state === 'due').length;
+    // Agreements inside their plan's renewal window, or past it (state §0.110).
+    const renewalQueue = useMemo(
+        () => buildRenewalQueue(customers, servicePlans, todayYmd),
+        [customers, servicePlans, todayYmd]);
+    // Skipped occurrences, joined to their customer and plan, so a wrong skip can be undone.
+    const skippedVisits = useMemo(() => planVisits
+        .filter(v => v.action === 'skipped')
+        .map(v => ({ visit: v, customer: customers.find(c => c.id === v.customerId) || null, plan: servicePlans.find(p => p.id === v.planId) || null }))
+        .sort((a, b) => (b.visit.createdAt || '').localeCompare(a.visit.createdAt || '')),
+        [planVisits, customers, servicePlans]);
+
+    // ── Skip / defer / undo / renew (state §0.110) ────────────────────────────
+    // Each writes first and adopts the server's row — an optimistic update that
+    // survived a refused write is how "it didn't save" reports start. A refusal
+    // is shown above the queue, not logged.
+    const recordVisit = async (row, action, { deferredTo, reason } = {}) => {
+        setVisitActionError('');
+        const res = await dbFetch('/.netlify/functions/dispatch-plan-visits', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customerId: row.customer.id, planId: row.plan.id, dueDate: row.occurrence || row.due, action, deferredTo, reason }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.visit) {
+            setVisitActionError(data.error || `The visit was not ${action} (HTTP ${res.status}).`);
+            return false;
+        }
+        setPlanVisits(prev => [
+            ...prev.filter(v => !(v.customerId === data.visit.customerId && v.planId === data.visit.planId && v.dueDate === data.visit.dueDate)),
+            data.visit,
+        ]);
+        return true;
+    };
+    const skipVisit  = (row, opts) => recordVisit(row, 'skipped', opts);
+    const deferVisit = (row, opts) => recordVisit(row, 'deferred', opts);
+    // Undo a deferral (from its queue row) or a skip (from the skipped list).
+    const undoVisit = async (row, visit) => {
+        const target = visit || planVisits.find(v => v.customerId === row.customer.id && v.planId === row.plan.id && v.dueDate === (row.occurrence || row.due));
+        if (!target) return;
+        setVisitActionError('');
+        const r = await dbWrite(`/.netlify/functions/dispatch-plan-visits?id=${encodeURIComponent(target.id)}`, { method: 'DELETE' });
+        if (!r.ok) { setVisitActionError(`Not undone — ${r.error}`); return; }
+        setPlanVisits(prev => prev.filter(v => v.id !== target.id));
+    };
+    // Twelve months from the CURRENT end date (an expired one renews from today),
+    // through the customer PUT the edit form already uses.
+    const renewAgreement = (row) => {
+        const next = renewedExpiry(row.customer, todayYmd, 12);
+        const go = async () => {
+            setVisitActionError('');
+            const res = await dbFetch(`/.netlify/functions/dispatch-customers?id=${encodeURIComponent(row.customer.id)}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agreementExpiry: next }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.customer) {
+                setVisitActionError(data.error || `The agreement was not renewed (HTTP ${res.status}).`);
+                return;
+            }
+            setCustomers(prev => prev.map(c => c.id === data.customer.id ? data.customer : c));
+        };
+        if (showConfirm) showConfirm(`Renew the maintenance agreement for ${row.customer.name} through ${next}?`, go, false);
+        else go();
+    };
 
     // Opens New Job pre-filled for a plan occurrence. The visit is materialised
     // only here — planDueDate records WHICH occurrence it satisfies, which is what
@@ -4509,7 +4626,9 @@ export default function DispatchTab() {
             address:       cust.address || '', city: cust.city || '',
             state:         cust.state   || '', zip:  cust.zip  || '',
             servicePlanId: row.plan.id,
-            planDueDate:   row.due,
+            // The grid date, not the deferred one: completing this job must retire
+            // the occurrence it was created for (planVisits.js).
+            planDueDate:   row.occurrence || row.due,
             window:        row.due,
         };
         let note = null;
@@ -4553,7 +4672,7 @@ export default function DispatchTab() {
                 // Wait for Clerk JWT to be available before hitting DB
                 await waitForToken();
 
-                const [techsRes, vehiclesRes, equipRes, custsRes, jobsRes, blocksRes, plansRes] = await Promise.all([
+                const [techsRes, vehiclesRes, equipRes, custsRes, jobsRes, blocksRes, plansRes, visitsRes] = await Promise.all([
                     dbFetch('/.netlify/functions/dispatch-technicians'),
                     dbFetch('/.netlify/functions/dispatch-vehicles'),
                     dbFetch('/.netlify/functions/dispatch-equipment'),
@@ -4561,6 +4680,7 @@ export default function DispatchTab() {
                     dbFetch('/.netlify/functions/dispatch-jobs'),
                     dbFetch('/.netlify/functions/dispatch-schedule-blocks'),
                     dbFetch('/.netlify/functions/dispatch-service-plans'),
+                    dbFetch('/.netlify/functions/dispatch-plan-visits'),
                 ]);
 
                 if (cancelled) return;
@@ -4572,14 +4692,14 @@ export default function DispatchTab() {
                 const failed = [
                     ['technicians', techsRes], ['vehicles', vehiclesRes], ['equipment', equipRes],
                     ['customers', custsRes],   ['jobs', jobsRes], ['schedule', blocksRes],
-                    ['service plans', plansRes],
+                    ['service plans', plansRes], ['plan visits', visitsRes],
                 ].filter(([, r]) => !r.ok);
                 if (failed.length) {
                     const detail = failed.map(([n, r]) => `${n} (${r.status})`).join(', ');
                     throw new Error(`Dispatch data failed to load: ${detail}`);
                 }
 
-                const [techsData, vehiclesData, equipData, custsData, jobsData, blocksData, plansData] = await Promise.all([
+                const [techsData, vehiclesData, equipData, custsData, jobsData, blocksData, plansData, visitsData] = await Promise.all([
                     techsRes.json(),
                     vehiclesRes.json(),
                     equipRes.json(),
@@ -4587,6 +4707,7 @@ export default function DispatchTab() {
                     jobsRes.json(),
                     blocksRes.json(),
                     plansRes.json(),
+                    visitsRes.json(),
                 ]);
 
                 // Normalise technicians — map DB fields to what BoardView/CrewBuilder expect
@@ -4673,6 +4794,7 @@ export default function DispatchTab() {
                 setVehicles(vehiclesData.vehicles  || []);
                 setEquipment(equipData.equipment   || []);
                 setServicePlans(plansData.plans    || []);
+                setPlanVisits(visitsData.visits    || []);
                 setCustomers(custsData.customers   || []);
                 setJobs(normJobs);
                 setJobsRaw(dbJobs);
@@ -5329,12 +5451,14 @@ export default function DispatchTab() {
                             });
                         }}/>
                 ) : view === 'due' ? (
-                    <ServiceDueView rows={visitQueue} today={todayYmd}
+                    <ServiceDueView rows={visitQueue} renewals={renewalQueue} skipped={skippedVisits} today={todayYmd}
                         onStart={startPlanVisit}
+                        onSkip={skipVisit} onDefer={deferVisit} onUndo={undoVisit} onRenew={renewAgreement}
+                        actionError={visitActionError}
                         onOpenJob={id => { setSelectedJobId(id); setView('queue'); }}
                         onOpenCustomer={() => setView('customers')}/>
                 ) : view === 'customers' ? (
-                    <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans} propertyTypes={propertyTypes} confirmDiscard={confirmDiscard}
+                    <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans} planVisits={planVisits} propertyTypes={propertyTypes} confirmDiscard={confirmDiscard}
                         onSaved={saved => setCustomers(prev => {
                             const i = prev.findIndex(c => c.id === saved.id);
                             if (i === -1) return [...prev, saved];

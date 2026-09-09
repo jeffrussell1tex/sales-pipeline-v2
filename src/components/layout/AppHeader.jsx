@@ -143,6 +143,7 @@ export default function AppHeader({
         quoteRejected:      { enabled: true,  mode: 'instant' },
         quotePending:       { enabled: true,  mode: 'instant' },
         quoteAccepted:      { enabled: true,  mode: 'instant' },
+        agreementRenewal:   { enabled: true,  mode: 'instant' },
     };
     const ALERT_LABELS = {
         stageChanged: 'Deal stage changed', dealAssigned: 'Deal assigned to me',
@@ -154,6 +155,7 @@ export default function AppHeader({
         managerAlerts: 'Manager escalation alerts', quoteApproved: 'Quote approved',
         quoteRejected: 'Quote rejected', quotePending: 'Quote submitted for approval',
         quoteAccepted: 'Quote accepted by customer',
+        agreementRenewal: 'Maintenance agreement expiring (Dispatch)',
     };
 
     const prefs        = myProfile?.notificationPrefs || DEFAULT_PREFS;
@@ -594,6 +596,8 @@ export default function AppHeader({
                                         {Object.entries(ALERT_LABELS).map(([alertType, label]) => {
                                             if (alertType === 'managerAlerts' && !isManager && !isAdmin) return null;
                                             if (alertType === 'quotePending' && !isManager && !isAdmin) return null;
+                                            // Renewal alerts go to the org's Admins and Managers (state §0.110).
+                                            if (alertType === 'agreementRenewal' && !isManager && !isAdmin) return null;
                                             if ((alertType === 'quoteApproved' || alertType === 'quoteRejected') && (isManager || isAdmin)) return null;
                                             const pref = prefs[alertType] || DEFAULT_PREFS[alertType] || { enabled: true, mode: 'instant' };
                                             const isDigestOnly = alertType === 'taskDigest' || alertType === 'overdueTaskNudge';

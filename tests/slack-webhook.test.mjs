@@ -83,7 +83,8 @@ test('send-slack: sendSlack itself refuses a non-Slack destination, so a stored 
     assert.ok(s.includes('    const res = await fetch(checked.value, {'), 'the fetch takes the checked value');
     assert.ok(!s.includes('fetch(webhookUrl'), 'nothing fetches the raw input');
     const pa = code(read('netlify/functions/pipeline-alerts.mjs'));
-    assert.equal((pa.match(/await sendSlackToOrg\(orgId, slackTemplates\./g) || []).length, 5, 'the five alerts still route through sendSlackToOrg → sendSlack');
+    // Five deal signals plus the agreement-renewal post (state §0.110).
+    assert.equal((pa.match(/await sendSlackToOrg\(orgId, slackTemplates\./g) || []).length, 6, 'the five deal alerts and the renewal post still route through sendSlackToOrg → sendSlack');
     assert.ok(!pa.includes('sendSlack({'), 'no alert bypasses the org path');
 });
 

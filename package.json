@@ -14,7 +14,7 @@
     "check:dbfetch": "node scripts/scan-dbfetch.mjs",
     "check:fnscope": "node scripts/check-fnscope.mjs",
     "test": "node --test",
-    "test:int": "node --env-file-if-exists=.env --import tsx --test --experimental-test-module-mocks tests/integration/accounts.itest.mjs tests/integration/leads.itest.mjs tests/integration/contacts.itest.mjs tests/integration/opportunities.itest.mjs tests/integration/tasks.itest.mjs tests/integration/lead-requests.itest.mjs tests/integration/coaching-notes.itest.mjs tests/integration/audit-stream.itest.mjs tests/integration/integration-requests.itest.mjs tests/integration/email-inbound.itest.mjs tests/integration/send-slack.itest.mjs tests/integration/job-heartbeat.itest.mjs tests/integration/users-self.itest.mjs",
+    "test:int": "node --env-file-if-exists=.env --import tsx --test --experimental-test-module-mocks tests/integration/accounts.itest.mjs tests/integration/leads.itest.mjs tests/integration/contacts.itest.mjs tests/integration/opportunities.itest.mjs tests/integration/tasks.itest.mjs tests/integration/lead-requests.itest.mjs tests/integration/coaching-notes.itest.mjs tests/integration/audit-stream.itest.mjs tests/integration/integration-requests.itest.mjs tests/integration/email-inbound.itest.mjs tests/integration/send-slack.itest.mjs tests/integration/job-heartbeat.itest.mjs tests/integration/users-self.itest.mjs tests/integration/dispatch-plan-visits.itest.mjs",
     "check:handoff": "node scripts/check-handoff.mjs"
   },
   "dependencies": {

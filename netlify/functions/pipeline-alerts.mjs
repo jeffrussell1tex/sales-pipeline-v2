@@ -17,15 +17,19 @@
  *   lapsed      - forecasted close date has passed
  *   velocity    - 2+ stages in 14 days (positive alert)
  *   scoreDrop   - AI score dropped below 40
+ *   renewal     - a dispatch customer's maintenance agreement is inside its
+ *                 plan's renewal window, or has expired (state §0.110)
  */
 
 import { db } from '../../db/index.js';
-import { opportunities, activities, users, recommendationLog } from '../../db/schema.js';
+import { opportunities, activities, users, recommendationLog, dispatchCustomers, dispatchServicePlans } from '../../db/schema.js';
 import { eq, and, gte } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
 import { sendSlackToOrg, slackTemplates }             from './send-slack.mjs';
 import { withHeartbeat }                              from './_heartbeat.mjs';
+// The same recurrence arithmetic the Service Due queue renders (state §0.110).
+import { buildRenewalQueue }                          from '../../src/utils/planVisits.js';
 
 const DEDUP_DAYS = 7;
 const today = new Date();
@@ -39,6 +43,7 @@ const DEFAULT_PREFS = {
     dealMomentum:  { enabled: true  },
     managerAlerts: { enabled: true  },
     scoreDropAlert: { enabled: true  },
+    agreementRenewal: { enabled: true  },
 };
 
 // bf4a3c5 (7 Apr 2026) renamed this parameter from `profile` and left the body
@@ -492,7 +497,72 @@ const run = async () => {
 
         } // end for loop
 
-        const summary = `${emailsSent} emails sent, ${smsSent} SMS sent, ${skipped} skipped (dedup)`;
+        // ── Signal 6: Agreement renewal (state §0.110) ────────────────────────
+        // A DISPATCH signal, not a deal one. Per org, every customer whose
+        // maintenance agreement is inside its plan's renewal window (or past it)
+        // goes to that org's active Admins and Managers by email — each at their
+        // own alert hour, behind their 'agreementRenewal' preference — and once
+        // to the org's Slack under the company's switch. Deduped through the same
+        // ledger as the deal signals, keyed on the customer: one alert per
+        // customer per recipient per DEDUP_DAYS, so an unrenewed agreement nudges
+        // weekly rather than hourly. Never fails the run: the deal signals above
+        // have already gone out.
+        let renewalsSent = 0;
+        try {
+            const allCustomers = await db.select().from(dispatchCustomers);
+            const allPlans     = await db.select().from(dispatchServicePlans);
+            for (const orgId of [...new Set(allCustomers.map(c => c.orgId))]) {
+                const queue = buildRenewalQueue(
+                    allCustomers.filter(c => c.orgId === orgId),
+                    allPlans.filter(p => p.orgId === orgId),
+                    todayStr);
+                if (!queue.length) continue;
+                // Cross-tenant safety: recipients are THIS org's roster only.
+                const recipients = allUsers.filter(u =>
+                    u.orgId === orgId && u.active && u.email && (u.role === 'Admin' || u.role === 'Manager'));
+                for (const r of queue) {
+                    const cust = r.customer;
+                    const detail = {
+                        customerName:   cust.name,
+                        customerNumber: cust.customerNumber || null,
+                        planName:       r.plan?.name || cust.serviceAgreement || 'Maintenance agreement',
+                        expiry:         r.expiry,
+                        daysLeft:       r.daysLeft,
+                        expired:        r.state === 'expired',
+                    };
+                    const asOpp  = { id: cust.id, opportunityName: cust.name, arr: null, stage: null };
+                    const signal = `Agreement ${r.state} — ends ${r.expiry}`;
+                    for (const u of recipients) {
+                        const profile         = u.profile || {};
+                        const resolvedProfile = { ...profile, notificationPrefs: profile.notificationPrefs || {} };
+                        const alertTimeStr    = profile.alertTime || profile.digestTime || '08:00';
+                        const [alertHour]     = alertTimeStr.split(':').map(Number);
+                        if (localHourToUtc(alertHour, profile.timezone || 'UTC') !== nowHour) continue;
+                        if (await wasRecentlyAlerted(orgId, u.name, cust.id, 'renewal')) { skipped++; continue; }
+                        try {
+                            if (wantsAlert(resolvedProfile, 'agreementRenewal')) {
+                                await sendEmail({ to: u.email, ...emailTemplates.agreementRenewal({ recipientName: u.name, ...detail }) });
+                                emailsSent++; renewalsSent++;
+                                console.log(`agreementRenewal → ${u.email} (${cust.name}, ${r.state} ${r.expiry})`);
+                            }
+                            await logAlert(orgId, u.name, 'renewal', asOpp, signal);
+                        } catch (err) {
+                            console.error(`agreementRenewal error (${cust.name}):`, err.message);
+                        }
+                    }
+                    // The org's channel: once per customer per DEDUP_DAYS, at the
+                    // first run after it enters the window, whatever the hour.
+                    if (!(await wasRecentlyAlerted(orgId, '__org__', cust.id, 'renewal-slack'))) {
+                        const posted = await sendSlackToOrg(orgId, slackTemplates.agreementRenewal(detail), 'agreementRenewal');
+                        if (posted) await logAlert(orgId, '__org__', 'renewal-slack', asOpp, signal);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('pipeline-alerts: agreement renewals failed:', err.message);
+        }
+
+        const summary = `${emailsSent} emails sent (${renewalsSent} renewals), ${smsSent} SMS sent, ${skipped} skipped (dedup)`;
         console.log('pipeline-alerts: complete —', summary);
         return { statusCode: 200, body: JSON.stringify({ emailsSent, smsSent, skipped }) };
 
