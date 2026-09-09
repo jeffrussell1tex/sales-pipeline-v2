@@ -496,7 +496,6 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                             <div style={{ display:'flex', gap:12 }}>
                                 {isAdmin && <button onClick={() => setSlackModal(true)} style={linkBtn(T.info)}>{slackConnected ? 'Configure' : 'Configure Slack'}</button>}
                                 {isAdmin && slackConnected && <button disabled={busy === 'slack'} onClick={handleDisconnectSlack} style={{ ...linkBtn(T.danger), opacity: busy === 'slack' ? 0.5 : 1 }}>{busy === 'slack' ? 'Disconnecting…' : 'Disconnect'}</button>}
-                                {!isAdmin && <span style={{ fontSize:11.5, color:T.inkMuted }}>An Admin configures Slack</span>}
                             </div>
                         </>}>
                         <CardNote text={notes.slack}/>

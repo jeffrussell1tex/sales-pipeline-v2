@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import {
     SLACK_ALERT_TYPES, SLACK_ALERT_KEYS, SLACK_EVENT_KEYS, SLACK_HOURLY_KEYS,
     cleanSlackAlerts, slackAlertEnabled, slackAlertsOnCount, dealSlackEvents,
+    bulkStageSummary,
 } from '../src/utils/slackAlerts.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -97,7 +98,7 @@ test('postDealEvents posts each event through the org path with its type, and th
 
 test('the deal save posts the events the moment a stage changes, naming who moved it', () => {
     const s = code(read('netlify/functions/opportunities.mjs'));
-    assert.ok(s.includes("import { postDealEvents } from './send-slack.mjs';"));
+    assert.ok(s.includes("import { postDealEvents, postBulkStageMove } from './send-slack.mjs';"), 'the per-deal poster and, since §0.106, the batch poster');
     assert.ok(s.includes('                await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId) });'));
     assert.ok(s.indexOf('await postDealEvents(orgId,') > s.indexOf('if (stageChanged) {'), 'inside the stage-changed branch');
     assert.ok(s.indexOf('await postDealEvents(orgId,') < s.indexOf("const autoEvt = upserted.stage === 'Closed Won'"), 'beside the webhooks, before the automations');
@@ -140,4 +141,46 @@ test('the Configure Slack modal renders the two groups as checkboxes, says the c
     assert.ok(s.includes('await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true, alerts: cleanSlackAlerts(alerts) });'));
     assert.ok(s.includes('${slackAlertsOnCount(slackConfig)} of ${SLACK_ALERT_TYPES.length} alerts'), 'the card says n of 7');
     assert.ok(!s.includes('when the rep the deal belongs to has that alert on'), 'the old rep-gated sentence is gone');
+});
+
+// ── §0.106: a bulk stage move posts one summary line ─────────────────────────
+
+test('bulkStageSummary: a row moved when the file supplied a stage that differs from the stored one; wins counted; tallied by destination', () => {
+    const priors = new Map([
+        ['a', { stage: 'Proposal' }], ['b', { stage: 'Proposal' }], ['c', { stage: 'Qualification' }],
+        ['d', { stage: 'Negotiation' }], ['e', { stage: 'Proposal' }],
+    ]);
+    const rows = [
+        { id: 'a', stage: 'Negotiation' },      // moved
+        { id: 'b', stage: 'Negotiation' },      // moved
+        { id: 'c', stage: 'Closed Won' },       // moved, won
+        { id: 'd', stage: 'Negotiation' },      // unchanged
+        { id: 'e' },                            // no stage in the file — not a move
+        { id: 'zz', stage: 'Proposal' },        // no prior (a new row) — not a move
+        { id: 'a2', stage: '  ' },              // blank — not a move
+    ];
+    assert.deepEqual(bulkStageSummary(rows, priors), { moved: 3, won: 1, byStage: [{ to: 'Negotiation', n: 2 }, { to: 'Closed Won', n: 1 }] });
+    assert.deepEqual(bulkStageSummary([], priors), { moved: 0, won: 0, byStage: [] });
+    assert.deepEqual(bulkStageSummary(rows, null), { moved: 0, won: 0, byStage: [] }, 'no priors: nothing is known to have moved');
+    assert.deepEqual(bulkStageSummary(undefined, priors), { moved: 0, won: 0, byStage: [] });
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: 's' + i, stage: 'S' + i }));
+    const manyPriors = new Map(many.map(r => [r.id, { stage: 'X' }]));
+    assert.equal(bulkStageSummary(many, manyPriors).byStage.length, 8, 'the tally is capped at eight destinations');
+});
+
+test('the bulk stage move posts ONE line for the batch, under the stageChanged switch, beside its audit — and nothing when nothing moved', () => {
+    const slack = code(read('netlify/functions/send-slack.mjs'));
+    assert.ok(slack.includes('export async function postBulkStageMove(orgId, { summary, total, mover } = {}) {'));
+    assert.ok(slack.includes('    if (!summary || !(summary.moved > 0)) return false;'), 'REGRESSION: an import that moved nothing posts nothing');
+    assert.ok(slack.includes("    return sendSlackToOrg(orgId, slackTemplates.bulkStageMoved({ mover: mover || 'Someone', total: total || summary.moved, ...summary }), 'stageChanged');"), 'one post, the org\'s stage-changed switch');
+    assert.ok(slack.includes('    bulkStageMoved: ({ mover, moved, won, total, byStage }) => {'), 'the template');
+    assert.ok(slack.includes("{ type: 'mrkdwn', text: `Imported by *${mover}*` }"), 'names who imported');
+    const opp = code(read('netlify/functions/opportunities.mjs'));
+    assert.ok(opp.includes("import { postDealEvents, postBulkStageMove } from './send-slack.mjs';"));
+    assert.ok(opp.includes("import { bulkStageSummary } from '../../src/utils/slackAlerts.js';"));
+    const call = '                    await postBulkStageMove(orgId, { summary: bulkStageSummary(staged.rows, priors), total: data.length, mover: await getCallerName(userId, orgId) });';
+    assert.ok(opp.includes(call), 'REGRESSION: the batch branch posts the summary');
+    const audit = opp.indexOf("action: 'opportunity.stage_changed_bulk'");
+    assert.ok(audit > 0 && opp.indexOf(call) > audit && opp.indexOf(call) - audit < 700, 'inside the same `if (staged.changedCount > 0)` block as the bulk audit');
+    assert.equal((opp.match(/postDealEvents\(/g) || []).length, 1, 'the per-deal event post stays on the single save only — never inside the batch loop');
 });

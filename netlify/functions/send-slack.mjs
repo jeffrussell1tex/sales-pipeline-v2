@@ -112,6 +112,18 @@ export async function postDealEvents(orgId, { before, after, mover } = {}) {
     return posted;
 }
 
+// ── One summary post for a bulk stage move (state §0.106) ─────────────────────
+/**
+ * A CSV import that moved deals posts ONE line — how many moved, into which
+ * stages, by whom — under the org's 'stageChanged' switch, never one post per
+ * deal (a 200-deal import would flood the channel). Nothing posts when nothing
+ * moved. Never throws; returns whether it posted.
+ */
+export async function postBulkStageMove(orgId, { summary, total, mover } = {}) {
+    if (!summary || !(summary.moved > 0)) return false;
+    return sendSlackToOrg(orgId, slackTemplates.bulkStageMoved({ mover: mover || 'Someone', total: total || summary.moved, ...summary }), 'stageChanged');
+}
+
 // ── Message templates ─────────────────────────────────────────────────────────
 const APP_URL = process.env.APP_URL || process.env.URL || 'https://salespipelinetracker.com';
 
@@ -247,6 +259,35 @@ export const slackTemplates = {
             },
         ],
     }),
+
+    // A bulk stage move — one line for the batch (state §0.106)
+    bulkStageMoved: ({ mover, moved, won, total, byStage }) => {
+        const where = (byStage || []).map(s => `*${s.n}* → ${s.to}`).join(' · ');
+        return {
+            text: `➡️ *${moved} deal${moved === 1 ? '' : 's'}* moved stage in an import by ${mover}${won ? ` · 🏆 ${won} closed won` : ''}`,
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `➡️ *Stages moved in bulk*\n*${moved}* of ${total} imported deal${total === 1 ? '' : 's'} changed stage${where ? ` — ${where}` : ''}${won ? `\n🏆 *${won}* closed won` : ''}`,
+                    },
+                },
+                {
+                    type: 'context',
+                    elements: [
+                        { type: 'mrkdwn', text: `Imported by *${mover}*` },
+                    ],
+                },
+                {
+                    type: 'actions',
+                    elements: [
+                        { type: 'button', text: { type: 'plain_text', text: 'View pipeline →' }, url: APP_URL, action_id: 'view_pipeline' },
+                    ],
+                },
+            ],
+        };
+    },
 
     // A deal changed stage — posted from the save (state §0.99)
     stageChanged: ({ mover, repName, dealName, account, arr, fromStage, toStage }) => ({

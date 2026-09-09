@@ -85,3 +85,28 @@ export function dealSlackEvents({ before, after } = {}) {
     if (from === null) return [];
     return [{ type: 'stageChanged', from, to }];
 }
+
+/**
+ * What a BULK stage move (a CSV import, opportunities.mjs's array POST) did,
+ * for one summary post (state §0.106 — one post per deal would flood a
+ * channel, so the batch posts one line under the org's 'stageChanged' switch).
+ * `rows` are the staged rows (id, stage); `priors` a Map(id → { stage }) of the
+ * stored rows. A row MOVED when the file supplied a stage, the stored stage is
+ * known, and they differ — the same rule as _stage.mjs resolveStageChange.
+ * → { moved, won, byStage: [{ to, n }] (most first, at most 8) }
+ */
+export function bulkStageSummary(rows, priors) {
+    const tally = new Map();
+    let moved = 0, won = 0;
+    for (const row of Array.isArray(rows) ? rows : []) {
+        const prior = priors && typeof priors.get === 'function' ? priors.get(row?.id) : null;
+        const to = typeof row?.stage === 'string' ? row.stage.trim() : '';
+        const from = typeof prior?.stage === 'string' ? prior.stage : null;
+        if (!to || from === null || from === to) continue;
+        moved++;
+        if (to === 'Closed Won') won++;
+        tally.set(to, (tally.get(to) || 0) + 1);
+    }
+    const byStage = [...tally].map(([to, n]) => ({ to, n })).sort((a, b) => b.n - a.n || a.to.localeCompare(b.to)).slice(0, 8);
+    return { moved, won, byStage };
+}

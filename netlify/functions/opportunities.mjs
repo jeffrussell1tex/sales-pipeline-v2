@@ -4,7 +4,7 @@ import { eq, asc, and, inArray } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isManager, isReadOnly, requireRole, requireWrite } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
-import { postDealEvents } from './send-slack.mjs';
+import { postDealEvents, postBulkStageMove } from './send-slack.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import {
     serverErrorBody, writeAudit, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
@@ -14,6 +14,7 @@ import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
 import { partialRows } from './_sanitize.mjs';
 import { applyStageChanges } from './_stage.mjs';
+import { bulkStageSummary } from '../../src/utils/slackAlerts.js';
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -338,6 +339,9 @@ export const handler = async (event) => {
                         detail: `CSV import moved ${staged.changedCount} of ${data.length} deals to a new stage`,
                         userId,
                     });
+                    // One Slack post for the batch too (state §0.106) — under the org's
+                    // 'stageChanged' switch, never one post per deal. Never throws.
+                    await postBulkStageMove(orgId, { summary: bulkStageSummary(staged.rows, priors), total: data.length, mover: await getCallerName(userId, orgId) });
                 }
                 return { statusCode: 200, headers, body: JSON.stringify({ ...result, stageChanged: staged.changedCount }) };
             }
