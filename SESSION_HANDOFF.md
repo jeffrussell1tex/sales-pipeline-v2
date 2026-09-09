@@ -985,8 +985,10 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   eyeball of §0.103. To run dev's jobs for a test, set the flag on `accelerep`
   and remove it after (§18b33's new bullet). §0.101's row proof therefore
   moves to PROD after the ship (next bullet is now prod's, not dev's). **Then read Resend → Webhooks** — prod
-  Enabled, dev Disabled at the tenth ship (Jeff's screenshot); not re-read
-  for two sessions. Every email observation is prod's.
+  Enabled, dev Disabled at the tenth ship; RE-READ after the eleventh ship
+  (Jeff's screenshot of resend.com/webhooks, 9 Sep): prod Enabled, dev
+  Disabled. Every email observation is prod's; re-read again only before
+  the next email work.
 - **Read `site_job_heartbeats` (read-only) after the ship — this is
   §0.101's proof, on PROD now:** the `salespipelinetracker.com` / `digest`
   row after the first 08:00 or 13:00 UTC following the ship, `error_count` 0,
