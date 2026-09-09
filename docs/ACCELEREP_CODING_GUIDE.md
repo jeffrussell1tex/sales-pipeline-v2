@@ -3195,6 +3195,31 @@ The rule:
   is wrapped and listed in `SCHEDULED_JOBS` (`src/utils/jobHealth.js`) —
   the unit test that pins the four against netlify.toml will say so.
 
+- **A rename lands in every file the commit touched (§0.101, 9 Sep).**
+  `bf4a3c5` changed TWO files. §0.95 read `pipeline-alerts.mjs`, fixed it,
+  wrote this rule — and `digest.mjs`, with the identical rename and the
+  identical bodies, threw for another day: at 08:00 and 13:00 UTC (every
+  roster member is 08:00 local, in UTC or Chicago), a ReferenceError, a 500,
+  two Netlify retries, six `error` stamps a day on each site's heartbeat row
+  — visible the morning after §0.100 in `error_count`, with `last_error`
+  already cleared by the next ok hour. When a bug is traced to a commit,
+  `git show --stat <sha>` and read EVERY file it touched for the same
+  defect before the rule is written. The fix is the same two lines, plus a
+  suite that runs the helpers (`tests/digest-prefs.test.mjs`).
+- **A `db.select()` row has the schema's columns and nothing else (§0.101).**
+  The users table has `role`; `userType`, `digestTime`, `timezone`,
+  `notificationPrefs` and `smsNotifications` live inside the `profile`
+  jsonb, where `users.mjs` `sanitize()` puts them. The GET flattens the
+  profile onto the response, so a component sees `user.userType`; a job
+  reading rows sees `undefined`. `digest.mjs` selected its Monday managers
+  by `u.userType` — no manager had ever matched — and read the rep loop's
+  `resolvedProfile` inside the manager loop, out of scope. A job's
+  top-level reads (`user.digestTime || profile.digestTime`) are dead on the
+  left and real on the right; the comment that said the fields were "flat on
+  the row" described the API, not the table. Read `db/schema.ts` before
+  trusting a row field, and pin the read with a source scan (`.userType`
+  absent from the file).
+
 The check: `node --test` a suite that calls the helper with the shapes the
 job passes; and the mutation harness's `SUITES` list must name the suite, or
 its mutants survive silently — the first run here printed three SURVIVED

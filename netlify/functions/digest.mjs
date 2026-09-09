@@ -36,12 +36,12 @@ function getPref(profile, alertType) {
 }
 
 function wantsDigest(resolvedProfile, alertType) {
-    const pref = getPref(profile, alertType);
+    const pref = getPref(resolvedProfile, alertType);
     return pref.enabled && pref.mode === 'digest';
 }
 
 function wantsSms(resolvedProfile, smsKey) {
-    const smsPrefs = profile?.smsNotifications || {};
+    const smsPrefs = resolvedProfile?.smsNotifications || {};
     if (!smsPrefs.enabled) return false;
     return smsPrefs[smsKey] === true;
 }
@@ -124,9 +124,13 @@ const run = async () => {
         for (const user of allUsers) {
             if (!user.email || !user.active) continue;
 
-            // AppHeader.saveProfile saves these fields flat on the user row (top-level),
-            // not nested inside user.profile. Read from top-level first, fall back to
-            // user.profile for any older records that may have nested values.
+            // The users table has no digestTime / timezone / notificationPrefs /
+            // smsNotifications / mobile / phone columns: users.mjs sanitize() stores
+            // every one of them inside the `profile` jsonb, so on a row read with
+            // db.select() the top-level reads below are always undefined and the
+            // `profile.*` fallbacks are the real values (state §0.101). The
+            // top-level reads are kept for an API-shaped object (users.mjs GET
+            // spreads profile flat) should one ever be handed in.
             const profile           = user.profile || {};
             const digestTime        = user.digestTime        || profile.digestTime        || '08:00';
             const userTz            = user.timezone          || profile.timezone          || 'UTC';
@@ -284,14 +288,19 @@ const run = async () => {
         // managers and admins who have managerTeamDigest enabled.
         const isMonday = now.getUTCDay() === 1;
         if (isMonday) {
+            // `role` is the column (Admin | Manager | User | …); `userType` lives only
+            // inside the profile jsonb (users.mjs), so `u.userType` on a db row is
+            // always undefined — this filter had never matched anyone (state §0.101).
             const managers = allUsers.filter(u =>
                 u.email && u.active &&
-                (u.userType === 'Manager' || u.userType === 'Admin')
+                (u.role === 'Manager' || u.role === 'Admin')
             );
 
             for (const mgr of managers) {
+                // The manager's own profile — `resolvedProfile` is the rep loop's const
+                // and is not in scope here (a ReferenceError on the first manager).
                 const profile = mgr.profile || {};
-                if (!wantsDigest(resolvedProfile, 'managerTeamDigest')) continue;
+                if (!wantsDigest(profile, 'managerTeamDigest')) continue;
 
                 const digestTime = mgr.digestTime || profile.digestTime || '08:00';
                 const userTz     = mgr.timezone   || profile.timezone   || 'UTC';
@@ -303,8 +312,8 @@ const run = async () => {
 
                 try {
                     // Identify reps this manager can see
-                    const allReps = allUsers.filter(u => u.userType === 'User');
-                    const visibleReps = mgr.userType === 'Admin' ? allReps : allReps.filter(u =>
+                    const allReps = allUsers.filter(u => u.role === 'User');
+                    const visibleReps = mgr.role === 'Admin' ? allReps : allReps.filter(u =>
                         (mgr.teamId && u.teamId === mgr.teamId) ||
                         (mgr.team   && u.team   === mgr.team)
                     );
