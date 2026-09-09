@@ -1091,7 +1091,10 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   literal newline (caught by `node --check`). Write any file that carries
   backslashes with the Write tool; keep edit scripts backslash-free or build
   the backslash with `String.fromCharCode(92)`.
-- **DONE — item 28 is §0.104 and item 27 is §0.105 (`dfcdee4`, one tree).**
+- **DONE — item 28 is §0.104 and item 27 is §0.105 (`dfcdee4`, one tree).
+  §0.104 OBSERVED by Jeff (19:38 UTC, as Karen on dev: "Kelly Powelltest",
+  owner left blank, the rail reading "Assigned Rep: Karen Russell"; the row
+  read back with both columns Karen's).**
   Jeff's eyeball, on dev, as Admin then as Karen: Karen creates a contact
   and leaves "Assigned Rep" empty → the rail reads "Assigned Rep: Karen
   Russell" and the row appears in Jeff's "All" (his "Mine" is his own plus

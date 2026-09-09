@@ -5361,10 +5361,7 @@ deploy `6aa1b288…`, commit `dfcdee4`, branch `dev`, published 19:25:59 UTC,
 76 functions, secret scan clean. The served bundle carries "Message-ID: "
 and `emailMessageId` once each (the rail's fallback helper is minified away —
 its proof is the source scan); the deployed `email-inbound` answers 401
-unauthenticated. **Not yet observed** — §0.104 needs a contact created by
-Karen without naming a rep (the rail then reads "Assigned Rep: Karen Russell"
-for her and for Jeff; the row appears in Jeff's "All" — his "Mine" is his own
-plus unassigned, by design), and the four legacy rows
+unauthenticated. **§0.104 OBSERVED by Jeff (19:38 UTC 9 Sep, his screenshot as Karen on dev: "created contact as karten and left owner blank - system assigned Karen") — the contact "Kelly Powelltest", the rail reading "Assigned Rep: Karen Russell"; the row read back: `assigned_rep` "Karen Russell", `owner_id` Karen's `usr_…`, stamped together at 19:38:03.** Still to see: the four legacy rows
 read as before until Jeff runs `db/backfill-owner-names.mjs --apply`;
 §0.105 needs a real email, which prod's function writes (the Resend webhook
 targets prod) — so its envelope appears on prod after the next ship, or on
