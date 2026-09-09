@@ -1164,11 +1164,10 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 - **DONE — Jeff's five ("lets resolve these from your list"), as §0.106 and
   §0.107:** the bulk stage move posts one line (his eyeball: a CSV import
   that moves a deal, #sales-alerts open); item 31 struck; the dead
-  Connected-apps line gone; `check:fnscope` in the chain. **Still Jeff's
-  hand:** `INTEGRATION_REQUESTS_TO` on the Netlify sites (Site
-  configuration → Environment variables, the inbox that should receive
-  integration requests) — unset, so requests are recorded and audited but
-  never mailed; Claude's env-var writes are refused by the classifier.
+  Connected-apps line gone; `check:fnscope` in the chain. **DONE — `INTEGRATION_REQUESTS_TO` set on the prod site by Jeff ("created
+  variable", 9 Sep); dev stays unset by choice.** Not yet observed: a Request
+  click on a catalogue row in prod's Connected apps, then the mail in that
+  inbox (the response says whether it went).
 - **Ship §0.106 and §0.107 when Jeff says so:** ancestor check, `git push
   origin dev:master`; the prod hash changes (§0.106 is in the bundle); the
   proof is the new hash on salespipelinetracker.com, Netlify's prod record,

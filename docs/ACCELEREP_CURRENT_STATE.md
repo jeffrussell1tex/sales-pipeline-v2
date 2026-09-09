@@ -5397,7 +5397,7 @@ unrun, available.** `master` == `dev` == `901ad12` at the ship.
 
 **The Connected-apps dead branch.** Settings is Admin-only, so the Slack card's "An Admin configures Slack" line for non-Admins could never render; removed. The `isAdmin` guards on the buttons stay — they are correct guards should Settings ever open wider.
 
-**`INTEGRATION_REQUESTS_TO` — Jeff's hand.** `integration-requests.mjs` records and audits every request and mails the vendor only when that env var names an address; unset on both sites, so no request has ever been mailed. Set it on the prod site (and dev if wanted) to the inbox that should receive them; Claude's env-var writes through the Netlify tool are refused by the permission classifier.
+**`INTEGRATION_REQUESTS_TO` — Jeff's hand.** `integration-requests.mjs` records and audits every request and mails the vendor only when that env var names an address; unset on both sites, so no request has ever been mailed. Set on the prod site by Jeff's hand after the batch landed (9 Sep, "created variable"); dev stays unset — its requests are recorded and audited, not mailed. Claude's env-var writes through the Netlify tool are refused by the permission classifier. Not yet observed: a Request click on prod's Connected apps and the mail in that inbox.
 
 **Verified:** five gates, **631/631 unit**, **355/355 mutations, printed green baseline**, **127/127 integration**, build guard OK **`index--5aHcCr_.js`** (the Connected-apps line is in the bundle). Not observed: a CSV import that moves deals, with #sales-alerts open — one post.
 
@@ -5408,8 +5408,7 @@ seconds after the push); Netlify's record: deploy `6aa1c0ea…`, commit
 clean, the `opportunities` and `send-slack` digests changed. Not observed:
 the post needs a CSV import that moves at least one deal, on dev, with
 #sales-alerts open (dev's webhook is the same org config as prod's — both
-sites read the shared database — so the post lands in the same channel). Also
-not done: `INTEGRATION_REQUESTS_TO` is still unset on both sites.
+sites read the shared database — so the post lands in the same channel). `INTEGRATION_REQUESTS_TO`: set on prod by Jeff after the landing.
 
 ### 0.107 `check:fnscope` — every name a function file reads is bound (9 Sep, eleventh session — the guard §0.95 and §0.101 asked for)
 
