@@ -5306,8 +5306,7 @@ last minute before the publish, and had not stamped 17:32 or 17:33
 (`ok_count` 16 and 18); while the LEGACY `task-reminders` row — prod's,
 still on the old code — finished 17:33:02.142, `ok_count` 1,222. One site
 runs the jobs now, and until the ship it is prod on the old code, which is
-what item 36 asked for. Not eyeballed: the failing "not enabled on this
-site" check on dev's Workspace Health and the Slack card's line are Jeff's.
+what item 36 asked for. **OBSERVED by Jeff's screenshot (9 Sep, after the ship): dev's Settings → Workspace Health, "2 of 7 checks passing", with "Scheduled jobs not enabled on this site (JOBS_ENABLED)" listed among the not-passing checks — the designed truth on dev (the other four not passing — MFA, backups, team members, quote branding — predate this session).** The Slack card's line is not yet eyeballed.
 `master` stays at `5a306e3`; **the ship waits on `JOBS_ENABLED` = `true`
 on the prod site, by Jeff's hand.**
 
