@@ -240,8 +240,12 @@ caller's row from Clerk, in the sync's shape with a validated role,
 idempotently — from the self-profile GET when nothing matches and from the
 request function for an unrostered requester; landed on dev (record
 `6aa1ca8b…`, 21:08:04 UTC). And Jeff: "production is connected to slack".
-642/642 unit, 361/361 mutations, 128/128 integration. NOT
-shipped; NOT observed.** 629/621 unit, 345/345 mutations,
+642/642 unit, 361/361 mutations, 128/128 integration. **Then, on prod, Jeff's
+Sync from Clerk (1 added), his HubSpot request recorded with his name, and
+the mail in accelerep@outlook.com — the request path OBSERVED end to end;
+then "ship prod" → THE FOURTEENTH SHIP: `master` `f546a03` → `59116be`
+(7 commits), pushed 21:17:18 UTC, functions only, Netlify record
+`6aa1cce0…`, 76 functions, prod's jobs ticking through it.** 629/621 unit, 345/345 mutations,
 125/125 integration.
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
@@ -269,7 +273,7 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.108` (a first sign-in provisions the roster row), `### 0.107` with a paragraph beginning **"PROD SHIPPED — the THIRTEENTH ship"**, `### 0.106` (the bulk stage move posts one line), `### 0.105` (the email envelope) and `### 0.104` (owner and display name stamped together), `### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
+`### 0.108` with a paragraph beginning **"PROD SHIPPED — the FOURTEENTH ship"**, `### 0.107` with a paragraph beginning **"PROD SHIPPED — the THIRTEENTH ship"**, `### 0.106` (the bulk stage move posts one line), `### 0.105` (the email envelope) and `### 0.104` (owner and display name stamped together), `### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
 beginning **"Landed on dev (`cab9b92`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` under `## 18b23` carry a heading beginning
 **"### 3. The harness's own death must not leave a mutant on disk (§0.102,
@@ -288,10 +292,24 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the THIRTEENTH ship put §0.106 and §0.107 on `master` (9 Sep 20:45 UTC); §0.108 is on `dev` only
+## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); nothing is on `dev` alone but this ship-record
 
-**Eleventh session, seventh batch (9 Sep) — ON DEV ONLY, deploy-verified, NOT
-observed, NOT shipped:** `8134313` (state §0.108) and its landing docs commit
+**PROD SHIPPED — the FOURTEENTH ship (Jeff: "ship prod", 9 Sep).** Ancestor check
+(tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`),
+then `git push origin dev:master`: `master` `f546a03` → `59116be` (7 commits —
+§0.108 and the docs), pushed 21:17:18 UTC. Functions only: the served hash
+stays `index-DKAHLlej.js` (checked at 21:18:48); the deployed `users?me=true`
+answers 401 unauthenticated. Netlify's record: deploy `6aa1cce0…`, commit
+`59116be`, branch `master`, published 21:17:58 UTC, 76 functions, secret scan
+clean. Prod's jobs never paused: `task-reminders` finished 21:19:01 (`ok_count`
+147). §0.108's own proof on prod is the next NEW member of any workspace —
+Jeff's row already exists by his Sync at 21:14. `master` == `dev` == `59116be`
+at the ship.
+The ship-record docs commit is `9cbe101`; dev is ahead of `master` by it and
+this handoff.
+
+**Eleventh session, seventh batch (9 Sep) — ON DEV, deploy-verified, then
+SHIPPED in the fourteenth ship (above):** `8134313` (state §0.108) and its landing docs commit
 `c62e5bc`. Functions only — the bundle hash is unchanged; Netlify's record
 `6aa1ca8b…` = `8134313`, published 21:08:04 UTC, 76 functions, the `_lib`, `users`
 and `integration-requests` digests changed (and every function importing
@@ -1063,7 +1081,7 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (9 Sep, eleventh session — after the THIRTEENTH ship and §0.108)
+## 4. Verified state at close (9 Sep, eleventh session — after the FOURTEENTH ship)
 
 SIX gates green (`check:fnscope` since §0.107: 83 function files, no unbound
 reads; the five on 154 files) · **642/642 unit** (32 new this session:
@@ -1075,9 +1093,10 @@ hash of the session), guard OK, `dist/` cleared · **128/128 integration** (4 ne
 browser pass** — the pane holds no session; §0.103's tile copy is a source
 scan and Jeff's eyeball · dev deploys verified from Netlify's record
 (`6aa18e68…` = `cab9b92`; `6aa197ca…` = `67d5554`) · **`master` ==
-`f546a03`, prod serving `index-DKAHLlej.js` (the THIRTEENTH ship, 20:46:52
-UTC)**; dev is ahead of `master` by the ship-record docs commits, `8134313`
-(§0.108), its landing docs commit (`c62e5bc`) and the handoff commits · **one schema change: four nullable `activities.email_*`
+`59116be`, prod serving `index-DKAHLlej.js` (the FOURTEENTH ship, 21:17 UTC —
+functions only, the hash from the thirteenth)**; dev is ahead of `master`
+only by the ship-record docs commit (`9cbe101`) and the handoff commit carrying
+this line · **one schema change: four nullable `activities.email_*`
 columns, additive, in BOTH databases, read back** ·
 **dev's scheduled jobs are OFF (no `JOBS_ENABLED` on `accelerep`, by
 design); prod's run the shipped code with the flag on — its first per-site
@@ -1095,7 +1114,7 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Eleventh-session prep (read at the twelfth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect `8134313` and docs commits after `f546a03` (the ship record, observations,
+  expect only DOCS commits after `59116be` (the ship record, observations,
   handoffs) — a CODE commit there is
   unshipped code and a finding.
 - **DONE — the ELEVENTH ship (§1): `JOBS_ENABLED` set on `sales-pipeline-v2`
@@ -1218,12 +1237,11 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   — the request path works end to end; the prod Slack card is Live
   (#sales-alerts, 7 of 7). §0.108's own proof on prod now needs a NEW member
   or a fresh workspace, since Jeff's row exists by the Sync.**
-- **Ship §0.108 when Jeff says so** — functions only, no hash change; the
-  proof is Netlify's prod record, then a read-only SELECT of `users` for
-  `org_3Dwny…` after Jeff's next page load: his row, `usr_…`, his Clerk id,
-  role Admin. Then a Request on a not-yet-requested row → `byName` his name,
-  and the mail reads it (`INTEGRATION_REQUESTS_TO` is on prod since the
-  thirteenth ship).
+- **DONE — the fourteenth ship (§1): §0.108 on prod.** Its proof there is the
+  next NEW member of any workspace: their first page load creates their row
+  (a read-only SELECT of `users` for that org shows `usr_…`, their Clerk id,
+  their validated role) before their first click. Jeff's own row exists by
+  his Sync.
 - **DONE — the thirteenth ship (§1).** Two observations on prod, Jeff's: (1)
   Request on HubSpot (DocuSign is already recorded for that workspace, and a
   repeat is idempotent) → the mail at accelerep@outlook.com within a minute —
