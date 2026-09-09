@@ -3221,10 +3221,22 @@ The rule:
   renamed, grep the body for the OLD name before the commit. A hit that
   resolves to some OTHER binding in the file is the dangerous one — it
   parses, it bundles, and it throws only when called.
-- **A lowercase helper in `netlify/functions` is outside every scanner.**
-  `check-tdz`'s undefined pass inspects Capitalised components under `src/`;
-  its whole-file pass is JSX. A pure helper in a function file gets a unit
-  test that RUNS it: lift it out of the source with a regex and `new
+- **A lowercase helper in `netlify/functions` WAS outside every scanner —
+  since §0.107 (9 Sep) it is not.** `check-tdz`'s undefined pass inspects
+  Capitalised components under `src/`; its whole-file pass is JSX. Now
+  `npm run check:fnscope` (`scripts/check-fnscope.mjs` over
+  `scripts/fnscope.mjs`, a proper lexical-scope walk) reports every
+  identifier a file under `netlify/functions/` or `db/` reads without a
+  binding in any enclosing scope — imports, params, destructuring and its
+  defaults, hoisted `var` and function declarations, block `let/const/class`,
+  catch and for-loop heads, class names, `arguments`, a function's own name
+  — unless a standard Node/ES global names it. Run against `bf4a3c5` it
+  flags `profile` in both helpers of `pipeline-alerts.mjs`, both of
+  `digest.mjs`, and the manager loop's `resolvedProfile` — every line of
+  §0.95 and §0.101, on the day. It is in the verification chain and it gates
+  a commit like the others; the one false-positive class found on the live
+  tree (a re-export with a source) is handled and pinned in its suite. A pure
+  helper in a function file STILL gets a unit test that RUNS it: lift it out of the source with a regex and `new
   Function` (the pattern in `tests/pipeline-alerts.test.mjs`) when the
   module's imports make importing it impossible, or move it to a `_name.mjs`
   sidecar (`_slackWebhook.mjs`, `_inboundText.mjs`) so a test imports it

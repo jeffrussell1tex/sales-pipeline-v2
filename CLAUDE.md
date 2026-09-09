@@ -64,6 +64,7 @@ npm run check:tdz
 npm run check:inline
 npm run check:dupes
 npm run check:dbfetch
+npm run check:fnscope     # every name a function file reads is bound (§0.107)
 npm run check:handoff
 npm run build            # never `npx vite build` — bypasses the bundle guard
 npm test                 # load-bearing for deploy: function-import graph

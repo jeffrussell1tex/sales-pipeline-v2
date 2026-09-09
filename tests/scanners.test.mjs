@@ -267,6 +267,34 @@ test('check-handoff fails when a copy is missing', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// check-fnscope — every name a function file reads is bound (state §0.107). The
+// April shape (bf4a3c5): a helper reading a name bound only inside another
+// function's loop — it parsed, bundled and imported, and threw hourly for five
+// months (§0.95, §0.101). The gate walks netlify/functions/ and db/ by default;
+// a fixture is passed explicitly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('check-fnscope catches a helper reading a name bound only in another function (the §0.95 shape)', () => {
+    const r = run('scripts/check-fnscope.mjs', [`${FIX}/fnscope-unbound-helper.mjs`]);
+    assert.notEqual(r.code, 0, 'the April bug passed the gate');
+    assert.match(r.stdout, /UNBOUND {2}.*fnscope-unbound-helper\.mjs:8:\d+ {2}"profile" read in wantsAlert/);
+    assert.equal((r.stdout.match(/UNBOUND/g) || []).length, 1, "exactly the one read; the loop's own profile is bound");
+});
+
+test('check-fnscope stays quiet on every way a name can be bound', () => {
+    const r = run('scripts/check-fnscope.mjs', [`${FIX}/fnscope-safe.mjs`]);
+    assert.equal(r.code, 0, `false positive:
+${r.stdout}`);
+    assert.match(r.stdout, /No unbound reads in 1 function file/);
+});
+
+test('check-fnscope is clean on the whole tree — no function file reads a name it cannot see', () => {
+    const r = run('scripts/check-fnscope.mjs');
+    assert.equal(r.code, 0, r.stdout);
+    assert.match(r.stdout, /No unbound reads in \d+ function file/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Coverage
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -276,7 +304,7 @@ test('every gate script has at least one catch fixture and one safe fixture', ()
     const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
     const gates = Object.keys(pkg.scripts).filter(k => k.startsWith('check:'));
     const fixtures = fs.readdirSync(FIX);
-    const prefixOf = { 'check:tdz': 'tdz', 'check:inline': 'inline', 'check:dupes': 'dupes', 'check:dbfetch': 'dbfetch', 'check:handoff': 'handoff' };
+    const prefixOf = { 'check:tdz': 'tdz', 'check:inline': 'inline', 'check:dupes': 'dupes', 'check:dbfetch': 'dbfetch', 'check:handoff': 'handoff', 'check:fnscope': 'fnscope' };
 
     for (const gate of gates) {
         if (gate === 'check:bundle') continue;          // fixtures are built at run time above
