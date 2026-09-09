@@ -207,8 +207,15 @@ the owner of an older row; `db/backfill-owner-names.mjs` for the four legacy
 rows, Jeff's hand) and §0.105 (four nullable `activities.email_*` columns
 applied to BOTH databases first, `envelopeOf` with the header To/Cc winning
 over the SMTP envelope, the viewer showing From/To/Cc and the Message-ID).
-Landed `index-De0DMnrV.js` at 19:26:03 UTC (record `6aa1b288…`). NOT
-shipped; NOT observed.** 629/621 unit, 345/345 mutations,
+Landed `index-De0DMnrV.js` at 19:26:03 UTC (record `6aa1b288…`); §0.104
+OBSERVED by Jeff as Karen (19:38 UTC). **Then Jeff: "ship prod" — THE TWELFTH
+SHIP: `master` `a9d2d08` → `901ad12` (12 commits), pushed 19:44:44 UTC,
+salespipelinetracker.com serving `index-DowJRBZt.js` 68 seconds later,
+Netlify record `6aa1b72e…`, 76 functions; prod's jobs never paused
+(`task-reminders` ticking through the deploy, the 19:00 run its first
+`digest` and `pipeline-alerts` rows). Jeff on the four legacy rows: "dont
+worry about blank name on those 4. this is all demo data - nothing real" —
+the backfill stays unrun.** 629/621 unit, 345/345 mutations,
 125/125 integration.
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
@@ -255,10 +262,32 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the ELEVENTH ship put §0.100 through §0.103 on `master` (9 Sep 18:51 UTC); §0.104 and §0.105 are on `dev` only
+## 1. What shipped — the TWELFTH ship put §0.104 and §0.105 on `master` (9 Sep 19:44 UTC), an hour after the eleventh put §0.100–§0.103 there; nothing is on `dev` alone but this ship-record
 
-**Eleventh session, fourth batch (9 Sep) — ON DEV ONLY, deploy-verified, NOT
-observed, NOT shipped:** `dfcdee4` (state §0.104 item 28 and §0.105 item 27,
+**PROD SHIPPED — the TWELFTH ship (Jeff: "ship prod", 9 Sep).** Ancestor check
+(tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`),
+then `git push origin dev:master`: `master` `a9d2d08` → `901ad12` (12
+commits — §0.104, §0.105 and the docs), pushed 19:44:44 UTC.
+salespipelinetracker.com served `index-DowJRBZt.js` at 19:45:52 UTC (68
+seconds), 2,506,144 bytes — dev's byte size — `pk_live_` inlined,
+"Message-ID: " and `emailMessageId` present once each; the deployed
+`email-inbound` answers 401 unauthenticated. Netlify's record: deploy
+`6aa1b72e…`, commit `901ad12`, branch `master`, published 19:45:46 UTC, 76
+functions, secret scan clean. **Prod's jobs never paused:** at 19:47:19 UTC
+its `task-reminders` row had finished 19:47:01 (`ok_count` 55), and the
+19:00 run had given prod its first `digest` and `pipeline-alerts` rows,
+both `ok` (`ok_count` 1). Nothing to flip: `JOBS_ENABLED` stays on prod
+alone, the Resend webhook is on prod, the four `activities.email_*` columns
+were in the shared database before either site's code named them (§18c).
+**The next real email through prod's dropbox is §0.105's observation.**
+**The four legacy rows: Jeff — "dont worry about blank name on those 4. this
+is all demo data - nothing real" — `db/backfill-owner-names.mjs` stays
+unrun, available.** `master` == `dev` == `901ad12` at the ship.
+The ship-record docs commit is `ede995d`; dev is ahead of `master` by it and
+this handoff.
+
+**Eleventh session, fourth batch (9 Sep) — ON DEV, deploy-verified, §0.104
+OBSERVED, then SHIPPED in the twelfth ship (above):** `dfcdee4` (state §0.104 item 28 and §0.105 item 27,
 guide §18b22's new part) and its landing docs commit `73a13b6`.
 accelerep.netlify.app served `index-De0DMnrV.js` — the local gate build's
 hash — at 19:26:03 UTC (69 seconds after the 19:24:54 push); Netlify's record
@@ -960,7 +989,7 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (9 Sep, eleventh session — after the ELEVENTH ship and §0.104/§0.105)
+## 4. Verified state at close (9 Sep, eleventh session — after the TWELFTH ship)
 
 Five gates green on 154 files · **629/629 unit** (22 new this session:
 `digest-prefs` 4, `mutant-restore` 8, `job-heartbeat` 2, `inbound-text` 5,
@@ -971,10 +1000,9 @@ kB; the fourth new hash of the session), guard OK, `dist/` cleared ·
 browser pass** — the pane holds no session; §0.103's tile copy is a source
 scan and Jeff's eyeball · dev deploys verified from Netlify's record
 (`6aa18e68…` = `cab9b92`; `6aa197ca…` = `67d5554`) · **`master` ==
-`a9d2d08`, prod serving `index-DcLtbkSJ.js` (the ELEVENTH ship, 18:52:48
-UTC)**; dev is ahead of `master` by the ship-record and observation docs
-commits, `dfcdee4` (§0.104 + §0.105), its landing docs commit (`73a13b6`) and
-the handoff commits · **one schema change: four nullable `activities.email_*`
+`901ad12`, prod serving `index-DowJRBZt.js` (the TWELFTH ship, 19:45:52
+UTC)**; dev is ahead of `master` only by the ship-record docs commit
+(`ede995d`) and the handoff commit carrying this line · **one schema change: four nullable `activities.email_*`
 columns, additive, in BOTH databases, read back** ·
 **dev's scheduled jobs are OFF (no `JOBS_ENABLED` on `accelerep`, by
 design); prod's run the shipped code with the flag on — its first per-site
@@ -992,7 +1020,7 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Eleventh-session prep (read at the twelfth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect `dfcdee4` and docs commits after `a9d2d08` (the ship record, observations,
+  expect only DOCS commits after `901ad12` (the ship record, observations,
   handoffs) — a CODE commit there is
   unshipped code and a finding.
 - **DONE — the ELEVENTH ship (§1): `JOBS_ENABLED` set on `sales-pipeline-v2`
@@ -1095,16 +1123,12 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   §0.104 OBSERVED by Jeff (19:38 UTC, as Karen on dev: "Kelly Powelltest",
   owner left blank, the rail reading "Assigned Rep: Karen Russell"; the row
   read back with both columns Karen's).**
-  Jeff's eyeball, on dev, as Admin then as Karen: Karen creates a contact
-  and leaves "Assigned Rep" empty → the rail reads "Assigned Rep: Karen
-  Russell" and the row appears in Jeff's "All" (his "Mine" is his own plus
-  unassigned — a Karen-owned row is neither, by design). **Jeff's hand:**
-  `node --env-file=.env db/backfill-owner-names.mjs` prints the four legacy
-  rows (two contacts of Karen's, two accounts of Jeff's, dev org); `--apply`
-  fills them. §0.105's observation needs a real email — the Resend webhook
-  targets prod, so the envelope shows on prod after the next ship (the four
-  columns are already in the shared database), or on dev if the webhook is
-  flipped for a test and back. Not built: nothing in the viewer for Bcc (the
+  SHIPPED in the twelfth ship. The four legacy rows stay as they are —
+  Jeff: "dont worry about blank name on those 4. this is all demo data -
+  nothing real" (the script stays in `db/` for a real org's data one day).
+  **§0.105's observation is the next real email through prod's dropbox:**
+  open it in the viewer on salespipelinetracker.com — From, To and Cc under
+  the subject, the Message-ID in the footer. Not built: nothing in the viewer for Bcc (the
   provider does not carry it in the headers map).
 - **Carried, unchanged:** the Connected
   apps non-Admin dead branches, `INTEGRATION_REQUESTS_TO` unset, the bulk
