@@ -1267,6 +1267,9 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   shows every skip and every out-of-window deferral with its undo. Read on
   dev: Jeff's own deferral (2026-08-01 → 2026-09-30) listed there; the
   deferred visit returns to the queue on 2026-09-16 (14 days before).
+  **DONE — OBSERVED by Jeff ("tested and passed", ~23:50 UTC) and read in
+  the pane at 23:46 UTC: "deferred to 2026-09-30 — back in the queue 14 days
+  before · Customer pon vacation · by Karen Russell · Undo deferral".**
 - **DONE — §0.110's dev deploy READ (`6aa1e1d5…` = `a3fa3e2`, 22:47:36 UTC,
   78 functions, `dispatch-plan-visits` new) and the queue OBSERVED in the
   pane as Karen (§4):** Defer/undo, Skip/undo (the skipped list names her
