@@ -4,7 +4,7 @@ import { activities, contacts, users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { serverErrorBody, resolveCaller } from './_lib.mjs';
-import { normaliseBodyText, htmlToText, attachmentNamesOf, notesOf } from './_inboundText.mjs';
+import { normaliseBodyText, htmlToText, attachmentNamesOf, notesOf, envelopeOf } from './_inboundText.mjs';
 
 // ── BCC email dropbox ────────────────────────────────────────────────────────
 // Each org gets a unique, unguessable BCC address. A rep BCCs it on any email;
@@ -358,6 +358,10 @@ export const handler = async (event) => {
         // duplicate risk rather than dropping the activity.
         const owner = viaUser ? { id: viaUser.id, name: viaUser.name } : await ownerFromSender(orgId, fromEmail);
         const messageId = String((full && full.message_id) || mail.message_id || '').trim();
+        // The envelope for the record (item 27, state §0.105): From as the provider
+        // gave it, the header To and Cc as address lists, the Message-ID — the
+        // header fields when the fetched message has them, else the payload's own.
+        const envelope = envelopeOf({ full, mail });
         const activityId = messageId
             ? 'id_' + crypto.createHash('sha256').update(orgId + '|' + messageId).digest('hex').slice(0, 36)
             : 'id_' + crypto.randomUUID();
@@ -381,6 +385,10 @@ export const handler = async (event) => {
             // neither matched — visible to everyone, attributed to the raw sender.
             ownerId: owner?.id || null,
             author: owner?.name || fromEmail || null,
+            emailFrom: envelope.from || null,
+            emailTo: envelope.to,
+            emailCc: envelope.cc,
+            emailMessageId: envelope.messageId || null,
             createdAt: new Date(),
             orgId,
         };

@@ -137,6 +137,27 @@ before(async () => {
 });
 after(cleanup);
 
+test('REGRESSION (item 28) — a rep creating a contact WITHOUT naming a rep owns it AND is named on it; naming another rep keeps that name', async () => {
+    const res = await handler(asRep('POST', { id: 'ct_item28_own', firstName: 'Blank', lastName: 'Rep' }));
+    assert.equal(res.statusCode, 201);
+    const own = await rowOf('ct_item28_own');
+    assert.equal(own.ownerId, 'usr_itest_contacts_rep', 'the creator owns it (as before)');
+    assert.equal(own.assignedRep, REP_NAME, 'REGRESSION: and is NAMED on it — the row used to read as nobody\'s');
+    const named = await handler(asRep('POST', { id: 'ct_item28_named', firstName: 'Named', lastName: 'Rep', assignedRep: REP_NAME }));
+    assert.equal(named.statusCode, 201);
+    assert.equal((await rowOf('ct_item28_named')).assignedRep, REP_NAME, 'a supplied name is kept, not overwritten');
+    const other = await handler(ev('POST', { id: 'ct_item28_other', firstName: 'Other', lastName: 'Rep', assignedRep: OTHER_NAME }));
+    assert.equal(other.statusCode, 201);
+    const o = await rowOf('ct_item28_other');
+    assert.equal(o.ownerId, 'usr_itest_contacts_other');
+    assert.equal(o.assignedRep, OTHER_NAME, 'an Admin naming another rep: that rep\'s name, not the Admin\'s');
+    const nobody = await handler(ev('POST', { id: 'ct_item28_nobody', firstName: 'No', lastName: 'Caller' }, null, { role: 'User', userId: 'u_itest_unknown' }));
+    assert.equal(nobody.statusCode, 201);
+    const nb = await rowOf('ct_item28_nobody');
+    assert.equal(nb.ownerId, null, 'an unresolvable caller stamps no owner (as before)');
+    assert.equal(nb.assignedRep, null, 'and no name — unassigned stays unassigned');
+});
+
 test('REGRESSION — a rep DELETING their own contact gets 200, not a 500', async () => {
     // The 500 was db.select({ owner: contacts.createdBy }) with createdBy
     // undefined. Any status other than 200 here means the ownership branch is

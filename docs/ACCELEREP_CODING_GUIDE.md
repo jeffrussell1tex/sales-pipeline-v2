@@ -2683,6 +2683,24 @@ projecting the OLD key made **every owned row in every batch writable by anyone*
 It now throws when an `ownerColumn` was requested and the projection came back
 without it. §18b20, inside the function §18b20 was written about.
 
+### The display name rides with the owner (§0.104, 9 Sep — item 28)
+
+Ownership keys on `ownerId`; the display-name column is "for rendering and
+export only". True, and it produced a row that was owned by one person and
+displayed as nobody's: a contact created without naming a rep was stamped
+`ownerId` = the creator and `assignedRep` = null, so the rail's "Assigned
+Rep" was blank, and a Manager — whose only scoping is a set of rep NAMES
+(`isRepVisible`) — could not see a row the server had granted. Two columns
+that mean the same thing must be written together or not at all:
+`stampOwnerId` now fills the display name from the SAME roster row it took
+the id from whenever the caller becomes owner by default. A supplied name is
+still resolved and kept; an unresolvable caller stamps null for both. The
+rows from before are filled by `db/backfill-owner-names.mjs` (dry run by
+default, Jeff's hand), and the contact rail names the owner from the roster
+or the caller's own profile until then. The check: a rep-created record in
+the integration suite has BOTH columns equal to the rep; the harness has a
+mutant that drops the name half.
+
 ---
 
 ## 18b23. A Guard Guards A SHAPE; A Score Needs A BASELINE (hard rule)

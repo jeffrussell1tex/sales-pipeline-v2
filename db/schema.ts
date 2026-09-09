@@ -278,6 +278,15 @@ export const activities = pgTable('activities', {
     accountId:     text('account_id'),
     leadId:        text('lead_id'),
     author:        varchar('author', { length: 255 }),
+    // A logged EMAIL's envelope (state §0.105, handoff item 27): who it was from,
+    // the header To and Cc as address lists, and the RFC Message-ID. Nullable and
+    // additive — every non-email activity leaves them null; the UI never writes
+    // them (activities.mjs sanitize() does not name them, so a PUT cannot blank
+    // them). Applied by db/apply-email-headers.mjs to both databases first (§18c).
+    emailFrom:      text('email_from'),
+    emailTo:        jsonb('email_to'),
+    emailCc:        jsonb('email_cc'),
+    emailMessageId: text('email_message_id'),
     // OWNERSHIP. FK -> users.id (usr_<uuid>), the app-owned permanent id.
     // Nullable: null means UNASSIGNED, and an unassigned record is mutable by
     // any writer -- that is how a rep picks up unowned work. It does NOT mean

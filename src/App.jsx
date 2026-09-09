@@ -1505,6 +1505,7 @@ dbFetch('/.netlify/functions/users?me=true')
         // Auth
         currentUser,
         currentUserId,
+        myProfile,   // the caller's own users row (/users?me) — the contact rail names the owner of a pre-§0.104 row from it
         userRole,
         clerkUser,
         canSeeAll: userRole === 'Admin' || userRole === 'Manager',

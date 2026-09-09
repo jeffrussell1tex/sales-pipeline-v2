@@ -270,10 +270,18 @@ export async function ownerIdForWrite({ suppliedName, clerkUserId, orgId }) {
  */
 export async function stampOwnerId(row, entity, { clerkUserId, orgId }) {
     const nameKey = ownerNameKeyFor(entity);
-    return {
-        ...row,
-        ownerId: await ownerIdForWrite({ suppliedName: row?.[nameKey], clerkUserId, orgId }),
-    };
+    const supplied = String(row?.[nameKey] ?? '').trim();
+    if (supplied) return { ...row, ownerId: await resolveOwnerId(supplied, orgId) };
+    // Nothing named: the caller owns what they create — AND IS NAMED ON IT.
+    // Item 28 (state §0.104): a contact created without naming a rep was owned
+    // by its creator underneath (ownerId) and displayed as nobody's (the
+    // display-name column null) — "Assigned Rep" blank in the rail, and hidden
+    // from a Manager whose scoping keys on that name (isRepVisible). The owner
+    // id and the display name are stamped together from ONE roster row, so the
+    // two columns cannot disagree at creation. An unresolvable caller stamps
+    // null for both — unassigned, as before.
+    const caller = await resolveCaller(clerkUserId, orgId);
+    return { ...row, ownerId: caller.id, [nameKey]: caller.name || null };
 }
 
 /**

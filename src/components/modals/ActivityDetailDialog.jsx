@@ -8,7 +8,7 @@
 // the server would let write (canEditActivity mirrors mayMutate).
 import React from 'react';
 import { useApp } from '../../AppContext';
-import { emailPartsOf, canEditActivity } from '../../utils/activityView';
+import { emailPartsOf, emailEnvelopeOf, canEditActivity } from '../../utils/activityView';
 import { parseLocalDate } from '../../utils/dateLocal';
 
 const T = {
@@ -32,6 +32,7 @@ const fmtWhen = (v) => {
  */
 export default function ActivityDetailDialog({ activity, contactName = '', accountName = '', dealName = '', canEdit = false, onEdit, onClose, isMobile = false }) {
     const { subject, body } = emailPartsOf(activity);
+    const envelope = emailEnvelopeOf(activity);   // item 27: From / To / Cc / Message-ID, when the row has them
     const type = activity?.type || 'Note';
     const links = [contactName, accountName, dealName].filter(Boolean);
     return (
@@ -47,6 +48,13 @@ export default function ActivityDetailDialog({ activity, contactName = '', accou
                         </div>
                         {subject && <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginTop: 6, lineHeight: 1.3, overflowWrap: 'anywhere' }}>{subject}</div>}
                         {links.length > 0 && <div style={{ fontSize: 11.5, color: T.inkMid, marginTop: 4 }}>{links.join(' · ')}</div>}
+                        {envelope.any && (
+                            <div style={{ fontSize: 11.5, color: T.inkMid, marginTop: 6, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+                                {envelope.from && <div><span style={{ color: T.inkMuted }}>From:</span> {envelope.from}</div>}
+                                {envelope.to.length > 0 && <div><span style={{ color: T.inkMuted }}>To:</span> {envelope.to.join(', ')}</div>}
+                                {envelope.cc.length > 0 && <div><span style={{ color: T.inkMuted }}>Cc:</span> {envelope.cc.join(', ')}</div>}
+                            </div>
+                        )}
                     </div>
                     <button type="button" onClick={onClose} aria-label="Close"
                         style={{ background: 'none', border: 'none', color: T.inkMuted, fontSize: 20, cursor: 'pointer', padding: '0 4px', lineHeight: 1, borderRadius: 4, flexShrink: 0 }}>×</button>
@@ -60,6 +68,11 @@ export default function ActivityDetailDialog({ activity, contactName = '', accou
                             {activity.outcome && <span>Outcome: {activity.outcome}</span>}
                             {activity.outcome && activity.duration ? <span> · </span> : null}
                             {activity.duration ? <span>Duration: {activity.duration} min</span> : null}
+                        </div>
+                    )}
+                    {envelope.messageId && (
+                        <div style={{ marginTop: 14, fontSize: 10.5, color: T.inkMuted, borderTop: `1px solid ${T.border}`, paddingTop: 8, overflowWrap: 'anywhere', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                            Message-ID: {envelope.messageId}
                         </div>
                     )}
                 </div>

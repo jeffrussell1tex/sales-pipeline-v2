@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { emailPartsOf, previewOf, canEditActivity } from '../src/utils/activityView.js';
+import { emailPartsOf, previewOf, canEditActivity, emailEnvelopeOf } from '../src/utils/activityView.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n');
@@ -105,4 +105,27 @@ test('every activity row opens the viewer: three rails and both deal-modal lists
     const row = code(read('src/components/rails/ActivityRowText.jsx'));
     assert.ok(row.includes('WebkitLineClamp: 2'), 'two-line clamp');
     assert.ok(row.includes('const { title, snippet } = previewOf(activity);'));
+});
+
+// ── item 27 (state §0.105): the viewer shows the envelope when the row has one ──
+
+test('emailEnvelopeOf: every field present; a row logged before §0.105 has nothing to show', () => {
+    assert.deepEqual(emailEnvelopeOf({ emailFrom: 'Ada Rep <ada@alpha.test>', emailTo: ['carl@client.test'], emailCc: [], emailMessageId: '<m1@alpha>' }),
+        { from: 'Ada Rep <ada@alpha.test>', to: ['carl@client.test'], cc: [], messageId: '<m1@alpha>', any: true });
+    assert.deepEqual(emailEnvelopeOf({ type: 'Email', notes: 'x' }), { from: '', to: [], cc: [], messageId: '', any: false }, 'REGRESSION: an old row renders as before');
+    assert.deepEqual(emailEnvelopeOf({ emailTo: 'one@x.test', emailCc: [' ', 'b@x.test'] }).to, ['one@x.test'], 'a string To is a one-item list');
+    assert.deepEqual(emailEnvelopeOf({ emailCc: [' ', 'b@x.test'] }).cc, ['b@x.test'], 'blanks dropped');
+    assert.equal(emailEnvelopeOf(null).any, false);
+});
+
+test('the viewer renders From, To and Cc under the subject and the Message-ID in a footer — only when present', () => {
+    const s = code(read('src/components/modals/ActivityDetailDialog.jsx'));
+    assert.ok(s.includes("import { emailPartsOf, emailEnvelopeOf, canEditActivity } from '../../utils/activityView';"));
+    assert.ok(s.includes('    const envelope = emailEnvelopeOf(activity);'), 'one envelope per render');
+    assert.ok(s.includes('                        {envelope.any && ('), 'nothing is drawn for a row without one');
+    assert.ok(s.includes("{envelope.from && <div><span style={{ color: T.inkMuted }}>From:</span> {envelope.from}</div>}"), 'From');
+    assert.ok(s.includes("{envelope.to.length > 0 && <div><span style={{ color: T.inkMuted }}>To:</span> {envelope.to.join(', ')}</div>}"), 'To');
+    assert.ok(s.includes("{envelope.cc.length > 0 && <div><span style={{ color: T.inkMuted }}>Cc:</span> {envelope.cc.join(', ')}</div>}"), 'Cc');
+    assert.ok(s.includes('                    {envelope.messageId && ('), 'REGRESSION: the Message-ID footer');
+    assert.ok(s.includes('Message-ID: {envelope.messageId}'));
 });

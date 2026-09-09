@@ -181,3 +181,22 @@ test('a one-line body with no attachments stores exactly as before (the §0.91 s
     const [a] = (await activitiesOf(ORG_A)).filter(x => x.id === body.activityId);
     assert.equal(a.notes, 'Test email — Test email for logging');
 });
+
+test('the envelope is on the row: From, To, Cc and the Message-ID (item 27, state §0.105); an email without a Message-ID stores null there', async () => {
+    const { body } = parse(await post(orgAddr(ORG_A), { from: 'ada@alpha.test', subject: 'Envelope', text: 'Body', message_id: '<env-1@itest>' }));
+    assert.equal(body.matched, true);
+    const [a] = (await activitiesOf(ORG_A)).filter(x => x.id === body.activityId);
+    assert.equal(a.emailFrom, 'ada@alpha.test', 'From as the payload gave it');
+    assert.deepEqual(a.emailTo, [orgAddr(ORG_A).toLowerCase()], 'the flat payload\'s To is the dropbox itself — stored as given (Resend\'s header To replaces it when the message is fetched)');
+    assert.deepEqual(a.emailCc, ['carl@client.test'], 'Cc');
+    assert.equal(a.emailMessageId, '<env-1@itest>', 'REGRESSION: the Message-ID is on the row, not only hashed into its id');
+    // Without a Message-ID the id is random and the column is null — not '' and not undefined.
+    const r2 = handler({
+        httpMethod: 'POST', headers: {}, queryStringParameters: { secret: process.env.INBOUND_SHARED_SECRET },
+        body: JSON.stringify({ from: 'ada@alpha.test', to: [orgAddr(ORG_A)], cc: ['carl@client.test'], subject: 'No id', text: 'Body' }),
+    });
+    const { body: b2 } = parse(await r2);
+    const [a2] = (await activitiesOf(ORG_A)).filter(x => x.id === b2.activityId);
+    assert.equal(a2.emailMessageId, null);
+    assert.equal(a2.emailFrom, 'ada@alpha.test');
+});

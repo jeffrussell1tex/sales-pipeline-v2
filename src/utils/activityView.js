@@ -20,6 +20,19 @@ export function emailPartsOf(activity) {
     return { subject, body: notes };
 }
 
+/**
+ * The envelope a logged email carries (state §0.105, item 27): From as stored,
+ * To and Cc as address lists, the Message-ID. Every field present — a string or
+ * an array — and `any` says whether there is anything to show, so a row logged
+ * before §0.105 (all four null) renders exactly as it did.
+ */
+export function emailEnvelopeOf(activity) {
+    const str = (v) => (typeof v === 'string' ? v.trim() : '');
+    const list = (v) => (Array.isArray(v) ? v.map(x => str(x)).filter(Boolean) : (str(v) ? [str(v)] : []));
+    const from = str(activity?.emailFrom), to = list(activity?.emailTo), cc = list(activity?.emailCc), messageId = str(activity?.emailMessageId);
+    return { from, to, cc, messageId, any: !!(from || to.length || cc.length || messageId) };
+}
+
 /** What a list row shows: a bold title when there is a subject, and the snippet the row clamps. */
 export function previewOf(activity) {
     const { subject, body } = emailPartsOf(activity);

@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { normaliseBodyText, htmlToText, attachmentNamesOf, notesOf } from '../netlify/functions/_inboundText.mjs';
+import { normaliseBodyText, htmlToText, attachmentNamesOf, notesOf, envelopeOf, headerMapOf, emailAddressesIn } from '../netlify/functions/_inboundText.mjs';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n');
@@ -51,7 +51,7 @@ test('the stored notes are subject — body, then an Attachments line, within th
 
 test('email-inbound stores through the pure module, and the rails give the viewer first claim on Escape', () => {
     const s = code(read('netlify/functions/email-inbound.mjs'));
-    assert.ok(s.includes("import { normaliseBodyText, htmlToText, attachmentNamesOf, notesOf } from './_inboundText.mjs';"));
+    assert.ok(s.includes("import { normaliseBodyText, htmlToText, attachmentNamesOf, notesOf, envelopeOf } from './_inboundText.mjs';"));
     assert.ok(s.includes('const text = normaliseBodyText(rawText);'), 'the body keeps its line breaks');
     assert.ok(!s.includes("replace(/\\s+/g, ' ')"), 'REGRESSION: the whitespace collapse is gone');
     assert.ok(s.includes('const attachmentNames = attachmentNamesOf(full ? full.attachments : mail.attachments);'));
@@ -62,4 +62,61 @@ test('email-inbound stores through the pure module, and the rails give the viewe
         assert.ok(r.includes("const onKey = (e) => { if (e.key === 'Escape' && !isEditing && !viewingActivity) closeRail(); };"), f + ': the rail yields Escape to the viewer');
         assert.ok(r.includes('}, [isOpen, isEditing, viewingActivity]);'), f + ': and re-binds when the viewer opens or closes');
     }
+});
+
+// ── item 27 (state §0.105): the envelope — From, To, Cc, Message-ID ──────────
+
+test('headerMapOf: both header shapes lower-cased into one map; garbage is {}', () => {
+    assert.deepEqual(headerMapOf({ To: 'a@x.com', 'Message-ID': '<1@x>' }), { to: 'a@x.com', 'message-id': '<1@x>' });
+    assert.deepEqual(headerMapOf([{ name: 'Cc', value: 'b@x.com' }, { key: 'To', value: 'a@x.com' }, { name: '' }]), { cc: 'b@x.com', to: 'a@x.com' });
+    assert.deepEqual(headerMapOf(null), {});
+    assert.deepEqual(headerMapOf('nope'), {});
+});
+
+test('emailAddressesIn: display names, angle brackets, commas — lower-cased addresses only', () => {
+    assert.deepEqual(emailAddressesIn('Carl Client <Carl@Client.test>, "Dora" <dora@other.test>'), ['carl@client.test', 'dora@other.test']);
+    assert.deepEqual(emailAddressesIn(''), []);
+    assert.deepEqual(emailAddressesIn(undefined), []);
+});
+
+test('envelopeOf: the fetched message\'s HEADER To/Cc win over its envelope fields; From keeps the display name; Message-ID from the message', () => {
+    const full = {
+        from: { name: 'Ada Rep', email: 'ada@alpha.test' },
+        to: [{ email: 'log-org-abc@inbound.test' }],          // the SMTP envelope — our dropbox — must NOT be the stored To
+        headers: { To: 'Carl Client <carl@client.test>', Cc: 'dora@other.test, Ada Rep <ada@alpha.test>' },
+        message_id: '<m1@alpha>',
+    };
+    assert.deepEqual(envelopeOf({ full, mail: { from: 'ignored@x.test' } }), {
+        from: 'Ada Rep <ada@alpha.test>', to: ['carl@client.test'], cc: ['dora@other.test', 'ada@alpha.test'], messageId: '<m1@alpha>',
+    });
+});
+
+test('envelopeOf: without a headers map the structured fields of the payload are the record; a flat payload works the same; everything present when unknown', () => {
+    const full = { from: 'Ada Rep <ada@alpha.test>', to: ['carl@client.test', { email: 'x@y.test' }], cc: [], message_id: '<m2@alpha>' };
+    assert.deepEqual(envelopeOf({ full }), { from: 'Ada Rep <ada@alpha.test>', to: ['carl@client.test', 'x@y.test'], cc: [], messageId: '<m2@alpha>' });
+    const mail = { from: 'ada@alpha.test', to: ['log-org@inbound.test'], cc: ['carl@client.test'], message_id: '<m3@itest>' };
+    assert.deepEqual(envelopeOf({ full: null, mail }), { from: 'ada@alpha.test', to: ['log-org@inbound.test'], cc: ['carl@client.test'], messageId: '<m3@itest>' });
+    assert.deepEqual(envelopeOf({}), { from: '', to: [], cc: [], messageId: '' }, 'every field present, empty');
+    assert.deepEqual(envelopeOf({ mail: { to: ['A@X.test', 'a@x.test'] } }).to, ['a@x.test'], 'de-duplicated, lower-cased');
+    assert.equal(envelopeOf({ full: { headers: { 'Message-Id': '<h@x>' } } }).messageId, '<h@x>', 'a Message-ID only in the headers map is still found');
+});
+
+test('email-inbound stores the envelope on the row, from envelopeOf, beside the owner (item 27)', () => {
+    const s = code(read('netlify/functions/email-inbound.mjs'));
+    assert.ok(s.includes("import { normaliseBodyText, htmlToText, attachmentNamesOf, notesOf, envelopeOf } from './_inboundText.mjs';"));
+    assert.ok(s.includes('        const envelope = envelopeOf({ full, mail });'), 'one envelope, from the fetched message and the payload');
+    assert.ok(s.includes('            emailFrom: envelope.from || null,'), 'From is stored');
+    assert.ok(s.includes('            emailTo: envelope.to,'), 'To is stored');
+    assert.ok(s.includes('            emailCc: envelope.cc,'), 'Cc is stored');
+    assert.ok(s.includes('            emailMessageId: envelope.messageId || null,'), 'REGRESSION: the Message-ID is stored — it was only ever hashed into the row id');
+    const schema = read('db/schema.ts');
+    for (const col of ["emailFrom:      text('email_from')", "emailTo:        jsonb('email_to')", "emailCc:        jsonb('email_cc')", "emailMessageId: text('email_message_id')"]) {
+        assert.ok(schema.includes(col), `schema: ${col}`);
+    }
+    const apply = read('db/apply-email-headers.mjs');
+    assert.ok(!/\b(DROP|ALTER COLUMN|TRUNCATE|DELETE)\b/.test(code(apply)), 'additive only (guide §18c)');
+    assert.equal((code(apply).match(/ADD COLUMN IF NOT EXISTS/g) || []).length, 4, 'four nullable ADD COLUMNs');
+    assert.ok(read('tests/integration/_schema-guard.mjs').includes("['activities', 'email_message_id'],"), 'the test-schema guard names the new column');
+    const san = code(read('netlify/functions/activities.mjs'));
+    assert.ok(!/email(From|To|Cc|MessageId)/.test(san), 'activities.mjs sanitize() never names the envelope, so a PUT from the editor cannot blank it');
 });

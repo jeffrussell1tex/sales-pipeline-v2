@@ -33,6 +33,20 @@ function avatarBg(name) {
     return colors[Math.abs(h) % colors.length];
 }
 
+// Item 28 (state §0.104): a contact created before §0.104 without naming a rep is
+// owned by its creator (ownerId) with a BLANK assignedRep — it read as nobody's.
+// New rows are stamped with both from one roster row; for the old ones the
+// rail names the owner: from the roster (Admins and Managers hold it), or, for
+// the owner reading their own row, from their own profile. Display only —
+// nothing authorises on this (ownership keys on ownerId, §18b22).
+function ownerNameOf(row, roster, currentUserId, myProfile) {
+    if (row?.assignedRep) return row.assignedRep;
+    if (!row?.ownerId) return '';
+    const u = (roster || []).find(x => x && x.id === row.ownerId);
+    if (u?.name) return u.name;
+    return row.ownerId === currentUserId ? (myProfile?.name || '') : '';
+}
+
 function ReadRow({ label, value, wide }) {
     if (!value && value !== 0) return null;
     return (
@@ -134,6 +148,7 @@ export default function ContactRail() {
         showActivityModal, setShowActivityModal, setActivityInitialContext, setViewingActivity, viewingActivity,
         handleSaveContact,
         handleDeleteContact,
+        currentUserId, myProfile,
         handleAddActivity,
         contactModalError, setContactModalError,
         contactModalSaving,
@@ -733,7 +748,7 @@ export default function ContactRail() {
                             </div>
                         ) : (
                             <div style={grid2}>
-                                <ReadRow label="Assigned Rep" value={formData.assignedRep} />
+                                <ReadRow label="Assigned Rep" value={ownerNameOf(formData, settings?.users, currentUserId, myProfile)} />
                                 <ReadRow label="Buyer Persona" value={formData.buyerPersona} />
                                 {formData.doNotContact && (
                                     <div style={{ gridColumn: '1 / -1', marginBottom: 10, background: '#fef2f2', border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '6px 10px', fontSize: 12, fontWeight: 600, color: T.danger }}>

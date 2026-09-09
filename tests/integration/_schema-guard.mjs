@@ -27,6 +27,7 @@ import { sql } from 'drizzle-orm';
 // [table, column] pairs the suites need. Newest first -- the most recently added
 // column is the one most likely to be missing.
 const REQUIRED = [
+    ['activities', 'email_message_id'],  // §0.105: a logged email's From/To/Cc/Message-ID (db/apply-email-headers.mjs --test)
     ['site_job_heartbeats', 'site'],       // §0.100: scheduled-job heartbeats, per site (db/apply-site-job-heartbeats.mjs --test)
     ['audit_stream_destinations', 'id'],   // §0.87: audit streaming destinations (db/apply-audit-stream.mjs --test)
     ['coaching_notes', 'id'],      // §0.82: coaching notes in their own table

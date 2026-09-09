@@ -67,3 +67,60 @@ export function notesOf({ subject, body, attachmentNames = [] }, max) {
     const tail = attachmentNames.length ? '\n\nAttachments: ' + attachmentNames.join(', ') : '';
     return (head + body + tail).slice(0, max);
 }
+
+// ── The envelope (state §0.105, handoff item 27) ─────────────────────────────
+
+/** Every email address in a raw header value — display names, angle brackets and commas tolerated — lower-cased. */
+export const emailAddressesIn = (s) =>
+    (String(s || '').match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/gi) || []).map(a => a.toLowerCase());
+
+/**
+ * Resend's parsed `headers` as one lower-cased map, whichever of its two shapes
+ * arrived (an object map, or an array of { name | key, value }). {} for anything else.
+ */
+export function headerMapOf(headers) {
+    const map = {};
+    if (Array.isArray(headers)) {
+        for (const it of headers) {
+            const name = String((it && (it.name || it.key)) || '').toLowerCase();
+            if (name) map[name] = (it && it.value) || '';
+        }
+    } else if (headers && typeof headers === 'object') {
+        for (const k of Object.keys(headers)) map[k.toLowerCase()] = headers[k];
+    }
+    return map;
+}
+
+const listOf = (v) => [].concat(v ?? []).map(r => (r && typeof r === 'object') ? (r.email || '') : r);
+const fromTextOf = (v) => {
+    if (!v) return '';
+    if (typeof v === 'string') return v.trim();
+    if (typeof v === 'object') {
+        const name = String(v.name || '').trim(), email = String(v.email || '').trim();
+        return name && email ? `${name} <${email}>` : (email || name);
+    }
+    return '';
+};
+
+/**
+ * What the row records about who the email was between: `from` as the provider
+ * gave it ("Name <addr>" when both are known), `to` and `cc` as address lists,
+ * and the RFC Message-ID. The header To/Cc win when the fetched message carries
+ * a headers map (Resend's structured `to` is the SMTP envelope — our own
+ * dropbox); otherwise the structured fields of whichever payload there is. Every
+ * field is present, empty when unknown, so the viewer and the row agree.
+ */
+export function envelopeOf({ full, mail } = {}) {
+    const map = headerMapOf(full && full.headers);
+    const src = full || mail || {};
+    const to = map.to ? emailAddressesIn(map.to) : listOf(src.to).flatMap(emailAddressesIn);
+    const cc = map.cc ? emailAddressesIn(map.cc) : listOf(src.cc).flatMap(emailAddressesIn);
+    const from = fromTextOf(src.from) || fromTextOf(mail && mail.from);
+    const messageId = String((full && full.message_id) || (mail && mail.message_id) || (map['message-id'] || '')).trim();
+    return {
+        from: from.slice(0, 500),
+        to: [...new Set(to)].slice(0, 50),
+        cc: [...new Set(cc)].slice(0, 50),
+        messageId: messageId.slice(0, 500),
+    };
+}

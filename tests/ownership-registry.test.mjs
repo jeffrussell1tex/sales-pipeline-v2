@@ -127,6 +127,21 @@ test('THE GUARD — the app user id prefix is asserted, not assumed', () => {
 
 test('REGRESSION — contacts displays assignedRep, and createdBy is not a contacts column', () => {
     assert.equal(OWNER_NAME_COLUMNS.contact, 'assignedRep');
+});
+
+// Item 28 (state §0.104): a record created without naming an owner is owned by
+// its creator (ownerId) AND named for them (the display column) — from one
+// roster row, so the two columns cannot disagree. The integration suite proves
+// it against the database; this scan keeps the stamp's shape, so a mutant that
+// drops the name half is caught without a database.
+test('stampOwnerId names the caller on what they create when nothing was named (item 28)', () => {
+    const src = readFileSync(new URL('../netlify/functions/_lib.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    const fn = src.match(/^export async function stampOwnerId\([^)]*\) \{[\s\S]*?^\}/m)?.[0];
+    assert.ok(fn, 'stampOwnerId is a top-level export of _lib.mjs');
+    assert.ok(fn.includes("if (supplied) return { ...row, ownerId: await resolveOwnerId(supplied, orgId) };"), 'a supplied name is resolved and KEPT — never overwritten');
+    assert.ok(fn.includes('    const caller = await resolveCaller(clerkUserId, orgId);'), 'the caller comes from one roster lookup');
+    assert.ok(fn.includes('    return { ...row, ownerId: caller.id, [nameKey]: caller.name || null };'), 'REGRESSION (item 28): owner id AND display name stamped together — the row read as nobody\'s');
+    assert.ok(!fn.includes('ownerIdForWrite'), 'the stamp no longer goes through the id-only helper');
     const props = propertiesOf('contacts');
     assert.ok(props.has('assignedRep'), 'contacts must have assignedRep');
     assert.ok(!props.has('createdBy'), 'contacts has no createdBy — if it gains one, revisit the ownership rule deliberately');
