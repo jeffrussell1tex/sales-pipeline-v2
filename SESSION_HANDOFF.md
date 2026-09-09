@@ -1212,6 +1212,12 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   variable", 9 Sep); dev stays unset by choice.** Not yet observed: a Request
   click on a catalogue row in prod's Connected apps, then the mail in that
   inbox (the response says whether it went).
+- **OBSERVED on prod (Jeff's screenshots, 21:14 UTC): Sync from Clerk on the
+  Users page ("1 added" — his row), Request on HubSpot recorded with his
+  name, and the mail in accelerep@outlook.com ("Requested by: Jeff Russell")
+  — the request path works end to end; the prod Slack card is Live
+  (#sales-alerts, 7 of 7). §0.108's own proof on prod now needs a NEW member
+  or a fresh workspace, since Jeff's row exists by the Sync.**
 - **Ship §0.108 when Jeff says so** — functions only, no hash change; the
   proof is Netlify's prod record, then a read-only SELECT of `users` for
   `org_3Dwny…` after Jeff's next page load: his row, `usr_…`, his Clerk id,
