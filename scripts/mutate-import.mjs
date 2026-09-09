@@ -3,13 +3,17 @@
 // Each entry breaks exactly one rule the new suites claim to enforce and asserts
 // the suites go red. A test that has never failed is not evidence. Files are
 // saved and restored in memory — never via `git checkout`, which has reverted
-// unrelated fixes mid-session before.
+// unrelated fixes mid-session before — through scripts/_mutant.mjs, which
+// restores in a finally AND from a process exit hook: twice this harness died
+// mid-mutant (a transient Windows file lock) and left a mutant on disk for
+// `git status` to catch (state §0.102, handoff item 35).
 //
 // Run: node scripts/mutate-import.mjs
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
+import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1614,6 +1618,19 @@ const mutations = [
         'netlify/functions/digest.mjs',
         "                (u.role === 'Manager' || u.role === 'Admin')",
         "                (u.userType === 'Manager' || u.userType === 'Admin')"],
+    // ── §0.102: the sidecar that keeps a mutant from surviving a crash ──
+    ['harness: the original is not registered before the mutant write (a crash leaves the mutant)',
+        'scripts/_mutant.mjs',
+        '    pending.set(file, original);   // BEFORE the write: a write that throws half-way is still restored',
+        '    /* not registered */'],
+    ['harness: the finally stops restoring',
+        'scripts/_mutant.mjs',
+        '            writeFileSync(file, original);\n            pending.delete(file);',
+        '            pending.delete(file);'],
+    ['harness: an async run is graded after the restore',
+        'scripts/_mutant.mjs',
+        "        if (result && typeof result.then === 'function') {",
+        '        if (false) {'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
@@ -1642,6 +1659,8 @@ try {
     process.exit(1);
 }
 
+armRestoreOnExit();   // no exit path leaves a mutant on disk (§0.102)
+
 let survived = 0;
 let stale = 0;
 for (const [name, file, from, to] of mutations) {
@@ -1656,14 +1675,12 @@ for (const [name, file, from, to] of mutations) {
         stale++;
         continue;
     }
-    writeFileSync(file, original.replace(re, () => toFileEol(to, original)));
-    let failed = false;
-    try {
-        execSync(`node --test ${SUITES}`, { stdio: 'pipe' });
-    } catch {
-        failed = true;
-    }
-    writeFileSync(file, original);
+    // The mutant goes on and comes off through the sidecar: restored in a finally,
+    // and again by the exit hook if this process dies mid-run (§0.102, item 35).
+    const failed = withMutant(file, original.replace(re, () => toFileEol(to, original)), () => {
+        try { execSync(`node --test ${SUITES}`, { stdio: 'pipe' }); return false; }
+        catch { return true; }
+    });
     console.log(`${failed ? 'CAUGHT' : 'SURVIVED'}  ${name}`);
     if (!failed) survived++;
 }

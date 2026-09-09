@@ -2728,6 +2728,32 @@ Note also why the write-path policy did not save it — visibility filters do th
 comparison in the endpoint and never reach `mayMutate()`. **Reads need their own
 guards.** A policy function protects only the callers that call it.
 
+### 3. The harness's own death must not leave a mutant on disk (§0.102, 9 Sep)
+
+Twice (§0.96, §0.100) the harness died mid-mutant — the second time
+`writeFileSync` threw `UNKNOWN errno -4094`, a transient Windows file lock —
+and left a mutated source file on disk. `git status` at the next step caught
+it both times; nothing else would have, and a mutant that reaches a commit is
+a bug shipped by the tool meant to prove bugs are caught. The loop had been
+write-mutant / run / write-original: three statements with nothing between a
+throw and a dirty tree.
+
+Now every mutant goes through `scripts/_mutant.mjs`: the original is
+registered BEFORE the mutant write, restored in a `finally`, and restored
+again by a process-level hook on exit, on SIGINT/SIGTERM/SIGHUP and on an
+uncaught exception — so `process.exit()` from inside a run, which skips every
+`finally`, still restores (`tests/mutant-restore.test.mjs` proves it with a
+child process). A restore that fails stays registered for the hook and is
+rethrown, because a harness that keeps grading over a stuck mutant misgrades
+every mutant after it. The rules:
+
+- **A tool that edits the tree registers its undo before its edit**, not after
+  the thing it wanted to do — the crash comes between.
+- **The harness has no `writeFileSync` of its own** (a source scan in the
+  suite); a new harness or a new mutation loop uses `withMutant`.
+- **`git status` after every harness run stays** — the hook is a second line,
+  not a reason to stop looking.
+
 ---
 
 ## 18b24. A Vocabulary Is A Schema (hard rule)
