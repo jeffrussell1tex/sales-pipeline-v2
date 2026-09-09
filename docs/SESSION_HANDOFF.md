@@ -175,10 +175,12 @@ doubled backslashes; §5 carries the working note). Five gates, **619/619
 unit**, **340/340 mutations**, **124/124 integration**, the bundle hash
 unchanged by both batches (functions-only, tooling-only). **ON DEV ONLY, NOT
 shipped** — `master` stays at `5a306e3`. **New open item 36:** both sites
-run every scheduled job against the one database — since the tenth ship a
-qualifying pipeline alert goes out twice (one per site: email, SMS, and the
-Slack post), and after the next ship so will every digest; Jeff's call on
-the shape (§5). **Then Jeff: "ship the manager digest / add the per site env
+run every scheduled job against the one database — every task reminder
+and the lead-scoring batch twice, and after the next ship every digest
+twice; Jeff's call on the shape (§5). (First written as "a qualifying
+pipeline alert goes out twice" — corrected below: the five hourly signals
+dedupe through `recommendation_log`; Jeff's screenshot of the first hourly
+alert ever, 13:00 UTC 9 Sep, one post with both sites running.) **Then Jeff: "ship the manager digest / add the per site env
 flag" → §0.103 `67d5554`:** `jobsEnabled(env)` — a job runs only where
 `JOBS_ENABLED` is exactly "true" in that site's Netlify env, the heartbeat
 wrapper the one gate (no run, no stamp, a 200 that says skipped anywhere
@@ -1028,8 +1030,11 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   the test database; then delete the LEGACY block from `schema.ts`,
   `db/apply-job-heartbeats.mjs`, and the two "legacy" scan assertions in
   `tests/job-heartbeat.test.mjs`.
-- **DONE — item 36 is §0.103 (`67d5554`), option (a), the ship gated on the
-  flag above.** Was: **Item 36 — design first, Jeff's call: one database, two sites, every
+- **DONE — item 36 is §0.103 (`67d5554`), option (a), shipped. And a
+  correction, OBSERVED by (Jeff's screenshot of #sales-alerts, 9 Sep): the first hourly pipeline alert ever — "🔴 Close date lapsed — test (Test) — close date 2026-04-30 passed 132 days ago · Rep: Jeff Russell · Stage: Qualification · ARR: $100K", 8:00 AM Chicago = 13:00 UTC, while BOTH sites were still running — posted ONCE: the five hourly signals dedupe through `recommendation_log` for seven
+  days (`wasRecentlyAlerted`), so the "twice" claim held only for the digests,
+  task reminders and lead scoring, which have no such record — the flag stands
+  for those (state §0.103, guide §18b33 corrected).** Was: **Item 36 — design first, Jeff's call: one database, two sites, every
   scheduled job running on both.** Since the tenth ship prod's
   `pipeline-alerts` runs the fixed code beside dev's, both reading the same
   orgs, deals, preferences and Slack webhook: a qualifying signal at the top
@@ -1130,7 +1135,8 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   screenshot: prod Enabled, dev Disabled. Every email observation is now
   prod's, running the same code as dev; if that has changed, say so before
   trusting one (§18b31).
-- **Look at #sales-alerts.** The first hourly `pipeline-alerts` run that can
+- **DONE — 9 Sep, Jeff's screenshot: the first hourly alert ever (Close date
+  lapsed, the test deal, 13:00 UTC), and it posted once.** Was: **Look at #sales-alerts.** The first hourly `pipeline-alerts` run that can
   get past its first deal on dev was 22:00 UTC 8 Sep (state §0.95). A post
   there is the first alert in five months; none is not a finding by itself —
   it needs a qualifying deal (14 days silent, stuck past the stage average,
