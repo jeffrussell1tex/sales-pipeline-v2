@@ -17,6 +17,9 @@ test('DispatchTab: no inert "Manual pick" button, and no copy telling the user t
     const s = code(read('src/Tabs/DispatchTab.jsx'));
     assert.ok(!s.includes('Manual pick'), 'DispatchTab still carries "Manual pick"');
     assert.ok(s.includes('distance from job, and customer preference.'), 'the scoring explanation stays');
+    // §9 "Priority vocabulary normalization" asked for the dual-accept alias to
+    // be collapsed in its own commit once the vocabulary was one; it is.
+    assert.ok(!s.includes('prioColor2'), 'the prioColor2 alias is collapsed — one priority colour map');
 });
 
 test('DispatchJobTemplatesDetail: no inert "Test auto-create" button', () => {

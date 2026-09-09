@@ -980,8 +980,6 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
     const scheduledJobs = jobs.filter(j => j.start && (j.assignedTechIds || []).length > 0);
     const overbooking = techs.some(t => (t.hoursThisWeek || 0) > (t.hoursCap || 40));
 
-    const prioColor2 = prioColor;   // kept as an alias for existing call sites
-
     return (
         <div style={{ display: 'flex', height: '100%', overflow: 'hidden', fontFamily: T.sans }}>
             {/* Left — job queue */}
@@ -1003,7 +1001,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
                     {sortedQueue.map(j => {
-                        const pc = prioColor2(j.priority);
+                        const pc = prioColor(j.priority);
                         const isSel = j.id === selectedJob?.id;
                         const isScheduled = j.start && (j.assignedTechIds || []).length > 0;
                         return (
@@ -1053,7 +1051,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                             borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 999,
-                                    background: `${prioColor2(selectedJob.priority)}22`, color: prioColor2(selectedJob.priority),
+                                    background: `${prioColor(selectedJob.priority)}22`, color: prioColor(selectedJob.priority),
                                     textTransform: 'uppercase', letterSpacing: 0.6 }}>
                                     {selectedJob.priority}
                                 </span>

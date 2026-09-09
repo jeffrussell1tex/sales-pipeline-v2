@@ -1762,6 +1762,10 @@ const mutations = [
         'src/Tabs/DispatchTab.jsx',
         'distance from job, and customer preference.',
         'distance from job, and customer preference. Override by clicking Manual pick.'],
+    ['dispatch: the prioColor2 alias returns',
+        'src/Tabs/DispatchTab.jsx',
+        '    const overbooking = techs.some(t => (t.hoursThisWeek || 0) > (t.hoursCap || 40));\n\n    return (',
+        '    const overbooking = techs.some(t => (t.hoursThisWeek || 0) > (t.hoursCap || 40));\n\n    const prioColor2 = prioColor;\n\n    return ('],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
