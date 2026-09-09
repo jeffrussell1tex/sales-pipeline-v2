@@ -231,7 +231,17 @@ by the 19:45 deploy's function, which never saw the variable; "ship prod" →
 THE THIRTEENTH SHIP: `master` `901ad12` → `f546a03` (7 commits), pushed
 20:45:52 UTC, salespipelinetracker.com serving `index-DKAHLlej.js` 60 seconds
 later, Netlify record `6aa1c585…`, 76 functions, prod's jobs ticking
-through it. §0.106's post and the request mail are NOT yet observed.** 629/621 unit, 345/345 mutations,
+through it. §0.106's post and the request mail are NOT yet observed.**
+**Then Jeff: "Please fix the clerk name issue for integration requests" —
+§0.108 `8134313`: the prod workspace had NO roster rows at all (only an Admin's
+Sync ever created them), so its Admin's request recorded no name and
+everything they created was unowned; now `ensureRosterRow` provisions the
+caller's row from Clerk, in the sync's shape with a validated role,
+idempotently — from the self-profile GET when nothing matches and from the
+request function for an unrostered requester; landed on dev (record
+`6aa1ca8b…`, 21:08:04 UTC). And Jeff: "production is connected to slack".
+642/642 unit, 361/361 mutations, 128/128 integration. NOT
+shipped; NOT observed.** 629/621 unit, 345/345 mutations,
 125/125 integration.
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
@@ -259,7 +269,7 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
-`### 0.107` with a paragraph beginning **"PROD SHIPPED — the THIRTEENTH ship"**, `### 0.106` (the bulk stage move posts one line), `### 0.105` (the email envelope) and `### 0.104` (owner and display name stamped together), `### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
+`### 0.108` (a first sign-in provisions the roster row), `### 0.107` with a paragraph beginning **"PROD SHIPPED — the THIRTEENTH ship"**, `### 0.106` (the bulk stage move posts one line), `### 0.105` (the email envelope) and `### 0.104` (owner and display name stamped together), `### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
 beginning **"Landed on dev (`cab9b92`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` under `## 18b23` carry a heading beginning
 **"### 3. The harness's own death must not leave a mutant on disk (§0.102,
@@ -278,7 +288,18 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the THIRTEENTH ship put §0.106 and §0.107 on `master` (9 Sep 20:45 UTC); nothing is on `dev` alone but this ship-record
+## 1. What shipped — the THIRTEENTH ship put §0.106 and §0.107 on `master` (9 Sep 20:45 UTC); §0.108 is on `dev` only
+
+**Eleventh session, seventh batch (9 Sep) — ON DEV ONLY, deploy-verified, NOT
+observed, NOT shipped:** `8134313` (state §0.108) and its landing docs commit
+`c62e5bc`. Functions only — the bundle hash is unchanged; Netlify's record
+`6aa1ca8b…` = `8134313`, published 21:08:04 UTC, 76 functions, the `_lib`, `users`
+and `integration-requests` digests changed (and every function importing
+`_lib`). What it is: a signed-in member of an org with no roster row gets one
+on their first request — the self-profile GET provisions from the Clerk user
+it already fetched; the request function provisions an unrostered requester.
+The prod workspace's rows will appear the moment Jeff loads it after the
+ship. `master` stays at `f546a03`.
 
 **PROD SHIPPED — the THIRTEENTH ship (Jeff: "ship prod", 9 Sep — after "no email
 arrived": the request mail needed a deploy that carried the new variable).**
@@ -1042,22 +1063,21 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (9 Sep, eleventh session — after the THIRTEENTH ship)
+## 4. Verified state at close (9 Sep, eleventh session — after the THIRTEENTH ship and §0.108)
 
 SIX gates green (`check:fnscope` since §0.107: 83 function files, no unbound
-reads; the five on 154 files) · **640/640 unit** (30 new this session:
+reads; the five on 154 files) · **642/642 unit** (32 new this session:
 `digest-prefs` 4, `mutant-restore` 8, `job-heartbeat` 2, `inbound-text` 5,
 `activity-view` 2, `ownership-registry` 1, `slack-alerts` 2,
-`check-fnscope` 6) · **358/358 mutations, printed green baseline** (25
-added this session) · build `index--5aHcCr_.js` (2,447 kB; the fifth new
-hash of the session), guard OK, `dist/` cleared · **127/127
-integration** (3 new this session) · **no pane
+`check-fnscope` 6, `roster-provision` 2) · **361/361 mutations, printed
+green baseline** (28 added this session) · build `index--5aHcCr_.js` (2,447 kB; the fifth new
+hash of the session), guard OK, `dist/` cleared · **128/128 integration** (4 new this session) · **no pane
 browser pass** — the pane holds no session; §0.103's tile copy is a source
 scan and Jeff's eyeball · dev deploys verified from Netlify's record
 (`6aa18e68…` = `cab9b92`; `6aa197ca…` = `67d5554`) · **`master` ==
 `f546a03`, prod serving `index-DKAHLlej.js` (the THIRTEENTH ship, 20:46:52
-UTC)**; dev is ahead of `master` only by the ship-record docs commit
-(`adda080`) and the handoff commit carrying this line · **one schema change: four nullable `activities.email_*`
+UTC)**; dev is ahead of `master` by the ship-record docs commits, `8134313`
+(§0.108), its landing docs commit (`c62e5bc`) and the handoff commits · **one schema change: four nullable `activities.email_*`
 columns, additive, in BOTH databases, read back** ·
 **dev's scheduled jobs are OFF (no `JOBS_ENABLED` on `accelerep`, by
 design); prod's run the shipped code with the flag on — its first per-site
@@ -1075,7 +1095,7 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Eleventh-session prep (read at the twelfth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect only DOCS commits after `f546a03` (the ship record, observations,
+  expect `8134313` and docs commits after `f546a03` (the ship record, observations,
   handoffs) — a CODE commit there is
   unshipped code and a finding.
 - **DONE — the ELEVENTH ship (§1): `JOBS_ENABLED` set on `sales-pipeline-v2`
@@ -1192,17 +1212,20 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   variable", 9 Sep); dev stays unset by choice.** Not yet observed: a Request
   click on a catalogue row in prod's Connected apps, then the mail in that
   inbox (the response says whether it went).
+- **Ship §0.108 when Jeff says so** — functions only, no hash change; the
+  proof is Netlify's prod record, then a read-only SELECT of `users` for
+  `org_3Dwny…` after Jeff's next page load: his row, `usr_…`, his Clerk id,
+  role Admin. Then a Request on a not-yet-requested row → `byName` his name,
+  and the mail reads it (`INTEGRATION_REQUESTS_TO` is on prod since the
+  thirteenth ship).
 - **DONE — the thirteenth ship (§1).** Two observations on prod, Jeff's: (1)
   Request on HubSpot (DocuSign is already recorded for that workspace, and a
   repeat is idempotent) → the mail at accelerep@outlook.com within a minute —
   this deploy is the first whose functions carry `INTEGRATION_REQUESTS_TO`;
   (2) a CSV import that moves at least one deal, with #sales-alerts open → one
-  "Stages moved in bulk" post (the prod workspace's Slack card read "Not
-  connected" in Jeff's screenshot — configure it there first, or observe on
-  dev whose org has the webhook). Open: the DocuSign request row carries
-  `byName: null` — Jeff's prod Clerk user has no row in that workspace's
-  roster, so the mail would say "(no name)"; a roster sync question, Jeff's
-  call.
+  "Stages moved in bulk" post — **Jeff: "production is connected to slack"**,
+  so it is observable there now. The `byName: null` on the DocuSign row was
+  the prod workspace having no roster rows at all — §0.108 above.
 - **Carried, unchanged:** the Connected
   apps non-Admin dead branches, `INTEGRATION_REQUESTS_TO` unset, the bulk
   stage-move endpoint not posting to Slack (Jeff's call on a summary line),
