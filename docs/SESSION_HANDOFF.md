@@ -248,6 +248,37 @@ then "ship prod" → THE FOURTEENTH SHIP: `master` `f546a03` → `59116be`
 `6aa1cce0…`, 76 functions, prod's jobs ticking through it.** 629/621 unit, 345/345 mutations,
 125/125 integration.
 
+**Twelfth session (9 September 2026, Jeff: "Claude, you said these are left on
+our list. Let's get these all resolved" — the four backlog phrases at the
+bottom of the state doc: dispatch gaps, settings panels that swallow save
+errors, seed-data cleanup, the self-profile security follow-up) — CLOSE.**
+The ritual passed (clean tree, copies identical, `master` == `59116be`).
+Everything was READ against the tree before any code, and most of it had been
+done by earlier batches and never struck. What was live became **§0.109
+`29a6e7e`**: `PUT /users?me=true` had its role column pinned but merged the
+WHOLE body, and the profile panel sends the whole roster row it holds, so
+every preference toggle rewrote quota, team, territory, `active`, the
+quarterly quotas and the forecast calls from the caller's own copy (and a
+hand-written body could set any of them) — now `_selfProfile.mjs`'s frozen
+`SELF_EDITABLE_KEYS` is all that reaches the merge and the blob's
+`userType` copy is pinned to the stored role (guide §18b34 new; proven
+against the test database — one body carrying fourteen administrative keys
+changes none of them; `email` kept self-editable by design); the team and
+territory delete cascades and the lead-conversion benchmark save reported a
+refused write to the console alone — now a banner above the table with the
+member rows that did not update named; the inert "Manual pick" and "Test
+auto-create" buttons removed. Struck by reading: the four dispatch "smaller
+gaps" (job numbers, preferred tech, equipment UI, crew size), the template
+name bug, templates in New Job, the Technician per-field whitelist and the
+legacy tech fields, "Save draft", five salesProcess stubs; the "ten
+@test.com users" are ONE, a linked Clerk account (read-only query, four orgs
+read). Then, as its own commit as the §9 entry asked, **`9996c1c`** collapsed
+`prioColor2` into `prioColor`. Six gates, 652/652 unit (+10), 369/369
+mutations (+8, printed green baseline), 133/133 integration (+5), build
+guard OK `index-BlthEjPa.js`, `dist/` cleared. **NOTHING SHIPPED — two
+CODE commits sit on `dev` alone; no browser pass (the pane holds no
+session).**
+
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
 since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
@@ -273,6 +304,8 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
+`### 0.109` with a paragraph beginning **"Seed data — struck by a read-only query."** and does
+`docs/ACCELEREP_CODING_GUIDE.md` carry `## 18b34. A Self-Service Endpoint Takes An Allowlist Of Fields`; does the state doc contain
 `### 0.108` with a paragraph beginning **"PROD SHIPPED — the FOURTEENTH ship"**, `### 0.107` with a paragraph beginning **"PROD SHIPPED — the THIRTEENTH ship"**, `### 0.106` (the bulk stage move posts one line), `### 0.105` (the email envelope) and `### 0.104` (owner and display name stamped together), `### 0.103` with a paragraph beginning **"PROD SHIPPED — the ELEVENTH ship"**, `### 0.102` (the mutation harness sidecar) and `### 0.101` with a paragraph
 beginning **"Landed on dev (`cab9b92`"**, and does
 `docs/ACCELEREP_CODING_GUIDE.md` under `## 18b23` carry a heading beginning
@@ -292,7 +325,15 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); nothing is on `dev` alone but this ship-record
+## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); `dev` is now ahead by TWO CODE commits (§0.109 `29a6e7e`, the prioColor2 collapse `9996c1c`) — NOT shipped
+
+**Twelfth session — NOTHING SHIPPED.** `master` stays at `59116be`. On `dev`
+alone: `29a6e7e` (§0.109 — the self-profile allowlist, the three settings
+banners, two inert dispatch buttons gone, the §9 backlog struck by reading;
+`_selfProfile.mjs` is a NEW function file, so the next ship is functions AND
+bundle) and `9996c1c` (`prioColor2` collapsed — bundle only), plus the docs
+commits. The bundle hash after both is `index-BlthEjPa.js`. Ship when Jeff
+says so — §5 says what to observe on prod afterwards.
 
 **PROD SHIPPED — the FOURTEENTH ship (Jeff: "ship prod", 9 Sep).** Ancestor check
 (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`),
@@ -1081,9 +1122,26 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (9 Sep, eleventh session — after the FOURTEENTH ship)
+## 4. Verified state at close (9 Sep, twelfth session — §0.109 and the alias collapse on `dev`, NOT shipped)
 
-SIX gates green (`check:fnscope` since §0.107: 83 function files, no unbound
+SIX gates green (`check:fnscope`: 84 function files — `_selfProfile.mjs` is
+new; the five on 154 files) · **652/652 unit** (10 new this session:
+`self-profile` 4, `settings-cascade-errors` 4, `dispatch-stubs` 2) ·
+**369/369 mutations, printed green baseline** (8 added this session — 7 in
+`29a6e7e`, 1 in `9996c1c`; both runs 100% caught, no STALE) · build
+`index-BlthEjPa.js` (2,447 kB; the second new hash of the session —
+`index-CRtPA764.js` after `29a6e7e`, this one after `9996c1c`), guard OK,
+`dist/` cleared after each build · **133/133 integration** (5 new:
+`users-self.itest`) · **no browser pass** — the pane holds no session; the
+new banners need a REFUSED settings PUT, which an Admin's delete does not
+produce · **no schema change** · **no deploy verified this session** — dev's
+deploy of `29a6e7e`/`9996c1c` was NOT read from Netlify's record (the session
+closed at the commit) · **`master` == `59116be`; `dev` ahead by the two
+CODE commits and the docs commits after them** · the read-only seed query
+(9 Sep): one `@test.com` row in the whole database, linked to Clerk · the
+working tree was clean at close, this handoff commit the last.
+
+**Eleventh session's close, kept for the record:** SIX gates green (`check:fnscope` since §0.107: 83 function files, no unbound
 reads; the five on 154 files) · **642/642 unit** (32 new this session:
 `digest-prefs` 4, `mutant-restore` 8, `job-heartbeat` 2, `inbound-text` 5,
 `activity-view` 2, `ownership-registry` 1, `slack-alerts` 2,
@@ -1111,6 +1169,44 @@ read at 16:35 UTC: `accelerep.netlify.app` alone, four jobs, all `ok`,
 copy of the same bug) · the working tree was clean at close · **ordering slip, corrected here:** the §0.103 landing docs commit (`8a6edc8`) landed AFTER the first handoff commit `34b843c` because the landing script's anchor missed on first apply (a typo in its own text); this line was written last, after that commit — SIXTEEN commits ahead of `master` counting the handoff commits themselves, the last of them the one carrying this line.
 
 ## 5. Next — start here
+
+**Twelfth-session prep (read at the thirteenth), in order:**
+- **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
+  expect the docs commits after `59116be` PLUS two CODE commits, `29a6e7e`
+  (§0.109) and `9996c1c` (prioColor2), and the docs commits after them. Those
+  two are UNSHIPPED CODE by design (Jeff has not said ship); anything else is
+  a finding.
+- **Read dev's deploy from Netlify's record first** — this session closed at
+  the commit without reading it: the deploy for `9996c1c` (or the handoff
+  commit after it) must show `index-BlthEjPa.js` and 77 functions
+  (`_selfProfile.mjs` is new — the function-import graph test passed, but
+  the bundle guard does not count function files). Then, signed in as
+  KAREN (role User) on accelerep.netlify.app: avatar → Profile, change her
+  title, Save; avatar → Notifications, flip one toggle; hard-refresh — both
+  persist. That is the allowlist's live proof from the client side (every
+  key the panel sends is pinned on the list by test, but observe it once).
+  Then a read-only SELECT of her `users` row: quota, team, territory,
+  active unchanged by those saves.
+- **Ship when Jeff says so** — functions AND bundle. After the ship, the same
+  two checks on salespipelinetracker.com as Jeff (Admin): a profile save and
+  a preference toggle persist; his row's quota/team unchanged (read-only).
+- **The banners (§0.109) have no Admin-visible trigger:** a refused settings
+  PUT needs a non-Admin, and non-Admins cannot reach Settings; a 500 or a
+  network failure is the only path. Observe instead that an Admin's team
+  delete still clears its members with nothing in the console.
+- **Open, restated in state §9 by this session's reading:** drag-to-reschedule
+  on the dispatch week grid (nothing is draggable); the New Job flow is three
+  client-side writes and cannot be one transaction without one server
+  endpoint; `dispatch_jobs.priority` legacy values — a read-only
+  `SELECT DISTINCT priority FROM dispatch_jobs` first, Jeff's hand for any
+  UPDATE; the Add-vs-commit question across settings panels; the 13 panels
+  whose persistence shape differs (unchanged). `email` stays self-editable
+  on the profile — Jeff's call to revisit.
+- **Carried, unchanged from the eleventh:** the legacy `job_heartbeats`
+  DROP (Jeff's hand, both databases, after prod's four rows are there);
+  Monday 14 Sep 13:00 UTC is the first manager digest ever; prod's Workspace
+  Health should read "Scheduled jobs running"; re-read Resend → Webhooks
+  before any email work.
 
 **Eleventh-session prep (read at the twelfth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
