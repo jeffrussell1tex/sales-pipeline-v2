@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1727,6 +1727,41 @@ const mutations = [
         'scripts/_mutant.mjs',
         "        if (result && typeof result.then === 'function') {",
         '        if (false) {'],
+    // ── The self-profile allowlist; the last three console-only settings catches; two inert dispatch buttons (0.109) ──
+    ['self-profile: the allowlist drops — the whole body reaches the merge',
+        'netlify/functions/users.mjs',
+        '            const own  = { id: data.id, ...pickSelfEditable(data) };',
+        '            const own  = { ...data };'],
+
+    ['self-profile: the blob role copy is taken from the body again (me branch)',
+        'netlify/functions/users.mjs',
+        '            const clean = withRole(sanitize({ ...(await mergeForUpdate(own)), userType: storedRole }), storedRole);',
+        '            const clean = withRole(sanitize(await mergeForUpdate(own)), storedRole);'],
+
+    ['self-profile: quota becomes self-editable',
+        'netlify/functions/_selfProfile.mjs',
+        "    'notificationPrefs', 'digestTime', 'smsNotifications', 'timezone',",
+        "    'notificationPrefs', 'digestTime', 'smsNotifications', 'timezone', 'quota',"],
+
+    ['cascade: a refused team delete is logged, not shown',
+        'src/Tabs/settings/people/TeamsDetail.jsx',
+        '                setDeleteErr(`Team not deleted — ${e.message}`);',
+        "                console.error('Delete team failed', e);"],
+
+    ['cascade: a refused territory delete is logged, not shown',
+        'src/Tabs/settings/people/TerritoriesDetail.jsx',
+        '                setDeleteErr(`Territory not deleted — ${e.message}`);',
+        "                console.error('Delete territory failed', e);"],
+
+    ['lead-conv: a refused benchmark save is logged, not shown',
+        'src/Tabs/settings/salesProcess/LeadConversionDetail.jsx',
+        "            setSaveError(e.message || 'Save failed.');",
+        "            console.error('Failed to save lead conv benchmarks', e);"],
+
+    ['dispatch: the copy pointing at the inert Manual pick button returns',
+        'src/Tabs/DispatchTab.jsx',
+        'distance from job, and customer preference.',
+        'distance from job, and customer preference. Override by clicking Manual pick.'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

@@ -298,7 +298,6 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             extraActions={
                 <>
-                    <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Test auto-create</button>
                     <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,name:'',ctypes:[],propertyTypes:[],crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',vehicleType:'',equipCategories:[],equipUnmatched:[],autojob:true,priority:'normal',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
                 </>
             }>

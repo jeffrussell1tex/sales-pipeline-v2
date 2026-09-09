@@ -3299,3 +3299,35 @@ The check: `node --test` a suite that calls the helper with the shapes the
 job passes; and the mutation harness's `SUITES` list must name the suite, or
 its mutants survive silently — the first run here printed three SURVIVED
 lines for exactly that reason, which is the harness working.
+
+---
+
+## 18b34. A Self-Service Endpoint Takes An Allowlist Of Fields (hard rule)
+
+**Origin (state §0.109):** `PUT /users?me=true` is the one write in
+`users.mjs` every role may call. After a self-supplied `role` polluted the
+roster, the role column was pinned to the stored value — a denylist of one.
+Everything else in the body still reached the merge, and the profile panel
+sends the whole roster row it holds (`{ ...myDbUser, ...updates }`), so every
+preference toggle rewrote quota, team, territory, `active`, the quarterly
+quotas and the forecast calls from the caller's own copy, and a body written
+by hand could set any of them. The profile blob's `userType` copy came from
+the body too.
+
+**The rule:** an endpoint a member calls about THEMSELVES declares the fields
+they may change — a frozen list in a pure module (`_selfProfile.mjs`) — and
+builds its write from `{ id, ...pickSelfEditable(data) }`, with the id
+checked against the roster first. A column added to the row builder later is
+administrative until someone puts it on the list on purpose. Drop, do not
+400: the client has always sent the extra keys, and a refusal would break
+every save it makes. A key the list drops keeps its stored value through the
+read-then-merge (§18b13); a derived copy of a protected column (the blob's
+`userType`) is pinned to the stored value, never taken from the body.
+
+**The check, three-sided:** a unit test asserts every administrative key is
+ABSENT from the list, so a mutant that adds one fails; an integration test
+sends every administrative key in one body and reads the row back unchanged
+(and the same identity's row in another org untouched); and a scan of the
+client proves every key the panel saves is ON the list — otherwise a save is
+dropped silently, which is the same bug seen from the other side
+(`tests/self-profile.test.mjs`, `tests/integration/users-self.itest.mjs`).

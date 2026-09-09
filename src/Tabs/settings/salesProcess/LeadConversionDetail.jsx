@@ -59,7 +59,9 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
             setSaved2(true);
             setTimeout(() => setSaved2(false), 2000);
         } catch (e) {
-            console.error('Failed to save lead conv benchmarks', e);
+            // The banner above the table is where the user is looking (§18b32);
+            // a console.error here was the only report of a refused save.
+            setSaveError(e.message || 'Save failed.');
         } finally {
             setSaving(false);
         }

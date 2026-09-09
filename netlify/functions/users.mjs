@@ -4,6 +4,7 @@ import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
 import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName, ensureRosterRow } from './_lib.mjs';
+import { pickSelfEditable } from './_selfProfile.mjs';
 import { randomUUID } from 'crypto';
 // Pure, shared with the Sales Manager tab (the _stage.mjs / stageClock.js
 // arrangement): one validator decides the forecast-call shape on both sides.
@@ -329,7 +330,21 @@ export const handler = async (event) => {
             // Keep whatever role is already stored. A profile save must never
             // change it — previously omitting userType downgraded the user to
             // 'User', which is how Admins quietly lost their roster role.
-            const clean = withRole(sanitize(await mergeForUpdate(data)), await roleOf(data.id) || 'User');
+            //
+            // And only the keys a member may change about THEMSELVES reach the
+            // merge (state §0.109, guide §18b34). The client sends the whole row
+            // it holds, so before this every administrative field on it — quota,
+            // team, territory, active, the quarterly quotas, the forecast calls —
+            // was rewritten from the caller's own body on every preference
+            // toggle, and could be set by a body written by hand. A key the
+            // allowlist drops keeps its stored value (mergeForUpdate); the id is
+            // the only raw key kept, and it was checked against the roster
+            // above. The profile blob's userType copy is pinned to the stored
+            // role too, so a body carrying `userType` cannot pollute the blob
+            // that flatten() used to read the role from.
+            const own  = { id: data.id, ...pickSelfEditable(data) };
+            const storedRole = await roleOf(data.id) || 'User';
+            const clean = withRole(sanitize({ ...(await mergeForUpdate(own)), userType: storedRole }), storedRole);
             const { id, ...updateData } = clean;
             let upsertResult;
             try {
@@ -615,7 +630,11 @@ export const handler = async (event) => {
                 // would change the roster without changing Clerk, which is what
                 // auth.mjs actually reads. Role changes go through user-role.mjs.
                 const merged = await mergeForUpdate(data);
-                const clean = withRole(sanitize(merged), await roleOf(data.id) || 'User');
+                const storedRole = await roleOf(data.id) || 'User';
+                // The blob's userType copy follows the column (§0.109): a body
+                // carrying a different userType changed the blob and not the
+                // role, putting two answers to one question back in the row.
+                const clean  = withRole(sanitize({ ...merged, userType: storedRole }), storedRole);
                 // First day on a team (state §0.82): when profile.teamId changes, stamp
                 // team_joined_at — the floor a team coaching note is read against.
                 // Leaving a team clears it; an unchanged team leaves the column alone.

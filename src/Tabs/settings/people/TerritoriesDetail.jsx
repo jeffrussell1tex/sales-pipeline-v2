@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
 import { dbFetch, dbWrite } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
 
@@ -164,6 +165,10 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
 
     const [openTerrKebab, setOpenTerrKebab] = useState(null);
     const [modal,         setModal]         = useState(null); // { mode, territory }
+    // A refused delete had no surface at all: its settings PUT was checked with
+    // `if (res.ok)` and did nothing on failure, and the rep cascade was only
+    // console.error'd (state §0.109). Both are reported here, above the table.
+    const [deleteErr,     setDeleteErr]     = useState('');
 
     React.useEffect(() => {
         if (openTerrKebab === null) return;
@@ -212,17 +217,27 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
         setOpenTerrKebab(null);
         showConfirm(`Delete territory "${tr.name}"? Assigned reps will become unassigned.`, async () => {
             const updatedTerritories = territories.filter(t => t.id !== tr.id);
-            const updatedUsers = allUsers.map(u => u.territory === tr.name ? { ...u, territory: '' } : u);
+            const reps = allUsers.filter(u => u.territory === tr.name);
+            setDeleteErr('');
             try {
-                const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ territories: updatedTerritories }) });
-                if (res.ok) {
-                    for (const u of allUsers.filter(u => u.territory === tr.name)) {
-                        const rc = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: '' }) });
-                        if (!rc.ok) console.error('territory clear failed', u.id, rc.error);
-                    }
-                    setSettings(prev => ({ ...prev, territories: updatedTerritories, users: updatedUsers }));
-                }
-            } catch(e) { console.error('Delete territory failed', e); }
+                await putSettings({ territories: updatedTerritories });   // throws on non-2xx
+            } catch (e) {
+                setDeleteErr(`Territory not deleted — ${e.message}`);
+                return;
+            }
+            // The territory is gone; now the rep rows. One that did not update is
+            // reported by name, not logged.
+            const cleared = new Set(), failed = [];
+            for (const u of reps) {
+                const rc = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: '' }) });
+                if (rc.ok) cleared.add(u.id); else failed.push(`${u.name || u.id}: ${rc.error}`);
+            }
+            setSettings(prev => ({
+                ...prev,
+                territories: updatedTerritories,
+                users: (prev.users || []).map(u => cleared.has(u.id) ? { ...u, territory: '' } : u),
+            }));
+            if (failed.length) setDeleteErr(`Territory deleted, but ${failed.length} user record(s) did not update: ${failed.join('; ')}`);
         });
     };
 
@@ -286,6 +301,12 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
                 </button>
             </div>
         </div>
+
+        {deleteErr && (
+            <div style={{ padding:'10px 14px', marginBottom:14, background:'rgba(156,58,46,0.08)', border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12.5 }}>
+                {deleteErr}
+            </div>
+        )}
 
         {/* Territory table */}
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8 }}>

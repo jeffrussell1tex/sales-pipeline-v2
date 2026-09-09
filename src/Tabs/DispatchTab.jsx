@@ -1100,10 +1100,6 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                 <span style={{ marginLeft: 'auto', fontSize: 11.5, color: T.inkMid }}>
                                     {addedCount} of {crewSlots} crew slots filled
                                 </span>
-                                <button style={{ padding: '4px 10px', background: T.surface, border: `1px solid ${T.borderStrong}`,
-                                    borderRadius: T.r, fontSize: 11.5, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}>
-                                    Manual pick
-                                </button>
                             </div>
 
                             {selectedJob.isBridge && (
@@ -1250,7 +1246,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
 
                             {candidates.length > 0 && (
                                 <div style={{ fontSize: 12, color: T.inkMuted, marginTop: 8, lineHeight: 1.5 }}>
-                                    Score = weighted match of required skills, cert status, license level, hours-this-week, distance from job, and customer preference. Override by clicking Manual pick.
+                                    Score = weighted match of required skills, cert status, license level, hours-this-week, distance from job, and customer preference.
                                 </div>
                             )}
                         </div>

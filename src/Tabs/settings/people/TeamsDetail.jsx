@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
 import { dbFetch, dbWrite } from '../../../utils/storage';
+import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
 
@@ -328,6 +329,10 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
     // with `if (res.ok)` and simply did nothing on failure, and the /users cascade
     // was a bare await. Both are now reported here.
     const [assignErr,    setAssignErr]    = useState('');
+    // A refused delete had no surface at all: its settings PUT was checked with
+    // `if (res.ok)` and did nothing on failure, and the member cascade was only
+    // console.error'd (state §0.109). Both are reported here, above the table.
+    const [deleteErr,    setDeleteErr]    = useState('');
 
     React.useEffect(() => {
         if (openKebab === null) return;
@@ -353,18 +358,28 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
         setOpenKebab(null);
         showConfirm(`Delete team "${team.name}"? Members will become unassigned.`, async () => {
             const updatedTeams = teams.filter(t => t.id !== team.id);
-            const updatedUsers = allUsers.map(u => u.teamId === team.id ? { ...u, team:'', teamId:'', territory:'', vertical:'' } : u);
+            const members = allUsers.filter(u => u.teamId === team.id);
+            setDeleteErr('');
             try {
-                const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
-                if (res.ok) {
-                    setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
-                    // Clear team on affected users in DB
-                    for (const u of allUsers.filter(u => u.teamId === team.id)) {
-                        const r = await dbWrite(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team:'', teamId:'', territory:'', vertical:'' }) });
-                        if (!r.ok) console.error('user team clear failed', u.id, r.error);
-                    }
-                }
-            } catch(e) { console.error('Delete team failed', e); }
+                await putSettings({ teams: updatedTeams });   // throws on non-2xx
+            } catch (e) {
+                setDeleteErr(`Team not deleted — ${e.message}`);
+                return;
+            }
+            // The team is gone; now the member rows. One that did not update is
+            // reported by name, not logged — it still points at a team the
+            // roster no longer has.
+            const cleared = new Set(), failed = [];
+            for (const u of members) {
+                const r = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, team:'', teamId:'', territory:'', vertical:'' }) });
+                if (r.ok) cleared.add(u.id); else failed.push(`${u.name || u.id}: ${r.error}`);
+            }
+            setSettings(prev => ({
+                ...prev,
+                teams: updatedTeams,
+                users: (prev.users || []).map(u => cleared.has(u.id) ? { ...u, team:'', teamId:'', territory:'', vertical:'' } : u),
+            }));
+            if (failed.length) setDeleteErr(`Team deleted, but ${failed.length} member record(s) did not update: ${failed.join('; ')}`);
         });
     };
 
@@ -480,6 +495,12 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                 </button>
             </div>
         </div>
+
+        {deleteErr && (
+            <div style={{ padding:'10px 14px', marginBottom:14, background:'rgba(156,58,46,0.08)', border:`1px solid ${T.danger}`, borderRadius:T.r, color:T.danger, fontSize:12.5 }}>
+                {deleteErr}
+            </div>
+        )}
 
         {/* Org chart view */}
         {viewMode === 'org' && (
