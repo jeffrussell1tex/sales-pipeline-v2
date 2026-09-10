@@ -352,8 +352,10 @@ and turned the switch on). And the public page 404'd on that real token:
 Netlify substitutes a placeholder into a path, not a query string — the
 first probe with a bogus token could not tell. `89e85b6`: the rewrite is
 `/.netlify/functions/dispatch-status/:token` and the function reads the
-path segment; 390/390 mutations. Read on dev after the deploy: the pretty
-path 200.**
+path segment — and a second probe showed the rewritten request carries the
+BROWSER'S path, so `2e6a9c4` reads the last segment of either
+`/status/<token>` or `/dispatch-status/<token>`; 390/390 mutations. Read on
+dev after the deploy: the pretty path 200 with the real token.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -1321,7 +1323,7 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   phone on file"; the token `oSP8_…` is on the row. **Remaining, Jeff's
   eyeball:** the email in his Yahoo inbox ("Your Filter Change visit is
   scheduled"), its "View visit status →" link opening the public page in a
-  private window (the pretty path works since `89e85b6`), the job detail's
+  private window (the pretty path works since `2e6a9c4`), the job detail's
   Customer notifications trail and Copy status link, then Start travel (or
   set En route) → the on-the-way email. Turn the switch back off afterwards
   if he does not want the test customer mailed again. **UX note for Jeff's
