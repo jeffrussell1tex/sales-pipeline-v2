@@ -435,7 +435,12 @@ NEW nullable jsonb `dispatch_jobs.assigned_equipment_ids` (applied to APP and
 TEST first), shown on the job, released by any path back to unscheduled
 (server rule). 707/707 unit, 147/147 integration, 411/411 mutations,
 `index-DRfAzx7m.js`. **OBSERVED end to end on dev:** "Scheduled — Savannah
-Miller on 2026-09-18 at 8:00 AM. Reserved: Pressure Tester." **NOT shipped.**
+Miller on 2026-09-18 at 8:00 AM. Reserved: Pressure Tester." **Then
+`a7201b7`** (Jeff: "There is no way to add equipment under required
+equipment"): the chips toggled but looked like labels — now "+ Kind" / "✓
+Kind", role=checkbox, a "click a kind to require it" line under each picker,
+skills and kinds in both forms and the technician editor. 708/708 unit,
+147/147 integration, 412/412 mutations, `index-mSB6P0Q8.js`. **NOT shipped.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -486,7 +491,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); `dev` is ahead by SEVEN CODE commits, §0.112 `470b948`, its roster correction `a29cc1e`, §0.113 `223c99a`, §0.114 `9bc6b89`, §0.115 `360e4f7` and its follow-up `54fb180`, §0.116 `e5970f3`, `d7f0765` and its kinds-and-reservation model `1233de4` — NOT shipped
+## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); `dev` is ahead by SEVEN CODE commits, §0.112 `470b948`, its roster correction `a29cc1e`, §0.113 `223c99a`, §0.114 `9bc6b89`, §0.115 `360e4f7` and its follow-up `54fb180`, §0.116 `e5970f3`, `d7f0765`, its kinds-and-reservation model `1233de4` and the toggle chips `a7201b7` — NOT shipped
 
 **PROD SHIPPED — the FIFTEENTH ship (Jeff: "ship prod", 10 Sep).** Ancestor check (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 27 commits after `59116be`), then `git push origin dev:master`: `master` `59116be` → `0a242c6`, pushed 17:46:08 UTC. Netlify record `6aa2ece6…`: branch `master`, commit `0a242c6`, published 17:47:02 UTC (54 seconds after the push), **80 functions** (`_selfProfile`, `dispatch-plan-visits`, `_customerNotify`, `dispatch-status` all present), **2 redirect rules processed**, secret scan clean over 405 files; salespipelinetracker.com serving `index-C23CrCCK.js` at 17:47:03 UTC with the `pk_live_` key inlined; `/status/<32 bogus chars>` on prod → the function's own 404 with `Cache-Control: no-store` and `X-Robots-Tag: noindex` — the rewrite beats the SPA catch-all there too. The schema for §0.110 and §0.111 was already in the shared database. **What prod does differently from the moment of the ship:** every member's self-profile save goes through the allowlist (§0.109); a skipped or deferred plan occurrence and the Agreement renewals list exist in Service Due (§0.110); the hourly job's Signal 6 runs on prod (`JOBS_ENABLED` is set there) — a prod customer whose agreement ends within the plan's window would email its Admins/Managers at their alert hour and post once to #sales-alerts; and customer notifications are OFF for the prod org until an Admin turns them on (§0.111) — nothing is sent to any prod customer by this ship.
 
@@ -1297,7 +1302,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (10 Sep, twelfth session — after the FIFTEENTH ship)
 
-**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time) and **`a29cc1e`** (the roster correction — `normaliseTech` now carries `workingHours`) and **`223c99a`** (§0.113 — the null-category 500 on the Jobs editor's save; a new technician rostered Mon–Fri 8–5; functions AND bundle) and **`9bc6b89`** (§0.114 — a filled crew slot says it is not saved; a success is announced), **`360e4f7`** and **`54fb180`** (§0.115 — the page bound to the viewport, the next-step card, Wait for group schedule, the planner honouring a held crew, a preferred start not a placement; bundle only) , **`e5970f3`**, **`d7f0765`** and **`1233de4`** (§0.116 — equipment by KIND with a unit reserved at scheduling; functions AND bundle, and a schema column already in the shared database; hash `index-DRfAzx7m.js`, 707/707 unit, 411/411 mutations, 147/147 integration) — `dev` ahead of `master` by those NINE CODE commits and the docs after them. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
+**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time) and **`a29cc1e`** (the roster correction — `normaliseTech` now carries `workingHours`) and **`223c99a`** (§0.113 — the null-category 500 on the Jobs editor's save; a new technician rostered Mon–Fri 8–5; functions AND bundle) and **`9bc6b89`** (§0.114 — a filled crew slot says it is not saved; a success is announced), **`360e4f7`** and **`54fb180`** (§0.115 — the page bound to the viewport, the next-step card, Wait for group schedule, the planner honouring a held crew, a preferred start not a placement; bundle only) , **`e5970f3`**, **`d7f0765`**, **`1233de4`** and **`a7201b7`** (§0.116 — equipment by KIND with a unit reserved at scheduling, and chips that read as toggles; functions AND bundle, and a schema column already in the shared database; hash `index-mSB6P0Q8.js`, 708/708 unit, 412/412 mutations, 147/147 integration) — `dev` ahead of `master` by those TEN CODE commits and the docs after them. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
 
 **Before the ship:**
 
@@ -1396,10 +1401,10 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Thirteenth-session prep — first:**
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  NINE CODE commits, `470b948` (§0.112), `a29cc1e` (its roster
+  TEN CODE commits, `470b948` (§0.112), `a29cc1e` (its roster
   correction), `223c99a` (§0.113), `9bc6b89` (§0.114), `360e4f7` and
-  `54fb180` (§0.115), `e5970f3`, `d7f0765` and `1233de4` (§0.116), and
-  the docs after them; anything else is a finding. The schema column
+  `54fb180` (§0.115), `e5970f3`, `d7f0765`, `1233de4` and `a7201b7`
+  (§0.116), and the docs after them; anything else is a finding. The schema column
   `dispatch_jobs.assigned_equipment_ids` is ALREADY in the shared database
   (and the test database) — nothing to apply at ship time.
 - **§0.112 on dev (either role):** Dispatch → Queue → select JOB-2026-0006
@@ -1432,11 +1437,12 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   unscheduled job: + Add → the card appears at the top: Schedule now / Wait
   for group schedule / Clear crew. Mass-schedule next week on a held job
   proposes exactly the held crew.
-- **§0.116 on dev — Jeff's checks:** (a) Vehicles & equipment → the Pressure
-  Tester's **Category** should become "Pressure Tester" (a kind is what a
-  technician asks for; "HVAC" was a trade) — then Jobs → New HVAC System →
-  Required equipment shows "Pressure Tester 1/1" and the old "HVAC" as a
-  removable chip. (b) New HVAC System is ALREADY scheduled by the pane's
+- **§0.116 on dev — Jeff's checks:** (a) the fleet now has "Pressure Tester
+  #1/#2" (kind "Pressure Tester", from the templates import) beside the
+  original unit still in kind "HVAC" — set that unit's **Category** to
+  "Pressure Tester" too, or leave "HVAC" as its own kind. Jobs → New HVAC
+  System → Required equipment reads "+ HVAC 1/1 · + Pressure Tester 2/2" (a
+  ✓ on whichever is required); clicking toggles. (b) New HVAC System is ALREADY scheduled by the pane's
   observation (Savannah, Thu 18 08:00, "reserved: Pressure Tester" on its
   Required line) — the reservation to look at. (c) Add a second job on Thu
   18 overlapping 08:00–12:00 that requires the same kind → the builder refuses
