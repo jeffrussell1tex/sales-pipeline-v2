@@ -1973,6 +1973,16 @@ const mutations = [
         '                                        {unknown.map(r => (',
         '                                        {[].map(r => ('],
 
+    ['queue card: an unscheduled job with a preferred time reads as booked again ("◷ 08:00")',
+        'src/Tabs/DispatchTab.jsx',
+        "    if (j.status !== 'unscheduled' && j.timeSlot === 'exact' && j.scheduledStart) return j.scheduledStart;",
+        "    if (j.timeSlot === 'exact' && j.scheduledStart) return j.scheduledStart;"],
+
+    ['dispatch page: the shell\'s bottom padding is not counted (the document scrolls by it)',
+        'src/Tabs/DispatchTab.jsx',
+        'setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY + below)));',
+        'setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY)));'],
+
     ['dispatch page: the viewport-bound height is gone (the action bar can fall below the fold again)',
         'src/Tabs/DispatchTab.jsx',
         "height: pageTop != null ? `calc(100vh - ${pageTop}px)` : '100%', boxSizing: 'border-box', overflow: 'hidden' }}>",

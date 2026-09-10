@@ -44,6 +44,14 @@ test('normaliseTech carries the weekly shift pattern onto the board shape — th
     assert.ok(s.includes("            blockers.push(`Not rostered on ${dayName}`);"), 'the scorer still blocks a day off the pattern');
 });
 
+test('a queue card shows a time only for a SCHEDULED job; an unscheduled job shows its date and its preferred start as a note (§0.117)', () => {
+    assert.ok(s.includes("    if (j.status !== 'unscheduled' && j.timeSlot === 'exact' && j.scheduledStart) return j.scheduledStart;"), 'the time only once the job is actually scheduled');
+    assert.ok(s.includes("    return j.scheduledStart ? `${day} · prefers ${to12h(j.scheduledStart) || j.scheduledStart}` : day;"), 'a preferred start reads as a preference');
+    assert.ok(s.includes('                        window:         queueWindow(j),'), 'the board mapping');
+    assert.ok(s.includes('                                    window: queueWindow(saved),'), 'and the editor-save mapping, so a saved preferred time updates the card');
+    assert.ok(s.includes('<span>◷ {j.window}</span>'));
+});
+
 test('the job editor offers a preferred start time and a time window, and saves them the way the schema expects', () => {
     assert.ok(s.includes('<CustFieldRow label="Preferred start time">'));
     assert.ok(s.includes('<TimeDropdown value={draft.scheduledStart || \'\'} onChange={v => set(\'scheduledStart\', v)} stepMinutes={30} ariaLabel="Preferred start time"/>'));

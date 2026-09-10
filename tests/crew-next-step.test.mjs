@@ -68,8 +68,9 @@ test('Mass-schedule next week honours a held crew — those people, exactly, or 
 
 test('the Dispatch page is bound to the viewport below the fixed header, so no action bar falls below the fold', () => {
     assert.ok(s.includes('import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from \'react\';'));
-    assert.ok(s.includes('setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY)));'), 'measured from the page div, the ContactsTab pattern');
-    assert.ok(s.includes("        if (pageTop != null || !pageRef.current) return;\n        setPageTop("), 'measured on every render until it exists — the loading state renders first, without the div');
+    assert.ok(s.includes("const below = parseFloat(getComputedStyle(pageRef.current.parentElement).paddingBottom) || 0;"), 'the shell\'s bottom padding counts (§0.117 — the document still scrolled by 8px)');
+    assert.ok(s.includes('setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY + below)));'), 'measured from the page div, the ContactsTab pattern, plus the padding below');
+    assert.ok(s.includes("        if (pageTop != null || !pageRef.current) return;\n        const below = "), 'measured on every render until it exists — the loading state renders first, without the div');
     assert.ok(!s.includes("getBoundingClientRect().top + window.scrollY)));\n    }, []);"), 'not mount-only');
     assert.ok(s.includes("height: pageTop != null ? `calc(100vh - ${pageTop}px)` : '100%', boxSizing: 'border-box', overflow: 'hidden' }}>"));
     assert.ok(s.includes('<div ref={pageRef} className="tab-page"'));

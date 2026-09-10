@@ -70,6 +70,15 @@ const blocksOnDate = (blocks, techId, dateStr) =>
 const addDaysStr = (str, n) => { const d = fromYmd(str); d.setDate(d.getDate() + n); return ymd(d); };
 
 const hhToNum = (t) => { const [h, m] = String(t || '').split(':').map(Number); return (h || 0) + (m || 0) / 60; };
+// What a queue card's "◷" reads (§0.117): a SCHEDULED job with an exact time
+// shows the time; anything else shows the date, and an unscheduled job with a
+// preferred start says so as a note — before this, "◷ 08:00" on an unscheduled
+// job read as a booking (Jeff's queue, 10 Sep).
+const queueWindow = (j) => {
+    if (j.status !== 'unscheduled' && j.timeSlot === 'exact' && j.scheduledStart) return j.scheduledStart;
+    const day = j.scheduledDate || 'TBD';
+    return j.scheduledStart ? `${day} · prefers ${to12h(j.scheduledStart) || j.scheduledStart}` : day;
+};
 // 'HH:MM' plus a duration in hours, back to 'HH:MM' (wraps at midnight).
 const addHoursHHMM = (hhmm, hrs) => {
     const mins = (Math.round((hhToNum(hhmm) + (Number(hrs) || 0)) * 60) % (24 * 60) + 24 * 60) % (24 * 60);
@@ -4844,7 +4853,10 @@ export default function DispatchTab() {
         // which returns before the page div exists, so a mount-only effect never
         // measured anything and the height stayed "100%" (observed on dev).
         if (pageTop != null || !pageRef.current) return;
-        setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY)));
+        // The app shell pads the page (8px on .app-container); without counting its
+        // bottom padding the document still scrolled by that much (§0.117).
+        const below = parseFloat(getComputedStyle(pageRef.current.parentElement).paddingBottom) || 0;
+        setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY + below)));
     });
 
     // Sub-tab state persists to localStorage so navigating away and back restores
@@ -5181,9 +5193,7 @@ export default function DispatchTab() {
                         crewSize:       j.crewSize || ([j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean).length || 1),
                         durationHrs:    j.durationMinutes ? j.durationMinutes / 60 : 2,
                         priority:       normalisePriority(j.priority),
-                        window:         j.timeSlot === 'exact' && j.scheduledStart
-                            ? j.scheduledStart
-                            : j.scheduledDate || 'TBD',
+                        window:         queueWindow(j),
                         // equipment_ids stores required equipment CATEGORIES, not asset
                         // ids. Asset-level checkout is tracked the other way round, on
                         // dispatch_equipment.checkedOutJobId.
@@ -5867,6 +5877,7 @@ export default function DispatchTab() {
                                 ? { ...j, title: saved.title, priority: normalisePriority(saved.priority),
                                     status: saved.status, scheduledDate: saved.scheduledDate,
                                     scheduledStart: saved.scheduledStart || null,
+                                    window: queueWindow(saved),
                                     equipCategories: Array.isArray(saved.equipmentIds) ? saved.equipmentIds : [],
                                     assignedEquipment: Array.isArray(saved.assignedEquipmentIds) ? saved.assignedEquipmentIds : [],
                                     start: saved.scheduledStart && saved.status !== 'unscheduled' ? hhToNum(saved.scheduledStart) : null,
