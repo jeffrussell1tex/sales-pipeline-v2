@@ -1341,9 +1341,9 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   job being listed" — `ddba08e`:** the queue's cards carry "Open →" and the
   header's name and a new "Open job record →" button open the job in the Jobs
   view (the card click still selects for the builder). Bundle hash
-  `index-BHUmMfhB.js`; 392/392 mutations, 687/687 unit. NOT observed in a
-  browser — Jeff's eyeball: Dispatch → Queue → "Open →" on a card lands on
-  that job's editor in Jobs.
+  `index-BHUmMfhB.js`; 392/392 mutations, 687/687 unit. OBSERVED in the
+  pane as Karen (17:22 UTC): "Open →" on a card landed on that job's editor in
+  Jobs (JOB-2026-0006, title input "Filter Change", Save present).
 - **SMS lights up with no code change** the day a site has
   `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM_NUMBER` AND
   the A2P campaign reads Approved (Twilio: Trust Hub → Registrations → A2P
