@@ -362,6 +362,19 @@ JOB-2026-0005"; the company line reads "Your service provider" because the
 dev org has no company name set (Settings → Company profile). Jeff's
 screenshot then showed the board with Jax at 9a · 2h on Fri 11 — OBSERVED.**
 
+**Twelfth session, after the FIFTEENTH ship (Jeff: "It says double-booked at
+9AM for Savannah … Where is the 9AM assumption coming from?") — CLOSE.**
+**§0.112 `470b948`**: `scoreTech` scored an unscheduled job as if it began at
+9 AM and compared start hours against every job the technician had ever
+held, on ANY date — Savannah's August jobs "clashed" with a September one.
+Now same-day only, and only when a start is known (the builder's chosen
+Start, passed and depended on, else the job's preferred start, else the
+points with a "pick a start to check" note). Jobs → the editor gains
+**Preferred start time** and **Time window**, saved as
+`scheduledStart`/`scheduledEnd`/`timeSlot`; selecting a job seeds the
+builder's Start from it. 690/690 unit, 394/394 mutations, 145/145
+integration, `index-BPgC4Z9Q.js`. **NOT shipped; NOT observed.**
+
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
 since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
@@ -387,6 +400,7 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
+`### 0.112` with a paragraph beginning **"Fix ("**,
 `### 0.111` with a paragraph beginning **"The company decides, per org."**, `docs/ACCELEREP_CODING_GUIDE.md` with `## 18b35. A Public Page Reads By An Unguessable Token, Never By An Id`,
 `### 0.110` with a paragraph beginning **"The arithmetic moves out."**,
 `### 0.109` with a paragraph beginning **"Seed data — struck by a read-only query."** and does
@@ -410,7 +424,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); nothing is on `dev` alone but this ship-record
+## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); `dev` is ahead by ONE CODE commit, §0.112 `470b948` — NOT shipped
 
 **PROD SHIPPED — the FIFTEENTH ship (Jeff: "ship prod", 10 Sep).** Ancestor check (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 27 commits after `59116be`), then `git push origin dev:master`: `master` `59116be` → `0a242c6`, pushed 17:46:08 UTC. Netlify record `6aa2ece6…`: branch `master`, commit `0a242c6`, published 17:47:02 UTC (54 seconds after the push), **80 functions** (`_selfProfile`, `dispatch-plan-visits`, `_customerNotify`, `dispatch-status` all present), **2 redirect rules processed**, secret scan clean over 405 files; salespipelinetracker.com serving `index-C23CrCCK.js` at 17:47:03 UTC with the `pk_live_` key inlined; `/status/<32 bogus chars>` on prod → the function's own 404 with `Cache-Control: no-store` and `X-Robots-Tag: noindex` — the rewrite beats the SPA catch-all there too. The schema for §0.110 and §0.111 was already in the shared database. **What prod does differently from the moment of the ship:** every member's self-profile save goes through the allowlist (§0.109); a skipped or deferred plan occurrence and the Agreement renewals list exist in Service Due (§0.110); the hourly job's Signal 6 runs on prod (`JOBS_ENABLED` is set there) — a prod customer whose agreement ends within the plan's window would email its Admins/Managers at their alert hour and post once to #sales-alerts; and customer notifications are OFF for the prod org until an Admin turns them on (§0.111) — nothing is sent to any prod customer by this ship.
 
@@ -1221,7 +1235,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (10 Sep, twelfth session — after the FIFTEENTH ship)
 
-**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit carrying this line — `dev` ahead of `master` by it alone. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
+**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time — bundle only, hash `index-BPgC4Z9Q.js`, 690/690 unit, 394/394 mutations) — `dev` ahead of `master` by that CODE commit and the docs after it. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
 
 **Before the ship:**
 
@@ -1317,6 +1331,19 @@ read at 16:35 UTC: `accelerep.netlify.app` alone, four jobs, all `ok`,
 copy of the same bug) · the working tree was clean at close · **ordering slip, corrected here:** the §0.103 landing docs commit (`8a6edc8`) landed AFTER the first handoff commit `34b843c` because the landing script's anchor missed on first apply (a typo in its own text); this line was written last, after that commit — SIXTEEN commits ahead of `master` counting the handoff commits themselves, the last of them the one carrying this line.
 
 ## 5. Next — start here
+
+**Thirteenth-session prep — first:**
+- **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
+  ONE CODE commit, `470b948` (§0.112), and the docs after it; anything else is
+  a finding.
+- **§0.112 on dev (either role):** Dispatch → Queue → select JOB-2026-0006
+  (unscheduled, Fri 11, no start): neither technician reads "Double-booked
+  at 9a" any more — Savannah's blockers are the roster ones only, and Jax
+  reads a clash ONLY once a Start of 9:00 is picked (his real 9:00 job that
+  day). Then Jobs → that job → set **Preferred start time** 1:00 PM, Save →
+  the row's `scheduled_start` 13:00, `scheduled_end` 14:00, `time_slot`
+  exact (read-only); back in the Queue the builder's Start reads 1:00 PM
+  without being asked. Ship when Jeff says so.
 
 **After the FIFTEENTH ship — prod observations, Jeff's, in order:**
 - **§0.109 on prod (Jeff, Admin):** avatar → Profile, change the title, Save;
