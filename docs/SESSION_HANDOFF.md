@@ -380,6 +380,16 @@ so the roster was never read anywhere but Work Schedules — every technician
 unit, 395/395 mutations, 145/145 integration, `index-C3oKwuKE.js`.
 **OBSERVED on dev** (Fri 11 clears both technicians; Start 9:00 shows Jax's
 real clash; Sat 12 blocks both). **NOT shipped.**
+**§0.113 `223c99a`** (Jeff: "I set a preferred start time to 11AM and it gave
+me the server error"): the start time was innocent — `trade`/`jobType` are
+NOT NULL and the Jobs editor sent null for "— None —", so NO job without a
+category could be saved from the editor. The PUT coerces to `''`, the editor
+sends `''`. And per Jeff, a new technician starts rostered Mon–Fri
+08:00–17:00 (`src/utils/workWeek.js`, client draft + server fallback; an
+explicit `{}` stays "no working days"). 696/696 unit, 146/146 integration,
+399/399 mutations, `index-Bd046o9b.js`. **OBSERVED on dev:** the 11:00 AM
+save → "Saved", the row 11:00/13:00/exact, the builder's Start seeded 11:00
+AM (§0.112's last item closed). **NOT shipped.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -430,7 +440,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); `dev` is ahead by TWO CODE commits, §0.112 `470b948` and its roster correction `a29cc1e` — NOT shipped
+## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); `dev` is ahead by THREE CODE commits, §0.112 `470b948`, its roster correction `a29cc1e`, and §0.113 `223c99a` — NOT shipped
 
 **PROD SHIPPED — the FIFTEENTH ship (Jeff: "ship prod", 10 Sep).** Ancestor check (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 27 commits after `59116be`), then `git push origin dev:master`: `master` `59116be` → `0a242c6`, pushed 17:46:08 UTC. Netlify record `6aa2ece6…`: branch `master`, commit `0a242c6`, published 17:47:02 UTC (54 seconds after the push), **80 functions** (`_selfProfile`, `dispatch-plan-visits`, `_customerNotify`, `dispatch-status` all present), **2 redirect rules processed**, secret scan clean over 405 files; salespipelinetracker.com serving `index-C23CrCCK.js` at 17:47:03 UTC with the `pk_live_` key inlined; `/status/<32 bogus chars>` on prod → the function's own 404 with `Cache-Control: no-store` and `X-Robots-Tag: noindex` — the rewrite beats the SPA catch-all there too. The schema for §0.110 and §0.111 was already in the shared database. **What prod does differently from the moment of the ship:** every member's self-profile save goes through the allowlist (§0.109); a skipped or deferred plan occurrence and the Agreement renewals list exist in Service Due (§0.110); the hourly job's Signal 6 runs on prod (`JOBS_ENABLED` is set there) — a prod customer whose agreement ends within the plan's window would email its Admins/Managers at their alert hour and post once to #sales-alerts; and customer notifications are OFF for the prod org until an Admin turns them on (§0.111) — nothing is sent to any prod customer by this ship.
 
@@ -1241,7 +1251,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (10 Sep, twelfth session — after the FIFTEENTH ship)
 
-**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time) and **`a29cc1e`** (the roster correction — `normaliseTech` now carries `workingHours`; bundle only, hash `index-C3oKwuKE.js`, 691/691 unit, 395/395 mutations, 145/145 integration) — `dev` ahead of `master` by those TWO CODE commits and the docs after them. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
+**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time) and **`a29cc1e`** (the roster correction — `normaliseTech` now carries `workingHours`) and **`223c99a`** (§0.113 — the null-category 500 on the Jobs editor's save; a new technician rostered Mon–Fri 8–5; functions AND bundle, hash `index-Bd046o9b.js`, 696/696 unit, 399/399 mutations, 146/146 integration) — `dev` ahead of `master` by those THREE CODE commits and the docs after them. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
 
 **Before the ship:**
 
@@ -1340,8 +1350,9 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Thirteenth-session prep — first:**
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  TWO CODE commits, `470b948` (§0.112) and `a29cc1e` (its roster
-  correction), and the docs after them; anything else is a finding.
+  THREE CODE commits, `470b948` (§0.112), `a29cc1e` (its roster
+  correction) and `223c99a` (§0.113), and the docs after them; anything
+  else is a finding.
 - **§0.112 on dev (either role):** Dispatch → Queue → select JOB-2026-0006
   (unscheduled, Fri 11, no start): neither technician reads "Double-booked
   at 9a" any more — Savannah's blockers are the roster ones only, and Jax
@@ -1349,19 +1360,22 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   day). Then Jobs → that job → set **Preferred start time** 1:00 PM, Save →
   the row's `scheduled_start` 13:00, `scheduled_end` 14:00, `time_slot`
   exact (read-only); back in the Queue the builder's Start reads 1:00 PM
-  without being asked. Ship when Jeff says so. **Partly OBSERVED in the pane
-  (18:00 UTC): an unscheduled job (JOB-2026-0007, Mon 14) scores both techs
-  with no "Double-booked" line; the editor shows the new fields. NOT yet
-  observed: a saved preferred time seeding the builder.** The earlier note
+  without being asked. Ship when Jeff says so. **ALL OBSERVED in the pane
+  (18:00–20:17 UTC): no "Double-booked" line on an unscheduled job; the
+  editor's new fields; and after §0.113 the 11:00 AM save on JOB-2026-0007
+  → "Saved", row 11:00/13:00/exact, the builder's Start seeded 11:00 AM.**
+  The earlier note
   here that "the dev technicians have no working hours set" was WRONG — the
   roster was never read on the board (`a29cc1e`, state §0.112 correction).
   **OBSERVED after it (18:40 UTC):** the Fri 11 job scores Savannah 92 with
   no roster blocker; Start 9:00 → Jax "Double-booked at 9a" (his real 9:00
   job, 70 → 55); Date Sat 12 → both "Not rostered on Sat".
-- **Design question for Jeff (flagged, not changed):** a technician with NO
-  shift pattern set is now blocked every day ("Set shift pattern" under Work
-  Schedules) — the documented rule "a missing day means not working". If a
-  new technician should default to a working week instead, say so.
+- **§0.113 on dev — Jeff's remaining check:** Technicians → add a technician
+  → Save → Work Schedules shows 08:00–17:00 Mon–Fri and Off Sat/Sun for the
+  new row without a click (the design question was answered: "M-F 8AM to 5PM
+  as default", done in `223c99a`). Existing technicians keep their own
+  patterns. Then a Jobs save on a job with Job category "— None —" reads
+  "Saved", not "Internal server error".
 
 **After the FIFTEENTH ship — prod observations, Jeff's, in order:**
 - **§0.109 on prod (Jeff, Admin):** avatar → Profile, change the title, Save;
