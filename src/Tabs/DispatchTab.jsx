@@ -1254,6 +1254,18 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                             )}
                         </div>
 
+                        {/* A refused schedule — no start time, a shift or time-off clash,
+                            equipment, a won-opportunity placeholder — says why in a banner
+                            here, not in an 11.5px line among the controls: Jeff's first
+                            crew-builder schedule was refused pre-flight and he read the
+                            board as broken (state §0.111; guide §18b32). */}
+                        {scheduleError && (
+                            <div role="alert" style={{ margin: '0 18px 10px', padding: '10px 14px', background: 'rgba(156,58,46,0.08)',
+                                border: `1px solid ${T.danger}`, borderRadius: T.r, color: T.danger, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans }}>
+                                Not scheduled — {scheduleError}
+                            </div>
+                        )}
+
                         {/* Action bar */}
                         <div style={{ padding: '12px 18px', borderTop: `1px solid ${T.border}`,
                             background: T.surface, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1269,9 +1281,6 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                 <span style={{ fontSize: 11.5, color: T.warn, fontWeight: 600, fontFamily: T.sans }}>
                                     {addedCount}/{crewSlots} added — not scheduled yet
                                 </span>
-                            )}
-                            {scheduleError && (
-                                <span style={{ fontSize: 11.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{scheduleError}</span>
                             )}
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
                                 <span>Date</span>

@@ -22,6 +22,15 @@ test('DispatchTab: no inert "Manual pick" button, and no copy telling the user t
     assert.ok(!s.includes('prioColor2'), 'the prioColor2 alias is collapsed — one priority colour map');
 });
 
+test('DispatchTab: a refused crew schedule is a banner above the action bar, not a line among the controls', () => {
+    // Jeff's first schedule was refused pre-flight ("Set a start time before
+    // scheduling.") in an 11.5px span, and he read the board as broken (§0.111).
+    const s = code(read('src/Tabs/DispatchTab.jsx'));
+    assert.ok(s.includes('                                Not scheduled — {scheduleError}'), 'the refusal names itself as a refusal');
+    assert.ok(s.includes('{scheduleError && (\n                            <div role="alert"'), 'a banner, announced');
+    assert.ok(!s.includes("<span style={{ fontSize: 11.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{scheduleError}</span>"), 'the inline span is gone');
+});
+
 test('DispatchJobTemplatesDetail: no inert "Test auto-create" button', () => {
     const s = code(read('src/Tabs/settings/dispatch/DispatchJobTemplatesDetail.jsx'));
     assert.ok(!s.includes('Test auto-create'), 'DispatchJobTemplatesDetail still carries "Test auto-create"');

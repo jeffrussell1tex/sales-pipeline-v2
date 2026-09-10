@@ -1870,6 +1870,10 @@ const mutations = [
         'netlify.toml',
         'from = "/status/:token"',
         'from = "/status-link/:token"'],
+    ['dispatch: a refused crew schedule goes back to an 11.5px line among the controls',
+        'src/Tabs/DispatchTab.jsx',
+        '                                Not scheduled — {scheduleError}',
+        '                                {scheduleError}'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
