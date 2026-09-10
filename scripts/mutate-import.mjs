@@ -1888,6 +1888,11 @@ const mutations = [
         'src/Tabs/DispatchTab.jsx',
         'j.start != null && j.scheduledDate === availDate)',
         'j.start != null)'],
+
+    ['crew scoring: the board technician drops the shift pattern again (every day "Not rostered")',
+        'src/Tabs/DispatchTab.jsx',
+        '    workingHours:   t.workingHours || {},',
+        '    // workingHours dropped'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

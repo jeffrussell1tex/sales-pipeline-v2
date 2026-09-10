@@ -1429,6 +1429,13 @@ const normaliseTech = (t) => ({
     dispatchSkills: t.skills        || [],
     dispatchCerts:  t.certifications || [],
     hoursThisWeek:  0,
+    // The weekly shift pattern itself, not just the cap derived from it. This
+    // was dropped here, so every consumer of shiftForDate on the board shape
+    // (scoreTech, the day board's lane shading, the time gate, the planner)
+    // read a technician with a full Mon–Fri pattern as "Not rostered" on every
+    // day, while Work Schedules — which reads the raw rows — showed the pattern
+    // (state §0.112; Jeff: "is this not being referenced in the rostering process").
+    workingHours:   t.workingHours || {},
     hoursCap:       capFromPattern(t.workingHours),
     vehicle:        t.assignedVehicleId || null,
     baseLocation:   t.homeZip || null,

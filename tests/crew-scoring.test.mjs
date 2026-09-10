@@ -33,6 +33,17 @@ test('the crew builder hands the scorer its chosen start and re-scores when it c
     assert.ok(s.includes('                        scheduledStart: j.scheduledStart || null,'), 'the board job shape carries it');
 });
 
+test('normaliseTech carries the weekly shift pattern onto the board shape — the roster lookup reads it', () => {
+    // Work Schedules reads the raw technician rows; everything else reads the
+    // normalised shape. Drop workingHours here and every day is "Not rostered".
+    const start = s.indexOf('const normaliseTech = (t) => ({');
+    assert.ok(start > 0, 'normaliseTech exists');
+    const body = s.slice(start, s.indexOf('});', start));
+    assert.ok(body.includes('    workingHours:   t.workingHours || {},'), 'the pattern rides on the board technician');
+    assert.ok(body.includes('    hoursCap:       capFromPattern(t.workingHours),'));
+    assert.ok(s.includes("            blockers.push(`Not rostered on ${dayName}`);"), 'the scorer still blocks a day off the pattern');
+});
+
 test('the job editor offers a preferred start time and a time window, and saves them the way the schema expects', () => {
     assert.ok(s.includes('<CustFieldRow label="Preferred start time">'));
     assert.ok(s.includes('<TimeDropdown value={draft.scheduledStart || \'\'} onChange={v => set(\'scheduledStart\', v)} stepMinutes={30} ariaLabel="Preferred start time"/>'));
