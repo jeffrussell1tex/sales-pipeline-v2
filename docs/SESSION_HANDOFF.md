@@ -440,7 +440,17 @@ Miller on 2026-09-18 at 8:00 AM. Reserved: Pressure Tester." **Then
 equipment"): the chips toggled but looked like labels — now "+ Kind" / "✓
 Kind", role=checkbox, a "click a kind to require it" line under each picker,
 skills and kinds in both forms and the technician editor. 708/708 unit,
-147/147 integration, 412/412 mutations, `index-mSB6P0Q8.js`. **NOT shipped.**
+147/147 integration, 412/412 mutations, `index-mSB6P0Q8.js`. **All of
+§0.112–§0.116 SHIPPED at 22:51 UTC — the SIXTEENTH ship, §1; Jeff:
+"everything tested out perfectly."**
+**§0.117 `e4d9ac3`** (Jeff: "please do a fix on the two things you
+noticed"): a queue card read "◷ 08:00" on an UNSCHEDULED job with a preferred
+time — now the date with "· prefers 8:00 AM" (`queueWindow`); the document
+still scrolled 8 px — the shell's bottom padding now counts. 709/709 unit,
+147/147 integration, 414/414 mutations, `index-DlxqI1V6.js`. **OBSERVED on
+dev** (no scroll; the clocks). **NOT shipped.** Also: two harness runs ended
+red on a failed RESTORE (Windows "UNKNOWN: open", Defender) — not survivors;
+the file was restored from HEAD; see §0.117 and the memory note.
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -491,7 +501,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); nothing is on `dev` alone but this ship-record
+## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); `dev` is ahead by ONE CODE commit, §0.117 `e4d9ac3` — NOT shipped
 
 **PROD SHIPPED — the SIXTEENTH ship (Jeff: "ship prod", 10 Sep).** Pre-flight: tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 29 commits after `0a242c6` (ten of them code: `470b948`, `a29cc1e`, `223c99a`, `9bc6b89`, `360e4f7`, `54fb180`, `e5970f3`, `d7f0765`, `1233de4`, `a7201b7`). `git push origin dev:master` at 22:50:39 UTC: `master` `0a242c6` → `0726934`. Netlify record `6aa33443…`: branch `master`, commit `0726934`, created 22:50:43, published 22:51:30 UTC (51 seconds after the push, deploy_time 45 s), **80 functions**, **2 redirect rules**, 1 header rule, secret scan clean over 412 files; salespipelinetracker.com serving `index-DaJE9sq9.js` from 22:51:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-mSB6P0Q8.js` — the key differs). The one schema change of the batch, `dispatch_jobs.assigned_equipment_ids`, was already in the shared database (applied 10 Sep, §18c) — nothing applied at ship time. **What prod does differently from this moment:** the roster is read on the board (a technician with a pattern is rostered, one without is "Not rostered" — §0.112); a job with no category saves from the editor, a new technician starts Mon–Fri 08:00–17:00 (§0.113); the Dispatch page fits the screen, the next-step card asks Schedule now / Wait for group schedule / Clear the moment a crew slot is filled, a held crew is persisted and honoured by Mass-schedule (§0.114–§0.115); equipment is required by KIND, scheduling reserves one in-service unit per kind and releases it on unschedule, and the kind/skill chips read as toggles (§0.116). Every "NOT shipped" in §0.112–§0.116 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in the handoff §5.
 
@@ -1304,7 +1314,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (10 Sep, twelfth session — after the SIXTEENTH ship)
 
-**`master` == `dev` == `0726934` at the SIXTEENTH ship (22:50:39 UTC); prod serving `index-DaJE9sq9.js` from 22:51:42 UTC, Netlify record `6aa33443…`, 80 functions, 2 redirect rules, secret scan clean over 412 files.** Then the ship-record docs commits carrying this line — `dev` ahead of `master` by them alone. Counts at the ship: 708/708 unit, 147/147 integration, 412/412 mutations, six gates, dev bundle `index-mSB6P0Q8.js`.
+**`master` == `dev` == `0726934` at the SIXTEENTH ship (22:50:39 UTC); prod serving `index-DaJE9sq9.js` from 22:51:42 UTC, Netlify record `6aa33443…`, 80 functions, 2 redirect rules, secret scan clean over 412 files.** Then the ship-record docs commits, and after them **§0.117 `e4d9ac3`** (the queue card's clock; the 8 px scroll — bundle only, `index-DlxqI1V6.js`, 709/709 unit, 414/414 mutations, 147/147 integration) — `dev` ahead of `master` by that ONE CODE commit and the docs after it. Counts at the ship: 708/708 unit, 147/147 integration, 412/412 mutations, six gates, dev bundle `index-mSB6P0Q8.js`.
 
 **After the FIFTEENTH ship, earlier the same day:** **`master` == `dev` == `0a242c6` at that ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time) and **`a29cc1e`** (the roster correction — `normaliseTech` now carries `workingHours`) and **`223c99a`** (§0.113 — the null-category 500 on the Jobs editor's save; a new technician rostered Mon–Fri 8–5; functions AND bundle) and **`9bc6b89`** (§0.114 — a filled crew slot says it is not saved; a success is announced), **`360e4f7`** and **`54fb180`** (§0.115 — the page bound to the viewport, the next-step card, Wait for group schedule, the planner honouring a held crew, a preferred start not a placement; bundle only) , **`e5970f3`**, **`d7f0765`**, **`1233de4`** and **`a7201b7`** (§0.116 — equipment by KIND with a unit reserved at scheduling, and chips that read as toggles; functions AND bundle, and a schema column already in the shared database; hash `index-mSB6P0Q8.js`, 708/708 unit, 412/412 mutations, 147/147 integration) — `dev` ahead of `master` by those TEN CODE commits and the docs after them. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
 
@@ -1424,8 +1434,15 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Thirteenth-session prep — first:**
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  ONLY docs commits (the SIXTEENTH ship's record); a code commit is a
-  finding.
+  ONE CODE commit, `e4d9ac3` (§0.117), and the docs around it; anything
+  else is a finding. Ship it when Jeff says so — bundle only.
+- **§0.117 on dev — Jeff's check:** Dispatch → Queue: the window does not
+  scroll at all; set a Preferred start time on an UNSCHEDULED job under Jobs
+  → its queue card reads "◷ <date> · prefers <time>", not the bare time.
+- **If the mutation harness ends red after "Baseline: green."**, read
+  `/tmp/mut.log` for "restore of" / "COULD NOT" before calling it a
+  survivor; `git status`; restore that file from HEAD if none of the
+  session's edits touched it; rerun (twice on 10 Sep — Defender).
 - **§0.112 on dev (either role):** Dispatch → Queue → select JOB-2026-0006
   (unscheduled, Fri 11, no start): neither technician reads "Double-booked
   at 9a" any more — Savannah's blockers are the roster ones only, and Jax
