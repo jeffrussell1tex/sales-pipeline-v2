@@ -22,6 +22,21 @@ test('DispatchTab: no inert "Manual pick" button, and no copy telling the user t
     assert.ok(!s.includes('prioColor2'), 'the prioColor2 alias is collapsed — one priority colour map');
 });
 
+test('DispatchTab: a filled crew slot says it is not saved, and a saved schedule says so too (§0.114)', () => {
+    // Jeff assigned Savannah in the Queue and found the job still "Needs a crew"
+    // on the Job Board: the row had never been written. "+ Add" turns green and
+    // reads "1 of 1 crew slots filled" — done, to a reader — while only "Schedule
+    // crew" persists; and a successful schedule clears the selection with no word.
+    const s = code(read('src/Tabs/DispatchTab.jsx'));
+    assert.ok(s.includes("{addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? ' — not saved yet: click Schedule crew to assign' : ''}"),
+        'the slots header names the unsaved state');
+    assert.ok(s.includes("showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}. It is on the Job Board now.`);"),
+        'a successful write is announced');
+    assert.ok(s.includes('{scheduleNotice && !scheduleError && (\n                            <div role="status"'), 'as a status banner, never over a refusal');
+    assert.ok(s.includes("noticeTimer.current = setTimeout(() => setScheduleNotice(''), 10000);"), 'timed, since the selection moves on success');
+    assert.ok(s.includes("import { to12h } from '../utils/customerNotifications.js';"));
+});
+
 test('DispatchTab: a refused crew schedule is a banner above the action bar, not a line among the controls', () => {
     // Jeff's first schedule was refused pre-flight ("Set a start time before
     // scheduling.") in an 11.5px span, and he read the board as broken (§0.111).

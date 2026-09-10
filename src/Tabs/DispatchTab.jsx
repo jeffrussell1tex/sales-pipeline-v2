@@ -5,6 +5,7 @@ import { dbFetch, dbWrite, waitForToken } from '../utils/storage';
 // pipeline-alerts job (state §0.110).
 import { planVisitState, buildVisitQueue, buildRenewalQueue, renewedExpiry } from '../utils/planVisits.js';
 import { defaultWorkWeek, DEFAULT_SHIFT_HOURS } from '../utils/workWeek.js';
+import { to12h } from '../utils/customerNotifications.js';
 import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -819,6 +820,19 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
     const [scheduleTime,   setScheduleTime]   = useState('');   // 'HH:MM'
     const [scheduleDate,   setScheduleDate]   = useState('');   // 'YYYY-MM-DD'
     const [scheduleError,  setScheduleError]  = useState('');
+    // "Scheduled — …" after a successful write. The job leaves the unscheduled
+    // list and the selection clears, so without this the dispatcher saw nothing
+    // happen; with "+ Add" reading as done, the difference between a filled slot
+    // and a saved schedule was invisible (state §0.114). Timed, not tied to the
+    // selection, because the selection moves to the next job on success.
+    const [scheduleNotice, setScheduleNotice] = useState('');
+    const noticeTimer = useRef(null);
+    const showNotice = (text) => {
+        if (noticeTimer.current) clearTimeout(noticeTimer.current);
+        setScheduleNotice(text);
+        noticeTimer.current = setTimeout(() => setScheduleNotice(''), 10000);
+    };
+    useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -940,6 +954,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
         }
 
         setScheduleError('');
+        setScheduleNotice('');
         setSaving(true);
         try {
             const [leadId, ...coIds] = addedIds;
@@ -987,6 +1002,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                 overridden,
             });
 
+            showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}. It is on the Job Board now.`);
             setAddedTechs({});
             setScheduleTime('');
             setScheduleDate('');
@@ -1138,8 +1154,8 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                                 <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>Suggested crew — ranked by match</span>
-                                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: T.inkMid }}>
-                                    {addedCount} of {crewSlots} crew slots filled
+                                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: addedCount > 0 ? T.warn : T.inkMid, fontWeight: addedCount > 0 ? 600 : 400 }}>
+                                    {addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? ' — not saved yet: click Schedule crew to assign' : ''}
                                 </span>
                             </div>
 
@@ -1301,6 +1317,12 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                             <div role="alert" style={{ margin: '0 18px 10px', padding: '10px 14px', background: 'rgba(156,58,46,0.08)',
                                 border: `1px solid ${T.danger}`, borderRadius: T.r, color: T.danger, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans }}>
                                 Not scheduled — {scheduleError}
+                            </div>
+                        )}
+                        {scheduleNotice && !scheduleError && (
+                            <div role="status" style={{ margin: '0 18px 10px', padding: '10px 14px', background: 'rgba(77,107,61,0.08)',
+                                border: `1px solid ${T.ok}`, borderRadius: T.r, color: T.ok, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans }}>
+                                {scheduleNotice}
                             </div>
                         )}
 

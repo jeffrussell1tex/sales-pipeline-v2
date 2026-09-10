@@ -1914,6 +1914,17 @@ const mutations = [
         'src/Tabs/DispatchTab.jsx',
         "assignedVehicleId: '', notes: '', workingHours: defaultWorkWeek() });",
         "assignedVehicleId: '', notes: '' });"],
+
+    // ── A filled slot is not a saved schedule (0.114) ────────────────────────
+    ['crew builder: the slots header stops saying "not saved yet"',
+        'src/Tabs/DispatchTab.jsx',
+        "{addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? ' — not saved yet: click Schedule crew to assign' : ''}",
+        "{addedCount} of {crewSlots} crew slots filled"],
+
+    ['crew builder: a successful schedule is silent again',
+        'src/Tabs/DispatchTab.jsx',
+        "            showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}. It is on the Job Board now.`);",
+        "            showNotice('');"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
