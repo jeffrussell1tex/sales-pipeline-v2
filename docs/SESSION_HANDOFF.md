@@ -359,7 +359,8 @@ dev after the deploy of `2e6a9c4` (15:28:36 UTC): the pretty path **200** with
 the real token — "Filter Change · Scheduled · Friday, September 11, 2026
 between 9:00 AM and 11:00 AM · Jax · 400 Westheimer, Houston, TX ·
 JOB-2026-0005"; the company line reads "Your service provider" because the
-dev org has no company name set (Settings → Company profile).**
+dev org has no company name set (Settings → Company profile). Jeff's
+screenshot then showed the board with Jax at 9a · 2h on Fri 11 — OBSERVED.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
