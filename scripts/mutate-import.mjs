@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1872,7 +1872,7 @@ const mutations = [
         'from = "/status-link/:token"'],
     ['dispatch: a refused crew schedule goes back to an 11.5px line among the controls',
         'src/Tabs/DispatchTab.jsx',
-        '                                Not scheduled — {scheduleError}',
+        '                                    Not scheduled — {scheduleError}',
         '                                {scheduleError}'],
     ['dispatch: the click-through opens Jobs but never selects the job',
         'src/Tabs/DispatchTab.jsx',
@@ -1918,8 +1918,29 @@ const mutations = [
     // ── A filled slot is not a saved schedule (0.114) ────────────────────────
     ['crew builder: the slots header stops saying "not saved yet"',
         'src/Tabs/DispatchTab.jsx',
-        "{addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? ' — not saved yet: click Schedule crew to assign' : ''}",
+        "{addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? (isHeld ? ' — held for group schedule' : ' — not saved yet: Schedule now or Wait for group schedule above') : ''}",
         "{addedCount} of {crewSlots} crew slots filled"],
+
+    // ── The next step after choosing a crew (0.115) ───────────────────────────
+    ['crew builder: the next-step card never appears',
+        'src/Tabs/DispatchTab.jsx',
+        '                            {addedCount > 0 && (\n                                <CrewNextStep',
+        '                            {false && (\n                                <CrewNextStep'],
+
+    ['crew builder: holding a crew schedules it instead (status flips)',
+        'src/Tabs/DispatchTab.jsx',
+        "body: JSON.stringify({ id: selectedJob.id, status: 'unscheduled', assignedTechId: leadId, coTechIds: coIds }),",
+        "body: JSON.stringify({ id: selectedJob.id, status: 'scheduled', assignedTechId: leadId, coTechIds: coIds }),"],
+
+    ['planner: a held crew is ignored — anyone free is placed',
+        'src/Tabs/DispatchTab.jsx',
+        '            .filter(t => !only || only.has(t.id))   // a held crew: these people, exactly (§0.115)',
+        '            .filter(t => true)'],
+
+    ['dispatch page: the viewport-bound height is gone (the action bar can fall below the fold again)',
+        'src/Tabs/DispatchTab.jsx',
+        "height: pageTop != null ? `calc(100vh - ${pageTop}px)` : '100%', boxSizing: 'border-box', overflow: 'hidden' }}>",
+        "height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>"],
 
     ['crew builder: a successful schedule is silent again',
         'src/Tabs/DispatchTab.jsx',

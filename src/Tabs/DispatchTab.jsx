@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch, dbWrite, waitForToken } from '../utils/storage';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
@@ -808,7 +808,60 @@ const QUEUE_SORTS = {
     Value:    (a, b) => (b.value || 0) - (a.value || 0),
 };
 
-const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled, onCreateBridgeJob, onOpenJob }) => {
+// ── Next step after choosing a crew (§0.115) ─────────────────────────────────
+// Jeff added a technician and never saw the Schedule crew button — the action
+// bar sat below the fold of a 40" monitor. The moment a slot is filled this card
+// asks, at the top of the panel where the eye already is: schedule now, or hold
+// the crew for Mass-schedule next week. Module scope, data as props.
+const CrewNextStep = ({ crewNames, addedCount, crewSlots, held, dateStr, onDate, time, onTime, onScheduleNow, onHold, onClear, saving }) => {
+    const more = Math.max(0, crewSlots - addedCount);
+    const names = crewNames.join(', ');
+    return (
+        <div role="region" aria-label="Next step" style={{ margin: '0 0 14px', padding: '12px 14px', background: T.surface,
+            border: `2px solid ${held ? T.ok : T.ink}`, borderRadius: T.r + 2 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: T.ink, marginBottom: 4 }}>
+                {held ? `Crew held for group schedule — ${names}` : `Crew chosen — ${names}`}
+                <span style={{ fontSize: 11.5, fontWeight: 500, color: T.inkMid, marginLeft: 8 }}>
+                    {addedCount} of {crewSlots}{more ? ` · ${more} more needed, or schedule with ${addedCount}` : ''}
+                </span>
+            </div>
+            <div style={{ fontSize: 12, color: T.inkMid, marginBottom: 10 }}>
+                {held
+                    ? 'Saved without a time. Pick a date and start to schedule now, or leave it for Mass-schedule next week.'
+                    : 'Nothing is saved yet. Schedule now, or hold this crew for the group schedule.'}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid }}>Date
+                    <input type="date" value={dateStr} onChange={e => onDate(e.target.value)}
+                        style={{ padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.ink, fontFamily: T.sans, background: T.bg, outline: 'none' }}/>
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid }}>Start
+                    <div style={{ width: 132 }}>
+                        <TimeDropdown value={time} onChange={onTime} stepMinutes={30} ariaLabel="Next step start time"/>
+                    </div>
+                </div>
+                <button disabled={saving} onClick={onScheduleNow}
+                    style={{ padding: '7px 16px', background: saving ? T.borderStrong : T.ink, color: '#fbf8f3', border: 'none',
+                        borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
+                    {saving ? 'Saving…' : 'Schedule now'}
+                </button>
+                {!held && (
+                    <button disabled={saving} onClick={onHold}
+                        style={{ padding: '7px 14px', background: T.surface, color: T.ink, border: `1px solid ${T.borderStrong}`,
+                            borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
+                        Wait for group schedule
+                    </button>
+                )}
+                <button disabled={saving} onClick={onClear}
+                    style={{ padding: '7px 10px', background: 'transparent', color: T.inkMuted, border: 'none', fontSize: 12, cursor: 'pointer', fontFamily: T.sans }}>
+                    {held ? 'Release crew' : 'Clear crew'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled, onHeld, onCreateBridgeJob, onOpenJob }) => {
     const [queueSort, setQueueSort] = useState('Priority');
     const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
@@ -836,10 +889,13 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        setAddedTechs({});
+        const sel = (jobs || []).find(j => j.id === selectedJobId);
+        // A crew held for the group schedule (§0.115) comes back as the added
+        // crew, so the dispatcher sees who was chosen instead of an empty list.
+        const held = sel && sel.start == null ? (sel.assignedTechIds || []) : [];
+        setAddedTechs(Object.fromEntries(held.map(id => [id, true])));
         // The job's preferred start (Jobs → Preferred start time, §0.112) seeds
         // the builder's Start, so a dispatcher who set one is not asked again.
-        const sel = (jobs || []).find(j => j.id === selectedJobId);
         setScheduleTime(sel?.scheduledStart || '');
     }, [selectedJobId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1013,8 +1069,50 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
         }
     };
 
+    // "Wait for group schedule" (§0.115): persist the chosen crew on the job with
+    // no time and the status unchanged, so it survives leaving the page and
+    // Mass-schedule next week places exactly these people. Release undoes it.
+    const writeHeldCrew = async (ids) => {
+        if (!selectedJob) return;
+        if (selectedJob.isBridge) {
+            setScheduleError('This is a won opportunity, not a job yet. Use "Create job" on it first.');
+            return;
+        }
+        setScheduleError('');
+        setScheduleNotice('');
+        setSaving(true);
+        try {
+            const [leadId = null, ...coIds] = ids;
+            const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(selectedJob.id), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: selectedJob.id, status: 'unscheduled', assignedTechId: leadId, coTechIds: coIds }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (res.status === 403) throw new Error('Your role cannot schedule jobs.');
+                throw new Error(data.error || ('HTTP ' + res.status));
+            }
+            const crewNames = ids.map(id => techs.find(t => t.id === id)?.name || id);
+            if (onHeld) onHeld({ jobId: selectedJob.id, jobName: selectedJob.title || selectedJob.customer, techIds: ids, crewNames });
+            setAddedTechs(Object.fromEntries(ids.map(id => [id, true])));
+            showNotice(ids.length
+                ? `Crew held — ${crewNames.join(', ')}. The job stays in Jobs to schedule; Mass-schedule next week will place them, or come back and Schedule now.`
+                : 'Held crew released. The job is back to needing a crew.');
+        } catch (e) {
+            setScheduleError(e.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+    const handleHoldCrew = () => writeHeldCrew(Object.entries(addedTechs).filter(([, v]) => v).map(([k]) => k));
+
     const crewSlots = selectedJob?.crewSize || 2;
     const addedCount = Object.values(addedTechs).filter(Boolean).length;
+    const heldIds = selectedJob && selectedJob.start == null ? (selectedJob.assignedTechIds || []) : [];
+    const addedIdsNow = Object.entries(addedTechs).filter(([, v]) => v).map(([k]) => k);
+    const isHeld = heldIds.length > 0 && addedIdsNow.length === heldIds.length && addedIdsNow.every(id => heldIds.includes(id));
+    const handleClearCrew = () => { if (isHeld) writeHeldCrew([]); else setAddedTechs({}); };
     const unscheduledJobs = jobs.filter(j => !j.start || (j.assignedTechIds || []).length === 0);
     const scheduledJobs = jobs.filter(j => j.start && (j.assignedTechIds || []).length > 0);
     const overbooking = techs.some(t => (t.hoursThisWeek || 0) > (t.hoursCap || 40));
@@ -1152,10 +1250,33 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
 
                         {/* Crew suggestions */}
                         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
+                            {scheduleError && (
+                                <div role="alert" style={{ margin: '0 0 10px', padding: '10px 14px', background: 'rgba(156,58,46,0.08)',
+                                    border: `1px solid ${T.danger}`, borderRadius: T.r, color: T.danger, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans }}>
+                                    Not scheduled — {scheduleError}
+                                </div>
+                            )}
+                            {scheduleNotice && !scheduleError && (
+                                <div role="status" style={{ margin: '0 0 10px', padding: '10px 14px', background: 'rgba(77,107,61,0.08)',
+                                    border: `1px solid ${T.ok}`, borderRadius: T.r, color: T.ok, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans }}>
+                                    {scheduleNotice}
+                                </div>
+                            )}
+                            {addedCount > 0 && (
+                                <CrewNextStep
+                                    crewNames={addedIdsNow.map(id => techs.find(t => t.id === id)?.name || id)}
+                                    addedCount={addedCount} crewSlots={crewSlots} held={isHeld}
+                                    dateStr={scheduleDate || selectedJob.scheduledDate || ''}
+                                    onDate={v => { setScheduleDate(v); setScheduleError(''); }}
+                                    time={scheduleTime}
+                                    onTime={v => { setScheduleTime(v || ''); setScheduleError(''); }}
+                                    onScheduleNow={handleSchedule} onHold={handleHoldCrew} onClear={handleClearCrew}
+                                    saving={saving}/>
+                            )}
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                                 <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>Suggested crew — ranked by match</span>
-                                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: addedCount > 0 ? T.warn : T.inkMid, fontWeight: addedCount > 0 ? 600 : 400 }}>
-                                    {addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? ' — not saved yet: click Schedule crew to assign' : ''}
+                                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: addedCount > 0 ? (isHeld ? T.ok : T.warn) : T.inkMid, fontWeight: addedCount > 0 ? 600 : 400 }}>
+                                    {addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? (isHeld ? ' — held for group schedule' : ' — not saved yet: Schedule now or Wait for group schedule above') : ''}
                                 </span>
                             </div>
 
@@ -1313,20 +1434,8 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                             here, not in an 11.5px line among the controls: Jeff's first
                             crew-builder schedule was refused pre-flight and he read the
                             board as broken (state §0.111; guide §18b32). */}
-                        {scheduleError && (
-                            <div role="alert" style={{ margin: '0 18px 10px', padding: '10px 14px', background: 'rgba(156,58,46,0.08)',
-                                border: `1px solid ${T.danger}`, borderRadius: T.r, color: T.danger, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans }}>
-                                Not scheduled — {scheduleError}
-                            </div>
-                        )}
-                        {scheduleNotice && !scheduleError && (
-                            <div role="status" style={{ margin: '0 18px 10px', padding: '10px 14px', background: 'rgba(77,107,61,0.08)',
-                                border: `1px solid ${T.ok}`, borderRadius: T.r, color: T.ok, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans }}>
-                                {scheduleNotice}
-                            </div>
-                        )}
-
-                        {/* Action bar */}
+                        {/* Action bar. The refusal and success banners sit at the top of the
+                            crew section beside the next-step card (§0.115), not here. */}
                         <div style={{ padding: '12px 18px', borderTop: `1px solid ${T.border}`,
                             background: T.surface, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                             <div style={{ fontSize: 12, color: T.inkMid, flex: 1 }}>
@@ -1338,8 +1447,8 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                 )}
                             </div>
                             {addedCount > 0 && (
-                                <span style={{ fontSize: 11.5, color: T.warn, fontWeight: 600, fontFamily: T.sans }}>
-                                    {addedCount}/{crewSlots} added — not scheduled yet
+                                <span style={{ fontSize: 11.5, color: isHeld ? T.ok : T.warn, fontWeight: 600, fontFamily: T.sans }}>
+                                    {addedCount}/{crewSlots} {isHeld ? 'held for group schedule' : 'added — not scheduled yet'}
                                 </span>
                             )}
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid, fontFamily: T.sans }}>
@@ -3788,9 +3897,10 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], equi
 
     // Every technician who could work this job on this day, each with the first
     // slot inside their own shift where they are free. Sorted best-first.
-    const candidatesForDay = (job, dateStr) => {
+    const candidatesForDay = (job, dateStr, only = null) => {
         const dur = job.durationHrs || 2;
         return techs
+            .filter(t => !only || only.has(t.id))   // a held crew: these people, exactly (§0.115)
             .map(t => ({ tech: t, ...scoreTech(t, job, jobs, skills, { blocks, blockTypes, vehicles, dateStr }) }))
             .filter(c => c.blockers.length === 0)
             .sort((a, b) => b.score - a.score)
@@ -3821,8 +3931,8 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], equi
     // A crew must work the SAME hour, so the slot is chosen first and the crew
     // assembled from whoever is free then — not the other way round, which would
     // pick the best techs and then find they never overlap.
-    const crewForDay = (job, dateStr, need) => {
-        const cands = candidatesForDay(job, dateStr);
+    const crewForDay = (job, dateStr, need, only = null) => {
+        const cands = candidatesForDay(job, dateStr, only);
         if (cands.length < need) return { crew: null, shortfall: cands.length };
 
         for (const h of DSP_HOURS) {
@@ -3845,6 +3955,11 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], equi
 
     for (const job of queue) {
         const need = Math.max(1, parseInt(job.crewSize, 10) || 1);
+        // A crew held in the builder ("Wait for group schedule", §0.115) is honoured:
+        // only those people, and exactly them — the planner never swaps them out.
+        const heldIds = (job.assignedTechIds || []).filter(id => techs.some(t => t.id === id));
+        const only = heldIds.length ? new Set(heldIds) : null;
+        const want = only ? heldIds.length : need;
 
         // Respect an existing date; otherwise try each day in the window.
         const days = job.scheduledDate
@@ -3858,7 +3973,7 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], equi
         let placed = null;
         let lastMiss = null;
         for (const dateStr of days) {
-            const r = crewForDay(job, dateStr, need);
+            const r = crewForDay(job, dateStr, want, only);
             if (r.crew) { placed = { dateStr, crew: r.crew, startHr: r.startHr }; break; }
             lastMiss = r;
         }
@@ -3869,7 +3984,9 @@ const planWeek = ({ jobs, techs, skills, blocks, blockTypes, vehicles = [], equi
                 .sort((a, b) => a.blockers.length - b.blockers.length)[0];
 
             let reason;
-            if (need > 1 && lastMiss && lastMiss.shortfall < need && !lastMiss.noCommonSlot) {
+            if (only) {
+                reason = `Held crew (${heldIds.map(id => techs.find(t => t.id === id)?.name || id).join(', ')}) not free together in this window`;
+            } else if (need > 1 && lastMiss && lastMiss.shortfall < need && !lastMiss.noCommonSlot) {
                 reason = `Needs ${need} technicians; only ${lastMiss.shortfall} available`;
             } else if (need > 1 && lastMiss && lastMiss.noCommonSlot) {
                 reason = `Needs ${need} technicians free at the same time — no common slot`;
@@ -4591,6 +4708,17 @@ export default function DispatchTab() {
         else action();
     }, [showConfirm]);
     const isTech = userRole === 'Technician';
+
+    // The page fills the viewport below the fixed header, measured on mount (the
+    // ContactsTab pattern): height: 100% resolved to "auto" inside the app shell,
+    // so the Queue grew to its longest column and its action bar fell below the
+    // fold — Jeff never saw Schedule crew on a 40" monitor (§0.115).
+    const pageRef = useRef(null);
+    const [pageTop, setPageTop] = useState(null);
+    useLayoutEffect(() => {
+        if (!pageRef.current) return;
+        setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY)));
+    }, []);
 
     // Sub-tab state persists to localStorage so navigating away and back restores
     // the last view, matching every other tab in the app (style guide §10).
@@ -5364,7 +5492,8 @@ export default function DispatchTab() {
     }
 
     return (
-        <div className="tab-page" style={{ fontFamily: T.sans, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <div ref={pageRef} className="tab-page" style={{ fontFamily: T.sans, display: 'flex', flexDirection: 'column',
+            height: pageTop != null ? `calc(100vh - ${pageTop}px)` : '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
             {/* Page header */}
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
                 padding: '14px 20px 14px', borderBottom: `1px solid ${T.border}`, background: T.bg, flexShrink: 0 }}>
@@ -5666,6 +5795,15 @@ export default function DispatchTab() {
                         onSelectJob={setSelectedJobId}
                         onOpenJob={openJobRecord}
                         onBack={() => setView('board')}
+                        onHeld={({ jobId, jobName, techIds, crewNames }) => {
+                            // Crew on the job, no time: the week board shows it on their row as
+                            // TBD; the queue and the day board's rail still list it (§0.115).
+                            setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds } : j));
+                            if (addAudit) {
+                                addAudit(techIds.length ? 'dispatch.crew.hold' : 'dispatch.crew.release', 'dispatch_job', jobId, jobName,
+                                    techIds.length ? `Crew held for group schedule: ${crewNames.join(', ')}` : 'Held crew released');
+                            }
+                        }}
                         onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden, serverJob }) => {
                             setJobs(prev => prev.map(j => j.id === jobId
                                 ? { ...j, assignedTechIds: techIds, start: startHr, status: 'scheduled',

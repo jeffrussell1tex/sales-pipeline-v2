@@ -28,11 +28,11 @@ test('DispatchTab: a filled crew slot says it is not saved, and a saved schedule
     // reads "1 of 1 crew slots filled" — done, to a reader — while only "Schedule
     // crew" persists; and a successful schedule clears the selection with no word.
     const s = code(read('src/Tabs/DispatchTab.jsx'));
-    assert.ok(s.includes("{addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? ' — not saved yet: click Schedule crew to assign' : ''}"),
-        'the slots header names the unsaved state');
+    assert.ok(s.includes("{addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? (isHeld ? ' — held for group schedule' : ' — not saved yet: Schedule now or Wait for group schedule above') : ''}"),
+        'the slots header names the unsaved state, or the held one');
     assert.ok(s.includes("showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}. It is on the Job Board now.`);"),
         'a successful write is announced');
-    assert.ok(s.includes('{scheduleNotice && !scheduleError && (\n                            <div role="status"'), 'as a status banner, never over a refusal');
+    assert.ok(s.includes('{scheduleNotice && !scheduleError && (\n                                <div role="status"'), 'as a status banner, never over a refusal');
     assert.ok(s.includes("noticeTimer.current = setTimeout(() => setScheduleNotice(''), 10000);"), 'timed, since the selection moves on success');
     assert.ok(s.includes("import { to12h } from '../utils/customerNotifications.js';"));
 });
@@ -41,8 +41,8 @@ test('DispatchTab: a refused crew schedule is a banner above the action bar, not
     // Jeff's first schedule was refused pre-flight ("Set a start time before
     // scheduling.") in an 11.5px span, and he read the board as broken (§0.111).
     const s = code(read('src/Tabs/DispatchTab.jsx'));
-    assert.ok(s.includes('                                Not scheduled — {scheduleError}'), 'the refusal names itself as a refusal');
-    assert.ok(s.includes('{scheduleError && (\n                            <div role="alert"'), 'a banner, announced');
+    assert.ok(s.includes('                                    Not scheduled — {scheduleError}'), 'the refusal names itself as a refusal');
+    assert.ok(s.includes('{scheduleError && (\n                                <div role="alert"'), 'a banner, announced — at the top of the crew section, beside the next-step card (§0.115)');
     assert.ok(!s.includes("<span style={{ fontSize: 11.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{scheduleError}</span>"), 'the inline span is gone');
 });
 
