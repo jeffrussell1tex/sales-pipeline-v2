@@ -68,6 +68,11 @@ const blocksOnDate = (blocks, techId, dateStr) =>
 const addDaysStr = (str, n) => { const d = fromYmd(str); d.setDate(d.getDate() + n); return ymd(d); };
 
 const hhToNum = (t) => { const [h, m] = String(t || '').split(':').map(Number); return (h || 0) + (m || 0) / 60; };
+// 'HH:MM' plus a duration in hours, back to 'HH:MM' (wraps at midnight).
+const addHoursHHMM = (hhmm, hrs) => {
+    const mins = (Math.round((hhToNum(hhmm) + (Number(hrs) || 0)) * 60) % (24 * 60) + 24 * 60) % (24 * 60);
+    return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+};
 
 // Weekly capacity implied by the shift pattern. Falls back to 40 only when no
 // pattern is set, rather than asserting 40 for everyone as before.
@@ -478,17 +483,25 @@ const scoreTech = (tech, job, allJobs, skills, avail = {}) => {
         why.push(`Near cap · ${hoursUsed}/${hoursCap}`);
     }
 
-    // Availability - no overlap with existing jobs (15pts)
-    const assignedJobs = allJobs.filter(j => j.id !== job.id && (j.assignedTechIds || []).includes(tech.id) && j.start != null);
-    const overlaps = assignedJobs.filter(j => {
-        const js = j.start, je = j.start + (j.durationHrs || 2);
-        const ns = job.start || 9, ne = ns + (job.durationHrs || 2);
-        return js < ne && je > ns;
-    });
-    if (overlaps.length === 0) {
-        score += 15;
+    // Availability - no overlap with existing jobs (15pts). SAME DAY only, and
+    // only when a start time is actually known. This used to assume an
+    // unscheduled job began at 9 AM and compared start hours against every job
+    // the technician had ever held, on ANY date — so a September job read
+    // "Double-booked at 9a" because of two August ones (state §0.112; Jeff:
+    // "where is the 9AM assumption coming from?"). The probe is the builder's
+    // chosen start, else the job's preferred start, else nothing to compare.
+    const probeStart = avail.start ?? job.start ?? null;
+    const sameDayJobs = availDate
+        ? allJobs.filter(j => j.id !== job.id && (j.assignedTechIds || []).includes(tech.id) && j.start != null && j.scheduledDate === availDate)
+        : [];
+    if (probeStart == null) {
+        score += 15;   // no evidence of a clash; the time gate re-checks once a start exists
+        if (sameDayJobs.length) why.push(`${sameDayJobs.length} other job${sameDayJobs.length === 1 ? '' : 's'} that day — pick a start to check`);
     } else {
-        blockers.push(`Double-booked at ${fmt12(overlaps[0].start)}`);
+        const ne = probeStart + (job.durationHrs || 2);
+        const overlaps = sameDayJobs.filter(j => j.start < ne && j.start + (j.durationHrs || 2) > probeStart);
+        if (overlaps.length === 0) score += 15;
+        else blockers.push(`Double-booked at ${fmt12(overlaps[0].start)}`);
     }
 
     // Customer preference (7pts)
@@ -809,12 +822,17 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
 
     useEffect(() => {
         setAddedTechs({});
-    }, [selectedJobId]);
+        // The job's preferred start (Jobs → Preferred start time, §0.112) seeds
+        // the builder's Start, so a dispatcher who set one is not asked again.
+        const sel = (jobs || []).find(j => j.id === selectedJobId);
+        setScheduleTime(sel?.scheduledStart || '');
+    }, [selectedJobId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     const candidates = useMemo(() => {
         if (!selectedJob) return [];
         return techs
-            .map(t => ({ tech: t, ...scoreTech(t, selectedJob, jobs, skills, { blocks, blockTypes, vehicles, dateStr: scheduleDate || selectedJob.scheduledDate }) }))
+            .map(t => ({ tech: t, ...scoreTech(t, selectedJob, jobs, skills, { blocks, blockTypes, vehicles, dateStr: scheduleDate || selectedJob.scheduledDate,
+                start: scheduleTime ? hhToNum(scheduleTime) : (selectedJob.start ?? null) }) }))
             .filter(c => c.score >= 50)
             // Blocked candidates sort below every clean one regardless of score.
             // Score answers "how good a fit is this?"; blockers answer "may this
@@ -826,7 +844,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                 return b.score - a.score;
             })
             .slice(0, 5);
-    }, [selectedJob, techs, jobs, skills, blocks, blockTypes, scheduleDate]);
+    }, [selectedJob, techs, jobs, skills, blocks, blockTypes, scheduleDate, scheduleTime]);
 
     // Full roster, independent of the board filters, so the preference note can
     // tell "filtered out of this view" apart from "not on the roster".
@@ -3455,6 +3473,10 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                     minLicense:      draft.minLicense || null,
                     needSkills:      draft.needSkills || [],
                     scheduledDate:   draft.scheduledDate || null,
+                    // A preferred start makes the window exact and sets the end from the duration (§0.112).
+                    scheduledStart:  draft.scheduledStart || null,
+                    scheduledEnd:    draft.scheduledStart ? addHoursHHMM(draft.scheduledStart, parseFloat(draft.durationHrs ?? ((draft.durationMinutes || 120) / 60)) || 2) : null,
+                    timeSlot:        draft.scheduledStart ? 'exact' : (draft.timeSlot && draft.timeSlot !== 'exact' ? draft.timeSlot : 'anytime'),
                     locationId,
                 }),
             });
@@ -3578,6 +3600,22 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                             </CustFieldRow>
                             <CustFieldRow label="Scheduled date">
                                 <input type="date" value={draft.scheduledDate || ''} onChange={e => set('scheduledDate', e.target.value)} style={custInput}/>
+                            </CustFieldRow>
+                            {/* A preferred start makes the window exact and seeds the crew builder's
+                                Start; the customer's confirmation reads it (§0.112). */}
+                            <CustFieldRow label="Preferred start time">
+                                <TimeDropdown value={draft.scheduledStart || ''} onChange={v => set('scheduledStart', v)} stepMinutes={30} ariaLabel="Preferred start time"/>
+                            </CustFieldRow>
+                            <CustFieldRow label="Time window">
+                                <select value={draft.scheduledStart ? 'exact' : (draft.timeSlot && draft.timeSlot !== 'exact' ? draft.timeSlot : 'anytime')}
+                                    disabled={!!draft.scheduledStart}
+                                    onChange={e => set('timeSlot', e.target.value)} style={{ ...custInput, opacity: draft.scheduledStart ? 0.6 : 1 }}>
+                                    <option value="anytime">Any time that day</option>
+                                    <option value="morning">Morning</option>
+                                    <option value="afternoon">Afternoon</option>
+                                    <option value="evening">Evening</option>
+                                    <option value="exact">Exact time (set a start)</option>
+                                </select>
                             </CustFieldRow>
                         </div>
 
@@ -4884,6 +4922,7 @@ export default function DispatchTab() {
                         trade:          j.trade,
                         jobType:        j.jobType,
                         scheduledDate:  j.scheduledDate,
+                        scheduledStart: j.scheduledStart || null,
                         locationId:     j.locationId,
                         customerId:     j.customerId,
                         // raw DB fields preserved for saves
@@ -5526,6 +5565,8 @@ export default function DispatchTab() {
                             setJobs(prev => prev.map(j => j.id === saved.id
                                 ? { ...j, title: saved.title, priority: normalisePriority(saved.priority),
                                     status: saved.status, scheduledDate: saved.scheduledDate,
+                                    scheduledStart: saved.scheduledStart || null,
+                                    start: saved.scheduledStart ? hhToNum(saved.scheduledStart) : null,
                                     durationHrs: (saved.durationMinutes || 120) / 60,
                                     crewSize: saved.crewSize || j.crewSize,
                                     minLicense: saved.minLicense || null,
