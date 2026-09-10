@@ -30,8 +30,9 @@ test('DispatchTab: a filled crew slot says it is not saved, and a saved schedule
     const s = code(read('src/Tabs/DispatchTab.jsx'));
     assert.ok(s.includes("{addedCount} of {crewSlots} crew slots filled{addedCount > 0 ? (isHeld ? ' — held for group schedule' : ' — not saved yet: Schedule now or Wait for group schedule above') : ''}"),
         'the slots header names the unsaved state, or the held one');
-    assert.ok(s.includes("showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}. It is on the Job Board now.`);"),
+    assert.ok(s.includes("showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}.`"),
         'a successful write is announced');
+    assert.ok(s.includes("+ ' It is on the Job Board now.');"), 'and points at the board');
     assert.ok(s.includes('{scheduleNotice && !scheduleError && (\n                                <div role="status"'), 'as a status banner, never over a refusal');
     assert.ok(s.includes("noticeTimer.current = setTimeout(() => setScheduleNotice(''), 10000);"), 'timed, since the selection moves on success');
     assert.ok(s.includes("import { to12h } from '../utils/customerNotifications.js';"));

@@ -253,3 +253,25 @@ test('PUT with a null trade / jobType saves (stored as the empty string), instea
     assert.equal(row.status, beforeRow.status, 'nothing else moved');
     assert.equal(r.body.job.trade, '', 'the response carries what was stored');
 });
+
+// §0.116 — the units reserved for a job at scheduling ride the schedule write
+// and are released by ANY path that returns the job to unscheduled.
+test('assignedEquipmentIds is stored with the schedule and cleared when the job goes back to unscheduled', async () => {
+    const r1 = parse(await call('PUT', ORG_A, { params: { id: JOB_A }, body: {
+        id: JOB_A, status: 'scheduled', scheduledDate: '2026-10-05', scheduledStart: '09:00', scheduledEnd: '11:00', timeSlot: 'exact',
+        assignedEquipmentIds: ['eq_itest_1', 'eq_itest_2'],
+    } }));
+    assert.equal(r1.status, 200, JSON.stringify(r1.body));
+    assert.deepEqual((await rowOf(JOB_A)).assignedEquipmentIds, ['eq_itest_1', 'eq_itest_2']);
+    assert.deepEqual(r1.body.job.assignedEquipmentIds, ['eq_itest_1', 'eq_itest_2'], 'the response carries the reservation');
+
+    // A save that says nothing about equipment leaves the reservation alone.
+    const r2 = parse(await call('PUT', ORG_A, { params: { id: JOB_A }, body: { id: JOB_A, title: 'Furnace <tune-up>' } }));
+    assert.equal(r2.status, 200);
+    assert.deepEqual((await rowOf(JOB_A)).assignedEquipmentIds, ['eq_itest_1', 'eq_itest_2']);
+
+    // Back to unscheduled — by any path — releases the units without being asked.
+    const r3 = parse(await call('PUT', ORG_A, { params: { id: JOB_A }, body: { id: JOB_A, status: 'unscheduled', assignedTechId: null, coTechIds: [] } }));
+    assert.equal(r3.status, 200);
+    assert.deepEqual((await rowOf(JOB_A)).assignedEquipmentIds, []);
+});

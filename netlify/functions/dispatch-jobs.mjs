@@ -53,6 +53,7 @@ function normaliseJob(row) {
         assignedVehicleId:row.assignedVehicleId ?? row.assigned_vehicle_id ?? null,
         coTechIds:        row.coTechIds         ?? row.co_tech_ids        ?? [],
         equipmentIds:     row.equipmentIds      ?? row.equipment_ids      ?? [],
+        assignedEquipmentIds: row.assignedEquipmentIds ?? row.assigned_equipment_ids ?? [],
         laborHours:       row.laborHours        ?? row.labor_hours        ?? null,
         laborCost:        row.laborCost         ?? row.labor_cost         ?? null,
         materialCost:     row.materialCost      ?? row.material_cost      ?? null,
@@ -314,6 +315,7 @@ export const handler = async (event) => {
                 assignedVehicleId:data.assignedVehicleId ?? null,
                 coTechIds:        JSON.stringify(data.coTechIds     ?? []),
                 equipmentIds:     JSON.stringify(data.equipmentIds  ?? []),
+                assignedEquipmentIds: JSON.stringify(data.assignedEquipmentIds ?? []),
                 laborHours:       data.laborHours        ?? null,
                 laborCost:        data.laborCost         ?? null,
                 materialCost:     data.materialCost      ?? null,
@@ -433,6 +435,10 @@ export const handler = async (event) => {
             if ('coTechIds'    in data) updates.coTechIds    = JSON.stringify(data.coTechIds);
             if ('needSkills'   in data) updates.needSkills   = JSON.stringify(data.needSkills);
             if ('equipmentIds' in data) updates.equipmentIds = JSON.stringify(data.equipmentIds);
+            // The units reserved at scheduling (§0.116). A job that leaves the
+            // schedule releases them, whichever path unscheduled it.
+            if ('assignedEquipmentIds' in data) updates.assignedEquipmentIds = JSON.stringify(data.assignedEquipmentIds ?? []);
+            else if (data.status === 'unscheduled') updates.assignedEquipmentIds = JSON.stringify([]);
             if ('tags'         in data) updates.tags         = JSON.stringify(data.tags);
             if ('customFields' in data) updates.customFields = JSON.stringify(data.customFields);
 

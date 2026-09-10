@@ -48,7 +48,7 @@ test('Wait for group schedule persists the crew with NO time and the status unch
     assert.ok(s.includes('const isHeld = heldIds.length > 0 && addedIdsNow.length === heldIds.length && addedIdsNow.every(id => heldIds.includes(id));'));
     assert.ok(s.includes("const held = sel && sel.start == null ? (sel.assignedTechIds || []) : [];\n        setAddedTechs(Object.fromEntries(held.map(id => [id, true])));"),
         'selecting a job brings its held crew back as the added crew');
-    assert.ok(s.includes("setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds, start: null, status: 'unscheduled', window: 'TBD' } : j));"),
+    assert.ok(s.includes("setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds, start: null, status: 'unscheduled', window: 'TBD', assignedEquipment: [] } : j));"),
         'the parent records the crew with NO placed start — holding a crew on a job that had a time takes the time off the client copy too');
     // An unscheduled job's scheduledStart is its PREFERRED time (§0.112); it must
     // not read as a placement, or a held crew shows as booked at that hour.

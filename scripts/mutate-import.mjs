@@ -1948,10 +1948,20 @@ const mutations = [
         '                    equipmentIds:    Array.isArray(draft.equipmentIds) ? draft.equipmentIds : [],',
         '                    equipmentIds:    Array.isArray(draft.equipmentIds) ? draft.equipmentIds : draft.equipmentIds,'],
 
-    ['equipment check: a unit id is no longer recognised as a unit (every named requirement reads as missing)',
+    ['equipment: a reservation ignores what overlapping jobs already hold (the same unit twice)',
         'src/Tabs/DispatchTab.jsx',
-        '        const unit = (units || []).find(u => u.id === req);\n        if (unit) {',
-        '        const unit = null;\n        if (unit) {'],
+        '            .filter(x => !taken.has(x.id) && !picked.includes(x.id))',
+        '            .filter(x => !picked.includes(x.id))'],
+
+    ['equipment: the schedule write stops carrying the reservation',
+        'src/Tabs/DispatchTab.jsx',
+        "                    timeSlot:       'exact',\n                    assignedEquipmentIds: reservedUnits,",
+        "                    timeSlot:       'exact',"],
+
+    ['equipment: a job returning to unscheduled keeps its reserved units (server)',
+        'netlify/functions/dispatch-jobs.mjs',
+        "            else if (data.status === 'unscheduled') updates.assignedEquipmentIds = JSON.stringify([]);",
+        "            else if (false) updates.assignedEquipmentIds = JSON.stringify([]);"],
 
     ['job editor: a requirement the fleet does not have is hidden again',
         'src/Tabs/DispatchTab.jsx',
@@ -1965,8 +1975,8 @@ const mutations = [
 
     ['crew builder: a successful schedule is silent again',
         'src/Tabs/DispatchTab.jsx',
-        "            showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}. It is on the Job Board now.`);",
-        "            showNotice('');"],
+        "            showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}.`",
+        "            showNotice(''"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

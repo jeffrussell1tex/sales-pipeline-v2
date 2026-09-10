@@ -1114,7 +1114,8 @@ export const dispatchJobs = pgTable('dispatch_jobs', {
     assignedTechId:     text('assigned_tech_id'),                     // FK → dispatch_technicians.id
     assignedVehicleId:  text('assigned_vehicle_id'),                  // FK → dispatch_vehicles.id
     coTechIds:          jsonb('co_tech_ids').default('[]'),           // additional techs on job
-    equipmentIds:       jsonb('equipment_ids').default('[]'),         // checked-out equipment IDs
+    equipmentIds:       jsonb('equipment_ids').default('[]'),         // required equipment KINDS (dispatch_equipment.category values)
+    assignedEquipmentIds: jsonb('assigned_equipment_ids'),           // §0.116: the units reserved at scheduling, one per kind; nullable, additive (db/apply-assigned-equipment.mjs)
     laborHours:         decimal('labor_hours', { precision: 6, scale: 2 }),
     laborCost:          decimal('labor_cost', { precision: 10, scale: 2 }),
     materialCost:       decimal('material_cost', { precision: 10, scale: 2 }),

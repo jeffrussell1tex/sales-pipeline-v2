@@ -221,60 +221,79 @@ const equipmentConflicts = (job, allJobs, units = [], dateStr, probeOverride = n
     if (!need.length || !dateStr) return [];
     const probe = probeOverride || { start: job.start, durationHrs: job.durationHrs };
 
-    const rivals = (allJobs || []).filter(j =>
-        j.id !== job.id &&
-        j.scheduledDate === dateStr &&
-        j.status !== 'cancelled' && j.status !== 'completed' &&
-        (j.equipCategories || []).length > 0 &&
-        jobsOverlap(probe, j));
+    const rivals = overlappingRivals(job, allJobs, dateStr, probe);
 
     const out = [];
-    need.forEach(req => {
-        // A SPECIFIC unit — its id, picked by name in the Jobs editor and the
-        // new-job form (§0.116; Jeff: "why does it not just show the name of the
-        // actual piece of equipment required"). That one unit must be in service
-        // and not required by an overlapping job the same day.
-        const unit = (units || []).find(u => u.id === req);
-        if (unit) {
-            const st = unit.status || 'available';
-            const usable = (st !== 'maintenance' && st !== 'out_of_service') ? 1 : 0;
-            const committed = rivals.filter(j => (j.equipCategories || []).includes(unit.id)).length;
-            if (usable === 0 || committed >= usable) out.push({ cat: unit.name, unit: true, missing: false, usable, owned: 1, committed });
-            return;
-        }
-        // …or a KIND — a category name, which is what a job template carries.
-        // Capacity is the count of units in it that are not out of service, minus
-        // the units committed to overlapping jobs. Counting rows rather than a
+    need.forEach(kind => {
+        // A requirement is a KIND — a category on the fleet (Jeff, §0.116: "If I
+        // need a pressure tester and we have 10 of them I don't care which one I
+        // get"). Capacity is the count of units of that kind not out of service,
+        // minus the units already spoken for by overlapping jobs that day: a
+        // scheduled rival counts its RESERVED units of this kind; a rival with no
+        // reservation yet counts its requirement. Counting rows rather than a
         // quantity field is what lets one unit sit in maintenance while its twin
         // stays bookable.
-        const all = (units || []).filter(u => (u.category || '').trim() === req);
-        if (!all.length) { out.push({ cat: req, missing: true, usable: 0, owned: 0, committed: 0 }); return; }
+        const all = (units || []).filter(u => (u.category || '').trim() === kind);
+        if (!all.length) { out.push({ cat: kind, missing: true, usable: 0, owned: 0, committed: 0 }); return; }
         const usable = all.filter(u => {
             const st = u.status || 'available';
             return st !== 'maintenance' && st !== 'out_of_service';
         }).length;
-        const committed = rivals.filter(j => (j.equipCategories || []).includes(req)).length;
+        const committed = rivals.reduce((n, j) => n + committedOfKind(j, kind, units), 0);
         if (usable === 0 || committed >= usable) {
-            out.push({ cat: req, missing: false, usable, owned: all.length, committed });
+            out.push({ cat: kind, missing: false, usable, owned: all.length, committed });
         }
     });
     return out;
 };
 
-const describeConflict = (c) => {
-    if (c.missing) return `${c.cat} — no longer in Vehicles & equipment (remove it under Jobs)`;
-    if (c.unit) return c.usable === 0 ? `${c.cat} — in maintenance or out of service` : `${c.cat} — committed to an overlapping job that day`;
-    if (c.usable === 0) return `${c.cat} — all ${c.owned} unit(s) are in maintenance or out of service`;
-    return `${c.cat} — all ${c.usable} available unit(s) committed to overlapping jobs that day`;
+// Jobs that compete for equipment at this time: same day, not cancelled or
+// completed, overlapping the probe, and either requiring or holding equipment.
+const overlappingRivals = (job, allJobs, dateStr, probe) => (allJobs || []).filter(j =>
+    j.id !== job.id &&
+    j.scheduledDate === dateStr &&
+    j.status !== 'cancelled' && j.status !== 'completed' &&
+    ((j.equipCategories || []).length > 0 || (j.assignedEquipment || []).length > 0) &&
+    jobsOverlap(probe, j));
+
+// How many units of a kind a rival ties up: its reserved units of that kind when
+// it has a reservation, else how many times it requires the kind.
+const committedOfKind = (rival, kind, units = []) => {
+    const reserved = rival.assignedEquipment || [];
+    if (reserved.length) {
+        return reserved.filter(id => ((units || []).find(u => u.id === id)?.category || '').trim() === kind).length;
+    }
+    return (rival.equipCategories || []).filter(k => k === kind).length;
 };
 
-// What a requirement entry means to a reader: the unit's name, "any <kind>" for a
-// category, or the raw id of something no longer in the fleet.
-const equipLabel = (req, units = []) => {
-    const unit = (units || []).find(u => u.id === req);
-    if (unit) return unit.name;
-    if ((units || []).some(u => (u.category || '').trim() === req)) return `any ${req}`;
-    return req;
+// Reserve one unit per required kind for a job being scheduled: in service, not
+// reserved by an overlapping job (nor earlier in this same pass), first by name.
+// → { picked: [unitId], short: [kind] } — a short kind is what the equipment
+// gate already refused, so callers only read the picked list.
+const pickEquipmentFor = (kinds, units = [], rivals = [], alsoTaken = []) => {
+    const taken = new Set([...rivals.flatMap(j => j.assignedEquipment || []), ...alsoTaken]);
+    const picked = [], short = [];
+    for (const kind of kinds || []) {
+        const u = (units || [])
+            .filter(x => (x.category || '').trim() === kind)
+            .filter(x => { const st = x.status || 'available'; return st !== 'maintenance' && st !== 'out_of_service'; })
+            .filter(x => !taken.has(x.id) && !picked.includes(x.id))
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))[0];
+        if (u) picked.push(u.id); else short.push(kind);
+    }
+    return { picked, short };
+};
+
+const describeConflict = (c) => {
+    if (c.missing) return `${c.cat} — not a kind in Vehicles & equipment (remove it under Jobs, or set a unit's Category to it)`;
+    if (c.usable === 0) return `${c.cat} — all ${c.owned} unit(s) are in maintenance or out of service`;
+    return `${c.cat} — all ${c.usable} available unit(s) reserved by overlapping jobs that day`;
+};
+
+// A reserved unit, for readers: its name, then its asset tag if it has one.
+const unitLabel = (id, units = []) => {
+    const u = (units || []).find(x => x.id === id);
+    return u ? (u.assetTag ? `${u.name} (${u.assetTag})` : u.name) : id;
 };
 
 // ── Customer typeahead ───────────────────────────────────────────────
@@ -1033,6 +1052,11 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
             return;
         }
 
+        // One unit of each required kind, reserved for this job at this time (§0.116).
+        const reservedUnits = pickEquipmentFor(
+            selectedJob.equipCategories, equipUnits,
+            overlappingRivals(selectedJob, jobs, dateStr, { start: startNum, durationHrs: selectedJob.durationHrs })).picked;
+
         setScheduleError('');
         setScheduleNotice('');
         setSaving(true);
@@ -1055,6 +1079,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                     scheduledStart: scheduleTime,
                     scheduledEnd:   endStr,
                     timeSlot:       'exact',
+                    assignedEquipmentIds: reservedUnits,
                 }),
             });
             const data = await res.json().catch(() => ({}));
@@ -1080,9 +1105,12 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                 startTime: scheduleTime,
                 startDate: dateStr,
                 overridden,
+                assignedEquipment: reservedUnits,
             });
 
-            showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}. It is on the Job Board now.`);
+            showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}.`
+                + (reservedUnits.length ? ` Reserved: ${reservedUnits.map(id => unitLabel(id, equipUnits)).join(', ')}.` : '')
+                + ' It is on the Job Board now.');
             setAddedTechs({});
             setScheduleTime('');
             setScheduleDate('');
@@ -1268,10 +1296,13 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                 {(selectedJob.equipCategories || []).length > 0 && <>
                                     <span style={{ fontSize: 10.5, fontWeight: 600, color: T.inkMid, marginLeft: 12, marginRight: 4 }}>Equip:</span>
                                     <span style={{ fontSize: 11, color: T.inkMid }}>
-                                        {(selectedJob.equipCategories || []).map((req, ci) => {
-                                            const known = (equipUnits || []).some(u => u.id === req || (u.category || '').trim() === req);
-                                            return <span key={req}>{ci ? ', ' : ''}{equipLabel(req, equipUnits)}{known ? '' : <span style={{ color: T.warn, fontWeight: 600 }}> (no longer in Vehicles &amp; equipment — remove it under Jobs)</span>}</span>;
+                                        {(selectedJob.equipCategories || []).map((kind, ci) => {
+                                            const known = (equipUnits || []).some(u => (u.category || '').trim() === kind);
+                                            return <span key={kind}>{ci ? ', ' : ''}{kind}{known ? '' : <span style={{ color: T.warn, fontWeight: 600 }}> (not a kind in Vehicles &amp; equipment — remove it under Jobs)</span>}</span>;
                                         })}
+                                        {(selectedJob.assignedEquipment || []).length > 0 && (
+                                            <span style={{ color: T.ok, fontWeight: 600 }}> · reserved: {(selectedJob.assignedEquipment || []).map(id => unitLabel(id, equipUnits)).join(', ')}</span>
+                                        )}
                                     </span>
                                 </>}
                             </div>
@@ -3841,49 +3872,52 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                             {(() => {
                                 const req = Array.isArray(draft.equipmentIds) ? draft.equipmentIds : [];
                                 const units = equipment || [];
-                                // Entries are unit ids (picked here, shown by name), kinds (category
-                                // names a job template carries — "any HVAC"), or ids of units that
-                                // no longer exist. Every entry is visible and every entry can go.
-                                const kinds = req.filter(r => !units.some(u => u.id === r) && units.some(u => (u.category || '').trim() === r));
-                                const unknown = req.filter(r => !units.some(u => u.id === r) && !kinds.includes(r));
+                                // A requirement is a KIND — the Category on the fleet's units. Any
+                                // stored entry that is not a kind (an old unit id, a renamed
+                                // category) is shown and can be removed. The reservation made at
+                                // scheduling is read-only here.
+                                const kindList = [...new Set(units.map(u => (u.category || '').trim()).filter(Boolean))].sort();
+                                const unknown = req.filter(r => !kindList.includes(r));
+                                const reserved = Array.isArray(draft.assignedEquipmentIds) ? draft.assignedEquipmentIds : [];
                                 const toggle = (v) => set('equipmentIds', req.includes(v) ? req.filter(x => x !== v) : [...req, v]);
                                 return (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
-                                        {units.length === 0 && req.length === 0 && (
-                                            <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
-                                                No equipment in the fleet yet — add units under Vehicles &amp; equipment.
-                                            </div>
-                                        )}
-                                        {units.map(u => {
-                                            const on = req.includes(u.id);
-                                            const st = (u.status || 'available').replace(/_/g, ' ');
-                                            return (
-                                                <span key={u.id} onClick={() => toggle(u.id)}
-                                                    title={`${u.category || 'general'} · ${st}`}
+                                    <div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+                                            {kindList.length === 0 && unknown.length === 0 && (
+                                                <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                                                    No equipment in the fleet yet — add units under Vehicles &amp; equipment.
+                                                </div>
+                                            )}
+                                            {kindList.map(kind => {
+                                                const on = req.includes(kind);
+                                                const all = units.filter(u => (u.category || '').trim() === kind);
+                                                const inService = all.filter(u => { const st = u.status || 'available'; return st !== 'maintenance' && st !== 'out_of_service'; }).length;
+                                                return (
+                                                    <span key={kind} onClick={() => toggle(kind)}
+                                                        title={`${inService} of ${all.length} in service: ${all.map(u => u.name).join(', ')}`}
+                                                        style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                            border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
+                                                            color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
+                                                        {kind}
+                                                        <span style={{ marginLeft: 5, opacity: 0.65, fontFamily: T.mono }}>{inService}/{all.length}</span>
+                                                    </span>
+                                                );
+                                            })}
+                                            {unknown.map(r => (
+                                                <span key={r} onClick={() => toggle(r)} role="button" aria-label={`Remove equipment requirement ${r}`}
+                                                    title="No unit in Vehicles & equipment has this Category. The job cannot be scheduled while it is required — click to remove."
                                                     style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
-                                                        border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
-                                                        color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
-                                                    {u.name}
-                                                    <span style={{ marginLeft: 5, opacity: 0.65, fontSize: 10.5, fontWeight: 500 }}>{u.category || 'general'}</span>
+                                                        border: `1px solid ${T.warn}`, background: `${T.warn}14`, color: T.ink, fontFamily: T.sans }}>
+                                                    ⚠ {r} — not a kind in Vehicles &amp; equipment · remove ×
                                                 </span>
-                                            );
-                                        })}
-                                        {kinds.map(r => (
-                                            <span key={r} onClick={() => toggle(r)} role="button" aria-label={`Remove equipment requirement any ${r}`}
-                                                title="Any unit of this kind — a job template requires kinds, not specific units. Click to remove."
-                                                style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
-                                                    border: `1px solid ${T.borderStrong}`, background: T.surface2, color: T.inkMid, fontFamily: T.sans }}>
-                                                any {r} · remove ×
-                                            </span>
-                                        ))}
-                                        {unknown.map(r => (
-                                            <span key={r} onClick={() => toggle(r)} role="button" aria-label={`Remove equipment requirement ${r}`}
-                                                title="This unit is no longer in Vehicles & equipment. The job cannot be scheduled while it is required — click to remove."
-                                                style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
-                                                    border: `1px solid ${T.warn}`, background: `${T.warn}14`, color: T.ink, fontFamily: T.sans }}>
-                                                ⚠ {r} — no longer in Vehicles &amp; equipment · remove ×
-                                            </span>
-                                        ))}
+                                            ))}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 6, fontFamily: T.sans, lineHeight: 1.45 }}>
+                                            A kind is the <strong>Category</strong> on each unit under Vehicles &amp; equipment — name it the way a
+                                            technician asks for it (Pressure Tester, Recovery Machine), not by trade. Scheduling reserves one
+                                            in-service unit of each kind that no overlapping job holds that day.
+                                            {reserved.length > 0 && <> <strong>Reserved for this job:</strong> {reserved.map(id => { const u = units.find(x => x.id === id); return u ? (u.assetTag ? `${u.name} (${u.assetTag})` : u.name) : id; }).join(', ')}.</>}
+                                        </div>
                                     </div>
                                 );
                             })()}
@@ -5151,6 +5185,8 @@ export default function DispatchTab() {
                         // ids. Asset-level checkout is tracked the other way round, on
                         // dispatch_equipment.checkedOutJobId.
                         equipCategories: j.equipmentIds || [],
+                        // …and the units reserved for it at scheduling (§0.116).
+                        assignedEquipment: Array.isArray(j.assignedEquipmentIds) ? j.assignedEquipmentIds : [],
                         requiredVehicleType: j.requiredVehicleType || null,
                         servicePlanId:  j.servicePlanId || null,
                         planDueDate:    j.planDueDate   || null,
@@ -5405,7 +5441,13 @@ export default function DispatchTab() {
         setMassSaving(true);
         let done = 0, failed = 0;
         const applied = [];
+        // Units reserved earlier in this same pass are not offered again (§0.116).
+        const reservedThisRun = [];
         for (const pr of massPlan.proposals) {
+            pr.assignedEquipment = pickEquipmentFor(
+                pr.job.equipCategories, equipment,
+                overlappingRivals(pr.job, jobs, pr.dateStr, { start: pr.startHr, durationHrs: pr.job.durationHrs || 2 }),
+                reservedThisRun).picked;
             try {
                 const dur    = pr.job.durationHrs || 2;
                 const startS = hhmm(pr.startHr);
@@ -5422,10 +5464,12 @@ export default function DispatchTab() {
                         coTechIds: (pr.crew || []).slice(1).map(t => t.id),
                         scheduledDate: pr.dateStr, scheduledStart: startS, scheduledEnd: endS,
                         timeSlot: 'exact',
+                        assignedEquipmentIds: pr.assignedEquipment,
                     }),
                 });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 applied.push(pr);
+                reservedThisRun.push(...pr.assignedEquipment);
                 done += 1;
             } catch (e) {
                 failed += 1;
@@ -5438,7 +5482,8 @@ export default function DispatchTab() {
             // Whole crew, not just the lead — otherwise the board shows a
             // one-tech job until the next reload contradicts it.
             return pr ? { ...j, assignedTechIds: (pr.crew || [pr.tech]).map(t => t.id), start: pr.startHr,
-                status: 'scheduled', scheduledDate: pr.dateStr, window: hhmm(pr.startHr) } : j;
+                status: 'scheduled', scheduledDate: pr.dateStr, window: hhmm(pr.startHr),
+                assignedEquipment: pr.assignedEquipment || [] } : j;
         }));
 
         if (addAudit && applied.length) {
@@ -5498,7 +5543,7 @@ export default function DispatchTab() {
         }
 
         setJobs(prev => prev.map(j => freed.includes(j.id)
-            ? { ...j, assignedTechIds: [], start: null, status: 'unscheduled', window: 'TBD' }
+            ? { ...j, assignedTechIds: [], start: null, status: 'unscheduled', window: 'TBD', assignedEquipment: [] }
             : j));
 
         const techName = (techsRaw.find(t => t.id === blk.techId) || {});
@@ -5820,6 +5865,7 @@ export default function DispatchTab() {
                                     status: saved.status, scheduledDate: saved.scheduledDate,
                                     scheduledStart: saved.scheduledStart || null,
                                     equipCategories: Array.isArray(saved.equipmentIds) ? saved.equipmentIds : [],
+                                    assignedEquipment: Array.isArray(saved.assignedEquipmentIds) ? saved.assignedEquipmentIds : [],
                                     start: saved.scheduledStart && saved.status !== 'unscheduled' ? hhToNum(saved.scheduledStart) : null,
                                     durationHrs: (saved.durationMinutes || 120) / 60,
                                     crewSize: saved.crewSize || j.crewSize,
@@ -5892,16 +5938,17 @@ export default function DispatchTab() {
                         onHeld={({ jobId, jobName, techIds, crewNames }) => {
                             // Crew on the job, no time: the week board shows it on their row as
                             // TBD; the queue and the day board's rail still list it (§0.115).
-                            setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds, start: null, status: 'unscheduled', window: 'TBD' } : j));
+                            setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds, start: null, status: 'unscheduled', window: 'TBD', assignedEquipment: [] } : j));
                             if (addAudit) {
                                 addAudit(techIds.length ? 'dispatch.crew.hold' : 'dispatch.crew.release', 'dispatch_job', jobId, jobName,
                                     techIds.length ? `Crew held for group schedule: ${crewNames.join(', ')}` : 'Held crew released');
                             }
                         }}
-                        onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden, serverJob }) => {
+                        onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden, serverJob, assignedEquipment = [] }) => {
                             setJobs(prev => prev.map(j => j.id === jobId
                                 ? { ...j, assignedTechIds: techIds, start: startHr, status: 'scheduled',
                                     window: startTime, scheduledDate: startDate,
+                                    assignedEquipment,
                                     // The server decided and recorded the customer notification (§0.111).
                                     publicToken: serverJob?.publicToken ?? j.publicToken ?? null,
                                     customerNotifications: Array.isArray(serverJob?.customerNotifications) ? serverJob.customerNotifications : (j.customerNotifications || []) }
@@ -6158,37 +6205,29 @@ export default function DispatchTab() {
                                 </div>
                             )}
                             {/* Required equipment */}
-                            {equipment.length > 0 && (
+                            {equipCategories.length > 0 && (
                                 <div>
                                     <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Required Equipment</label>
-                                    {/* Specific units by name (§0.116). A template applied to this form
-                                        may add KINDS (category names) — those show as "any <kind>". */}
+                                    {/* KINDS — the Category on the fleet's units (§0.116). Scheduling
+                                        reserves one in-service unit of each kind for the job. */}
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                                        {equipment.map(u => {
-                                            const on = (newJobForm.equipCategories || []).includes(u.id);
-                                            const st = (u.status || 'available').replace(/_/g, ' ');
+                                        {equipCategories.map(kind => {
+                                            const on    = (newJobForm.equipCategories || []).includes(kind);
+                                            const units = equipment.filter(e => (e.category || '').trim() === kind);
+                                            const inService = units.filter(u => { const st = u.status || 'available'; return st !== 'maintenance' && st !== 'out_of_service'; }).length;
                                             return (
-                                                <span key={u.id}
+                                                <span key={kind}
                                                     onClick={() => setNewJobForm(f => ({ ...f,
-                                                        equipCategories: on ? (f.equipCategories || []).filter(x => x !== u.id) : [...(f.equipCategories || []), u.id] }))}
-                                                    title={`${u.category || 'general'} · ${st}`}
+                                                        equipCategories: on ? (f.equipCategories || []).filter(x => x !== kind) : [...(f.equipCategories || []), kind] }))}
+                                                    title={`${inService} of ${units.length} in service: ${units.map(u => u.name).join(', ')}`}
                                                     style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
                                                         border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
                                                         color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
-                                                    {u.name}
-                                                    <span style={{ marginLeft: 5, opacity: 0.65, fontSize: 10.5, fontWeight: 500 }}>{u.category || 'general'}</span>
+                                                    {kind}
+                                                    <span style={{ marginLeft: 5, opacity: 0.65, fontFamily: T.mono }}>{inService}/{units.length}</span>
                                                 </span>
                                             );
                                         })}
-                                        {(newJobForm.equipCategories || []).filter(r => !equipment.some(u => u.id === r)).map(r => (
-                                            <span key={r}
-                                                onClick={() => setNewJobForm(f => ({ ...f, equipCategories: (f.equipCategories || []).filter(x => x !== r) }))}
-                                                title="Any unit of this kind (from the job template). Click to remove."
-                                                style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
-                                                    border: `1px solid ${T.borderStrong}`, background: T.surface2, color: T.inkMid, fontFamily: T.sans }}>
-                                                any {r} · remove ×
-                                            </span>
-                                        ))}
                                     </div>
                                 </div>
                             )}
