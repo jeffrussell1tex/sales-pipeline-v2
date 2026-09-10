@@ -416,6 +416,15 @@ integration, 406/406 mutations, `index-B8shyvit.js`. **OBSERVED on dev at
 1800×1000.** Also read from the row: Jeff's own retest of §0.114 WROTE —
 JOB-2026-0006 scheduled to Savannah Fri 11 11:00–12:00 at 20:45 UTC. JOB-2026-0007
 is now a HELD crew (Savannah, Mon 14, preferred 11:00). **NOT shipped.**
+**§0.116 `e5970f3`** (Jeff: "I do not see where an equipment requirement is
+listed"): JOB-2026-0004's `equipment_ids` is `["eq_1786389760843"]` from
+the August seed — a unit id where the scheduler expects equipment KINDS, so
+"no units exist" blocked it, and the Jobs editor had no equipment field. Now
+Jobs → Required equipment: fleet categories as toggles, an unmatched
+requirement as a removable "⚠ … remove ×" chip, saved as `equipmentIds`; the
+builder's Required line names an unmatched kind. 706/706 unit, 146/146
+integration, 408/408 mutations, `index-3dtx4520.js`. **OBSERVED on dev**
+(the editor field with both the HVAC toggle and the chip). **NOT shipped.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -466,7 +475,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); `dev` is ahead by SIX CODE commits, §0.112 `470b948`, its roster correction `a29cc1e`, §0.113 `223c99a`, §0.114 `9bc6b89`, §0.115 `360e4f7` and its follow-up `54fb180` — NOT shipped
+## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); `dev` is ahead by SEVEN CODE commits, §0.112 `470b948`, its roster correction `a29cc1e`, §0.113 `223c99a`, §0.114 `9bc6b89`, §0.115 `360e4f7` and its follow-up `54fb180`, §0.116 `e5970f3` — NOT shipped
 
 **PROD SHIPPED — the FIFTEENTH ship (Jeff: "ship prod", 10 Sep).** Ancestor check (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 27 commits after `59116be`), then `git push origin dev:master`: `master` `59116be` → `0a242c6`, pushed 17:46:08 UTC. Netlify record `6aa2ece6…`: branch `master`, commit `0a242c6`, published 17:47:02 UTC (54 seconds after the push), **80 functions** (`_selfProfile`, `dispatch-plan-visits`, `_customerNotify`, `dispatch-status` all present), **2 redirect rules processed**, secret scan clean over 405 files; salespipelinetracker.com serving `index-C23CrCCK.js` at 17:47:03 UTC with the `pk_live_` key inlined; `/status/<32 bogus chars>` on prod → the function's own 404 with `Cache-Control: no-store` and `X-Robots-Tag: noindex` — the rewrite beats the SPA catch-all there too. The schema for §0.110 and §0.111 was already in the shared database. **What prod does differently from the moment of the ship:** every member's self-profile save goes through the allowlist (§0.109); a skipped or deferred plan occurrence and the Agreement renewals list exist in Service Due (§0.110); the hourly job's Signal 6 runs on prod (`JOBS_ENABLED` is set there) — a prod customer whose agreement ends within the plan's window would email its Admins/Managers at their alert hour and post once to #sales-alerts; and customer notifications are OFF for the prod org until an Admin turns them on (§0.111) — nothing is sent to any prod customer by this ship.
 
@@ -1277,7 +1286,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (10 Sep, twelfth session — after the FIFTEENTH ship)
 
-**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time) and **`a29cc1e`** (the roster correction — `normaliseTech` now carries `workingHours`) and **`223c99a`** (§0.113 — the null-category 500 on the Jobs editor's save; a new technician rostered Mon–Fri 8–5; functions AND bundle) and **`9bc6b89`** (§0.114 — a filled crew slot says it is not saved; a success is announced), **`360e4f7`** and **`54fb180`** (§0.115 — the page bound to the viewport, the next-step card, Wait for group schedule, the planner honouring a held crew, a preferred start not a placement; bundle only, hash `index-B8shyvit.js`, 702/702 unit, 406/406 mutations, 146/146 integration) — `dev` ahead of `master` by those SIX CODE commits and the docs after them. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
+**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time) and **`a29cc1e`** (the roster correction — `normaliseTech` now carries `workingHours`) and **`223c99a`** (§0.113 — the null-category 500 on the Jobs editor's save; a new technician rostered Mon–Fri 8–5; functions AND bundle) and **`9bc6b89`** (§0.114 — a filled crew slot says it is not saved; a success is announced), **`360e4f7`** and **`54fb180`** (§0.115 — the page bound to the viewport, the next-step card, Wait for group schedule, the planner honouring a held crew, a preferred start not a placement; bundle only) and **`e5970f3`** (§0.116 — Required equipment in the Jobs editor; bundle only, hash `index-3dtx4520.js`, 706/706 unit, 408/408 mutations, 146/146 integration) — `dev` ahead of `master` by those SEVEN CODE commits and the docs after them. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
 
 **Before the ship:**
 
@@ -1376,9 +1385,10 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Thirteenth-session prep — first:**
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  SIX CODE commits, `470b948` (§0.112), `a29cc1e` (its roster
+  SEVEN CODE commits, `470b948` (§0.112), `a29cc1e` (its roster
   correction), `223c99a` (§0.113), `9bc6b89` (§0.114), `360e4f7` and
-  `54fb180` (§0.115), and the docs after them; anything else is a finding.
+  `54fb180` (§0.115), `e5970f3` (§0.116), and the docs after them;
+  anything else is a finding.
 - **§0.112 on dev (either role):** Dispatch → Queue → select JOB-2026-0006
   (unscheduled, Fri 11, no start): neither technician reads "Double-booked
   at 9a" any more — Savannah's blockers are the roster ones only, and Jax
@@ -1408,7 +1418,13 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   → the green banner and the job on Savannah's row at 11a. On any
   unscheduled job: + Add → the card appears at the top: Schedule now / Wait
   for group schedule / Clear crew. Mass-schedule next week on a held job
-  proposes exactly the held crew. **Ship when Jeff says so** — bundle only.
+  proposes exactly the held crew.
+- **§0.116 on dev — Jeff's check:** Jobs → New HVAC System → Required
+  equipment shows the HVAC toggle and the amber "eq_1786389760843 — not in
+  Vehicles & equipment · remove ×" chip; click the chip (and HVAC if the job
+  really needs the Pressure Tester's kind), Save → "Saved"; back in the
+  Queue that job schedules without the equipment banner. **Ship when Jeff
+  says so** — §0.112–§0.116 together, bundle only.
 - **§0.113 on dev — Jeff's remaining check:** Technicians → add a technician
   → Save → Work Schedules shows 08:00–17:00 Mon–Fri and Off Sat/Sun for the
   new row without a click (the design question was answered: "M-F 8AM to 5PM
