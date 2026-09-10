@@ -410,9 +410,11 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); `dev` is now ahead by FIVE CODE commits (§0.109 `29a6e7e`, the prioColor2 collapse `9996c1c`, §0.110 `a3fa3e2`, its deferred-list correction `1866158`, §0.111 `7e6eed3`) — NOT shipped
+## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); nothing is on `dev` alone but this ship-record
 
-**Twelfth session — NOTHING SHIPPED.** `master` stays at `59116be`. The third
+**PROD SHIPPED — the FIFTEENTH ship (Jeff: "ship prod", 10 Sep).** Ancestor check (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 27 commits after `59116be`), then `git push origin dev:master`: `master` `59116be` → `0a242c6`, pushed 17:46:08 UTC. Netlify record `6aa2ece6…`: branch `master`, commit `0a242c6`, published 17:47:02 UTC (54 seconds after the push), **80 functions** (`_selfProfile`, `dispatch-plan-visits`, `_customerNotify`, `dispatch-status` all present), **2 redirect rules processed**, secret scan clean over 405 files; salespipelinetracker.com serving `index-C23CrCCK.js` at 17:47:03 UTC with the `pk_live_` key inlined; `/status/<32 bogus chars>` on prod → the function's own 404 with `Cache-Control: no-store` and `X-Robots-Tag: noindex` — the rewrite beats the SPA catch-all there too. The schema for §0.110 and §0.111 was already in the shared database. **What prod does differently from the moment of the ship:** every member's self-profile save goes through the allowlist (§0.109); a skipped or deferred plan occurrence and the Agreement renewals list exist in Service Due (§0.110); the hourly job's Signal 6 runs on prod (`JOBS_ENABLED` is set there) — a prod customer whose agreement ends within the plan's window would email its Admins/Managers at their alert hour and post once to #sales-alerts; and customer notifications are OFF for the prod org until an Admin turns them on (§0.111) — nothing is sent to any prod customer by this ship.
+
+**Earlier in the twelfth session, before the ship:** `master` stays at `59116be`. The third
 CODE commit, `a3fa3e2` (§0.110 — maintenance agreements: a NEW function
 `dispatch-plan-visits.mjs`, so the next ship is functions AND bundle, 78
 functions; the schema change is ALREADY in both databases, §18c) and the
@@ -1217,7 +1219,11 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (9 Sep, twelfth session — §0.109, the alias collapse and §0.110 on `dev`, NOT shipped)
+## 4. Verified state at close (10 Sep, twelfth session — after the FIFTEENTH ship)
+
+**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit carrying this line — `dev` ahead of `master` by it alone. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
+
+**Before the ship:**
 
 SIX gates green (`check:fnscope`: 89 function files — `_selfProfile.mjs`,
 `dispatch-plan-visits.mjs`, `_customerNotify.mjs` and `dispatch-status.mjs`
@@ -1255,9 +1261,8 @@ Netlify's record:** `6aa1e1d5…`, branch `dev`, published 22:47:36 UTC 9 Sep,
 **78 functions** (`dispatch-plan-visits` new, created 22:47:22; every other
 function rebuilt too, since `db/schema.ts` changed), secret scan clean over
 398 files, the served hash `index-5Gkq-AHb.js` at 22:47:38 UTC by curl ·
-**`master` == `59116be`; `dev` ahead by the three CODE commits and the
-docs commits after them** · the working tree was clean at close, this
-handoff commit the last.
+**`master` == `59116be` at that point; `dev` ahead by the three CODE commits and the
+docs commits after them** · the working tree was clean at that close.
 
 **Earlier in the twelfth session (§0.109's close):** SIX gates green (`check:fnscope`: 84 function files — `_selfProfile.mjs` is
 new; the five on 154 files) · **652/652 unit** (10 new this session:
@@ -1312,6 +1317,25 @@ read at 16:35 UTC: `accelerep.netlify.app` alone, four jobs, all `ok`,
 copy of the same bug) · the working tree was clean at close · **ordering slip, corrected here:** the §0.103 landing docs commit (`8a6edc8`) landed AFTER the first handoff commit `34b843c` because the landing script's anchor missed on first apply (a typo in its own text); this line was written last, after that commit — SIXTEEN commits ahead of `master` counting the handoff commits themselves, the last of them the one carrying this line.
 
 ## 5. Next — start here
+
+**After the FIFTEENTH ship — prod observations, Jeff's, in order:**
+- **§0.109 on prod (Jeff, Admin):** avatar → Profile, change the title, Save;
+  avatar → Notifications, flip one toggle; hard-refresh — both persist; a
+  read-only SELECT of his `users` row shows quota/team/territory/active
+  unchanged by those saves.
+- **§0.110 on prod:** Dispatch → Service Due shows Skip/Defer on any due
+  visit and the Agreement renewals list (empty unless a prod customer's
+  agreement ends within 60 days); Settings → Dispatch → Service plans shows
+  the Renewal reminder field. The Signal 6 email/Slack fires only when a prod
+  customer is inside a window — read `recommendation_log` for
+  `action_type` 'renewal'/'renewal-slack' rows (read-only) if one is.
+- **§0.111 on prod: OFF by default.** Nothing reaches a prod customer until
+  Settings → Dispatch → Customer notifications is turned on — Jeff's call,
+  and set the company display name first (Settings → Company profile), or the
+  emails and the status page say "Your service provider". When it is on, the
+  same checks as dev: schedule a job → the trail and the email; the link
+  opens the public page signed out; En route → the on-the-way email.
+- **Prod's Resend webhook** is unaffected by this ship (no inbound change).
 
 **Twelfth-session prep (read at the thirteenth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
@@ -1391,9 +1415,8 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   title, Save; avatar → Notifications, flip one toggle; hard-refresh — both
   persist. Then a read-only SELECT of her `users` row: quota, team, territory,
   active unchanged by those saves.
-- **Ship when Jeff says so** — functions AND bundle. After the ship, the same
-  two checks on salespipelinetracker.com as Jeff (Admin): a profile save and
-  a preference toggle persist; his row's quota/team unchanged (read-only).
+- **DONE — the FIFTEENTH ship (§1), 10 Sep 17:47 UTC.** The prod checks are
+  the block at the top of this section.
 - **DONE per Jeff ("all test passed") — the Admin team-delete check.** The
   banners (§0.109) have no Admin-visible trigger: a refused settings PUT
   needs a non-Admin, and non-Admins cannot reach Settings; a 500 or a
