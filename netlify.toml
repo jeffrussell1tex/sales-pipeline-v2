@@ -41,10 +41,12 @@ schedule = "0 6 * * *"
 # The customer's job-status link (state §0.111): /status/<token> is served by
 # the public dispatch-status function. Netlify applies redirects in order, so
 # this MUST stay above the SPA catch-all or the SPA (and its sign-in wall)
-# swallows it.
+# swallows it. The token rides as a PATH segment: Netlify substitutes a
+# placeholder into a path but not into a query string (`?t=:token` reached the
+# function as the literal ":token" on the first dev probe).
 [[redirects]]
   from = "/status/:token"
-  to = "/.netlify/functions/dispatch-status?t=:token"
+  to = "/.netlify/functions/dispatch-status/:token"
   status = 200
 
 [[redirects]]

@@ -217,6 +217,14 @@ test('the public status page renders by token only, escaped and no-store; malfor
     assert.ok(!ok.body.includes(JOB_A) && !ok.body.includes(ORG_A) && !ok.body.includes(CUST_A), 'no id of any kind on the page');
     assert.ok(!ok.body.includes('pat@itest-notify.local') && !ok.body.includes('5551234567'), 'no contact details on the page');
 
+    // The pretty path rewrites to /.netlify/functions/dispatch-status/<token>:
+    // the token arrives as the last path segment, with no query string at all.
+    const byPath = await statusPage({ httpMethod: 'GET', path: `/.netlify/functions/dispatch-status/${token}`, queryStringParameters: {} });
+    assert.equal(byPath.statusCode, 200, 'found by the path segment');
+    assert.ok(byPath.body.includes('Furnace &lt;tune-up&gt;'));
+    const literal = await statusPage({ httpMethod: 'GET', path: '/.netlify/functions/dispatch-status/:token', queryStringParameters: {} });
+    assert.equal(literal.statusCode, 404, 'the unsubstituted placeholder is not a token');
+
     const bad = await statusPage({ httpMethod: 'GET', queryStringParameters: { t: 'short' } });
     const unknown = await statusPage({ httpMethod: 'GET', queryStringParameters: { t: 'x'.repeat(32) } });
     const byId = await statusPage({ httpMethod: 'GET', queryStringParameters: { t: JOB_A } });

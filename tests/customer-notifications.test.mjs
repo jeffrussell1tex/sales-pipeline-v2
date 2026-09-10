@@ -119,7 +119,7 @@ test('_customerNotify: the token is random and issued once, SMS without credenti
 test('dispatch-status: token-only, no-store, noindex, escaped, and every secondary read by the job\'s own org', () => {
     const s = code(read('netlify/functions/dispatch-status.mjs'));
     assert.ok(s.includes('export const TOKEN_RE = /^[A-Za-z0-9_-]{24,64}$/;'));
-    assert.ok(s.includes("const token = String(event.queryStringParameters?.t || '').trim();"), 'the token is the only input');
+    assert.ok(s.includes("const token = String(event.queryStringParameters?.t || (fromPath ? decodeURIComponent(fromPath[1]) : '')).trim();"), 'the token — from the path segment or ?t= — is the only input');
     assert.ok(s.includes('if (!TOKEN_RE.test(token)) return notFound();'));
     assert.ok(s.includes('const [job] = await db.select().from(dispatchJobs).where(eq(dispatchJobs.publicToken, token));'), 'found by token, never by id');
     assert.ok(!/queryStringParameters\?\.(id|jobId|orgId)/.test(s), 'no id is accepted');
@@ -132,9 +132,14 @@ test('dispatch-status: token-only, no-store, noindex, escaped, and every seconda
 test('netlify.toml: /status/:token is rewritten to the function BEFORE the SPA catch-all', () => {
     const t = read('netlify.toml');
     const status = t.indexOf('from = "/status/:token"');
-    const fn = t.indexOf('to = "/.netlify/functions/dispatch-status?t=:token"');
+    // A PATH segment, not a query string: Netlify substitutes :token into a path only
+    // (`?t=:token` reached the function as the literal ":token" on the first dev probe).
+    const fn = t.indexOf('to = "/.netlify/functions/dispatch-status/:token"');
     const spa = t.indexOf('from = "/*"');
     assert.ok(status > 0 && fn > status && spa > fn, 'order: status rule, its target, then the catch-all');
+    assert.ok(!t.includes('dispatch-status?t=:token'), 'the query-string form must not return');
+    const s = code(read('netlify/functions/dispatch-status.mjs'));
+    assert.ok(s.includes("const fromPath = String(event.path || '').match(/\\/dispatch-status\\/([^/?#]+)/);"), 'the function reads the path segment');
 });
 
 test('the panel, the catalogue and the routing exist; the dispatch tab shows the trail and adopts the server\'s row after scheduling', () => {
