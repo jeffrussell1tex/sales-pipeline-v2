@@ -793,7 +793,7 @@ const QUEUE_SORTS = {
     Value:    (a, b) => (b.value || 0) - (a.value || 0),
 };
 
-const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled, onCreateBridgeJob }) => {
+const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled, onCreateBridgeJob, onOpenJob }) => {
     const [queueSort, setQueueSort] = useState('Priority');
     const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
     const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
@@ -1039,6 +1039,14 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                     <span style={{ color: T.inkMuted }}>·</span>
                                     <span>{j.crewSize}p × {j.durationHrs}h</span>
                                     {isScheduled && <span style={{ marginLeft: 'auto', color: T.ok, fontWeight: 600 }}>✓ Scheduled</span>}
+                                    {/* Click-through to the job record (Jeff: "these are static right now"). The
+                                        card itself still SELECTS the job for the builder; this opens it in Jobs. */}
+                                    {onOpenJob && !j.isBridge && (
+                                        <span onClick={e => { e.stopPropagation(); onOpenJob(j.id); }} title="Open the job record"
+                                            style={{ marginLeft: isScheduled ? 8 : 'auto', color: T.info, fontWeight: 600, cursor: 'pointer' }}>
+                                            Open →
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -1059,8 +1067,19 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                     textTransform: 'uppercase', letterSpacing: 0.6 }}>
                                     {selectedJob.priority}
                                 </span>
-                                <span style={{ fontSize: 17, fontWeight: 700, color: T.ink }}>{selectedJob.customer}</span>
+                                <span onClick={() => { if (onOpenJob && !selectedJob.isBridge) onOpenJob(selectedJob.id); }}
+                                    title={selectedJob.isBridge ? undefined : 'Open the job record'}
+                                    style={{ fontSize: 17, fontWeight: 700, color: T.ink, cursor: (onOpenJob && !selectedJob.isBridge) ? 'pointer' : 'default' }}>
+                                    {selectedJob.customer}
+                                </span>
                                 <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.mono }}>{selectedJob.id}</span>
+                                {onOpenJob && !selectedJob.isBridge && (
+                                    <button onClick={() => onOpenJob(selectedJob.id)}
+                                        style={{ padding: '3px 10px', background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r,
+                                            fontSize: 11, fontWeight: 600, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                                        Open job record →
+                                    </button>
+                                )}
                                 <span style={{ flex: 1 }}/>
                                 <span style={{ fontFamily: T.serif, fontStyle: 'italic', fontSize: 22, fontWeight: 700, color: T.ink }}>
                                     ${((selectedJob.value || 0)/1000).toFixed(1)}k
@@ -3335,10 +3354,19 @@ const JOB_STATUSES = ['unscheduled', 'scheduled', 'en_route', 'on_site', 'paused
 const typesForCategory = (allTypes, categoryId) =>
     (allTypes || []).filter(t => !t.categoryId || t.categoryId === categoryId);
 
-const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories, jobTypes, onSaved }) => {
+const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories, jobTypes, onSaved, openJobRequest }) => {
     const [query,      setQuery]      = React.useState('');
     const [statusFilt, setStatusFilt] = React.useState('all');
     const [selectedId, setSelectedId] = React.useState(null);
+    // A click-through from the queue or the board (state §0.111 — Jeff: "click
+    // through to the job being listed"). Keyed on the request object, not the
+    // id, so opening the same job twice works; the status filter widens so a
+    // job the filter would hide is still shown.
+    React.useEffect(() => {
+        if (!openJobRequest?.id) return;
+        setSelectedId(openJobRequest.id);
+        setStatusFilt('all');
+    }, [openJobRequest]);
     const [draft,      setDraft]      = React.useState(null);
     const [loc,        setLoc]        = React.useState(null);   // { id, address, city, state, zip }
     const [saving,     setSaving]     = React.useState(false);
@@ -4500,6 +4528,9 @@ export default function DispatchTab() {
     const [view, setViewRaw] = useState(() => localStorage.getItem('tab:dispatch:subView') || 'board');
     const setView = (v) => { setViewRaw(v); localStorage.setItem('tab:dispatch:subView', v); };
     const [selectedJobId, setSelectedJobId] = useState(null);
+    // Open one job's record in the Jobs view, from the queue's cards or its header.
+    const [openJobRequest, setOpenJobRequest] = useState(null);
+    const openJobRecord = (id) => { setOpenJobRequest({ id, at: Date.now() }); setView('jobs'); };
     const [boardRange,   setBoardRange]   = useState('today');   // 'today' | 'week' | 'month'
     const [boardAnchor,  setBoardAnchor]  = useState(() => new Date());
 
@@ -5485,6 +5516,7 @@ export default function DispatchTab() {
                     </div>
                 ) : view === 'jobs' ? (
                     <JobsView jobsRaw={jobsRaw} customers={customers} techs={techs} skills={skills}
+                        openJobRequest={openJobRequest}
                         licenseLevels={licLevels}
                         categories={settings?.dispatchTrades || []}
                         jobTypes={settings?.dispatchJobTypes || []}
@@ -5560,6 +5592,7 @@ export default function DispatchTab() {
                         onCreateBridgeJob={startBridgeJob}
                         selectedJobId={selectedJobId || jobsWithBridge[0]?.id}
                         onSelectJob={setSelectedJobId}
+                        onOpenJob={openJobRecord}
                         onBack={() => setView('board')}
                         onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden, serverJob }) => {
                             setJobs(prev => prev.map(j => j.id === jobId

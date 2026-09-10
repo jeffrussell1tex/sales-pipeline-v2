@@ -31,6 +31,16 @@ test('DispatchTab: a refused crew schedule is a banner above the action bar, not
     assert.ok(!s.includes("<span style={{ fontSize: 11.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{scheduleError}</span>"), 'the inline span is gone');
 });
 
+test('DispatchTab: the queue\'s cards and header click through to the job record (Jeff: "these are static right now")', () => {
+    const s = code(read('src/Tabs/DispatchTab.jsx'));
+    assert.ok(s.includes("const openJobRecord = (id) => { setOpenJobRequest({ id, at: Date.now() }); setView('jobs'); };"), 'one handler: remember the job, switch to Jobs');
+    assert.ok(s.includes('onOpenJob={openJobRecord}'), 'the crew builder receives it');
+    assert.ok(s.includes('openJobRequest={openJobRequest}'), 'the Jobs view receives the request');
+    assert.ok(s.includes('        setSelectedId(openJobRequest.id);'), 'and selects that job');
+    assert.ok(s.includes("<span onClick={e => { e.stopPropagation(); onOpenJob(j.id); }} title=\"Open the job record\""), 'each card has an Open link that does not also re-select');
+    assert.ok(s.includes('Open job record →'), 'the header has the button');
+});
+
 test('DispatchJobTemplatesDetail: no inert "Test auto-create" button', () => {
     const s = code(read('src/Tabs/settings/dispatch/DispatchJobTemplatesDetail.jsx'));
     assert.ok(!s.includes('Test auto-create'), 'DispatchJobTemplatesDetail still carries "Test auto-create"');

@@ -1874,6 +1874,10 @@ const mutations = [
         'src/Tabs/DispatchTab.jsx',
         '                                Not scheduled — {scheduleError}',
         '                                {scheduleError}'],
+    ['dispatch: the click-through opens Jobs but never selects the job',
+        'src/Tabs/DispatchTab.jsx',
+        '        setSelectedId(openJobRequest.id);',
+        '        setSelectedId(null);'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
