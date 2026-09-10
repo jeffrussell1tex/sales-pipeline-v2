@@ -1948,6 +1948,11 @@ const mutations = [
         '                    equipmentIds:    Array.isArray(draft.equipmentIds) ? draft.equipmentIds : [],',
         '                    equipmentIds:    Array.isArray(draft.equipmentIds) ? draft.equipmentIds : draft.equipmentIds,'],
 
+    ['equipment check: a unit id is no longer recognised as a unit (every named requirement reads as missing)',
+        'src/Tabs/DispatchTab.jsx',
+        '        const unit = (units || []).find(u => u.id === req);\n        if (unit) {',
+        '        const unit = null;\n        if (unit) {'],
+
     ['job editor: a requirement the fleet does not have is hidden again',
         'src/Tabs/DispatchTab.jsx',
         '                                        {unknown.map(r => (',

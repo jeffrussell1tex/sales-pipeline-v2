@@ -229,28 +229,52 @@ const equipmentConflicts = (job, allJobs, units = [], dateStr, probeOverride = n
         jobsOverlap(probe, j));
 
     const out = [];
-    need.forEach(cat => {
-        const all = (units || []).filter(u => (u.category || '').trim() === cat);
-        if (!all.length) { out.push({ cat, missing: true, usable: 0, owned: 0, committed: 0 }); return; }
-        // A unit in maintenance or out of service cannot be dispatched, so it is
-        // not capacity. A checked-out unit still counts: the overlap test below
-        // is what decides whether it is free at this time.
+    need.forEach(req => {
+        // A SPECIFIC unit — its id, picked by name in the Jobs editor and the
+        // new-job form (§0.116; Jeff: "why does it not just show the name of the
+        // actual piece of equipment required"). That one unit must be in service
+        // and not required by an overlapping job the same day.
+        const unit = (units || []).find(u => u.id === req);
+        if (unit) {
+            const st = unit.status || 'available';
+            const usable = (st !== 'maintenance' && st !== 'out_of_service') ? 1 : 0;
+            const committed = rivals.filter(j => (j.equipCategories || []).includes(unit.id)).length;
+            if (usable === 0 || committed >= usable) out.push({ cat: unit.name, unit: true, missing: false, usable, owned: 1, committed });
+            return;
+        }
+        // …or a KIND — a category name, which is what a job template carries.
+        // Capacity is the count of units in it that are not out of service, minus
+        // the units committed to overlapping jobs. Counting rows rather than a
+        // quantity field is what lets one unit sit in maintenance while its twin
+        // stays bookable.
+        const all = (units || []).filter(u => (u.category || '').trim() === req);
+        if (!all.length) { out.push({ cat: req, missing: true, usable: 0, owned: 0, committed: 0 }); return; }
         const usable = all.filter(u => {
             const st = u.status || 'available';
             return st !== 'maintenance' && st !== 'out_of_service';
         }).length;
-        const committed = rivals.filter(j => (j.equipCategories || []).includes(cat)).length;
+        const committed = rivals.filter(j => (j.equipCategories || []).includes(req)).length;
         if (usable === 0 || committed >= usable) {
-            out.push({ cat, missing: false, usable, owned: all.length, committed });
+            out.push({ cat: req, missing: false, usable, owned: all.length, committed });
         }
     });
     return out;
 };
 
 const describeConflict = (c) => {
-    if (c.missing) return `${c.cat} — no units exist in Vehicles & equipment`;
+    if (c.missing) return `${c.cat} — no longer in Vehicles & equipment (remove it under Jobs)`;
+    if (c.unit) return c.usable === 0 ? `${c.cat} — in maintenance or out of service` : `${c.cat} — committed to an overlapping job that day`;
     if (c.usable === 0) return `${c.cat} — all ${c.owned} unit(s) are in maintenance or out of service`;
     return `${c.cat} — all ${c.usable} available unit(s) committed to overlapping jobs that day`;
+};
+
+// What a requirement entry means to a reader: the unit's name, "any <kind>" for a
+// category, or the raw id of something no longer in the fleet.
+const equipLabel = (req, units = []) => {
+    const unit = (units || []).find(u => u.id === req);
+    if (unit) return unit.name;
+    if ((units || []).some(u => (u.category || '').trim() === req)) return `any ${req}`;
+    return req;
 };
 
 // ── Customer typeahead ───────────────────────────────────────────────
@@ -1244,9 +1268,9 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                 {(selectedJob.equipCategories || []).length > 0 && <>
                                     <span style={{ fontSize: 10.5, fontWeight: 600, color: T.inkMid, marginLeft: 12, marginRight: 4 }}>Equip:</span>
                                     <span style={{ fontSize: 11, color: T.inkMid }}>
-                                        {(selectedJob.equipCategories || []).map((cat, ci) => {
-                                            const known = (equipUnits || []).some(u => (u.category || '').trim() === cat);
-                                            return <span key={cat}>{ci ? ', ' : ''}{cat}{known ? '' : <span style={{ color: T.warn, fontWeight: 600 }}> (not in Vehicles &amp; equipment — remove it under Jobs)</span>}</span>;
+                                        {(selectedJob.equipCategories || []).map((req, ci) => {
+                                            const known = (equipUnits || []).some(u => u.id === req || (u.category || '').trim() === req);
+                                            return <span key={req}>{ci ? ', ' : ''}{equipLabel(req, equipUnits)}{known ? '' : <span style={{ color: T.warn, fontWeight: 600 }}> (no longer in Vehicles &amp; equipment — remove it under Jobs)</span>}</span>;
                                         })}
                                     </span>
                                 </>}
@@ -3517,10 +3541,6 @@ const typesForCategory = (allTypes, categoryId) =>
     (allTypes || []).filter(t => !t.categoryId || t.categoryId === categoryId);
 
 const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories, jobTypes, equipment = [], onSaved, openJobRequest }) => {
-    // Requirable equipment KINDS — the category values on the fleet (§0.116).
-    const equipCats = React.useMemo(
-        () => [...new Set((equipment || []).map(e => (e.category || '').trim()).filter(Boolean))].sort(),
-        [equipment]);
     const [query,      setQuery]      = React.useState('');
     const [statusFilt, setStatusFilt] = React.useState('all');
     const [selectedId, setSelectedId] = React.useState(null);
@@ -3820,34 +3840,48 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                         <CustFieldRow label="Required equipment">
                             {(() => {
                                 const req = Array.isArray(draft.equipmentIds) ? draft.equipmentIds : [];
-                                const unknown = req.filter(r => !equipCats.includes(r));
-                                const toggle = (cat) => set('equipmentIds', req.includes(cat) ? req.filter(x => x !== cat) : [...req, cat]);
+                                const units = equipment || [];
+                                // Entries are unit ids (picked here, shown by name), kinds (category
+                                // names a job template carries — "any HVAC"), or ids of units that
+                                // no longer exist. Every entry is visible and every entry can go.
+                                const kinds = req.filter(r => !units.some(u => u.id === r) && units.some(u => (u.category || '').trim() === r));
+                                const unknown = req.filter(r => !units.some(u => u.id === r) && !kinds.includes(r));
+                                const toggle = (v) => set('equipmentIds', req.includes(v) ? req.filter(x => x !== v) : [...req, v]);
                                 return (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
-                                        {equipCats.length === 0 && unknown.length === 0 && (
+                                        {units.length === 0 && req.length === 0 && (
                                             <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
                                                 No equipment in the fleet yet — add units under Vehicles &amp; equipment.
                                             </div>
                                         )}
-                                        {equipCats.map(cat => {
-                                            const on = req.includes(cat);
-                                            const units = (equipment || []).filter(e => (e.category || '').trim() === cat);
+                                        {units.map(u => {
+                                            const on = req.includes(u.id);
+                                            const st = (u.status || 'available').replace(/_/g, ' ');
                                             return (
-                                                <span key={cat} onClick={() => toggle(cat)}
-                                                    title={`${units.filter(u => (u.status || 'available') === 'available').length} of ${units.length} unit(s) currently available`}
+                                                <span key={u.id} onClick={() => toggle(u.id)}
+                                                    title={`${u.category || 'general'} · ${st}`}
                                                     style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
                                                         border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
                                                         color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
-                                                    {cat}
+                                                    {u.name}
+                                                    <span style={{ marginLeft: 5, opacity: 0.65, fontSize: 10.5, fontWeight: 500 }}>{u.category || 'general'}</span>
                                                 </span>
                                             );
                                         })}
+                                        {kinds.map(r => (
+                                            <span key={r} onClick={() => toggle(r)} role="button" aria-label={`Remove equipment requirement any ${r}`}
+                                                title="Any unit of this kind — a job template requires kinds, not specific units. Click to remove."
+                                                style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                    border: `1px solid ${T.borderStrong}`, background: T.surface2, color: T.inkMid, fontFamily: T.sans }}>
+                                                any {r} · remove ×
+                                            </span>
+                                        ))}
                                         {unknown.map(r => (
                                             <span key={r} onClick={() => toggle(r)} role="button" aria-label={`Remove equipment requirement ${r}`}
-                                                title="Nothing in Vehicles & equipment has this category. The job cannot be scheduled while it is required — click to remove."
+                                                title="This unit is no longer in Vehicles & equipment. The job cannot be scheduled while it is required — click to remove."
                                                 style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
                                                     border: `1px solid ${T.warn}`, background: `${T.warn}14`, color: T.ink, fontFamily: T.sans }}>
-                                                ⚠ {r} — not in Vehicles &amp; equipment · remove ×
+                                                ⚠ {r} — no longer in Vehicles &amp; equipment · remove ×
                                             </span>
                                         ))}
                                     </div>
@@ -6124,27 +6158,37 @@ export default function DispatchTab() {
                                 </div>
                             )}
                             {/* Required equipment */}
-                            {equipCategories.length > 0 && (
+                            {equipment.length > 0 && (
                                 <div>
                                     <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5 }}>Required Equipment</label>
+                                    {/* Specific units by name (§0.116). A template applied to this form
+                                        may add KINDS (category names) — those show as "any <kind>". */}
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                                        {equipCategories.map(cat => {
-                                            const on    = (newJobForm.equipCategories || []).includes(cat);
-                                            const units = equipment.filter(e => (e.category || '').trim() === cat);
-                                            const free  = units.filter(u => (u.status || 'available') === 'available').length;
+                                        {equipment.map(u => {
+                                            const on = (newJobForm.equipCategories || []).includes(u.id);
+                                            const st = (u.status || 'available').replace(/_/g, ' ');
                                             return (
-                                                <span key={cat}
+                                                <span key={u.id}
                                                     onClick={() => setNewJobForm(f => ({ ...f,
-                                                        equipCategories: on ? (f.equipCategories || []).filter(x => x !== cat) : [...(f.equipCategories || []), cat] }))}
-                                                    title={`${free} of ${units.length} unit(s) currently available`}
+                                                        equipCategories: on ? (f.equipCategories || []).filter(x => x !== u.id) : [...(f.equipCategories || []), u.id] }))}
+                                                    title={`${u.category || 'general'} · ${st}`}
                                                     style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
                                                         border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
                                                         color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
-                                                    {cat}
-                                                    <span style={{ marginLeft: 5, opacity: 0.65, fontFamily: T.mono }}>{free}/{units.length}</span>
+                                                    {u.name}
+                                                    <span style={{ marginLeft: 5, opacity: 0.65, fontSize: 10.5, fontWeight: 500 }}>{u.category || 'general'}</span>
                                                 </span>
                                             );
                                         })}
+                                        {(newJobForm.equipCategories || []).filter(r => !equipment.some(u => u.id === r)).map(r => (
+                                            <span key={r}
+                                                onClick={() => setNewJobForm(f => ({ ...f, equipCategories: (f.equipCategories || []).filter(x => x !== r) }))}
+                                                title="Any unit of this kind (from the job template). Click to remove."
+                                                style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                    border: `1px solid ${T.borderStrong}`, background: T.surface2, color: T.inkMid, fontFamily: T.sans }}>
+                                                any {r} · remove ×
+                                            </span>
+                                        ))}
                                     </div>
                                 </div>
                             )}
