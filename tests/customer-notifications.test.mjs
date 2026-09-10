@@ -139,7 +139,8 @@ test('netlify.toml: /status/:token is rewritten to the function BEFORE the SPA c
     assert.ok(status > 0 && fn > status && spa > fn, 'order: status rule, its target, then the catch-all');
     assert.ok(!t.includes('dispatch-status?t=:token'), 'the query-string form must not return');
     const s = code(read('netlify/functions/dispatch-status.mjs'));
-    assert.ok(s.includes("const fromPath = String(event.path || '').match(/\\/dispatch-status\\/([^/?#]+)/);"), 'the function reads the path segment');
+    // A rewritten request carries the BROWSER'S path (/status/<token>); a direct call carries /dispatch-status/<token>.
+    assert.ok(s.includes("const fromPath = String(event.path || '').match(/\\/(?:status|dispatch-status)\\/([^/?#]+)/);"), 'the function reads the path segment of either path');
 });
 
 test('the panel, the catalogue and the routing exist; the dispatch tab shows the trail and adopts the server\'s row after scheduling', () => {

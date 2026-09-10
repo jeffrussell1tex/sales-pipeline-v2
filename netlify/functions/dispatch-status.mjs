@@ -48,12 +48,15 @@ const notFound = () => ({
 
 export const handler = async (event) => {
     if (event.httpMethod !== 'GET') return { statusCode: 405, headers, body: page('Not allowed', '<h1>Not allowed</h1>') };
-    // The token arrives as the last PATH segment (/status/<token> is rewritten to
-    // /.netlify/functions/dispatch-status/<token> — Netlify substitutes a
-    // placeholder into a path, NOT into a query string: the first dev probe of
-    // `?t=:token` reached this function with the literal ":token" and 404'd a
-    // real link, state §0.111). `?t=` is still honoured for a direct call.
-    const fromPath = String(event.path || '').match(/\/dispatch-status\/([^/?#]+)/);
+    // The token arrives as the last PATH segment. /status/<token> is rewritten to
+    // /.netlify/functions/dispatch-status/<token>, and Netlify hands a rewritten
+    // request the BROWSER'S path (event.path is /status/<token>), while a direct
+    // call carries /dispatch-status/<token> — both are read. Two dev probes taught
+    // this (state §0.111): `?t=:token` reached the function as the literal
+    // ":token" (placeholders substitute into a path, not a query string), and a
+    // match on /dispatch-status/ alone missed the rewritten path. `?t=` is still
+    // honoured for a direct call.
+    const fromPath = String(event.path || '').match(/\/(?:status|dispatch-status)\/([^/?#]+)/);
     const token = String(event.queryStringParameters?.t || (fromPath ? decodeURIComponent(fromPath[1]) : '')).trim();
     if (!TOKEN_RE.test(token)) return notFound();
 

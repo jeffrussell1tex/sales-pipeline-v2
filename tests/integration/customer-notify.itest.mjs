@@ -220,8 +220,11 @@ test('the public status page renders by token only, escaped and no-store; malfor
     // The pretty path rewrites to /.netlify/functions/dispatch-status/<token>:
     // the token arrives as the last path segment, with no query string at all.
     const byPath = await statusPage({ httpMethod: 'GET', path: `/.netlify/functions/dispatch-status/${token}`, queryStringParameters: {} });
-    assert.equal(byPath.statusCode, 200, 'found by the path segment');
+    assert.equal(byPath.statusCode, 200, 'found by the path segment of a direct call');
     assert.ok(byPath.body.includes('Furnace &lt;tune-up&gt;'));
+    // A 200 rewrite hands the function the BROWSER'S path, not the rewritten target.
+    const byPretty = await statusPage({ httpMethod: 'GET', path: `/status/${token}`, queryStringParameters: {} });
+    assert.equal(byPretty.statusCode, 200, 'found by the path segment of the rewritten request');
     const literal = await statusPage({ httpMethod: 'GET', path: '/.netlify/functions/dispatch-status/:token', queryStringParameters: {} });
     assert.equal(literal.statusCode, 404, 'the unsubstituted placeholder is not a token');
 
