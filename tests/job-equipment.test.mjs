@@ -21,6 +21,19 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n');
 const s = code(read('src/Tabs/DispatchTab.jsx'));
 
+test('the kind and skill chips read as toggles — "+ Kind" off, "✓ Kind" on, role=checkbox — and the forms say to click them', () => {
+    // Jeff: "There is no way to add equipment under required equipment." The
+    // pills toggled on click (observed in the pane, both forms) but looked like
+    // labels; nothing said they were controls.
+    assert.equal((s.match(/role="checkbox" aria-checked=\{!!on\}/g) || []).length, 5, 'skills in the technician editor, skills and kinds in the Jobs editor, skills and kinds in the new-job form');
+    assert.ok(s.includes("                                                        {on ? '✓ ' : '+ '}{kind}"), 'Jobs editor kinds');
+    assert.ok(s.includes("                                                    {on ? '✓ ' : '+ '}{kind}"), 'new-job form kinds');
+    assert.ok(s.includes("{on ? '✓ ' : '+ '}{sk.name}"), 'Jobs editor skills');
+    assert.ok(s.includes("                                                        {on ? '✓ ' : '+ '}{s.name}"), 'new-job form skills');
+    assert.ok(s.includes('<strong>Click a kind to require it; click again to drop it.</strong>'), 'the Jobs editor says so');
+    assert.ok(s.includes('Click a kind to require it; click again to drop it. In service over total.'), 'the new-job form says so');
+});
+
 test('a requirement is a kind: the editor and the new-job form pick categories, and a stale entry is a removable chip', () => {
     assert.ok(s.includes('<CustFieldRow label="Required equipment">'));
     assert.ok(s.includes("const kindList = [...new Set(units.map(u => (u.category || '').trim()).filter(Boolean))].sort();"));

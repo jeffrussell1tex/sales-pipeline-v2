@@ -1948,6 +1948,11 @@ const mutations = [
         '                    equipmentIds:    Array.isArray(draft.equipmentIds) ? draft.equipmentIds : [],',
         '                    equipmentIds:    Array.isArray(draft.equipmentIds) ? draft.equipmentIds : draft.equipmentIds,'],
 
+    ['equipment: the kind chips look like labels again (no + / ✓)',
+        'src/Tabs/DispatchTab.jsx',
+        "                                                        {on ? '✓ ' : '+ '}{kind}",
+        "                                                        {kind}"],
+
     ['equipment: a reservation ignores what overlapping jobs already hold (the same unit twice)',
         'src/Tabs/DispatchTab.jsx',
         '            .filter(x => !taken.has(x.id) && !picked.includes(x.id))',

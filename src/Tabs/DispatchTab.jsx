@@ -3480,8 +3480,9 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                                                     : [...(draft.skills || []), s.id])}
                                                 style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
                                                     border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
-                                                    color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
-                                                {s.name}
+                                                    color: on ? T.surface : T.inkMid, fontFamily: T.sans }}
+                                                role="checkbox" aria-checked={!!on} title={on ? 'Click to remove' : 'Click to add'}>
+                                                {on ? '✓ ' : '+ '}{s.name}
                                             </span>
                                         );
                                     })}
@@ -3854,8 +3855,9 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                                                     : [...(draft.needSkills || []), sk.id])}
                                                 style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
                                                     border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
-                                                    color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
-                                                {sk.name}
+                                                    color: on ? T.surface : T.inkMid, fontFamily: T.sans }}
+                                                role="checkbox" aria-checked={!!on} title={on ? 'Required — click to remove' : 'Click to require'}>
+                                                {on ? '✓ ' : '+ '}{sk.name}
                                             </span>
                                         );
                                     })}
@@ -3897,8 +3899,9 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                                                         title={`${inService} of ${all.length} in service: ${all.map(u => u.name).join(', ')}`}
                                                         style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
                                                             border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
-                                                            color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
-                                                        {kind}
+                                                            color: on ? T.surface : T.inkMid, fontFamily: T.sans }}
+                                                        role="checkbox" aria-checked={!!on}>
+                                                        {on ? '✓ ' : '+ '}{kind}
                                                         <span style={{ marginLeft: 5, opacity: 0.65, fontFamily: T.mono }}>{inService}/{all.length}</span>
                                                     </span>
                                                 );
@@ -3913,7 +3916,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                                             ))}
                                         </div>
                                         <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 6, fontFamily: T.sans, lineHeight: 1.45 }}>
-                                            A kind is the <strong>Category</strong> on each unit under Vehicles &amp; equipment — name it the way a
+                                            <strong>Click a kind to require it; click again to drop it.</strong> A kind is the <strong>Category</strong> on each unit under Vehicles &amp; equipment — name it the way a
                                             technician asks for it (Pressure Tester, Recovery Machine), not by trade. Scheduling reserves one
                                             in-service unit of each kind that no overlapping job holds that day.
                                             {reserved.length > 0 && <> <strong>Reserved for this job:</strong> {reserved.map(id => { const u = units.find(x => x.id === id); return u ? (u.assetTag ? `${u.name} (${u.assetTag})` : u.name) : id; }).join(', ')}.</>}
@@ -6177,8 +6180,9 @@ export default function DispatchTab() {
                                                             needSkills: on ? f.needSkills.filter(x => x !== s.id) : [...(f.needSkills || []), s.id] }))}
                                                         style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
                                                             border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
-                                                            color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
-                                                        {s.name}
+                                                            color: on ? T.surface : T.inkMid, fontFamily: T.sans }}
+                                                        role="checkbox" aria-checked={!!on} title={on ? 'Required — click to remove' : 'Click to require'}>
+                                                        {on ? '✓ ' : '+ '}{s.name}
                                                     </span>
                                                 );
                                             })}
@@ -6222,12 +6226,16 @@ export default function DispatchTab() {
                                                     title={`${inService} of ${units.length} in service: ${units.map(u => u.name).join(', ')}`}
                                                     style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
                                                         border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
-                                                        color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
-                                                    {kind}
+                                                        color: on ? T.surface : T.inkMid, fontFamily: T.sans }}
+                                                    role="checkbox" aria-checked={!!on}>
+                                                    {on ? '✓ ' : '+ '}{kind}
                                                     <span style={{ marginLeft: 5, opacity: 0.65, fontFamily: T.mono }}>{inService}/{units.length}</span>
                                                 </span>
                                             );
                                         })}
+                                    </div>
+                                    <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 5, fontFamily: T.sans }}>
+                                        Click a kind to require it; click again to drop it. In service over total. Scheduling reserves one unit of each kind for the job.
                                     </div>
                                 </div>
                             )}
