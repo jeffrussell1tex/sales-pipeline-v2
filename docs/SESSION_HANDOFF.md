@@ -355,7 +355,11 @@ first probe with a bogus token could not tell. `89e85b6`: the rewrite is
 path segment — and a second probe showed the rewritten request carries the
 BROWSER'S path, so `2e6a9c4` reads the last segment of either
 `/status/<token>` or `/dispatch-status/<token>`; 390/390 mutations. Read on
-dev after the deploy: the pretty path 200 with the real token.**
+dev after the deploy of `2e6a9c4` (15:28:36 UTC): the pretty path **200** with
+the real token — "Filter Change · Scheduled · Friday, September 11, 2026
+between 9:00 AM and 11:00 AM · Jax · 400 Westheimer, Houston, TX ·
+JOB-2026-0005"; the company line reads "Your service provider" because the
+dev org has no company name set (Settings → Company profile).**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
