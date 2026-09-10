@@ -491,9 +491,11 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FIFTEENTH ship put §0.109–§0.111 on `master` (10 Sep 17:47 UTC, `0a242c6`); `dev` is ahead by SEVEN CODE commits, §0.112 `470b948`, its roster correction `a29cc1e`, §0.113 `223c99a`, §0.114 `9bc6b89`, §0.115 `360e4f7` and its follow-up `54fb180`, §0.116 `e5970f3`, `d7f0765`, its kinds-and-reservation model `1233de4` and the toggle chips `a7201b7` — NOT shipped
+## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); nothing is on `dev` alone but this ship-record
 
-**PROD SHIPPED — the FIFTEENTH ship (Jeff: "ship prod", 10 Sep).** Ancestor check (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 27 commits after `59116be`), then `git push origin dev:master`: `master` `59116be` → `0a242c6`, pushed 17:46:08 UTC. Netlify record `6aa2ece6…`: branch `master`, commit `0a242c6`, published 17:47:02 UTC (54 seconds after the push), **80 functions** (`_selfProfile`, `dispatch-plan-visits`, `_customerNotify`, `dispatch-status` all present), **2 redirect rules processed**, secret scan clean over 405 files; salespipelinetracker.com serving `index-C23CrCCK.js` at 17:47:03 UTC with the `pk_live_` key inlined; `/status/<32 bogus chars>` on prod → the function's own 404 with `Cache-Control: no-store` and `X-Robots-Tag: noindex` — the rewrite beats the SPA catch-all there too. The schema for §0.110 and §0.111 was already in the shared database. **What prod does differently from the moment of the ship:** every member's self-profile save goes through the allowlist (§0.109); a skipped or deferred plan occurrence and the Agreement renewals list exist in Service Due (§0.110); the hourly job's Signal 6 runs on prod (`JOBS_ENABLED` is set there) — a prod customer whose agreement ends within the plan's window would email its Admins/Managers at their alert hour and post once to #sales-alerts; and customer notifications are OFF for the prod org until an Admin turns them on (§0.111) — nothing is sent to any prod customer by this ship.
+**PROD SHIPPED — the SIXTEENTH ship (Jeff: "ship prod", 10 Sep).** Pre-flight: tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 29 commits after `0a242c6` (ten of them code: `470b948`, `a29cc1e`, `223c99a`, `9bc6b89`, `360e4f7`, `54fb180`, `e5970f3`, `d7f0765`, `1233de4`, `a7201b7`). `git push origin dev:master` at 22:50:39 UTC: `master` `0a242c6` → `0726934`. Netlify record `6aa33443…`: branch `master`, commit `0726934`, created 22:50:43, published 22:51:30 UTC (51 seconds after the push, deploy_time 45 s), **80 functions**, **2 redirect rules**, 1 header rule, secret scan clean over 412 files; salespipelinetracker.com serving `index-DaJE9sq9.js` from 22:51:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-mSB6P0Q8.js` — the key differs). The one schema change of the batch, `dispatch_jobs.assigned_equipment_ids`, was already in the shared database (applied 10 Sep, §18c) — nothing applied at ship time. **What prod does differently from this moment:** the roster is read on the board (a technician with a pattern is rostered, one without is "Not rostered" — §0.112); a job with no category saves from the editor, a new technician starts Mon–Fri 08:00–17:00 (§0.113); the Dispatch page fits the screen, the next-step card asks Schedule now / Wait for group schedule / Clear the moment a crew slot is filled, a held crew is persisted and honoured by Mass-schedule (§0.114–§0.115); equipment is required by KIND, scheduling reserves one in-service unit per kind and releases it on unschedule, and the kind/skill chips read as toggles (§0.116). Every "NOT shipped" in §0.112–§0.116 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in the handoff §5.
+
+**Earlier the same day — the FIFTEENTH ship (Jeff: "ship prod", 10 Sep).** Ancestor check (tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 27 commits after `59116be`), then `git push origin dev:master`: `master` `59116be` → `0a242c6`, pushed 17:46:08 UTC. Netlify record `6aa2ece6…`: branch `master`, commit `0a242c6`, published 17:47:02 UTC (54 seconds after the push), **80 functions** (`_selfProfile`, `dispatch-plan-visits`, `_customerNotify`, `dispatch-status` all present), **2 redirect rules processed**, secret scan clean over 405 files; salespipelinetracker.com serving `index-C23CrCCK.js` at 17:47:03 UTC with the `pk_live_` key inlined; `/status/<32 bogus chars>` on prod → the function's own 404 with `Cache-Control: no-store` and `X-Robots-Tag: noindex` — the rewrite beats the SPA catch-all there too. The schema for §0.110 and §0.111 was already in the shared database. **What prod does differently from the moment of the ship:** every member's self-profile save goes through the allowlist (§0.109); a skipped or deferred plan occurrence and the Agreement renewals list exist in Service Due (§0.110); the hourly job's Signal 6 runs on prod (`JOBS_ENABLED` is set there) — a prod customer whose agreement ends within the plan's window would email its Admins/Managers at their alert hour and post once to #sales-alerts; and customer notifications are OFF for the prod org until an Admin turns them on (§0.111) — nothing is sent to any prod customer by this ship.
 
 **Earlier in the twelfth session, before the ship:** `master` stays at `59116be`. The third
 CODE commit, `a3fa3e2` (§0.110 — maintenance agreements: a NEW function
@@ -1300,9 +1302,11 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (10 Sep, twelfth session — after the FIFTEENTH ship)
+## 4. Verified state at close (10 Sep, twelfth session — after the SIXTEENTH ship)
 
-**`master` == `dev` == `0a242c6` at the ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time) and **`a29cc1e`** (the roster correction — `normaliseTech` now carries `workingHours`) and **`223c99a`** (§0.113 — the null-category 500 on the Jobs editor's save; a new technician rostered Mon–Fri 8–5; functions AND bundle) and **`9bc6b89`** (§0.114 — a filled crew slot says it is not saved; a success is announced), **`360e4f7`** and **`54fb180`** (§0.115 — the page bound to the viewport, the next-step card, Wait for group schedule, the planner honouring a held crew, a preferred start not a placement; bundle only) , **`e5970f3`**, **`d7f0765`**, **`1233de4`** and **`a7201b7`** (§0.116 — equipment by KIND with a unit reserved at scheduling, and chips that read as toggles; functions AND bundle, and a schema column already in the shared database; hash `index-mSB6P0Q8.js`, 708/708 unit, 412/412 mutations, 147/147 integration) — `dev` ahead of `master` by those TEN CODE commits and the docs after them. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
+**`master` == `dev` == `0726934` at the SIXTEENTH ship (22:50:39 UTC); prod serving `index-DaJE9sq9.js` from 22:51:42 UTC, Netlify record `6aa33443…`, 80 functions, 2 redirect rules, secret scan clean over 412 files.** Then the ship-record docs commits carrying this line — `dev` ahead of `master` by them alone. Counts at the ship: 708/708 unit, 147/147 integration, 412/412 mutations, six gates, dev bundle `index-mSB6P0Q8.js`.
+
+**After the FIFTEENTH ship, earlier the same day:** **`master` == `dev` == `0a242c6` at that ship; prod serving `index-C23CrCCK.js` (the FIFTEENTH ship, 17:47 UTC 10 Sep), Netlify record `6aa2ece6…`, 80 functions, 2 redirect rules, secret scan clean; the public route probed on prod (the function's 404, no-store, noindex).** Then the ship-record docs commit, and after it **§0.112 `470b948`** (the crew builder's phantom clash; a job's preferred start time) and **`a29cc1e`** (the roster correction — `normaliseTech` now carries `workingHours`) and **`223c99a`** (§0.113 — the null-category 500 on the Jobs editor's save; a new technician rostered Mon–Fri 8–5; functions AND bundle) and **`9bc6b89`** (§0.114 — a filled crew slot says it is not saved; a success is announced), **`360e4f7`** and **`54fb180`** (§0.115 — the page bound to the viewport, the next-step card, Wait for group schedule, the planner honouring a held crew, a preferred start not a placement; bundle only) , **`e5970f3`**, **`d7f0765`**, **`1233de4`** and **`a7201b7`** (§0.116 — equipment by KIND with a unit reserved at scheduling, and chips that read as toggles; functions AND bundle, and a schema column already in the shared database; hash `index-mSB6P0Q8.js`, 708/708 unit, 412/412 mutations, 147/147 integration) — `dev` ahead of `master` by those TEN CODE commits and the docs after them. Nine CODE commits shipped: `29a6e7e`, `9996c1c`, `a3fa3e2`, `1866158`, `7e6eed3`, `89e85b6`, `2e6a9c4`, `55e219b`, `ddba08e`. The counts below were taken before the last four of them landed and are otherwise unchanged: 687/687 unit, 392/392 mutations, 145/145 integration, six gates.
 
 **Before the ship:**
 
@@ -1399,14 +1403,29 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 ## 5. Next — start here
 
+**After the SIXTEENTH ship — prod observations, Jeff's (Admin, salespipelinetracker.com), in order:**
+- **§0.112/§0.115 on prod:** Dispatch → Queue on the big monitor — Date /
+  Start / Schedule crew visible without scrolling; select an unscheduled job,
+  + Add a technician → the next-step card at the top ("Crew chosen — …
+  Nothing is saved yet"); the roster blockers reflect Work Schedules (a
+  technician with no pattern reads "Not rostered" until one is set).
+- **§0.113 on prod:** Technicians → add one → Work Schedules shows Mon–Fri
+  08:00–17:00 without a click; Jobs → a job with category "— None —" → Save
+  → "Saved".
+- **§0.116 on prod:** Settings → Dispatch → Vehicles & equipment → each
+  unit's Category is its KIND (name them as a technician asks — "Pressure
+  Tester", not a trade); Jobs → a job → Required equipment → "+ Kind n/n" →
+  click → "✓"; Save; Queue → schedule it → the banner ends "Reserved: <unit>."
+  and the Required line reads "<kind> · reserved: <unit>". Prod's fleet
+  rows are Jeff's — read them before assuming any kind exists.
+- Customer notifications on prod are still OFF (§0.111) unless Jeff has
+  turned them on since the fifteenth ship — a schedule on prod sends
+  nothing while they are off.
+
 **Thirteenth-session prep — first:**
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  TEN CODE commits, `470b948` (§0.112), `a29cc1e` (its roster
-  correction), `223c99a` (§0.113), `9bc6b89` (§0.114), `360e4f7` and
-  `54fb180` (§0.115), `e5970f3`, `d7f0765`, `1233de4` and `a7201b7`
-  (§0.116), and the docs after them; anything else is a finding. The schema column
-  `dispatch_jobs.assigned_equipment_ids` is ALREADY in the shared database
-  (and the test database) — nothing to apply at ship time.
+  ONLY docs commits (the SIXTEENTH ship's record); a code commit is a
+  finding.
 - **§0.112 on dev (either role):** Dispatch → Queue → select JOB-2026-0006
   (unscheduled, Fri 11, no start): neither technician reads "Double-booked
   at 9a" any more — Savannah's blockers are the roster ones only, and Jax
@@ -1449,8 +1468,8 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   it: "… all 1 available unit(s) reserved by overlapping jobs that day". Then
   the Job Board and any unschedule path release the unit. (d) Note: both
   JOB-2026-0007 (Tue 15 08:00) and -0004 were scheduled by the pane — his
-  rows to unschedule or keep. **Ship when Jeff
-  says so** — §0.112–§0.116 together, bundle only.
+  rows to unschedule or keep. **SHIPPED — the SIXTEENTH ship (§1), 22:51 UTC
+  10 Sep.**
 - **§0.113 on dev — Jeff's remaining check:** Technicians → add a technician
   → Save → Work Schedules shows 08:00–17:00 Mon–Fri and Off Sat/Sun for the
   new row without a click (the design question was answered: "M-F 8AM to 5PM
