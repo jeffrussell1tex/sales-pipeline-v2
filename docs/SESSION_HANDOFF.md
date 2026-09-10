@@ -1331,10 +1331,13 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   private window (the pretty path works since `2e6a9c4`), the job detail's
   Customer notifications trail and Copy status link, then Start travel (or
   set En route) → the on-the-way email. Turn the switch back off afterwards
-  if he does not want the test customer mailed again. **UX note for Jeff's
-  call:** the crew builder's refusals are a red 11.5px line under the
-  buttons — easy to miss; a banner (§18b32) would have said why nothing
-  happened.
+  if he does not want the test customer mailed again. **DONE — Jeff: "please
+  add that banner. Great idea" — `55e219b`:** a refused crew schedule is now a
+  "Not scheduled — <why>" banner above the action bar. His "still showing it
+  as needing a crew" was a SECOND Filter Change job (JOB-2026-0006, created
+  17:05 UTC during his attempts) — the board was right; cancelling it is his.
+  Bundle hash after the banner: `index-DgjASrGN.js`; 391/391 mutations,
+  686/686 unit.
 - **SMS lights up with no code change** the day a site has
   `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM_NUMBER` AND
   the A2P campaign reads Approved (Twilio: Trust Hub → Registrations → A2P
