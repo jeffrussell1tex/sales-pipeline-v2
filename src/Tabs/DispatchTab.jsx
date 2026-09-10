@@ -1243,7 +1243,12 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                 })}
                                 {(selectedJob.equipCategories || []).length > 0 && <>
                                     <span style={{ fontSize: 10.5, fontWeight: 600, color: T.inkMid, marginLeft: 12, marginRight: 4 }}>Equip:</span>
-                                    <span style={{ fontSize: 11, color: T.inkMid }}>{(selectedJob.equipCategories || []).join(', ')}</span>
+                                    <span style={{ fontSize: 11, color: T.inkMid }}>
+                                        {(selectedJob.equipCategories || []).map((cat, ci) => {
+                                            const known = (equipUnits || []).some(u => (u.category || '').trim() === cat);
+                                            return <span key={cat}>{ci ? ', ' : ''}{cat}{known ? '' : <span style={{ color: T.warn, fontWeight: 600 }}> (not in Vehicles &amp; equipment — remove it under Jobs)</span>}</span>;
+                                        })}
+                                    </span>
                                 </>}
                             </div>
                         </div>
@@ -3511,7 +3516,11 @@ const JOB_STATUSES = ['unscheduled', 'scheduled', 'en_route', 'on_site', 'paused
 const typesForCategory = (allTypes, categoryId) =>
     (allTypes || []).filter(t => !t.categoryId || t.categoryId === categoryId);
 
-const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories, jobTypes, onSaved, openJobRequest }) => {
+const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories, jobTypes, equipment = [], onSaved, openJobRequest }) => {
+    // Requirable equipment KINDS — the category values on the fleet (§0.116).
+    const equipCats = React.useMemo(
+        () => [...new Set((equipment || []).map(e => (e.category || '').trim()).filter(Boolean))].sort(),
+        [equipment]);
     const [query,      setQuery]      = React.useState('');
     const [statusFilt, setStatusFilt] = React.useState('all');
     const [selectedId, setSelectedId] = React.useState(null);
@@ -3612,6 +3621,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                     crewSize:        parseInt(draft.crewSize, 10) || 1,
                     minLicense:      draft.minLicense || null,
                     needSkills:      draft.needSkills || [],
+                    equipmentIds:    Array.isArray(draft.equipmentIds) ? draft.equipmentIds : [],
                     scheduledDate:   draft.scheduledDate || null,
                     // A preferred start makes the window exact and sets the end from the duration (§0.112).
                     scheduledStart:  draft.scheduledStart || null,
@@ -3800,6 +3810,49 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                                     })}
                                 </div>
                             )}
+                        </CustFieldRow>
+
+                        {/* Required equipment (§0.116). The requirement is a list of equipment
+                            KINDS (dispatch_equipment.category values) in equipment_ids. This field
+                            never existed in the editor, so a requirement the fleet no longer
+                            matches — JOB-2026-0004's "eq_1786389760843", a unit id from the
+                            August seed — blocked scheduling with no way to see or clear it. */}
+                        <CustFieldRow label="Required equipment">
+                            {(() => {
+                                const req = Array.isArray(draft.equipmentIds) ? draft.equipmentIds : [];
+                                const unknown = req.filter(r => !equipCats.includes(r));
+                                const toggle = (cat) => set('equipmentIds', req.includes(cat) ? req.filter(x => x !== cat) : [...req, cat]);
+                                return (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+                                        {equipCats.length === 0 && unknown.length === 0 && (
+                                            <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                                                No equipment in the fleet yet — add units under Vehicles &amp; equipment.
+                                            </div>
+                                        )}
+                                        {equipCats.map(cat => {
+                                            const on = req.includes(cat);
+                                            const units = (equipment || []).filter(e => (e.category || '').trim() === cat);
+                                            return (
+                                                <span key={cat} onClick={() => toggle(cat)}
+                                                    title={`${units.filter(u => (u.status || 'available') === 'available').length} of ${units.length} unit(s) currently available`}
+                                                    style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                        border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent',
+                                                        color: on ? T.surface : T.inkMid, fontFamily: T.sans }}>
+                                                    {cat}
+                                                </span>
+                                            );
+                                        })}
+                                        {unknown.map(r => (
+                                            <span key={r} onClick={() => toggle(r)} role="button" aria-label={`Remove equipment requirement ${r}`}
+                                                title="Nothing in Vehicles & equipment has this category. The job cannot be scheduled while it is required — click to remove."
+                                                style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 999,
+                                                    border: `1px solid ${T.warn}`, background: `${T.warn}14`, color: T.ink, fontFamily: T.sans }}>
+                                                ⚠ {r} — not in Vehicles &amp; equipment · remove ×
+                                            </span>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                         </CustFieldRow>
 
                         <CustFieldRow label="Description">
@@ -5720,7 +5773,7 @@ export default function DispatchTab() {
                         )}
                     </div>
                 ) : view === 'jobs' ? (
-                    <JobsView jobsRaw={jobsRaw} customers={customers} techs={techs} skills={skills}
+                    <JobsView jobsRaw={jobsRaw} customers={customers} techs={techs} skills={skills} equipment={equipment}
                         openJobRequest={openJobRequest}
                         licenseLevels={licLevels}
                         categories={settings?.dispatchTrades || []}
@@ -5732,6 +5785,7 @@ export default function DispatchTab() {
                                 ? { ...j, title: saved.title, priority: normalisePriority(saved.priority),
                                     status: saved.status, scheduledDate: saved.scheduledDate,
                                     scheduledStart: saved.scheduledStart || null,
+                                    equipCategories: Array.isArray(saved.equipmentIds) ? saved.equipmentIds : [],
                                     start: saved.scheduledStart && saved.status !== 'unscheduled' ? hhToNum(saved.scheduledStart) : null,
                                     durationHrs: (saved.durationMinutes || 120) / 60,
                                     crewSize: saved.crewSize || j.crewSize,
