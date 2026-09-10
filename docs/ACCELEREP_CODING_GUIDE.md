@@ -3331,3 +3331,39 @@ sends every administrative key in one body and reads the row back unchanged
 client proves every key the panel saves is ON the list — otherwise a save is
 dropped silently, which is the same bug seen from the other side
 (`tests/self-profile.test.mjs`, `tests/integration/users-self.itest.mjs`).
+
+---
+
+## 18b35. A Public Page Reads By An Unguessable Token, Never By An Id (hard rule)
+
+**Origin (state §0.111):** the customer's job-status link is the first
+unauthenticated read of tenant data in the app. Every other read is behind
+Clerk and scoped by the caller's org; a public page has no caller, so the
+only thing standing between one org's job and the whole internet is what the
+URL carries.
+
+**The rule:** the URL carries a per-row random token (`randomBytes(24)`,
+base64url, stored on the row under a unique index, issued once when first
+needed) and NOTHING else — no org id, no row id, no customer id. The handler
+accepts one parameter, checks its shape before touching the database, finds
+the row by the token column alone, and then reads every secondary row BY THE
+FOUND ROW'S ORG. A malformed token and an unknown token return the same 404
+body, so nothing can be probed. Everything rendered is escaped (these are
+customer- and company-typed strings, not ours); the response is
+`Cache-Control: no-store` and `X-Robots-Tag: noindex`, sends no referrer
+and cannot be framed; the page shows only what the customer needs and never
+links into the authenticated app. Which fields appear is a design decision
+made once, in the handler, not a pass-through of the row.
+
+**And the switch is the company's:** a workspace that never turned customer
+notifications on issues no token and sends nothing (`enabled: false` by
+default). SMS is not "on" because code exists for it — it is on when the
+site has the credentials, and until then the trail says so.
+
+**The check:** an integration test schedules a job and reads the page by its
+token, asserting the escaped strings, the customer-facing status, the
+technician's first name only, and the ABSENCE of every id and contact
+detail; then asserts a short token, an unknown token and a row id are the
+same 404 (`tests/integration/customer-notify.itest.mjs`); a scan pins the
+token regex, the token-column read, the headers and the netlify.toml rule's
+place above the SPA catch-all (`tests/customer-notifications.test.mjs`).

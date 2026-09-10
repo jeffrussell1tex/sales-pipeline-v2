@@ -318,6 +318,28 @@ queue excludes by design, and its only undo was on the row that vanished;
 does not show (skips AND out-of-window deferrals) with Undo deferral / Undo
 skip; +1 mutant, 380/380, `index-CxVhrH5t.js`. **NOT shipped.**
 
+**Twelfth session, third part (Jeff: "Customer-facing notifications. Appointment
+confirmation, 'tech on the way' SMS, a public job-status link") — CLOSE.**
+**§0.111 `7e6eed3`**: per-org switches (`settings.extra.customerNotifications`,
+OFF by default, a new Settings → Dispatch → Customer notifications panel);
+`src/utils/customerNotifications.js` decides what a job change means and how
+it reads; `_customerNotify.mjs` runs after every dispatch-jobs write — email
+through Resend, SMS through Twilio only when the site has all three
+variables (the trail records "SMS not configured" until then), a random
+per-job token issued once, every attempt appended to
+`dispatch_jobs.customer_notifications` (two new nullable columns, both
+databases first); `dispatch-status.mjs` + a netlify.toml rewrite serve
+`/status/<token>` — the app's first unauthenticated read: token-only,
+escaped, no-store, the same 404 for malformed and unknown (guide §18b35
+new); the job detail shows the trail and copies the link. Twilio, read from
+Jeff's screenshots: brand "Jeff Russell" APPROVED 6 Apr 2026 (sole
+proprietor); the console's top issue was Error 30034 (message from an
+unregistered number) — the CAMPAIGN is not approved or the number is not in
+its sender pool; Trust Hub → Registrations → A2P 10DLC Campaigns is where it
+shows. Six gates, 685/685 unit (+13), 390/390 mutations (+10), 145/145
+integration (+6), build guard OK `index-D8PIckNZ.js`. **NOT shipped; not
+yet observed in a browser — the switch is Admin-only.**
+
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
 since 11 May, `<SlackConfigModal/>`; restored, the `check:tdz` gate taught
@@ -343,6 +365,7 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
+`### 0.111` with a paragraph beginning **"The company decides, per org."**, `docs/ACCELEREP_CODING_GUIDE.md` with `## 18b35. A Public Page Reads By An Unguessable Token, Never By An Id`,
 `### 0.110` with a paragraph beginning **"The arithmetic moves out."**,
 `### 0.109` with a paragraph beginning **"Seed data — struck by a read-only query."** and does
 `docs/ACCELEREP_CODING_GUIDE.md` carry `## 18b34. A Self-Service Endpoint Takes An Allowlist Of Fields`; does the state doc contain
@@ -365,7 +388,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); `dev` is now ahead by FOUR CODE commits (§0.109 `29a6e7e`, the prioColor2 collapse `9996c1c`, §0.110 `a3fa3e2`, its deferred-list correction `1866158`) — NOT shipped
+## 1. What shipped — the FOURTEENTH ship put §0.108 on `master` (9 Sep 21:17 UTC); `dev` is now ahead by FIVE CODE commits (§0.109 `29a6e7e`, the prioColor2 collapse `9996c1c`, §0.110 `a3fa3e2`, its deferred-list correction `1866158`, §0.111 `7e6eed3`) — NOT shipped
 
 **Twelfth session — NOTHING SHIPPED.** `master` stays at `59116be`. The third
 CODE commit, `a3fa3e2` (§0.110 — maintenance agreements: a NEW function
@@ -373,7 +396,11 @@ CODE commit, `a3fa3e2` (§0.110 — maintenance agreements: a NEW function
 functions; the schema change is ALREADY in both databases, §18c) and the
 fourth, `1866158` (Jeff's finding — a deferral past the lead window had no
 visible undo; the list under the queue now shows it; bundle only), join the
-two below; the bundle hash after all four is `index-CxVhrH5t.js`. On `dev`
+two below; the bundle hash after all four is `index-CxVhrH5t.js`. The
+fifth, `7e6eed3` (§0.111 — customer notifications: NEW functions
+`_customerNotify.mjs` and `dispatch-status.mjs`, so 80 functions, plus a
+netlify.toml redirect and two nullable `dispatch_jobs` columns ALREADY in
+both databases), takes the hash to `index-D8PIckNZ.js`. On `dev`
 alone before it: `29a6e7e` (§0.109 — the self-profile allowlist, the three settings
 banners, two inert dispatch buttons gone, the §9 backlog struck by reading;
 `_selfProfile.mjs` is a NEW function file, so the next ship is functions AND
@@ -1170,16 +1197,17 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (9 Sep, twelfth session — §0.109, the alias collapse and §0.110 on `dev`, NOT shipped)
 
-SIX gates green (`check:fnscope`: 86 function files — `_selfProfile.mjs` and
-`dispatch-plan-visits.mjs` are new; the five on 155 files) · **672/672
-unit** (30 new this session: `self-profile` 4, `settings-cascade-errors` 4,
-`dispatch-stubs` 2, `plan-visits` 13, `agreement-renewals` 8; three pinned
-counts raised for the sixth signal) · **380/380 mutations, printed green
-baseline** (19 added this session — 7 in `29a6e7e`, 1 in `9996c1c`, 10 in
-`a3fa3e2`, 1 in `1866158`; every run 100% caught, no STALE) · build
-`index-CxVhrH5t.js` (2,459 kB; the fourth new hash of the session — the
-deferred-list correction), guard OK, `dist/` cleared after each build · **139/139 integration** (11 new: `users-self` 5,
-`dispatch-plan-visits` 6) · **browser pass DONE for §0.109 as Karen (see
+SIX gates green (`check:fnscope`: 89 function files — `_selfProfile.mjs`,
+`dispatch-plan-visits.mjs`, `_customerNotify.mjs` and `dispatch-status.mjs`
+are new; the five on 157 files) · **685/685 unit** (43 new this session:
+`self-profile` 4, `settings-cascade-errors` 4, `dispatch-stubs` 2,
+`plan-visits` 13, `agreement-renewals` 8, `customer-notifications` 13;
+three pinned counts raised for the sixth signal) · **390/390 mutations, printed green
+baseline** (29 added this session — 7 in `29a6e7e`, 1 in `9996c1c`, 10 in
+`a3fa3e2`, 1 in `1866158`, 10 in `7e6eed3`; every run 100% caught, no
+STALE) · build `index-D8PIckNZ.js` (2,465 kB; the fifth new hash of the
+session — §0.111), guard OK, `dist/` cleared after each build · **145/145 integration** (17 new: `users-self` 5,
+`dispatch-plan-visits` 6, `customer-notify` 6) · **browser pass DONE for §0.109 as Karen (see
 below) AND for §0.110's queue as Karen (22:49–22:53 UTC): Defer to
 2026-09-20 rendered "deferred from 2026-08-01" due in 11 days and undo
 restored the overdue row; Skip with a reason emptied the queue, the skipped
@@ -1189,7 +1217,10 @@ renewals as Expiring in 36 days, Renew 12 months confirmed "through
 2027-10-15" and the list emptied; every value restored (end date
 2027-07-31; zero `dispatch_plan_visits` rows and zero renewal ledger rows,
 read back read-only). NOT observed: the plan panel's Renewal reminder field
-(Admin-only)** · **ONE schema change:**
+(Admin-only); §0.111 NOT observed — the switch is Admin-only and the pane
+holds Karen** · **TWO schema changes:** `dispatch_jobs.public_token` (text
+NULL, unique) and `dispatch_jobs.customer_notifications` (jsonb NULL) by
+`db/apply-customer-notifications.mjs` in both databases, read back; and
 `dispatch_service_plans.renewal_lead_days` (integer NULL) and the
 `dispatch_plan_visits` table, additive, applied to BOTH databases by
 `db/apply-plan-visits.mjs` before any code read them and read back (11
@@ -1258,10 +1289,27 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Twelfth-session prep (read at the thirteenth), in order:**
 - **Ritual first** (item 1), then `git log --oneline origin/master..dev` —
-  expect the docs commits after `59116be` PLUS four CODE commits, `29a6e7e`
-  (§0.109), `9996c1c` (prioColor2), `a3fa3e2` (§0.110) and `1866158` (its
-  deferred-list correction), and the docs commits after them. Those four are
-  UNSHIPPED CODE by design (Jeff has not said ship); anything else is a finding.
+  expect the docs commits after `59116be` PLUS five CODE commits, `29a6e7e`
+  (§0.109), `9996c1c` (prioColor2), `a3fa3e2` (§0.110), `1866158` (its
+  deferred-list correction) and `7e6eed3` (§0.111), and the docs commits
+  after them. Those five are UNSHIPPED CODE by design (Jeff has not said
+  ship); anything else is a finding.
+- **§0.111 on dev — Jeff as Admin (the switch is Admin-only):** Settings →
+  Dispatch → **Customer notifications** → master switch On → Save. Give the
+  test customer ("Dispatch Customer Test") Jeff's own email under Edit
+  details. Schedule its job (or re-schedule with a new date): the job detail's
+  **Customer notifications** reads "Appointment confirmation · email to … ·
+  sent" and "… text … not sent — SMS not configured on this site"; the email
+  arrives with "View visit status →"; **Copy status link** and open it in a
+  private window — the public page, no sign-in. Then Start travel → the
+  on-the-way email. Read the row back read-only (`public_token`,
+  `customer_notifications`). Turn the switch back off afterwards if the test
+  customer's email is real.
+- **SMS lights up with no code change** the day a site has
+  `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM_NUMBER` AND
+  the A2P campaign reads Approved (Twilio: Trust Hub → Registrations → A2P
+  10DLC Campaigns; the brand is already Approved). Until then every text
+  attempt is recorded on the job as "SMS not configured on this site".
 - **Jeff's finding on §0.110, fixed in `1866158`:** a deferral past the lead
   window left the queue with no visible undo. The list under the queue now
   shows every skip and every out-of-window deferral with its undo. Read on
