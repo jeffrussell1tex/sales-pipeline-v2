@@ -4716,9 +4716,12 @@ export default function DispatchTab() {
     const pageRef = useRef(null);
     const [pageTop, setPageTop] = useState(null);
     useLayoutEffect(() => {
-        if (!pageRef.current) return;
+        // No dependency list on purpose: the first renders are the loading state,
+        // which returns before the page div exists, so a mount-only effect never
+        // measured anything and the height stayed "100%" (observed on dev).
+        if (pageTop != null || !pageRef.current) return;
         setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY)));
-    }, []);
+    });
 
     // Sub-tab state persists to localStorage so navigating away and back restores
     // the last view, matching every other tab in the app (style guide §10).
@@ -5035,9 +5038,12 @@ export default function DispatchTab() {
                 // Normalise jobs — map DB shape to what BoardView/CrewBuilder expect
                 const normJobs = dbJobs.map(j => {
                     const cust = (custsData.customers || []).find(c => c.id === j.customerId);
-                    // Convert scheduledStart "HH:MM" to decimal hour for timeline
+                    // Convert scheduledStart "HH:MM" to decimal hour for timeline. Only a
+                    // job that is actually scheduled has a placed start: an unscheduled
+                    // job's scheduledStart is its PREFERRED time (§0.112), and a crew
+                    // held on it (§0.115) must not read as booked at that hour.
                     let startHr = null;
-                    if (j.scheduledStart) {
+                    if (j.scheduledStart && j.status !== 'unscheduled') {
                         const [hh, mm] = j.scheduledStart.split(':').map(Number);
                         startHr = hh + mm / 60;
                     }
@@ -5726,7 +5732,7 @@ export default function DispatchTab() {
                                 ? { ...j, title: saved.title, priority: normalisePriority(saved.priority),
                                     status: saved.status, scheduledDate: saved.scheduledDate,
                                     scheduledStart: saved.scheduledStart || null,
-                                    start: saved.scheduledStart ? hhToNum(saved.scheduledStart) : null,
+                                    start: saved.scheduledStart && saved.status !== 'unscheduled' ? hhToNum(saved.scheduledStart) : null,
                                     durationHrs: (saved.durationMinutes || 120) / 60,
                                     crewSize: saved.crewSize || j.crewSize,
                                     minLicense: saved.minLicense || null,
@@ -5798,7 +5804,7 @@ export default function DispatchTab() {
                         onHeld={({ jobId, jobName, techIds, crewNames }) => {
                             // Crew on the job, no time: the week board shows it on their row as
                             // TBD; the queue and the day board's rail still list it (§0.115).
-                            setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds } : j));
+                            setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds, start: null, status: 'unscheduled', window: 'TBD' } : j));
                             if (addAudit) {
                                 addAudit(techIds.length ? 'dispatch.crew.hold' : 'dispatch.crew.release', 'dispatch_job', jobId, jobName,
                                     techIds.length ? `Crew held for group schedule: ${crewNames.join(', ')}` : 'Held crew released');

@@ -1937,6 +1937,11 @@ const mutations = [
         '            .filter(t => !only || only.has(t.id))   // a held crew: these people, exactly (§0.115)',
         '            .filter(t => true)'],
 
+    ['board mapping: a preferred start on an UNSCHEDULED job reads as a placement again',
+        'src/Tabs/DispatchTab.jsx',
+        "if (j.scheduledStart && j.status !== 'unscheduled') {",
+        "if (j.scheduledStart) {"],
+
     ['dispatch page: the viewport-bound height is gone (the action bar can fall below the fold again)',
         'src/Tabs/DispatchTab.jsx',
         "height: pageTop != null ? `calc(100vh - ${pageTop}px)` : '100%', boxSizing: 'border-box', overflow: 'hidden' }}>",

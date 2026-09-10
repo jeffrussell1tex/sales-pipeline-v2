@@ -48,7 +48,12 @@ test('Wait for group schedule persists the crew with NO time and the status unch
     assert.ok(s.includes('const isHeld = heldIds.length > 0 && addedIdsNow.length === heldIds.length && addedIdsNow.every(id => heldIds.includes(id));'));
     assert.ok(s.includes("const held = sel && sel.start == null ? (sel.assignedTechIds || []) : [];\n        setAddedTechs(Object.fromEntries(held.map(id => [id, true])));"),
         'selecting a job brings its held crew back as the added crew');
-    assert.ok(s.includes("setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds } : j));"), 'the parent records the crew without a start');
+    assert.ok(s.includes("setJobs(prev => prev.map(j => j.id === jobId ? { ...j, assignedTechIds: techIds, start: null, status: 'unscheduled', window: 'TBD' } : j));"),
+        'the parent records the crew with NO placed start — holding a crew on a job that had a time takes the time off the client copy too');
+    // An unscheduled job's scheduledStart is its PREFERRED time (§0.112); it must
+    // not read as a placement, or a held crew shows as booked at that hour.
+    assert.ok(s.includes("if (j.scheduledStart && j.status !== 'unscheduled') {"), 'the board mapping places only a scheduled job');
+    assert.ok(s.includes("start: saved.scheduledStart && saved.status !== 'unscheduled' ? hhToNum(saved.scheduledStart) : null,"), 'the editor save mapping too');
     assert.ok(s.includes("addAudit(techIds.length ? 'dispatch.crew.hold' : 'dispatch.crew.release', 'dispatch_job', jobId, jobName,"));
 });
 
@@ -63,7 +68,9 @@ test('Mass-schedule next week honours a held crew — those people, exactly, or 
 
 test('the Dispatch page is bound to the viewport below the fixed header, so no action bar falls below the fold', () => {
     assert.ok(s.includes('import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from \'react\';'));
-    assert.ok(s.includes('setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY)));'), 'measured on mount, the ContactsTab pattern');
+    assert.ok(s.includes('setPageTop(Math.max(0, Math.round(pageRef.current.getBoundingClientRect().top + window.scrollY)));'), 'measured from the page div, the ContactsTab pattern');
+    assert.ok(s.includes("        if (pageTop != null || !pageRef.current) return;\n        setPageTop("), 'measured on every render until it exists — the loading state renders first, without the div');
+    assert.ok(!s.includes("getBoundingClientRect().top + window.scrollY)));\n    }, []);"), 'not mount-only');
     assert.ok(s.includes("height: pageTop != null ? `calc(100vh - ${pageTop}px)` : '100%', boxSizing: 'border-box', overflow: 'hidden' }}>"));
     assert.ok(s.includes('<div ref={pageRef} className="tab-page"'));
 });
