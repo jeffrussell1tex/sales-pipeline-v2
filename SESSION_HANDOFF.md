@@ -341,8 +341,19 @@ integration (+6), build guard OK `index-D8PIckNZ.js`. Dev deploy READ
 (`6aa1f500…` = `118ed31`, 00:09:23 UTC 10 Sep, **80 functions**, 2 redirect
 rules, secret scan clean) and `/status/<bogus>` PROBED — the function's own
 404 with no-store and noindex, so the rewrite beats the SPA catch-all.
-**NOT shipped; not yet observed with a real token — the switch is
-Admin-only and the pane holds Karen.**
+**NOT shipped.** **Then Jeff: "I assigned Jax Miller as tech — did override
+and schedule and it is not showing her scheduled" — read against the row:
+the schedule write had never reached the server (the crew builder's own
+pre-flight refusal — "Set a start time before scheduling." is the likeliest;
+the board was right); the same request sent from the pane as Karen → 200,
+Jax scheduled 9:00 on the 11th, the token issued, the confirmation email
+SENT to jeffrussell1@yahoo.com (Jeff had put his email on the test customer
+and turned the switch on). And the public page 404'd on that real token:
+Netlify substitutes a placeholder into a path, not a query string — the
+first probe with a bogus token could not tell. `89e85b6`: the rewrite is
+`/.netlify/functions/dispatch-status/:token` and the function reads the
+path segment; 390/390 mutations. Read on dev after the deploy: the pretty
+path 200.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -1302,17 +1313,21 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   deferred-list correction) and `7e6eed3` (§0.111), and the docs commits
   after them. Those five are UNSHIPPED CODE by design (Jeff has not said
   ship); anything else is a finding.
-- **§0.111 on dev — Jeff as Admin (the switch is Admin-only):** Settings →
-  Dispatch → **Customer notifications** → master switch On → Save. Give the
-  test customer ("Dispatch Customer Test") Jeff's own email under Edit
-  details. Schedule its job (or re-schedule with a new date): the job detail's
-  **Customer notifications** reads "Appointment confirmation · email to … ·
-  sent" and "… text … not sent — SMS not configured on this site"; the email
-  arrives with "View visit status →"; **Copy status link** and open it in a
-  private window — the public page, no sign-in. Then Start travel → the
-  on-the-way email. Read the row back read-only (`public_token`,
-  `customer_notifications`). Turn the switch back off afterwards if the test
-  customer's email is real.
+- **§0.111 on dev — PARTLY OBSERVED (Jeff turned the switch on and put his
+  email on the test customer; the schedule was sent from the pane as Karen
+  after his crew-builder attempt was refused pre-flight):** JOB-2026-0005 is
+  scheduled with Jax at 9:00 on the 11th; the trail reads "confirmation ·
+  email to jeffrussell1@yahoo.com · sent" and "sms · not sent — no customer
+  phone on file"; the token `oSP8_…` is on the row. **Remaining, Jeff's
+  eyeball:** the email in his Yahoo inbox ("Your Filter Change visit is
+  scheduled"), its "View visit status →" link opening the public page in a
+  private window (the pretty path works since `89e85b6`), the job detail's
+  Customer notifications trail and Copy status link, then Start travel (or
+  set En route) → the on-the-way email. Turn the switch back off afterwards
+  if he does not want the test customer mailed again. **UX note for Jeff's
+  call:** the crew builder's refusals are a red 11.5px line under the
+  buttons — easy to miss; a banner (§18b32) would have said why nothing
+  happened.
 - **SMS lights up with no code change** the day a site has
   `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM_NUMBER` AND
   the A2P campaign reads Approved (Twilio: Trust Hub → Registrations → A2P
