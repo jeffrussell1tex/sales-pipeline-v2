@@ -337,8 +337,12 @@ proprietor); the console's top issue was Error 30034 (message from an
 unregistered number) — the CAMPAIGN is not approved or the number is not in
 its sender pool; Trust Hub → Registrations → A2P 10DLC Campaigns is where it
 shows. Six gates, 685/685 unit (+13), 390/390 mutations (+10), 145/145
-integration (+6), build guard OK `index-D8PIckNZ.js`. **NOT shipped; not
-yet observed in a browser — the switch is Admin-only.**
+integration (+6), build guard OK `index-D8PIckNZ.js`. Dev deploy READ
+(`6aa1f500…` = `118ed31`, 00:09:23 UTC 10 Sep, **80 functions**, 2 redirect
+rules, secret scan clean) and `/status/<bogus>` PROBED — the function's own
+404 with no-store and noindex, so the rewrite beats the SPA catch-all.
+**NOT shipped; not yet observed with a real token — the switch is
+Admin-only and the pane holds Karen.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -1217,8 +1221,12 @@ renewals as Expiring in 36 days, Renew 12 months confirmed "through
 2027-10-15" and the list emptied; every value restored (end date
 2027-07-31; zero `dispatch_plan_visits` rows and zero renewal ledger rows,
 read back read-only). NOT observed: the plan panel's Renewal reminder field
-(Admin-only); §0.111 NOT observed — the switch is Admin-only and the pane
-holds Karen** · **TWO schema changes:** `dispatch_jobs.public_token` (text
+(Admin-only); §0.111 NOT observed with a real token — the switch is
+Admin-only and the pane holds Karen — but its deploy READ (`6aa1f500…` =
+`118ed31`, published 00:09:23 UTC 10 Sep, 80 functions, 2 redirect rules,
+secret scan clean over 405 files, `index-D8PIckNZ.js` served at 00:09:26
+UTC) and `/status/<bogus>` PROBED: HTTP 404 from the function itself,
+`Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`** · **TWO schema changes:** `dispatch_jobs.public_token` (text
 NULL, unique) and `dispatch_jobs.customer_notifications` (jsonb NULL) by
 `db/apply-customer-notifications.mjs` in both databases, read back; and
 `dispatch_service_plans.renewal_lead_days` (integer NULL) and the
