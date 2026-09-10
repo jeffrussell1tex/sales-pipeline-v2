@@ -27,6 +27,7 @@ import { sql } from 'drizzle-orm';
 // [table, column] pairs the suites need. Newest first -- the most recently added
 // column is the one most likely to be missing.
 const REQUIRED = [
+    ['dispatch_jobs', 'public_token'],               // §0.111: the customer's status-link token and the notification trail (db/apply-customer-notifications.mjs --test)
     ['dispatch_plan_visits', 'id'],                 // §0.110: skipped/deferred plan occurrences (db/apply-plan-visits.mjs --test)
     ['dispatch_service_plans', 'renewal_lead_days'], // §0.110: how early a renewal surfaces (same script)
     ['activities', 'email_message_id'],  // §0.105: a logged email's From/To/Cc/Message-ID (db/apply-email-headers.mjs --test)

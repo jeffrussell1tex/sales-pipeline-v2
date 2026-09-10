@@ -1,4 +1,8 @@
 import { serverErrorBody } from './_lib.mjs';
+// Customer-facing templates (state §0.111) render customer and company strings
+// from the database, so they are escaped; the internal templates above render
+// our own users' data and always have not.
+import { esc as escHtml } from '../../src/utils/customerNotifications.js';
 /**
  * send-email.mjs
  * Shared mailer utility — all email sending flows through this function.
@@ -146,6 +150,43 @@ function formatCurrency(val) {
 // ─── Email templates ─────────────────────────────────────────────────────────
 
 export const emailTemplates = {
+
+    /**
+     * To the CUSTOMER: their visit is booked, or its date/time changed (state §0.111).
+     * @param {{ companyName, customerName, jobTitle, when, techFirstName, statusUrl }} d
+     */
+    customerAppointmentConfirmed({ companyName, customerName, jobTitle, when, techFirstName, statusUrl }) {
+        const co = escHtml(companyName || 'Your service provider');
+        const subject = `Your ${jobTitle || 'service'} visit is scheduled — ${companyName || 'confirmation'}`;
+        const html = layout(subject, `
+            <h2>Your visit is scheduled</h2>
+            <p>Hi ${escHtml(customerName || 'there')}, ${co} has scheduled your <strong>${escHtml(jobTitle || 'service')}</strong> visit.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">When</span><span>${escHtml(when)}</span></div>
+                <div class="detail-row"><span class="detail-label">Technician</span><span>${escHtml(techFirstName || 'To be assigned')}</span></div>
+                <div class="detail-row"><span class="detail-label">From</span><span>${co}</span></div>
+            </div>
+            ${statusUrl ? `<a class="btn" href="${escHtml(statusUrl)}">View visit status →</a>` : ''}
+            <p style="margin-top:16px">Need to change it? Reply to this email or call ${co}.</p>
+        `);
+        return { subject, html };
+    },
+
+    /**
+     * To the CUSTOMER: the technician is on the way (state §0.111).
+     * @param {{ companyName, customerName, jobTitle, when, techFirstName, statusUrl }} d
+     */
+    customerTechOnTheWay({ companyName, customerName, jobTitle, techFirstName, statusUrl }) {
+        const co = escHtml(companyName || 'Your service provider');
+        const who = techFirstName ? `${techFirstName} is` : 'Your technician is';
+        const subject = `${who} on the way — ${companyName || 'your service visit'}`;
+        const html = layout(subject, `
+            <h2>${escHtml(who)} on the way</h2>
+            <p>Hi ${escHtml(customerName || 'there')}, ${escHtml(who)} heading to you now for your <strong>${escHtml(jobTitle || 'service')}</strong> visit from ${co}.</p>
+            ${statusUrl ? `<a class="btn" href="${escHtml(statusUrl)}">Track visit status →</a>` : ''}
+        `);
+        return { subject, html };
+    },
 
     /**
      * A dispatch customer's maintenance agreement is inside its renewal window

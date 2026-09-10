@@ -1123,6 +1123,13 @@ export const dispatchJobs = pgTable('dispatch_jobs', {
     invoiceStatus:      varchar('invoice_status', { length: 20 }).default('none'),
     invoicePaidAt:      varchar('invoice_paid_at', { length: 20 }),
     customerPoNumber:   varchar('customer_po_number', { length: 100 }),
+    // Customer-facing notifications (state §0.111). public_token is the whole
+    // authority of the customer's status link — 24 random bytes, base64url,
+    // issued by _customerNotify.mjs on first use, never an id. The trail is
+    // every attempt, sent or not: [{ type, channel, to, at, ok, error?, by? }].
+    // Both added to both databases by db/apply-customer-notifications.mjs (§18c).
+    publicToken:          text('public_token'),
+    customerNotifications: jsonb('customer_notifications'),
     techNotes:          text('tech_notes'),                            // filled in by tech on site
     completionNotes:    text('completion_notes'),
     customerSignature:  boolean('customer_signature').default(false),
@@ -1141,6 +1148,7 @@ export const dispatchJobs = pgTable('dispatch_jobs', {
 }, (t) => [
     index('dispatch_jobs_org_id_idx').on(t.orgId),
     uniqueIndex('dispatch_jobs_org_number_uq').on(t.orgId, t.jobNumber),
+    uniqueIndex('dispatch_jobs_public_token_uq').on(t.publicToken),
 ]);
 
 // ── DISPATCH JOB LINE ITEMS ───────────────────────────────────────────────────

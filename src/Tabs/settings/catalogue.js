@@ -35,6 +35,7 @@ export const SETTINGS_ITEMS = [
     { id:'dsp-crews',     scope:'workspace', category:'Dispatch', name:'Crews',           desc:'Named groups of techs who work together — coverage area, default vehicle, crew lead.', status:'ok', statusDetail:'Admin-defined' },
     { id:'dsp-proptypes', scope:'workspace', category:'Dispatch', name:'Property types',  desc:'What kind of premises a service customer is — commercial, residential, industrial and any you add.', status:'ok', statusDetail:'Admin-defined' },
     { id:'dsp-plans',     scope:'workspace', category:'Dispatch', name:'Service plans',   desc:'Maintenance and service agreements — coverage, visit cadence, SLA, and pricing.', status:'ok', statusDetail:'Admin-defined' },
+    { id:'dsp-customer-notify', scope:'workspace', category:'Dispatch', name:'Customer notifications', desc:'What your service customers are told — appointment confirmations, "technician on the way", and a private job-status link. Off until you turn it on.', status:'ok', statusDetail:'Admin-defined' },
     { id:'dsp-templates', scope:'workspace', category:'Dispatch', name:'Job templates',   desc:'Per Customer Type defaults — crew size, duration, required skills, license, and auto-create rule.', status:'ok', statusDetail:'Admin-defined' },
     // Quoting
     { id:'price-book',       scope:'workspace', category:'Quoting', name:'Price book',            desc:'Product catalog for quotes — edit in Quotes tab',             status:'linked',  statusDetail:null,   link:true },

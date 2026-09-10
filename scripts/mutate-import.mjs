@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1820,6 +1820,56 @@ const mutations = [
         'src/Tabs/DispatchTab.jsx',
         "    const hidden = (exceptions || []).filter(e => e.visit.action === 'skipped' || !queued.has(exceptionKey(e)));",
         "    const hidden = (exceptions || []).filter(e => e.visit.action === 'skipped');"],
+    // ── Customer-facing notifications (0.111) ────────────────────────────────
+    ['customer-notify: the org master switch is ignored — a workspace that never turned it on emails its customers',
+        'src/utils/customerNotifications.js',
+        '    if (!c.enabled || !after) return [];',
+        '    if (!after) return [];'],
+
+    ['customer-notify: an unchanged appointment is confirmed again on every save',
+        'src/utils/customerNotifications.js',
+        '    if (scheduledNow && !alreadyTold && (c.confirmationEmail || c.confirmationSms)) out.push(\'confirmation\');',
+        '    if (scheduledNow && (c.confirmationEmail || c.confirmationSms)) out.push(\'confirmation\');'],
+
+    ['customer-notify: en_route is announced on every save while en_route',
+        'src/utils/customerNotifications.js',
+        "    const enRouteNow = after.status === 'en_route' && (!before || before.status !== 'en_route');",
+        "    const enRouteNow = after.status === 'en_route';"],
+
+    ['customer-notify: SMS is attempted without Twilio credentials',
+        'netlify/functions/_customerNotify.mjs',
+        "                else if (!smsConfigured()) entry(type, 'sms', to, false, { error: 'SMS not configured on this site' });",
+        "                else if (false) entry(type, 'sms', to, false, { error: 'SMS not configured on this site' });"],
+
+    ['customer-notify: the status link carries the job id instead of a random token',
+        'netlify/functions/_customerNotify.mjs',
+        '            token = newPublicToken();',
+        '            token = after.id;'],
+
+    ['dispatch-status: the page is found by id, not token',
+        'netlify/functions/dispatch-status.mjs',
+        'const [job] = await db.select().from(dispatchJobs).where(eq(dispatchJobs.publicToken, token));',
+        'const [job] = await db.select().from(dispatchJobs).where(eq(dispatchJobs.id, token));'],
+
+    ['dispatch-status: the company name is rendered unescaped',
+        'netlify/functions/dispatch-status.mjs',
+        '<p class="co">${esc(company)}</p>',
+        '<p class="co">${company}</p>'],
+
+    ['settings: the customerNotifications key drops out of the PUT merge (every save resets it)',
+        'netlify/functions/settings.mjs',
+        "                customerNotifications: 'customerNotifications' in data ? cleanCustomerNotifications(data.customerNotifications) : existingExtra.customerNotifications || {},\n",
+        ''],
+
+    ['dispatch-jobs: the dispatcher path stops telling the customer',
+        'netlify/functions/dispatch-jobs.mjs',
+        '            await notifyCustomer({ orgId, before: current, after: written, actorName: await getCallerName(userId, orgId) });\n            const [updated]',
+        '            const [updated]'],
+
+    ['netlify.toml: the status link falls behind the SPA catch-all',
+        'netlify.toml',
+        'from = "/status/:token"',
+        'from = "/status-link/:token"'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

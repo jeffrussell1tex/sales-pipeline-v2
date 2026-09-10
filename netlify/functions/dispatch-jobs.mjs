@@ -7,7 +7,10 @@ import {
 } from '../../db/schema.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
-import { serverErrorBody, withNumberRetry } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry, getCallerName } from './_lib.mjs';
+// Customer-facing notifications (state §0.111): decided and sent AFTER the row
+// is written, from the stored before/after rows; never changes the response.
+import { notifyCustomer } from './_customerNotify.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -21,6 +24,8 @@ function normaliseJob(row) {
         id:               row.id,
         orgId:            row.orgId             ?? row.org_id,
         jobNumber:        row.jobNumber         ?? row.job_number         ?? null,
+        publicToken:      row.publicToken       ?? row.public_token       ?? null,
+        customerNotifications: Array.isArray(row.customerNotifications ?? row.customer_notifications) ? (row.customerNotifications ?? row.customer_notifications) : [],
         customerId:       row.customerId        ?? row.customer_id,
         locationId:       row.locationId        ?? row.location_id        ?? null,
         accountId:        row.accountId         ?? row.account_id         ?? null,
@@ -272,7 +277,7 @@ export const handler = async (event) => {
 
             // POST is an upsert, so reuse any number already issued for this id
             // rather than reissuing one — job numbers are immutable.
-            const [priorJob] = await db.select({ jobNumber: dispatchJobs.jobNumber })
+            const [priorJob] = await db.select()
                 .from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
 
@@ -342,6 +347,10 @@ export const handler = async (event) => {
 
             await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');
 
+            const [written] = await db.select().from(dispatchJobs)
+                .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
+            // A job created already scheduled confirms the appointment (§0.111).
+            await notifyCustomer({ orgId, before: priorJob || null, after: written, actorName: await getCallerName(userId, orgId) });
             const [inserted] = await db.select().from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
 
@@ -386,12 +395,16 @@ export const handler = async (event) => {
                 await db.update(dispatchJobs).set(updates)
                     .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
 
-                const [updatedRow] = await db.select().from(dispatchJobs)
+                const [written] = await db.select().from(dispatchJobs)
                     .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
 
                 if ('status' in data && data.status !== current.status) {
                     await recordStatusChange(orgId, id, current.status, data.status, userId, 'Updated in the field');
                 }
+                // "Start travel" from the truck is the on-the-way message (§0.111).
+                await notifyCustomer({ orgId, before: current, after: written, actorName: await getCallerName(userId, orgId) });
+                const [updatedRow] = await db.select().from(dispatchJobs)
+                    .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
 
                 return { statusCode: 200, headers, body: JSON.stringify({ job: normaliseJob(updatedRow) }) };
             }
@@ -430,6 +443,10 @@ export const handler = async (event) => {
                 await recordStatusChange(orgId, id, fromStatus, toStatus, userId, data.statusNote ?? null);
             }
 
+            const [written] = await db.select().from(dispatchJobs)
+                .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+            // Scheduling (or re-scheduling) confirms; en_route announces (§0.111).
+            await notifyCustomer({ orgId, before: current, after: written, actorName: await getCallerName(userId, orgId) });
             const [updated] = await db.select().from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
 

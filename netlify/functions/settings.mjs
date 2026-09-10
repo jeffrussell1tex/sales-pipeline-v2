@@ -4,6 +4,7 @@ import { eq, desc } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAdmin } from './auth.mjs';
 import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
 import { cleanSlackAlerts } from '../../src/utils/slackAlerts.js';
+import { cleanCustomerNotifications } from '../../src/utils/customerNotifications.js';
 import { encrypt, decrypt } from './crypto.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 import { DEFAULT_LEAD_SCORING } from './score-lead.mjs';
@@ -109,6 +110,9 @@ export const handler = async (event) => {
                 // failure mode after the audit-streaming keys; see guide 18b.
                 connectedApps:  row.extra?.connectedApps  || {},
                 slackConfig:    row.extra?.slackConfig    || {},
+                // What dispatch customers are told (state §0.111). Off by default;
+                // the panel and the jobs function read one normaliser.
+                customerNotifications: cleanCustomerNotifications(row.extra?.customerNotifications),
                 // Written server-side by integration-requests.mjs (§0.90); read by
                 // the Connected Apps panel. Carried here so an Admin settings save
                 // never wipes it.
@@ -263,6 +267,7 @@ export const handler = async (event) => {
                 leadConvBenchmarks:   'leadConvBenchmarks'   in data ? (data.leadConvBenchmarks   || null) : existingExtra.leadConvBenchmarks   || null,
                 connectedApps:  'connectedApps'  in data ? (data.connectedApps  || {}) : existingExtra.connectedApps  || {},
                 slackConfig:    'slackConfig'    in data ? (data.slackConfig    || {}) : existingExtra.slackConfig    || {},
+                customerNotifications: 'customerNotifications' in data ? cleanCustomerNotifications(data.customerNotifications) : existingExtra.customerNotifications || {},
                 integrationRequests: 'integrationRequests' in data ? (data.integrationRequests || {}) : existingExtra.integrationRequests || {},
                 // Company profile detail fields
                 companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,

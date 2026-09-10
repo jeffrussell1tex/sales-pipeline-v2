@@ -49,6 +49,7 @@ import { DispatchVehiclesDetail } from './settings/dispatch/DispatchVehiclesDeta
 import { DispatchCrewsDetail } from './settings/dispatch/DispatchCrewsDetail.jsx';
 import { DispatchJobTemplatesDetail } from './settings/dispatch/DispatchJobTemplatesDetail.jsx';
 import { DispatchServicePlansDetail } from './settings/dispatch/DispatchServicePlansDetail.jsx';
+import { DispatchCustomerNotificationsDetail } from './settings/dispatch/DispatchCustomerNotificationsDetail.jsx';
 import { DispatchPropertyTypesDetail } from './settings/dispatch/DispatchPropertyTypesDetail.jsx';
 import { SETTINGS_ITEMS, WORKSPACE_TABS_BASE } from './settings/catalogue.js';
 import { cardStateOf, healthChecksOf, healthSummaryOf } from '../utils/settingsCards';
@@ -297,6 +298,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         'dsp-crews':            'dsp-crews',
         'dsp-templates':        'dsp-templates',
         'dsp-plans':            'dsp-plans',
+        'dsp-customer-notify':  'dsp-customer-notify',
         'dsp-proptypes':        'dsp-proptypes',
         'dispatch-skills':      'dispatch-skills',
         'dispatch-vehicles':    'dispatch-vehicles',
@@ -480,6 +482,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         if (id === 'dsp-crews')     return <DispatchCrewsDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'dsp-templates') return <DispatchJobTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'dsp-plans')     return <DispatchServicePlansDetail settings={settings} onBack={onBack} setSettingsDirty={setSettingsDirty}/>;
+        if (id === 'dsp-customer-notify') return <DispatchCustomerNotificationsDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'dsp-proptypes') return <DispatchPropertyTypesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
         if (id === 'duplicates')      return <DuplicateScanView onBack={onBack}/>;

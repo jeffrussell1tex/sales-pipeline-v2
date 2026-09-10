@@ -958,6 +958,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
             // The parent owns jobs state and the audit logger.
             onScheduled({
                 jobId:     selectedJob.id,
+                serverJob: data.job || null,
                 jobName:   selectedJob.title || selectedJob.customer,
                 techIds:   addedIds,
                 crewNames,
@@ -1081,7 +1082,8 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                     </div>
                                 ))}
                             </div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                            <CustomerNotifyTrail job={selectedJob}/>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', marginTop: 10 }}>
                                 <span style={{ fontSize: 10.5, fontWeight: 600, color: T.inkMid, marginRight: 4 }}>Required:</span>
                                 {(selectedJob.needSkills || []).map(id => {
                                     const s = skills.find(sk => sk.id === id);
@@ -1751,6 +1753,53 @@ const buildWonBridgeJobs = ({ opportunities, jobs, customers, accounts, template
 // Plan visits inside their lead window, plus any already scheduled so the queue
 // reads as the full picture rather than only the outstanding half. Every row is
 // computed; nothing here exists in the database until "Create visit" is used.
+// ── Customer notifications on a job (state §0.111) ───────────────────────────
+// What the customer was told and when, from the job's trail, plus the private
+// status link to copy. Module scope: a component defined inside the detail pane
+// would remount on every keystroke there (CLAUDE.md).
+const NOTIFY_TYPE_LABEL = { confirmation: 'Appointment confirmation', on_the_way: 'Technician on the way' };
+const CustomerNotifyTrail = ({ job }) => {
+    const [copied, setCopied] = useState(false);
+    const trail = Array.isArray(job?.customerNotifications) ? job.customerNotifications : [];
+    const link = job?.publicToken ? `${window.location.origin}/status/${encodeURIComponent(job.publicToken)}` : null;
+    const copy = async () => {
+        if (!link) return;
+        try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1800); }
+        catch { setCopied(false); }
+    };
+    const when = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); };
+    return (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.7 }}>Customer notifications</span>
+                {link && (
+                    <button onClick={copy} title={link}
+                        style={{ marginLeft: 'auto', padding: '3px 9px', background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r,
+                            fontSize: 11, fontWeight: 600, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                        {copied ? 'Link copied' : 'Copy status link'}
+                    </button>
+                )}
+            </div>
+            {trail.length === 0 ? (
+                <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                    Nothing sent yet. Confirmations go out when the job is scheduled and "on the way" when it starts travel — if Customer notifications are on under Settings → Dispatch.
+                </div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {[...trail].reverse().slice(0, 6).map((n, i) => (
+                        <div key={i} style={{ fontSize: 11.5, color: n.ok ? T.inkMid : T.danger, fontFamily: T.sans }}>
+                            <span style={{ fontWeight: 600, color: n.ok ? T.ink : T.danger }}>{NOTIFY_TYPE_LABEL[n.type] || n.type}</span>
+                            {' · '}{n.channel === 'sms' ? 'text' : 'email'}{n.to ? ` to ${n.to}` : ''}
+                            {' · '}{n.ok ? 'sent' : `not sent — ${n.error || 'unknown reason'}`}
+                            {n.at ? <span style={{ color: T.inkMuted }}>{' · '}{when(n.at)}</span> : null}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const VISIT_TONE = {
     overdue:   { bg: 'danger', label: 'Overdue' },
     due:       { bg: 'warn',   label: 'Due' },
@@ -4775,6 +4824,10 @@ export default function DispatchTab() {
                         requiredVehicleType: j.requiredVehicleType || null,
                         servicePlanId:  j.servicePlanId || null,
                         planDueDate:    j.planDueDate   || null,
+                        // Customer-facing notifications (state §0.111): the status
+                        // link's token and the trail of what was sent, shown on the job.
+                        publicToken:    j.publicToken || null,
+                        customerNotifications: Array.isArray(j.customerNotifications) ? j.customerNotifications : [],
                         value:          parseFloat(j.invoiceAmount || 0),
                         // Was hardcoded 'Journeyman', discarding the stored requirement —
                         // so every licence blocker compared against a constant.
@@ -5499,10 +5552,13 @@ export default function DispatchTab() {
                         selectedJobId={selectedJobId || jobsWithBridge[0]?.id}
                         onSelectJob={setSelectedJobId}
                         onBack={() => setView('board')}
-                        onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden }) => {
+                        onScheduled={({ jobId, jobName, techIds, crewNames, startHr, startTime, startDate, overridden, serverJob }) => {
                             setJobs(prev => prev.map(j => j.id === jobId
                                 ? { ...j, assignedTechIds: techIds, start: startHr, status: 'scheduled',
-                                    window: startTime, scheduledDate: startDate }
+                                    window: startTime, scheduledDate: startDate,
+                                    // The server decided and recorded the customer notification (§0.111).
+                                    publicToken: serverJob?.publicToken ?? j.publicToken ?? null,
+                                    customerNotifications: Array.isArray(serverJob?.customerNotifications) ? serverJob.customerNotifications : (j.customerNotifications || []) }
                                 : j));
                             if (addAudit) {
                                 addAudit(

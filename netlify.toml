@@ -38,6 +38,15 @@ schedule = "0 6 * * *"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
+# The customer's job-status link (state §0.111): /status/<token> is served by
+# the public dispatch-status function. Netlify applies redirects in order, so
+# this MUST stay above the SPA catch-all or the SPA (and its sign-in wall)
+# swallows it.
+[[redirects]]
+  from = "/status/:token"
+  to = "/.netlify/functions/dispatch-status?t=:token"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
