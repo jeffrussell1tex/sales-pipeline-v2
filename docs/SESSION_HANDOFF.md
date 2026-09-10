@@ -1403,7 +1403,7 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 ## 5. Next — start here
 
-**After the SIXTEENTH ship — prod observations, Jeff's (Admin, salespipelinetracker.com), in order:**
+**After the SIXTEENTH ship — prod observations: DONE. Jeff (Admin, salespipelinetracker.com), 10 Sep: "everything tested out perfectly."** The list below is what he walked; nothing is outstanding from it.
 - **§0.112/§0.115 on prod:** Dispatch → Queue on the big monitor — Date /
   Start / Schedule crew visible without scrolling; select an unscheduled job,
   + Add a technician → the next-step card at the top ("Crew chosen — …
