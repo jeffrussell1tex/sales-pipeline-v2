@@ -1343,7 +1343,12 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   day). Then Jobs → that job → set **Preferred start time** 1:00 PM, Save →
   the row's `scheduled_start` 13:00, `scheduled_end` 14:00, `time_slot`
   exact (read-only); back in the Queue the builder's Start reads 1:00 PM
-  without being asked. Ship when Jeff says so.
+  without being asked. Ship when Jeff says so. **Partly OBSERVED in the pane
+  (18:00 UTC): an unscheduled job (JOB-2026-0007, Mon 14) scores both techs
+  with no "Double-booked" line; the editor shows the new fields. NOT yet
+  observed: a Start of 9:00 on the Fri 11 job producing Jax's real clash, and
+  a saved preferred time seeding the builder.** Note: the dev technicians
+  have no working hours set, so every day reads "Not rostered".
 
 **After the FIFTEENTH ship — prod observations, Jeff's, in order:**
 - **§0.109 on prod (Jeff, Admin):** avatar → Profile, change the title, Save;
