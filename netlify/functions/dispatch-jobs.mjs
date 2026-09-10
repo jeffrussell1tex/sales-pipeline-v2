@@ -421,6 +421,9 @@ export const handler = async (event) => {
                 'requiresFollowUp','followUpJobId','parentJobId','createdBy','dispatchedBy',
             ];
             scalarFields.forEach(f => { if (f in data) updates[f] = data[f]; });
+            // trade and jobType are NOT NULL ('' is "none", as create writes). The
+            // editor's "— None —" arrived as null and the save 500ed (§0.113).
+            for (const f of ['trade', 'jobType']) if (f in data && data[f] == null) updates[f] = '';
 
             // Handle timestamp fields
             if ('actualStart' in data) updates.actualStart = data.actualStart ? new Date(data.actualStart) : null;

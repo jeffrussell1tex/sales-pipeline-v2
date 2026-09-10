@@ -4,6 +4,7 @@ import { dbFetch, dbWrite, waitForToken } from '../utils/storage';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
 // pipeline-alerts job (state §0.110).
 import { planVisitState, buildVisitQueue, buildRenewalQueue, renewedExpiry } from '../utils/planVisits.js';
+import { defaultWorkWeek, DEFAULT_SHIFT_HOURS } from '../utils/workWeek.js';
 import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ const LICENSE_ORDER = { Apprentice: 0, Journeyman: 1, Master: 2, Lead: 3 };
 // nothing consumed them, so the scheduler treated every tech as available
 // 7a-6p, seven days a week.
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const DEFAULT_SHIFT = { start: '07:00', end: '17:00' };
+const DEFAULT_SHIFT = DEFAULT_SHIFT_HOURS;   // one default, shared with the new-technician draft and the server (§0.113)
 
 const shiftForDate = (tech, dateStr) => {
     const wh = tech?.workingHours || {};
@@ -3115,7 +3116,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
         setStatus(null);
         setDraft({ id: 'dtech_' + crypto.randomUUID(), _isNew: true, firstName: '', lastName: '',
             userId: '', email: '', phone: '', employmentType: 'employee', status: 'active',
-            homeZip: '', skills: [], laborRate: '', overtimeRate: '', assignedVehicleId: '', notes: '' });
+            homeZip: '', skills: [], laborRate: '', overtimeRate: '', assignedVehicleId: '', notes: '', workingHours: defaultWorkWeek() });
     });
 
     const save = async () => {
@@ -3473,8 +3474,9 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                     description:     draft.description || null,
                     priority:        draft.priority || 'normal',
                     status:          draft.status || 'unscheduled',
-                    jobType:         draft.jobType || null,
-                    trade:           draft.trade   || null,
+                    // Both columns are NOT NULL; '' is "none", as the create path writes (§0.113).
+                    jobType:         draft.jobType || '',
+                    trade:           draft.trade   || '',
                     durationMinutes: Math.round((parseFloat(draft.durationHrs ?? ((draft.durationMinutes || 120) / 60)) || 2) * 60),
                     crewSize:        parseInt(draft.crewSize, 10) || 1,
                     minLicense:      draft.minLicense || null,

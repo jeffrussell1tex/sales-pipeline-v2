@@ -237,3 +237,19 @@ test('the public status page renders by token only, escaped and no-store; malfor
     assert.equal(bad.body, unknown.body, 'the two 404s are indistinguishable');
     assert.equal((await statusPage({ httpMethod: 'POST', queryStringParameters: { t: token } })).statusCode, 405);
 });
+
+// §0.113 — the Jobs editor's "— None —" category. trade and job_type are NOT
+// NULL; the editor sent null and the save 500ed. The dispatcher PUT now stores
+// the empty string the create path already writes, and the row is otherwise
+// untouched.
+test('PUT with a null trade / jobType saves (stored as the empty string), instead of a 500', async () => {
+    const beforeRow = await rowOf(JOB_A);
+    const r = parse(await call('PUT', ORG_A, { params: { id: JOB_A }, body: { id: JOB_A, title: beforeRow.title, trade: null, jobType: null } }));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const row = await rowOf(JOB_A);
+    assert.equal(row.trade, '');
+    assert.equal(row.jobType, '');
+    assert.equal(row.title, beforeRow.title);
+    assert.equal(row.status, beforeRow.status, 'nothing else moved');
+    assert.equal(r.body.job.trade, '', 'the response carries what was stored');
+});

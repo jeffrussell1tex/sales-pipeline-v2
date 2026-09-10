@@ -3,6 +3,7 @@ import { dispatchTechnicians } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
+import { defaultWorkWeek } from '../../src/utils/workWeek.js';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -88,7 +89,9 @@ export const handler = async (event) => {
                 serviceZones:     JSON.stringify(data.serviceZones     ?? []),
                 skills:           JSON.stringify(data.skills           ?? []),
                 certifications:   JSON.stringify(data.certifications   ?? []),
-                workingHours:     JSON.stringify(data.workingHours     ?? {}),
+                // A new technician starts rostered Mon–Fri 08:00–17:00 unless the
+                // create carries a pattern; an explicit {} is "no working days" (§0.113).
+                workingHours:     JSON.stringify(data.workingHours     ?? defaultWorkWeek()),
                 laborRate:        data.laborRate        ?? null,
                 overtimeRate:     data.overtimeRate     ?? null,
                 assignedVehicleId: data.assignedVehicleId ?? null,
