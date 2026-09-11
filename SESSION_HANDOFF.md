@@ -142,6 +142,23 @@ as it should"** (the embed from a local file, New link, Turn off / Turn on).
 **NOT shipped** — `dev` is ahead of `master` by TWO code commits, `04ad57b`
 and `d936baf`, plus docs; ship when Jeff says so (functions AND bundle AND
 one netlify.toml rewrite; no schema change).
+**Then Jeff: "do the second half of the recommendation please"** → **§0.122
+`59cd6c3` — email templates for reps, mailto-based:** an org library in
+`settings.extra.emailTemplates` (both halves, `cleanEmailTemplates`), nine
+merge fields (the contact's names, company, title; the rep's name, email,
+phone from `myProfile`; the org's company name), `renderTemplate` leaving an
+unknown field visible; Settings → Sales process → **Email templates** (a
+list, an editor with merge-field chips and a sample preview, Save through
+`putSettings`); the contact rail's ✉ Email becomes "✉ Email ▾" once a
+template exists and opens a picker — Blank email plus one real `mailto:` per
+template rendered for THAT contact — the rep's own client sends it, and the
+click logs the Email activity with "Template: <name> — <subject>". +1 test
+file (7), 4 mutants; six gates (161 files), 735/735 unit, 153/153
+integration, **429/429 mutations after a printed green baseline**,
+`index-Bk9klMuV.js`; no schema change. **LANDED on dev** at 22:38:28 UTC
+(the hash poll). **NOT observed** (Jeff's, §5). **NOT shipped** — `dev` is
+ahead of `master` by THREE code commits, `04ad57b`, `d936baf` (§0.121) and
+`59cd6c3` (§0.122), plus docs.
 
 **Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
@@ -656,7 +673,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the SEVENTEENTH ship put §0.117–§0.120 on `master` (11 Sep 20:59 UTC, `dab2655`, bundle only); `dev` is ahead by TWO CODE commits, §0.121 `04ad57b` and its follow-up `d936baf` (web-to-lead) — NOT shipped
+## 1. What shipped — the SEVENTEENTH ship put §0.117–§0.120 on `master` (11 Sep 20:59 UTC, `dab2655`, bundle only); `dev` is ahead by THREE CODE commits, §0.121 `04ad57b` and its follow-up `d936baf` (web-to-lead), §0.122 `59cd6c3` (email templates) — NOT shipped
 
 **PROD SHIPPED — the SEVENTEENTH ship (Jeff: "all works as it is supposed to. Ship prod", 11 Sep).** Pre-flight: tree clean, `dev` == `origin/dev` == `dab2655`, `origin/master` (`0726934`) an ancestor of `dev`, 15 commits after it (five code: `e4d9ac3`, `889cc85`, `0deb6b6`, `074669d`, `e5d574f`), no function, schema or config change (the diff over `netlify/`, `db/`, `package.json`, `netlify.toml` empty). `git push origin dev:master` at 20:59:07 UTC: `master` `0726934` → `dab2655`. salespipelinetracker.com serving `index-BDt4t8KW.js` from 20:59:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-DtQQ5W86.js` — the key differs); the served bundle carries "Edit job →", "Create job →", "crew and duration not set", "No deals match the current filter." and `"allTime"?[]:[`, and NOT `"thisQuarter"?[]`. The Netlify deploy record was not read this time (the reader takes a deploy id; none to hand). **What prod does differently from this moment:** the Queue lists only jobs to schedule; a scheduled job clicked on the Job Board opens its record in Jobs; "Edit job →" / "Create job →" in the queue header and on the cards; unset template values read "Not set"; the queue card's "prefers" note and no 8 px scroll (§0.117–§0.118); the Pipeline List shows Closed Won / Closed Lost deals when the filter asks (§0.119); the Filter popover's "This quarter" filters and "All time" reads back as itself (§0.120). Every "NOT shipped" in §0.117–§0.120 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in §5.
 
@@ -1473,7 +1490,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (11 Sep, thirteenth session — after the SEVENTEENTH ship, then §0.121 on dev)
 
-**AT CLOSE: `origin/master` == `dab2655` (the SEVENTEENTH ship); `dev` == `origin/dev` == `d936baf` before the handoff commit — ahead by TWO CODE commits (§0.121 web-to-lead `04ad57b` and its follow-up `d936baf`: functions `lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`; `netlify.toml` one rewrite; the bundle; NO schema change) and this handoff. Counts: six gates (check:fnscope 91 function files; the five on 159 files), 728/728 unit, 153/153 integration, 425/425 mutations (printed green baseline, no restore errors), build guard OK 2,483 kB `index-CPK391Dz.js`, `dist/` cleared; dev serving `index-CPK391Dz.js` from 22:20:08 UTC 11 Sep (the first cut `index-DsxCtD8l.js` from 22:06:49).**
+**AT CLOSE: `origin/master` == `dab2655` (the SEVENTEENTH ship); `dev` == `origin/dev` == `59cd6c3` before the handoff commit — ahead by THREE CODE commits (§0.121 web-to-lead `04ad57b` and its follow-up `d936baf`: functions `lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`; `netlify.toml` one rewrite; the bundle — and §0.122 email templates `59cd6c3`: `settings.mjs` and the bundle; NO schema change in either) and this handoff. Counts: six gates (check:fnscope 91 function files; the five on 161 files), 735/735 unit, 153/153 integration, 429/429 mutations (printed green baseline, no restore errors), build guard OK 2,494 kB `index-Bk9klMuV.js`, `dist/` cleared; dev serving `index-Bk9klMuV.js` from 22:38:28 UTC 11 Sep (before it `index-CPK391Dz.js` from 22:20:08, `index-DsxCtD8l.js` from 22:06:49).**
 
 **AT THE SEVENTEENTH SHIP (20:59:07 UTC 11 Sep): `master` == `dev` == `dab2655`; prod serving `index-BDt4t8KW.js` from 20:59:42 UTC; `dev` then ahead only by the ship-record docs commits (`fd2c1d0` state, then this handoff).** The state before the ship: **`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `e5d574f` before the handoff commit, ahead by FIVE CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d` (§0.119), `e5d574f` (§0.120), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 716/716 unit, 147/147 integration, 420/420 mutations (printed green baseline, no restore errors in any of the four runs), build guard OK 2,479 kB `index-DtQQ5W86.js`, `dist/` cleared; dev serving `index-DtQQ5W86.js` from 18:48:40 UTC 11 Sep (before it `index-jRTXPWFT.js` from 18:35:08, `index-BYQZhHpB.js` from 17:03:24, `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
 
@@ -1607,9 +1624,9 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   "This quarter" → Apply → only this quarter's close dates. Prod's rows are
   his — read before assuming any won deal or scheduled job exists there.
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  TWO CODE commits after `dab2655`, `04ad57b` and `d936baf` (§0.121
-  web-to-lead and its follow-up), and the docs commits around them; anything
-  else is a finding. Compare against
+  THREE CODE commits after `dab2655`, `04ad57b` and `d936baf` (§0.121
+  web-to-lead and its follow-up) and `59cd6c3` (§0.122 email templates), and
+  the docs commits around them; anything else is a finding. Compare against
   `origin/master`: the local `master` branch is stale (ships push
   `dev:master`). Ship when Jeff says so — functions AND bundle AND one
   netlify.toml rewrite; no schema change.
@@ -1626,10 +1643,28 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   list — delete or edit that row by hand. Read-only afterwards on a new
   submission: `owner_id` null, `assigned_to` null, `source` 'Web Form',
   `org_id` the dev org.
-- **Flagged, not done (§0.121), Jeff's call:** email to Admins/Managers on a
-  new web lead (Slack and the unassigned pool are v1); a thank-you URL field
-  on the card (the key is honoured, no UI); custom fields. Then the second
-  half of the recommendation: **email templates for reps, mailto-based**.
+- **§0.122 on dev — Jeff's checks (Admin for the panel, then any role for
+  the rail; bundle `index-Bk9klMuV.js`, hard-refresh):** Settings → Sales
+  process → **Email templates** → + New template → name it, a subject such
+  as "Following up, {{firstName}}", a body using the merge-field chips (they
+  insert at the cursor), the preview under the editor filling in the sample
+  contact → Save changes → the card on the Settings page reads "1 template".
+  Contacts → open a contact WITH an email → the action bar's ✉ Email now
+  reads "✉ Email ▾" → click → a list: Blank email, then the template with
+  its subject rendered for THAT contact (their first name in it) → click the
+  template → his mail client opens with the subject and body filled in, his
+  own name/company where {{repName}}/{{companyName}} were, AND the app's
+  Log-activity dialog opens as Email with "Template: <name> — <subject>" in
+  the notes. A contact with no email shows no ✉ button at all (unchanged).
+  Delete the template in Settings → the contact's button is plain "✉ Email"
+  again.
+- **Flagged, not done (§0.121/§0.122), Jeff's call:** email to
+  Admins/Managers on a new web lead (Slack and the unassigned pool are v1);
+  a thank-you URL field on the web-form card (the key is honoured, no UI);
+  custom form fields; PERSONAL (per-rep) email templates; templates on a
+  LEAD (the Leads tab has no email action to hang them on); sending from
+  the app instead of the rep's client (a per-org sending domain — a
+  different project).
 - **§0.120 on dev — OBSERVED by Jeff ("all works as it is supposed to")
   before the ship; the same checks are now the prod list above.** The
   original dev checks, for the record:
