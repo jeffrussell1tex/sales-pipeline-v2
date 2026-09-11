@@ -105,7 +105,8 @@ test('lead-intake.mjs: the honeypot returns thanks with NO row; a 404 body never
     const insert = s.indexOf('await db.insert(leads)');
     assert.ok(spam > 0 && spam < insert, 'the honeypot exit comes before the insert');
     assert.ok(s.includes("    if (!TOKEN_RE.test(token)) return null;") && s.includes('const notFound = () => ({'), 'one 404 for malformed, unknown and turned-off');
-    assert.ok(s.includes(`    'Content-Security-Policy': "frame-ancestors *; default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",`), 'embeddable by design');
+    assert.ok(s.includes(`    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",`), 'embeddable by design — no frame-ancestors at all');
+    assert.ok(!s.includes('frame-ancestors'), "frame-ancestors * refuses file: and data: parents (Chrome: '*' matches only network schemes) — a customer's local test page");
     assert.ok(!s.includes("'X-Frame-Options'"), 'no frame denial on this surface');
     assert.ok(s.includes("    'X-Robots-Tag':            'noindex, nofollow',") && s.includes("'Cache-Control':           'no-store',"));
     assert.ok(s.includes('    if (raw.length > BODY_CAP) return { tooLarge: true };') && s.includes('const BODY_CAP    = 16 * 1024;'));

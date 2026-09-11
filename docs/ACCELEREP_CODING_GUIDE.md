@@ -3398,10 +3398,12 @@ validation so a refused submission still counts), a body cap, escaping of
 every rendered value, no-store and noindex on every response.
 
 **The embed is the point, so the frame policy is the opposite of §18b35:**
-the hosted form sends no `X-Frame-Options` and
-`Content-Security-Policy: frame-ancestors *`. Whether the site's static
-header rule reaches a function response is read from the deployed headers,
-not assumed.
+the hosted form sends no `X-Frame-Options` and NO `frame-ancestors`
+directive at all. `frame-ancestors *` is not "anywhere": Chrome reads `*`
+as network schemes only and refuses a `file:` or `data:` parent — the
+local HTML file a customer opens to try the embed (found in the pane, 11
+Sep). Whether the site's static header rule reaches a function response is
+read from the deployed headers, not assumed (it does not — read on dev).
 
 **The check:** an integration test seeds two orgs' settings rows, posts by
 one token and asserts the row lands in THAT org unassigned and unowned with

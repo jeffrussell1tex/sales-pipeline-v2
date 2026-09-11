@@ -84,7 +84,7 @@ test('the hosted form: the org\'s display name, the form posts to the function w
     assert.ok(r.body.includes(`action="/.netlify/functions/lead-intake?t=${TA}"`));
     assert.ok(r.body.includes('name="website"'), 'the honeypot is in the form');
     assert.equal(r.headers['X-Frame-Options'], undefined, 'no frame denial');
-    assert.match(r.headers['Content-Security-Policy'], /frame-ancestors \*/);
+    assert.doesNotMatch(r.headers['Content-Security-Policy'], /frame-ancestors/, 'no frame-ancestors either — framable from file: and data: parents too');
     assert.equal(r.headers['Cache-Control'], 'no-store');
     assert.equal((await get(TA, true)).statusCode, 200, 'the /lead-form/<token> path');
 });

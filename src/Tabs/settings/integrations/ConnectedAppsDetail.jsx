@@ -312,7 +312,7 @@ const WebFormCard = ({ form, isAdmin, busy, note, onSave }) => {
         <IntegrationCard
             tile={<AppTile name="Web-to-lead form" color="#3a5a7a" emoji="📝" size={36}/>}
             name="Web-to-lead form" category="Lead capture"
-            desc="A hosted contact form for your website — link to it or embed it. Every submission lands in Leads as an unassigned lead with source “Web form”, scored and ready to claim or assign, and posts to Slack when that alert is on."
+            desc="A hosted contact form for your website — link to it or embed it. Every submission lands in Leads as an unassigned lead with source “Web Form”, scored and ready to claim or assign, and posts to Slack when that alert is on."
             pill={form == null ? null : on ? <Pill tone="ok">Live</Pill> : <Pill tone="muted">Off</Pill>}
             foot={form == null ? <span style={{ fontSize:11.5, color:T.inkMuted }}>Loading…</span> : on ? (
                 <>

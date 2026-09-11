@@ -20,8 +20,10 @@
 // public-api.mjs approach), a 16 kB body cap, every field trimmed and capped,
 // every rendered value escaped. No cookie, no session, no link back into the
 // app. Rejections and the thank-you page are no-store and noindex. The form
-// page carries NO X-Frame-Options and `frame-ancestors *`, because being
-// framed on the customer's site is the point.
+// page carries NO X-Frame-Options and NO frame-ancestors directive, because
+// being framed anywhere is the point — `frame-ancestors *` was tried first
+// and Chrome refused a data: and a file: parent ("'*' matches only URLs with
+// network schemes"), which is exactly how a customer tests an embed locally.
 import { db } from '../../db/index.js';
 import { settings, leads } from '../../db/schema.js';
 import { sql } from 'drizzle-orm';
@@ -57,7 +59,7 @@ const htmlHeaders = {
     'Cache-Control':           'no-store',
     'X-Robots-Tag':            'noindex, nofollow',
     'Referrer-Policy':         'no-referrer',
-    'Content-Security-Policy': "frame-ancestors *; default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
 };
 
 const page = (title, body) => `<!DOCTYPE html>

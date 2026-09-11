@@ -12,7 +12,7 @@
 // web lead is handled the way every other unowned lead is, and nothing about
 // who-may-write changes for a public caller: it never names an owner.
 
-export const WEB_LEAD_SOURCE = 'Web form';
+export const WEB_LEAD_SOURCE = 'Web Form';
 
 // base64url of 24 bytes is 32 chars; the same shape as the job-status token.
 export const TOKEN_RE = /^[A-Za-z0-9_-]{24,64}$/;
