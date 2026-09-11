@@ -70,7 +70,7 @@ function FilterPanel({
     getQuarter, getQuarterLabel, currentUser, canSeeAll,
 }) {
     const [draftPipeline,   setDraftPipeline]   = useState(activePipeline?.id || null);
-    const [draftTimeWindow, setDraftTimeWindow] = useState(pipelineQuarterFilter[0] || 'thisQuarter');
+    const [draftTimeWindow, setDraftTimeWindow] = useState(pipelineQuarterFilter[0] || 'allTime');
     const [draftStage,      setDraftStage]      = useState(pipelineStageFilter[0]   || '__allOpen__');
     const [draftRep,        setDraftRep]        = useState(pipelineRepFilter[0]     || (canSeeAll ? '__all__' : '__me__'));
     const [draftTerritory,  setDraftTerritory]  = useState(pipelineTerritoryFilter[0] || '__all__');
@@ -78,7 +78,7 @@ function FilterPanel({
     useEffect(() => {
         if (open) {
             setDraftPipeline(activePipeline?.id || null);
-            setDraftTimeWindow(pipelineQuarterFilter[0] || 'thisQuarter');
+            setDraftTimeWindow(pipelineQuarterFilter[0] || 'allTime');
             setDraftStage(pipelineStageFilter[0] || '__allOpen__');
             setDraftRep(pipelineRepFilter[0] || (canSeeAll ? '__all__' : '__me__'));
             setDraftTerritory(pipelineTerritoryFilter[0] || '__all__');
@@ -105,7 +105,10 @@ function FilterPanel({
 
     const handleApply = () => {
         if (draftPipeline && setActivePipelineId) setActivePipelineId(draftPipeline);
-        setPipelineQuarterFilter(draftTimeWindow === 'allTime' || draftTimeWindow === 'thisQuarter' ? [] : [draftTimeWindow]);
+        // Only "All time" is the empty filter. "This quarter" used to map to []
+        // as well (c25a043), so it never filtered and "All time" read back as
+        // "This quarter" on reopen (Jeff, 11 Sep).
+        setPipelineQuarterFilter(draftTimeWindow === 'allTime' ? [] : [draftTimeWindow]);
         setPipelineStageFilter(draftStage === '__allOpen__' ? [] : [draftStage]);
         if (draftRep === '__all__') setPipelineRepFilter([]);
         else if (draftRep === '__me__') setPipelineRepFilter([currentUser]);
@@ -117,7 +120,7 @@ function FilterPanel({
 
     const handleReset = () => {
         setDraftPipeline(allPipelines[0]?.id || null);
-        setDraftTimeWindow('thisQuarter');
+        setDraftTimeWindow('allTime');
         setDraftStage('__allOpen__');
         setDraftRep('__me__');
         setDraftTerritory('__all__');
