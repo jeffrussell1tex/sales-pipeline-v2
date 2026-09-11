@@ -137,9 +137,11 @@ import vocabulary is "Web Form". → **follow-up `d936baf`:** the
 rest of the CSP unchanged), the default source "Web Form" (his first test
 lead keeps the lowercase value — his row); scans and the itest updated;
 six gates, 728/728, 153/153, 425/425 after a green baseline,
-`index-CPK391Dz.js`; **LANDED on dev** at 22:20:08 UTC. **The follow-up NOT
-observed** (the embed from a local file — §5). **NOT shipped** — `dev` is
-ahead of `master` by TWO code commits, `04ad57b` and `d936baf`, plus docs.
+`index-CPK391Dz.js`; **LANDED on dev** at 22:20:08 UTC. **The follow-up OBSERVED — Jeff: "All test confirmed passed. It all works
+as it should"** (the embed from a local file, New link, Turn off / Turn on).
+**NOT shipped** — `dev` is ahead of `master` by TWO code commits, `04ad57b`
+and `d936baf`, plus docs; ship when Jeff says so (functions AND bundle AND
+one netlify.toml rewrite; no schema change).
 
 **Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
@@ -1613,7 +1615,8 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   netlify.toml rewrite; no schema change.
 - **§0.121 on dev — OBSERVED by Jeff** (Turn on, the hosted form, the
   thank-you page, the unassigned lead under "Needs first touch", the Slack
-  post). **Remaining, his (bundle `index-CPK391Dz.js`, hard-refresh):** the
+  post). **DONE — Jeff: "All test confirmed passed. It all works as it should."**
+  What he walked: the
   embed — **Copy embed code** → paste into a local HTML file → open it →
   the form renders inside the iframe (the follow-up made a `file:` parent
   work; the pane's `data:` parent is the same case). **New link** → the old
