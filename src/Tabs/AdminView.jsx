@@ -15,6 +15,7 @@ import { KPIThresholdsDetail } from './settings/salesProcess/KPIThresholdsDetail
 import { LeadConversionDetail, LeadConvBenchmarks } from './settings/salesProcess/LeadConversionDetail.jsx';
 import { CustomFieldsDetail } from './settings/salesProcess/CustomFieldsDetail.jsx';
 import { PainPointsDetail } from './settings/salesProcess/PainPointsDetail.jsx';
+import { EmailTemplatesDetail } from './settings/salesProcess/EmailTemplatesDetail.jsx';
 import { BuyerPersonasDetail } from './settings/salesProcess/BuyerPersonasDetail.jsx';
 import { CustomerTypesDetail } from './settings/salesProcess/CustomerTypesDetail.jsx';
 import { LeadScoringDetail } from './settings/salesProcess/LeadScoringDetail.jsx';
@@ -466,6 +467,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         // Sales process Group 2 detail pages
         if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'email-templates') return <EmailTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'competitors')     return <CompetitorsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-won')     return <ReasonsWonDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;

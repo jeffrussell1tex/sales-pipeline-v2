@@ -6,6 +6,7 @@ import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
 import { cleanSlackAlerts } from '../../src/utils/slackAlerts.js';
 import { cleanCustomerNotifications } from '../../src/utils/customerNotifications.js';
 import { cleanWebToLead } from '../../src/utils/webToLead.js';
+import { cleanEmailTemplates } from '../../src/utils/emailTemplates.js';
 import { randomBytes } from 'crypto';
 import { encrypt, decrypt } from './crypto.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
@@ -119,6 +120,8 @@ export const handler = async (event) => {
                 // thank-you URL. Normalised here with NO mint — a read never creates
                 // a token; only the PUT below does.
                 webToLead: cleanWebToLead(row.extra?.webToLead),
+                // Email templates for reps (state §0.122): the org's library, normalised.
+                emailTemplates: cleanEmailTemplates(row.extra?.emailTemplates),
                 // Written server-side by integration-requests.mjs (§0.90); read by
                 // the Connected Apps panel. Carried here so an Admin settings save
                 // never wipes it.
@@ -277,6 +280,7 @@ export const handler = async (event) => {
                 // The stored token survives every save; a token is minted only when
                 // the form is turned on without one, or a rotate is asked for.
                 webToLead: 'webToLead' in data ? cleanWebToLead(data.webToLead, existingExtra.webToLead, () => randomBytes(24).toString('base64url')) : existingExtra.webToLead || {},
+                emailTemplates: 'emailTemplates' in data ? cleanEmailTemplates(data.emailTemplates) : existingExtra.emailTemplates || [],
                 integrationRequests: 'integrationRequests' in data ? (data.integrationRequests || {}) : existingExtra.integrationRequests || {},
                 // Company profile detail fields
                 companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,

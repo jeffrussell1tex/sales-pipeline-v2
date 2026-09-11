@@ -4,6 +4,7 @@ import ActivityRowText from './ActivityRowText';
 import { dbFetch } from '../../utils/storage';
 import RecordDocuments from '../documents/RecordDocuments';
 import AccountPicker from './AccountPicker';
+import { cleanEmailTemplates, mergeContext, renderForContact, mailtoHref } from '../../utils/emailTemplates.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -134,6 +135,33 @@ const EMPTY_CONTACT = {
     homeAddress: '', notes: '', doNotContact: false, buyerPersona: '',
     assignedRep: '',
 };
+
+
+// The org's email templates, offered under ✉ Email (state §0.122). Each row is
+// a REAL mailto: link rendered for this contact — the browser hands it to the
+// rep's own mail client, nothing is sent by the app — and the click logs the
+// Email activity naming the template. Module scope, data as props.
+const TemplatePicker = ({ contact, templates, ctx, onPick, onBlank }) => (
+    <div style={{ padding: '8px 16px 10px', background: T.surface2, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Email {contact.firstName || contact.email} with…</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <a href={`mailto:${contact.email}`} onClick={onBlank}
+               style={{ padding: '7px 10px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.ink2, textDecoration: 'none', fontFamily: T.sans }}>
+                Blank email
+            </a>
+            {templates.map(t => {
+                const r = renderForContact(t, ctx);
+                return (
+                    <a key={t.id} href={mailtoHref(contact.email, r.subject, r.body)} onClick={() => onPick(t, r)} title={r.subject || t.name}
+                       style={{ padding: '7px 10px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.ink, textDecoration: 'none', fontFamily: T.sans }}>
+                        <div style={{ fontWeight: 600 }}>{t.name}</div>
+                        {r.subject && <div style={{ fontSize: 11.5, color: T.ink3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.subject}</div>}
+                    </a>
+                );
+            })}
+        </div>
+    </div>
+);
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -372,7 +400,14 @@ export default function ContactRail() {
     // mail/phone handoff; this pre-opens the Activity rail prefilled with what we
     // know (type + contact + account + sole open opp) so the user only adds notes
     // and Saves. Nothing persists until they save in the rail (confirm-to-log).
-    const openCommLog = (type) => {
+    // The org's templates (state §0.122) and the values they render with for
+    // THIS contact: the rep is the roster profile, the org the settings.
+    const emailTemplates = cleanEmailTemplates(settings?.emailTemplates);
+    const mergeCtx = mergeContext({ contact, rep: myProfile, org: settings });
+    const [showTemplates, setShowTemplates] = useState(false);
+    useEffect(() => { setShowTemplates(false); }, [contactRailId]);
+
+    const openCommLog = (type, extra = {}) => {
         if (!contact) return;
         const acct = contact.company
             ? (accounts || []).find(a => (a.name || '').toLowerCase() === (contact.company || '').toLowerCase())
@@ -384,6 +419,7 @@ export default function ContactRail() {
             company: contact.company || '',
             accountId: acct?.id || '',
             opportunityId: openOpps.length === 1 ? openOpps[0].id : '',
+            ...extra,
         });
         setShowActivityModal(true);
     };
@@ -476,11 +512,17 @@ export default function ContactRail() {
             {/* ── Quick-action bar (view mode only) ─────────────────────────── */}
             {!isEditing && contact && (
                 <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: T.surface2, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
-                    {contact.email && (
+                    {contact.email && emailTemplates.length === 0 && (
                         <a href={`mailto:${contact.email}`} onClick={() => openCommLog('Email')}
                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.ink2, textDecoration: 'none', cursor: 'pointer' }}>
                             ✉ Email
                         </a>
+                    )}
+                    {contact.email && emailTemplates.length > 0 && (
+                        <button type="button" onClick={() => setShowTemplates(v => !v)} aria-expanded={showTemplates} title="Email with a template, or a blank email"
+                           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: showTemplates ? T.ink : T.surface, border: `1px solid ${showTemplates ? T.ink : T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: showTemplates ? '#f5f1eb' : T.ink2, cursor: 'pointer', fontFamily: T.sans }}>
+                            ✉ Email ▾
+                        </button>
                     )}
                     {contact.phone && (
                         <a href={`tel:${contact.phone}`} onClick={() => openCommLog('Call')}
@@ -499,6 +541,14 @@ export default function ContactRail() {
                         Edit
                     </button>
                 </div>
+            )}
+            {!isEditing && contact && contact.email && showTemplates && emailTemplates.length > 0 && (
+                <TemplatePicker contact={contact} templates={emailTemplates} ctx={mergeCtx}
+                    onBlank={() => { setShowTemplates(false); openCommLog('Email'); }}
+                    onPick={(t, r) => {
+                        setShowTemplates(false);
+                        openCommLog('Email', { notes: `Template: ${t.name}${r.subject ? ` — ${r.subject}` : ''}` });
+                    }}/>
             )}
 
             {/* ── Sub-tabs ───────────────────────────────────────────────────── */}

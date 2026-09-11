@@ -18,6 +18,7 @@ export const SETTINGS_ITEMS = [
     { id:'kpi-settings',     scope:'workspace', category:'Sales process', name:'KPI thresholds',  desc:'Thresholds, colors, and sparkline ranges for dashboards',     status:'ok',      statusDetail:null },
     { id:'lead-conv-benchmarks', scope:'workspace', category:'Sales process', name:'Lead conversion benchmarks', desc:'Good / average / poor conversion rate targets by lead source', status:'ok', statusDetail:null },
     { id:'pain-points',      scope:'workspace', category:'Sales process', name:'Pain points library', desc:'Reusable customer pain point templates',                  status:'ok',      statusDetail:null },
+    { id:'email-templates',  scope:'workspace', category:'Sales process', name:'Email templates', desc:'Reusable emails reps send from a contact — merge fields fill in the names; opens in the rep\'s own mail client', status:'ok', statusDetail:null },
     { id:'customer-types',   scope:'workspace', category:'Sales process', name:'Customer types',  desc:'Account classification tags (SMB, Mid-market, Enterprise…)', status:'ok',      statusDetail:null },
     { id:'lead-scoring', scope:'workspace', category:'Sales process', name:'Lead scoring', desc:'Rule-based Fit + Engagement scoring for leads (sources, deal size, status, recency)', status:'ok', statusDetail:'Fit + Engagement' },
     { id:'lead-visibility', scope:'workspace', category:'Sales process', name:'Lead visibility', desc:'Whether sales reps can see unassigned leads — Admins and Managers always see all', status:'ok', statusDetail:null },

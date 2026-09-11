@@ -123,6 +123,7 @@ export function cardStateOf(item, settings, liveCounts = {}) {
     if (item.id === 'industries')      statusDetail = industriesDetail(settings?.industries) || 'App defaults';
     if (item.id === 'lead-conv-benchmarks') statusDetail = countOrNull(len(settings?.leadConvBenchmarks), 'source');
     if (item.id === 'pain-points')     statusDetail = countOrNull(len(settings?.painPoints), 'pain point');
+    if (item.id === 'email-templates') statusDetail = countOrNull(len(settings?.emailTemplates), 'template');
     if (item.id === 'buyer-personas')  statusDetail = plural(len(settings?.buyerPersonas), 'persona');
 
     if (item.id === 'competitors') {
