@@ -101,6 +101,27 @@ live key; the batch's literals found in the served bundle, the April
 record was NOT read (no deploy id to hand). **`master` == `dev` == `dab2655`
 at the ship**; `dev` is ahead only by the ship-record docs commits (`fd2c1d0`
 and this one). **NOT yet observed on prod** — Jeff's, in §5.
+**Then Jeff: "one of the enhancement recommendations that Claude has made is
+the following: email templates for reps; web-to-lead forms (an embeddable
+form that posts into your Leads module — SMBs ask for this constantly)"** —
+assessed against the code (leads POST behind Clerk, the public API read-only
+by design, one unauthenticated surface, reps emailing by `mailto:`), the
+recommendation web-to-lead first with a new lead UNASSIGNED, then
+mailto-based templates; **Jeff: "I agree with your recommendations."** →
+**§0.121 `04ad57b`** (guide §18b36, new): one hosted form per org behind a
+server-minted token — `settings.extra.webToLead` in both halves of
+`settings.mjs`, `lead-intake.mjs` (GET `/lead-form/<token>` the framable
+hosted form; POST the intake, JSON or form-encoded), the ONE write an
+unassigned, unowned, scored lead in the token's org with source "Web form",
+a Slack post under a new `webLead` switch, a Connected apps card (Turn on,
+the link, Copy link / Copy embed code, New link, Turn off). +1 unit file
+(12), +1 integration file (6), 5 mutants; six gates (91 function files, 159
+files), 728/728 unit, 153/153 integration, **425/425 mutations after a
+printed green baseline**, `index-DsxCtD8l.js`; no schema change. **LANDED
+on dev** at 22:06:49 UTC (the hash poll). **The frame-header probe on the
+deployed 404 page (`/lead-form/<junk>`): the rewrite reaches the function (its own 404 page, 'This form is not available'), NO X-Frame-Options header, Content-Security-Policy frame-ancestors * present, no-store, noindex — netlify.toml's static DENY does not reach a function response, so the iframe embed is not blocked by the site; the POST with an unknown token answers 404 { ok: false, error: 'Form not found' }.** **NOT observed** (turning the
+form on is an Admin action in the app — Jeff's, §5). **NOT shipped** —
+`dev` is ahead of `master` by ONE code commit, `04ad57b`, plus docs.
 
 **Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
@@ -615,7 +636,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the SEVENTEENTH ship put §0.117–§0.120 on `master` (11 Sep 20:59 UTC, `dab2655`, bundle only); `dev` is ahead only by the ship-record docs commits
+## 1. What shipped — the SEVENTEENTH ship put §0.117–§0.120 on `master` (11 Sep 20:59 UTC, `dab2655`, bundle only); `dev` is ahead by ONE CODE commit, §0.121 `04ad57b` (web-to-lead) — NOT shipped
 
 **PROD SHIPPED — the SEVENTEENTH ship (Jeff: "all works as it is supposed to. Ship prod", 11 Sep).** Pre-flight: tree clean, `dev` == `origin/dev` == `dab2655`, `origin/master` (`0726934`) an ancestor of `dev`, 15 commits after it (five code: `e4d9ac3`, `889cc85`, `0deb6b6`, `074669d`, `e5d574f`), no function, schema or config change (the diff over `netlify/`, `db/`, `package.json`, `netlify.toml` empty). `git push origin dev:master` at 20:59:07 UTC: `master` `0726934` → `dab2655`. salespipelinetracker.com serving `index-BDt4t8KW.js` from 20:59:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-DtQQ5W86.js` — the key differs); the served bundle carries "Edit job →", "Create job →", "crew and duration not set", "No deals match the current filter." and `"allTime"?[]:[`, and NOT `"thisQuarter"?[]`. The Netlify deploy record was not read this time (the reader takes a deploy id; none to hand). **What prod does differently from this moment:** the Queue lists only jobs to schedule; a scheduled job clicked on the Job Board opens its record in Jobs; "Edit job →" / "Create job →" in the queue header and on the cards; unset template values read "Not set"; the queue card's "prefers" note and no 8 px scroll (§0.117–§0.118); the Pipeline List shows Closed Won / Closed Lost deals when the filter asks (§0.119); the Filter popover's "This quarter" filters and "All time" reads back as itself (§0.120). Every "NOT shipped" in §0.117–§0.120 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in §5.
 
@@ -1430,7 +1451,9 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (11 Sep, thirteenth session — nothing shipped this session)
+## 4. Verified state at close (11 Sep, thirteenth session — after the SEVENTEENTH ship, then §0.121 on dev)
+
+**AT CLOSE: `origin/master` == `dab2655` (the SEVENTEENTH ship); `dev` == `origin/dev` == `04ad57b` before the handoff commit — ahead by ONE CODE commit (§0.121 web-to-lead: functions `lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`; `netlify.toml` one rewrite; the bundle; NO schema change) and this handoff. Counts: six gates (check:fnscope 91 function files; the five on 159 files), 728/728 unit, 153/153 integration, 425/425 mutations (printed green baseline, no restore errors), build guard OK 2,483 kB `index-DsxCtD8l.js`, `dist/` cleared; dev serving `index-DsxCtD8l.js` from 22:06:49 UTC 11 Sep.**
 
 **AT THE SEVENTEENTH SHIP (20:59:07 UTC 11 Sep): `master` == `dev` == `dab2655`; prod serving `index-BDt4t8KW.js` from 20:59:42 UTC; `dev` then ahead only by the ship-record docs commits (`fd2c1d0` state, then this handoff).** The state before the ship: **`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `e5d574f` before the handoff commit, ahead by FIVE CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d` (§0.119), `e5d574f` (§0.120), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 716/716 unit, 147/147 integration, 420/420 mutations (printed green baseline, no restore errors in any of the four runs), build guard OK 2,479 kB `index-DtQQ5W86.js`, `dist/` cleared; dev serving `index-DtQQ5W86.js` from 18:48:40 UTC 11 Sep (before it `index-jRTXPWFT.js` from 18:35:08, `index-BYQZhHpB.js` from 17:03:24, `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
 
@@ -1564,10 +1587,30 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   "This quarter" → Apply → only this quarter's close dates. Prod's rows are
   his — read before assuming any won deal or scheduled job exists there.
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  ONLY the two ship-record docs commits after `dab2655` (`fd2c1d0` state,
-  then the handoff); any CODE commit is a finding; anything else is a finding. Compare against `origin/master`:
-  the local `master` branch is stale (ships push `dev:master`). Ship both
-  when Jeff says so — bundle only, no schema, no function change.
+  ONE CODE commit after `dab2655`, `04ad57b` (§0.121 web-to-lead), and the
+  docs commits around it; anything else is a finding. Compare against
+  `origin/master`: the local `master` branch is stale (ships push
+  `dev:master`). Ship when Jeff says so — functions AND bundle AND one
+  netlify.toml rewrite; no schema change.
+- **§0.121 on dev — Jeff's checks (Admin, accelerep.netlify.app; bundle
+  `index-DsxCtD8l.js`):** Settings → Connected apps → the "Web-to-lead form"
+  card reads Off → **Turn on** → Live, with a link ending `/lead-form/<32
+  chars>`; the panel's "n live" counts it. Open the link in a PRIVATE window
+  → the "Get in touch" form under the company display name, no sign-in
+  wall. Submit it with his own email and a message → the thank-you page;
+  Leads → a new lead, unassigned, source "Web form", the message and
+  "Submitted via web form from …" in notes, scored; if Slack is connected,
+  "📝 New lead from the web form" in the channel (Configure Slack has a new
+  checkbox for it). **Copy embed code** → paste into any HTML page (a local
+  file is fine) → the form renders inside the iframe — the one thing the
+  pane cannot prove. **New link** → the old link is a 404, the new one works.
+  **Turn off** → the link is a 404; Turn on again → the SAME link works.
+  Read-only afterwards: the lead's row (`owner_id` null, `assigned_to`
+  null, `source` 'Web form', `org_id` the dev org).
+- **Flagged, not done (§0.121), Jeff's call:** email to Admins/Managers on a
+  new web lead (Slack and the unassigned pool are v1); a thank-you URL field
+  on the card (the key is honoured, no UI); custom fields. Then the second
+  half of the recommendation: **email templates for reps, mailto-based**.
 - **§0.120 on dev — OBSERVED by Jeff ("all works as it is supposed to")
   before the ship; the same checks are now the prod list above.** The
   original dev checks, for the record:
