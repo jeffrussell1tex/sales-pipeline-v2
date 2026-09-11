@@ -90,6 +90,10 @@ const crewLine = (j, compact = false) => {
     const h = hrs == null ? 'duration not set' : `${hrs}h`;
     return `${c} ${compact ? '×' : '·'} ${h}`;
 };
+// Still to schedule: no placed start, or no crew — a held crew (§0.115) and a
+// won opportunity both count. The queue lists exactly these; the board sends a
+// scheduled job to its record instead (Jeff, 11 Sep).
+const isUnscheduled = (j) => !j.start || (j.assignedTechIds || []).length === 0;
 // 'HH:MM' plus a duration in hours, back to 'HH:MM' (wraps at midnight).
 const addHoursHHMM = (hhmm, hrs) => {
     const mins = (Math.round((hhToNum(hhmm) + (Number(hrs) || 0)) * 60) % (24 * 60) + 24 * 60) % (24 * 60);
@@ -927,17 +931,15 @@ const CrewNextStep = ({ crewNames, addedCount, crewSlots, held, dateStr, onDate,
 const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled, onHeld, onCreateBridgeJob, onOpenJob }) => {
     const [queueSort, setQueueSort] = useState('Priority');
     // The list is what its heading says (Jeff, 11 Sep: "Doesn't it make more
-    // sense to only show unscheduled jobs under that list"): jobs with no placed
-    // start or no crew — a held crew and a won opportunity included. A SCHEDULED
-    // job opened here from the board is listed too, alone among scheduled jobs,
-    // so it can still be re-crewed; it drops out once deselected. The default
-    // selection is the first job to schedule, never a scheduled one.
-    const isUnscheduled = (j) => !j.start || (j.assignedTechIds || []).length === 0;
-    const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(isUnscheduled) || null;
-    const sortedQueue = useMemo(() => {
-        const listed = jobs.filter(j => isUnscheduled(j) || j.id === selectedJob?.id);
-        return listed.sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority);
-    }, [jobs, queueSort, selectedJob?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
+    // sense to only show unscheduled jobs under that list"): jobs still to
+    // schedule, nothing else. A first cut also listed a scheduled job opened here
+    // from the board; Jeff saw it join the list and called it a bug — a scheduled
+    // job now opens its record in Jobs (handleJobClick), so a selection that
+    // points at a scheduled job is ignored here. The default selection is the
+    // first job to schedule; none leaves the builder's "Select a job" state.
+    const chosen = jobs.find(j => j.id === selectedJobId);
+    const selectedJob = (chosen && isUnscheduled(chosen)) ? chosen : (jobs.find(isUnscheduled) || null);
+    const sortedQueue = useMemo(() => jobs.filter(isUnscheduled).sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
     const [addedTechs, setAddedTechs] = useState({});
     // Pending override: { tech, blockers }. Assigning a blocked technician is a
     // deliberate act (licence, expired cert, over-hours, double-booking), so it
@@ -1222,7 +1224,6 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                     {sortedQueue.map(j => {
                         const pc = prioColor(j.priority);
                         const isSel = j.id === selectedJob?.id;
-                        const isScheduled = j.start && (j.assignedTechIds || []).length > 0;
                         return (
                             <div key={j.id} onClick={() => onSelectJob(j.id)}
                                 style={{ padding: '10px 12px', marginBottom: 6,
@@ -1253,12 +1254,11 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                     <span>◷ {j.window}</span>
                                     <span style={{ color: T.inkMuted }}>·</span>
                                     <span>{crewLine(j, true)}</span>
-                                    {isScheduled && <span style={{ marginLeft: 'auto', color: T.ok, fontWeight: 600 }}>✓ Scheduled</span>}
                                     {/* Click-through to the job record (Jeff: "these are static right now"). The
                                         card itself still SELECTS the job for the builder; this opens it in Jobs. */}
                                     {onOpenJob && !j.isBridge && (
                                         <span onClick={e => { e.stopPropagation(); onOpenJob(j.id); }} title="Open the job record"
-                                            style={{ marginLeft: isScheduled ? 8 : 'auto', color: T.info, fontWeight: 600, cursor: 'pointer' }}>
+                                            style={{ marginLeft: 'auto', color: T.info, fontWeight: 600, cursor: 'pointer' }}>
                                             Open →
                                         </span>
                                     )}
@@ -5635,7 +5635,12 @@ export default function DispatchTab() {
         }
     };
 
+    // A job still to schedule opens the crew builder; a scheduled one opens its
+    // record in Jobs (Jeff, 11 Sep: "when a person clicks on a scheduled job in
+    // the job board it either opens a rail with the job for editing or it opens
+    // in the job tab under dispatch") — it never joins the queue's list.
     const handleJobClick = (job) => {
+        if (!isUnscheduled(job)) { openJobRecord(job.id); return; }
         setSelectedJobId(job.id);
         setView('queue');
     };
@@ -5949,7 +5954,7 @@ export default function DispatchTab() {
                         onStart={startPlanVisit}
                         onSkip={skipVisit} onDefer={deferVisit} onUndo={undoVisit} onRenew={renewAgreement}
                         actionError={visitActionError}
-                        onOpenJob={id => { setSelectedJobId(id); setView('queue'); }}
+                        onOpenJob={openJobRecord}
                         onOpenCustomer={() => setView('customers')}/>
                 ) : view === 'customers' ? (
                     <CustomersView customers={customers} accounts={accounts} techs={techs} jobs={jobs} plans={servicePlans} planVisits={planVisits} propertyTypes={propertyTypes} confirmDiscard={confirmDiscard}

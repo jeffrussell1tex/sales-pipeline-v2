@@ -62,10 +62,13 @@ test('the job editor offers a preferred start time and a time window, and saves 
     assert.ok(s.includes('const addHoursHHMM = (hhmm, hrs) => {'));
 });
 
-test('the queue lists only jobs still to schedule; a scheduled job is listed only while it is the one opened (Jeff, 11 Sep)', () => {
-    assert.ok(s.includes("    const isUnscheduled = (j) => !j.start || (j.assignedTechIds || []).length === 0;"), 'no placed start, or no crew — a held crew and a won opportunity both count');
-    assert.ok(s.includes("        const listed = jobs.filter(j => isUnscheduled(j) || j.id === selectedJob?.id);"), 'unscheduled, plus the job opened here from the board');
-    assert.ok(s.includes("    const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(isUnscheduled) || null;"), 'the default selection is the first job to schedule, never a scheduled one');
+test('the queue lists only jobs still to schedule; a scheduled job clicked on the board opens its record, never the queue (Jeff, 11 Sep)', () => {
+    assert.ok(s.includes("const isUnscheduled = (j) => !j.start || (j.assignedTechIds || []).length === 0;"), 'no placed start, or no crew — a held crew and a won opportunity both count');
+    assert.ok(s.includes("    const sortedQueue = useMemo(() => jobs.filter(isUnscheduled).sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);"), 'unscheduled only — Jeff saw a scheduled job join the list and called it a bug');
+    assert.ok(s.includes("    const selectedJob = (chosen && isUnscheduled(chosen)) ? chosen : (jobs.find(isUnscheduled) || null);"), 'a selection pointing at a scheduled job is ignored; the default is the first job to schedule');
+    assert.ok(s.includes("        if (!isUnscheduled(job)) { openJobRecord(job.id); return; }"), 'the board sends a scheduled job to its record in Jobs');
+    assert.ok(s.includes("                        onOpenJob={openJobRecord}"), 'so does Service Due\'s Open job on a scheduled visit');
+    assert.ok(!s.includes('✓ Scheduled'), 'no scheduled card exists to badge');
     assert.ok(!s.includes("selectedJobId={selectedJobId || jobsWithBridge[0]?.id}"), 'the parent no longer defaults to the first row of every job');
     assert.ok(s.includes("        const sel = selectedJob;\n"), 'the held-crew effect reads the job actually shown');
     assert.ok(s.includes("    }, [selectedJob?.id]);   // eslint-disable-line react-hooks/exhaustive-deps"), 'and follows it');

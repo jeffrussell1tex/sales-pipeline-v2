@@ -1995,8 +1995,13 @@ const mutations = [
 
     ['queue: every job is listed again, the scheduled ones included',
         'src/Tabs/DispatchTab.jsx',
-        '        const listed = jobs.filter(j => isUnscheduled(j) || j.id === selectedJob?.id);',
-        '        const listed = jobs.slice();'],
+        '    const sortedQueue = useMemo(() => jobs.filter(isUnscheduled).sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);',
+        '    const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);'],
+
+    ['board: a scheduled job click lands in the queue again (Jeff\'s finding, 11 Sep)',
+        'src/Tabs/DispatchTab.jsx',
+        '        if (!isUnscheduled(job)) { openJobRecord(job.id); return; }\n',
+        ''],
 
     ['queue header: a won opportunity has no Create job button',
         'src/Tabs/DispatchTab.jsx',
