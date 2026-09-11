@@ -25,10 +25,29 @@ duration not set". +2 scans, 1 pin updated, 3 mutants; six gates, 711/711
 unit, 147/147 integration, **417/417 mutations after a printed green baseline
 (no restore errors this run)**, `index-SFEVnpmt.js`; **LANDED on dev** —
 accelerep.netlify.app served `index-SFEVnpmt.js` at 16:44:14 UTC (curl, the
-hash poll), 2 min 40 s after the push. **NOT observed** — the in-app browser
-pane is signed out on dev and signing in is Jeff's; his checks are in §5.
-**NOT shipped** — `master` stays at `0726934`; `dev` is ahead by TWO code
-commits, `e4d9ac3` (§0.117) and `889cc85` (§0.118), both bundle-only.
+hash poll), 2 min 40 s after the push. **OBSERVED in part by Jeff within the
+hour** — his screenshot: "Edit job →" beside a saved job's id, "Create job →"
+and "crew and duration not set" on every won-opportunity card, the header grid
+populated — **and a finding:** "I clicked on this scheduled job on the job
+board. It opened it in Queue and now has added it to the jobs to schedule
+list. It did not go away until a hard refresh. I think the flow should be
+when a person clicks on a scheduled job in the job board it either opens a
+rail with the job for editing or it opens in the job tab under dispatch." The
+first cut had listed a scheduled job opened from the board while it was
+selected (so it could be re-crewed) — that read as the bug it looked like.
+**Follow-up `0deb6b6`** (bundle only): the queue lists exactly the jobs still
+to schedule, a selection pointing at a scheduled job is ignored, a scheduled
+job clicked on the Job Board opens its record in Jobs (`handleJobClick` →
+`openJobRecord`, the editor "Edit job →" already reaches — the Jobs tab, the
+second of his two options; a rail would be new UI), Service Due's "Open job"
+on a scheduled visit goes there too, and the "✓ Scheduled" card badge went
+with the last scheduled card. 1 scan rewritten, 1 mutant added; six gates,
+711/711 unit, 147/147 integration, **418/418 mutations after a printed green
+baseline**, `index-BYQZhHpB.js`; **LANDED on dev** at 17:03:24 UTC (the hash
+poll). **The follow-up is NOT observed** — the pane is signed out on dev;
+Jeff's checks are in §5. **NOT shipped** — `master` stays at `0726934`;
+`dev` is ahead by THREE code commits, `e4d9ac3` (§0.117), `889cc85` and
+`0deb6b6` (§0.118), all bundle-only.
 
 **Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
@@ -487,8 +506,12 @@ that list"): the Queue lists only jobs to schedule (plus the one opened from
 the board while selected); "Edit job →" on a saved job, "Create job →" on a
 won opportunity, in the header and on the card; unset template values read
 "Not set", not "null techs". 711/711 unit, 147/147 integration, 417/417
-mutations, `index-SFEVnpmt.js`, served by dev at 16:44 UTC. **NOT observed.
-NOT shipped.**
+mutations, `index-SFEVnpmt.js`, served by dev at 16:44 UTC; OBSERVED in part by
+Jeff (his screenshot), whose finding — a scheduled job clicked on the board
+joined the list — is the **follow-up `0deb6b6`**: a scheduled board click
+opens the record in Jobs, the list is strictly unscheduled; 418/418
+mutations, `index-BYQZhHpB.js`, served by dev at 17:03:24 UTC. **The follow-up
+NOT observed. NOT shipped.**
 
 **Previous session — 3 and 7 September 2026, seventh session (Jeff: "claude, lets
 continue" — the Connected Apps panel had rendered a component bound nowhere
@@ -539,7 +562,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); `dev` is ahead by TWO CODE commits, §0.117 `e4d9ac3` and §0.118 `889cc85` — NOT shipped
+## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); `dev` is ahead by THREE CODE commits, §0.117 `e4d9ac3`, §0.118 `889cc85` and its follow-up `0deb6b6` — NOT shipped
 
 **PROD SHIPPED — the SIXTEENTH ship (Jeff: "ship prod", 10 Sep).** Pre-flight: tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 29 commits after `0a242c6` (ten of them code: `470b948`, `a29cc1e`, `223c99a`, `9bc6b89`, `360e4f7`, `54fb180`, `e5970f3`, `d7f0765`, `1233de4`, `a7201b7`). `git push origin dev:master` at 22:50:39 UTC: `master` `0a242c6` → `0726934`. Netlify record `6aa33443…`: branch `master`, commit `0726934`, created 22:50:43, published 22:51:30 UTC (51 seconds after the push, deploy_time 45 s), **80 functions**, **2 redirect rules**, 1 header rule, secret scan clean over 412 files; salespipelinetracker.com serving `index-DaJE9sq9.js` from 22:51:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-mSB6P0Q8.js` — the key differs). The one schema change of the batch, `dispatch_jobs.assigned_equipment_ids`, was already in the shared database (applied 10 Sep, §18c) — nothing applied at ship time. **What prod does differently from this moment:** the roster is read on the board (a technician with a pattern is rostered, one without is "Not rostered" — §0.112); a job with no category saves from the editor, a new technician starts Mon–Fri 08:00–17:00 (§0.113); the Dispatch page fits the screen, the next-step card asks Schedule now / Wait for group schedule / Clear the moment a crew slot is filled, a held crew is persisted and honoured by Mass-schedule (§0.114–§0.115); equipment is required by KIND, scheduling reserves one in-service unit per kind and releases it on unschedule, and the kind/skill chips read as toggles (§0.116). Every "NOT shipped" in §0.112–§0.116 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in the handoff §5.
 
@@ -1352,7 +1375,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (11 Sep, thirteenth session — nothing shipped this session)
 
-**`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `889cc85`, ahead by TWO CODE commits — `e4d9ac3` (§0.117) and `889cc85` (§0.118), both bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 711/711 unit, 147/147 integration, 417/417 mutations (printed green baseline, no restore errors), build guard OK 2,479 kB `index-SFEVnpmt.js`, `dist/` cleared; dev serving `index-SFEVnpmt.js` from 16:44:14 UTC 11 Sep. Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
+**`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `0deb6b6` before the handoff commit, ahead by THREE CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 711/711 unit, 147/147 integration, 418/418 mutations (printed green baseline, no restore errors in either run), build guard OK 2,479 kB `index-BYQZhHpB.js`, `dist/` cleared; dev serving `index-BYQZhHpB.js` from 17:03:24 UTC 11 Sep (the first cut `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
 
 **Twelfth session's close (10 Sep — after the SIXTEENTH ship):**
 
@@ -1476,22 +1499,21 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Fourteenth-session prep — first:**
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  TWO CODE commits, `e4d9ac3` (§0.117) and `889cc85` (§0.118), and the docs
-  around them; anything else is a finding. Compare against `origin/master`:
+  THREE CODE commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118),
+  and the docs around them; anything else is a finding. Compare against `origin/master`:
   the local `master` branch is stale (ships push `dev:master`). Ship both
   when Jeff says so — bundle only, no schema, no function change.
-- **§0.118 on dev — Jeff's checks (hard-refresh; bundle `index-SFEVnpmt.js`):**
-  Dispatch → Queue: the left list holds ONLY unscheduled jobs (the "✓
-  Scheduled" cards are gone; a held crew and the won opportunities remain).
-  Select a saved job → the header shows **Edit job →** beside its id → it
-  opens that job in Jobs. Select a won opportunity (the `auto_…` rows, e.g.
-  "Dispatch Customer Test $112.0k") → the header shows a near-black **Create
-  job →** and the grid reads "Not set" for crew size, duration and min
-  license (no more "null techs"); its card reads "crew and duration not set"
-  and carries "Create job →"; the banner has no button of its own. Job Board
-  → click a SCHEDULED job → the Queue opens on it with that one scheduled
-  card in the list; click another card → it drops out. With every job
-  scheduled the centre reads "Select a job from the queue to build a crew."
+- **§0.118 follow-up on dev — Jeff's checks (hard-refresh; bundle
+  `index-BYQZhHpB.js`):** Job Board → click a SCHEDULED job → the **Jobs**
+  tab opens on that job's editor (not the Queue), and the Queue's list never
+  gains a scheduled card; Dispatch → Service Due → "Open job" on a scheduled
+  visit → the same. Job Board → click an UNSCHEDULED job in the rail → the
+  Queue, as before. From his first-cut screenshot, ALREADY SEEN: the list
+  without scheduled cards, "Edit job →", "Create job →" on the won-opportunity
+  cards, "crew and duration not set". Still his: select a won opportunity →
+  the header's near-black **Create job →** and "Not set" in its grid; the
+  banner without a button of its own; with every job scheduled the centre
+  reads "Select a job from the queue to build a crew."
 - **§0.117 on dev — Jeff's remaining check:** "1: no scrolling" DONE (11
   Sep). Still his: set a Preferred start time on an UNSCHEDULED job under
   Jobs → its queue card reads "◷ <date> · prefers <time>", not the bare time.
