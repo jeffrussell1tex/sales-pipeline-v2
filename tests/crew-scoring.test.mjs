@@ -61,3 +61,28 @@ test('the job editor offers a preferred start time and a time window, and saves 
     assert.ok(s.includes('scheduledEnd:    draft.scheduledStart ? addHoursHHMM(draft.scheduledStart,'), 'the end follows the duration');
     assert.ok(s.includes('const addHoursHHMM = (hhmm, hrs) => {'));
 });
+
+test('the queue lists only jobs still to schedule; a scheduled job is listed only while it is the one opened (Jeff, 11 Sep)', () => {
+    assert.ok(s.includes("    const isUnscheduled = (j) => !j.start || (j.assignedTechIds || []).length === 0;"), 'no placed start, or no crew — a held crew and a won opportunity both count');
+    assert.ok(s.includes("        const listed = jobs.filter(j => isUnscheduled(j) || j.id === selectedJob?.id);"), 'unscheduled, plus the job opened here from the board');
+    assert.ok(s.includes("    const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(isUnscheduled) || null;"), 'the default selection is the first job to schedule, never a scheduled one');
+    assert.ok(!s.includes("selectedJobId={selectedJobId || jobsWithBridge[0]?.id}"), 'the parent no longer defaults to the first row of every job');
+    assert.ok(s.includes("        const sel = selectedJob;\n"), 'the held-crew effect reads the job actually shown');
+    assert.ok(s.includes("    }, [selectedJob?.id]);   // eslint-disable-line react-hooks/exhaustive-deps"), 'and follows it');
+});
+
+test('a won opportunity has Create job where a saved job has Edit job — header and card; unset template values read as unset', () => {
+    assert.ok(s.includes('Edit job →'), 'the saved job\'s header button');
+    assert.ok(s.includes("{onCreateBridgeJob && selectedJob.isBridge && ("), 'the header button for a won opportunity');
+    assert.ok(s.includes("{onCreateBridgeJob && j.isBridge && ("), 'the card link for a won opportunity');
+    assert.ok(s.includes("<span onClick={e => { e.stopPropagation(); onCreateBridgeJob(j); }} title=\"Create the job from this won opportunity\""), 'the card link does not also re-select');
+    assert.equal(s.match(/onCreateBridgeJob\(selectedJob\)/g).length, 1, 'one Create job button on the selected row — the banner explains, the header acts');
+    assert.ok(s.includes('const crewLine = (j, compact = false) => {'));
+    assert.ok(s.includes("    if (crew == null && hrs == null) return 'crew and duration not set';"));
+    assert.ok(s.includes('<span>{crewLine(j, true)}</span>'), 'the queue card');
+    assert.ok(s.includes('<span>{crewLine(job)}</span>'), 'the board rail card');
+    assert.ok(s.includes("{ l: 'Crew size',   v: selectedJob.crewSize > 0 ? `${selectedJob.crewSize} tech${selectedJob.crewSize > 1 ? 's' : ''}` : 'Not set' },"));
+    assert.ok(s.includes("{ l: 'Duration',    v: selectedJob.durationHrs > 0 ? `${selectedJob.durationHrs}h` : 'Not set' },"));
+    assert.ok(s.includes("{ l: 'Min license', v: selectedJob.minLicense || 'Not set' },"));
+    assert.ok(!s.includes('`${selectedJob.crewSize} techs`'), '"null techs" is gone');
+});

@@ -54,7 +54,7 @@ test('DispatchTab: the queue\'s cards and header click through to the job record
     assert.ok(s.includes('openJobRequest={openJobRequest}'), 'the Jobs view receives the request');
     assert.ok(s.includes('        setSelectedId(openJobRequest.id);'), 'and selects that job');
     assert.ok(s.includes("<span onClick={e => { e.stopPropagation(); onOpenJob(j.id); }} title=\"Open the job record\""), 'each card has an Open link that does not also re-select');
-    assert.ok(s.includes('Open job record →'), 'the header has the button');
+    assert.ok(s.includes('Edit job →'), 'the header has the button (relabelled 11 Sep — Jeff: "edit the job\'s details from here via pushing a button")');
 });
 
 test('DispatchJobTemplatesDetail: no inert "Test auto-create" button', () => {

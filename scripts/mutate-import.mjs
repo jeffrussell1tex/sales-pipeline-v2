@@ -1992,6 +1992,21 @@ const mutations = [
         'src/Tabs/DispatchTab.jsx',
         "            showNotice(`Scheduled — ${crewNames.join(', ')} on ${dateStr} at ${to12h(scheduleTime) || scheduleTime}.`",
         "            showNotice(''"],
+
+    ['queue: every job is listed again, the scheduled ones included',
+        'src/Tabs/DispatchTab.jsx',
+        '        const listed = jobs.filter(j => isUnscheduled(j) || j.id === selectedJob?.id);',
+        '        const listed = jobs.slice();'],
+
+    ['queue header: a won opportunity has no Create job button',
+        'src/Tabs/DispatchTab.jsx',
+        '{onCreateBridgeJob && selectedJob.isBridge && (',
+        '{false && selectedJob.isBridge && ('],
+
+    ['crew line: a job with no template reads "crew not set · duration not set" instead of one honest line',
+        'src/Tabs/DispatchTab.jsx',
+        "    if (crew == null && hrs == null) return 'crew and duration not set';\n",
+        ''],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

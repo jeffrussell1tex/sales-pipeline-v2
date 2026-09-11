@@ -79,6 +79,17 @@ const queueWindow = (j) => {
     const day = j.scheduledDate || 'TBD';
     return j.scheduledStart ? `${day} · prefers ${to12h(j.scheduledStart) || j.scheduledStart}` : day;
 };
+// A won opportunity's crew size and duration come from its job template; with
+// none matched they are null and must read as unset — the header read "null
+// techs" / "nullh" and the cards "p × h" (Jeff's queue, 11 Sep).
+const crewLine = (j, compact = false) => {
+    const crew = j.crewSize > 0 ? j.crewSize : null;
+    const hrs  = j.durationHrs > 0 ? j.durationHrs : null;
+    if (crew == null && hrs == null) return 'crew and duration not set';
+    const c = crew == null ? 'crew not set' : (compact ? `${crew}p` : `${crew} tech${crew > 1 ? 's' : ''}`);
+    const h = hrs == null ? 'duration not set' : `${hrs}h`;
+    return `${c} ${compact ? '×' : '·'} ${h}`;
+};
 // 'HH:MM' plus a duration in hours, back to 'HH:MM' (wraps at midnight).
 const addHoursHHMM = (hhmm, hrs) => {
     const mins = (Math.round((hhToNum(hhmm) + (Number(hrs) || 0)) * 60) % (24 * 60) + 24 * 60) % (24 * 60);
@@ -617,7 +628,7 @@ const UnassignedCard = ({ job, skills, onClick }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: T.inkMid }}>
                 <span>{job.window}</span>
                 <span style={{ color: T.inkMuted }}>·</span>
-                <span>{job.crewSize} tech{job.crewSize > 1 ? 's' : ''} · {job.durationHrs}h</span>
+                <span>{crewLine(job)}</span>
                 <span style={{ flex: 1 }}/>
                 <span style={{ fontSize: 10.5, color: T.goldInk, fontWeight: 600 }}>Build crew →</span>
             </div>
@@ -915,8 +926,18 @@ const CrewNextStep = ({ crewNames, addedCount, crewSlots, held, dateStr, onDate,
 
 const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehicles = [], blocks, blockTypes, selectedJobId, onSelectJob, onBack, onScheduled, onHeld, onCreateBridgeJob, onOpenJob }) => {
     const [queueSort, setQueueSort] = useState('Priority');
-    const sortedQueue = useMemo(() => jobs.slice().sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority), [jobs, queueSort]);
-    const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(j => !j.start) || jobs[0];
+    // The list is what its heading says (Jeff, 11 Sep: "Doesn't it make more
+    // sense to only show unscheduled jobs under that list"): jobs with no placed
+    // start or no crew — a held crew and a won opportunity included. A SCHEDULED
+    // job opened here from the board is listed too, alone among scheduled jobs,
+    // so it can still be re-crewed; it drops out once deselected. The default
+    // selection is the first job to schedule, never a scheduled one.
+    const isUnscheduled = (j) => !j.start || (j.assignedTechIds || []).length === 0;
+    const selectedJob = jobs.find(j => j.id === selectedJobId) || jobs.find(isUnscheduled) || null;
+    const sortedQueue = useMemo(() => {
+        const listed = jobs.filter(j => isUnscheduled(j) || j.id === selectedJob?.id);
+        return listed.sort(QUEUE_SORTS[queueSort] || QUEUE_SORTS.Priority);
+    }, [jobs, queueSort, selectedJob?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
     const [addedTechs, setAddedTechs] = useState({});
     // Pending override: { tech, blockers }. Assigning a blocked technician is a
     // deliberate act (licence, expired cert, over-hours, double-booking), so it
@@ -941,7 +962,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        const sel = (jobs || []).find(j => j.id === selectedJobId);
+        const sel = selectedJob;
         // A crew held for the group schedule (§0.115) comes back as the added
         // crew, so the dispatcher sees who was chosen instead of an empty list.
         const held = sel && sel.start == null ? (sel.assignedTechIds || []) : [];
@@ -949,7 +970,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
         // The job's preferred start (Jobs → Preferred start time, §0.112) seeds
         // the builder's Start, so a dispatcher who set one is not asked again.
         setScheduleTime(sel?.scheduledStart || '');
-    }, [selectedJobId]);   // eslint-disable-line react-hooks/exhaustive-deps
+    }, [selectedJob?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     const candidates = useMemo(() => {
         if (!selectedJob) return [];
@@ -1231,7 +1252,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                 <div style={{ fontSize: 10.5, color: T.inkMid, display: 'flex', gap: 6 }}>
                                     <span>◷ {j.window}</span>
                                     <span style={{ color: T.inkMuted }}>·</span>
-                                    <span>{j.crewSize}p × {j.durationHrs}h</span>
+                                    <span>{crewLine(j, true)}</span>
                                     {isScheduled && <span style={{ marginLeft: 'auto', color: T.ok, fontWeight: 600 }}>✓ Scheduled</span>}
                                     {/* Click-through to the job record (Jeff: "these are static right now"). The
                                         card itself still SELECTS the job for the builder; this opens it in Jobs. */}
@@ -1239,6 +1260,14 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                         <span onClick={e => { e.stopPropagation(); onOpenJob(j.id); }} title="Open the job record"
                                             style={{ marginLeft: isScheduled ? 8 : 'auto', color: T.info, fontWeight: 600, cursor: 'pointer' }}>
                                             Open →
+                                        </span>
+                                    )}
+                                    {/* A won opportunity has no record to open; the job is created
+                                        from it, and its details are edited in that form. */}
+                                    {onCreateBridgeJob && j.isBridge && (
+                                        <span onClick={e => { e.stopPropagation(); onCreateBridgeJob(j); }} title="Create the job from this won opportunity"
+                                            style={{ marginLeft: 'auto', color: T.info, fontWeight: 600, cursor: 'pointer' }}>
+                                            Create job →
                                         </span>
                                     )}
                                 </div>
@@ -1268,10 +1297,20 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                 </span>
                                 <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.mono }}>{selectedJob.id}</span>
                                 {onOpenJob && !selectedJob.isBridge && (
-                                    <button onClick={() => onOpenJob(selectedJob.id)}
+                                    <button onClick={() => onOpenJob(selectedJob.id)} title="Open the job record to edit its details"
                                         style={{ padding: '3px 10px', background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r,
                                             fontSize: 11, fontWeight: 600, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
-                                        Open job record →
+                                        Edit job →
+                                    </button>
+                                )}
+                                {/* Jeff (11 Sep): "I can't edit the selected job beyond scheduling" — on a
+                                    won opportunity there is nothing to edit yet; creating the job is where
+                                    its details are filled in, so the button sits where Edit job would. */}
+                                {onCreateBridgeJob && selectedJob.isBridge && (
+                                    <button onClick={() => onCreateBridgeJob(selectedJob)} title="Create the job from this won opportunity and fill in its details"
+                                        style={{ padding: '3px 10px', background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r,
+                                            fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                        Create job →
                                     </button>
                                 )}
                                 <span style={{ flex: 1 }}/>
@@ -1283,9 +1322,9 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 10 }}>
                                 {[
                                     { l: 'Window',      v: selectedJob.window },
-                                    { l: 'Crew size',   v: `${selectedJob.crewSize} techs` },
-                                    { l: 'Duration',    v: `${selectedJob.durationHrs}h` },
-                                    { l: 'Min license', v: selectedJob.minLicense },
+                                    { l: 'Crew size',   v: selectedJob.crewSize > 0 ? `${selectedJob.crewSize} tech${selectedJob.crewSize > 1 ? 's' : ''}` : 'Not set' },
+                                    { l: 'Duration',    v: selectedJob.durationHrs > 0 ? `${selectedJob.durationHrs}h` : 'Not set' },
+                                    { l: 'Min license', v: selectedJob.minLicense || 'Not set' },
                                     { l: 'Vehicle',     v: selectedJob.requiredVehicleType ? labelise(selectedJob.requiredVehicleType) : 'Any' },
                                     { l: 'Preferred',   v: selectedJob.preferredTechId ? roster.find(t => t.id === selectedJob.preferredTechId)?.name?.split(' ')[0] || 'Unknown' : '—' },
                                 ].map(s => (
@@ -1358,16 +1397,8 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                                         {selectedJob.templateName
                                             ? `Defaults shown come from the "${selectedJob.templateName}" template.`
                                             : 'No template matched, so crew, duration and licence are unset.'}
-                                        {' '}Create the job to schedule it.
+                                        {' '}Create job (beside the name above) to fill in its details and schedule it.
                                     </div>
-                                    {onCreateBridgeJob && (
-                                        <button onClick={() => onCreateBridgeJob(selectedJob)}
-                                            style={{ padding: '6px 12px', background: T.ink, color: '#fbf8f3', border: 'none',
-                                                borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                                                fontFamily: T.sans, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                            Create job
-                                        </button>
-                                    )}
                                 </div>
                             )}
 
@@ -5945,7 +5976,7 @@ export default function DispatchTab() {
                     <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} allTechs={techs} skills={skills} equipUnits={equipment} vehicles={vehicles}
                         blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
                         onCreateBridgeJob={startBridgeJob}
-                        selectedJobId={selectedJobId || jobsWithBridge[0]?.id}
+                        selectedJobId={selectedJobId}
                         onSelectJob={setSelectedJobId}
                         onOpenJob={openJobRecord}
                         onBack={() => setView('board')}
