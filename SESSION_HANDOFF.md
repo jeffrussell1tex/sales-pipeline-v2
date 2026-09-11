@@ -89,6 +89,18 @@ green baseline**, `index-DtQQ5W86.js`; **LANDED on dev** at 18:48:40 UTC (the
 hash poll). **NOT observed. NOT shipped** — `dev` is ahead by FIVE code
 commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d`
 (§0.119), `e5d574f` (§0.120), all bundle-only, no schema, no function change.
+**Then Jeff: "all works as it is supposed to. Ship prod"** — §0.117–§0.120
+OBSERVED on dev — **the SEVENTEENTH ship:** pre-flight clean (tree clean,
+`dev` == `origin/dev` == `dab2655`, `origin/master` an ancestor, 15 commits
+after `0726934`, five of them code, the diff over `netlify/`, `db/`,
+`package.json` and `netlify.toml` EMPTY), `git push origin dev:master` at
+20:59:07 UTC: `master` `0726934` → `dab2655`; salespipelinetracker.com
+serving `index-BDt4t8KW.js` from 20:59:42 UTC (35 s after the push) with the
+live key; the batch's literals found in the served bundle, the April
+`"thisQuarter"?[]` mapping absent (state §0.120, last paragraph). The Netlify
+record was NOT read (no deploy id to hand). **`master` == `dev` == `dab2655`
+at the ship**; `dev` is ahead only by the ship-record docs commits (`fd2c1d0`
+and this one). **NOT yet observed on prod** — Jeff's, in §5.
 
 **Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
@@ -603,7 +615,11 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); `dev` is ahead by FIVE CODE commits, §0.117 `e4d9ac3`, §0.118 `889cc85` and its follow-up `0deb6b6`, §0.119 `074669d`, §0.120 `e5d574f` — NOT shipped
+## 1. What shipped — the SEVENTEENTH ship put §0.117–§0.120 on `master` (11 Sep 20:59 UTC, `dab2655`, bundle only); `dev` is ahead only by the ship-record docs commits
+
+**PROD SHIPPED — the SEVENTEENTH ship (Jeff: "all works as it is supposed to. Ship prod", 11 Sep).** Pre-flight: tree clean, `dev` == `origin/dev` == `dab2655`, `origin/master` (`0726934`) an ancestor of `dev`, 15 commits after it (five code: `e4d9ac3`, `889cc85`, `0deb6b6`, `074669d`, `e5d574f`), no function, schema or config change (the diff over `netlify/`, `db/`, `package.json`, `netlify.toml` empty). `git push origin dev:master` at 20:59:07 UTC: `master` `0726934` → `dab2655`. salespipelinetracker.com serving `index-BDt4t8KW.js` from 20:59:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-DtQQ5W86.js` — the key differs); the served bundle carries "Edit job →", "Create job →", "crew and duration not set", "No deals match the current filter." and `"allTime"?[]:[`, and NOT `"thisQuarter"?[]`. The Netlify deploy record was not read this time (the reader takes a deploy id; none to hand). **What prod does differently from this moment:** the Queue lists only jobs to schedule; a scheduled job clicked on the Job Board opens its record in Jobs; "Edit job →" / "Create job →" in the queue header and on the cards; unset template values read "Not set"; the queue card's "prefers" note and no 8 px scroll (§0.117–§0.118); the Pipeline List shows Closed Won / Closed Lost deals when the filter asks (§0.119); the Filter popover's "This quarter" filters and "All time" reads back as itself (§0.120). Every "NOT shipped" in §0.117–§0.120 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in §5.
+
+**Earlier — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`).**
 
 **PROD SHIPPED — the SIXTEENTH ship (Jeff: "ship prod", 10 Sep).** Pre-flight: tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 29 commits after `0a242c6` (ten of them code: `470b948`, `a29cc1e`, `223c99a`, `9bc6b89`, `360e4f7`, `54fb180`, `e5970f3`, `d7f0765`, `1233de4`, `a7201b7`). `git push origin dev:master` at 22:50:39 UTC: `master` `0a242c6` → `0726934`. Netlify record `6aa33443…`: branch `master`, commit `0726934`, created 22:50:43, published 22:51:30 UTC (51 seconds after the push, deploy_time 45 s), **80 functions**, **2 redirect rules**, 1 header rule, secret scan clean over 412 files; salespipelinetracker.com serving `index-DaJE9sq9.js` from 22:51:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-mSB6P0Q8.js` — the key differs). The one schema change of the batch, `dispatch_jobs.assigned_equipment_ids`, was already in the shared database (applied 10 Sep, §18c) — nothing applied at ship time. **What prod does differently from this moment:** the roster is read on the board (a technician with a pattern is rostered, one without is "Not rostered" — §0.112); a job with no category saves from the editor, a new technician starts Mon–Fri 08:00–17:00 (§0.113); the Dispatch page fits the screen, the next-step card asks Schedule now / Wait for group schedule / Clear the moment a crew slot is filled, a held crew is persisted and honoured by Mass-schedule (§0.114–§0.115); equipment is required by KIND, scheduling reserves one in-service unit per kind and releases it on unschedule, and the kind/skill chips read as toggles (§0.116). Every "NOT shipped" in §0.112–§0.116 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in the handoff §5.
 
@@ -1416,7 +1432,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (11 Sep, thirteenth session — nothing shipped this session)
 
-**`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `e5d574f` before the handoff commit, ahead by FIVE CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d` (§0.119), `e5d574f` (§0.120), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 716/716 unit, 147/147 integration, 420/420 mutations (printed green baseline, no restore errors in any of the four runs), build guard OK 2,479 kB `index-DtQQ5W86.js`, `dist/` cleared; dev serving `index-DtQQ5W86.js` from 18:48:40 UTC 11 Sep (before it `index-jRTXPWFT.js` from 18:35:08, `index-BYQZhHpB.js` from 17:03:24, `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
+**AT THE SEVENTEENTH SHIP (20:59:07 UTC 11 Sep): `master` == `dev` == `dab2655`; prod serving `index-BDt4t8KW.js` from 20:59:42 UTC; `dev` then ahead only by the ship-record docs commits (`fd2c1d0` state, then this handoff).** The state before the ship: **`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `e5d574f` before the handoff commit, ahead by FIVE CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d` (§0.119), `e5d574f` (§0.120), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 716/716 unit, 147/147 integration, 420/420 mutations (printed green baseline, no restore errors in any of the four runs), build guard OK 2,479 kB `index-DtQQ5W86.js`, `dist/` cleared; dev serving `index-DtQQ5W86.js` from 18:48:40 UTC 11 Sep (before it `index-jRTXPWFT.js` from 18:35:08, `index-BYQZhHpB.js` from 17:03:24, `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
 
 **Twelfth session's close (10 Sep — after the SIXTEENTH ship):**
 
@@ -1539,12 +1555,22 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   nothing while they are off.
 
 **Fourteenth-session prep — first:**
+- **After the SEVENTEENTH ship — prod observations, Jeff's (Admin,
+  salespipelinetracker.com), in order:** Dispatch → Queue: only unscheduled
+  jobs in the list; a saved job's "Edit job →", a won opportunity's near-black
+  "Create job →" with "Not set" in its grid; Job Board → a scheduled job →
+  the Jobs tab. Pipeline → Filter → Stage "Closed Won" → Apply → the won
+  deals listed by quarter; Filter → Time window reads "All time" by default,
+  "This quarter" → Apply → only this quarter's close dates. Prod's rows are
+  his — read before assuming any won deal or scheduled job exists there.
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  FIVE CODE commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118),
-  `074669d` (§0.119), `e5d574f` (§0.120), and the docs around them; anything else is a finding. Compare against `origin/master`:
+  ONLY the two ship-record docs commits after `dab2655` (`fd2c1d0` state,
+  then the handoff); any CODE commit is a finding; anything else is a finding. Compare against `origin/master`:
   the local `master` branch is stale (ships push `dev:master`). Ship both
   when Jeff says so — bundle only, no schema, no function change.
-- **§0.120 on dev — Jeff's checks (hard-refresh; bundle `index-DtQQ5W86.js`):**
+- **§0.120 on dev — OBSERVED by Jeff ("all works as it is supposed to")
+  before the ship; the same checks are now the prod list above.** The
+  original dev checks, for the record:
   Pipeline → Filter: the Time window reads **"All time"** when nothing has
   been chosen (it used to read "This quarter" while filtering nothing). Pick
   "This quarter" → Apply → only deals whose close date falls in Q4 2026 (Jul
