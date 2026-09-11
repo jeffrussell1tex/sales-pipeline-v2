@@ -47,7 +47,27 @@ baseline**, `index-BYQZhHpB.js`; **LANDED on dev** at 17:03:24 UTC (the hash
 poll). **The follow-up is NOT observed** — the pane is signed out on dev;
 Jeff's checks are in §5. **NOT shipped** — `master` stays at `0726934`;
 `dev` is ahead by THREE code commits, `e4d9ac3` (§0.117), `889cc85` and
-`0deb6b6` (§0.118), all bundle-only.
+`0deb6b6` (§0.118), all bundle-only. **Then Jeff on the follow-up: "all
+checks passed except the won opportunity black card"** (the §0.118 follow-up
+OBSERVED; the near-black Create job → still unseen — he had marked an
+opportunity won to get one and gone to the Pipeline first) — **and a new
+finding there: "I marked an opp won. Filtered by won deals only and it
+returned nothing in the list. I have all selected in all/mine."** Read: the
+tab's filter chain kept the six Closed Won rows (his header: "Showing 6 of
+6", "$1.0M total pipeline") and `ListView` then dropped every closed deal on
+its own ("Exclude closed deals (same as other views)", `740cac7`, 27 Apr) —
+the Filter popover offered two stages the List view could never show; Funnel
+and Kanban already show Closed Won. → **§0.119 `074669d`** (bundle only):
+`ListView` renders the set it is handed; the "All open" default still
+excludes closed deals upstream when no stage filter is set. +1 test file
+(`list-view-closed`, 2 scans, registered in `SUITES`), 1 mutant; six gates,
+713/713 unit, 147/147 integration, **419/419 mutations after a printed green
+baseline**, `index-jRTXPWFT.js`; **LANDED on dev** at 18:35:08 UTC (the hash
+poll). **NOT observed. NOT shipped** — `master` stays at `0726934`; `dev` is
+ahead by FOUR code commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6`
+(§0.118), `074669d` (§0.119), all bundle-only. Flagged, not done (§0.119):
+the header's "0 open deals" beside a won-only list; a Closed Lost filter
+shows nothing in Funnel or Kanban, whose columns omit that stage by design.
 
 **Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
@@ -562,7 +582,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); `dev` is ahead by THREE CODE commits, §0.117 `e4d9ac3`, §0.118 `889cc85` and its follow-up `0deb6b6` — NOT shipped
+## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); `dev` is ahead by FOUR CODE commits, §0.117 `e4d9ac3`, §0.118 `889cc85` and its follow-up `0deb6b6`, §0.119 `074669d` — NOT shipped
 
 **PROD SHIPPED — the SIXTEENTH ship (Jeff: "ship prod", 10 Sep).** Pre-flight: tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 29 commits after `0a242c6` (ten of them code: `470b948`, `a29cc1e`, `223c99a`, `9bc6b89`, `360e4f7`, `54fb180`, `e5970f3`, `d7f0765`, `1233de4`, `a7201b7`). `git push origin dev:master` at 22:50:39 UTC: `master` `0a242c6` → `0726934`. Netlify record `6aa33443…`: branch `master`, commit `0726934`, created 22:50:43, published 22:51:30 UTC (51 seconds after the push, deploy_time 45 s), **80 functions**, **2 redirect rules**, 1 header rule, secret scan clean over 412 files; salespipelinetracker.com serving `index-DaJE9sq9.js` from 22:51:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-mSB6P0Q8.js` — the key differs). The one schema change of the batch, `dispatch_jobs.assigned_equipment_ids`, was already in the shared database (applied 10 Sep, §18c) — nothing applied at ship time. **What prod does differently from this moment:** the roster is read on the board (a technician with a pattern is rostered, one without is "Not rostered" — §0.112); a job with no category saves from the editor, a new technician starts Mon–Fri 08:00–17:00 (§0.113); the Dispatch page fits the screen, the next-step card asks Schedule now / Wait for group schedule / Clear the moment a crew slot is filled, a held crew is persisted and honoured by Mass-schedule (§0.114–§0.115); equipment is required by KIND, scheduling reserves one in-service unit per kind and releases it on unschedule, and the kind/skill chips read as toggles (§0.116). Every "NOT shipped" in §0.112–§0.116 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in the handoff §5.
 
@@ -1375,7 +1395,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (11 Sep, thirteenth session — nothing shipped this session)
 
-**`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `0deb6b6` before the handoff commit, ahead by THREE CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 711/711 unit, 147/147 integration, 418/418 mutations (printed green baseline, no restore errors in either run), build guard OK 2,479 kB `index-BYQZhHpB.js`, `dist/` cleared; dev serving `index-BYQZhHpB.js` from 17:03:24 UTC 11 Sep (the first cut `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
+**`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `074669d` before the handoff commit, ahead by FOUR CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d` (§0.119), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 713/713 unit, 147/147 integration, 419/419 mutations (printed green baseline, no restore errors in any of the three runs), build guard OK 2,479 kB `index-jRTXPWFT.js`, `dist/` cleared; dev serving `index-jRTXPWFT.js` from 18:35:08 UTC 11 Sep (before it `index-BYQZhHpB.js` from 17:03:24, `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
 
 **Twelfth session's close (10 Sep — after the SIXTEENTH ship):**
 
@@ -1499,21 +1519,21 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Fourteenth-session prep — first:**
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  THREE CODE commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118),
-  and the docs around them; anything else is a finding. Compare against `origin/master`:
+  FOUR CODE commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118),
+  `074669d` (§0.119), and the docs around them; anything else is a finding. Compare against `origin/master`:
   the local `master` branch is stale (ships push `dev:master`). Ship both
   when Jeff says so — bundle only, no schema, no function change.
-- **§0.118 follow-up on dev — Jeff's checks (hard-refresh; bundle
-  `index-BYQZhHpB.js`):** Job Board → click a SCHEDULED job → the **Jobs**
-  tab opens on that job's editor (not the Queue), and the Queue's list never
-  gains a scheduled card; Dispatch → Service Due → "Open job" on a scheduled
-  visit → the same. Job Board → click an UNSCHEDULED job in the rail → the
-  Queue, as before. From his first-cut screenshot, ALREADY SEEN: the list
-  without scheduled cards, "Edit job →", "Create job →" on the won-opportunity
-  cards, "crew and duration not set". Still his: select a won opportunity →
-  the header's near-black **Create job →** and "Not set" in its grid; the
-  banner without a button of its own; with every job scheduled the centre
-  reads "Select a job from the queue to build a crew."
+- **§0.119 on dev — Jeff's check (hard-refresh; bundle `index-jRTXPWFT.js`):**
+  Pipeline → List → Filter → Stage "Closed Won" → Apply → the won deals are
+  listed, grouped by close quarter (a won deal with no forecast date under
+  "No close date"); Reset → the open deals only, as before. Then his call on
+  the two flagged items: the header's "0 open deals" beside a won-only list,
+  and whether Funnel/Kanban should grow a Closed Lost column.
+- **§0.118 follow-up on dev — OBSERVED by Jeff ("all checks passed except the
+  won opportunity black card").** Still his, one item: Dispatch → Queue →
+  select a won opportunity (an `auto_…` row) → the header's near-black
+  **Create job →** beside its id and "Not set" for crew size, duration and
+  min license; the banner without a button of its own.
 - **§0.117 on dev — Jeff's remaining check:** "1: no scrolling" DONE (11
   Sep). Still his: set a Preferred start time on an UNSCHEDULED job under
   Jobs → its queue card reads "◷ <date> · prefers <time>", not the bare time.
