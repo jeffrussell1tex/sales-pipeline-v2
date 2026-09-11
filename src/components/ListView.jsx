@@ -349,13 +349,15 @@ export default function ListView({ pipelineFilteredOpps, handleEdit }) {
     const { canSeeAll, calculateDealHealth, settings } = useApp();
     const fiscalStart = parseInt(settings?.fiscalYearStart) || 1;
 
-    // Exclude closed deals (same as other views)
-    const openOpps = pipelineFilteredOpps.filter(
-        o => !['Closed Won', 'Closed Lost'].includes(o.stage)
-    );
+    // The tab decides what the list shows. Its "All open" default already
+    // excludes closed deals when no stage filter is set; when the Filter popover
+    // asks for Closed Won or Closed Lost the list must show them — an
+    // unconditional drop here left "Filter · Closed Won" reading "No deals match
+    // the current filter." under a header counting six (Jeff, 11 Sep).
+    const listOpps = pipelineFilteredOpps;
 
     // Group by close quarter using forecastedCloseDate
-    const groups = groupByQuarter(openOpps, fiscalStart);
+    const groups = groupByQuarter(listOpps, fiscalStart);
 
     // Determine current calendar quarter key
     const todayIso  = todayLocal();
@@ -371,10 +373,10 @@ export default function ListView({ pipelineFilteredOpps, handleEdit }) {
     const validKey    = groups.find(g => g.key === activeKey)?.key || groups[0]?.key || null;
     const activeGroup = groups.find(g => g.key === validKey) || null;
     const sum         = activeGroup ? qSummary(activeGroup.opps) : { total: 0, weighted: 0, commit: 0, count: 0 };
-    const totalAll    = openOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
+    const totalAll    = listOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
 
     // ── Empty state ───────────────────────────────────────────
-    if (openOpps.length === 0) {
+    if (listOpps.length === 0) {
         return (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
                 No deals match the current filter.
