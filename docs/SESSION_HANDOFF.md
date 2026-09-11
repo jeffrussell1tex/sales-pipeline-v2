@@ -68,6 +68,27 @@ ahead by FOUR code commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6`
 (§0.118), `074669d` (§0.119), all bundle-only. Flagged, not done (§0.119):
 the header's "0 open deals" beside a won-only list; a Closed Lost filter
 shows nothing in Funnel or Kanban, whose columns omit that stage by design.
+**§0.119 OBSERVED by Jeff's next screenshot** (the Closed Won list: Q4 2026 ·
+4 deals, Q1 2027 · 2 deals in the quarter rail, two rows in the table) —
+**with the next finding on it: "This is for this quarter and the time window
+selected in the filter. I keep trying to select all time and it allows me to
+select it but it does not actually use that selection and when I reopen the
+filter it still is closed won but has switched back to this quarter for
+time."** Read: the popover's Apply mapped BOTH "All time" and "This quarter"
+to the empty quarter filter (`c25a043`, 21 Apr), and seeded its draft with
+'thisQuarter' whenever the filter was empty — so "This quarter" had NEVER
+filtered (his "this quarter" screenshot listed Q4 2026 and Q1 2027 deals side
+by side; the match rule in `timeFilterOpts` was never reached) and "All
+time" was applied invisibly, reading back as "This quarter". → **§0.120
+`e5d574f`** (bundle only): only "All time" is the empty filter; every other
+window is stored and filters; the empty filter reads back as "All time" on
+mount, reopen and Reset; the default view is unchanged. +1 test file
+(`pipeline-time-window`, 3 scans, registered in `SUITES`), 1 mutant; six
+gates, 716/716 unit, 147/147 integration, **420/420 mutations after a printed
+green baseline**, `index-DtQQ5W86.js`; **LANDED on dev** at 18:48:40 UTC (the
+hash poll). **NOT observed. NOT shipped** — `dev` is ahead by FIVE code
+commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d`
+(§0.119), `e5d574f` (§0.120), all bundle-only, no schema, no function change.
 
 **Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
@@ -582,7 +603,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); `dev` is ahead by FOUR CODE commits, §0.117 `e4d9ac3`, §0.118 `889cc85` and its follow-up `0deb6b6`, §0.119 `074669d` — NOT shipped
+## 1. What shipped — the SIXTEENTH ship put §0.112–§0.116 on `master` (10 Sep 22:51 UTC, `0726934`); `dev` is ahead by FIVE CODE commits, §0.117 `e4d9ac3`, §0.118 `889cc85` and its follow-up `0deb6b6`, §0.119 `074669d`, §0.120 `e5d574f` — NOT shipped
 
 **PROD SHIPPED — the SIXTEENTH ship (Jeff: "ship prod", 10 Sep).** Pre-flight: tree clean, `dev` == `origin/dev`, `origin/master` an ancestor of `dev`, 29 commits after `0a242c6` (ten of them code: `470b948`, `a29cc1e`, `223c99a`, `9bc6b89`, `360e4f7`, `54fb180`, `e5970f3`, `d7f0765`, `1233de4`, `a7201b7`). `git push origin dev:master` at 22:50:39 UTC: `master` `0a242c6` → `0726934`. Netlify record `6aa33443…`: branch `master`, commit `0726934`, created 22:50:43, published 22:51:30 UTC (51 seconds after the push, deploy_time 45 s), **80 functions**, **2 redirect rules**, 1 header rule, secret scan clean over 412 files; salespipelinetracker.com serving `index-DaJE9sq9.js` from 22:51:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-mSB6P0Q8.js` — the key differs). The one schema change of the batch, `dispatch_jobs.assigned_equipment_ids`, was already in the shared database (applied 10 Sep, §18c) — nothing applied at ship time. **What prod does differently from this moment:** the roster is read on the board (a technician with a pattern is rostered, one without is "Not rostered" — §0.112); a job with no category saves from the editor, a new technician starts Mon–Fri 08:00–17:00 (§0.113); the Dispatch page fits the screen, the next-step card asks Schedule now / Wait for group schedule / Clear the moment a crew slot is filled, a held crew is persisted and honoured by Mass-schedule (§0.114–§0.115); equipment is required by KIND, scheduling reserves one in-service unit per kind and releases it on unschedule, and the kind/skill chips read as toggles (§0.116). Every "NOT shipped" in §0.112–§0.116 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in the handoff §5.
 
@@ -1395,7 +1416,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (11 Sep, thirteenth session — nothing shipped this session)
 
-**`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `074669d` before the handoff commit, ahead by FOUR CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d` (§0.119), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 713/713 unit, 147/147 integration, 419/419 mutations (printed green baseline, no restore errors in any of the three runs), build guard OK 2,479 kB `index-jRTXPWFT.js`, `dist/` cleared; dev serving `index-jRTXPWFT.js` from 18:35:08 UTC 11 Sep (before it `index-BYQZhHpB.js` from 17:03:24, `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
+**`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `e5d574f` before the handoff commit, ahead by FIVE CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d` (§0.119), `e5d574f` (§0.120), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 716/716 unit, 147/147 integration, 420/420 mutations (printed green baseline, no restore errors in any of the four runs), build guard OK 2,479 kB `index-DtQQ5W86.js`, `dist/` cleared; dev serving `index-DtQQ5W86.js` from 18:48:40 UTC 11 Sep (before it `index-jRTXPWFT.js` from 18:35:08, `index-BYQZhHpB.js` from 17:03:24, `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
 
 **Twelfth session's close (10 Sep — after the SIXTEENTH ship):**
 
@@ -1519,16 +1540,21 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
 
 **Fourteenth-session prep — first:**
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  FOUR CODE commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118),
-  `074669d` (§0.119), and the docs around them; anything else is a finding. Compare against `origin/master`:
+  FIVE CODE commits, `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118),
+  `074669d` (§0.119), `e5d574f` (§0.120), and the docs around them; anything else is a finding. Compare against `origin/master`:
   the local `master` branch is stale (ships push `dev:master`). Ship both
   when Jeff says so — bundle only, no schema, no function change.
-- **§0.119 on dev — Jeff's check (hard-refresh; bundle `index-jRTXPWFT.js`):**
-  Pipeline → List → Filter → Stage "Closed Won" → Apply → the won deals are
-  listed, grouped by close quarter (a won deal with no forecast date under
-  "No close date"); Reset → the open deals only, as before. Then his call on
-  the two flagged items: the header's "0 open deals" beside a won-only list,
-  and whether Funnel/Kanban should grow a Closed Lost column.
+- **§0.120 on dev — Jeff's checks (hard-refresh; bundle `index-DtQQ5W86.js`):**
+  Pipeline → Filter: the Time window reads **"All time"** when nothing has
+  been chosen (it used to read "This quarter" while filtering nothing). Pick
+  "This quarter" → Apply → only deals whose close date falls in Q4 2026 (Jul
+  1 – Sep 30 by the org's fiscal year), the badge counting it ("Filter · 2"
+  with a stage chosen); reopen → still "This quarter". Pick "All time" →
+  Apply → every quarter again; reopen → "All time". Reset → "All time".
+- **§0.119 on dev — OBSERVED by Jeff's screenshot** (Closed Won → the won
+  deals listed by quarter: Q4 2026 · 4, Q1 2027 · 2). Still his call on the
+  two flagged items: the header's "0 open deals" beside a won-only list, and
+  whether Funnel/Kanban should grow a Closed Lost column.
 - **§0.118 follow-up on dev — OBSERVED by Jeff ("all checks passed except the
   won opportunity black card").** Still his, one item: Dispatch → Queue →
   select a won opportunity (an `auto_…` row) → the header's near-black
