@@ -24,6 +24,7 @@ export const SLACK_ALERT_TYPES = Object.freeze([
     // Posted when it happens
     Object.freeze({ key: 'stageChanged',   kind: 'event',  label: 'Deal stage changed' }),
     Object.freeze({ key: 'dealClosedWon',  kind: 'event',  label: 'Deal closed won' }),
+    Object.freeze({ key: 'webLead',        kind: 'event',  label: 'New lead from the web form' }),
     // Checked every hour by the pipeline-alerts job
     Object.freeze({ key: 'dealSilent',     kind: 'hourly', label: 'Deal gone silent (no activity for 14 days)' }),
     Object.freeze({ key: 'dealStuck',      kind: 'hourly', label: 'Deal stuck in a stage past the average' }),

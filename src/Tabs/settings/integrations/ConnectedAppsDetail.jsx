@@ -31,6 +31,7 @@ import { T } from '../shared/tokens.js';
 import { useApp } from '../../../AppContext';
 import { REQUESTABLE_APPS } from '../../../utils/integrationCatalog.js';
 import { SLACK_ALERT_TYPES, cleanSlackAlerts, slackAlertsOnCount } from '../../../utils/slackAlerts.js';
+import { cleanWebToLead, webToLeadLinks } from '../../../utils/webToLead.js';
 import { calendarReturnMessage } from '../../../utils/calendarReturn.js';
 import { jobHealth, jobLine } from '../../../utils/jobHealth.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter } from './shared.jsx';
@@ -291,6 +292,48 @@ const BccCard = ({ bcc }) => {
     );
 };
 
+
+// The web-to-lead form (state §0.121): one hosted form per org behind an
+// unguessable token, embeddable by iframe; a submission is an UNASSIGNED lead.
+// Nothing to connect — turn it on, copy the link or the embed code. The token
+// is minted by the settings PUT, never here. Admin-only actions; anyone can
+// read the link once it is on. Module scope, data as props.
+const WebFormCard = ({ form, isAdmin, busy, note, onSave }) => {
+    const [copied,  setCopied]  = useState('');
+    const [copyErr, setCopyErr] = useState('');
+    const on    = form?.enabled === true && !!form.token;
+    const links = webToLeadLinks(typeof window !== 'undefined' ? window.location.origin : '', on ? form.token : null);
+    const copy = async (what, text) => {
+        setCopyErr('');
+        try { await navigator.clipboard.writeText(text); setCopied(what); setTimeout(() => setCopied(''), 1800); }
+        catch { setCopied(''); setCopyErr('Copy failed — select the text and copy it yourself.'); }
+    };
+    return (
+        <IntegrationCard
+            tile={<AppTile name="Web-to-lead form" color="#3a5a7a" emoji="📝" size={36}/>}
+            name="Web-to-lead form" category="Lead capture"
+            desc="A hosted contact form for your website — link to it or embed it. Every submission lands in Leads as an unassigned lead with source “Web form”, scored and ready to claim or assign, and posts to Slack when that alert is on."
+            pill={form == null ? null : on ? <Pill tone="ok">Live</Pill> : <Pill tone="muted">Off</Pill>}
+            foot={form == null ? <span style={{ fontSize:11.5, color:T.inkMuted }}>Loading…</span> : on ? (
+                <>
+                    <code style={{ fontSize:11.5, color:T.ink, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'3px 7px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>{links.formUrl}</code>
+                    <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
+                        <button onClick={() => copy('link', links.formUrl)} style={linkBtn(T.info)}>{copied === 'link' ? 'Copied' : 'Copy link'}</button>
+                        <button onClick={() => copy('embed', links.embed)} style={linkBtn(T.info)}>{copied === 'embed' ? 'Copied' : 'Copy embed code'}</button>
+                        {isAdmin && <button disabled={busy} onClick={() => onSave({ rotate: true })} title="Replace the link — the old one stops working" style={{ ...linkBtn(T.inkMid), opacity: busy ? 0.5 : 1 }}>{busy ? 'Saving…' : 'New link'}</button>}
+                        {isAdmin && <button disabled={busy} onClick={() => onSave({ enabled: false })} style={{ ...linkBtn(T.danger), opacity: busy ? 0.5 : 1 }}>Turn off</button>}
+                    </div>
+                </>
+            ) : isAdmin ? (
+                <button disabled={busy} onClick={() => onSave({ enabled: true })} style={{ ...linkBtn(T.info), opacity: busy ? 0.5 : 1 }}>{busy ? 'Turning on…' : 'Turn on'}</button>
+            ) : (
+                <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Off — an Admin can turn it on.</span>
+            )}>
+            <CardNote text={note || copyErr}/>
+        </IntegrationCard>
+    );
+};
+
 // A catalogue row is a REQUEST. It never says Connect and never opens a modal.
 const RequestRow = ({ app, request, onRequest, busy, last, note }) => (
     <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom: last ? 'none' : `1px solid ${T.border}` }}>
@@ -324,6 +367,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     const [requests,      setRequests]      = useState({});   // { [appId]: { requestedAt, byUserId, byName, note } }
     const [cal,           setCal]           = useState(null); // { userConnections, orgConnections, providers }
     const [bcc,           setBcc]           = useState(null); // { address, configured }
+    const [webForm,       setWebForm]       = useState(null); // cleanWebToLead() of settings.webToLead (§0.121)
     const [jobs,          setJobs]          = useState(null); // jobHealth() rows — the Slack card says when alerts last ran (§0.98)
     const [loading,       setLoading]       = useState(true);
     const [error,         setError]         = useState('');   // the settings load only — nothing else on screen to say it
@@ -349,6 +393,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                 setConnectedApps(data.settings?.connectedApps || {});
                 setSlackConfig(data.settings?.slackConfig || {});
                 setRequests(data.settings?.integrationRequests || {});
+                setWebForm(cleanWebToLead(data.settings?.webToLead));
             } catch (e) {
                 if (!cancelled) setError(`Settings could not be loaded — ${e.message}`);
             } finally {
@@ -458,10 +503,30 @@ export const ConnectedAppsDetail = ({ onBack }) => {
         setBusy(null);
     };
 
+
+    // The web-to-lead form (state §0.121). Turn on mints the token SERVER-SIDE
+    // in the settings PUT, so the panel re-reads settings to learn it; the same
+    // read after New link and Turn off. The outcome lands on the card (§18b32).
+    const saveWebForm = async (patch) => {
+        setBusy('webform'); note('webform', '');
+        try {
+            await putSettings({ webToLead: { ...(webForm || {}), ...patch } });
+            const res  = await dbFetch('/.netlify/functions/settings');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Saved, but the form settings could not be re-read');
+            setWebForm(cleanWebToLead(data.settings?.webToLead));
+        } catch (e) {
+            note('webform', `Not saved — ${e.message}`);
+        } finally {
+            setBusy(null);
+        }
+    };
+
     const connByProvider = (list, provider) => (list || []).find(c => c.provider === provider) || null;
     const liveCount = (slackConnected ? 1 : 0)
         + CALENDARS.filter(c => connByProvider(cal?.orgConnections, c.provider) || connByProvider(cal?.userConnections, c.provider)).length
-        + (bcc?.configured ? 1 : 0);
+        + (bcc?.configured ? 1 : 0)
+        + (webForm?.enabled && webForm.token ? 1 : 0);
     const requestedCount = Object.values(requests).filter(r => r?.requestedAt).length;
     const alertsJob = jobs ? jobs.find(j => j.job === 'pipeline-alerts') || null : null;
 
@@ -478,7 +543,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
 
             <IntCrumb page="Connected apps" onBack={onBack}/>
             <IntTitle title="Connected apps"
-                sub={`${liveCount} live · Slack, calendars and email logging are the integrations that exist; anything else can be requested below`}/>
+                sub={`${liveCount} live · Slack, calendars, email logging and the web-to-lead form are the integrations that exist; anything else can be requested below`}/>
 
             {error && <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>}
 
@@ -515,6 +580,7 @@ export const ConnectedAppsDetail = ({ onBack }) => {
                             onConnect={connectCalendar} onDisconnect={disconnectCalendar}/>
                     ))}
                     <BccCard bcc={bcc}/>
+                    <WebFormCard form={webForm} isAdmin={isAdmin} busy={busy === 'webform'} note={notes.webform} onSave={saveWebForm}/>
                 </div>
             </div>
 

@@ -324,6 +324,19 @@ export const slackTemplates = {
     },
 
     // A deal changed stage — posted from the save (state §0.99)
+    // A submission on the org's web-to-lead form (state §0.121) — posted the
+    // moment it lands, under the org's 'webLead' switch. Fields as given by the
+    // visitor; the lead is unassigned, so the post is the prompt to claim it.
+    webLead: ({ name, company, email, phone, message }) => ({
+        text: `📝 New web lead — *${name}* (${company})`,
+        blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: `📝 *New lead from the web form*\n*${name}* — ${company}` } },
+            { type: 'context', elements: [{ type: 'mrkdwn', text: `Email: *${email}* · Phone: *${phone}* · Unassigned — claim it in Leads` }] },
+            ...(message ? [{ type: 'section', text: { type: 'mrkdwn', text: `> ${String(message).slice(0, 600).replace(/\n/g, '\n> ')}` } }] : []),
+            { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'View leads →' }, url: APP_URL, action_id: 'view_leads' }] },
+        ],
+    }),
+
     stageChanged: ({ mover, repName, dealName, account, arr, fromStage, toStage }) => ({
         text: `➡️ *${dealName}* moved to ${toStage}${fromStage ? ` (from ${fromStage})` : ''}`,
         blocks: [

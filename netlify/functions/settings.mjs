@@ -5,6 +5,8 @@ import { verifyAuth, requireRole, isAdmin } from './auth.mjs';
 import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
 import { cleanSlackAlerts } from '../../src/utils/slackAlerts.js';
 import { cleanCustomerNotifications } from '../../src/utils/customerNotifications.js';
+import { cleanWebToLead } from '../../src/utils/webToLead.js';
+import { randomBytes } from 'crypto';
 import { encrypt, decrypt } from './crypto.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 import { DEFAULT_LEAD_SCORING } from './score-lead.mjs';
@@ -113,6 +115,10 @@ export const handler = async (event) => {
                 // What dispatch customers are told (state §0.111). Off by default;
                 // the panel and the jobs function read one normaliser.
                 customerNotifications: cleanCustomerNotifications(row.extra?.customerNotifications),
+                // The web-to-lead form (state §0.121): on/off, the token, source,
+                // thank-you URL. Normalised here with NO mint — a read never creates
+                // a token; only the PUT below does.
+                webToLead: cleanWebToLead(row.extra?.webToLead),
                 // Written server-side by integration-requests.mjs (§0.90); read by
                 // the Connected Apps panel. Carried here so an Admin settings save
                 // never wipes it.
@@ -268,6 +274,9 @@ export const handler = async (event) => {
                 connectedApps:  'connectedApps'  in data ? (data.connectedApps  || {}) : existingExtra.connectedApps  || {},
                 slackConfig:    'slackConfig'    in data ? (data.slackConfig    || {}) : existingExtra.slackConfig    || {},
                 customerNotifications: 'customerNotifications' in data ? cleanCustomerNotifications(data.customerNotifications) : existingExtra.customerNotifications || {},
+                // The stored token survives every save; a token is minted only when
+                // the form is turned on without one, or a rotate is asked for.
+                webToLead: 'webToLead' in data ? cleanWebToLead(data.webToLead, existingExtra.webToLead, () => randomBytes(24).toString('base64url')) : existingExtra.webToLead || {},
                 integrationRequests: 'integrationRequests' in data ? (data.integrationRequests || {}) : existingExtra.integrationRequests || {},
                 // Company profile detail fields
                 companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,

@@ -3367,3 +3367,48 @@ detail; then asserts a short token, an unknown token and a row id are the
 same 404 (`tests/integration/customer-notify.itest.mjs`); a scan pins the
 token regex, the token-column read, the headers and the netlify.toml rule's
 place above the SPA catch-all (`tests/customer-notifications.test.mjs`).
+
+## 18b36. A Public Write Names No Owner And No Org — The Token Finds The Org (hard rule)
+
+**Origin (state §0.121):** the web-to-lead form is the app's first
+unauthenticated WRITE. §18b35 settled how a public READ is authorised — one
+per-row random token, nothing else in the URL, every secondary read by the
+found row's org. A public write raises what a read does not: the payload is
+the visitor's, and a visitor may put anything in it.
+
+**The rule:** the token is per ORG here (one form per workspace), minted
+server-side in the settings PUT and only there — the GET and the client
+normalise with no mint and can therefore never create one; the stored token
+survives every save that does not carry it, and is replaced only by an
+explicit rotate. The handler reads from the payload ONLY the fields the form
+asked for (`INTAKE_FIELDS`, each trimmed and capped to its column) and
+nothing else; the row it writes carries `orgId` from the settings row the
+token found and `assignedTo: null, ownerId: null` — always unassigned,
+never an owner, never an org, from the caller. A turned-off form, an
+unknown token and a malformed token are the same 404 on GET and on POST. A
+redirect after a form post goes only to a CONFIGURED https URL, never to one
+in the payload (an open redirect otherwise). The write is exactly one
+`db.insert`; the function has no `db.update` and no `db.delete`, no
+`auth.mjs`, no `apiKeys`.
+
+**Cheap defences are not optional:** a honeypot field (a filled one is
+thanked and not stored — a bot learns nothing), a per-token rate limit (in
+memory per instance is enough to blunt a burst; the limit runs before
+validation so a refused submission still counts), a body cap, escaping of
+every rendered value, no-store and noindex on every response.
+
+**The embed is the point, so the frame policy is the opposite of §18b35:**
+the hosted form sends no `X-Frame-Options` and
+`Content-Security-Policy: frame-ancestors *`. Whether the site's static
+header rule reaches a function response is read from the deployed headers,
+not assumed.
+
+**The check:** an integration test seeds two orgs' settings rows, posts by
+one token and asserts the row lands in THAT org unassigned and unowned with
+the org's source, the other org empty, the honeypot thanked with no row, a
+payload naming an owner and an org stored unowned in the token's org, and
+the three 404s (`tests/integration/lead-intake.itest.mjs`); scans pin the
+token-column read, the enabled guard, the `orgId: org.orgId` insert, the
+null owner lines, the single insert, the absence of `auth.mjs`, both
+settings halves, the mint only in the PUT, and the rewrite's place above the
+catch-all (`tests/lead-intake.test.mjs`).

@@ -49,6 +49,14 @@ schedule = "0 6 * * *"
   to = "/.netlify/functions/dispatch-status/:token"
   status = 200
 
+# The org's hosted web-to-lead form (state §0.121): /lead-form/<token> is the
+# public lead-intake function's GET. Same rule — above the catch-all, token as
+# a path segment. The form itself POSTs to the function path directly.
+[[redirects]]
+  from = "/lead-form/:token"
+  to = "/.netlify/functions/lead-intake/:token"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
