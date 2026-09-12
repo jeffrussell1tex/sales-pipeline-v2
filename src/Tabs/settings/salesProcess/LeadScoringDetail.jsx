@@ -4,38 +4,8 @@ import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
-
-// Mirror of the backend DEFAULT_LEAD_SCORING (score-lead.mjs) for first-load + reset.
-const DEFAULT_LEAD_SCORING = {
-    enabled: true,
-    scoredEntity: 'lead',
-    fit: {
-        max: 100,
-        rules: [
-            { id: 'f_title_exec', field: 'title', op: 'matchesAny', value: ['ceo','founder','owner','president','chief','cxo','cfo','cto','coo','partner'], points: 30, label: 'Exec / C-level title' },
-            { id: 'f_title_vp',   field: 'title', op: 'matchesAny', value: ['vp','vice president','head of'], points: 22, label: 'VP / Head title' },
-            { id: 'f_title_dir',  field: 'title', op: 'matchesAny', value: ['director'], points: 14, label: 'Director title' },
-            { id: 'f_title_mgr',  field: 'title', op: 'matchesAny', value: ['manager','lead'], points: 8, label: 'Manager title' },
-            { id: 'f_arr_250',    field: 'estimatedARR', op: 'gte', value: 250000, points: 30, label: '$250k+ est. ARR' },
-            { id: 'f_arr_100',    field: 'estimatedARR', op: 'gte', value: 100000, points: 20, label: '$100k+ est. ARR' },
-            { id: 'f_arr_50',     field: 'estimatedARR', op: 'gte', value: 50000,  points: 10, label: '$50k+ est. ARR' },
-            { id: 'f_src_ref',    field: 'source', op: 'in', value: ['Referral','Partner Referral'], points: 18, label: 'Referral source' },
-            { id: 'f_src_inb',    field: 'source', op: 'in', value: ['Website','Webinar','LinkedIn'], points: 10, label: 'Inbound source' },
-        ],
-    },
-    engagement: {
-        max: 100,
-        rules: [
-            { id: 'e_qualified', field: 'status', op: 'equals', value: 'Qualified', points: 45, label: 'Reached Qualified' },
-            { id: 'e_working',   field: 'status', op: 'equals', value: 'Working',   points: 30, label: 'Working' },
-            { id: 'e_contacted', field: 'status', op: 'equals', value: 'Contacted', points: 18, label: 'Contacted' },
-            { id: 'e_new',       field: 'status', op: 'equals', value: 'New',       points: 5,  label: 'New' },
-            { id: 'e_recency',   op: 'recency', points: 40, decayHalfLifeDays: 21, label: 'Recency of first touch' },
-        ],
-    },
-    buckets: { cold: [0, 40], warm: [41, 70], hot: [71, 100] },
-    predictive: { enabled: false, minClosedRecords: 200, lastTrainedAt: null, coefficients: null },
-};
+import { useApp } from '../../../AppContext';
+import { DEFAULT_LEAD_SCORING, isDecidedLead } from '../../../utils/leadScoringDefaults.js';
 
 const FIELD_OPTS = [
     { v: 'title',        l: 'Title' },
@@ -115,6 +85,10 @@ const RuleTable = ({ kind, rules, onChange }) => {
 };
 
 export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
+    // Progress toward the predictive threshold: how many of this org's leads are
+    // decided (Converted / Dead). An Admin's context holds every lead.
+    const { leads } = useApp();
+    const decidedCount = (leads || []).filter(isDecidedLead).length;
     const seed = () => JSON.parse(JSON.stringify(settings?.leadScoring || DEFAULT_LEAD_SCORING));
     const [cfg, setCfg]       = useState(seed);
     const [saved, setSaved]   = useState(seed);
@@ -225,7 +199,7 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
                     <div style={{ padding: '10px 12px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, color: T.inkMid, fontFamily: T.sans }}>
                         {cfg.predictive?.model
                             ? <>Model trained on <b style={{ color: T.ink }}>{cfg.predictive.model.n}</b> decided leads · <b style={{ color: T.ink }}>{cfg.predictive.model.accuracy}%</b> training accuracy · last trained {cfg.predictive.model.trainedAt ? new Date(cfg.predictive.model.trainedAt).toLocaleDateString() : '—'}. A win-probability now shows on each lead.</>
-                            : <>No model yet. Enable predictive scoring and accumulate at least <b style={{ color: T.ink }}>{cfg.predictive?.minClosedRecords ?? 150}</b> decided (Converted / Dead) leads — the model trains automatically on the nightly run.</>}
+                            : <>No model yet. <b style={{ color: T.ink }}>{decidedCount}</b> of <b style={{ color: T.ink }}>{cfg.predictive?.minClosedRecords ?? 150}</b> decided (Converted / Dead) leads so far{cfg.predictive?.enabled ? '' : ' — and predictive scoring is off'}. The model trains automatically on the nightly run once the threshold is met and the switch above is on.</>}
                     </div>
                 </CSectionCard>
             </div>

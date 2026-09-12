@@ -10,6 +10,7 @@ import { db } from '../../db/index.js';
 import { leads, settings as settingsTable, activities as activitiesTable } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { scoreLead, DEFAULT_LEAD_SCORING, leadFeatures, computeSourceWinRate, trainLeadModel } from './score-lead.mjs';
+import { isDecidedLead } from '../../src/utils/leadScoringDefaults.js';
 import { withHeartbeat } from './_heartbeat.mjs';
 
 // The run itself; `handler` (at the bottom) is this wrapped in a heartbeat stamp (state §0.98).
@@ -35,7 +36,7 @@ const run = async () => {
             const now = Date.now();
 
             // Phase 2: train per-org predictive model on decided leads (Converted/Dead)
-            const decided = rows.filter(l => l.status === 'Converted' || l.status === 'Dead')
+            const decided = rows.filter(isDecidedLead)
                 .map(l => ({ lead: l, label: l.status === 'Converted' ? 1 : 0, source: l.source }));
             const predCfg = cfg.predictive;
             if (predCfg && predCfg.enabled && decided.length >= (predCfg.minClosedRecords || 150)) {

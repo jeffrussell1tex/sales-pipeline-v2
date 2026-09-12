@@ -12,6 +12,8 @@
 // forward-compatible: when real lead activity events exist (v1.5), add rules
 // with op 'event' and pass them through computeEngagement's `events` arg.
 
+import { DEFAULT_LEAD_SCORING } from '../../src/utils/leadScoringDefaults.js';
+
 const decay = (points, ageDays, halfLife) =>
     (halfLife > 0 ? points * Math.pow(0.5, ageDays / halfLife) : points);
 
@@ -118,41 +120,10 @@ export function scoreLead(lead, leadScoring, now = Date.now(), events = null) {
     return out;
 }
 
-export const DEFAULT_LEAD_SCORING = {
-    enabled: true,
-    scoredEntity: 'lead',
-    fit: {
-        max: 100,
-        rules: [
-            { id: 'f_title_exec', field: 'title', op: 'matchesAny', value: ['ceo','founder','owner','president','chief','cxo','cfo','cto','coo','partner'], points: 30, label: 'Exec / C-level title' },
-            { id: 'f_title_vp',   field: 'title', op: 'matchesAny', value: ['vp','vice president','head of'], points: 22, label: 'VP / Head title' },
-            { id: 'f_title_dir',  field: 'title', op: 'matchesAny', value: ['director'], points: 14, label: 'Director title' },
-            { id: 'f_title_mgr',  field: 'title', op: 'matchesAny', value: ['manager','lead'], points: 8, label: 'Manager title' },
-            { id: 'f_arr_250',    field: 'estimatedARR', op: 'gte', value: 250000, points: 30, label: '$250k+ est. ARR' },
-            { id: 'f_arr_100',    field: 'estimatedARR', op: 'gte', value: 100000, points: 20, label: '$100k+ est. ARR' },
-            { id: 'f_arr_50',     field: 'estimatedARR', op: 'gte', value: 50000,  points: 10, label: '$50k+ est. ARR' },
-            { id: 'f_src_ref',    field: 'source', op: 'in', value: ['Referral','Partner Referral'], points: 18, label: 'Referral source' },
-            { id: 'f_src_inb',    field: 'source', op: 'in', value: ['Website','Webinar','LinkedIn'], points: 10, label: 'Inbound source' },
-        ],
-    },
-    engagement: {
-        max: 100,
-        rules: [
-            { id: 'e_qualified', field: 'status', op: 'equals', value: 'Qualified', points: 45, label: 'Reached Qualified' },
-            { id: 'e_working',   field: 'status', op: 'equals', value: 'Working',   points: 30, label: 'Working' },
-            { id: 'e_contacted', field: 'status', op: 'equals', value: 'Contacted', points: 18, label: 'Contacted' },
-            { id: 'e_new',       field: 'status', op: 'equals', value: 'New',       points: 5,  label: 'New' },
-            { id: 'e_recency',   op: 'recency', points: 40, decayHalfLifeDays: 21, label: 'Recency of first touch' },
-            { id: 'e_demo',     op: 'event', event: 'Demo',     points: 35, decayHalfLifeDays: 30, label: 'Demo logged' },
-            { id: 'e_meeting',  op: 'event', event: 'Meeting',  points: 28, decayHalfLifeDays: 30, label: 'Meeting logged' },
-            { id: 'e_schedule', op: 'event', event: 'Schedule', points: 18, decayHalfLifeDays: 30, label: 'Meeting scheduled' },
-            { id: 'e_call',     op: 'event', event: 'Call',     points: 15, decayHalfLifeDays: 21, label: 'Call logged' },
-            { id: 'e_email',    op: 'event', event: 'Email',    points: 6,  decayHalfLifeDays: 14, label: 'Email logged' },
-        ],
-    },
-    buckets: { cold: [0, 40], warm: [41, 70], hot: [71, 100] },
-    predictive: { enabled: false, minClosedRecords: 150, model: null },
-};
+// The default config lives in src/utils/leadScoringDefaults.js (one copy, shared
+// with the Settings panel — state §0.123); re-exported so every function and
+// test keeps importing it from the engine.
+export { DEFAULT_LEAD_SCORING };
 
 // --- Phase 2: predictive (per-org logistic regression) ----------------------
 // Predicts conversion probability from signals that PRECEDE the outcome.
