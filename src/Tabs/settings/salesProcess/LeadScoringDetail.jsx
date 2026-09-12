@@ -161,7 +161,7 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
                 </CSectionCard>
 
                 {/* Engagement */}
-                <CSectionCard title="Engagement signals" description="Progression + recency. Status rules add points for how far a lead has advanced; a recency rule decays over time (half-life). Behavioral events arrive in a later release.">
+                <CSectionCard title="Engagement signals" description="Progression + recency. Status rules add points for how far a lead has advanced; a recency rule decays over time (half-life). Behavioral events are live: an ‘activity logged’ rule scores a Demo, Meeting, Call or Email logged against the lead, decaying by its half-life.">
                     <RuleTable kind="engagement" rules={cfg.engagement?.rules || []} onChange={updateEngRules} />
                 </CSectionCard>
 

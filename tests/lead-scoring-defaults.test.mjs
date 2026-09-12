@@ -61,6 +61,8 @@ test('the Settings panel imports the shared defaults and keeps no mirror; Reset 
     assert.ok(panel.includes('    const handleReset  = () => { setCfg(JSON.parse(JSON.stringify(DEFAULT_LEAD_SCORING))); setDirty(true); };'), 'Reset restores the shared defaults — ten engagement rules');
     assert.ok(panel.includes('    const decidedCount = (leads || []).filter(isDecidedLead).length;'), 'progress toward the training threshold');
     assert.ok(panel.includes('decided (Converted / Dead) leads so far'), 'and it is shown');
+    assert.ok(!panel.includes('later release'), 'the Engagement card no longer says events arrive later — they are live (v1.5)');
+    assert.ok(panel.includes('Behavioral events are live: an ‘activity logged’ rule scores'), 'and says so');
 });
 
 test('scoreLead with the shared defaults still scores a web lead: unassigned, New, inbound', () => {
