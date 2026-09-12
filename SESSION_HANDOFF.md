@@ -190,6 +190,35 @@ nothing is sent until you press Send there." Six gates, 735/735, 153/153,
 **OBSERVED in the pane signed in as Jeff (19:30 UTC): Sunniva's rail → ✉ Email ▾ → a select whose options read "Choose a template…", "Blank email", "Follow-up after a call — Following up, Sunniva", the hint line under it; not chosen (a mail client from the pane). NOT shipped** — `dev` is ahead of
 `master` by FIVE code commits, `04ad57b`, `d936baf` (§0.121), `59cd6c3`,
 `51675be` and `f422a92` (§0.122), plus docs.
+**Then Jeff: "this is a recommended enhancement by you. Lets work on lead
+scoring — finish Lead Scoring v1.5 …"** — read against the code FIRST
+(§0a8's lesson): **v1.5 is live, and so is Phase 2** (the per-org logistic
+regression, its nightly training above the threshold, the stored model, the
+probability on every lead); the horizon entry he quoted was the stale one
+§0a8 had already struck, and the Phase 2 line under it was stale too — now
+struck by reading. What was NOT right → **§0.123 `cf752b5`** (functions AND
+bundle; no schema change): the Settings panel kept a drifted MIRROR of the
+engine's defaults (five engagement rules where the engine has ten — a Reset,
+or a new org's first Save, silently undid v1.5) → ONE copy in
+`src/utils/leadScoringDefaults.js`, re-exported by the engine, imported by
+the panel; "Web Form" (the web-to-lead source) made an inbound fit source;
+the engine's 18-test file registered in the harness (it never was) with
+three engine mutants; `isDecidedLead` shared by the batch and the panel; a
+readiness line "n of 150 decided leads so far" in the panel. Read-only on
+the shared database: every org's saved config has ten rules and no trained
+model; the dev org has 1 decided lead of 25. +1 test file (6), 5 mutants;
+six gates (162 files), 741/741 unit, 153/153 integration, **435/435
+mutations after a printed green baseline**, `index-Af3POXBZ.js`, served by
+dev from 19:47:12 UTC; **OBSERVED in the pane signed in as Jeff** (19 rule
+rows — nine fit, ten engagement with the five event rules; the readiness
+line "1 of 150 … predictive scoring is off"); the Engagement card's stale
+"Behavioral events arrive in a later release" sentence seen and fixed in
+**`0810167`** (`index-DS-lL6jZ.js`; a first attempt with straight quotes broke
+the JSX attribute and two gates went red — typographic quotes now, the scan
+pins the sentence); **435/435 mutations**; **LANDED on dev** at 19:55:57 UTC.
+**NOT shipped** — `dev` is ahead of `master` by SEVEN code commits,
+`04ad57b`, `d936baf` (§0.121), `59cd6c3`, `51675be`, `f422a92` (§0.122),
+`cf752b5` and `0810167` (§0.123), plus docs.
 
 **Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
@@ -704,7 +733,7 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the SEVENTEENTH ship put §0.117–§0.120 on `master` (11 Sep 20:59 UTC, `dab2655`, bundle only); `dev` is ahead by THREE CODE commits, §0.121 `04ad57b` and its follow-up `d936baf` (web-to-lead), §0.122 `59cd6c3`, its fix `51675be` and the dropdown `f422a92` (email templates) — NOT shipped
+## 1. What shipped — the SEVENTEENTH ship put §0.117–§0.120 on `master` (11 Sep 20:59 UTC, `dab2655`, bundle only); `dev` is ahead by THREE CODE commits, §0.121 `04ad57b` and its follow-up `d936baf` (web-to-lead), §0.122 `59cd6c3`, its fix `51675be` and the dropdown `f422a92` (email templates), §0.123 `cf752b5` and its copy fix `0810167` (lead scoring) — NOT shipped
 
 **PROD SHIPPED — the SEVENTEENTH ship (Jeff: "all works as it is supposed to. Ship prod", 11 Sep).** Pre-flight: tree clean, `dev` == `origin/dev` == `dab2655`, `origin/master` (`0726934`) an ancestor of `dev`, 15 commits after it (five code: `e4d9ac3`, `889cc85`, `0deb6b6`, `074669d`, `e5d574f`), no function, schema or config change (the diff over `netlify/`, `db/`, `package.json`, `netlify.toml` empty). `git push origin dev:master` at 20:59:07 UTC: `master` `0726934` → `dab2655`. salespipelinetracker.com serving `index-BDt4t8KW.js` from 20:59:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-DtQQ5W86.js` — the key differs); the served bundle carries "Edit job →", "Create job →", "crew and duration not set", "No deals match the current filter." and `"allTime"?[]:[`, and NOT `"thisQuarter"?[]`. The Netlify deploy record was not read this time (the reader takes a deploy id; none to hand). **What prod does differently from this moment:** the Queue lists only jobs to schedule; a scheduled job clicked on the Job Board opens its record in Jobs; "Edit job →" / "Create job →" in the queue header and on the cards; unset template values read "Not set"; the queue card's "prefers" note and no 8 px scroll (§0.117–§0.118); the Pipeline List shows Closed Won / Closed Lost deals when the filter asks (§0.119); the Filter popover's "This quarter" filters and "All time" reads back as itself (§0.120). Every "NOT shipped" in §0.117–§0.120 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in §5.
 
@@ -1521,7 +1550,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (11 Sep, thirteenth session — after the SEVENTEENTH ship, then §0.121 on dev)
 
-**AT CLOSE: `origin/master` == `dab2655` (the SEVENTEENTH ship); `dev` == `origin/dev` == `f422a92` before the handoff commit — ahead by FIVE CODE commits (§0.121 web-to-lead `04ad57b` and its follow-up `d936baf`: functions `lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`; `netlify.toml` one rewrite; the bundle — and §0.122 email templates `59cd6c3`, its fix `51675be` and the dropdown `f422a92`: `settings.mjs` and the bundle; NO schema change in any) and this handoff. Counts: six gates (check:fnscope 91 function files; the five on 161 files), 735/735 unit, 153/153 integration, 430/430 mutations (printed green baseline, no restore errors), build guard OK 2,494 kB `index-s255BQ_M.js`, `dist/` cleared; dev serving `index-s255BQ_M.js` from 19:25:14 UTC 12 Sep (before it `index-CD8TO61e.js` from 16:44:59 UTC 12 Sep (before it `index-Bk9klMuV.js` from 22:38:28 UTC 11 Sep (before it `index-CPK391Dz.js` from 22:20:08, `index-DsxCtD8l.js` from 22:06:49).**
+**AT CLOSE: `origin/master` == `dab2655` (the SEVENTEENTH ship); `dev` == `origin/dev` == `0810167` before the handoff commit — ahead by SEVEN CODE commits (§0.121 web-to-lead `04ad57b` and its follow-up `d936baf`: functions `lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`; `netlify.toml` one rewrite; the bundle — §0.122 email templates `59cd6c3`, its fix `51675be` and the dropdown `f422a92`: `settings.mjs` and the bundle — §0.123 lead scoring `cf752b5` and its copy fix `0810167`: `score-lead.mjs`, `score-leads-batch.mjs`, a new `src/utils/leadScoringDefaults.js` and the bundle; NO schema change in any) and this handoff. Counts: six gates (check:fnscope 91 function files; the five on 162 files), 741/741 unit, 153/153 integration, 435/435 mutations (printed green baseline, no restore errors), build guard OK 2,495 kB `index-DS-lL6jZ.js`, `dist/` cleared; dev serving `index-DS-lL6jZ.js` from 19:55:57 UTC 12 Sep (before it `index-Af3POXBZ.js` from 19:47:12, `index-s255BQ_M.js` from 19:25:14 UTC 12 Sep (before it `index-CD8TO61e.js` from 16:44:59 UTC 12 Sep (before it `index-Bk9klMuV.js` from 22:38:28 UTC 11 Sep (before it `index-CPK391Dz.js` from 22:20:08, `index-DsxCtD8l.js` from 22:06:49).**
 
 **AT THE SEVENTEENTH SHIP (20:59:07 UTC 11 Sep): `master` == `dev` == `dab2655`; prod serving `index-BDt4t8KW.js` from 20:59:42 UTC; `dev` then ahead only by the ship-record docs commits (`fd2c1d0` state, then this handoff).** The state before the ship: **`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `e5d574f` before the handoff commit, ahead by FIVE CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d` (§0.119), `e5d574f` (§0.120), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 716/716 unit, 147/147 integration, 420/420 mutations (printed green baseline, no restore errors in any of the four runs), build guard OK 2,479 kB `index-DtQQ5W86.js`, `dist/` cleared; dev serving `index-DtQQ5W86.js` from 18:48:40 UTC 11 Sep (before it `index-jRTXPWFT.js` from 18:35:08, `index-BYQZhHpB.js` from 17:03:24, `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
 
@@ -1655,10 +1684,11 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   "This quarter" → Apply → only this quarter's close dates. Prod's rows are
   his — read before assuming any won deal or scheduled job exists there.
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  FIVE CODE commits after `dab2655`, `04ad57b` and `d936baf` (§0.121
+  SEVEN CODE commits after `dab2655`, `04ad57b` and `d936baf` (§0.121
   web-to-lead and its follow-up), `59cd6c3`, `51675be` and `f422a92` (§0.122
-  email templates, its dead-card fix, the dropdown), and the docs commits
-  around them; anything else is a finding. Compare against
+  email templates, its dead-card fix, the dropdown), `cf752b5` and `0810167`
+  (§0.123 lead scoring and its copy fix), and the docs commits around them;
+  anything else is a finding. Compare against
   `origin/master`: the local `master` branch is stale (ships push
   `dev:master`). Ship when Jeff says so — functions AND bundle AND one
   netlify.toml rewrite; no schema change.
@@ -1700,6 +1730,21 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   the notes. A contact with no email shows no ✉ button at all (unchanged).
   Delete the template in Settings → the contact's button is plain "✉ Email"
   again.
+- **§0.123 on dev — OBSERVED in the pane (the rules, the readiness line);
+  Jeff's checks (Admin; bundle `index-DS-lL6jZ.js`, hard-refresh):** Settings
+  → Sales process → Lead scoring → the Engagement table shows TEN rules (five
+  status/recency, then Demo / Meeting / Schedule / Call / Email "activity
+  logged") and its description now says behavioural events are live; the
+  Predictive card reads "No model yet. 1 of 150 decided (Converted / Dead)
+  leads so far — and predictive scoring is off." (the dev org's one decided
+  lead); **Reset to defaults** → still ten rules and "Web Form" under the
+  Inbound source rule → Cancel (or Save, his choice — the dev org's saved
+  config keeps "Website, Webinar, LinkedIn" until he does). A NEW web-form
+  submission scores Fit 10 (inbound) and reads warm.
+- **Flagged, not done (§0.123), Jeff's call:** a "Train now" Admin action
+  (the batch trains only nightly and only above the threshold); the batch's
+  whole-blob settings write could lose a concurrent Admin save (once a
+  night, narrow).
 - **Flagged, not done (§0.121/§0.122), Jeff's call:** email to
   Admins/Managers on a new web lead (Slack and the unassigned pool are v1);
   a thank-you URL field on the web-form card (the key is honoured, no UI);
