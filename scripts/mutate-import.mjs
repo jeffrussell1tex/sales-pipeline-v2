@@ -2053,6 +2053,11 @@ const mutations = [
         "                emailTemplates: 'emailTemplates' in data ? cleanEmailTemplates(data.emailTemplates) : existingExtra.emailTemplates || [],",
         "                emailTemplates: existingExtra.emailTemplates || [],"],
 
+    ['email templates: the Settings card has no click again (the DETAIL_PANELS gate; Jeff found the dead card)',
+        'src/Tabs/AdminView.jsx',
+        "        'email-templates':      'email-templates',\n",
+        ''],
+
     ['email templates: a duplicate id is kept, so two templates answer to one id',
         'src/utils/emailTemplates.js',
         "        if (!id || !name || seen.has(id)) continue;",

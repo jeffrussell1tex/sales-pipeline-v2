@@ -70,6 +70,9 @@ test('the catalogue lists the panel, the card counts it, AdminView routes it', (
     assert.ok(cards.includes("    if (item.id === 'email-templates') statusDetail = countOrNull(len(settings?.emailTemplates), 'template');"));
     const av = code(read('src/Tabs/AdminView.jsx'));
     assert.ok(av.includes("if (id === 'email-templates') return <EmailTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;"));
+    // The card opens ONLY if its id is in DETAIL_PANELS — the route alone leaves a
+    // card with no click (Jeff, 12 Sep: 'email templates will not open').
+    assert.ok(av.includes("        'email-templates':      'email-templates',"), 'the DETAIL_PANELS gate, not just the route');
     const panel = code(read('src/Tabs/settings/salesProcess/EmailTemplatesDetail.jsx'));
     assert.ok(panel.includes('const TemplateEditor = ({ tpl, onChange, onDelete }) => {'), 'the editor is module scope, data as props (focus)');
     assert.ok(panel.includes('            await putSettings({ emailTemplates: clean });'), 'saved through the settings PUT');

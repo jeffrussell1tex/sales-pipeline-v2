@@ -280,6 +280,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         // Sales process Group 2
         'custom-fields':        'custom-fields',
         'pain-points':          'pain-points',
+        'email-templates':      'email-templates',
         'customer-types':       'customer-types',
         'lead-scoring':         'lead-scoring',
         'lead-visibility':      'lead-visibility',
