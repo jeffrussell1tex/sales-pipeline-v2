@@ -82,11 +82,17 @@ test('the catalogue lists the panel, the card counts it, AdminView routes it', (
 test('the contact rail: a template renders for THAT contact, opens the rep\'s own client, and logs the Email with the template named', () => {
     const rail = code(read('src/components/rails/ContactRail.jsx'));
     assert.ok(rail.includes("import { cleanEmailTemplates, mergeContext, renderForContact, mailtoHref } from '../../utils/emailTemplates.js';"));
-    assert.ok(rail.includes('const TemplatePicker = ({ contact, templates, ctx, onPick, onBlank }) => ('), 'module scope, data as props');
+    assert.ok(rail.includes('const TemplatePicker = ({ contact, templates, ctx, onPick, onBlank }) => {'), 'module scope, data as props');
     assert.ok(rail.includes('    const emailTemplates = cleanEmailTemplates(settings?.emailTemplates);'));
     assert.ok(rail.includes('    const mergeCtx = mergeContext({ contact, rep: myProfile, org: settings });'), 'the rep is the roster profile, the org the settings');
-    assert.ok(rail.includes('                const r = renderForContact(t, ctx);\n                return (\n                    <a key={t.id} href={mailtoHref(contact.email, r.subject, r.body)}'), 'a real mailto: link per template — the browser hands it to the mail client');
-    assert.ok(rail.includes("onClick={() => onPick(t, r)}"));
+    // A DROPDOWN (Jeff: a long library must not eat the rail): choosing an
+    // entry renders for THIS contact and opens the mailto: — the rep's own client.
+    assert.ok(rail.includes('            <select id="contact-email-template" value="" onChange={e => choose(e.target.value)} aria-label="Email template"'), 'a select, held on its placeholder');
+    assert.ok(rail.includes('                <option value={BLANK_EMAIL}>Blank email</option>'));
+    assert.ok(rail.includes("                    return <option key={t.id} value={t.id}>{t.name}{subject ? ` — ${subject}` : ''}</option>;"), 'each template with its rendered subject');
+    assert.ok(rail.includes('        const r = renderForContact(t, ctx);\n        window.location.href = mailtoHref(contact.email, r.subject, r.body);\n        onPick(t, r);'), 'render for the contact, open the mailto:, then log');
+    assert.ok(rail.includes('Opens in your own mail client with the fields filled in — nothing is sent until you press Send there.'), 'the hand-off is said out loud (Jeff expected the app to send)');
+    assert.ok(!rail.includes('<a key={t.id} href={mailtoHref('), 'the row-per-template list is gone');
     assert.ok(rail.includes("openCommLog('Email', { notes: `Template: ${t.name}${r.subject ? ` — ${r.subject}` : ''}` });"), 'the logged activity names the template and subject');
     assert.ok(rail.includes('    const openCommLog = (type, extra = {}) => {'), 'the existing comm-log prompt, extended, not duplicated');
     assert.ok(rail.includes('            ...extra,\n        });'), 'extra rides into the activity prefill');

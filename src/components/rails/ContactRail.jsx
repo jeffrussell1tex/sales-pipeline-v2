@@ -137,31 +137,49 @@ const EMPTY_CONTACT = {
 };
 
 
-// The org's email templates, offered under ✉ Email (state §0.122). Each row is
-// a REAL mailto: link rendered for this contact — the browser hands it to the
-// rep's own mail client, nothing is sent by the app — and the click logs the
-// Email activity naming the template. Module scope, data as props.
-const TemplatePicker = ({ contact, templates, ctx, onPick, onBlank }) => (
-    <div style={{ padding: '8px 16px 10px', background: T.surface2, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
-        <div style={{ fontSize: 10.5, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Email {contact.firstName || contact.email} with…</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href={`mailto:${contact.email}`} onClick={onBlank}
-               style={{ padding: '7px 10px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.ink2, textDecoration: 'none', fontFamily: T.sans }}>
-                Blank email
-            </a>
-            {templates.map(t => {
-                const r = renderForContact(t, ctx);
-                return (
-                    <a key={t.id} href={mailtoHref(contact.email, r.subject, r.body)} onClick={() => onPick(t, r)} title={r.subject || t.name}
-                       style={{ padding: '7px 10px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.ink, textDecoration: 'none', fontFamily: T.sans }}>
-                        <div style={{ fontWeight: 600 }}>{t.name}</div>
-                        {r.subject && <div style={{ fontSize: 11.5, color: T.ink3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.subject}</div>}
-                    </a>
-                );
-            })}
+// The org's email templates, offered under ✉ Email (state §0.122). A DROPDOWN
+// (Jeff, 12 Sep: "with one or two just showing them works fine but if someone
+// has a lot that will be a lot of screen real estate"): choosing an entry
+// renders the template for this contact and opens the mailto: — the browser
+// hands it to the rep's own mail client; NOTHING is sent by the app, and the
+// hint under the list says so — then the choice logs the Email activity naming
+// the template. The select stays on its placeholder so the same template can
+// be chosen again. Module scope, data as props.
+const BLANK_EMAIL = '__blank__';
+const TemplatePicker = ({ contact, templates, ctx, onPick, onBlank }) => {
+    const choose = (value) => {
+        if (!value) return;
+        if (value === BLANK_EMAIL) {
+            window.location.href = `mailto:${contact.email}`;
+            onBlank();
+            return;
+        }
+        const t = templates.find(x => x.id === value);
+        if (!t) return;
+        const r = renderForContact(t, ctx);
+        window.location.href = mailtoHref(contact.email, r.subject, r.body);
+        onPick(t, r);
+    };
+    return (
+        <div style={{ padding: '8px 16px 10px', background: T.surface2, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+            <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }} htmlFor="contact-email-template">
+                Email {contact.firstName || contact.email} with…
+            </label>
+            <select id="contact-email-template" value="" onChange={e => choose(e.target.value)} aria-label="Email template"
+                style={{ width: '100%', padding: '8px 10px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.ink, fontFamily: T.sans }}>
+                <option value="">Choose a template…</option>
+                <option value={BLANK_EMAIL}>Blank email</option>
+                {templates.map(t => {
+                    const subject = renderForContact(t, ctx).subject;
+                    return <option key={t.id} value={t.id}>{t.name}{subject ? ` — ${subject}` : ''}</option>;
+                })}
+            </select>
+            <div style={{ marginTop: 6, fontSize: 11, color: T.ink3, fontFamily: T.sans }}>
+                Opens in your own mail client with the fields filled in — nothing is sent until you press Send there.
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 // ── Main component ────────────────────────────────────────────────────────────
 
