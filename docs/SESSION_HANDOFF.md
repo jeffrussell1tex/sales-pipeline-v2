@@ -1,5 +1,48 @@
 # SESSION_HANDOFF.md
 
+**Fourteenth session (13 September 2026, Jeff: "Please follow the new
+conversation ritual and then work on this enhancement that was suggested by
+claude in an earlier conversation — light workflow automation ('when deal
+enters Proposal, create task X; alert if silent 14 days' — your stalled-deal
+cards show you already compute the signals, they just don't act)") — CLOSE.**
+The ritual passed (tree clean, `dev` == `origin/dev` == `98aad4b`,
+`origin/master..dev` exactly the two ship-record docs commits after
+`b54a2a7`, every fingerprint present, copies identical). **Read against the
+code before building:** an automations engine already existed
+(`dispatch-automations.mjs`, the `automations` / `automation_runs` tables,
+Settings → Integrations → Automations with a four-step builder) — the hourly
+job computed silent / stuck / close-lapsed and emailed, texted and posted them
+and NEVER fired a rule; the panel offered `task.overdue` / `task.completed`
+and nothing fired either; the condition field was free text; a rule's task was
+unlinked and unowned and wrote two keys the table has no column for; and
+**`update_field` wrote ANY column the rule named — `orgId` included, a
+cross-tenant write by configuration** (guide §18b37, new). → **§0.124
+`427fd65`** (functions AND bundle; no schema change): `src/utils/automationEvents.js`
+(pure, new — one trigger vocabulary of ten with a Deal health group
+`opportunity.silent` / `.stuck` / `.close_lapsed`, the fields each event
+carries, the payload builders, `{{key}}` merge rendering, the task builder,
+the update_field allowlist); the engine refuses an unknown trigger, links and
+OWNS the task it creates (ownerId resolved in THIS org's roster by the
+assignee's name), renders and escapes email, allowlists update_field, scopes
+its counter (off the org-scoping skip list); the hourly job fires the three
+signals right after each Slack post (once per deal per signal per week, at the
+rep's alert hour); every call site hands the shared payload and tasks.mjs fires
+`task.completed`; the panel renders the shared list, a SELECT for the
+condition field, notes and merge-field hints. +1 unit file (13, in `SUITES`),
++1 integration file (5 — two orgs, a user of the same name in each, one org's
+event: the task lands in that org owned by that org's user, the other org
+empty; the `orgId` write refused), 9 mutants. Six gates (163 files; 91
+function files), **754/754 unit, 158/158 integration, 444/444 mutations after a
+printed green baseline (no restore errors)**, build guard OK 2,499 kB
+`index-CDir98BZ.js`, `dist/` cleared. Pushed at 13:46:31 UTC; **LANDED on
+dev** — accelerep.netlify.app served `index-CDir98BZ.js` at 13:47:02 UTC (curl,
+the hash poll). **NOT observed in a browser** — the pane holds no session and
+signing in is not Claude's to do; Jeff's checks are in §5. **NOT shipped** —
+`origin/master` stays at `b54a2a7`; `dev` is ahead by ONE code commit
+`427fd65` and the docs. Docs: state §0.124 and the header, guide §18b37 (and
+its header line, which had read "through §18b25" while the body reached
+§18b36), all in the code commit; this handoff after.
+
 **Thirteenth session (11 September 2026, Jeff: "Claude, let's continue on our
 Accelerep work") — CLOSE.** The ritual passed (tree clean, `dev` == `origin/dev`
 at `7bc5b26`, `origin/master..dev` exactly ONE code commit `e4d9ac3` plus
@@ -716,6 +759,7 @@ SHIPPED as the ninth ship, `master` `ad76a38` → `cf72f99`,
 salespipelinetracker.com serving `index-DIeZb8qh.js`**).**
 
 **Fast staleness check:** does `docs/ACCELEREP_CURRENT_STATE.md` contain
+`### 0.124` with a paragraph beginning **"What was found, before building anything."** (13 Sep — light workflow automation) and `docs/ACCELEREP_CODING_GUIDE.md` `## 18b37. A Rule Engine Is A Write Path — Its Actions Take Allowlists, Its Vocabulary Is One List`,
 `### 0.118` with a paragraph beginning **"What it was."** (11 Sep — the queue lists only jobs to schedule), `### 0.112` with a paragraph beginning **"Fix ("**,
 `### 0.111` with a paragraph beginning **"The company decides, per org."**, `docs/ACCELEREP_CODING_GUIDE.md` with `## 18b35. A Public Page Reads By An Unguessable Token, Never By An Id`,
 `### 0.110` with a paragraph beginning **"The arithmetic moves out."**,
@@ -740,7 +784,9 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the EIGHTEENTH ship put §0.121–§0.123 on `master` (13 Sep 13:14 UTC, `b54a2a7`; functions, one rewrite and the bundle; no schema change); `dev` is ahead only by the ship-record docs commits
+## 1. What shipped — the EIGHTEENTH ship put §0.121–§0.123 on `master` (13 Sep 13:14 UTC, `b54a2a7`; functions, one rewrite and the bundle; no schema change); `dev` is ahead by §0.124 (ONE code commit, NOT shipped) and the docs
+
+**NOT shipped — §0.124 (light workflow automation, `427fd65`, 13 Sep) is on `dev` only: functions (`dispatch-automations.mjs`, `pipeline-alerts.mjs`, `opportunities.mjs`, `leads.mjs`, `lead-intake.mjs`, `tasks.mjs`), `package.json` (the integration list), the bundle; no schema change. A ship would be `git push origin dev:master` after Jeff's dev observation.**
 
 **PROD SHIPPED — the EIGHTEENTH ship (Jeff: "push master", 13 Sep).** Pre-flight: tree clean, `dev` == `origin/dev` == `b54a2a7`, `origin/master` (`dab2655`) an ancestor of `dev`, 17 commits after it (seven code: `04ad57b`, `d936baf`, `59cd6c3`, `51675be`, `f422a92`, `cf752b5`, `0810167`), NO schema change (the diff over `db/schema.ts` empty); five function files (`lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`, `score-lead.mjs`, `score-leads-batch.mjs`), one `netlify.toml` rewrite (`/lead-form/:token`), `package.json` (the integration-test list), the bundle. `git push origin dev:master` at 13:14:46 UTC: `master` `dab2655` → `b54a2a7`. salespipelinetracker.com serving `index-COkIzXNn.js` from 13:15:31 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-DS-lL6jZ.js` — the key differs); the served bundle carries the batch's literals ("Web-to-lead form", "Copy embed code", "Email templates", "Choose a template…", "decided (Converted / Dead) leads so far", "Behavioral events are live"), and GET salespipelinetracker.com/lead-form/<junk> answered the intake function's own 404 page while the JSON POST with an unknown token answered 404 { ok: false, error: 'Form not found' } — the rewrite and the new function are live on prod (13:16 UTC). The Netlify record was NOT read (no deploy id to hand). **What prod does differently from this moment:** the web-to-lead form exists but is OFF for every workspace until an Admin turns it on (§0.121); email templates exist, empty until an Admin writes one, sent by the rep's own client (§0.122); the Lead scoring panel reads the shared defaults and shows the readiness line (§0.123). Every "NOT shipped" in §0.121–§0.123 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in §5.
 
@@ -1559,7 +1605,9 @@ value before calling it fixed. The same check found the dateless task
 invisible on the Tasks tab (three buckets keyed on `dueDate`, no home for
 none) — now the "No due date" section, oldest first.
 
-## 4. Verified state at close (11 Sep, thirteenth session — after the SEVENTEENTH ship, then §0.121 on dev)
+## 4. Verified state at close (13 Sep, fourteenth session — §0.124 on dev, NOT shipped)
+
+**Fourteenth session's close (13 Sep): `origin/master` == `b54a2a7` (the EIGHTEENTH ship); `dev` == `origin/dev` == `427fd65` before this handoff commit — ahead by ONE CODE commit (§0.124: six function files, `package.json`, the bundle, a new pure module; NO schema change) and this handoff. Counts: six gates (check:fnscope 91 function files; the five on 163 files), 754/754 unit, 158/158 integration, 444/444 mutations (printed green baseline, no restore errors), build guard OK 2,499 kB `index-CDir98BZ.js`, `dist/` cleared; dev serving `index-CDir98BZ.js` from 13:47:02 UTC 13 Sep (before it `index-DS-lL6jZ.js`). Prod unchanged: `index-COkIzXNn.js` = `b54a2a7`.**
 
 **AT THE EIGHTEENTH SHIP (13:14:46 UTC 13 Sep): `master` == `dev` == `b54a2a7`; prod serving `index-COkIzXNn.js` from 13:15:31 UTC; `dev` then ahead only by the ship-record docs commits (`eb93d58` state, then this handoff).** The state before the ship: **AT CLOSE: `origin/master` == `dab2655` (the SEVENTEENTH ship); `dev` == `origin/dev` == `0810167` before the handoff commit — ahead by SEVEN CODE commits (§0.121 web-to-lead `04ad57b` and its follow-up `d936baf`: functions `lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`; `netlify.toml` one rewrite; the bundle — §0.122 email templates `59cd6c3`, its fix `51675be` and the dropdown `f422a92`: `settings.mjs` and the bundle — §0.123 lead scoring `cf752b5` and its copy fix `0810167`: `score-lead.mjs`, `score-leads-batch.mjs`, a new `src/utils/leadScoringDefaults.js` and the bundle; NO schema change in any) and this handoff. Counts: six gates (check:fnscope 91 function files; the five on 162 files), 741/741 unit, 153/153 integration, 435/435 mutations (printed green baseline, no restore errors), build guard OK 2,495 kB `index-DS-lL6jZ.js`, `dist/` cleared; dev serving `index-DS-lL6jZ.js` from 19:55:57 UTC 12 Sep (before it `index-Af3POXBZ.js` from 19:47:12, `index-s255BQ_M.js` from 19:25:14 UTC 12 Sep (before it `index-CD8TO61e.js` from 16:44:59 UTC 12 Sep (before it `index-Bk9klMuV.js` from 22:38:28 UTC 11 Sep (before it `index-CPK391Dz.js` from 22:20:08, `index-DsxCtD8l.js` from 22:06:49).**
 
@@ -1665,6 +1713,12 @@ read at 16:35 UTC: `accelerep.netlify.app` alone, four jobs, all `ok`,
 copy of the same bug) · the working tree was clean at close · **ordering slip, corrected here:** the §0.103 landing docs commit (`8a6edc8`) landed AFTER the first handoff commit `34b843c` because the landing script's anchor missed on first apply (a typo in its own text); this line was written last, after that commit — SIXTEEN commits ahead of `master` counting the handoff commits themselves, the last of them the one carrying this line.
 
 ## 5. Next — start here
+
+**Fifteenth-session prep — first:**
+- **§0.124 on dev — Jeff's checks, in order (Admin, accelerep.netlify.app, hard-refresh to `index-CDir98BZ.js`):** Settings → Integrations → Automations → "+ New automation" → the trigger step shows FOUR groups — Pipeline, **Deal health** (Deal gone silent / Deal stuck in a stage / Close date lapsed, with the line "Checked every hour. A rule fires once per deal per signal per week…"), Leads, Tasks (Task completed only — "Task overdue" is gone). Name it "Proposal → task", pick **Stage changed**, Next → Conditions → "+ Add condition" → the FIELD is now a dropdown (Deal name, Account, Sales rep, Stage, ARR, …, Previous stage, New stage) → choose **New stage** · equals · `Proposal` → Next → Actions → Create task: title `Send proposal to {{account}}`, Due in 2, High, the new Notes box, and the "Merge fields:" line listing the event's keys → Next → Review names the trigger ("Stage changed") → Create automation → the table row reads "Stage changed" under TRIGGER. Then Pipeline → move a deal into Proposal (any rep's) → Tasks: a new task "Send proposal to <that account>", High, due in two days, linked to the deal (open it — the deal is on the rail), assigned to the deal's rep; as **Karen** (role User) that task is hers if the deal is hers and invisible if not (ownership by id, not name). Back in Automations → ⋯ → View run history → one "Success · 1 action" row; move a deal to another stage → a "Skipped" row. **The hourly signals cannot be observed on dev:** `JOBS_ENABLED` is set on prod alone (state §0.100) — a rule on "Deal gone silent" fires there only after a ship, at the rep's alert hour, for a deal 14+ days without activity, once per week. **update_field:** a rule with Update field → Field `forecastCategory` works; the panel still lets him TYPE `orgId` — the engine refuses it and the run row says "field "orgId" cannot be set by a rule" (a dropdown of the six allowed fields is a small follow-up, his call).
+- **Then, his call: ship §0.124** (`git push origin dev:master` — functions and the bundle; no schema change; pre-flight as the eighteenth ship's).
+- **Flagged, not done (state §0.124):** `task.overdue` (nothing computes it); momentum and score-drop as triggers; a roster picker for "Assign to"; an allowed-field dropdown for update_field; Slack as an action; a rule fires only when the job raises the signal (a deal with no rep, or whose rep has no email or is inactive, raises none — the job's own rule).
+- **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect the two ship-record docs commits after `b54a2a7`, then `427fd65` (CODE) and this handoff; anything else is a finding.
 
 **After the SIXTEENTH ship — prod observations: DONE. Jeff (Admin, salespipelinetracker.com), 10 Sep: "everything tested out perfectly."** The list below is what he walked; nothing is outstanding from it.
 - **§0.112/§0.115 on prod:** Dispatch → Queue on the big monitor — Date /
