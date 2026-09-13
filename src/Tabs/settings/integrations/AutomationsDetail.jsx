@@ -107,12 +107,17 @@ const ActionEditor = ({ action, idx, actions, setAction, delAction, fields }) =>
         </div>
     );
 
-const NewAutomationModal = ({ onClose, onCreated }) => {
+// One modal for a new rule and for editing an existing one (`rule` set): the
+// same four steps, seeded from the rule, saved through the endpoint's PUT — a
+// rule could only be deleted and rebuilt before (Jeff, 13 Sep). Editing lets
+// every step be opened directly; a new rule still walks them in order.
+const AutomationModal = ({ rule, onClose, onSaved }) => {
+    const editing = !!rule;
     const [step,    setStep]    = React.useState(1); // 1=trigger 2=conditions 3=actions 4=review
-    const [name,    setName]    = React.useState('');
-    const [trigger, setTrigger] = React.useState('opportunity.stage_changed');
-    const [conditions, setConds] = React.useState([]); // [{field,operator,value}]
-    const [actions,    setActs]  = React.useState([{ type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
+    const [name,    setName]    = React.useState(rule?.name || '');
+    const [trigger, setTrigger] = React.useState(rule?.triggerEvent || 'opportunity.stage_changed');
+    const [conditions, setConds] = React.useState(Array.isArray(rule?.conditions) ? rule.conditions : []); // [{field,operator,value}]
+    const [actions,    setActs]  = React.useState(Array.isArray(rule?.actions) && rule.actions.length ? rule.actions : [{ type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
     const [saving,  setSaving]  = React.useState(false);
     const [error,   setError]   = React.useState('');
 
@@ -141,12 +146,12 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
         setSaving(true); setError('');
         try {
             const res  = await dbFetch('/.netlify/functions/automations', {
-                method: 'POST',
-                body: JSON.stringify({ name: name.trim(), triggerEvent: trigger, conditions, actions }),
+                method: editing ? 'PUT' : 'POST',
+                body: JSON.stringify({ ...(editing ? { id: rule.id } : {}), name: name.trim(), triggerEvent: trigger, conditions, actions }),
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to create');
-            if (onCreated) onCreated(data.automation);
+            if (!res.ok) throw new Error(data.error || (editing ? 'Failed to save' : 'Failed to create'));
+            if (onSaved) onSaved(data.automation);
             onClose();
         } catch(e) {
             setError(e.message);
@@ -157,12 +162,12 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
 
     return (
         <IntModal width={680} onClose={onClose}>
-            <IntModalHeader onClose={onClose} title="New automation" sub="Define a trigger, optional conditions, and what actions to run."/>
+            <IntModalHeader onClose={onClose} title={editing ? 'Edit automation' : 'New automation'} sub={editing ? `Changes apply to the next event; ${rule.runCount || 0} past run${(rule.runCount || 0) === 1 ? '' : 's'} stay as logged.` : 'Define a trigger, optional conditions, and what actions to run.'}/>
             {/* Stepper */}
             <div style={{ display:'flex', borderBottom:`1px solid ${T.border}`, padding:'0 22px', flexShrink:0 }}>
                 {steps.map((s,i) => { const n=i+1, active=step===n, done=step>n; return (
-                    <div key={s} onClick={() => done && setStep(n)}
-                        style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 14px 10px 0', fontSize:12, fontWeight:600, cursor:done?'pointer':'default',
+                    <div key={s} onClick={() => (done || editing) && setStep(n)}
+                        style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 14px 10px 0', fontSize:12, fontWeight:600, cursor:(done || editing)?'pointer':'default',
                             color:active?T.ink:done?T.ok:T.inkMuted, borderBottom:active?`2px solid ${T.goldInk}`:'2px solid transparent' }}>
                         <span style={{ width:19, height:19, borderRadius:'50%', border:`1.5px solid ${active?T.goldInk:done?T.ok:T.border}`,
                             display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:10,
@@ -275,7 +280,7 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
                 <div style={{ flex:1 }}/>
                 {step < 4
                     ? <IntBtn label="Next →" primary onClick={() => { if(step===1&&!name.trim()){setError('Name is required');return;} setError(''); setStep(s=>s+1); }}/>
-                    : <IntBtn label={saving?'Saving…':'Create automation'} primary onClick={handleSave} disabled={saving}/>
+                    : <IntBtn label={saving?'Saving…':editing?'Save changes':'Create automation'} primary onClick={handleSave} disabled={saving}/>
                 }
             </IntModalFooter>
         </IntModal>
@@ -301,6 +306,7 @@ export const AutomationsDetail = ({ onBack }) => {
     const [loading,        setLoading]        = React.useState(true);
     const [error,          setError]          = React.useState(null);
     const [showModal,      setShowModal]      = React.useState(false);
+    const [editingRule,    setEditingRule]    = React.useState(null); // the rule the modal edits; null = a new one
     const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('auto-btn-', 'auto-menu-');
     const lists = useApp(); // opportunities / leads / tasks — to name a run's record
     const [runsFor,        setRunsFor]        = React.useState(null); // { rule, runs }
@@ -367,7 +373,8 @@ export const AutomationsDetail = ({ onBack }) => {
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewAutomationModal onClose={() => setShowModal(false)} onCreated={rule => setAutomationList(prev => [rule, ...prev])}/>}
+            {showModal && <AutomationModal rule={editingRule} onClose={() => { setShowModal(false); setEditingRule(null); }}
+                onSaved={saved => setAutomationList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev])}/>}
 
             {/* Run history slide-over */}
             {runsFor && (
@@ -498,6 +505,7 @@ export const AutomationsDetail = ({ onBack }) => {
                                         borderRadius:4, padding:4, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', fontFamily:T.sans }}>
                                         {[
                                             { icon:rule.active?'⏸':'▶', label:rule.active?'Pause':'Resume', fn:() => handleToggle(rule) },
+                                            { icon:'✏️', label:'Edit', fn:() => { setActiveMenu(null); setEditingRule(rule); setShowModal(true); } },
                                             { icon:'📋', label:'View run history', fn:() => handleViewRuns(rule) },
                                             null,
                                             { icon:'🗑', label:'Delete', fn:() => handleDelete(rule), danger:true },

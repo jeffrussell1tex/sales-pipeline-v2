@@ -302,3 +302,24 @@ test('the Update field action saves what it shows — a select over the allowlis
     assert.ok(s.includes("        if (actions.some(a => a.type === 'webhook' && !a.params?.url?.trim())) { setError('Fire webhook: an endpoint URL is required'); return; }"));
     assert.ok(s.includes("'— no field chosen'"), 'the review says so too');
 });
+
+test('an existing automation can be EDITED — the same modal seeded from the rule, saved through PUT with its id, the list updated in place (Jeff, 13 Sep)', () => {
+    const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
+    assert.ok(s.includes('const AutomationModal = ({ rule, onClose, onSaved }) => {') && !s.includes('NewAutomationModal'), 'one modal for both');
+    assert.ok(s.includes("    const [name,    setName]    = React.useState(rule?.name || '');"));
+    assert.ok(s.includes("    const [trigger, setTrigger] = React.useState(rule?.triggerEvent || 'opportunity.stage_changed');"));
+    assert.ok(s.includes('    const [conditions, setConds] = React.useState(Array.isArray(rule?.conditions) ? rule.conditions : []);'));
+    assert.ok(s.includes('    const [actions,    setActs]  = React.useState(Array.isArray(rule?.actions) && rule.actions.length ? rule.actions : ['));
+    assert.ok(s.includes("                method: editing ? 'PUT' : 'POST',"), 'an edit is an update, never a second rule');
+    assert.ok(s.includes('body: JSON.stringify({ ...(editing ? { id: rule.id } : {}), name: name.trim(), triggerEvent: trigger, conditions, actions }),'), 'the id rides only on an edit');
+    assert.ok(s.includes("title={editing ? 'Edit automation' : 'New automation'}"));
+    assert.ok(s.includes("label={saving?'Saving…':editing?'Save changes':'Create automation'}"));
+    assert.ok(s.includes('onClick={() => (done || editing) && setStep(n)}'), 'editing opens any step directly');
+    assert.ok(s.includes("{ icon:'✏️', label:'Edit', fn:() => { setActiveMenu(null); setEditingRule(rule); setShowModal(true); } },"), 'the ⋯ menu offers Edit');
+    assert.ok(s.includes('onSaved={saved => setAutomationList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev])}'), 'an edited rule replaces its row; a new one is prepended');
+    assert.ok(s.includes("onClose={() => { setShowModal(false); setEditingRule(null); }}"), 'closing forgets the rule being edited');
+    // the endpoint's PUT already takes every field the modal sends
+    const fn = code(read('netlify/functions/automations.mjs'));
+    for (const k of ['name', 'triggerEvent', 'conditions', 'actions']) assert.ok(fn.includes(`if (data.${k}`), `PUT applies ${k}`);
+    assert.ok(fn.includes('.where(and(eq(automations.id, data.id), eq(automations.orgId, orgId)))'), 'org-scoped');
+});

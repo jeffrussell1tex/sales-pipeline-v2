@@ -2173,6 +2173,16 @@ const mutations = [
         'src/Tabs/settings/integrations/AutomationsDetail.jsx',
         "        if (actions.some(a => a.type === 'update_field' && !a.params?.field)) { setError('Update field: choose the field to set'); return; }\n",
         ''],
+
+    ['automations: editing a rule creates a second one instead of updating it',
+        'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+        "                method: editing ? 'PUT' : 'POST',",
+        "                method: 'POST',"],
+
+    ['automations: the Edit menu item is gone again',
+        'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+        "                                            { icon:'✏️', label:'Edit', fn:() => { setActiveMenu(null); setEditingRule(rule); setShowModal(true); } },\n",
+        ''],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
