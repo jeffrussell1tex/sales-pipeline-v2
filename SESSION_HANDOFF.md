@@ -216,7 +216,8 @@ line "1 of 150 … predictive scoring is off"); the Engagement card's stale
 **`0810167`** (`index-DS-lL6jZ.js`; a first attempt with straight quotes broke
 the JSX attribute and two gates went red — typographic quotes now, the scan
 pins the sentence); **435/435 mutations**; **LANDED on dev** at 19:55:57 UTC.
-**NOT shipped** — `dev` is ahead of `master` by SEVEN code commits,
+**OBSERVED by Jeff on dev: "working as designed."** **NOT shipped** — `dev`
+is ahead of `master` by SEVEN code commits,
 `04ad57b`, `d936baf` (§0.121), `59cd6c3`, `51675be`, `f422a92` (§0.122),
 `cf752b5` and `0810167` (§0.123), plus docs.
 
@@ -1730,8 +1731,8 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   the notes. A contact with no email shows no ✉ button at all (unchanged).
   Delete the template in Settings → the contact's button is plain "✉ Email"
   again.
-- **§0.123 on dev — OBSERVED in the pane (the rules, the readiness line);
-  Jeff's checks (Admin; bundle `index-DS-lL6jZ.js`, hard-refresh):** Settings
+- **§0.123 on dev — OBSERVED by Jeff ("working as designed") and in the
+  pane.** The checks he walked, for the record: Settings
   → Sales process → Lead scoring → the Engagement table shows TEN rules (five
   status/recency, then Demo / Meeting / Schedule / Call / Email "activity
   logged") and its description now says behavioural events are live; the
