@@ -260,3 +260,13 @@ test('the panel renders the shared vocabulary — no local trigger list, a field
     assert.ok(s.includes('deal gone silent, stuck in a stage, close date lapsed (checked hourly, once per deal per week)'));
     assert.ok(!s.includes('task overdue/completed'), 'the old footer is gone');
 });
+
+test('the row menu is a fixed popover at the button\'s viewport rect — the overflow:hidden card clipped the absolute one (Jeff, 13 Sep)', () => {
+    const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
+    assert.ok(s.includes('const menuPlacement = (r) => {'), 'module scope');
+    assert.ok(s.includes('        ? { top: r.bottom + 4, right }') && s.includes('        : { bottom: window.innerHeight - r.top + 4, right };'), 'below when it fits, above otherwise');
+    assert.ok(s.includes('setMenuAt(menuPlacement(e.currentTarget.getBoundingClientRect()));'), 'anchored to the button\'s rect on open');
+    assert.ok(s.includes("style={{ position:'fixed', ...(menuAt || {}), zIndex:100,"), 'position: fixed');
+    assert.ok(!s.includes("bottom:'100%'") && !s.includes("top:'100%'"), 'REGRESSION: an absolute menu inside the overflow:hidden card');
+    assert.ok(s.includes("window.addEventListener('scroll', dismiss, true);") && s.includes("window.addEventListener('resize', dismiss);"), 'a fixed menu closes when the page moves');
+});

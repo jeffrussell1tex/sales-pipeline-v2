@@ -2143,6 +2143,11 @@ const mutations = [
         'src/Tabs/settings/integrations/AutomationsDetail.jsx',
         "                            <select value={c.field} onChange={e => setCond(i,'field',e.target.value)} style={sel}>\n                                {conditionFields(trigger).map(f => <option key={f.key} value={f.key}>{f.label}</option>)}\n                            </select>\n",
         "                            <input value={c.field} onChange={e => setCond(i,'field',e.target.value)} placeholder=\"Field (e.g. stage, arr)\" style={inp}/>\n"],
+
+    ['automations panel: the row menu is absolute inside the overflow:hidden card again (clipped at the card\'s edge — Jeff, 13 Sep)',
+        'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+        "style={{ position:'fixed', ...(menuAt || {}), zIndex:100,",
+        "style={{ position:'absolute', right:0, top:'100%', marginTop:4, zIndex:100,"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

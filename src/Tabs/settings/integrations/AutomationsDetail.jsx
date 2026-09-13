@@ -268,12 +268,27 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
     );
 };
 
+// The row menu is position: fixed at the ⋯ button's viewport rect (the popover
+// rule: getBoundingClientRect + fixed). The Rules card is overflow:hidden, so
+// the absolute menu it replaces was clipped at the card's top edge for a short
+// list (it opened upward for the last three rows — with one row, the only row)
+// and would be clipped at the bottom edge for a long one (Jeff, 13 Sep). Below
+// the button when it fits in the viewport, above it otherwise.
+const MENU_H = 128;
+const menuPlacement = (r) => {
+    const right = Math.max(8, window.innerWidth - r.right);
+    return r.bottom + 4 + MENU_H <= window.innerHeight
+        ? { top: r.bottom + 4, right }
+        : { bottom: window.innerHeight - r.top + 4, right };
+};
+
 export const AutomationsDetail = ({ onBack }) => {
     const [automationList, setAutomationList] = React.useState([]);
     const [loading,        setLoading]        = React.useState(true);
     const [error,          setError]          = React.useState(null);
     const [showModal,      setShowModal]      = React.useState(false);
     const [activeMenu,     setActiveMenu]     = React.useState(null); // rule id
+    const [menuAt,         setMenuAt]         = React.useState(null); // { right, top | bottom } — viewport px, position: fixed
     const [runsFor,        setRunsFor]        = React.useState(null); // { rule, runs }
     const [runsLoading,    setRunsLoading]    = React.useState(false);
     const [filter,         setFilter]         = React.useState('All');
@@ -300,8 +315,16 @@ export const AutomationsDetail = ({ onBack }) => {
             if (btn  && btn.contains(e.target))  return;
             setActiveMenu(null);
         };
+        // A fixed menu does not follow the page: scrolling or resizing closes it.
+        const dismiss = () => setActiveMenu(null);
         document.addEventListener('mousedown', close);
-        return () => document.removeEventListener('mousedown', close);
+        window.addEventListener('scroll', dismiss, true);
+        window.addEventListener('resize', dismiss);
+        return () => {
+            document.removeEventListener('mousedown', close);
+            window.removeEventListener('scroll', dismiss, true);
+            window.removeEventListener('resize', dismiss);
+        };
     }, [activeMenu]);
 
     const handleToggle = async (rule) => {
@@ -473,17 +496,14 @@ export const AutomationsDetail = ({ onBack }) => {
                             {/* ⋯ menu */}
                             <div style={{ position:'relative' }}>
                                 <button id={'auto-btn-' + rule.id}
-                                    onClick={() => setActiveMenu(isMenuOpen ? null : rule.id)}
+                                    onClick={(e) => { if (isMenuOpen) { setActiveMenu(null); return; } setMenuAt(menuPlacement(e.currentTarget.getBoundingClientRect())); setActiveMenu(rule.id); }}
                                     style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:24, height:24,
                                         borderRadius:3, fontSize:15, fontWeight:700, border:'none', cursor:'pointer', lineHeight:1,
                                         color:isMenuOpen?T.goldInk:T.inkMuted, background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent' }}>⋯</button>
                                 {isMenuOpen && (
-                                    <div id={'auto-menu-' + rule.id} style={{ position:'absolute', right:0, ...(i >= visible.length - 3 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }), zIndex:100,
+                                    <div id={'auto-menu-' + rule.id} style={{ position:'fixed', ...(menuAt || {}), zIndex:100,
                                         width:188, background:T.surface, border:`1px solid ${T.borderStrong}`,
                                         borderRadius:4, padding:4, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', fontFamily:T.sans }}>
-                                        <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
-                                            background:T.surface, border:`1px solid ${T.borderStrong}`,
-                                            borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
                                         {[
                                             { icon:rule.active?'⏸':'▶', label:rule.active?'Pause':'Resume', fn:() => handleToggle(rule) },
                                             { icon:'📋', label:'View run history', fn:() => handleViewRuns(rule) },
