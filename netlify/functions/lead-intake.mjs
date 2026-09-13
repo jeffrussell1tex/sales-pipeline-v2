@@ -31,6 +31,7 @@ import { randomUUID } from 'crypto';
 import { scoreLead, DEFAULT_LEAD_SCORING } from './score-lead.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
+import { leadEventData } from '../../src/utils/automationEvents.js';
 import { sendSlackToOrg, slackTemplates } from './send-slack.mjs';
 import { esc } from '../../src/utils/customerNotifications.js';
 import { TOKEN_RE, INTAKE_FIELDS, HONEYPOT_FIELD, cleanWebToLead, cleanIntake } from '../../src/utils/webToLead.js';
@@ -192,9 +193,7 @@ export const handler = async (event) => {
             email: inserted.email, source: inserted.source, status: inserted.status, score: inserted.score,
             estimated_arr: null, assigned_to: null,
         }).catch(e => console.warn('lead-intake webhook:', e.message));
-        dispatchAutomations(org.orgId, 'lead.created', {
-            id: inserted.id, first_name: inserted.firstName, last_name: inserted.lastName, company: inserted.company, email: inserted.email, assigned_to: null,
-        }).catch(e => console.warn('lead-intake automations:', e.message));
+        dispatchAutomations(org.orgId, 'lead.created', leadEventData(inserted)).catch(e => console.warn('lead-intake automations:', e.message));
         await sendSlackToOrg(org.orgId, slackTemplates.webLead({
             name: [inserted.firstName, inserted.lastName].filter(Boolean).join(' ') || '—',
             company: inserted.company || '—', email: inserted.email || '—', phone: inserted.phone || '—', message: clean.lead.notes || '',

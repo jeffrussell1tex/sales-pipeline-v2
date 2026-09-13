@@ -6,6 +6,7 @@ import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { postDealEvents, postBulkStageMove } from './send-slack.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
+import { dealEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
@@ -257,10 +258,7 @@ export const handler = async (event) => {
                 pipeline_id:      inserted.pipelineId,
                 created_date:     inserted.createdDate,
             });
-            dispatchAutomations(orgId, 'opportunity.created', {
-                id: inserted.id, account: inserted.account, sales_rep: inserted.salesRep,
-                stage: inserted.stage, arr: inserted.arr ? Number(inserted.arr) : null,
-            }).catch(e => console.warn('auto error:', e.message));
+            dispatchAutomations(orgId, 'opportunity.created', dealEventData(inserted)).catch(e => console.warn('auto error:', e.message));
 
             return { statusCode: 201, headers, body: JSON.stringify({ opportunity: inserted }) };
         }
@@ -479,11 +477,7 @@ export const handler = async (event) => {
                 // preferences (state §0.99, item 33). Never throws; 4 s cap.
                 await postDealEvents(orgId, { before: { stage: previousStage }, after: upserted, mover: await getCallerName(userId, orgId) });
                 const autoEvt = upserted.stage === 'Closed Won' ? 'opportunity.won' : upserted.stage === 'Closed Lost' ? 'opportunity.lost' : 'opportunity.stage_changed';
-                dispatchAutomations(orgId, autoEvt, {
-                    id: upserted.id, account: upserted.account, sales_rep: upserted.salesRep,
-                    stage: upserted.stage, arr: upserted.arr ? Number(upserted.arr) : null,
-                    from_stage: previousStage, to_stage: upserted.stage,
-                }).catch(e => console.warn('auto error:', e.message));
+                dispatchAutomations(orgId, autoEvt, dealEventData(upserted, { from_stage: previousStage, to_stage: upserted.stage })).catch(e => console.warn('auto error:', e.message));
             }
 
             return { statusCode: 200, headers, body: JSON.stringify({ opportunity: upserted }) };

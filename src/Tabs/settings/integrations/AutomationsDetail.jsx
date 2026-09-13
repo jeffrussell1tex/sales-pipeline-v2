@@ -3,17 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter } from './shared.jsx';
-
-const TRIGGER_EVENTS = [
-    { value:'opportunity.created',       label:'Opportunity created',      group:'Pipeline' },
-    { value:'opportunity.stage_changed', label:'Stage changed',            group:'Pipeline' },
-    { value:'opportunity.won',           label:'Deal won',                 group:'Pipeline' },
-    { value:'opportunity.lost',          label:'Deal lost',                group:'Pipeline' },
-    { value:'lead.created',              label:'Lead created',             group:'Leads'    },
-    { value:'lead.converted',            label:'Lead converted',           group:'Leads'    },
-    { value:'task.overdue',              label:'Task overdue',             group:'Tasks'    },
-    { value:'task.completed',            label:'Task completed',           group:'Tasks'    },
-];
+// The trigger vocabulary, the fields each event carries and the merge-field
+// keys are the engine's own (state §0.124): a trigger offered here is one the
+// engine fires, and a condition names a field the event actually has.
+import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, conditionFields, triggerOf } from '../../../utils/automationEvents.js';
 
 const ACTION_TYPES = [
     { value:'create_task',  label:'Create task',       icon:'✅' },
@@ -48,7 +41,15 @@ const fmtRunAge = (iso) => {
 const inp = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, width:'100%', boxSizing:'border-box' };
 const sel = { ...inp, appearance:'none', cursor:'pointer' };
 
-const ActionEditor = ({ action, idx, actions, setAction, delAction }) => (
+// Module scope (§16). `fields` are the event's fields — the merge fields a
+// title, notes, subject or body may name as {{key}}.
+const MergeHint = ({ fields }) => (
+    <div style={{ fontSize:11, color:T.inkMuted, marginTop:8, lineHeight:1.5 }}>
+        Merge fields: {fields.map(f => <code key={f.key} style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, marginRight:6 }}>{'{{' + f.key + '}}'}</code>)}
+    </div>
+);
+
+const ActionEditor = ({ action, idx, actions, setAction, delAction, fields }) => (
         <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, padding:'14px 16px', marginBottom:10 }}>
             <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:10 }}>
                 <select value={action.type} onChange={e => setAction(idx,'type',e.target.value)} style={{ ...sel, flex:1 }}>
@@ -59,7 +60,7 @@ const ActionEditor = ({ action, idx, actions, setAction, delAction }) => (
             {action.type === 'create_task' && (
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Task title</label>
-                        <input value={action.params.title||''} onChange={e => setAction(idx,'title',e.target.value)} placeholder="e.g. Follow up with {account}" style={inp}/></div>
+                        <input value={action.params.title||''} onChange={e => setAction(idx,'title',e.target.value)} placeholder="e.g. Follow up with {{account}}" style={inp}/></div>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Due in (days)</label>
                         <input type="number" min="0" value={action.params.dueOffsetDays??1} onChange={e => setAction(idx,'dueOffsetDays',Number(e.target.value))} style={inp}/></div>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Priority</label>
@@ -67,16 +68,20 @@ const ActionEditor = ({ action, idx, actions, setAction, delAction }) => (
                             {['Low','Medium','High'].map(p => <option key={p}>{p}</option>)}</select></div>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Assign to (rep name)</label>
                         <input value={action.params.assignedTo||''} onChange={e => setAction(idx,'assignedTo',e.target.value)} placeholder="leave blank = use deal rep" style={inp}/></div>
+                    <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Notes (optional)</label>
+                        <textarea value={action.params.notes||''} onChange={e => setAction(idx,'notes',e.target.value)} rows={2} placeholder="e.g. {{days_silent}} days without activity on {{opportunity_name}}" style={{ ...inp, resize:'vertical' }}/></div>
+                    <div style={{ gridColumn:'1 / -1' }}><MergeHint fields={fields}/></div>
                 </div>
             )}
             {action.type === 'send_email' && (
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>To (email)</label>
-                        <input value={action.params.to||''} onChange={e => setAction(idx,'to',e.target.value)} placeholder="rep@example.com or leave blank to use record email" style={inp}/></div>
+                        <input value={action.params.to||''} onChange={e => setAction(idx,'to',e.target.value)} placeholder="leave blank = the lead's email, or the deal's rep" style={inp}/></div>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Subject</label>
                         <input value={action.params.subject||''} onChange={e => setAction(idx,'subject',e.target.value)} style={inp}/></div>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Body</label>
                         <textarea value={action.params.body||''} onChange={e => setAction(idx,'body',e.target.value)} rows={3} style={{ ...inp, resize:'vertical' }}/></div>
+                    <MergeHint fields={fields}/>
                 </div>
             )}
             {action.type === 'webhook' && (
@@ -107,13 +112,13 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
     const [saving,  setSaving]  = React.useState(false);
     const [error,   setError]   = React.useState('');
 
-    const addCond = () => setConds(p => [...p, { field:'stage', operator:'eq', value:'' }]);
+    const addCond = () => setConds(p => [...p, { field: conditionFields(trigger)[0]?.key || '', operator:'eq', value:'' }]);
     const delCond = (i) => setConds(p => p.filter((_,j) => j!==i));
     const setCond = (i, k, v) => setConds(p => p.map((c,j) => j===i ? {...c,[k]:v} : c));
 
     const addAction = () => setActs(p => [...p, { type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
     const delAction = (i) => setActs(p => p.filter((_,j) => j!==i));
-    const setAction = (i, k, v) => setActs(p => p.map((a,j) => j===i ? (k==='type' ? { type:v, params:{} } : {...a, params:{...a.params,[k]:v}}) : a));
+    const setAction = (i, k, v) => setActs(p => p.map((a,j) => j===i ? (k==='type' ? { type:v, params: v==='create_task' ? { title:'', dueOffsetDays:1, priority:'Medium' } : {} } : {...a, params:{...a.params,[k]:v}}) : a));
 
     const steps = ['Trigger','Conditions','Actions','Review'];
 
@@ -162,11 +167,14 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
                         <input value={name} onChange={e=>{setName(e.target.value);setError('');}} placeholder="e.g. New lead → create follow-up task" style={inp} autoFocus/>
                     </div>
                     <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:10 }}>Trigger event</div>
-                    {['Pipeline','Leads','Tasks'].map(group => (
+                    {TRIGGER_GROUPS.map(group => (
                         <div key={group} style={{ marginBottom:14 }}>
                             <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:6, fontFamily:T.sans }}>{group}</div>
+                            {group === 'Deal health' && (
+                                <div style={{ fontSize:11.5, color:T.inkMid, marginBottom:8 }}>Checked every hour. A rule fires once per deal per signal per week, at the deal rep's alert hour — the same moment the signal is emailed and posted.</div>
+                            )}
                             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                                {TRIGGER_EVENTS.filter(e => e.group===group).map(ev => (
+                                {AUTOMATION_TRIGGERS.filter(e => e.group===group).map(ev => (
                                     <div key={ev.value} onClick={() => setTrigger(ev.value)}
                                         style={{ padding:'10px 14px', border:`1.5px solid ${trigger===ev.value?T.goldInk:T.border}`,
                                             borderRadius:6, cursor:'pointer', background:trigger===ev.value?'rgba(200,185,154,0.10)':T.surface,
@@ -188,7 +196,9 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
                     <div style={{ fontSize:12, color:T.inkMid, marginBottom:14 }}>Leave empty to run on every <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{trigger}</code> event.</div>
                     {conditions.map((c,i) => (
                         <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 160px 1fr 28px', gap:8, marginBottom:8, alignItems:'center' }}>
-                            <input value={c.field} onChange={e => setCond(i,'field',e.target.value)} placeholder="Field (e.g. stage, arr)" style={inp}/>
+                            <select value={c.field} onChange={e => setCond(i,'field',e.target.value)} style={sel}>
+                                {conditionFields(trigger).map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                            </select>
                             <select value={c.operator} onChange={e => setCond(i,'operator',e.target.value)} style={sel}>
                                 {CONDITION_OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
@@ -203,7 +213,7 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
                 {/* Step 3: Actions */}
                 {step === 3 && (<>
                     <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>Actions <span style={{ fontSize:12, fontWeight:400, color:T.inkMuted }}>(run in order)</span></div>
-                    {actions.map((a,i) => <ActionEditor key={i} action={a} idx={i} actions={actions} setAction={setAction} delAction={delAction}/>)}
+                    {actions.map((a,i) => <ActionEditor key={i} action={a} idx={i} actions={actions} setAction={setAction} delAction={delAction} fields={conditionFields(trigger)}/>)}
                     <button onClick={addAction} style={{ fontSize:12.5, fontWeight:600, color:T.info, background:'none', border:`1px dashed ${T.border}`, borderRadius:T.r, padding:'7px 14px', cursor:'pointer', fontFamily:T.sans, width:'100%' }}>
                         + Add action
                     </button>
@@ -217,7 +227,8 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
                         </div>
                         <div style={{ background:T.surface2, borderRadius:6, padding:'14px 18px' }}>
                             <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8 }}>Trigger</div>
-                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.info }}>{trigger}</span>
+                            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{triggerOf(trigger)?.label || trigger}{HOURLY_TRIGGERS.includes(trigger) ? ' · checked hourly' : ''}</div>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.info }}>{trigger}</span>
                         </div>
                         {conditions.length > 0 && (
                             <div style={{ background:T.surface2, borderRadius:6, padding:'14px 18px' }}>
@@ -337,7 +348,7 @@ export const AutomationsDetail = ({ onBack }) => {
         return true;
     });
 
-    const triggerLabel = (ev) => TRIGGER_EVENTS.find(t => t.value===ev)?.label || ev;
+    const triggerLabel = (ev) => triggerOf(ev)?.label || ev;
 
     return (
         <div style={{ fontFamily:T.sans }}>
@@ -446,8 +457,8 @@ export const AutomationsDetail = ({ onBack }) => {
                                 </div>
                             </div>
                             {/* Trigger */}
-                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.info, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                                {rule.triggerEvent}
+                            <span title={rule.triggerEvent} style={{ fontSize:11.5, color:triggerOf(rule.triggerEvent) ? T.inkMid : T.danger, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                {triggerLabel(rule.triggerEvent)}{triggerOf(rule.triggerEvent) ? '' : ' (never fires)'}
                             </span>
                             {/* Run count */}
                             <div style={{ fontSize:12.5, color:T.inkMid }}>{rule.runCount || 0}</div>
@@ -498,8 +509,8 @@ export const AutomationsDetail = ({ onBack }) => {
             </div>
 
             <div style={{ marginTop:16, padding:'12px 16px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12.5, color:T.inkMid }}>
-                <b style={{ color:T.info }}>Supported triggers:</b> opportunity created/stage changed/won/lost, lead created/converted, task overdue/completed.
-                Actions: create task, send email, fire webhook, update field. Run history is logged per execution.
+                <b style={{ color:T.info }}>Triggers:</b> opportunity created / stage changed / won / lost; deal gone silent, stuck in a stage, close date lapsed (checked hourly, once per deal per week); lead created / converted; task completed.
+                Actions: create task (linked to the deal and owned by the assignee), send email, fire webhook, update field (forecast category, probability, next steps, vertical, territory, team). Merge fields such as {'{{account}}'} render from the event. Run history is logged per execution.
             </div>
         </div>
     );

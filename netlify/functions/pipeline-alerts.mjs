@@ -28,6 +28,11 @@ import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
 import { sendSlackToOrg, slackTemplates }             from './send-slack.mjs';
 import { withHeartbeat }                              from './_heartbeat.mjs';
+// The rules engine (state §0.124): the three stalled-deal signals — silent,
+// stuck, close date lapsed — fire a rule at the point they post to Slack, so
+// once per deal per signal per DEDUP_DAYS, at the rep's alert hour.
+import { dispatchAutomations }                        from './dispatch-automations.mjs';
+import { dealEventData }                              from '../../src/utils/automationEvents.js';
 // The same recurrence arithmetic the Service Due queue renders (state §0.110).
 import { buildRenewalQueue }                          from '../../src/utils/planVisits.js';
 
@@ -298,6 +303,7 @@ const run = async () => {
                         }
                         await logAlert(orgId, repName, 'stale', opp, `No activity in ${daysSilent} days`);
                         await sendSlackToOrg(orgId, slackTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent }), 'dealSilent');
+                        await dispatchAutomations(orgId, 'opportunity.silent', dealEventData(opp, { days_silent: daysSilent }));
                         console.log(`dealSilent → ${repUser.email} (${name}, ${daysSilent}d)`);
 
                         // Manager copy for very stale (21+ days)
@@ -339,6 +345,7 @@ const run = async () => {
                         }
                         await logAlert(orgId, repName, 'stuck', opp, `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`);
                         await sendSlackToOrg(orgId, slackTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage }), 'dealStuck');
+                        await dispatchAutomations(orgId, 'opportunity.stuck', dealEventData(opp, { days_in_stage: daysInStage, avg_days_in_stage: avgForStage }));
                         console.log(`dealStuck → ${repUser.email} (${name}, ${daysInStage}d)`);
 
                         // Manager copy if 3× over average
@@ -381,6 +388,7 @@ const run = async () => {
                         }
                         await logAlert(orgId, repName, 'lapsed', opp, `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`);
                         await sendSlackToOrg(orgId, slackTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate }), 'closeLapsed');
+                        await dispatchAutomations(orgId, 'opportunity.close_lapsed', dealEventData(opp, { days_lapsed: daysLapsed }));
                         console.log(`closeLapsed → ${repUser.email} (${name}, ${daysLapsed}d overdue)`);
 
                         // Always CC manager on lapsed close date

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** August 31, 2026 · rules current through **§18b25**.
+**Updated:** September 13, 2026 · rules current through **§18b37**.
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3414,3 +3414,43 @@ token-column read, the enabled guard, the `orgId: org.orgId` insert, the
 null owner lines, the single insert, the absence of `auth.mjs`, both
 settings halves, the mint only in the PUT, and the rewrite's place above the
 catch-all (`tests/lead-intake.test.mjs`).
+
+## 18b37. A Rule Engine Is A Write Path — Its Actions Take Allowlists, Its Vocabulary Is One List (hard rule)
+
+**Origin (state §0.124):** the automations engine's `update_field` action
+wrote whatever column the rule named — `set({ [p.field]: p.value })` — so an
+Admin of org A could save a rule with field `orgId` and value `org_B` and
+the next matching event would move A's deal into B's workspace. Nothing in
+the gates saw it: the engine was on the org-scoping test's skip list, the
+write itself was scoped by `orgId`, and the column name came from
+configuration, not from a request. The same batch found the Settings panel
+offering two triggers nothing fired, a condition field typed free-text (a
+typo is a rule that never matches), and a task action writing two keys the
+table has no column for (drizzle drops them silently).
+
+**The rule:** configuration that drives a write is a request. A rule's
+action names a column from an ALLOWLIST kept beside the engine (§18b34 for
+a self-service endpoint; the same shape here), with the value coerced to
+what the column holds — never a column name from the rule, never the org,
+the owner, the rep, the stage or the money. A rule's task is stamped like a
+rep's task: `orgId` from the event's org, `ownerId` resolved in THAT org's
+roster by the assignee's name (no match → unowned and said so; ambiguous →
+unowned, reported); the payload names no owner. Every write the engine makes
+carries the org, so the engine is scanned by the org-scoping test like any
+endpoint — a skip-list entry is a debt, not an exemption. The trigger
+vocabulary is ONE exported list the engine refuses to fire outside of (fail
+closed, the `slackAlertEnabled` precedent), and the panel renders that list:
+a trigger offered is a trigger fired, and a field offered in a condition is
+a field the event carries. A signal computed for a human channel (email, SMS,
+Slack) fires the engine at the same point, under the same dedup — a signal
+the product already raises must be able to act.
+
+**The check:** an integration test seeds two orgs with a user of the same
+display name in each, a rule in each on the same trigger, and fires ONE
+org's event: the task lands in that org owned by that org's user, the other
+org has no task and its rule no run; a rule whose `update_field` names
+`orgId` leaves the row where it was and the run record says why
+(`tests/integration/dispatch-automations.itest.mjs`). Unit scans pin the
+allowlist, the trigger check before any read, the roster resolution, the
+org-scoped counter, the panel's import of the shared list and its SELECT
+(`tests/automation-events.test.mjs`); nine mutants cover them.

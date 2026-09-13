@@ -19,7 +19,7 @@ const FN_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'netlify', 'f
 // tenant data.
 // tests/job-heartbeat.test.mjs pins that it imports no other table, so this
 // exemption cannot quietly widen.
-const SKIP = new Set(['auth.mjs', '_lib.mjs', 'score-lead.mjs', 'send-email.mjs', 'send-sms.mjs', 'crypto.mjs', 'webhooks.mjs', 'dispatch-automations.mjs', 'quote-pdf.mjs', '_heartbeat.mjs']);
+const SKIP = new Set(['auth.mjs', '_lib.mjs', 'score-lead.mjs', 'send-email.mjs', 'send-sms.mjs', 'crypto.mjs', 'webhooks.mjs', 'quote-pdf.mjs', '_heartbeat.mjs']);
 
 // Extract the full JS statement starting at `start` (balances () [] {} and skips
 // '…' "…" `…` strings), stopping at the first top-level ';'.

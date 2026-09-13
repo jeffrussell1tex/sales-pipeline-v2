@@ -3,6 +3,8 @@ import { tasks } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
+import { dispatchAutomations } from './dispatch-automations.mjs';
+import { taskEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerId, assertOwnership,
     stampOwnerId, ownerIdForUpdate, ambiguousOwnerResponse,
@@ -130,6 +132,8 @@ export const handler = async (event) => {
                     opportunity_id: upserted.opportunityId,
                     completed_date: upserted.completedDate,
                 });
+                // The rules engine (state §0.124) — the same first-flip-only gate.
+                dispatchAutomations(orgId, 'task.completed', taskEventData(upserted)).catch(e => console.warn('auto error:', e.message));
             }
 
             return { statusCode: 200, headers, body: JSON.stringify({ task: upserted }) };

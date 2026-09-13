@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -2098,6 +2098,51 @@ const mutations = [
         'src/Tabs/DispatchTab.jsx',
         "    if (crew == null && hrs == null) return 'crew and duration not set';\n",
         ''],
+    // ── Light workflow automation (0.124) ────────────────────────────────────
+    ['automations: the silent signal stops reaching the rules engine (the job computes it and does not act again)',
+        'netlify/functions/pipeline-alerts.mjs',
+        "                        await dispatchAutomations(orgId, 'opportunity.silent', dealEventData(opp, { days_silent: daysSilent }));\n",
+        ''],
+
+    ['automations: a trigger outside the vocabulary fires rules again (a typo at a call site matches nothing — or the wrong rule)',
+        'netlify/functions/dispatch-automations.mjs',
+        '        if (!isAutomationTrigger(triggerEvent)) {',
+        '        if (false) {'],
+
+    ['automations: a created task is no longer owned by its assignee (the name column alone, 18b22)',
+        'netlify/functions/dispatch-automations.mjs',
+        '                    ownerId = await resolveOwnerId(row.assignedTo, orgId);',
+        '                    ownerId = null;'],
+
+    ['automations: update_field writes whatever column the rule names again (orgId included)',
+        'netlify/functions/dispatch-automations.mjs',
+        '                .set({ [patch.field]: patch.value, updatedAt: new Date() })',
+        '                .set({ [p.field]: p.value, updatedAt: new Date() })'],
+
+    ['automations: orgId joins the update_field allowlist',
+        'src/utils/automationEvents.js',
+        "    forecastCategory: 'string',",
+        "    forecastCategory: 'string',\n    orgId:            'string',"],
+
+    ['automations: an unknown merge field vanishes instead of staying visible',
+        'src/utils/automationEvents.js',
+        "(Object.prototype.hasOwnProperty.call(d, key) && d[key] !== null && d[key] !== undefined ? String(d[key]) : m)",
+        "(Object.prototype.hasOwnProperty.call(d, key) && d[key] !== null && d[key] !== undefined ? String(d[key]) : '')"],
+
+    ['automations: the created task loses its link to the deal',
+        'src/utils/automationEvents.js',
+        '        opportunityId: dealId,',
+        '        opportunityId: null,'],
+
+    ['automations: a negative due offset dates the task in the past',
+        'src/utils/automationEvents.js',
+        '    const dueDate = offset !== null && offset >= 0 ? isoDate(',
+        '    const dueDate = offset !== null ? isoDate('],
+
+    ['automations: the condition field is typed free-text again (a typo is a rule that never matches)',
+        'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+        "                            <select value={c.field} onChange={e => setCond(i,'field',e.target.value)} style={sel}>\n                                {conditionFields(trigger).map(f => <option key={f.key} value={f.key}>{f.label}</option>)}\n                            </select>\n",
+        "                            <input value={c.field} onChange={e => setCond(i,'field',e.target.value)} placeholder=\"Field (e.g. stage, arr)\" style={inp}/>\n"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

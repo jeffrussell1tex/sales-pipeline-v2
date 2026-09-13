@@ -50,6 +50,9 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
 mock.module(new URL('../../netlify/functions/webhooks.mjs', import.meta.url).href, {
     namedExports: { dispatchWebhook: async () => {} },
 });
+mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.meta.url).href, {
+    namedExports: { dispatchAutomations: async () => {} },
+});
 
 const { handler } = await import('../../netlify/functions/tasks.mjs');
 const { db } = await import('../../db/index.js');
