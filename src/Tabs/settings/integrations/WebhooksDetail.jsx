@@ -2,15 +2,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
-import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow } from './shared.jsx';
+import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
 const WebhookRowMenu = ({ wh, onToggle, onDelete, onClose }) => {
     return (
         <div style={{ width:192, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
             boxShadow:'0 8px 24px rgba(42,38,34,0.12)', padding:4, position:'relative' }}>
-            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
-                background:T.surface, border:`1px solid ${T.borderStrong}`,
-                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
             <MenuRow icon={wh.active?'⏸':'▶'} label={wh.active?'Pause':'Resume'} onClick={onToggle} onClose={onClose}/>
             <MenuRow icon="🔁" label="Send test event" onClick={() => {}} onClose={onClose}/>
             <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
@@ -149,7 +146,7 @@ export const WebhooksDetail = ({ onBack }) => {
     const [loading,   setLoading]   = React.useState(true);
     const [error,     setError]     = React.useState(null);
     const [showModal, setShowModal] = React.useState(false);
-    const [activeMenu, setActiveMenu] = React.useState(null);
+    const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('wh-btn-', 'wh-menu-');
     const [deleting,  setDeleting]  = React.useState(null);
     const menuRefs = React.useRef({});
 
@@ -165,18 +162,6 @@ export const WebhooksDetail = ({ onBack }) => {
     }, []);
 
     React.useEffect(() => { load(); }, []);
-
-    // Outside click closes menu
-    React.useEffect(() => {
-        if (!activeMenu) return;
-        const onDoc = (e) => {
-            const btn = document.getElementById('wh-btn-' + activeMenu);
-            const menu = document.getElementById('wh-menu-' + activeMenu);
-            if (btn && !btn.contains(e.target) && menu && !menu.contains(e.target)) setActiveMenu(null);
-        };
-        document.addEventListener('mousedown', onDoc);
-        return () => document.removeEventListener('mousedown', onDoc);
-    }, [activeMenu]);
 
     const handleToggle = async (wh) => {
         try {
@@ -303,10 +288,10 @@ export const WebhooksDetail = ({ onBack }) => {
                                 {/* ⋯ menu */}
                                 <div style={{ position:'relative' }}>
                                     <button id={'wh-btn-' + wh.id}
-                                        onClick={() => setActiveMenu(isMenuOpen ? null : wh.id)}
+                                        onClick={(e) => toggleMenu(e, wh.id)}
                                         style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:24, height:24, borderRadius:3, fontSize:16, fontWeight:700, border:'none', cursor:'pointer', lineHeight:1, color:isMenuOpen?T.goldInk:T.inkMuted, background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent' }}>⋯</button>
                                     {isMenuOpen && (
-                                        <div id={'wh-menu-' + wh.id} style={{ position:'absolute', right:0, ...(i >= webhooks.length - 3 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }), zIndex:100 }}>
+                                        <div id={'wh-menu-' + wh.id} style={{ position:'fixed', ...(menuAt || {}), zIndex:100 }}>
                                             <WebhookRowMenu wh={wh} onClose={() => setActiveMenu(null)} onToggle={() => handleToggle(wh)} onDelete={() => handleDelete(wh)}/>
                                         </div>
                                     )}

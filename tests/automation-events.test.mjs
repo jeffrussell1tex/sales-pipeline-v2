@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import {
     AUTOMATION_TRIGGERS, TRIGGER_GROUPS, TRIGGER_VALUES, HOURLY_TRIGGERS, triggerOf, isAutomationTrigger,
     EVENT_FIELDS, conditionFields, dealEventData, leadEventData, taskEventData, renderMerge, eventSubject,
-    taskFromAction, TASK_PRIORITIES, UPDATABLE_OPPORTUNITY_FIELDS, updateFieldPatch,
+    taskFromAction, TASK_PRIORITIES, UPDATABLE_OPPORTUNITY_FIELDS, UPDATABLE_FIELD_OPTIONS, updateFieldPatch,
 } from '../src/utils/automationEvents.js';
 import { isoLocal } from '../src/utils/dateLocal.js';
 
@@ -238,7 +238,7 @@ test('every call site hands the engine the shared payload: deals, leads (both en
 
 test('the panel renders the shared vocabulary — no local trigger list, a field SELECT in the condition builder, merge-field hints, notes on a task', () => {
     const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
-    assert.ok(s.includes("import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, conditionFields, triggerOf } from '../../../utils/automationEvents.js';"));
+    assert.ok(s.includes("import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf } from '../../../utils/automationEvents.js';"));
     assert.ok(!s.includes('const TRIGGER_EVENTS'), 'REGRESSION: a local copy of the vocabulary drifts (task.overdue was offered for months and never fired)');
     assert.ok(!s.includes("'task.overdue'"));
     assert.ok(s.includes('                    {TRIGGER_GROUPS.map(group => ('));
@@ -254,19 +254,51 @@ test('the panel renders the shared vocabulary — no local trigger list, a field
     assert.ok(s.includes('fields={conditionFields(trigger)}/>)}'));
     assert.ok(s.includes('placeholder="e.g. Follow up with {{account}}"'), 'the placeholder promises what the engine renders');
     assert.ok(s.includes("<textarea value={action.params.notes||''} onChange={e => setAction(idx,'notes',e.target.value)}"), 'notes reach the task\'s description');
-    assert.ok(s.includes("params: v==='create_task' ? { title:'', dueOffsetDays:1, priority:'Medium' } : {}"), 'switching to create_task keeps the defaults the inputs show');
+    assert.ok(s.includes("const defaultParams = (type) => type === 'create_task' ? { title:'', dueOffsetDays:1, priority:'Medium' }"), 'switching to create_task keeps the defaults the inputs show');
     assert.ok(s.includes("    const triggerLabel = (ev) => triggerOf(ev)?.label || ev;"));
     assert.ok(s.includes("{triggerLabel(rule.triggerEvent)}{triggerOf(rule.triggerEvent) ? '' : ' (never fires)'}"), 'a rule saved under a retired trigger says so');
     assert.ok(s.includes('deal gone silent, stuck in a stage, close date lapsed (checked hourly, once per deal per week)'));
     assert.ok(!s.includes('task overdue/completed'), 'the old footer is gone');
 });
 
-test('the row menu is a fixed popover at the button\'s viewport rect — the overflow:hidden card clipped the absolute one (Jeff, 13 Sep)', () => {
+test('every integration panel\'s row menu is ONE fixed popover hook at the button\'s viewport rect — the overflow:hidden cards clipped the absolute ones (Jeff, 13 Sep)', () => {
+    const sh = code(read('src/Tabs/settings/integrations/shared.jsx'));
+    assert.ok(sh.includes('export const menuPlacement = (r) => {'));
+    assert.ok(sh.includes('        ? { top: r.bottom + 4, right }') && sh.includes('        : { bottom: window.innerHeight - r.top + 4, right };'), 'below when it fits, above otherwise');
+    assert.ok(sh.includes('export function useRowMenu(btnPrefix, menuPrefix) {'));
+    assert.ok(sh.includes('        setMenuAt(menuPlacement(e.currentTarget.getBoundingClientRect()));'), 'anchored to the button\'s rect on open');
+    assert.ok(sh.includes("window.addEventListener('scroll', dismiss, true);") && sh.includes("window.addEventListener('resize', dismiss);"), 'a fixed menu closes when the page moves');
+    for (const [file, prefixes] of [['AutomationsDetail', "'auto-btn-', 'auto-menu-'"], ['WebhooksDetail', "'wh-btn-', 'wh-menu-'"], ['ApiKeysDetail', "'key-btn-', 'key-menu-'"]]) {
+        const s = code(read(`src/Tabs/settings/integrations/${file}.jsx`));
+        assert.ok(s.includes(`useRowMenu(${prefixes})`), `${file}: the shared hook`);
+        assert.ok(s.includes("style={{ position:'fixed', ...(menuAt || {}), zIndex:100"), `${file}: position: fixed`);
+        assert.ok(!s.includes('...(i >= '), `${file}: REGRESSION — an absolute menu flipped by row index inside the overflow:hidden card`);
+        assert.ok(!s.includes("top:-6, right:10"), `${file}: no arrow that assumes a direction`);
+        assert.ok(!/React\.useEffect\(\(\) => \{\s*if \(!activeMenu\) return;/.test(s), `${file}: no local outside-click effect — the hook owns it`);
+    }
+});
+
+test('the run history names the record a run was triggered by, from the lists the app holds; a missing record falls back to the id', () => {
     const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
-    assert.ok(s.includes('const menuPlacement = (r) => {'), 'module scope');
-    assert.ok(s.includes('        ? { top: r.bottom + 4, right }') && s.includes('        : { bottom: window.innerHeight - r.top + 4, right };'), 'below when it fits, above otherwise');
-    assert.ok(s.includes('setMenuAt(menuPlacement(e.currentTarget.getBoundingClientRect()));'), 'anchored to the button\'s rect on open');
-    assert.ok(s.includes("style={{ position:'fixed', ...(menuAt || {}), zIndex:100,"), 'position: fixed');
-    assert.ok(!s.includes("bottom:'100%'") && !s.includes("top:'100%'"), 'REGRESSION: an absolute menu inside the overflow:hidden card');
-    assert.ok(s.includes("window.addEventListener('scroll', dismiss, true);") && s.includes("window.addEventListener('resize', dismiss);"), 'a fixed menu closes when the page moves');
+    assert.ok(s.includes("import { useApp } from '../../../AppContext';"));
+    assert.ok(s.includes('const recordName = (run, lists) => {'), 'module scope');
+    assert.ok(s.includes("    if (ev.startsWith('opportunity.')) { const o = (lists?.opportunities || []).find(x => x.id === id); return o ? (o.opportunityName || o.account || id) : id; }"));
+    assert.ok(s.includes("    if (ev.startsWith('lead.'))") && s.includes("    if (ev.startsWith('task.'))"));
+    assert.ok(s.includes('    const lists = useApp();'));
+    assert.ok(s.includes('<div title={run.triggeredBy} style={{ fontSize:11, color:T.inkMuted, marginTop:1 }}>Triggered by: {recordName(run, lists)}</div>'), 'the name, the id on hover');
+    assert.ok(!s.includes('Triggered by: {run.triggeredBy}'), 'REGRESSION: the raw id');
+});
+
+test('the Update field action saves what it shows — a select over the allowlist, defaults stored on type switch, no field refused at Create (Jeff, 13 Sep: "it did not change it to commit")', () => {
+    assert.deepEqual(UPDATABLE_FIELD_OPTIONS.map(f => f.key), Object.keys(UPDATABLE_OPPORTUNITY_FIELDS), 'the picker IS the allowlist');
+    assert.deepEqual(updateFieldPatch({ field: 'forecastCategory', value: 'Commit' }), { ok: true, field: 'forecastCategory', value: 'Commit' }, 'a rule saved without an entity means opportunity');
+    assert.equal(updateFieldPatch({ entity: 'opportunity' }).ok, false, 'but no field is still refused');
+    const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
+    assert.ok(s.includes('UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf }'));
+    assert.ok(s.includes('                            {UPDATABLE_FIELD_OPTIONS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}'), 'the field is chosen, not typed');
+    assert.ok(!s.includes('placeholder="forecastCategory"'), 'REGRESSION: a typed column name');
+    assert.ok(s.includes("        : type === 'update_field' ? { entity:'opportunity', field:'', value:'' }"), 'the entity the select shows is stored');
+    assert.ok(s.includes("        if (actions.some(a => a.type === 'update_field' && !a.params?.field)) { setError('Update field: choose the field to set'); return; }"));
+    assert.ok(s.includes("        if (actions.some(a => a.type === 'webhook' && !a.params?.url?.trim())) { setError('Fire webhook: an endpoint URL is required'); return; }"));
+    assert.ok(s.includes("'— no field chosen'"), 'the review says so too');
 });

@@ -241,6 +241,17 @@ export const UPDATABLE_OPPORTUNITY_FIELDS = Object.freeze({
     territory:        'string',
     team:             'string',
 });
+// What the panel offers — a SELECT over the allowlist, so a rule can never
+// name a column the engine refuses (the first update_field rule saved on dev
+// carried params {} — a typed field, or none, and nothing was written).
+export const UPDATABLE_FIELD_OPTIONS = Object.freeze([
+    Object.freeze({ key: 'forecastCategory', label: 'Forecast category' }),
+    Object.freeze({ key: 'probability',      label: 'Probability (0–100)' }),
+    Object.freeze({ key: 'nextSteps',        label: 'Next steps' }),
+    Object.freeze({ key: 'vertical',         label: 'Vertical' }),
+    Object.freeze({ key: 'territory',        label: 'Territory' }),
+    Object.freeze({ key: 'team',             label: 'Team' }),
+]);
 
 /**
  * → { ok: true, field, value } for an allowlisted field with a value the
@@ -249,7 +260,8 @@ export const UPDATABLE_OPPORTUNITY_FIELDS = Object.freeze({
  */
 export function updateFieldPatch(params) {
     const p = params && typeof params === 'object' ? params : {};
-    if (p.entity !== 'opportunity') return { ok: false, reason: 'unsupported entity' };
+    // Opportunities are the only entity; a rule saved without naming one means it.
+    if ((p.entity || 'opportunity') !== 'opportunity') return { ok: false, reason: 'unsupported entity' };
     const field = str(p.field, 64);
     const kind = Object.prototype.hasOwnProperty.call(UPDATABLE_OPPORTUNITY_FIELDS, field) ? UPDATABLE_OPPORTUNITY_FIELDS[field] : null;
     if (!kind) return { ok: false, reason: `field "${field || '(blank)'}" cannot be set by a rule` };

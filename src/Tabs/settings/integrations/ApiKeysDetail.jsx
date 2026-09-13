@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
-import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow } from './shared.jsx';
+import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
 const NewApiKeyModal = ({ onClose, onCreated }) => {
     const [step,    setStep]    = React.useState('form'); // form | creating | reveal
@@ -447,9 +447,6 @@ const ApiKeyRowMenu = ({ keyRecord, onClose, onRevoke, onCopyPrefix }) => {
     return (
         <div style={{ width:192, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
             boxShadow:'0 8px 24px rgba(42,38,34,0.12)', padding:4, fontFamily:T.sans }}>
-            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
-                background:T.surface, border:`1px solid ${T.borderStrong}`,
-                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
             <MenuRow icon="📋" label={copied ? '✓ Copied' : 'Copy prefix'} onClick={() => {
                 navigator.clipboard?.writeText(keyRecord.keyPrefix || '');
                 setCopied(true);
@@ -467,7 +464,7 @@ export const ApiKeysDetail = ({ onBack }) => {
     const [filter,     setFilter]     = React.useState('Active');
     const [showModal,  setShowModal]  = React.useState(false);
     const [showDocs,   setShowDocs]   = React.useState(false);
-    const [activeMenu, setActiveMenu] = React.useState(null); // key id
+    const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('key-btn-', 'key-menu-');
     const [revoking,   setRevoking]   = React.useState(null); // key record
     const docsBtnRef = React.useRef(null);
 
@@ -482,20 +479,6 @@ export const ApiKeysDetail = ({ onBack }) => {
     }, []);
 
     React.useEffect(() => { load(); }, []);
-
-    // Outside click closes row menu
-    React.useEffect(() => {
-        if (!activeMenu) return;
-        const close = (e) => {
-            const menu = document.getElementById('key-menu-' + activeMenu);
-            const btn  = document.getElementById('key-btn-'  + activeMenu);
-            if (menu && menu.contains(e.target)) return;
-            if (btn  && btn.contains(e.target))  return;
-            setActiveMenu(null);
-        };
-        document.addEventListener('mousedown', close);
-        return () => document.removeEventListener('mousedown', close);
-    }, [activeMenu]);
 
     const fmtDate = (iso) => {
         if (!iso) return '—';
@@ -615,12 +598,12 @@ export const ApiKeysDetail = ({ onBack }) => {
                             {!revoked && (
                                 <div style={{ position:'relative' }}>
                                     <button id={'key-btn-' + k.id}
-                                        onClick={() => setActiveMenu(isMenuOpen ? null : k.id)}
+                                        onClick={(e) => toggleMenu(e, k.id)}
                                         style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:24, height:24,
                                             borderRadius:3, fontSize:15, fontWeight:700, border:'none', cursor:'pointer', lineHeight:1,
                                             color:isMenuOpen?T.goldInk:T.inkMuted, background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent' }}>⋯</button>
                                     {isMenuOpen && (
-                                        <div id={'key-menu-' + k.id} style={{ position:'absolute', right:0, ...(i >= visible.length - 3 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }), zIndex:100 }}>
+                                        <div id={'key-menu-' + k.id} style={{ position:'fixed', ...(menuAt || {}), zIndex:100 }}>
                                             <ApiKeyRowMenu
                                                 keyRecord={k}
                                                 onClose={() => setActiveMenu(null)}

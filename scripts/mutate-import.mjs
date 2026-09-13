@@ -2148,6 +2148,31 @@ const mutations = [
         'src/Tabs/settings/integrations/AutomationsDetail.jsx',
         "style={{ position:'fixed', ...(menuAt || {}), zIndex:100,",
         "style={{ position:'absolute', right:0, top:'100%', marginTop:4, zIndex:100,"],
+
+    ['integration panels: a fixed row menu stops closing on scroll (it drifts off its row)',
+        'src/Tabs/settings/integrations/shared.jsx',
+        "        window.addEventListener('scroll', dismiss, true);\n",
+        ''],
+
+    ['webhooks panel: the row menu is absolute inside the overflow:hidden card again',
+        'src/Tabs/settings/integrations/WebhooksDetail.jsx',
+        "style={{ position:'fixed', ...(menuAt || {}), zIndex:100 }}",
+        "style={{ position:'absolute', right:0, ...(i >= webhooks.length - 3 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }), zIndex:100 }}"],
+
+    ['run history: the raw record id again instead of its name',
+        'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+        'Triggered by: {recordName(run, lists)}',
+        'Triggered by: {run.triggeredBy}'],
+
+    ['update_field: switching to it stores no entity again (the rule that did nothing on dev)',
+        'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+        "        : type === 'update_field' ? { entity:'opportunity', field:'', value:'' }\n",
+        ''],
+
+    ['update_field: a rule with no field is saved anyway',
+        'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+        "        if (actions.some(a => a.type === 'update_field' && !a.params?.field)) { setError('Update field: choose the field to set'); return; }\n",
+        ''],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

@@ -78,3 +78,50 @@ export const MenuRow = ({ icon, label, danger:isDanger, onClick, onClose }) => (
     <span style={{ fontSize:12.5, fontWeight:500 }}>{label}</span>
     </div>
     );
+
+// ── Row menus ────────────────────────────────────────────────────────────────
+// A row's ⋯ menu is position: fixed at the button's viewport rect (the popover
+// rule: getBoundingClientRect + fixed). Every list card in these panels is
+// overflow:hidden, so an absolute menu was clipped at the card's top edge for a
+// short list (it opened upward for the last three rows — with one row, the only
+// row) and at the bottom edge for a long one (Jeff, 13 Sep — Automations first,
+// then the same pattern in Webhooks and API keys). Below the button when it fits
+// the viewport, above it otherwise; a scroll (capture) or resize closes it,
+// since a fixed menu does not follow the page. One hook, three panels.
+const MENU_H = 128;
+export const menuPlacement = (r) => {
+    const right = Math.max(8, window.innerWidth - r.right);
+    return r.bottom + 4 + MENU_H <= window.innerHeight
+        ? { top: r.bottom + 4, right }
+        : { bottom: window.innerHeight - r.top + 4, right };
+};
+
+export function useRowMenu(btnPrefix, menuPrefix) {
+    const [activeMenu, setActiveMenu] = React.useState(null); // row id
+    const [menuAt,     setMenuAt]     = React.useState(null); // { right, top | bottom } — viewport px
+    React.useEffect(() => {
+        if (!activeMenu) return;
+        const close = (e) => {
+            const menu = document.getElementById(menuPrefix + activeMenu);
+            const btn  = document.getElementById(btnPrefix + activeMenu);
+            if (menu && menu.contains(e.target)) return;
+            if (btn  && btn.contains(e.target))  return;
+            setActiveMenu(null);
+        };
+        const dismiss = () => setActiveMenu(null);
+        document.addEventListener('mousedown', close);
+        window.addEventListener('scroll', dismiss, true);
+        window.addEventListener('resize', dismiss);
+        return () => {
+            document.removeEventListener('mousedown', close);
+            window.removeEventListener('scroll', dismiss, true);
+            window.removeEventListener('resize', dismiss);
+        };
+    }, [activeMenu, btnPrefix, menuPrefix]);
+    const toggleMenu = (e, id) => {
+        if (activeMenu === id) { setActiveMenu(null); return; }
+        setMenuAt(menuPlacement(e.currentTarget.getBoundingClientRect()));
+        setActiveMenu(id);
+    };
+    return { activeMenu, setActiveMenu, menuAt, toggleMenu };
+}

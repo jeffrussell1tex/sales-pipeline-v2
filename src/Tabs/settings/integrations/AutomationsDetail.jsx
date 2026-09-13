@@ -2,11 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
-import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter } from './shared.jsx';
+import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, useRowMenu } from './shared.jsx';
+import { useApp } from '../../../AppContext';
 // The trigger vocabulary, the fields each event carries and the merge-field
 // keys are the engine's own (state §0.124): a trigger offered here is one the
 // engine fires, and a condition names a field the event actually has.
-import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, conditionFields, triggerOf } from '../../../utils/automationEvents.js';
+import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf } from '../../../utils/automationEvents.js';
 
 const ACTION_TYPES = [
     { value:'create_task',  label:'Create task',       icon:'✅' },
@@ -95,7 +96,10 @@ const ActionEditor = ({ action, idx, actions, setAction, delAction, fields }) =>
                             <option value="opportunity">Opportunity</option>
                         </select></div>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Field</label>
-                        <input value={action.params.field||''} onChange={e => setAction(idx,'field',e.target.value)} placeholder="forecastCategory" style={inp}/></div>
+                        <select value={action.params.field||''} onChange={e => setAction(idx,'field',e.target.value)} style={sel}>
+                            <option value="">Choose a field…</option>
+                            {UPDATABLE_FIELD_OPTIONS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                        </select></div>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Value</label>
                         <input value={action.params.value||''} onChange={e => setAction(idx,'value',e.target.value)} placeholder="commit" style={inp}/></div>
                 </div>
@@ -118,13 +122,22 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
 
     const addAction = () => setActs(p => [...p, { type:'create_task', params:{ title:'', dueOffsetDays:1, priority:'Medium' } }]);
     const delAction = (i) => setActs(p => p.filter((_,j) => j!==i));
-    const setAction = (i, k, v) => setActs(p => p.map((a,j) => j===i ? (k==='type' ? { type:v, params: v==='create_task' ? { title:'', dueOffsetDays:1, priority:'Medium' } : {} } : {...a, params:{...a.params,[k]:v}}) : a));
+    // Switching an action's type seeds the params its inputs SHOW — an input
+    // that displays a default the rule never stored is a rule that does nothing
+    // (the first update_field rule on dev saved params {} and skipped as
+    // "unsupported entity"; the task's due days had the same gap).
+    const defaultParams = (type) => type === 'create_task' ? { title:'', dueOffsetDays:1, priority:'Medium' }
+        : type === 'update_field' ? { entity:'opportunity', field:'', value:'' }
+        : {};
+    const setAction = (i, k, v) => setActs(p => p.map((a,j) => j===i ? (k==='type' ? { type:v, params: defaultParams(v) } : {...a, params:{...a.params,[k]:v}}) : a));
 
     const steps = ['Trigger','Conditions','Actions','Review'];
 
     const handleSave = async () => {
         if (!name.trim()) { setError('Name is required'); return; }
         if (actions.length === 0) { setError('Add at least one action'); return; }
+        if (actions.some(a => a.type === 'update_field' && !a.params?.field)) { setError('Update field: choose the field to set'); return; }
+        if (actions.some(a => a.type === 'webhook' && !a.params?.url?.trim())) { setError('Fire webhook: an endpoint URL is required'); return; }
         setSaving(true); setError('');
         try {
             const res  = await dbFetch('/.netlify/functions/automations', {
@@ -249,6 +262,7 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
                                     {a.type==='create_task' && a.params?.title && <span style={{ fontSize:12, color:T.inkMuted }}>— "{a.params.title}"</span>}
                                     {a.type==='send_email'  && a.params?.to    && <span style={{ fontSize:12, color:T.inkMuted }}>→ {a.params.to}</span>}
                                     {a.type==='webhook'     && a.params?.url   && <span style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{a.params.url}</span>}
+                                    {a.type==='update_field' && <span style={{ fontSize:12, color:a.params?.field ? T.inkMuted : T.danger }}>{a.params?.field ? `— ${UPDATABLE_FIELD_OPTIONS.find(f => f.key === a.params.field)?.label || a.params.field} = ${a.params.value ?? ''}` : '— no field chosen'}</span>}
                                 </div>
                             ))}
                         </div>
@@ -268,18 +282,18 @@ const NewAutomationModal = ({ onClose, onCreated }) => {
     );
 };
 
-// The row menu is position: fixed at the ⋯ button's viewport rect (the popover
-// rule: getBoundingClientRect + fixed). The Rules card is overflow:hidden, so
-// the absolute menu it replaces was clipped at the card's top edge for a short
-// list (it opened upward for the last three rows — with one row, the only row)
-// and would be clipped at the bottom edge for a long one (Jeff, 13 Sep). Below
-// the button when it fits in the viewport, above it otherwise.
-const MENU_H = 128;
-const menuPlacement = (r) => {
-    const right = Math.max(8, window.innerWidth - r.right);
-    return r.bottom + 4 + MENU_H <= window.innerHeight
-        ? { top: r.bottom + 4, right }
-        : { bottom: window.innerHeight - r.top + 4, right };
+// The run row stores the record's ID (`triggeredBy`); the name is looked up in
+// the lists the app already holds, by the trigger's entity (Jeff, 13 Sep: "fix
+// the opp names in the run history"). A record since deleted, or one outside
+// the caller's view, falls back to the id — never blank.
+const recordName = (run, lists) => {
+    const id = run?.triggeredBy;
+    if (!id) return null;
+    const ev = String(run.triggerEvent || '');
+    if (ev.startsWith('opportunity.')) { const o = (lists?.opportunities || []).find(x => x.id === id); return o ? (o.opportunityName || o.account || id) : id; }
+    if (ev.startsWith('lead.'))        { const l = (lists?.leads || []).find(x => x.id === id);         return l ? ([l.firstName, l.lastName].filter(Boolean).join(' ') || l.company || id) : id; }
+    if (ev.startsWith('task.'))        { const t = (lists?.tasks || []).find(x => x.id === id);         return t ? (t.title || id) : id; }
+    return id;
 };
 
 export const AutomationsDetail = ({ onBack }) => {
@@ -287,8 +301,8 @@ export const AutomationsDetail = ({ onBack }) => {
     const [loading,        setLoading]        = React.useState(true);
     const [error,          setError]          = React.useState(null);
     const [showModal,      setShowModal]      = React.useState(false);
-    const [activeMenu,     setActiveMenu]     = React.useState(null); // rule id
-    const [menuAt,         setMenuAt]         = React.useState(null); // { right, top | bottom } — viewport px, position: fixed
+    const { activeMenu, setActiveMenu, menuAt, toggleMenu } = useRowMenu('auto-btn-', 'auto-menu-');
+    const lists = useApp(); // opportunities / leads / tasks — to name a run's record
     const [runsFor,        setRunsFor]        = React.useState(null); // { rule, runs }
     const [runsLoading,    setRunsLoading]    = React.useState(false);
     const [filter,         setFilter]         = React.useState('All');
@@ -304,28 +318,6 @@ export const AutomationsDetail = ({ onBack }) => {
     }, []);
 
     React.useEffect(() => { load(); }, []);
-
-    // Outside-click closes row menu
-    React.useEffect(() => {
-        if (!activeMenu) return;
-        const close = (e) => {
-            const menu = document.getElementById('auto-menu-' + activeMenu);
-            const btn  = document.getElementById('auto-btn-'  + activeMenu);
-            if (menu && menu.contains(e.target)) return;
-            if (btn  && btn.contains(e.target))  return;
-            setActiveMenu(null);
-        };
-        // A fixed menu does not follow the page: scrolling or resizing closes it.
-        const dismiss = () => setActiveMenu(null);
-        document.addEventListener('mousedown', close);
-        window.addEventListener('scroll', dismiss, true);
-        window.addEventListener('resize', dismiss);
-        return () => {
-            document.removeEventListener('mousedown', close);
-            window.removeEventListener('scroll', dismiss, true);
-            window.removeEventListener('resize', dismiss);
-        };
-    }, [activeMenu]);
 
     const handleToggle = async (rule) => {
         setAutomationList(prev => prev.map(r => r.id===rule.id ? {...r, active:!r.active} : r));
@@ -400,7 +392,7 @@ export const AutomationsDetail = ({ onBack }) => {
                                     <div style={{ flex:1, minWidth:0 }}>
                                         <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, textTransform:'capitalize' }}>{run.status}</div>
                                         {run.error && <div style={{ fontSize:11, color:T.danger, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{run.error}</div>}
-                                        {run.triggeredBy && <div style={{ fontSize:11, color:T.inkMuted, marginTop:1 }}>Triggered by: {run.triggeredBy}</div>}
+                                        {run.triggeredBy && <div title={run.triggeredBy} style={{ fontSize:11, color:T.inkMuted, marginTop:1 }}>Triggered by: {recordName(run, lists)}</div>}
                                     </div>
                                     <div style={{ fontSize:11, color:T.inkMuted, flexShrink:0 }}>{fmtRunAge(run.createdAt)}</div>
                                     <div style={{ fontSize:11, color:T.inkMid, flexShrink:0 }}>{run.actionsExecuted} action{run.actionsExecuted!==1?'s':''}</div>
@@ -496,7 +488,7 @@ export const AutomationsDetail = ({ onBack }) => {
                             {/* ⋯ menu */}
                             <div style={{ position:'relative' }}>
                                 <button id={'auto-btn-' + rule.id}
-                                    onClick={(e) => { if (isMenuOpen) { setActiveMenu(null); return; } setMenuAt(menuPlacement(e.currentTarget.getBoundingClientRect())); setActiveMenu(rule.id); }}
+                                    onClick={(e) => toggleMenu(e, rule.id)}
                                     style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:24, height:24,
                                         borderRadius:3, fontSize:15, fontWeight:700, border:'none', cursor:'pointer', lineHeight:1,
                                         color:isMenuOpen?T.goldInk:T.inkMuted, background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent' }}>⋯</button>
