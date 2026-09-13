@@ -23,15 +23,15 @@ const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//'))
 
 // ── the vocabulary ───────────────────────────────────────────────────────────
 
-test('one vocabulary: ten triggers in four groups; the three stalled-deal signals are hourly; task.overdue is gone (nothing computes it)', () => {
-    assert.equal(AUTOMATION_TRIGGERS.length, 10);
+test('one vocabulary: twelve triggers in four groups; the five deal-health signals are hourly; task.overdue is gone (nothing computes it)', () => {
+    assert.equal(AUTOMATION_TRIGGERS.length, 12);
     assert.deepEqual(TRIGGER_GROUPS, ['Pipeline', 'Deal health', 'Leads', 'Tasks']);
     for (const t of AUTOMATION_TRIGGERS) {
         assert.ok(TRIGGER_GROUPS.includes(t.group), `${t.value} is in a known group`);
         assert.ok(Array.isArray(EVENT_FIELDS[t.value]) && EVENT_FIELDS[t.value].length > 0, `${t.value} carries fields`);
         assert.ok(['event', 'hourly'].includes(t.kind));
     }
-    assert.deepEqual(HOURLY_TRIGGERS, ['opportunity.silent', 'opportunity.stuck', 'opportunity.close_lapsed']);
+    assert.deepEqual(HOURLY_TRIGGERS, ['opportunity.silent', 'opportunity.stuck', 'opportunity.close_lapsed', 'opportunity.momentum', 'opportunity.score_drop']);
     assert.ok(!TRIGGER_VALUES.includes('task.overdue'), 'nothing fires task.overdue — it is not offered');
     assert.ok(TRIGGER_VALUES.includes('task.completed'), 'tasks.mjs fires task.completed');
     assert.equal(triggerOf('opportunity.silent').label, 'Deal gone silent (no activity for 14 days)');
@@ -48,6 +48,8 @@ test('conditionFields: the fields an event actually carries — a move has from/
     assert.ok(keys('opportunity.silent').includes('days_silent'));
     assert.ok(keys('opportunity.stuck').includes('days_in_stage') && keys('opportunity.stuck').includes('avg_days_in_stage'));
     assert.ok(keys('opportunity.close_lapsed').includes('days_lapsed'));
+    assert.ok(keys('opportunity.momentum').includes('stage_count') && keys('opportunity.momentum').includes('days_since_created'), '§0.127');
+    assert.ok(keys('opportunity.score_drop').includes('score') && keys('opportunity.score_drop').includes('verdict'), '§0.127');
     assert.ok(keys('lead.created').includes('source') && keys('lead.created').includes('score'));
     assert.ok(keys('task.completed').includes('opportunity_id'));
     assert.deepEqual(conditionFields('nope'), []);
@@ -203,6 +205,8 @@ test('the hourly job fires opportunity.silent / .stuck / .close_lapsed right aft
         ["'dealSilent');",  "                        await dispatchAutomations(orgId, 'opportunity.silent', dealEventData(opp, { days_silent: daysSilent }));"],
         ["'dealStuck');",   "                        await dispatchAutomations(orgId, 'opportunity.stuck', dealEventData(opp, { days_in_stage: daysInStage, avg_days_in_stage: avgForStage }));"],
         ["'closeLapsed');", "                        await dispatchAutomations(orgId, 'opportunity.close_lapsed', dealEventData(opp, { days_lapsed: daysLapsed }));"],
+        ["'dealMomentum');",   "                        await dispatchAutomations(orgId, 'opportunity.momentum', dealEventData(opp, { stage_count: stageCount, days_since_created: createdDays }));"],
+        ["'scoreDropAlert');", "                        await dispatchAutomations(orgId, 'opportunity.score_drop', dealEventData(opp, { score: opp.aiScore.score, verdict: verdictLabel }));"],
     ];
     for (const [slackTail, dispatch] of pairs) {
         const slack = s.indexOf(slackTail);
@@ -212,7 +216,7 @@ test('the hourly job fires opportunity.silent / .stuck / .close_lapsed right aft
         const catchAfter = s.indexOf('} catch (err) {', slack);
         assert.ok(fire < catchAfter, `${slackTail}: inside the same try — inside the !alerted block`);
     }
-    assert.equal((s.match(/await dispatchAutomations\(orgId, 'opportunity\./g) || []).length, 3, 'three signals fire; momentum and score drop do not (flagged, not done)');
+    assert.equal((s.match(/await dispatchAutomations\(orgId, 'opportunity\./g) || []).length, 5, 'five signals fire — momentum and score drop since §0.127');
     for (const t of HOURLY_TRIGGERS) assert.ok(s.includes(`'${t}'`), `${t} is fired by the job`);
 });
 
@@ -258,7 +262,7 @@ test('the panel renders the shared vocabulary — no local trigger list, a field
     assert.ok(s.includes("const defaultParams = (type) => type === 'create_task' ? { title:'', dueOffsetDays:1, priority:'Medium' }"), 'switching to create_task keeps the defaults the inputs show');
     assert.ok(s.includes("    const triggerLabel = (ev) => triggerOf(ev)?.label || ev;"));
     assert.ok(s.includes("{triggerLabel(rule.triggerEvent)}{triggerOf(rule.triggerEvent) ? '' : ' (never fires)'}"), 'a rule saved under a retired trigger says so');
-    assert.ok(s.includes('deal gone silent, stuck in a stage, close date lapsed (checked hourly, once per deal per week)'));
+    assert.ok(s.includes('deal gone silent, stuck in a stage, close date lapsed, gaining momentum, AI score dropped (checked hourly, once per deal per week)'));
     assert.ok(!s.includes('task overdue/completed'), 'the old footer is gone');
 });
 
@@ -302,6 +306,24 @@ test('the panel picks the assignee from the roster and stores both keys; the eng
     assert.ok(l.includes('export async function rosterUserById(id, orgId) {'));
     assert.ok(l.includes('    return (await orgRoster(orgId)).find((u) => u.id === wanted) || null;'), 'this org\'s roster only');
     assert.ok(l.includes("    if (!orgId) throw new Error('_lib.rosterUserById: orgId is required.');"));
+});
+
+// ── Post to Slack (state §0.127) ─────────────────────────────────────────────
+
+test('send_slack: the engine posts the rendered message through the org-aware sender with NO alert type (the rule is the switch); the panel offers it, requires a message, names it in the review', () => {
+    const e = code(read('netlify/functions/dispatch-automations.mjs'));
+    assert.ok(e.includes("import { sendSlackToOrg } from './send-slack.mjs';"));
+    assert.ok(e.includes("        case 'send_slack': {"));
+    assert.ok(e.includes("            const text = renderMerge(String(p.message || '').trim() || `Automation: ${eventSubject(data) || triggerEvent}`, data);"), 'merge fields render; a blank message still says what fired');
+    assert.ok(e.includes('            const posted = await sendSlackToOrg(orgId, { text });'), 'no alert type: not gated by a pipeline-alert switch the Admin may have off; the webhook and the master switch still gate');
+    assert.ok(e.includes("            return posted ? { type: 'send_slack', status: 'ok' } : { type: 'send_slack', status: 'skipped', reason: 'Slack is not connected for this workspace' };"), 'an unconnected Slack is a skip that says why');
+    const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
+    assert.ok(s.includes("    { value:'send_slack',   label:'Post to Slack',     icon:'💬' },"));
+    assert.ok(s.includes("<textarea value={action.params.message||''} onChange={e => setAction(idx,'message',e.target.value)}"), 'the message reaches the params');
+    assert.ok(s.includes("        : type === 'send_slack' ? { message:'' }"), 'a type switch stores what the input shows');
+    assert.ok(s.includes("        if (actions.some(a => a.type === 'send_slack' && !a.params?.message?.trim())) { setError('Post to Slack: a message is required'); return; }"));
+    assert.ok(s.includes('{a.type===\'send_slack\'  && a.params?.message && <span style={{ fontSize:12, color:T.inkMuted }}>→ Slack: "{a.params.message}"</span>}'), 'the review names it');
+    assert.ok(s.includes('send email, post to Slack, fire webhook, update field'), 'the footer lists it');
 });
 
 test('every integration panel\'s row menu is ONE fixed popover hook at the button\'s viewport rect — the overflow:hidden cards clipped the absolute ones (Jeff, 13 Sep)', () => {

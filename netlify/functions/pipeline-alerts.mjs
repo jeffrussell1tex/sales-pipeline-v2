@@ -429,6 +429,7 @@ const run = async () => {
                         }
                         await logAlert(orgId, repName, 'velocity', opp, `${stageCount} stages in ${createdDays} days`);
                         await sendSlackToOrg(orgId, slackTemplates.dealMomentum({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays }), 'dealMomentum');
+                        await dispatchAutomations(orgId, 'opportunity.momentum', dealEventData(opp, { stage_count: stageCount, days_since_created: createdDays }));
                         console.log(`dealMomentum → ${repUser.email} (${name})`);
                     } catch (err) {
                         console.error(`dealMomentum error (${name}):`, err.message);
@@ -487,6 +488,7 @@ const run = async () => {
                         }
                         await logAlert(orgId, repName, 'scoreDrop', opp, `AI score ${opp.aiScore.score} (${verdictLabel})`);
                         await sendSlackToOrg(orgId, slackTemplates.scoreDrop({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, score: opp.aiScore.score, verdict: verdictLabel }), 'scoreDropAlert');
+                        await dispatchAutomations(orgId, 'opportunity.score_drop', dealEventData(opp, { score: opp.aiScore.score, verdict: verdictLabel }));
                         console.log(`scoreDropAlert → ${repUser.email} (${name}, score ${opp.aiScore.score})`);
 
                         // Escalate to manager if Critical

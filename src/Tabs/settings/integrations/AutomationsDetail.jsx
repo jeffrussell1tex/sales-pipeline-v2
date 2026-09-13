@@ -13,6 +13,7 @@ const ACTION_TYPES = [
     { value:'create_task',  label:'Create task',       icon:'✅' },
     { value:'send_email',   label:'Send email',        icon:'✉️' },
     { value:'webhook',      label:'Fire webhook',      icon:'⚡' },
+    { value:'send_slack',   label:'Post to Slack',     icon:'💬' },
     { value:'update_field', label:'Update field',      icon:'✏️' },
 ];
 
@@ -90,6 +91,14 @@ const ActionEditor = ({ action, idx, actions, setAction, setAssignee, delAction,
                     <MergeHint fields={fields}/>
                 </div>
             )}
+            {action.type === 'send_slack' && (
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Message</label>
+                        <textarea value={action.params.message||''} onChange={e => setAction(idx,'message',e.target.value)} rows={3} placeholder="e.g. {{sales_rep}}: {{opportunity_name}} moved to {{to_stage}}" style={{ ...inp, resize:'vertical' }}/></div>
+                    <div style={{ fontSize:11, color:T.inkMuted }}>Posts to the workspace's Slack webhook (Settings → Connected apps → Slack). If Slack is not connected, the action is skipped and the run history says so.</div>
+                    <MergeHint fields={fields}/>
+                </div>
+            )}
             {action.type === 'webhook' && (
                 <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Endpoint URL</label>
                     <input value={action.params.url||''} onChange={e => setAction(idx,'url',e.target.value)} placeholder="https://hooks.example.com/..." style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}/></div>
@@ -140,6 +149,7 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
     // "unsupported entity"; the task's due days had the same gap).
     const defaultParams = (type) => type === 'create_task' ? { title:'', dueOffsetDays:1, priority:'Medium' }
         : type === 'update_field' ? { entity:'opportunity', field:'', value:'' }
+        : type === 'send_slack' ? { message:'' }
         : {};
     const setAction = (i, k, v) => setActs(p => p.map((a,j) => j===i ? (k==='type' ? { type:v, params: defaultParams(v) } : {...a, params:{...a.params,[k]:v}}) : a));
     // The assignee stores both keys at once (id and name — §0.126).
@@ -152,6 +162,7 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
         if (actions.length === 0) { setError('Add at least one action'); return; }
         if (actions.some(a => a.type === 'update_field' && !a.params?.field)) { setError('Update field: choose the field to set'); return; }
         if (actions.some(a => a.type === 'webhook' && !a.params?.url?.trim())) { setError('Fire webhook: an endpoint URL is required'); return; }
+        if (actions.some(a => a.type === 'send_slack' && !a.params?.message?.trim())) { setError('Post to Slack: a message is required'); return; }
         setSaving(true); setError('');
         try {
             const res  = await dbFetch('/.netlify/functions/automations', {
@@ -277,6 +288,7 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
                                     {a.type==='create_task' && a.params?.assignedTo && <span style={{ fontSize:12, color:T.inkMuted }}>→ {a.params.assignedTo}</span>}
                                     {a.type==='send_email'  && a.params?.to    && <span style={{ fontSize:12, color:T.inkMuted }}>→ {a.params.to}</span>}
                                     {a.type==='webhook'     && a.params?.url   && <span style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{a.params.url}</span>}
+                                    {a.type==='send_slack'  && a.params?.message && <span style={{ fontSize:12, color:T.inkMuted }}>→ Slack: "{a.params.message}"</span>}
                                     {a.type==='update_field' && <span style={{ fontSize:12, color:a.params?.field ? T.inkMuted : T.danger }}>{a.params?.field ? `— ${UPDATABLE_FIELD_OPTIONS.find(f => f.key === a.params.field)?.label || a.params.field} = ${a.params.value ?? ''}` : '— no field chosen'}</span>}
                                 </div>
                             ))}
@@ -539,8 +551,8 @@ export const AutomationsDetail = ({ onBack }) => {
             </div>
 
             <div style={{ marginTop:16, padding:'12px 16px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12.5, color:T.inkMid }}>
-                <b style={{ color:T.info }}>Triggers:</b> opportunity created / stage changed / won / lost; deal gone silent, stuck in a stage, close date lapsed (checked hourly, once per deal per week); lead created / converted; task completed.
-                Actions: create task (linked to the deal and owned by the assignee), send email, fire webhook, update field (forecast category, probability, next steps, vertical, territory, team). Merge fields such as {'{{account}}'} render from the event. Run history is logged per execution.
+                <b style={{ color:T.info }}>Triggers:</b> opportunity created / stage changed / won / lost; deal gone silent, stuck in a stage, close date lapsed, gaining momentum, AI score dropped (checked hourly, once per deal per week); lead created / converted; task completed.
+                Actions: create task (linked to the deal and owned by the assignee), send email, post to Slack, fire webhook, update field (forecast category, probability, next steps, vertical, territory, team). Merge fields such as {'{{account}}'} render from the event. Run history is logged per execution.
             </div>
         </div>
     );

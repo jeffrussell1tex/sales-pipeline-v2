@@ -2235,6 +2235,27 @@ const mutations = [
         'src/App.jsx',
         "            setCalendarEvents([]);                       // the last org's meetings never show under the new org's name",
         '            // (not cleared)'],
+
+    // ── Post to Slack; momentum and score drop fire the engine (0.127) ──────
+    ['slack action: the post is gated by a pipeline-alert switch the Admin may have off',
+        'netlify/functions/dispatch-automations.mjs',
+        '            const posted = await sendSlackToOrg(orgId, { text });',
+        "            const posted = await sendSlackToOrg(orgId, { text }, 'dealSilent');"],
+
+    ['slack action: a blank message is accepted at Create (a post that says nothing)',
+        'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+        "        if (actions.some(a => a.type === 'send_slack' && !a.params?.message?.trim())) { setError('Post to Slack: a message is required'); return; }",
+        '        // (no guard)'],
+
+    ['momentum: the job stops firing the engine on a deal gaining momentum',
+        'netlify/functions/pipeline-alerts.mjs',
+        "                        await dispatchAutomations(orgId, 'opportunity.momentum', dealEventData(opp, { stage_count: stageCount, days_since_created: createdDays }));",
+        '                        // (not fired)'],
+
+    ['score drop: the trigger is offered and never fired (task.overdue all over again)',
+        'netlify/functions/pipeline-alerts.mjs',
+        "                        await dispatchAutomations(orgId, 'opportunity.score_drop', dealEventData(opp, { score: opp.aiScore.score, verdict: verdictLabel }));",
+        '                        // (not fired)'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

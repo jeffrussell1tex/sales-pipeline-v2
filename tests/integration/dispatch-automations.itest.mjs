@@ -25,6 +25,13 @@ mock.module(new URL('../../netlify/functions/send-email.mjs', import.meta.url).h
         emailTemplates: new Proxy({}, { get: () => () => ({ subject: '', html: '' }) }),
     },
 });
+// The engine posts to Slack through the org-aware sender (§0.127); stub it too.
+const slackPosts = [];
+mock.module(new URL('../../netlify/functions/send-slack.mjs', import.meta.url).href, {
+    namedExports: {
+        sendSlackToOrg: async (orgId, msg, alertType) => { slackPosts.push({ orgId, msg, alertType }); return true; },
+    },
+});
 
 const { dispatchAutomations } = await import('../../netlify/functions/dispatch-automations.mjs');
 const { dealEventData } = await import('../../src/utils/automationEvents.js');
@@ -86,6 +93,7 @@ before(async () => {
                 { type: 'update_field', params: { entity: 'opportunity', field: 'orgId', value: B } },
                 { type: 'update_field', params: { entity: 'opportunity', field: 'forecastCategory', value: 'At risk' } },
                 { type: 'send_email',   params: { subject: '{{opportunity_name}} silent {{days_silent}}d', body: 'Hi {{sales_rep}} <b>' } },
+                { type: 'send_slack',   params: { message: '{{opportunity_name}} has been silent {{days_silent}} days' } },
             ],
             active: true, runCount: 0,
         },
@@ -147,7 +155,7 @@ test('a silent deal: update_field cannot hand the deal to another org, the allow
     const runs = await runsFor(A, 'auto_itest_A_silent');
     assert.equal(runs.length, 1);
     assert.equal(runs[0].status, 'success');
-    assert.equal(runs[0].actionsExecuted, 2, 'the refused write does not count');
+    assert.equal(runs[0].actionsExecuted, 3, 'the refused write does not count; the write, the email and the Slack post do');
     assert.match(runs[0].error, /field "orgId" cannot be set by a rule/, 'the refusal is on the run record');
 
     assert.equal(sent.length, 1);
@@ -155,6 +163,10 @@ test('a silent deal: update_field cannot hand the deal to another org, the allow
     assert.equal(sent[0].subject, 'Acme — HVAC silent 16d');
     assert.equal(sent[0].html, '<p>Hi Karen Rep &lt;b&gt;</p>');
     assert.equal(sent[0].text, 'Hi Karen Rep <b>');
+    assert.equal(slackPosts.length, 1, 'one Slack post (§0.127)');
+    assert.equal(slackPosts[0].orgId, A, 'to A\'s Slack');
+    assert.equal(slackPosts[0].msg.text, 'Acme — HVAC has been silent 16 days', 'merge fields rendered');
+    assert.equal(slackPosts[0].alertType, undefined, 'no alert type — the rule is the switch');
 });
 
 test('a trigger outside the vocabulary fires nothing — no run, no task, no write', async () => {

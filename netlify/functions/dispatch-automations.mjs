@@ -25,6 +25,7 @@ import { db }          from '../../db/index.js';
 import { automations, automationRuns, tasks, opportunities, users } from '../../db/schema.js';
 import { eq, and }     from 'drizzle-orm';
 import { sendEmail }   from './send-email.mjs';
+import { sendSlackToOrg } from './send-slack.mjs';
 import { resolveOwnerId, rosterUserById } from './_lib.mjs';
 import {
     isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, eventSubject,
@@ -134,6 +135,17 @@ const executeAction = async (action, orgId, triggerEvent, data) => {
             } catch (e) {
                 return { type: 'webhook', status: 'error', reason: e.message };
             }
+        }
+
+        case 'send_slack': {
+            // params: { message } — the workspace's Slack webhook (Settings →
+            // Connected apps), rendered with the event's merge fields. No alert
+            // type: the rule IS the switch; the org's webhook and its master
+            // switch still gate the post, and an unconnected Slack is a skip.
+            const p = action.params || {};
+            const text = renderMerge(String(p.message || '').trim() || `Automation: ${eventSubject(data) || triggerEvent}`, data);
+            const posted = await sendSlackToOrg(orgId, { text });
+            return posted ? { type: 'send_slack', status: 'ok' } : { type: 'send_slack', status: 'skipped', reason: 'Slack is not connected for this workspace' };
         }
 
         case 'update_field': {
