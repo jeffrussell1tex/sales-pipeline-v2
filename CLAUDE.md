@@ -116,7 +116,9 @@ One commit per verified batch; doc patch in the same commit.
   self-fetch.
 - New modal state: `useModalState.js` → destructure in `App.jsx` → add to
   `appContextValue`. The wiring file is `App.jsx`, not `AppContext.jsx`.
-- Popovers: `getBoundingClientRect()` + `position: fixed`.
+- Popovers: `getBoundingClientRect()` + `position: fixed`, rendered through
+  `createPortal(…, document.body)` — an ancestor with a `transform` (a hover
+  lift) traps a fixed box inside it (guide §16, the menu rule; state §0.128).
 - UI follows `docs/`-adjacent style guide (warm stone palette, Plus Jakarta
   Sans, near-black buttons, red only for delete).
 

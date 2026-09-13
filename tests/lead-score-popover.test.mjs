@@ -7,7 +7,13 @@
 // popover was position: absolute under the badge, so the row clipped it and grew
 // a scrollbar to hold it. Now: the popover rule — a fixed popover placed from the
 // badge's rect by the pure popoverPlacement, closed by an outside click, a scroll
-// or a resize (a fixed box does not follow the page).
+// or a resize (a fixed box does not follow the page). And rendered through a
+// portal to document.body: the Triage card lifts on hover (transform:
+// translateY(-1px)), and a transformed ancestor is the containing block for a
+// fixed box — as a child of the card the fixed popover was still inside the
+// strip whenever a real pointer hovered the card (Jeff, after the first cut:
+// "nothing pops up except a scroll bar on the right"; synthetic clicks never
+// hover, which is how the pane pass missed it).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -40,7 +46,12 @@ test('LeadScore: the popover is position: fixed, placed from the badge, closed b
     assert.equal(count(block, "position: 'absolute', top: '100%'"), 0, 'the absolute popover is gone');
     assert.ok(block.includes("window.addEventListener('scroll', close, true);"), 'a scroll closes it — a fixed box does not follow the page');
     assert.ok(block.includes("window.addEventListener('resize', close);"));
-    assert.ok(block.includes("const onDoc = (e) => { if (!wrapRef.current?.contains(e.target)) close(); };"), 'an outside click closes it (the badge and the popover are inside the wrapper)');
+    assert.ok(block.includes("const onDoc = (e) => { if (!wrapRef.current?.contains(e.target) && !cardRef.current?.contains(e.target)) close(); };"), 'an outside click closes it — the portal\'s box is not a DOM child of the wrapper, so both are checked');
+    assert.ok(s.includes("import { createPortal } from 'react-dom';"));
+    assert.ok(block.includes('{open && canExplain && createPortal('), 'REGRESSION: as a child of the card, the hover lift\'s transform contains the fixed box');
+    assert.ok(block.includes('                document.body,'), 'to the body');
+    assert.ok(block.includes('<div ref={cardRef} onClick={e => e.stopPropagation()} style={{ position: \'fixed\', ...at,'));
+    assert.ok(s.includes("transform: hov ? 'translateY(-1px)' : 'none'"), 'the hover lift that made the portal necessary is still there (if it goes, the portal still costs nothing)');
     assert.ok(block.includes("window.removeEventListener('scroll', close, true);"), 'listeners come off');
     assert.ok(block.includes('<div ref={wrapRef} style={{ position: \'relative\', display: \'inline-block\' }}>'));
     assert.ok(block.includes('onClick={canExplain ? toggle : undefined}'));

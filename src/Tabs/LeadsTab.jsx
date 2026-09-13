@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../AppContext';
 import { dbFetch, dbWrite } from '../utils/storage';
 import { popoverPlacement } from '../utils/popoverPlacement.js';
@@ -118,6 +119,7 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
     const [at, setAt] = useState(null);
     const wrapRef = useRef(null);
     const badgeRef = useRef(null);
+    const cardRef = useRef(null);      // the portal's box — not a DOM child of the wrapper
     const toggle = (e) => {
         e.stopPropagation();
         if (open) { setOpen(false); return; }
@@ -127,7 +129,7 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
     useEffect(() => {
         if (!open) return;
         const close = () => setOpen(false);
-        const onDoc = (e) => { if (!wrapRef.current?.contains(e.target)) close(); };
+        const onDoc = (e) => { if (!wrapRef.current?.contains(e.target) && !cardRef.current?.contains(e.target)) close(); };
         document.addEventListener('mousedown', onDoc);
         window.addEventListener('scroll', close, true);
         window.addEventListener('resize', close);
@@ -151,8 +153,12 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
             {hasAxes && size !== 'sm' && (
                 <div style={{ fontSize: 9.5, color: T.inkMuted, fontFamily: T.sans, textAlign: 'center', marginTop: 2, whiteSpace: 'nowrap' }}>F{fit || 0}·E{eng || 0}{bd && bd.probability != null ? ` ·P${bd.probability}` : ''}</div>
             )}
-            {open && canExplain && (
-                <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', ...at, zIndex: 60, width: 232, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', padding: '10px 12px' }}>
+            {/* A portal, not a child: the Triage card lifts on hover (transform:
+                translateY(-1px)), and a transformed ancestor is the containing
+                block for a fixed box — rendered here, the popover sat inside the
+                hovered card, clipped by the strip, and grew its scrollbar. */}
+            {open && canExplain && createPortal(
+                <div ref={cardRef} onClick={e => e.stopPropagation()} style={{ position: 'fixed', ...at, zIndex: 60, width: 232, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', padding: '10px 12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: T.ink, fontFamily: T.sans }}>Why this score</span>
                         <span style={{ fontSize: 10.5, fontWeight: 700, color, textTransform: 'uppercase', fontFamily: T.sans }}>{band}</span>
@@ -165,7 +171,8 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
                     )}
                     <BDSection title={`Fit · ${fit || 0}`} rows={bd.fit} />
                     <BDSection title={`Engagement · ${eng || 0}`} rows={bd.engagement} />
-                </div>
+                </div>,
+                document.body,
             )}
         </div>
     );

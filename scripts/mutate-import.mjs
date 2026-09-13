@@ -2277,6 +2277,11 @@ const mutations = [
         'src/Tabs/LeadsTab.jsx',
         "        window.addEventListener('scroll', close, true);",
         '        // (no scroll listener)'],
+
+    ['score popover: rendered inside the card again — the hover lift\'s transform contains the fixed box',
+        'src/Tabs/LeadsTab.jsx',
+        '            {open && canExplain && createPortal(',
+        '            {open && canExplain && ((el) => el)('],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
