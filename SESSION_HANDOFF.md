@@ -36,8 +36,7 @@ function files), **754/754 unit, 158/158 integration, 444/444 mutations after a
 printed green baseline (no restore errors)**, build guard OK 2,499 kB
 `index-CDir98BZ.js`, `dist/` cleared. Pushed at 13:46:31 UTC; **LANDED on
 dev** — accelerep.netlify.app served `index-CDir98BZ.js` at 13:47:02 UTC (curl,
-the hash poll). **NOT observed in a browser** — the pane holds no session and
-signing in is not Claude's to do; Jeff's checks are in §5. **NOT shipped** —
+the hash poll). **OBSERVED IN PART by Jeff on dev (13 Sep, minutes after landing): "created. moved the deal. task created for Karen (account was assigned to her)" — the rule built through the new picker, a deal moved into Proposal, the task created for the deal's rep. Still his: the run history rows, the task as Karen, update_field with forecastCategory and the refused orgId.** The rest of his checks are in §5. **NOT shipped** —
 `origin/master` stays at `b54a2a7`; `dev` is ahead by ONE code commit
 `427fd65` and the docs. Docs: state §0.124 and the header, guide §18b37 (and
 its header line, which had read "through §18b25" while the body reached
