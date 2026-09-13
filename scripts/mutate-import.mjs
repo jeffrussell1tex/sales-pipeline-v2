@@ -2209,6 +2209,32 @@ const mutations = [
         'src/utils/storage.js',
         "            console.warn('waitForToken: no Clerk token after 8 s — the request will go out unauthenticated (401)');",
         '            // silent'],
+
+    // ── The Assign-to picker; the engine owns by id in THIS org (0.126) ─────
+    ['assignee: the engine trusts any id — a user from another org would own the task',
+        'netlify/functions/_lib.mjs',
+        '    return (await orgRoster(orgId)).find((u) => u.id === wanted) || null;',
+        '    return { id: wanted, name: String(wanted) };'],
+
+    ['assignee: the id path is dead — the stale name decides again',
+        'netlify/functions/dispatch-automations.mjs',
+        '            if (byId) { ownerId = byId.id; row.assignedTo = byId.name; }',
+        '            if (false) { ownerId = byId.id; row.assignedTo = byId.name; }'],
+
+    ['assignee: the picker stores the id alone (a rename, or the name path, loses it)',
+        'src/utils/automationEvents.js',
+        "    return u ? { assignedTo: String(u.name), assignedToId: u.id } : { assignedTo: '', assignedToId: '' };",
+        "    return { assignedTo: '', assignedToId: v };"],
+
+    ['assignee: an inactive user is offered',
+        'src/utils/automationEvents.js',
+        '        .filter(u => u && u.id && u.name && u.active !== false)',
+        '        .filter(u => u && u.id && u.name)'],
+
+    ['calendar: the last org\'s meetings stay on the strip through the switch',
+        'src/App.jsx',
+        "            setCalendarEvents([]);                       // the last org's meetings never show under the new org's name",
+        '            // (not cleared)'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

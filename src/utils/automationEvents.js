@@ -273,3 +273,45 @@ export function updateFieldPatch(params) {
     const value = str(p.value, 500);
     return { ok: true, field, value: value || null };
 }
+
+// ── The task action's assignee (state §0.126) ────────────────────────────────
+// The panel picks the assignee from the org's roster and stores BOTH the
+// user's id and their name: the engine owns the task by the id when that id
+// is in the EVENT'S org (rename-proof, never ambiguous) and falls back to the
+// name — the §0.124 contract — otherwise, so a rule saved before the picker,
+// or one whose user has left, behaves as it did.
+
+/** A saved name with no single roster match is kept as a `name:` value so the select never blanks a rule. */
+const nameValue = (name) => 'name:' + name;
+
+/**
+ * → { value, options } for the Assign-to select: '' is the default (the deal's
+ * rep or the lead's assignee), a roster id picks that user, and a saved name
+ * that matches no single active user is offered as itself, "by name".
+ */
+export function assigneeOptions(roster, params) {
+    const rows = (Array.isArray(roster) ? roster : [])
+        .filter(u => u && u.id && u.name && u.active !== false)
+        .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }) || String(a.id).localeCompare(String(b.id)));
+    const options = [{ value: '', label: "The deal's rep (default)" }, ...rows.map(u => ({ value: u.id, label: String(u.name) }))];
+    const p = params && typeof params === 'object' ? params : {};
+    const id = str(p.assignedToId, 64);
+    const name = str(p.assignedTo, 255);
+    let value = '';
+    if (id && rows.some(u => u.id === id)) value = id;
+    else if (name) {
+        const byName = rows.filter(u => String(u.name).trim().toLowerCase() === name.toLowerCase());
+        if (byName.length === 1) value = byName[0].id;
+        else { value = nameValue(name); options.push({ value, label: `${name} (by name — ${byName.length ? 'more than one user' : 'not in the roster'})` }); }
+    }
+    return { value, options };
+}
+
+/** The params a chosen select value stores: both keys, always, so a stale pair never survives a change. */
+export function assigneeParams(value, roster) {
+    const v = String(value ?? '');
+    if (!v) return { assignedTo: '', assignedToId: '' };
+    if (v.startsWith('name:')) return { assignedTo: v.slice(5), assignedToId: '' };
+    const u = (Array.isArray(roster) ? roster : []).find(r => r && r.id === v);
+    return u ? { assignedTo: String(u.name), assignedToId: u.id } : { assignedTo: '', assignedToId: '' };
+}

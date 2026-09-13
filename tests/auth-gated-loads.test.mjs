@@ -68,6 +68,7 @@ test('calendar: the home-tab auto-fetch waits for an org and fetches again for a
     assert.ok(block.includes('        if (!activeOrgId) return;'), 'nothing before an org is active');
     assert.ok(block.includes('if (calendarOrgRef.current !== activeOrgId) {'), 'a switch is detected');
     assert.ok(block.includes('calendarFetchAttempted.current = false;'), 'and re-arms the once-per-session fetch');
+    assert.ok(block.includes('setCalendarEvents([]);'), 'the last org\'s meetings are cleared on a switch (§0.126)');
     assert.ok(block.includes("if (activeTab === 'home' && !calendarFetchAttempted.current && !calendarLoading) {"), 'the original once-per-session guard stays');
     assert.equal(count(app, '}, [activeTab, activeOrgId]);'), 1, 'keyed on the tab AND the org');
     assert.equal(count(app, '    }, [activeTab]);'), 0, 'the tab-only deps are gone');

@@ -7,7 +7,7 @@ import { useApp } from '../../../AppContext';
 // The trigger vocabulary, the fields each event carries and the merge-field
 // keys are the engine's own (state §0.124): a trigger offered here is one the
 // engine fires, and a condition names a field the event actually has.
-import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf } from '../../../utils/automationEvents.js';
+import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf, assigneeOptions, assigneeParams } from '../../../utils/automationEvents.js';
 
 const ACTION_TYPES = [
     { value:'create_task',  label:'Create task',       icon:'✅' },
@@ -50,7 +50,10 @@ const MergeHint = ({ fields }) => (
     </div>
 );
 
-const ActionEditor = ({ action, idx, actions, setAction, delAction, fields }) => (
+const ActionEditor = ({ action, idx, actions, setAction, setAssignee, delAction, fields, roster }) => {
+    // The Assign-to select's value and options from the org's roster (§0.126).
+    const assignee = action.type === 'create_task' ? assigneeOptions(roster, action.params) : null;
+    return (
         <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, padding:'14px 16px', marginBottom:10 }}>
             <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:10 }}>
                 <select value={action.type} onChange={e => setAction(idx,'type',e.target.value)} style={{ ...sel, flex:1 }}>
@@ -67,8 +70,10 @@ const ActionEditor = ({ action, idx, actions, setAction, delAction, fields }) =>
                     <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Priority</label>
                         <select value={action.params.priority||'Medium'} onChange={e => setAction(idx,'priority',e.target.value)} style={sel}>
                             {['Low','Medium','High'].map(p => <option key={p}>{p}</option>)}</select></div>
-                    <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Assign to (rep name)</label>
-                        <input value={action.params.assignedTo||''} onChange={e => setAction(idx,'assignedTo',e.target.value)} placeholder="leave blank = use deal rep" style={inp}/></div>
+                    <div><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Assign to</label>
+                        <select value={assignee.value} onChange={e => setAssignee(idx, e.target.value)} style={sel}>
+                            {assignee.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select></div>
                     <div style={{ gridColumn:'1 / -1' }}><label style={{ display:'block', fontSize:10.5, fontWeight:600, color:T.inkMid, marginBottom:3 }}>Notes (optional)</label>
                         <textarea value={action.params.notes||''} onChange={e => setAction(idx,'notes',e.target.value)} rows={2} placeholder="e.g. {{days_silent}} days without activity on {{opportunity_name}}" style={{ ...inp, resize:'vertical' }}/></div>
                     <div style={{ gridColumn:'1 / -1' }}><MergeHint fields={fields}/></div>
@@ -106,6 +111,7 @@ const ActionEditor = ({ action, idx, actions, setAction, delAction, fields }) =>
             )}
         </div>
     );
+};
 
 // One modal for a new rule and for editing an existing one (`rule` set): the
 // same four steps, seeded from the rule, saved through the endpoint's PUT — a
@@ -113,6 +119,7 @@ const ActionEditor = ({ action, idx, actions, setAction, delAction, fields }) =>
 // every step be opened directly; a new rule still walks them in order.
 const AutomationModal = ({ rule, onClose, onSaved }) => {
     const editing = !!rule;
+    const roster = useApp().settings?.users || [];
     const [step,    setStep]    = React.useState(1); // 1=trigger 2=conditions 3=actions 4=review
     const [name,    setName]    = React.useState(rule?.name || '');
     const [trigger, setTrigger] = React.useState(rule?.triggerEvent || 'opportunity.stage_changed');
@@ -135,6 +142,8 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
         : type === 'update_field' ? { entity:'opportunity', field:'', value:'' }
         : {};
     const setAction = (i, k, v) => setActs(p => p.map((a,j) => j===i ? (k==='type' ? { type:v, params: defaultParams(v) } : {...a, params:{...a.params,[k]:v}}) : a));
+    // The assignee stores both keys at once (id and name — §0.126).
+    const setAssignee = (i, v) => setActs(p => p.map((a,j) => j===i ? { ...a, params:{ ...a.params, ...assigneeParams(v, roster) } } : a));
 
     const steps = ['Trigger','Conditions','Actions','Review'];
 
@@ -231,7 +240,7 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
                 {/* Step 3: Actions */}
                 {step === 3 && (<>
                     <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>Actions <span style={{ fontSize:12, fontWeight:400, color:T.inkMuted }}>(run in order)</span></div>
-                    {actions.map((a,i) => <ActionEditor key={i} action={a} idx={i} actions={actions} setAction={setAction} delAction={delAction} fields={conditionFields(trigger)}/>)}
+                    {actions.map((a,i) => <ActionEditor key={i} action={a} idx={i} actions={actions} setAction={setAction} delAction={delAction} setAssignee={setAssignee} roster={roster} fields={conditionFields(trigger)}/>)}
                     <button onClick={addAction} style={{ fontSize:12.5, fontWeight:600, color:T.info, background:'none', border:`1px dashed ${T.border}`, borderRadius:T.r, padding:'7px 14px', cursor:'pointer', fontFamily:T.sans, width:'100%' }}>
                         + Add action
                     </button>
@@ -265,6 +274,7 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
                                     <span style={{ fontSize:12, width:16, textAlign:'center' }}>{ACTION_TYPES.find(t=>t.value===a.type)?.icon||'⚡'}</span>
                                     <span style={{ fontSize:12.5, color:T.ink, fontWeight:600 }}>{ACTION_TYPES.find(t=>t.value===a.type)?.label}</span>
                                     {a.type==='create_task' && a.params?.title && <span style={{ fontSize:12, color:T.inkMuted }}>— "{a.params.title}"</span>}
+                                    {a.type==='create_task' && a.params?.assignedTo && <span style={{ fontSize:12, color:T.inkMuted }}>→ {a.params.assignedTo}</span>}
                                     {a.type==='send_email'  && a.params?.to    && <span style={{ fontSize:12, color:T.inkMuted }}>→ {a.params.to}</span>}
                                     {a.type==='webhook'     && a.params?.url   && <span style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{a.params.url}</span>}
                                     {a.type==='update_field' && <span style={{ fontSize:12, color:a.params?.field ? T.inkMuted : T.danger }}>{a.params?.field ? `— ${UPDATABLE_FIELD_OPTIONS.find(f => f.key === a.params.field)?.label || a.params.field} = ${a.params.value ?? ''}` : '— no field chosen'}</span>}

@@ -3435,7 +3435,9 @@ what the column holds — never a column name from the rule, never the org,
 the owner, the rep, the stage or the money. A rule's task is stamped like a
 rep's task: `orgId` from the event's org, `ownerId` resolved in THAT org's
 roster by the assignee's name (no match → unowned and said so; ambiguous →
-unowned, reported); the payload names no owner. Every write the engine makes
+unowned, reported) — or, since §0.126, by the id the panel's roster picker
+stored, when that id is in the event's org (an id from any other org is a
+miss; the name path then decides); the payload names no owner. Every write the engine makes
 carries the org, so the engine is scanned by the org-scoping test like any
 endpoint — a skip-list entry is a debt, not an exemption. The trigger
 vocabulary is ONE exported list the engine refuses to fire outside of (fail

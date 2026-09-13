@@ -15,6 +15,7 @@ import {
     EVENT_FIELDS, conditionFields, dealEventData, leadEventData, taskEventData, renderMerge, eventSubject,
     taskFromAction, TASK_PRIORITIES, UPDATABLE_OPPORTUNITY_FIELDS, UPDATABLE_FIELD_OPTIONS, updateFieldPatch,
 } from '../src/utils/automationEvents.js';
+import { assigneeOptions, assigneeParams } from '../src/utils/automationEvents.js';
 import { isoLocal } from '../src/utils/dateLocal.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -157,7 +158,7 @@ test('updateFieldPatch: an allowlist (18b34) — never orgId, ownerId, stage or 
 
 test('the engine refuses an unknown trigger, builds the task from the shared module, stamps ownership from THIS org\'s roster, and scopes every write', () => {
     const s = code(read('netlify/functions/dispatch-automations.mjs'));
-    assert.ok(s.includes("import { resolveOwnerId } from './_lib.mjs';"));
+    assert.ok(s.includes("import { resolveOwnerId, rosterUserById } from './_lib.mjs';"));
     assert.ok(s.includes("} from '../../src/utils/automationEvents.js';"));
     assert.ok(s.includes('        if (!isAutomationTrigger(triggerEvent)) {'), 'fail closed on a trigger outside the vocabulary');
     assert.ok(s.indexOf('if (!isAutomationTrigger(triggerEvent))') < s.indexOf('.from(automations)'), 'before any read');
@@ -238,7 +239,7 @@ test('every call site hands the engine the shared payload: deals, leads (both en
 
 test('the panel renders the shared vocabulary — no local trigger list, a field SELECT in the condition builder, merge-field hints, notes on a task', () => {
     const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
-    assert.ok(s.includes("import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf } from '../../../utils/automationEvents.js';"));
+    assert.ok(s.includes("import { AUTOMATION_TRIGGERS, TRIGGER_GROUPS, HOURLY_TRIGGERS, UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf, assigneeOptions, assigneeParams } from '../../../utils/automationEvents.js';"));
     assert.ok(!s.includes('const TRIGGER_EVENTS'), 'REGRESSION: a local copy of the vocabulary drifts (task.overdue was offered for months and never fired)');
     assert.ok(!s.includes("'task.overdue'"));
     assert.ok(s.includes('                    {TRIGGER_GROUPS.map(group => ('));
@@ -250,7 +251,7 @@ test('the panel renders the shared vocabulary — no local trigger list, a field
     assert.ok(!s.includes('placeholder="Field (e.g. stage, arr)"'), 'REGRESSION: a typed field name a typo turns into "never matches"');
     assert.ok(s.includes("    const addCond = () => setConds(p => [...p, { field: conditionFields(trigger)[0]?.key || '', operator:'eq', value:'' }]);"));
     assert.ok(s.includes('const MergeHint = ({ fields }) => ('), 'module scope (§16)');
-    assert.ok(s.includes('const ActionEditor = ({ action, idx, actions, setAction, delAction, fields }) => ('));
+    assert.ok(s.includes('const ActionEditor = ({ action, idx, actions, setAction, setAssignee, delAction, fields, roster }) => {'));
     assert.ok(s.includes('fields={conditionFields(trigger)}/>)}'));
     assert.ok(s.includes('placeholder="e.g. Follow up with {{account}}"'), 'the placeholder promises what the engine renders');
     assert.ok(s.includes("<textarea value={action.params.notes||''} onChange={e => setAction(idx,'notes',e.target.value)}"), 'notes reach the task\'s description');
@@ -259,6 +260,48 @@ test('the panel renders the shared vocabulary — no local trigger list, a field
     assert.ok(s.includes("{triggerLabel(rule.triggerEvent)}{triggerOf(rule.triggerEvent) ? '' : ' (never fires)'}"), 'a rule saved under a retired trigger says so');
     assert.ok(s.includes('deal gone silent, stuck in a stage, close date lapsed (checked hourly, once per deal per week)'));
     assert.ok(!s.includes('task overdue/completed'), 'the old footer is gone');
+});
+
+// ── the Assign-to picker (state §0.126) ──────────────────────────────────────
+
+test('assigneeOptions / assigneeParams: the default, a roster id, a saved name matched to one user, a legacy or ambiguous name kept "by name"', () => {
+    const roster = [{ id: 'usr_b', name: 'Bob Rep', active: true }, { id: 'usr_a', name: 'Ann Rep' }, { id: 'usr_x', name: 'Gone Rep', active: false }, { id: 'usr_d1', name: 'Dup Rep' }, { id: 'usr_d2', name: 'dup rep' }];
+    const o = assigneeOptions(roster, {});
+    assert.deepEqual(o.options.map(x => x.value), ['', 'usr_a', 'usr_b', 'usr_d1', 'usr_d2'], 'active users by name; the default first; an inactive user is not offered');
+    assert.equal(o.value, '');
+    assert.equal(assigneeOptions(roster, { assignedToId: 'usr_b', assignedTo: 'Old Name' }).value, 'usr_b', 'the id wins over a stale name');
+    assert.equal(assigneeOptions(roster, { assignedTo: 'ann rep' }).value, 'usr_a', 'a saved name matched to ONE user, case-insensitively');
+    const legacy = assigneeOptions(roster, { assignedTo: 'Nobody Here' });
+    assert.equal(legacy.value, 'name:Nobody Here');
+    assert.equal(legacy.options.at(-1).label, 'Nobody Here (by name — not in the roster)', 'a saved rule is never blanked');
+    const dup = assigneeOptions(roster, { assignedTo: 'Dup Rep' });
+    assert.equal(dup.value, 'name:Dup Rep'); assert.match(dup.options.at(-1).label, /more than one user/);
+    assert.equal(assigneeOptions(roster, { assignedToId: 'usr_other_org', assignedTo: 'Bob Rep' }).value, 'usr_b', 'an id not in this roster falls back to the name');
+    assert.deepEqual(assigneeParams('', roster), { assignedTo: '', assignedToId: '' });
+    assert.deepEqual(assigneeParams('usr_a', roster), { assignedTo: 'Ann Rep', assignedToId: 'usr_a' }, 'both keys, always');
+    assert.deepEqual(assigneeParams('name:Nobody Here', roster), { assignedTo: 'Nobody Here', assignedToId: '' });
+    assert.deepEqual(assigneeParams('usr_not_here', roster), { assignedTo: '', assignedToId: '' }, 'an unknown id is never stored');
+    assert.deepEqual(assigneeOptions(null, null).options, [{ value: '', label: "The deal's rep (default)" }]);
+});
+
+test('the panel picks the assignee from the roster and stores both keys; the engine owns by id in THIS org first, then by name', () => {
+    const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
+    assert.ok(s.includes("    const roster = useApp().settings?.users || [];"), 'the org roster the Admin already holds');
+    assert.ok(s.includes("    const setAssignee = (i, v) => setActs(p => p.map((a,j) => j===i ? { ...a, params:{ ...a.params, ...assigneeParams(v, roster) } } : a));"));
+    assert.ok(s.includes("<select value={assignee.value} onChange={e => setAssignee(idx, e.target.value)} style={sel}>"), 'a SELECT, not a typed name');
+    assert.ok(s.includes('{assignee.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}'));
+    assert.ok(!s.includes('placeholder="leave blank = use deal rep"'), 'the typed input is gone');
+    assert.ok(s.includes('setAssignee={setAssignee} roster={roster} fields={conditionFields(trigger)}/>)}'));
+    assert.ok(s.includes("{a.type==='create_task' && a.params?.assignedTo && <span style={{ fontSize:12, color:T.inkMuted }}>→ {a.params.assignedTo}</span>}"), 'the review names the assignee');
+    const e = code(read('netlify/functions/dispatch-automations.mjs'));
+    assert.ok(e.includes("import { resolveOwnerId, rosterUserById } from './_lib.mjs';"));
+    assert.ok(e.includes('            const byId = action.params?.assignedToId ? await rosterUserById(action.params.assignedToId, orgId) : null;'), 'the id is looked up in the EVENT\'S org');
+    assert.ok(e.includes('            if (byId) { ownerId = byId.id; row.assignedTo = byId.name; }'), 'owned by id, the name refreshed from the roster');
+    assert.ok(e.includes('            else if (row.assignedTo) {'), 'the name path is the fallback');
+    const l = code(read('netlify/functions/_lib.mjs'));
+    assert.ok(l.includes('export async function rosterUserById(id, orgId) {'));
+    assert.ok(l.includes('    return (await orgRoster(orgId)).find((u) => u.id === wanted) || null;'), 'this org\'s roster only');
+    assert.ok(l.includes("    if (!orgId) throw new Error('_lib.rosterUserById: orgId is required.');"));
 });
 
 test('every integration panel\'s row menu is ONE fixed popover hook at the button\'s viewport rect — the overflow:hidden cards clipped the absolute ones (Jeff, 13 Sep)', () => {
@@ -294,7 +337,7 @@ test('the Update field action saves what it shows — a select over the allowlis
     assert.deepEqual(updateFieldPatch({ field: 'forecastCategory', value: 'Commit' }), { ok: true, field: 'forecastCategory', value: 'Commit' }, 'a rule saved without an entity means opportunity');
     assert.equal(updateFieldPatch({ entity: 'opportunity' }).ok, false, 'but no field is still refused');
     const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
-    assert.ok(s.includes('UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf }'));
+    assert.ok(s.includes('UPDATABLE_FIELD_OPTIONS, conditionFields, triggerOf, assigneeOptions, assigneeParams }'));
     assert.ok(s.includes('                            {UPDATABLE_FIELD_OPTIONS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}'), 'the field is chosen, not typed');
     assert.ok(!s.includes('placeholder="forecastCategory"'), 'REGRESSION: a typed column name');
     assert.ok(s.includes("        : type === 'update_field' ? { entity:'opportunity', field:'', value:'' }"), 'the entity the select shows is stored');

@@ -627,6 +627,7 @@ dbFetch('/.netlify/functions/users?me=true')
         if (calendarOrgRef.current !== activeOrgId) {   // a switch: the new org's calendar, not the last one's
             calendarOrgRef.current = activeOrgId;
             calendarFetchAttempted.current = false;
+            setCalendarEvents([]);                       // the last org's meetings never show under the new org's name
         }
         if (activeTab === 'home' && !calendarFetchAttempted.current && !calendarLoading) {
             calendarFetchAttempted.current = true;

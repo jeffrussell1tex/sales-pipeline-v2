@@ -181,3 +181,26 @@ test('an assignee with no roster row in this org leaves the task unowned and say
     await dispatchAutomations(B, 'lead.created', { id: 'lead_itest_auto_2', first_name: 'Bee' });
     assert.equal((await tasksIn(B)).length, 0);
 });
+
+test('the picker\'s id owns the task in THIS org and refreshes the name; an id from another org is a miss and the name decides (§0.126)', async () => {
+    await db.insert(automations).values([
+        {   // A's Karen by id with a stale name: owned by id, the name refreshed from the roster
+            id: 'auto_itest_A_byid', orgId: A, name: 'By id', triggerEvent: 'lead.created',
+            conditions: [], actions: [{ type: 'create_task', params: { title: 'Id {{first_name}}', assignedToId: KAREN_A, assignedTo: 'Old Name', dueOffsetDays: 0 } }], active: true, runCount: 0,
+        },
+        {   // B's Karen by id in A's rule: a miss in A; the name resolves in A
+            id: 'auto_itest_A_crossid', orgId: A, name: 'Cross-org id', triggerEvent: 'lead.created',
+            conditions: [], actions: [{ type: 'create_task', params: { title: 'Cross {{first_name}}', assignedToId: KAREN_B, assignedTo: 'Karen Rep', dueOffsetDays: 0 } }], active: true, runCount: 0,
+        },
+    ]);
+    await dispatchAutomations(A, 'lead.created', { id: 'lead_itest_auto_3', first_name: 'Cy' });
+    const byId = (await tasksIn(A)).find(r => r.title === 'Id Cy');
+    assert.ok(byId, 'the by-id task exists');
+    assert.equal(byId.ownerId, KAREN_A, 'owned by the id');
+    assert.equal(byId.assignedTo, 'Karen Rep', 'the roster name, not the stale one');
+    const cross = (await tasksIn(A)).find(r => r.title === 'Cross Cy');
+    assert.ok(cross, 'the cross-org task exists');
+    assert.equal(cross.ownerId, KAREN_A, 'B\'s id never resolves in A; the name did, in A');
+    assert.notEqual(cross.ownerId, KAREN_B);
+    assert.equal((await tasksIn(B)).length, 0, 'B still has no task');
+});

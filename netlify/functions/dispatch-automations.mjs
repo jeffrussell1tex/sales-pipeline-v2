@@ -25,7 +25,7 @@ import { db }          from '../../db/index.js';
 import { automations, automationRuns, tasks, opportunities, users } from '../../db/schema.js';
 import { eq, and }     from 'drizzle-orm';
 import { sendEmail }   from './send-email.mjs';
-import { resolveOwnerId } from './_lib.mjs';
+import { resolveOwnerId, rosterUserById } from './_lib.mjs';
 import {
     isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, eventSubject,
 } from '../../src/utils/automationEvents.js';
@@ -81,7 +81,12 @@ const executeAction = async (action, orgId, triggerEvent, data) => {
             const row = taskFromAction(action, triggerEvent, data);
             let ownerId = null;
             let note = null;
-            if (row.assignedTo) {
+            // The picker's id first (state §0.126): owned by that user when the id
+            // is in THIS org's roster — rename-proof, never ambiguous; an id from
+            // any other org is a miss and the name path below decides.
+            const byId = action.params?.assignedToId ? await rosterUserById(action.params.assignedToId, orgId) : null;
+            if (byId) { ownerId = byId.id; row.assignedTo = byId.name; }
+            else if (row.assignedTo) {
                 try {
                     ownerId = await resolveOwnerId(row.assignedTo, orgId);
                     if (ownerId === null) note = `no user named "${row.assignedTo}" — task left unassigned`;

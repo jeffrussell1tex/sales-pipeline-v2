@@ -183,6 +183,18 @@ async function orgRoster(orgId) {
 }
 
 /**
+ * The roster row (id, name, email) with this app id in THIS org, else null
+ * (state §0.126 — the automation picker's assignee). An id from another org
+ * is a miss, never a lookup across orgs.
+ */
+export async function rosterUserById(id, orgId) {
+    if (!orgId) throw new Error('_lib.rosterUserById: orgId is required.');
+    const wanted = String(id ?? '').trim();
+    if (!wanted) return null;
+    return (await orgRoster(orgId)).find((u) => u.id === wanted) || null;
+}
+
+/**
  * Clears the cached views of the `users` table for one org. Call after ANY write
  * to `users` in the same request.
  *
