@@ -216,10 +216,16 @@ line "1 of 150 … predictive scoring is off"); the Engagement card's stale
 **`0810167`** (`index-DS-lL6jZ.js`; a first attempt with straight quotes broke
 the JSX attribute and two gates went red — typographic quotes now, the scan
 pins the sentence); **435/435 mutations**; **LANDED on dev** at 19:55:57 UTC.
-**OBSERVED by Jeff on dev: "working as designed."** **NOT shipped** — `dev`
-is ahead of `master` by SEVEN code commits,
-`04ad57b`, `d936baf` (§0.121), `59cd6c3`, `51675be`, `f422a92` (§0.122),
-`cf752b5` and `0810167` (§0.123), plus docs.
+**OBSERVED by Jeff on dev: "working as designed."** Then **Jeff: "push
+master" — the EIGHTEENTH ship:** pre-flight clean (tree clean, `dev` ==
+`origin/dev` == `b54a2a7`, `origin/master` an ancestor, 17 commits after
+`dab2655`, seven code, NO schema change; five function files, one
+`netlify.toml` rewrite, the bundle), `git push origin dev:master` at 13:14:46
+UTC 13 Sep: `master` `dab2655` → `b54a2a7`; salespipelinetracker.com serving
+`index-COkIzXNn.js` from 13:15:31 UTC with the live key; the served bundle carries the batch's literals ("Web-to-lead form", "Copy embed code", "Email templates", "Choose a template…", "decided (Converted / Dead) leads so far", "Behavioral events are live"), and GET salespipelinetracker.com/lead-form/<junk> answered the intake function's own 404 page while the JSON POST with an unknown token answered 404 { ok: false, error: 'Form not found' } — the rewrite and the new function are live on prod (13:16 UTC). The Netlify record was NOT read (no deploy id to hand). **`master` ==
+`dev` == `b54a2a7` at the ship**; `dev` is ahead only by the ship-record
+docs commits (`eb93d58` and this one). **NOT yet observed on prod** — Jeff's,
+in §5.
 
 **Session of 7–8 September 2026, eighth session (Jeff: "Hello Claude, lets pick
 up our work on Accelerep" — an observation session first: §0.91 proven on
@@ -734,7 +740,11 @@ session resumed after four days. Headers say which.
 
 ---
 
-## 1. What shipped — the SEVENTEENTH ship put §0.117–§0.120 on `master` (11 Sep 20:59 UTC, `dab2655`, bundle only); `dev` is ahead by THREE CODE commits, §0.121 `04ad57b` and its follow-up `d936baf` (web-to-lead), §0.122 `59cd6c3`, its fix `51675be` and the dropdown `f422a92` (email templates), §0.123 `cf752b5` and its copy fix `0810167` (lead scoring) — NOT shipped
+## 1. What shipped — the EIGHTEENTH ship put §0.121–§0.123 on `master` (13 Sep 13:14 UTC, `b54a2a7`; functions, one rewrite and the bundle; no schema change); `dev` is ahead only by the ship-record docs commits
+
+**PROD SHIPPED — the EIGHTEENTH ship (Jeff: "push master", 13 Sep).** Pre-flight: tree clean, `dev` == `origin/dev` == `b54a2a7`, `origin/master` (`dab2655`) an ancestor of `dev`, 17 commits after it (seven code: `04ad57b`, `d936baf`, `59cd6c3`, `51675be`, `f422a92`, `cf752b5`, `0810167`), NO schema change (the diff over `db/schema.ts` empty); five function files (`lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`, `score-lead.mjs`, `score-leads-batch.mjs`), one `netlify.toml` rewrite (`/lead-form/:token`), `package.json` (the integration-test list), the bundle. `git push origin dev:master` at 13:14:46 UTC: `master` `dab2655` → `b54a2a7`. salespipelinetracker.com serving `index-COkIzXNn.js` from 13:15:31 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-DS-lL6jZ.js` — the key differs); the served bundle carries the batch's literals ("Web-to-lead form", "Copy embed code", "Email templates", "Choose a template…", "decided (Converted / Dead) leads so far", "Behavioral events are live"), and GET salespipelinetracker.com/lead-form/<junk> answered the intake function's own 404 page while the JSON POST with an unknown token answered 404 { ok: false, error: 'Form not found' } — the rewrite and the new function are live on prod (13:16 UTC). The Netlify record was NOT read (no deploy id to hand). **What prod does differently from this moment:** the web-to-lead form exists but is OFF for every workspace until an Admin turns it on (§0.121); email templates exist, empty until an Admin writes one, sent by the rep's own client (§0.122); the Lead scoring panel reads the shared defaults and shows the readiness line (§0.123). Every "NOT shipped" in §0.121–§0.123 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in §5.
+
+**Earlier — the SEVENTEENTH ship put §0.117–§0.120 on `master` (11 Sep 20:59 UTC, `dab2655`, bundle only).**
 
 **PROD SHIPPED — the SEVENTEENTH ship (Jeff: "all works as it is supposed to. Ship prod", 11 Sep).** Pre-flight: tree clean, `dev` == `origin/dev` == `dab2655`, `origin/master` (`0726934`) an ancestor of `dev`, 15 commits after it (five code: `e4d9ac3`, `889cc85`, `0deb6b6`, `074669d`, `e5d574f`), no function, schema or config change (the diff over `netlify/`, `db/`, `package.json`, `netlify.toml` empty). `git push origin dev:master` at 20:59:07 UTC: `master` `0726934` → `dab2655`. salespipelinetracker.com serving `index-BDt4t8KW.js` from 20:59:42 UTC with the `pk_live_` key inlined (prod's hash never equals dev's `index-DtQQ5W86.js` — the key differs); the served bundle carries "Edit job →", "Create job →", "crew and duration not set", "No deals match the current filter." and `"allTime"?[]:[`, and NOT `"thisQuarter"?[]`. The Netlify deploy record was not read this time (the reader takes a deploy id; none to hand). **What prod does differently from this moment:** the Queue lists only jobs to schedule; a scheduled job clicked on the Job Board opens its record in Jobs; "Edit job →" / "Create job →" in the queue header and on the cards; unset template values read "Not set"; the queue card's "prefers" note and no 8 px scroll (§0.117–§0.118); the Pipeline List shows Closed Won / Closed Lost deals when the filter asks (§0.119); the Filter popover's "This quarter" filters and "All time" reads back as itself (§0.120). Every "NOT shipped" in §0.117–§0.120 above is superseded by this line. **NOT yet observed on prod** — Jeff's, in §5.
 
@@ -1551,7 +1561,7 @@ none) — now the "No due date" section, oldest first.
 
 ## 4. Verified state at close (11 Sep, thirteenth session — after the SEVENTEENTH ship, then §0.121 on dev)
 
-**AT CLOSE: `origin/master` == `dab2655` (the SEVENTEENTH ship); `dev` == `origin/dev` == `0810167` before the handoff commit — ahead by SEVEN CODE commits (§0.121 web-to-lead `04ad57b` and its follow-up `d936baf`: functions `lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`; `netlify.toml` one rewrite; the bundle — §0.122 email templates `59cd6c3`, its fix `51675be` and the dropdown `f422a92`: `settings.mjs` and the bundle — §0.123 lead scoring `cf752b5` and its copy fix `0810167`: `score-lead.mjs`, `score-leads-batch.mjs`, a new `src/utils/leadScoringDefaults.js` and the bundle; NO schema change in any) and this handoff. Counts: six gates (check:fnscope 91 function files; the five on 162 files), 741/741 unit, 153/153 integration, 435/435 mutations (printed green baseline, no restore errors), build guard OK 2,495 kB `index-DS-lL6jZ.js`, `dist/` cleared; dev serving `index-DS-lL6jZ.js` from 19:55:57 UTC 12 Sep (before it `index-Af3POXBZ.js` from 19:47:12, `index-s255BQ_M.js` from 19:25:14 UTC 12 Sep (before it `index-CD8TO61e.js` from 16:44:59 UTC 12 Sep (before it `index-Bk9klMuV.js` from 22:38:28 UTC 11 Sep (before it `index-CPK391Dz.js` from 22:20:08, `index-DsxCtD8l.js` from 22:06:49).**
+**AT THE EIGHTEENTH SHIP (13:14:46 UTC 13 Sep): `master` == `dev` == `b54a2a7`; prod serving `index-COkIzXNn.js` from 13:15:31 UTC; `dev` then ahead only by the ship-record docs commits (`eb93d58` state, then this handoff).** The state before the ship: **AT CLOSE: `origin/master` == `dab2655` (the SEVENTEENTH ship); `dev` == `origin/dev` == `0810167` before the handoff commit — ahead by SEVEN CODE commits (§0.121 web-to-lead `04ad57b` and its follow-up `d936baf`: functions `lead-intake.mjs` new, `settings.mjs`, `send-slack.mjs`; `netlify.toml` one rewrite; the bundle — §0.122 email templates `59cd6c3`, its fix `51675be` and the dropdown `f422a92`: `settings.mjs` and the bundle — §0.123 lead scoring `cf752b5` and its copy fix `0810167`: `score-lead.mjs`, `score-leads-batch.mjs`, a new `src/utils/leadScoringDefaults.js` and the bundle; NO schema change in any) and this handoff. Counts: six gates (check:fnscope 91 function files; the five on 162 files), 741/741 unit, 153/153 integration, 435/435 mutations (printed green baseline, no restore errors), build guard OK 2,495 kB `index-DS-lL6jZ.js`, `dist/` cleared; dev serving `index-DS-lL6jZ.js` from 19:55:57 UTC 12 Sep (before it `index-Af3POXBZ.js` from 19:47:12, `index-s255BQ_M.js` from 19:25:14 UTC 12 Sep (before it `index-CD8TO61e.js` from 16:44:59 UTC 12 Sep (before it `index-Bk9klMuV.js` from 22:38:28 UTC 11 Sep (before it `index-CPK391Dz.js` from 22:20:08, `index-DsxCtD8l.js` from 22:06:49).**
 
 **AT THE SEVENTEENTH SHIP (20:59:07 UTC 11 Sep): `master` == `dev` == `dab2655`; prod serving `index-BDt4t8KW.js` from 20:59:42 UTC; `dev` then ahead only by the ship-record docs commits (`fd2c1d0` state, then this handoff).** The state before the ship: **`origin/master` == `0726934` (the SIXTEENTH ship); `dev` == `origin/dev` == `e5d574f` before the handoff commit, ahead by FIVE CODE commits — `e4d9ac3` (§0.117), `889cc85` and `0deb6b6` (§0.118), `074669d` (§0.119), `e5d574f` (§0.120), all bundle-only, no schema, no function change — and the docs commits around them.** Counts at close: six gates (check:fnscope 90 function files; the five on 158 files), 716/716 unit, 147/147 integration, 420/420 mutations (printed green baseline, no restore errors in any of the four runs), build guard OK 2,479 kB `index-DtQQ5W86.js`, `dist/` cleared; dev serving `index-DtQQ5W86.js` from 18:48:40 UTC 11 Sep (before it `index-jRTXPWFT.js` from 18:35:08, `index-BYQZhHpB.js` from 17:03:24, `index-SFEVnpmt.js` from 16:44:14). Prod unchanged: `index-DaJE9sq9.js`. The state before this session's batch follows.
 
@@ -1676,6 +1686,17 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   nothing while they are off.
 
 **Fourteenth-session prep — first:**
+- **After the EIGHTEENTH ship — prod observations, Jeff's (Admin,
+  salespipelinetracker.com), in order:** Settings → Connected apps → the
+  "Web-to-lead form" card reads Off (nothing exposed until he turns it on;
+  when he does, the same checks as dev — the hosted link in a private
+  window, a submission, the unassigned lead, the Slack post if the new
+  checkbox is on). Settings → Sales process → Email templates opens (the
+  DETAIL_PANELS fix rode this ship); write one → a contact's "✉ Email ▾" →
+  the dropdown → his mail client. Settings → Sales process → Lead scoring →
+  ten engagement rules, the readiness line with prod's decided count; Reset
+  shows "Web Form" (Cancel unless he wants it). Prod's rows are his — read
+  before assuming any lead or template exists there.
 - **After the SEVENTEENTH ship — prod observations, Jeff's (Admin,
   salespipelinetracker.com), in order:** Dispatch → Queue: only unscheduled
   jobs in the list; a saved job's "Edit job →", a won opportunity's near-black
@@ -1685,14 +1706,10 @@ copy of the same bug) · the working tree was clean at close · **ordering slip,
   "This quarter" → Apply → only this quarter's close dates. Prod's rows are
   his — read before assuming any won deal or scheduled job exists there.
 - **Ritual** (item 1), then `git log --oneline origin/master..dev` — expect
-  SEVEN CODE commits after `dab2655`, `04ad57b` and `d936baf` (§0.121
-  web-to-lead and its follow-up), `59cd6c3`, `51675be` and `f422a92` (§0.122
-  email templates, its dead-card fix, the dropdown), `cf752b5` and `0810167`
-  (§0.123 lead scoring and its copy fix), and the docs commits around them;
-  anything else is a finding. Compare against
+  ONLY the two ship-record docs commits after `b54a2a7` (`eb93d58` state,
+  then the handoff); any CODE commit is a finding. Compare against
   `origin/master`: the local `master` branch is stale (ships push
-  `dev:master`). Ship when Jeff says so — functions AND bundle AND one
-  netlify.toml rewrite; no schema change.
+  `dev:master`).
 - **§0.121 on dev — OBSERVED by Jeff** (Turn on, the hosted form, the
   thank-you page, the unassigned lead under "Needs first touch", the Slack
   post). **DONE — Jeff: "All test confirmed passed. It all works as it should."**
