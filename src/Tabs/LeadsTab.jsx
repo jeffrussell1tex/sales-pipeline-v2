@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch, dbWrite } from '../utils/storage';
+import { popoverPlacement } from '../utils/popoverPlacement.js';
 
 // ── Design tokens ────────────────────────────────────────────
 const T = {
@@ -111,12 +112,38 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
     const h = size === 'sm' ? 22 : size === 'lg' ? 30 : 26;
     const fs = size === 'sm' ? 11 : size === 'lg' ? 15 : 13;
     const [open, setOpen] = useState(false);
+    // The popover is position: fixed, placed from the badge's rect (state §0.128;
+    // the popover rule). Absolute under the badge, the Triage rows — which scroll
+    // sideways — clipped it and grew a scrollbar to hold it (Jeff, 13 Sep).
+    const [at, setAt] = useState(null);
+    const wrapRef = useRef(null);
+    const badgeRef = useRef(null);
+    const toggle = (e) => {
+        e.stopPropagation();
+        if (open) { setOpen(false); return; }
+        setAt(popoverPlacement(badgeRef.current.getBoundingClientRect(), { width: 232, height: 300 }));
+        setOpen(true);
+    };
+    useEffect(() => {
+        if (!open) return;
+        const close = () => setOpen(false);
+        const onDoc = (e) => { if (!wrapRef.current?.contains(e.target)) close(); };
+        document.addEventListener('mousedown', onDoc);
+        window.addEventListener('scroll', close, true);
+        window.addEventListener('resize', close);
+        return () => {
+            document.removeEventListener('mousedown', onDoc);
+            window.removeEventListener('scroll', close, true);
+            window.removeEventListener('resize', close);
+        };
+    }, [open]);
     const bd = lead?.breakdown;
     const canExplain = hasAxes && bd && (((bd.fit || []).length) || ((bd.engagement || []).length));
     return (
-        <div style={{ position: 'relative', display: 'inline-block' }}>
+        <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block' }}>
             <div
-                onClick={canExplain ? (e => { e.stopPropagation(); setOpen(o => !o); }) : undefined}
+                ref={badgeRef}
+                onClick={canExplain ? toggle : undefined}
                 title={hasAxes ? `Fit ${fit || 0} · Eng ${eng || 0} · ${String(band).toUpperCase()}` : undefined}
                 style={{ width: w, height: h, borderRadius: T.r, background: band === 'hot' ? color : 'transparent', border: `1.5px solid ${color}`, color: band === 'hot' ? T.surface : color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fs, fontWeight: 700, fontFamily: T.sans, cursor: canExplain ? 'pointer' : 'default' }}>
                 {headline}
@@ -125,7 +152,7 @@ const LeadScore = ({ lead, score, size = 'md' }) => {
                 <div style={{ fontSize: 9.5, color: T.inkMuted, fontFamily: T.sans, textAlign: 'center', marginTop: 2, whiteSpace: 'nowrap' }}>F{fit || 0}·E{eng || 0}{bd && bd.probability != null ? ` ·P${bd.probability}` : ''}</div>
             )}
             {open && canExplain && (
-                <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 60, width: 232, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', padding: '10px 12px' }}>
+                <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', ...at, zIndex: 60, width: 232, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, boxShadow: '0 8px 24px rgba(42,38,34,0.16)', padding: '10px 12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: T.ink, fontFamily: T.sans }}>Why this score</span>
                         <span style={{ fontSize: 10.5, fontWeight: 700, color, textTransform: 'uppercase', fontFamily: T.sans }}>{band}</span>
