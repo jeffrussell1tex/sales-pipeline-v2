@@ -88,6 +88,17 @@ function App() {
         }
         window.__getClerkToken = () => getToken({ organizationId: organization.id });
     }, [getToken, organization]);
+
+    // One gate for every load that fires on mount (state §0.125). The main load
+    // below waits for a signed-in user AND an active org; the spiff-claims,
+    // coaching-notes and calendar loads fired from mount on waitForToken alone,
+    // whose 8-second give-up sent all three WITHOUT a token (401) whenever no
+    // org was active for that long — the in-app sign-in with its MFA step, the
+    // no-organization page — and none of the three reloaded when the header's
+    // OrganizationSwitcher changed the org, so the previous org's rows stayed
+    // on screen. Every mount-time load keys on this value: nothing before it
+    // is set, again whenever it changes.
+    const activeOrgId = (clerkUser && organization?.id) || null;
     const clerkUserMeta = clerkUser?.publicMetadata || {};
 
     // Clerk's display name is a FALLBACK, not the identity.
@@ -573,20 +584,25 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // Settings save effect managed by useSettings hook
 
-    // Load spiff claims from DB on mount
+    // Spiff claims: once signed in with an active org, and again per org (§0.125).
     useEffect(() => {
+        setSpiffClaims(prev => (prev.length ? [] : prev));   // another org's claims never survive a switch
+        if (!activeOrgId) return;                 // spiff claims: signed in with an org, or nothing
+        let cancelled = false;
         const load = async () => {
             await waitForToken();
+            if (cancelled) return;
             dbFetch('/.netlify/functions/spiff-claims')
-                .then(r => r.json())
-                .then(data => { if (data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
+                .then(r => (r.ok ? r.json() : null))
+                .then(data => { if (!cancelled && data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
                 .catch(err => console.warn('spiff-claims load error:', err.message));
         };
         load();
-    }, []);
+        return () => { cancelled = true; };
+    }, [activeOrgId]);
 
     // Coaching notes (state §0.82) — the server returns only what this caller may see.
-    const { coachingNotes, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken });
+    const { coachingNotes, addCoachingNote, markCoachingNoteRead, deleteCoachingNote } = useCoachingNotes({ waitForToken, orgId: activeOrgId });
 
 
 
@@ -603,13 +619,20 @@ dbFetch('/.netlify/functions/users?me=true')
         }
     }, []);
 
-    // Auto-fetch calendar events when the home tab is active — once per session.
+    // Auto-fetch calendar events when the home tab is active — once per org and
+    // session, and never before an org is active (§0.125).
+    const calendarOrgRef = useRef(null);
     useEffect(() => {
+        if (!activeOrgId) return;
+        if (calendarOrgRef.current !== activeOrgId) {   // a switch: the new org's calendar, not the last one's
+            calendarOrgRef.current = activeOrgId;
+            calendarFetchAttempted.current = false;
+        }
         if (activeTab === 'home' && !calendarFetchAttempted.current && !calendarLoading) {
             calendarFetchAttempted.current = true;
             fetchCalendarEvents();
         }
-    }, [activeTab]);
+    }, [activeTab, activeOrgId]);
 
     // Security: determine user role
     // Role derived from Clerk user metadata (set via Clerk dashboard)

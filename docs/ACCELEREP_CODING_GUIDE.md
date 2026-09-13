@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** September 13, 2026 · rules current through **§18b37**.
+**Updated:** September 13, 2026 · rules current through **§18b38**.
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -166,7 +166,7 @@ Netlify Function
 
 - **Clerk** handles all user auth. Users log in with email/password.
 - `window.__getClerkToken` is set by `App.jsx` after `useAuth()` initializes.
-- `waitForToken()` in `storage.js` polls until the token getter is ready (up to 8 seconds).
+- `waitForToken()` in `storage.js` polls until the token getter is ready (up to 8 seconds), then resolves anyway with a console warning — every org-scoped load keys on `activeOrgId` (App.jsx), so that give-up is never reached (§18b38).
 - All Netlify functions call `verifyAuth(event)` first. Auth failures return 401/403, not 500.
 - `orgId` is extracted from the JWT payload at `payload.o.id` (Clerk compact format).
 - **Every DB query must be scoped to `orgId`** — this is the multi-tenancy boundary.
@@ -3454,3 +3454,35 @@ org has no task and its rule no run; a rule whose `update_field` names
 allowlist, the trigger check before any read, the roster resolution, the
 org-scoped counter, the panel's import of the shared list and its SELECT
 (`tests/automation-events.test.mjs`); nine mutants cover them.
+
+## 18b38. A Load That Fires On Mount Keys On An Active Org — Never On A Timeout (hard rule)
+
+**Origin (state §0.125):** three loads — spiff claims, coaching notes, the
+calendar strip — fired from mount on `waitForToken()` alone, and
+`waitForToken` gave up after eight seconds and resolved anyway, by its own
+design ("dbFetch will send without token and get 401"). Whenever no org was
+active for that long (the in-app sign-in with its MFA step; the no-organization
+page) all three went out unauthenticated, 401'd, and never retried — a `[]`
+effect runs once; the 200 seen after it was the next page load. §9 carried it
+for four days as "a load-order race, unread as to which hook fires early". The
+same read found none of the three reloaded when the header's
+OrganizationSwitcher changed the org: the previous org's rows stayed on the
+client until a refresh.
+
+**The rule:** a load is gated on the state that makes it valid — a signed-in
+ACTIVE session and an active org (`activeOrgId` in App.jsx; the main load's
+own gate since 0.65) — never on "the token is probably there by now". A
+mount-only effect (`[]`) that fetches org data is wrong twice: it can fire
+before the org (unauthenticated) and it cannot fire again for the next org
+(stale — another tenant's rows on screen). So every org-scoped load keys on
+the org id, clears what it holds when the org changes, and drops a load in
+flight. A wait with a timeout may resolve on give-up only if it says so out
+loud, and a caller that reaches that line is a bug to fix at the caller, not
+by lengthening the wait.
+
+**The check:** `tests/auth-gated-loads.test.mjs` pins the gate, its position
+after the active-session user and the token getter's effect, each of the three
+effects' gate / clear / deps, and `waitForToken`'s behaviour and loud give-up;
+five mutants. Before adding a fetch that runs on mount: does it key on
+`activeOrgId`? If it must run signed-out (a public route), it does not go
+through `dbFetch`.

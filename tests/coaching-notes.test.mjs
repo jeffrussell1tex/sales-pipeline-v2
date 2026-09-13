@@ -175,7 +175,7 @@ test('the client: a house dialog with a picker, the Team tab reads the table, Ho
     assert.ok(home.includes('isAddressedTo(n, currentUserId, myTeamId)'), 'Home shows what is addressed to me');
     assert.ok(home.includes('markCoachingNoteRead(n.id)'));
     const app = read('src/App.jsx');
-    assert.ok(app.includes('useCoachingNotes({ waitForToken })'));
+    assert.ok(app.includes('useCoachingNotes({ waitForToken, orgId: activeOrgId })'), 'the hook is told the org (§0.125)');
     assert.ok(app.includes('unreadFor(coachingNotes, currentUserId, myProfile?.teamId || null)'), 'unread notes reach the bell');
     assert.ok(app.includes('coachingNoteModal, setCoachingNoteModal'));
     const ml = read('src/components/layout/ModalLayer.jsx');

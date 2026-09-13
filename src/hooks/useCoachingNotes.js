@@ -1,8 +1,10 @@
 // useCoachingNotes — the client side of netlify/functions/coaching-notes.mjs
 // (state §0.82). The server decides what the caller may see; this hook loads
-// that list once the Clerk token is ready and keeps it current after each
-// write. Every write checks `res.ok` and adopts the server's row (guide 18b1 /
-// the dbfetch rule): a rejected write never shows as saved.
+// that list once signed in with an active org (`orgId`), again for each org,
+// and keeps it current after each write (§0.125: a mount-time load on the
+// token wait alone went out unauthenticated after its 8-second give-up).
+// Every write checks `res.ok` and adopts the server's row (guide 18b1 / the
+// dbfetch rule): a rejected write never shows as saved.
 import { useState, useEffect, useCallback } from 'react';
 import { dbFetch } from '../utils/storage';
 
@@ -12,7 +14,7 @@ const errorOf = async (res, fallback) => {
     try { const b = await res.json(); return b?.error || fallback; } catch { return fallback; }
 };
 
-export function useCoachingNotes({ waitForToken, enabled = true } = {}) {
+export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } = {}) {
     const [coachingNotes, setCoachingNotes] = useState([]);
     const [coachingNotesLoaded, setCoachingNotesLoaded] = useState(false);
 
@@ -26,7 +28,11 @@ export function useCoachingNotes({ waitForToken, enabled = true } = {}) {
     }, []);
 
     useEffect(() => {
-        if (!enabled) return;
+        // Nothing before an org is active, and never another org's notes after a
+        // switch: the list resets, then loads for THIS org (state §0.125).
+        setCoachingNotes(prev => (prev.length ? [] : prev));
+        setCoachingNotesLoaded(false);
+        if (!enabled || !orgId) return;
         let cancelled = false;
         (async () => {
             try {
@@ -36,7 +42,7 @@ export function useCoachingNotes({ waitForToken, enabled = true } = {}) {
             } catch (err) { console.warn('coaching-notes load error:', err.message); }
         })();
         return () => { cancelled = true; };
-    }, [enabled, waitForToken, reload]);
+    }, [enabled, orgId, waitForToken, reload]);
 
     /** POST a payload from newNotePayload. Returns { ok, note?, error? }. */
     const addCoachingNote = useCallback(async (payload) => {

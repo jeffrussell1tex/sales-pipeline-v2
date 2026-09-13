@@ -17,7 +17,12 @@ export const waitForToken = () => new Promise((resolve) => {
             resolve();
         } else if (attempts > 80) { // 8 seconds max
             clearInterval(interval);
-            resolve(); // resolve anyway — dbFetch will send without token and get 401
+            // Giving up here sends the caller's request WITHOUT a token — a 401.
+            // Every load keys on an active org now (App.jsx activeOrgId, state
+            // §0.125), so this line should never print; if it does, a caller is
+            // fetching before sign-in again.
+            console.warn('waitForToken: no Clerk token after 8 s — the request will go out unauthenticated (401)');
+            resolve();
         }
     }, 100);
 });
