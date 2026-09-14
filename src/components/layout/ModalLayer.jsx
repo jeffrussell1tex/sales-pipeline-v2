@@ -25,6 +25,7 @@ import MergeReviewModal from '../modals/MergeReviewModal';
 import ContactMergeReviewModal from '../modals/ContactMergeReviewModal';
 import { CoachingNoteDialogHost } from '../modals/CoachingNoteDialog';
 import { ActivityDetailDialogHost } from '../modals/ActivityDetailDialog';
+import { T } from '../../tokens.js';
 // ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
 // Chunked bulk transport for the CSV importer.
@@ -275,18 +276,18 @@ export default function ModalLayer() {
                     backdropFilter: 'blur(2px)', animation: 'fadeIn 0.15s ease'
                 }}>
                     <div onClick={e => e.stopPropagation()} style={{
-                        background: '#fff', borderRadius: isMobile ? '0' : '16px', width: isMobile ? '100%' : '540px', maxWidth: isMobile ? '100%' : '95vw', height: isMobile ? '100%' : 'auto',
+                        background: T.surface, borderRadius: isMobile ? '0' : '16px', width: isMobile ? '100%' : '540px', maxWidth: isMobile ? '100%' : '95vw', height: isMobile ? '100%' : 'auto',
                         maxHeight: isMobile ? '100%' : '85vh', overflowY: 'auto',
                         boxShadow: '0 25px 60px rgba(0,0,0,0.25)', animation: 'slideUp 0.18s ease'
                     }}>
                         {/* Header */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9' }}>
+                            padding: '1.25rem 1.5rem', borderBottom: `1px solid ${T.surface2}` }}>
                             <div>
-                                <div style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a' }}>⌨ Keyboard Shortcuts</div>
-                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.125rem' }}>Press <kbd style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0.1rem 0.375rem', fontSize: '0.6875rem', fontFamily: 'monospace', fontWeight: '700' }}>?</kbd> to toggle this panel</div>
+                                <div style={{ fontSize: '1rem', fontWeight: '800', color: T.ink }}>⌨ Keyboard Shortcuts</div>
+                                <div style={{ fontSize: '0.75rem', color: T.inkMuted, marginTop: '0.125rem' }}>Press <kbd style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '4px', padding: '0.1rem 0.375rem', fontSize: '0.6875rem', fontFamily: 'monospace', fontWeight: '700' }}>?</kbd> to toggle this panel</div>
                             </div>
-                            <button onClick={() => setShowShortcuts(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.25rem', lineHeight: 1, padding: '0.25rem' }}>✕</button>
+                            <button onClick={() => setShowShortcuts(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: '1.25rem', lineHeight: 1, padding: '0.25rem' }}>✕</button>
                         </div>
                         {/* Sections */}
                         {[
@@ -311,17 +312,17 @@ export default function ModalLayer() {
                                 { keys: ['Esc'], desc: 'Close modal or popover' },
                             ]},
                         ].map(group => (
-                            <div key={group.section} style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #f8fafc' }}>
-                                <div style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.625rem' }}>
+                            <div key={group.section} style={{ padding: '1rem 1.5rem', borderBottom: `1px solid ${T.surface2}` }}>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '800', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.625rem' }}>
                                     {group.icon} {group.section}
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                                     {group.shortcuts.map(sc => (
                                         <div key={sc.desc} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <span style={{ fontSize: '0.8125rem', color: '#475569' }}>{sc.desc}</span>
+                                            <span style={{ fontSize: '0.8125rem', color: T.inkMid }}>{sc.desc}</span>
                                             <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0, marginLeft: '1rem' }}>
                                                 {sc.keys.map(k => (
-                                                    <kbd key={k} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderBottom: '2px solid #d1d5db', borderRadius: '6px', padding: '0.2rem 0.5rem', fontSize: '0.75rem', fontFamily: 'monospace', fontWeight: '700', color: '#1e293b', minWidth: '28px', textAlign: 'center' }}>{k}</kbd>
+                                                    <kbd key={k} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderBottom: `2px solid ${T.borderStrong}`, borderRadius: '6px', padding: '0.2rem 0.5rem', fontSize: '0.75rem', fontFamily: 'monospace', fontWeight: '700', color: T.ink, minWidth: '28px', textAlign: 'center' }}>{k}</kbd>
                                                 ))}
                                             </div>
                                         </div>
@@ -329,8 +330,8 @@ export default function ModalLayer() {
                                 </div>
                             </div>
                         ))}
-                        <div style={{ padding: '0.75rem 1.5rem', background: '#f8fafc', borderRadius: '0 0 16px 16px' }}>
-                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', textAlign: 'center' }}>
+                        <div style={{ padding: '0.75rem 1.5rem', background: T.surface2, borderRadius: '0 0 16px 16px' }}>
+                            <div style={{ fontSize: '0.6875rem', color: T.inkMuted, textAlign: 'center' }}>
                                 Shortcuts are disabled while typing in a field
                             </div>
                         </div>
@@ -341,7 +342,7 @@ export default function ModalLayer() {
             {/* ── Undo Toast ───────────────────────────────────────── */}
             {undoToast && (
                 <div style={{ position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10050,
-                    background: '#1e293b', color: '#fff', borderRadius: '10px', padding: '0.75rem 1.25rem',
+                    background: T.ink, color: T.surface, borderRadius: '10px', padding: '0.75rem 1.25rem',
                     display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
                     minWidth: isMobile ? 'calc(100vw - 2rem)' : '320px', maxWidth: isMobile ? 'calc(100vw - 2rem)' : '480px' }}>
                     {/* Two shapes. The delete shape is { label, restore, timerId }.
@@ -357,13 +358,13 @@ export default function ModalLayer() {
                     </span>
                     {!undoToast.error && (
                         <button onClick={() => { clearTimeout(undoToast.timerId); undoToast.restore(); }}
-                            style={{ padding: '0.3rem 0.875rem', background: '#3b82f6', color: '#fff', border: 'none',
+                            style={{ padding: '0.3rem 0.875rem', background: T.ink, color: T.surface, border: 'none',
                                 borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                             ↩ Undo
                         </button>
                     )}
                     <button onClick={() => { clearTimeout(undoToast.timerId); setUndoToast(null); }}
-                        style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1rem', padding: '0 0.25rem', lineHeight: 1 }}>✕</button>
+                        style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '1rem', padding: '0 0.25rem', lineHeight: 1 }}>✕</button>
                 </div>
             )}
 
@@ -379,36 +380,36 @@ export default function ModalLayer() {
                 return (
                     <>
                         <div onClick={() => setNotesPopover(null)} style={{ position: 'fixed', inset: 0, zIndex: 998 }} />
-                        <div style={{ position: 'fixed', top, left, zIndex: 999, background: '#fff', borderRadius: '10px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', border: '1px solid #e2e8f0', width: isMobile ? 'calc(100vw - 2rem)' : '340px', maxHeight: '300px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ padding: '0.625rem 0.875rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: '10px 10px 0 0' }}>
-                                <div style={{ fontWeight: '700', fontSize: '0.75rem', color: '#1e293b' }}>
-                                    {type === 'notes' ? '📝 Notes' : '💬 Team Notes'} · <span style={{ color: '#64748b', fontWeight: '500' }}>{opp.opportunityName || opp.account}</span>
+                        <div style={{ position: 'fixed', top, left, zIndex: 999, background: T.surface, borderRadius: '10px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', border: `1px solid ${T.border}`, width: isMobile ? 'calc(100vw - 2rem)' : '340px', maxHeight: '300px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ padding: '0.625rem 0.875rem', borderBottom: `1px solid ${T.surface2}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.surface2, borderRadius: '10px 10px 0 0' }}>
+                                <div style={{ fontWeight: '700', fontSize: '0.75rem', color: T.ink }}>
+                                    {type === 'notes' ? '📝 Notes' : '💬 Team Notes'} · <span style={{ color: T.inkMid, fontWeight: '500' }}>{opp.opportunityName || opp.account}</span>
                                 </div>
-                                <button onClick={() => setNotesPopover(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem', lineHeight: 1, padding: '0 0.25rem' }}>✕</button>
+                                <button onClick={() => setNotesPopover(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: '1rem', lineHeight: 1, padding: '0 0.25rem' }}>✕</button>
                             </div>
                             <div style={{ overflowY: 'auto', padding: '0.75rem 0.875rem', flex: 1 }}>
                                 {type === 'notes' ? (
-                                    <p style={{ margin: 0, fontSize: '0.8125rem', color: '#334155', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{opp.notes}</p>
+                                    <p style={{ margin: 0, fontSize: '0.8125rem', color: T.ink, lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{opp.notes}</p>
                                 ) : (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                                         {(opp.comments || []).slice().sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(c => (
                                             <div key={c.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-                                                <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: getColor(c.author), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5625rem', fontWeight: '800', flexShrink: 0 }}>{getInitials(c.author)}</div>
+                                                <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: getColor(c.author), color: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5625rem', fontWeight: '800', flexShrink: 0 }}>{getInitials(c.author)}</div>
                                                 <div style={{ flex: 1 }}>
                                                     <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'baseline', marginBottom: '0.125rem' }}>
-                                                        <span style={{ fontWeight: '700', fontSize: '0.75rem', color: '#1e293b' }}>{c.author}</span>
-                                                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{new Date(c.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                                                        <span style={{ fontWeight: '700', fontSize: '0.75rem', color: T.ink }}>{c.author}</span>
+                                                        <span style={{ fontSize: '0.6875rem', color: T.inkMuted }}>{new Date(c.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                                                     </div>
-                                                    <p style={{ margin: 0, fontSize: '0.8125rem', color: '#334155', lineHeight: '1.5', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c.text}</p>
+                                                    <p style={{ margin: 0, fontSize: '0.8125rem', color: T.ink, lineHeight: '1.5', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c.text}</p>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 )}
                             </div>
-                            <div style={{ padding: '0.5rem 0.875rem', borderTop: '1px solid #f1f5f9', background: '#f8fafc', borderRadius: '0 0 10px 10px' }}>
+                            <div style={{ padding: '0.5rem 0.875rem', borderTop: `1px solid ${T.surface2}`, background: T.surface2, borderRadius: '0 0 10px 10px' }}>
                                 <button onClick={() => { setNotesPopover(null); setEditingOpp(notesPopover.opp); setShowModal(true); }}
-                                    style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+                                    style={{ background: 'none', border: 'none', color: T.info, fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
                                     Open full opportunity →
                                 </button>
                             </div>
@@ -687,22 +688,22 @@ export default function ModalLayer() {
                 <div className="modal-overlay" onClick={() => setConfirmModal(null)}>
                     <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '420px', width: '100%', padding: isMobile ? '1.25rem' : '2rem' }}>
                         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: confirmModal.danger !== false ? '#fef2f2' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: confirmModal.danger !== false ? `${T.danger}14` : `${T.info}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
                                 <span style={{ fontSize: '1.5rem' }}>{confirmModal.danger !== false ? '\u26A0\uFE0F' : '\u2139\uFE0F'}</span>
                             </div>
-                            <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1.125rem', fontWeight: '700', color: '#1e293b' }}>Confirm Action</h3>
-                            <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, lineHeight: '1.5', whiteSpace: 'pre-line' }}>{confirmModal.message}</p>
+                            <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1.125rem', fontWeight: '700', color: T.ink }}>Confirm Action</h3>
+                            <p style={{ color: T.inkMid, fontSize: '0.9rem', margin: 0, lineHeight: '1.5', whiteSpace: 'pre-line' }}>{confirmModal.message}</p>
                         </div>
                         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
                             <button
                                 onClick={() => setConfirmModal(null)}
-                                style={{ padding: '0.625rem 1.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#ffffff', color: '#64748b', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
-                                onMouseEnter={e => e.target.style.background = '#f8f9fa'}
-                                onMouseLeave={e => e.target.style.background = '#ffffff'}
+                                style={{ padding: '0.625rem 1.5rem', border: `1px solid ${T.border}`, borderRadius: '6px', background: T.surface, color: T.inkMid, fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                                onMouseEnter={e => e.target.style.background = T.surface2}
+                                onMouseLeave={e => e.target.style.background = T.surface}
                             >Cancel</button>
                             <button
                                 onClick={() => { const fn = confirmModal.onConfirm; setConfirmModal(null); fn(); }}
-                                style={{ padding: '0.625rem 1.5rem', border: 'none', borderRadius: '6px', background: confirmModal.danger !== false ? '#ef4444' : '#2563eb', color: 'white', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                                style={{ padding: '0.625rem 1.5rem', border: 'none', borderRadius: '6px', background: confirmModal.danger !== false ? T.danger : T.ink, color: T.surface, fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
                                 onMouseEnter={e => e.target.style.opacity = '0.9'}
                                 onMouseLeave={e => e.target.style.opacity = '1'}
                             >{confirmModal.danger !== false ? 'Delete' : 'Confirm'}</button>
@@ -718,22 +719,22 @@ export default function ModalLayer() {
                 return (
                     <div className="modal-overlay" onClick={() => setPromptModal(null)}>
                         <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '460px', width: '100%', padding: isMobile ? '1.25rem' : '2rem' }}>
-                            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem', fontWeight: '700', color: '#1e293b' }}>{promptModal.title}</h3>
-                            {promptModal.help && <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 1rem 0', lineHeight: '1.5' }}>{promptModal.help}</p>}
-                            {promptModal.label && <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.375rem' }}>{promptModal.label}</label>}
+                            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem', fontWeight: '700', color: T.ink }}>{promptModal.title}</h3>
+                            {promptModal.help && <p style={{ color: T.inkMid, fontSize: '0.85rem', margin: '0 0 1rem 0', lineHeight: '1.5' }}>{promptModal.help}</p>}
+                            {promptModal.label && <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: T.inkMid, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.375rem' }}>{promptModal.label}</label>}
                             <input
                                 autoFocus
                                 value={value}
                                 placeholder={promptModal.placeholder || ''}
                                 onChange={e => setPromptModal(m => ({ ...m, value: e.target.value }))}
                                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-                                style={{ width: '100%', padding: '0.625rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.9rem', fontFamily: 'inherit', boxSizing: 'border-box', marginBottom: '1.25rem' }}
+                                style={{ width: '100%', padding: '0.625rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: '6px', fontSize: '0.9rem', fontFamily: 'inherit', boxSizing: 'border-box', marginBottom: '1.25rem' }}
                             />
                             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
                                 <button onClick={() => setPromptModal(null)}
-                                    style={{ padding: '0.625rem 1.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#ffffff', color: '#64748b', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                                    style={{ padding: '0.625rem 1.5rem', border: `1px solid ${T.border}`, borderRadius: '6px', background: T.surface, color: T.inkMid, fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                                 <button onClick={submit} disabled={!value.trim()}
-                                    style={{ padding: '0.625rem 1.5rem', border: 'none', borderRadius: '6px', background: '#1c1917', color: 'white', fontWeight: '600', fontSize: '0.875rem', cursor: value.trim() ? 'pointer' : 'default', opacity: value.trim() ? 1 : 0.5, fontFamily: 'inherit' }}>{promptModal.submitLabel || 'Save'}</button>
+                                    style={{ padding: '0.625rem 1.5rem', border: 'none', borderRadius: '6px', background: '#1c1917', color: T.surface, fontWeight: '600', fontSize: '0.875rem', cursor: value.trim() ? 'pointer' : 'default', opacity: value.trim() ? 1 : 0.5, fontFamily: 'inherit' }}>{promptModal.submitLabel || 'Save'}</button>
                             </div>
                         </div>
                     </div>
@@ -744,33 +745,33 @@ export default function ModalLayer() {
             {blockedDeleteModal && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.55)', zIndex: 10200, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? '0' : '1rem' }}
                     onClick={() => setBlockedDeleteModal(null)}>
-                    <div style={{ background: '#ffffff', borderRadius: isMobile ? '16px 16px 0 0' : '14px', padding: 0, width: '100%', maxWidth: isMobile ? '100%' : '440px', boxShadow: '0 20px 60px rgba(0,0,0,0.28)', overflow: 'hidden' }}
+                    <div style={{ background: T.surface, borderRadius: isMobile ? '16px 16px 0 0' : '14px', padding: 0, width: '100%', maxWidth: isMobile ? '100%' : '440px', boxShadow: '0 20px 60px rgba(0,0,0,0.28)', overflow: 'hidden' }}
                         onClick={e => e.stopPropagation()}>
                         {/* Header band */}
-                        <div style={{ background: '#dc2626', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ background: T.danger, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 <span style={{ fontSize: '1.125rem', lineHeight: 1 }}>🚫</span>
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: '800', fontSize: '0.9375rem', color: '#ffffff', lineHeight: 1.2 }}>
+                                <div style={{ fontWeight: '800', fontSize: '0.9375rem', color: T.surface, lineHeight: 1.2 }}>
                                     {blockedDeleteModal.title}
                                 </div>
                             </div>
                             <button onClick={() => setBlockedDeleteModal(null)}
-                                style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '6px', color: '#ffffff', cursor: 'pointer', fontSize: '1.125rem', lineHeight: 1, padding: '0.25rem 0.5rem', fontFamily: 'inherit', flexShrink: 0 }}>
+                                style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '6px', color: T.surface, cursor: 'pointer', fontSize: '1.125rem', lineHeight: 1, padding: '0.25rem 0.5rem', fontFamily: 'inherit', flexShrink: 0 }}>
                                 ×
                             </button>
                         </div>
                         {/* Body */}
                         <div style={{ padding: '1.5rem 1.5rem 0.75rem' }}>
-                            <p style={{ margin: '0 0 1.25rem', fontSize: '0.9rem', color: '#44403c', lineHeight: '1.6' }}>
+                            <p style={{ margin: '0 0 1.25rem', fontSize: '0.9rem', color: T.inkMid, lineHeight: '1.6' }}>
                                 {blockedDeleteModal.message}
                             </p>
                         </div>
                         {/* Footer */}
                         <div style={{ padding: '0 1.5rem 1.25rem', display: 'flex', justifyContent: 'flex-end' }}>
                             <button onClick={() => setBlockedDeleteModal(null)}
-                                style={{ padding: '0.6rem 1.75rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                style={{ padding: '0.6rem 1.75rem', background: '#1c1917', color: T.surface, border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                                 OK, Got It
                             </button>
                         </div>
@@ -783,58 +784,58 @@ export default function ModalLayer() {
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center' }}
                     onClick={() => setTaskReminderPopup(null)}
                 >
-                    <div style={{ background: '#ffffff', borderRadius: isMobile ? '16px 16px 0 0' : '12px', padding: '0', width: isMobile ? '100%' : '420px', maxWidth: isMobile ? '100%' : '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+                    <div style={{ background: T.surface, borderRadius: isMobile ? '16px 16px 0 0' : '12px', padding: '0', width: isMobile ? '100%' : '420px', maxWidth: isMobile ? '100%' : '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
                         onClick={e => e.stopPropagation()}
                     >
-                        <div style={{ background: '#f59e0b', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ background: T.warn, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <span style={{ fontSize: '1.5rem' }}>🔔</span>
                             <div>
-                                <div style={{ fontWeight: '700', fontSize: '1rem', color: '#ffffff' }}>Task Reminder</div>
+                                <div style={{ fontWeight: '700', fontSize: '1rem', color: T.surface }}>Task Reminder</div>
                                 <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>
                                     {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                             </div>
                         </div>
                         <div style={{ padding: '1.25rem' }}>
-                            <div style={{ fontSize: '1.0625rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.75rem' }}>
+                            <div style={{ fontSize: '1.0625rem', fontWeight: '700', color: T.ink, marginBottom: '0.75rem' }}>
                                 {taskReminderPopup.title}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '1rem' }}>
                                 {taskReminderPopup.type && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <span style={{ fontSize: '0.75rem', color: '#64748b', width: '55px' }}>Type:</span>
-                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b', background: '#f1f5f9', padding: '0.125rem 0.5rem', borderRadius: '4px' }}>{taskReminderPopup.type}</span>
+                                        <span style={{ fontSize: '0.75rem', color: T.inkMid, width: '55px' }}>Type:</span>
+                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink, background: T.surface2, padding: '0.125rem 0.5rem', borderRadius: '4px' }}>{taskReminderPopup.type}</span>
                                     </div>
                                 )}
                                 {taskReminderPopup.dueDate && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <span style={{ fontSize: '0.75rem', color: '#64748b', width: '55px' }}>Due:</span>
-                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: new Date(taskReminderPopup.dueDate + 'T12:00:00') < new Date() ? '#ef4444' : '#1e293b' }}>
+                                        <span style={{ fontSize: '0.75rem', color: T.inkMid, width: '55px' }}>Due:</span>
+                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: new Date(taskReminderPopup.dueDate + 'T12:00:00') < new Date() ? T.danger : T.ink }}>
                                             {new Date(taskReminderPopup.dueDate + 'T12:00:00').toLocaleDateString()}
                                         </span>
                                     </div>
                                 )}
                                 {taskReminderPopup.assignedTo && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <span style={{ fontSize: '0.75rem', color: '#64748b', width: '55px' }}>Assigned:</span>
-                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{taskReminderPopup.assignedTo}</span>
+                                        <span style={{ fontSize: '0.75rem', color: T.inkMid, width: '55px' }}>Assigned:</span>
+                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink }}>{taskReminderPopup.assignedTo}</span>
                                     </div>
                                 )}
                                 {taskReminderPopup.notes && (
-                                    <div style={{ marginTop: '0.375rem', fontSize: '0.8125rem', color: '#475569', background: '#f8fafc', borderRadius: '6px', padding: '0.5rem 0.625rem', border: '1px solid #e2e8f0', lineHeight: '1.4' }}>
+                                    <div style={{ marginTop: '0.375rem', fontSize: '0.8125rem', color: T.inkMid, background: T.surface2, borderRadius: '6px', padding: '0.5rem 0.625rem', border: `1px solid ${T.border}`, lineHeight: '1.4' }}>
                                         {taskReminderPopup.notes}
                                     </div>
                                 )}
                             </div>
                             {/* Snooze selector */}
-                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.625rem', padding:'0.5rem 0.75rem', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0' }}>
-                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Snooze</span>
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.625rem', padding:'0.5rem 0.75rem', background:T.surface2, borderRadius:'8px', border:`1px solid ${T.border}` }}>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:T.inkMuted, textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Snooze</span>
                                 <select value={taskReminderSnoozeH} onChange={e => setTaskReminderSnoozeH(Number(e.target.value))}
-                                    style={{ padding:'3px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
+                                    style={{ padding:'3px 6px', border:`1px solid ${T.border}`, borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:T.ink, background:T.surface }}>
                                     {[0,1,2,3,4,5,6,8,12,24].map(h => <option key={h} value={h}>{h}h</option>)}
                                 </select>
                                 <select value={taskReminderSnoozeM} onChange={e => setTaskReminderSnoozeM(Number(e.target.value))}
-                                    style={{ padding:'3px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
+                                    style={{ padding:'3px 6px', border:`1px solid ${T.border}`, borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:T.ink, background:T.surface }}>
                                     {[0,5,10,15,20,30,45].map(m => <option key={m} value={m}>{m}m</option>)}
                                 </select>
                                 <button onClick={() => {
@@ -844,7 +845,7 @@ export default function ModalLayer() {
                                         setTaskReminderPopup(null);
                                         setTimeout(() => setTaskReminderPopup(task), ms);
                                     }}
-                                    style={{ padding:'4px 14px', background:'#f59e0b', color:'#fff', border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
+                                    style={{ padding:'4px 14px', background:T.warn, color:T.surface, border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
                                     Snooze
                                 </button>
                             </div>
@@ -859,15 +860,15 @@ export default function ModalLayer() {
                                             setTaskRailMode('view');
                                         }, 150);
                                     }}
-                                    style={{ flex: 1, padding: '0.625rem 1rem', background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
-                                    onMouseEnter={e => e.target.style.background = '#1d4ed8'}
-                                    onMouseLeave={e => e.target.style.background = '#2563eb'}
+                                    style={{ flex: 1, padding: '0.625rem 1rem', background: T.ink, color: T.surface, border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                                    onMouseEnter={e => e.target.style.background = T.ink}
+                                    onMouseLeave={e => e.target.style.background = T.ink}
                                 >Open Task</button>
                                 <button
                                     onClick={() => setTaskReminderPopup(null)}
-                                    style={{ flex: 1, padding: '0.625rem 1rem', background: '#ffffff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
-                                    onMouseEnter={e => { e.target.style.background = '#f8fafc'; e.target.style.color = '#475569'; }}
-                                    onMouseLeave={e => { e.target.style.background = '#ffffff'; e.target.style.color = '#64748b'; }}
+                                    style={{ flex: 1, padding: '0.625rem 1rem', background: T.surface, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                                    onMouseEnter={e => { e.target.style.background = T.surface2; e.target.style.color = T.inkMid; }}
+                                    onMouseLeave={e => { e.target.style.background = T.surface; e.target.style.color = T.inkMid; }}
                                 >Dismiss</button>
                             </div>
                         </div>
@@ -890,14 +891,14 @@ export default function ModalLayer() {
                         }
                     }}
                 >
-                    <div style={{ background: '#ffffff', borderRadius: isMobile ? '16px 16px 0 0' : '16px', padding: '0', width: isMobile ? '100%' : '440px', maxWidth: isMobile ? '100%' : '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.35)', overflow: 'hidden', animation: 'slideUp 0.25s ease' }}
+                    <div style={{ background: T.surface, borderRadius: isMobile ? '16px 16px 0 0' : '16px', padding: '0', width: isMobile ? '100%' : '440px', maxWidth: isMobile ? '100%' : '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.35)', overflow: 'hidden', animation: 'slideUp 0.25s ease' }}
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Red header */}
-                        <div style={{ background: 'linear-gradient(135deg, #dc2626, #ef4444)', padding: '1.125rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                        <div style={{ background: `linear-gradient(135deg, ${T.danger}, ${T.danger})`, padding: '1.125rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                             <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.375rem', flexShrink: 0 }}>⏰</div>
                             <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: '800', fontSize: '1rem', color: '#ffffff', letterSpacing: '-0.01em' }}>{taskDuePopup.dueDate && taskDuePopup.dueDate < [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-') ? 'Task Overdue' : 'Task Due Today'}</div>
+                                <div style={{ fontWeight: '800', fontSize: '1rem', color: T.surface, letterSpacing: '-0.01em' }}>{taskDuePopup.dueDate && taskDuePopup.dueDate < [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-') ? 'Task Overdue' : 'Task Due Today'}</div>
                                 <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', fontWeight: '500', marginTop: '1px' }}>
                                     {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                                     {taskDueQueue.length > 0 && <span style={{ marginLeft: '0.5rem', background: 'rgba(255,255,255,0.25)', padding: '0.1rem 0.4rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>+{taskDueQueue.length} more</span>}
@@ -907,7 +908,7 @@ export default function ModalLayer() {
 
                         {/* Body */}
                         <div style={{ padding: '1.375rem 1.5rem' }}>
-                            <div style={{ fontSize: '1.125rem', fontWeight: '800', color: '#1e293b', marginBottom: '1rem', lineHeight: '1.3' }}>
+                            <div style={{ fontSize: '1.125rem', fontWeight: '800', color: T.ink, marginBottom: '1rem', lineHeight: '1.3' }}>
                                 {taskDuePopup.title}
                             </div>
 
@@ -915,45 +916,45 @@ export default function ModalLayer() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
                                 {taskDuePopup.type && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px', flexShrink: 0 }}>Type</span>
-                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b', background: '#f1f5f9', padding: '0.2rem 0.625rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>{taskDuePopup.type}</span>
+                                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px', flexShrink: 0 }}>Type</span>
+                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink, background: T.surface2, padding: '0.2rem 0.625rem', borderRadius: '6px', border: `1px solid ${T.border}` }}>{taskDuePopup.type}</span>
                                     </div>
                                 )}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px', flexShrink: 0 }}>Due</span>
-                                    <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#dc2626', background: '#fef2f2', padding: '0.2rem 0.625rem', borderRadius: '6px', border: '1px solid #fecaca' }}>
+                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px', flexShrink: 0 }}>Due</span>
+                                    <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: T.danger, background: `${T.danger}14`, padding: '0.2rem 0.625rem', borderRadius: '6px', border: `1px solid ${T.danger}33` }}>
                                         {new Date(taskDuePopup.dueDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                                         {taskDuePopup.dueTime && <span style={{ marginLeft: '0.375rem' }}>at {taskDuePopup.dueTime}</span>}
                                     </span>
                                 </div>
                                 {taskDuePopup.assignedTo && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px', flexShrink: 0 }}>Assigned</span>
-                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{taskDuePopup.assignedTo}</span>
+                                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px', flexShrink: 0 }}>Assigned</span>
+                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink }}>{taskDuePopup.assignedTo}</span>
                                     </div>
                                 )}
                                 {taskDuePopup.account && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px', flexShrink: 0 }}>Account</span>
-                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{taskDuePopup.account}</span>
+                                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px', flexShrink: 0 }}>Account</span>
+                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink }}>{taskDuePopup.account}</span>
                                     </div>
                                 )}
                                 {taskDuePopup.notes && (
-                                    <div style={{ marginTop: '0.25rem', fontSize: '0.8125rem', color: '#475569', background: '#f8fafc', borderRadius: '8px', padding: '0.625rem 0.75rem', border: '1px solid #e2e8f0', lineHeight: '1.5' }}>
+                                    <div style={{ marginTop: '0.25rem', fontSize: '0.8125rem', color: T.inkMid, background: T.surface2, borderRadius: '8px', padding: '0.625rem 0.75rem', border: `1px solid ${T.border}`, lineHeight: '1.5' }}>
                                         {taskDuePopup.notes}
                                     </div>
                                 )}
                             </div>
 
                             {/* Snooze selector */}
-                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.875rem', padding:'0.5rem 0.75rem', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0' }}>
-                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Snooze</span>
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.875rem', padding:'0.5rem 0.75rem', background:T.surface2, borderRadius:'8px', border:`1px solid ${T.border}` }}>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:T.inkMuted, textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Snooze</span>
                                 <select value={taskDueSnoozeH} onChange={e => setTaskDueSnoozeH(Number(e.target.value))}
-                                    style={{ padding:'3px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
+                                    style={{ padding:'3px 6px', border:`1px solid ${T.border}`, borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:T.ink, background:T.surface }}>
                                     {[0,1,2,3,4,5,6,8,12,24].map(h => <option key={h} value={h}>{h}h</option>)}
                                 </select>
                                 <select value={taskDueSnoozeM} onChange={e => setTaskDueSnoozeM(Number(e.target.value))}
-                                    style={{ padding:'3px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
+                                    style={{ padding:'3px 6px', border:`1px solid ${T.border}`, borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:T.ink, background:T.surface }}>
                                     {[0,5,10,15,20,30,45].map(m => <option key={m} value={m}>{m}m</option>)}
                                 </select>
                                 <button onClick={() => {
@@ -966,7 +967,7 @@ export default function ModalLayer() {
                                         setSnoozedDueAlerts(prev => ({ ...prev, [task.id]: Date.now() + ms }));
                                         if (taskDueQueue.length > 0) { setTaskDuePopup(taskDueQueue[0]); setTaskDueQueue(prev => prev.slice(1)); } else { setTaskDuePopup(null); }
                                     }}
-                                    style={{ padding:'4px 14px', background:'#f59e0b', color:'#fff', border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
+                                    style={{ padding:'4px 14px', background:T.warn, color:T.surface, border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
                                     Snooze
                                 </button>
                             </div>
@@ -986,7 +987,7 @@ export default function ModalLayer() {
                                         setActiveTab('tasks');
                                         setTimeout(() => { setTaskRailId(task.id); setTaskRailMode('view'); }, 150);
                                     }}
-                                    style={{ flex: 1, padding: '0.7rem 1rem', background: 'linear-gradient(135deg, #dc2626, #ef4444)', color: '#ffffff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', boxShadow: '0 2px 8px rgba(220,38,38,0.3)' }}
+                                    style={{ flex: 1, padding: '0.7rem 1rem', background: `linear-gradient(135deg, ${T.danger}, ${T.danger})`, color: T.surface, border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', boxShadow: '0 2px 8px rgba(220,38,38,0.3)' }}
                                     onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(220,38,38,0.45)'}
                                     onMouseLeave={e => e.currentTarget.style.boxShadow = '0 2px 8px rgba(220,38,38,0.3)'}
                                 >Open Task</button>
@@ -1000,9 +1001,9 @@ export default function ModalLayer() {
                                             setTaskDuePopup(null);
                                         }
                                     }}
-                                    style={{ flex: 1, padding: '0.7rem 1rem', background: '#ffffff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
-                                    onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#475569'; }}
-                                    onMouseLeave={e => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#64748b'; }}
+                                    style={{ flex: 1, padding: '0.7rem 1rem', background: T.surface, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: '8px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                                    onMouseEnter={e => { e.currentTarget.style.background = T.surface2; e.currentTarget.style.color = T.inkMid; }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = T.surface; e.currentTarget.style.color = T.inkMid; }}
                                 >{taskDueQueue.length > 0 ? `Dismiss · Next (${taskDueQueue.length})` : 'Dismiss'}</button>
                             </div>
                         </div>
@@ -1028,32 +1029,32 @@ export default function ModalLayer() {
                 return (
                 <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:10100, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
                     onClick={closeClaimModal}>
-                    <div style={{ background:'#fff', border:'1px solid #e5e2db', borderRadius: isMobile ? '12px 12px 0 0' : '12px', padding:'1.25rem 1.5rem', width:'100%', maxWidth: isMobile ? '100%' : '480px', boxShadow:'0 12px 40px rgba(0,0,0,0.15)', fontFamily:"'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius: isMobile ? '12px 12px 0 0' : '12px', padding:'1.25rem 1.5rem', width:'100%', maxWidth: isMobile ? '100%' : '480px', boxShadow:'0 12px 40px rgba(0,0,0,0.15)', fontFamily:"'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}
                         onClick={e => e.stopPropagation()}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1rem' }}>
                             <div>
                                 <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                                    <div style={{ width:'3px', height:'16px', borderRadius:'1px', background:'#c8b99a' }} />
+                                    <div style={{ width:'3px', height:'16px', borderRadius:'1px', background:T.gold }} />
                                     <div style={{ fontWeight:'700', fontSize:'1rem', color:'#1c1917' }}>Claim SPIFF</div>
                                 </div>
-                                <div style={{ fontSize:'0.75rem', color:'#78716c', marginTop:'3px' }}>{opp.opportunityName || opp.account} · ${dealArr.toLocaleString()} ARR</div>
+                                <div style={{ fontSize:'0.75rem', color:T.inkMuted, marginTop:'3px' }}>{opp.opportunityName || opp.account} · ${dealArr.toLocaleString()} ARR</div>
                             </div>
-                            <button onClick={closeClaimModal} style={{ background:'none', border:'none', fontSize:'1.25rem', color:'#a8a29e', cursor:'pointer', lineHeight:1, fontFamily:'inherit' }}>×</button>
+                            <button onClick={closeClaimModal} style={{ background:'none', border:'none', fontSize:'1.25rem', color:T.inkMuted, cursor:'pointer', lineHeight:1, fontFamily:'inherit' }}>×</button>
                         </div>
 
                         {existingClaims.length > 0 && (
                             <div style={{ marginBottom:'1rem' }}>
-                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#a8a29e', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Already claimed</div>
+                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:T.inkMuted, textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Already claimed</div>
                                 {existingClaims.map(c => {
                                     const sp = activeSpiffsList.find(s => s.id === c.spiffId) || {};
                                     return (
-                                        <div key={c.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', background:'#f0ece4', border:'1px solid #ddd8cf', borderRadius:'6px', marginBottom:'4px', fontSize:'0.8125rem' }}>
+                                        <div key={c.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'6px', marginBottom:'4px', fontSize:'0.8125rem' }}>
                                             <span style={{ fontWeight:'600', color:'#1c1917' }}>{sp.name || 'SPIFF'}</span>
                                             <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                                                <span style={{ fontWeight:'700', color:'#7a6a48' }}>${Math.round(c.amount).toLocaleString()}</span>
+                                                <span style={{ fontWeight:'700', color:T.goldInk }}>${Math.round(c.amount).toLocaleString()}</span>
                                                 <span style={{ fontSize:'0.625rem', padding:'2px 7px', borderRadius:'999px', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.04em',
-                                                    background: c.status==='approved'?'#16a34a18':c.status==='rejected'?'#dc262618':c.status==='paid'?'#2563eb18':'#d9770618',
-                                                    color: c.status==='approved'?'#16a34a':c.status==='rejected'?'#dc2626':c.status==='paid'?'#2563eb':'#d97706' }}>
+                                                    background: c.status==='approved'?`${T.ok}18`:c.status==='rejected'?`${T.danger}18`:c.status==='paid'?`${T.ink}18`:`${T.warn}18`,
+                                                    color: c.status==='approved'?T.ok:c.status==='rejected'?T.danger:c.status==='paid'?T.info:T.warn }}>
                                                     {c.status.toUpperCase()}
                                                 </span>
                                             </div>
@@ -1064,31 +1065,31 @@ export default function ModalLayer() {
                         )}
 
                         {spiffClaimError && (
-                            <div style={{ background:'#dc262614', border:'1px solid #dc262640', borderRadius:'8px', padding:'0.625rem 0.875rem', marginBottom:'0.875rem', fontSize:'0.8125rem', color:'#dc2626', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                            <div style={{ background:`${T.danger}14`, border:`1px solid ${T.danger}40`, borderRadius:'8px', padding:'0.625rem 0.875rem', marginBottom:'0.875rem', fontSize:'0.8125rem', color:T.danger, display:'flex', alignItems:'center', gap:'0.5rem' }}>
                                 <span>⚠</span><span style={{ flex:1 }}>{spiffClaimError}</span>
-                                <button onClick={() => setSpiffClaimError(null)} style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:'1rem', lineHeight:1, fontFamily:'inherit' }}>×</button>
+                                <button onClick={() => setSpiffClaimError(null)} style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:'1rem', lineHeight:1, fontFamily:'inherit' }}>×</button>
                             </div>
                         )}
 
                         {claimableSpiffs.length === 0 ? (
-                            <div style={{ textAlign:'center', padding:'2rem', color:'#78716c', fontSize:'0.875rem', background:'#f0ece4', border:'1px solid #ddd8cf', borderRadius:'8px' }}>
+                            <div style={{ textAlign:'center', padding:'2rem', color:T.inkMuted, fontSize:'0.875rem', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'8px' }}>
                                 All active SPIFFs have already been claimed for this deal.
                             </div>
                         ) : (
                             <div>
-                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#a8a29e', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Select SPIFFs to claim</div>
+                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:T.inkMuted, textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Select SPIFFs to claim</div>
                                 <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem', maxHeight:'300px', overflowY:'auto' }}>
                                     {claimableSpiffs.map(spiff => {
                                         const estAmt = calcClaimAmt(spiff);
                                         return (
-                                            <div key={spiff.id} style={{ border:'1px solid #ddd8cf', borderRadius:'8px', padding:'0.75rem', background:'#fff' }}>
+                                            <div key={spiff.id} style={{ border:`1px solid ${T.border}`, borderRadius:'8px', padding:'0.75rem', background:T.surface }}>
                                                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.375rem' }}>
                                                     <div style={{ fontWeight:'600', fontSize:'0.875rem', color:'#1c1917' }}>{spiff.name || 'Unnamed SPIFF'}</div>
-                                                    <div style={{ fontWeight:'700', color:'#7a6a48', fontSize:'0.875rem' }}>
+                                                    <div style={{ fontWeight:'700', color:T.goldInk, fontSize:'0.875rem' }}>
                                                         {spiff.type === 'multiplier' ? `${spiff.amount}× multiplier` : `$${Math.round(estAmt).toLocaleString()}`}
                                                     </div>
                                                 </div>
-                                                <div style={{ fontSize:'0.75rem', color:'#78716c', marginBottom:'0.625rem' }}>
+                                                <div style={{ fontSize:'0.75rem', color:T.inkMuted, marginBottom:'0.625rem' }}>
                                                     {spiff.type==='flat'?`$${parseFloat(spiff.amount||0).toLocaleString()} flat bonus`:spiff.type==='pct'?`${spiff.amount}% of deal ARR`:`Commission multiplier ${spiff.amount}×`}
                                                     {spiff.condition && <span> · {spiff.condition}</span>}
                                                 </div>
@@ -1137,7 +1138,7 @@ export default function ModalLayer() {
                                                     }
                                                 }}
                                                 disabled={spiffClaimBusy === spiff.id}
-                                                style={{ width:'100%', padding:'0.4rem 0.875rem', background: spiffClaimBusy === spiff.id ? '#44403c' : '#1c1917', color:'#f5f1eb', border:'none', borderRadius:'8px', fontSize:'0.75rem', fontWeight:'500', cursor: spiffClaimBusy === spiff.id ? 'wait' : 'pointer', fontFamily:'inherit' }}>
+                                                style={{ width:'100%', padding:'0.4rem 0.875rem', background: spiffClaimBusy === spiff.id ? T.inkMid : '#1c1917', color:T.surface, border:'none', borderRadius:'8px', fontSize:'0.75rem', fontWeight:'500', cursor: spiffClaimBusy === spiff.id ? 'wait' : 'pointer', fontFamily:'inherit' }}>
                                                     {spiffClaimBusy === spiff.id ? 'Submitting…' : 'Submit Claim'}
                                                 </button>
                                             </div>

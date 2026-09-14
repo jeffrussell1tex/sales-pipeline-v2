@@ -381,7 +381,7 @@
         }
 
         .modal {
-            background: #ffffff;
+            background: #fbf8f3; /* T.surface — the warm stone surface, not white (state §0.136) */;
             border: 1px solid var(--border-color);
             border-radius: 16px;
             width: 90%;

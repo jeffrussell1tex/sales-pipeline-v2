@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../AppContext';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
+import { T } from '../../tokens.js';
 
 // Must match auth.mjs APP_ROLES. Technician was missing from this list, so any
 // Technician opened in this modal displayed as "Admin" — a <select> whose value
@@ -60,7 +61,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
     const tabBtnStyle = (active) => ({
         padding: '0.625rem 1.5rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
         fontWeight: '700', fontSize: '0.8125rem', fontFamily: 'inherit', transition: 'all 0.2s',
-        background: active ? '#ffffff' : 'transparent', color: active ? '#1e293b' : '#64748b',
+        background: active ? T.surface : 'transparent', color: active ? T.ink : T.inkMid,
         boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
     });
 
@@ -69,13 +70,13 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         {errorMessage && (
             <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
                  onClick={e => e.stopPropagation()}>
-                <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: '420px', width: '90%', textAlign: 'center' }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.5rem' }}>⚠️</div>
-                    <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.0625rem', fontWeight: '700', color: '#1e293b' }}>Failed to Save User</h3>
-                    <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6 }}>{errorMessage}</p>
+                <div style={{ background: T.surface, borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: '420px', width: '90%', textAlign: 'center' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: `${T.danger}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.5rem' }}>⚠️</div>
+                    <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.0625rem', fontWeight: '700', color: T.ink }}>Failed to Save User</h3>
+                    <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: T.inkMid, lineHeight: 1.6 }}>{errorMessage}</p>
                     <button
                         onClick={onDismissError}
-                        style={{ padding: '0.5rem 1.5rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#1e293b', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        style={{ padding: '0.5rem 1.5rem', borderRadius: '6px', border: `1px solid ${T.border}`, background: T.surface2, color: T.ink, fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                         Fix Email
                     </button>
                 </div>
@@ -84,10 +85,10 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ ...overlayStyle }} />
         <div {...clickCatcherProps} />
-        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: '1.5rem', overflowY: 'auto' }}>
+        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: T.surface, borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: `1px solid ${T.border}`, padding: '1.5rem', overflowY: 'auto' }}>
                 <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, marginBottom: '1rem' }}>{user ? 'Edit User' : 'New User'}</h2>
 
-                <div style={{ display: 'flex', background: '#f1f3f5', borderRadius: '6px', padding: '3px', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '2px' }}>
+                <div style={{ display: 'flex', background: T.surface2, borderRadius: '6px', padding: '3px', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '2px' }}>
                     <button type="button" onClick={() => setActiveUserTab('primary')} style={tabBtnStyle(activeUserTab === 'primary')}>Primary Info</button>
                     <button type="button" onClick={() => setActiveUserTab('role')} style={tabBtnStyle(activeUserTab === 'role')}>Role &amp; Access</button>
                     <button type="button" onClick={() => setActiveUserTab('additional')} style={tabBtnStyle(activeUserTab === 'additional')}>Additional Info</button>
@@ -98,9 +99,9 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                     {activeUserTab === 'primary' && (
                     <div className="form-grid">
                         {errorMessage && (
-                            <div style={{ gridColumn: '1 / -1', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                            <div style={{ gridColumn: '1 / -1', background: `${T.danger}14`, border: `1px solid ${T.danger}33`, borderRadius: '6px', padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
                                 <span style={{ fontSize: '1rem', flexShrink: 0 }}>⚠️</span>
-                                <span style={{ fontSize: '0.8125rem', color: '#b91c1c', lineHeight: 1.5 }}>{errorMessage}</span>
+                                <span style={{ fontSize: '0.8125rem', color: T.danger, lineHeight: 1.5 }}>{errorMessage}</span>
                             </div>
                         )}
                         <div className="form-group" style={{ gridColumn: 'span 1' }}>
@@ -119,22 +120,22 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                         <div className="form-group"><label>Company</label><input type="text" value={formData.company || ''} onChange={e => handleChange('company', e.target.value)} /></div>
                         <div className="form-group"><label>Department</label><input type="text" value={formData.department || ''} onChange={e => handleChange('department', e.target.value)} /></div>
                         <div className="form-group"><label>Work Location</label><input type="text" value={formData.workLocation || ''} onChange={e => handleChange('workLocation', e.target.value)} /></div>
-                        <div className="form-group"><label>Work Email</label><input type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)} style={errorMessage ? { borderColor: '#f87171', background: '#fff5f5' } : {}} /></div>
+                        <div className="form-group"><label>Work Email</label><input type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)} style={errorMessage ? { borderColor: T.danger, background: `${T.danger}14` } : {}} /></div>
                         <div className="form-group"><label>Personal Email</label><input type="email" value={formData.personalEmail || ''} onChange={e => handleChange('personalEmail', e.target.value)} /></div>
                         <div className="form-group"><label>Work Phone</label><input type="tel" value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)} /></div>
                         <div className="form-group"><label>Mobile</label><input type="tel" value={formData.mobile || ''} onChange={e => handleChange('mobile', e.target.value)} /></div>
                         <div className="form-group"><label>Territory</label>
-                            <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', fontSize: '0.875rem', color: formData.territory ? '#1e293b' : '#94a3b8', minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+                            <div style={{ padding: '0.5rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: '6px', background: T.surface2, fontSize: '0.875rem', color: formData.territory ? T.ink : T.inkMuted, minHeight: '36px', display: 'flex', alignItems: 'center' }}>
                                 {formData.territory ? `📍 ${formData.territory}` : 'Assigned via Team Builder'}
                             </div>
                         </div>
                         <div className="form-group"><label>Team</label>
-                            <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', fontSize: '0.875rem', color: formData.team ? '#1e293b' : '#94a3b8', minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+                            <div style={{ padding: '0.5rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: '6px', background: T.surface2, fontSize: '0.875rem', color: formData.team ? T.ink : T.inkMuted, minHeight: '36px', display: 'flex', alignItems: 'center' }}>
                                 {formData.team ? `👥 ${formData.team}` : 'Assigned via Team Builder'}
                             </div>
                         </div>
                         <div className="form-group"><label>Vertical</label>
-                            <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', fontSize: '0.875rem', color: formData.vertical ? '#1e293b' : '#94a3b8', minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+                            <div style={{ padding: '0.5rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: '6px', background: T.surface2, fontSize: '0.875rem', color: formData.vertical ? T.ink : T.inkMuted, minHeight: '36px', display: 'flex', alignItems: 'center' }}>
                                 {formData.vertical ? `🏭 ${formData.vertical}` : 'Assigned via Team Builder'}
                             </div>
                         </div>
@@ -143,12 +144,12 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
 
                     {activeUserTab === 'role' && (
                     <div style={{ maxWidth: '480px' }}>
-                        <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1.25rem' }}>
+                        <div style={{ padding: '1rem', background: T.surface2, borderRadius: '8px', border: `1px solid ${T.border}`, marginBottom: '1.25rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                                 <span style={{ fontSize: '1.125rem' }}>🔑</span>
-                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Role &amp; Access Level</span>
+                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: T.ink }}>Role &amp; Access Level</span>
                             </div>
-                            <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 1rem', lineHeight: 1.5 }}>
+                            <p style={{ fontSize: '0.75rem', color: T.inkMid, margin: '0 0 1rem', lineHeight: 1.5 }}>
                                 Set the user's role to control what they can see and do in the app. Login credentials are managed through Clerk — users receive an invitation email to set their own password.
                             </p>
                             <div className="form-group" style={{ marginBottom: 0 }}>
@@ -165,7 +166,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                                     {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                 </select>
                                 {isExistingUser && (
-                                    <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '0.375rem', lineHeight: 1.5 }}>
+                                    <div style={{ fontSize: '0.6875rem', color: T.inkMid, marginTop: '0.375rem', lineHeight: 1.5 }}>
                                         Roles are stored in Clerk, so changing one here would update the roster
                                         without changing what the server enforces. Change it in
                                         <strong> Settings &rarr; People &amp; Teams &rarr; {formData.name || 'this user'}</strong>.
@@ -173,7 +174,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                                 )}
                             </div>
                         </div>
-                        <div style={{ padding: '0.875rem 1rem', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe', fontSize: '0.75rem', color: '#1e40af', lineHeight: 1.6 }}>
+                        <div style={{ padding: '0.875rem 1rem', background: `${T.info}14`, borderRadius: '8px', border: `1px solid ${T.info}14`, fontSize: '0.75rem', color: T.info, lineHeight: 1.6 }}>
                             <strong>How login works:</strong> Users sign in via Clerk using their email address. Create their profile here to assign their role and team, then invite them from the Clerk dashboard so they can set their password and access the app.
                         </div>
                     </div>
@@ -181,7 +182,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
 
                     {activeUserTab === 'additional' && (
                     <div className="form-grid">
-                        <div style={{ gridColumn: '1 / -1', fontWeight: '700', fontSize: '0.8125rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.375rem', marginBottom: '0.25rem' }}>Home Address</div>
+                        <div style={{ gridColumn: '1 / -1', fontWeight: '700', fontSize: '0.8125rem', color: T.ink, borderBottom: `1px solid ${T.border}`, paddingBottom: '0.375rem', marginBottom: '0.25rem' }}>Home Address</div>
                         <div className="form-group full"><label>Street Address</label><input type="text" value={formData.address || ''} onChange={e => handleChange('address', e.target.value)} /></div>
                         <div className="form-group"><label>City</label><input type="text" value={formData.city || ''} onChange={e => handleChange('city', e.target.value)} /></div>
                         <div className="form-group"><label>State</label><input type="text" value={formData.state || ''} onChange={e => handleChange('state', e.target.value)} /></div>
@@ -189,7 +190,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                         <div className="form-group"><label>Country</label><input type="text" value={formData.country || ''} onChange={e => handleChange('country', e.target.value)} /></div>
                         <div className="form-group full"><label>Notes</label>
                             <textarea value={formData.notes || ''} onChange={e => handleChange('notes', e.target.value)}
-                                rows="4" style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', resize: 'vertical' }} />
+                                rows="4" style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', resize: 'vertical' }} />
                         </div>
                     </div>
                     )}
@@ -199,24 +200,24 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                         const setSmsPrefs = (patch) => handleChange('smsNotifications', { ...smsPrefs, ...patch });
 
                         const Toggle = ({ label, desc, checked, onChange }) => (
-                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', padding: '0.75rem 0', borderBottom: '1px solid #f1f5f9' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', padding: '0.75rem 0', borderBottom: `1px solid ${T.surface2}` }}>
                                 <div>
-                                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1e293b' }}>{label}</div>
-                                    {desc && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{desc}</div>}
+                                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: T.ink }}>{label}</div>
+                                    {desc && <div style={{ fontSize: '0.75rem', color: T.inkMid, marginTop: '2px' }}>{desc}</div>}
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => onChange(!checked)}
                                     style={{
                                         flexShrink: 0, width: '42px', height: '24px', borderRadius: '12px', border: 'none',
-                                        background: checked ? '#1c1917' : '#cbd5e1', cursor: 'pointer', position: 'relative',
+                                        background: checked ? '#1c1917' : T.borderStrong, cursor: 'pointer', position: 'relative',
                                         transition: 'background 0.2s',
                                     }}
                                     aria-pressed={checked}
                                 >
                                     <span style={{
                                         position: 'absolute', top: '3px', left: checked ? '21px' : '3px',
-                                        width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
+                                        width: '18px', height: '18px', borderRadius: '50%', background: T.surface,
                                         transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                                     }} />
                                 </button>
@@ -229,7 +230,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                             <div style={{ maxWidth: '480px' }}>
                                 {/* Mobile phone for SMS */}
                                 <div style={{ marginBottom: '1.25rem' }}>
-                                    <div style={{ fontWeight: '700', fontSize: '0.8125rem', color: '#1e293b', marginBottom: '0.625rem' }}>SMS Phone Number</div>
+                                    <div style={{ fontWeight: '700', fontSize: '0.8125rem', color: T.ink, marginBottom: '0.625rem' }}>SMS Phone Number</div>
                                     <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                                         <label>Mobile (preferred for SMS)</label>
                                         <input
@@ -248,13 +249,13 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                                             placeholder="+1 (555) 000-0000"
                                         />
                                     </div>
-                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.375rem' }}>
+                                    <div style={{ fontSize: '0.75rem', color: T.inkMuted, marginTop: '0.375rem' }}>
                                         Enter number in any format — we'll normalize it. US 10-digit numbers are assumed +1.
                                     </div>
                                 </div>
 
                                 {/* Master SMS toggle */}
-                                <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
+                                <div style={{ padding: '1rem', background: T.surface2, borderRadius: '8px', border: `1px solid ${T.border}`, marginBottom: '1rem' }}>
                                     <Toggle
                                         label="Enable SMS Notifications"
                                         desc="Send text messages in addition to email for the categories below"
@@ -266,14 +267,14 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                                 {/* Per-type SMS toggles */}
                                 <div style={{
                                     padding: '1rem',
-                                    background: smsEnabled ? '#fff' : '#f8fafc',
+                                    background: smsEnabled ? T.surface : T.surface2,
                                     borderRadius: '8px',
-                                    border: '1px solid #e2e8f0',
+                                    border: `1px solid ${T.border}`,
                                     opacity: smsEnabled ? 1 : 0.5,
                                     pointerEvents: smsEnabled ? 'auto' : 'none',
                                     transition: 'opacity 0.2s',
                                 }}>
-                                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>
+                                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>
                                         SMS Alert Types
                                     </div>
                                     <Toggle
@@ -302,7 +303,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                                     />
                                 </div>
 
-                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.75rem', lineHeight: 1.5 }}>
+                                <div style={{ fontSize: '0.75rem', color: T.inkMuted, marginTop: '0.75rem', lineHeight: 1.5 }}>
                                     SMS is sent via Twilio. Standard carrier messaging rates may apply. These settings are saved when you click Save/Update.
                                 </div>
                             </div>
@@ -312,7 +313,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                     <div className="modal-actions">
                         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
                         <button type="submit" className="btn" disabled={saving} style={{ opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {saving && <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
+                            {saving && <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: T.surface, borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
                             {saving ? 'Saving…' : (user ? 'Update' : 'Create')}
                         </button>
                     </div>

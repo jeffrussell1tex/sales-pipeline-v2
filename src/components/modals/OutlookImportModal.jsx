@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { isoLocal } from '../../utils/dateLocal';
+import { T } from '../../tokens.js';
 
 export default function OutlookImportModal({ contacts, opportunities, activities, onClose, onImport }) {
     const [step, setStep] = useState('upload'); // upload, preview, results
@@ -245,30 +246,30 @@ export default function OutlookImportModal({ contacts, opportunities, activities
         <>
         <div style={{ ...overlayStyle }} />
         <div {...clickCatcherProps} />
-        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db' }}>
+        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: T.surface, borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: `1px solid ${T.border}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                     <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, margin: 0 }}>📧 Import Outlook Sent Emails</h2>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>×</button>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: T.inkMid }}>×</button>
                 </div>
 
                 {step === 'upload' && (
                     <div>
                         <div style={{ 
                             padding: '1.25rem', 
-                            background: '#f1f3f5', 
+                            background: T.surface2, 
                             borderRadius: '8px', 
                             marginBottom: '1.5rem',
-                            border: '1px solid #e2e8f0'
+                            border: `1px solid ${T.border}`
                         }}>
                             <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '0.75rem' }}>How to export from Outlook:</h3>
-                            <ol style={{ paddingLeft: '1.25rem', color: '#64748b', fontSize: '0.875rem', lineHeight: '1.8' }}>
+                            <ol style={{ paddingLeft: '1.25rem', color: T.inkMid, fontSize: '0.875rem', lineHeight: '1.8' }}>
                                 <li>Open <strong>Outlook Desktop</strong> → File → Open & Export → <strong>Import/Export</strong></li>
                                 <li>Choose <strong>"Export to a file"</strong> → Next</li>
                                 <li>Select <strong>"Comma Separated Values"</strong> → Next</li>
                                 <li>Select the <strong>"Sent Items"</strong> folder (or any mail folder) → Next</li>
                                 <li>Choose a save location and click <strong>Finish</strong></li>
                             </ol>
-                            <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#ffffff', borderRadius: '6px', fontSize: '0.8125rem', color: '#64748b' }}>
+                            <div style={{ marginTop: '1rem', padding: '0.75rem', background: T.surface, borderRadius: '6px', fontSize: '0.8125rem', color: T.inkMid }}>
                                 <strong>Tip:</strong> The importer will match emails to contacts using the email addresses in the "To" and "CC" fields. Make sure your contacts have email addresses saved for the best match rate.
                             </div>
                         </div>
@@ -276,11 +277,11 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                         {parseError && (
                             <div style={{ 
                                 padding: '1rem', 
-                                background: '#fef2f2', 
-                                border: '1px solid #ef4444', 
+                                background: `${T.danger}14`, 
+                                border: `1px solid ${T.danger}`, 
                                 borderRadius: '6px', 
                                 marginBottom: '1rem',
-                                color: '#991b1b',
+                                color: T.danger,
                                 fontSize: '0.875rem',
                                 whiteSpace: 'pre-line'
                             }}>
@@ -297,13 +298,13 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                             transition: 'all 0.2s'
                         }}
                         onClick={() => document.getElementById('outlook-csv-input').click()}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#2563eb'; e.currentTarget.style.background = '#f1f3f5'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = 'transparent'; }}
-                        onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#2563eb'; e.currentTarget.style.background = '#f1f3f5'; }}
-                        onDragLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = 'transparent'; }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = T.info; e.currentTarget.style.background = T.surface2; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = 'transparent'; }}
+                        onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = T.info; e.currentTarget.style.background = T.surface2; }}
+                        onDragLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = 'transparent'; }}
                         onDrop={e => {
                             e.preventDefault();
-                            e.currentTarget.style.borderColor = '#e2e8f0';
+                            e.currentTarget.style.borderColor = T.border;
                             e.currentTarget.style.background = 'transparent';
                             const file = e.dataTransfer.files[0];
                             if (file) {
@@ -313,10 +314,10 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                         }}
                         >
                             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📂</div>
-                            <div style={{ fontSize: '1rem', fontWeight: '600', color: '#1e293b', marginBottom: '0.5rem' }}>
+                            <div style={{ fontSize: '1rem', fontWeight: '600', color: T.ink, marginBottom: '0.5rem' }}>
                                 Drop your Outlook CSV file here, or click to browse
                             </div>
-                            <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>
+                            <div style={{ fontSize: '0.8125rem', color: T.inkMid }}>
                                 Supports .csv files exported from Outlook
                             </div>
                             <input
@@ -334,21 +335,21 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                     <div>
                         {/* Summary Bar */}
                         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-                            <div style={{ padding: '0.75rem 1.25rem', background: '#f1f3f5', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{matchResults.length}</div>
-                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600' }}>TOTAL EMAILS</div>
+                            <div style={{ padding: '0.75rem 1.25rem', background: T.surface2, borderRadius: '6px', border: `1px solid ${T.border}` }}>
+                                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: T.ink }}>{matchResults.length}</div>
+                                <div style={{ fontSize: '0.7rem', color: T.inkMid, fontWeight: '600' }}>TOTAL EMAILS</div>
                             </div>
-                            <div style={{ padding: '0.75rem 1.25rem', background: '#d1fae5', borderRadius: '6px', border: '1px solid #86efac' }}>
-                                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#047857' }}>{totalMatched}</div>
-                                <div style={{ fontSize: '0.7rem', color: '#065f46', fontWeight: '600' }}>CONTACT MATCHED</div>
+                            <div style={{ padding: '0.75rem 1.25rem', background: `${T.ok}18`, borderRadius: '6px', border: `1px solid ${T.ok}40` }}>
+                                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: T.ok }}>{totalMatched}</div>
+                                <div style={{ fontSize: '0.7rem', color: T.ok, fontWeight: '600' }}>CONTACT MATCHED</div>
                             </div>
-                            <div style={{ padding: '0.75rem 1.25rem', background: '#fef3c7', borderRadius: '6px', border: '1px solid #fcd34d' }}>
-                                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#92400e' }}>{totalUnmatched}</div>
-                                <div style={{ fontSize: '0.7rem', color: '#78350f', fontWeight: '600' }}>NO MATCH</div>
+                            <div style={{ padding: '0.75rem 1.25rem', background: `${T.warn}18`, borderRadius: '6px', border: `1px solid ${T.warn}40` }}>
+                                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: T.warn }}>{totalUnmatched}</div>
+                                <div style={{ fontSize: '0.7rem', color: T.warn, fontWeight: '600' }}>NO MATCH</div>
                             </div>
-                            <div style={{ padding: '0.75rem 1.25rem', background: '#dbeafe', borderRadius: '6px', border: '1px solid #93c5fd' }}>
-                                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e40af' }}>{selectedCount}</div>
-                                <div style={{ fontSize: '0.7rem', color: '#1e3a8a', fontWeight: '600' }}>SELECTED</div>
+                            <div style={{ padding: '0.75rem 1.25rem', background: `${T.info}14`, borderRadius: '6px', border: `1px solid ${T.info}40` }}>
+                                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: T.info }}>{selectedCount}</div>
+                                <div style={{ fontSize: '0.7rem', color: T.info, fontWeight: '600' }}>SELECTED</div>
                             </div>
                         </div>
 
@@ -362,9 +363,9 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                                         style={{
                                             padding: '0.375rem 0.75rem',
                                             borderRadius: '4px',
-                                            border: '1px solid #e2e8f0',
+                                            border: `1px solid ${T.border}`,
                                             background: filterMatched === f ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                                            color: filterMatched === f ? 'white' : 'var(--text-secondary)',
+                                            color: filterMatched === f ? T.surface : T.inkMid,
                                             cursor: 'pointer',
                                             fontSize: '0.8125rem',
                                             fontWeight: '600'
@@ -381,16 +382,16 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                         </div>
 
                         {/* Email List */}
-                        <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                        <div style={{ maxHeight: '400px', overflowY: 'auto', border: `1px solid ${T.border}`, borderRadius: '8px' }}>
                             {getFilteredResults().length === 0 ? (
-                                <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                                <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMid }}>
                                     No emails match this filter
                                 </div>
                             ) : (
                                 getFilteredResults().map((email) => (
                                     <div key={email._idx} style={{
                                         padding: '0.875rem 1rem',
-                                        borderBottom: '1px solid #e2e8f0',
+                                        borderBottom: `1px solid ${T.border}`,
                                         display: 'flex',
                                         gap: '0.75rem',
                                         alignItems: 'flex-start',
@@ -407,10 +408,10 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                                             <div style={{ fontWeight: '600', fontSize: '0.875rem', marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {email.subject || '(No subject)'}
                                             </div>
-                                            <div style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            <div style={{ fontSize: '0.8125rem', color: T.inkMid, marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 To: {email.to || '-'}
                                             </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                            <div style={{ fontSize: '0.75rem', color: T.inkMuted }}>
                                                 {email.date || 'No date'}
                                             </div>
                                         </div>
@@ -418,8 +419,8 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                                             {email.hasMatch ? (
                                                 <div>
                                                     <span style={{
-                                                        background: '#d1fae5',
-                                                        color: '#047857',
+                                                        background: `${T.ok}18`,
+                                                        color: T.ok,
                                                         padding: '0.2rem 0.5rem',
                                                         borderRadius: '4px',
                                                         fontSize: '0.7rem',
@@ -427,19 +428,19 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                                                     }}>
                                                         ✓ Matched
                                                     </span>
-                                                    <div style={{ fontSize: '0.75rem', color: '#2563eb', marginTop: '0.25rem', fontWeight: '600' }}>
+                                                    <div style={{ fontSize: '0.75rem', color: T.info, marginTop: '0.25rem', fontWeight: '600' }}>
                                                         {email.matchedContacts.map(c => `${c.firstName} ${c.lastName}`).join(', ')}
                                                     </div>
                                                     {email.matchedOpportunity && (
-                                                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.125rem' }}>
+                                                        <div style={{ fontSize: '0.7rem', color: T.inkMid, marginTop: '0.125rem' }}>
                                                             Opp: {email.matchedOpportunity.account}
                                                         </div>
                                                     )}
                                                 </div>
                                             ) : (
                                                 <span style={{
-                                                    background: '#fef3c7',
-                                                    color: '#92400e',
+                                                    background: `${T.warn}18`,
+                                                    color: T.warn,
                                                     padding: '0.2rem 0.5rem',
                                                     borderRadius: '4px',
                                                     fontSize: '0.7rem',
@@ -480,19 +481,19 @@ export default function OutlookImportModal({ contacts, opportunities, activities
                         <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem' }}>Import Complete!</h3>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '2rem', fontWeight: '800', color: '#2563eb' }}>{importStats?.total || 0}</div>
-                                <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Activities Created</div>
+                                <div style={{ fontSize: '2rem', fontWeight: '800', color: T.info }}>{importStats?.total || 0}</div>
+                                <div style={{ fontSize: '0.8125rem', color: T.inkMid }}>Activities Created</div>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '2rem', fontWeight: '800', color: '#10b981' }}>{importStats?.matched || 0}</div>
-                                <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Linked to Contacts</div>
+                                <div style={{ fontSize: '2rem', fontWeight: '800', color: T.ok }}>{importStats?.matched || 0}</div>
+                                <div style={{ fontSize: '0.8125rem', color: T.inkMid }}>Linked to Contacts</div>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '2rem', fontWeight: '800', color: '#f59e0b' }}>{importStats?.unmatched || 0}</div>
-                                <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Unlinked</div>
+                                <div style={{ fontSize: '2rem', fontWeight: '800', color: T.warn }}>{importStats?.unmatched || 0}</div>
+                                <div style={{ fontSize: '0.8125rem', color: T.inkMid }}>Unlinked</div>
                             </div>
                         </div>
-                        <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                        <p style={{ color: T.inkMid, fontSize: '0.875rem', marginBottom: '1.5rem' }}>
                             Imported emails appear in your Activity Timeline as "Email" activities. Matched emails are automatically linked to their corresponding contacts{importStats?.matched > 0 ? ' and opportunities' : ''}.
                         </p>
                         <button className="btn" onClick={onClose}>Done</button>

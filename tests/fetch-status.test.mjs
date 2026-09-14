@@ -48,7 +48,8 @@ test('every loader reports through dbStatusOf; nothing sets the outage flag on a
     }
     const app = read('src/App.jsx');
     assert.ok(app.includes('<span>{bannerCopyOf(dbOffline).text}</span>'), 'the banner copy comes from the state');
-    assert.ok(app.includes("background: dbOffline === 'auth' ? '#b45309' : '#dc2626'"), 'the auth banner is amber, the outage banner red');
+    // Tokens since the blue-era sweep (state §0.136): warn for the auth banner, danger for the outage.
+    assert.ok(app.includes("background: dbOffline === 'auth' ? T.warn : T.danger"), 'the auth banner is amber, the outage banner red');
     assert.ok(!app.includes('<span>Database connection lost'), 'no hardcoded outage sentence');
 });
 

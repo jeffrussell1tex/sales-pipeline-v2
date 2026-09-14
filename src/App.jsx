@@ -39,6 +39,7 @@ import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
 import DispatchTab from './Tabs/DispatchTab';
 import ErrorBoundary from './components/ErrorBoundary';
+import { T } from './tokens.js';
 
 
 function App() {
@@ -1455,7 +1456,7 @@ dbFetch('/.netlify/functions/users?me=true')
         return (
             <div className="login-page">
                 <div className="login-card" style={{ textAlign: 'center', padding: '3rem' }}>
-                    <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
+                    <div style={{ color: T.inkMuted, fontSize: '0.875rem' }}>Loading…</div>
                 </div>
             </div>
         );
@@ -1467,13 +1468,13 @@ dbFetch('/.netlify/functions/users?me=true')
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '2rem' }}>
                     <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
                         <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: '56px', height: '56px', display: 'block', margin: '0 auto 0.75rem' }}>
-                            <rect width="100" height="100" rx="20" fill="#2563eb"/>
-                            <path d="M25 65 L25 45 L35 45 L35 65Z M42 65 L42 35 L52 35 L52 65Z M59 65 L59 50 L69 50 L69 65Z" fill="white"/>
-                            <path d="M22 40 L45 25 L68 32 L80 20" stroke="#34d399" strokeWidth="4" fill="none" strokeLinecap="round"/>
-                            <circle cx="80" cy="20" r="4" fill="#34d399"/>
+                            <rect width="100" height="100" rx="20" fill={T.ink}/>
+                            <path d="M25 65 L25 45 L35 45 L35 65Z M42 65 L42 35 L52 35 L52 65Z M59 65 L59 50 L69 50 L69 65Z" fill={T.surface}/>
+                            <path d="M22 40 L45 25 L68 32 L80 20" stroke={T.ok} strokeWidth="4" fill="none" strokeLinecap="round"/>
+                            <circle cx="80" cy="20" r="4" fill={T.ok}/>
                         </svg>
-                        <h1 style={{ color: '#fff', fontSize: '1.5rem', fontWeight: '700', margin: '0 0 0.25rem' }}>Sales Pipeline Tracker</h1>
-                        <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: 0 }}>Sign in to continue</p>
+                        <h1 style={{ color: T.surface, fontSize: '1.5rem', fontWeight: '700', margin: '0 0 0.25rem' }}>Sales Pipeline Tracker</h1>
+                        <p style={{ color: T.inkMuted, fontSize: '0.875rem', margin: 0 }}>Sign in to continue</p>
                     </div>
                     <SignIn routing="hash" />
                 </div>
@@ -1486,11 +1487,11 @@ dbFetch('/.netlify/functions/users?me=true')
             <div className="login-page">
                 <div className="login-card" style={{ textAlign: 'center', padding: '3rem', maxWidth: '420px', margin: '10vh auto' }}>
                     <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏢</div>
-                    <h2 style={{ color: '#1e293b', fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No Organization Found</h2>
-                    <p style={{ color: '#64748b', fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+                    <h2 style={{ color: T.ink, fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No Organization Found</h2>
+                    <p style={{ color: T.inkMid, fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
                         You haven't been added to a company yet. Contact your administrator to be invited to your organization.
                     </p>
-                    <button onClick={() => signOut()} style={{ padding: '0.5rem 1.5rem', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', color: '#475569' }}>
+                    <button onClick={() => signOut()} style={{ padding: '0.5rem 1.5rem', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', color: T.inkMid }}>
                         Sign Out
                     </button>
                 </div>
@@ -1753,12 +1754,12 @@ dbFetch('/.netlify/functions/users?me=true')
 
             {/* ── DB OFFLINE / SIGN-IN BANNER — dbOffline is false | 'auth' | true (fetchStatus.js) ── */}
             {dbOffline && (
-                <div style={{ background: dbOffline === 'auth' ? '#b45309' : '#dc2626', color:'#fff', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'0.8125rem', fontWeight:'600', zIndex:9999 }}>
+                <div style={{ background: dbOffline === 'auth' ? T.warn : T.danger, color:T.surface, padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'0.8125rem', fontWeight:'600', zIndex:9999 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'0.625rem' }}>
                         <span style={{ fontSize:'1rem' }}>⚠️</span>
                         <span>{bannerCopyOf(dbOffline).text}</span>
                     </div>
-                    <button onClick={() => setDbOffline(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:'4px', padding:'2px 8px', cursor:'pointer', fontSize:'0.75rem', fontWeight:'700', fontFamily:'inherit' }}>✕</button>
+                    <button onClick={() => setDbOffline(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:T.surface, borderRadius:'4px', padding:'2px 8px', cursor:'pointer', fontSize:'0.75rem', fontWeight:'700', fontFamily:'inherit' }}>✕</button>
                 </div>
             )}
 
@@ -1788,13 +1789,13 @@ dbFetch('/.netlify/functions/users?me=true')
                             return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate + 'T12:00:00') < now;
                         }).length;
                         return overdueCount > 0 ? (
-                            <span style={{ position: 'absolute', top: '3px', right: '3px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
+                            <span style={{ position: 'absolute', top: '3px', right: '3px', background: T.danger, color: T.surface, borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
                                 {overdueCount > 99 ? '99+' : overdueCount}
                             </span>
                         ) : null;
                     })()}
                     {(opportunities || []).reduce((acc, opp) => acc + (opp.comments || []).filter(c => c.timestamp > feedLastRead && c.author !== currentUser && (c.mentions || []).includes(currentUser)).length, 0) > 0 && (
-                        <span style={{ position: 'absolute', top: '4px', right: '4px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '13px', height: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 2px', lineHeight: 1 }}>!</span>
+                        <span style={{ position: 'absolute', top: '4px', right: '4px', background: T.danger, color: T.surface, borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '13px', height: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 2px', lineHeight: 1 }}>!</span>
                     )}
                 </button>
                 <button 
@@ -1981,8 +1982,8 @@ dbFetch('/.netlify/functions/users?me=true')
 
                 // Deal health
                 const health = matchedOpp ? calculateDealHealth(matchedOpp) : null;
-                const healthColor = health ? (health.score >= 70 ? '#10b981' : health.score >= 40 ? '#f59e0b' : '#ef4444') : '#94a3b8';
-                const healthBg = health ? (health.score >= 70 ? '#d1fae5' : health.score >= 40 ? '#fef3c7' : '#fee2e2') : '#f1f5f9';
+                const healthColor = health ? (health.score >= 70 ? T.ok : health.score >= 40 ? T.warn : T.danger) : T.inkMuted;
+                const healthBg = health ? (health.score >= 70 ? `${T.ok}18` : health.score >= 40 ? `${T.warn}18` : `${T.danger}14`) : T.surface2;
 
                 return (
                     <>
@@ -1991,38 +1992,38 @@ dbFetch('/.netlify/functions/users?me=true')
                             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 9000 }} />
 
                         {/* Slide-in panel */}
-                        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: '#fff', zIndex: 9001, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: T.surface, zIndex: 9001, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
                             {/* Header */}
-                            <div style={{ background: '#1c1917', padding: '1.25rem 1.5rem', color: '#f5f1eb', flexShrink: 0 }}>
+                            <div style={{ background: '#1c1917', padding: '1.25rem 1.5rem', color: T.surface, flexShrink: 0 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <div style={{ width: '3px', height: '16px', background: '#c8b99a', borderRadius: '2px' }} />
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#c8b99a', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Meeting Prep</div>
+                                        <div style={{ width: '3px', height: '16px', background: T.gold, borderRadius: '2px' }} />
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.gold, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Meeting Prep</div>
                                     </div>
                                     <button onClick={() => setMeetingPrepOpen(false)}
-                                        style={{ background: 'rgba(245,241,235,0.1)', border: '1px solid rgba(245,241,235,0.15)', color: '#f5f1eb', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: 'inherit' }}>✕</button>
+                                        style={{ background: 'rgba(245,241,235,0.1)', border: '1px solid rgba(245,241,235,0.15)', color: T.surface, borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: 'inherit' }}>✕</button>
                                 </div>
-                                <div style={{ fontWeight: '700', fontSize: '1rem', lineHeight: 1.3, marginBottom: '0.375rem', color: '#f5f1eb' }}>{evTitle}</div>
-                                <div style={{ fontSize: '0.8125rem', color: '#a8a29e' }}>
+                                <div style={{ fontWeight: '700', fontSize: '1rem', lineHeight: 1.3, marginBottom: '0.375rem', color: T.surface }}>{evTitle}</div>
+                                <div style={{ fontSize: '0.8125rem', color: T.inkMuted }}>
                                     {evDate} · {evTime}{evEnd ? ' – ' + evEnd : ''}{ev.attendeeCount > 0 ? ` · ${ev.attendeeCount} attendees` : ''}
                                 </div>
                             </div>
 
-                            <div style={{ flex: 1, padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', background: '#f0ece4' }}>
+                            <div style={{ flex: 1, padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', background: T.bg }}>
 
                                 {/* Opportunity match */}
                                 {matchedOpp ? (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Linked Opportunity</div>
-                                        <div style={{ background: '#fff', border: '1px solid #ddd8cf', borderRadius: '10px', padding: '0.75rem 1rem' }}>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Linked Opportunity</div>
+                                        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: '10px', padding: '0.75rem 1rem' }}>
                                             <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1c1917', marginBottom: '0.25rem' }}>{matchedOpp.opportunityName || matchedOpp.account}</div>
-                                            <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>{matchedOpp.account} · {matchedOpp.stage}</div>
-                                            <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#2563eb', marginTop: '0.25rem' }}>${(matchedOpp.arr || 0).toLocaleString()} Revenue</div>
+                                            <div style={{ fontSize: '0.8125rem', color: T.inkMid }}>{matchedOpp.account} · {matchedOpp.stage}</div>
+                                            <div style={{ fontWeight: '700', fontSize: '0.875rem', color: T.info, marginTop: '0.25rem' }}>${(matchedOpp.arr || 0).toLocaleString()} Revenue</div>
                                         </div>
                                     </div>
                                 ) : (
-                                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.8125rem', color: '#92400e' }}>
+                                    <div style={{ background: `${T.warn}18`, border: `1px solid ${T.warn}40`, borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.8125rem', color: T.warn }}>
                                         No matching opportunity found. Link this event to a deal by logging it as an activity.
                                     </div>
                                 )}
@@ -2030,17 +2031,17 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Deal Health */}
                                 {health && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Deal Health</div>
-                                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem' }}>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Deal Health</div>
+                                        <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '0.75rem 1rem' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                                                 <span style={{ fontWeight: '800', fontSize: '1.5rem', color: healthColor }}>{health.score}</span>
                                                 <span style={{ background: healthBg, color: healthColor, fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.625rem', borderRadius: '999px' }}>{health.score >= 70 ? 'Healthy' : health.score >= 40 ? 'At Risk' : 'Critical'}</span>
                                             </div>
-                                            <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+                                            <div style={{ height: '6px', background: T.border, borderRadius: '3px', overflow: 'hidden', marginBottom: '0.5rem' }}>
                                                 <div style={{ height: '100%', width: health.score + '%', background: healthColor, borderRadius: '3px', transition: 'width 0.4s ease' }} />
                                             </div>
                                             {health.reasons.slice(0, 2).map((r, i) => (
-                                                <div key={i} style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>· {r}</div>
+                                                <div key={i} style={{ fontSize: '0.75rem', color: T.inkMid, marginTop: '0.25rem' }}>· {r}</div>
                                             ))}
                                         </div>
                                     </div>
@@ -2049,8 +2050,8 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Account details */}
                                 {matchedAccount && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Account</div>
-                                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Account</div>
+                                        <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '0.75rem 1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                                             {[
                                                 ['Industry', matchedAccount.industry],
                                                 ['Owner', matchedAccount.accountOwner],
@@ -2058,8 +2059,8 @@ dbFetch('/.netlify/functions/users?me=true')
                                                 ['Website', matchedAccount.website],
                                             ].filter(([, v]) => v).map(([label, value]) => (
                                                 <div key={label}>
-                                                    <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
-                                                    <div style={{ fontSize: '0.8125rem', color: '#1e293b', fontWeight: '500', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
+                                                    <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+                                                    <div style={{ fontSize: '0.8125rem', color: T.ink, fontWeight: '500', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
                                                 </div>
                                             ))}
                                         </div>
@@ -2069,21 +2070,21 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Contacts */}
                                 {matchedOpp && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Contacts</div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Contacts</div>
                                         {matchedContacts.length === 0 ? (
-                                            <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No contacts found for this account</div>
+                                            <div style={{ fontSize: '0.8125rem', color: T.inkMuted, fontStyle: 'italic' }}>No contacts found for this account</div>
                                         ) : (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                                                 {matchedContacts.map(c => (
-                                                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-                                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '700', color: '#2563eb', flexShrink: 0 }}>
+                                                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.75rem', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px' }}>
+                                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: `${T.info}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '700', color: T.info, flexShrink: 0 }}>
                                                             {(c.firstName?.[0] || '') + (c.lastName?.[0] || '')}
                                                         </div>
                                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{c.firstName} {c.lastName}</div>
-                                                            <div style={{ fontSize: '0.6875rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[c.title, c.email].filter(Boolean).join(' · ')}</div>
+                                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink }}>{c.firstName} {c.lastName}</div>
+                                                            <div style={{ fontSize: '0.6875rem', color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[c.title, c.email].filter(Boolean).join(' · ')}</div>
                                                         </div>
-                                                        {c.phone && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', flexShrink: 0 }}>{c.phone}</div>}
+                                                        {c.phone && <div style={{ fontSize: '0.6875rem', color: T.inkMuted, flexShrink: 0 }}>{c.phone}</div>}
                                                     </div>
                                                 ))}
                                             </div>
@@ -2094,17 +2095,17 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Recent Activities */}
                                 {matchedOpp && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Recent Activities</div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Recent Activities</div>
                                         {recentActivities.length === 0 ? (
-                                            <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No activities logged yet</div>
+                                            <div style={{ fontSize: '0.8125rem', color: T.inkMuted, fontStyle: 'italic' }}>No activities logged yet</div>
                                         ) : (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                                                 {recentActivities.map(a => (
-                                                    <div key={a.id} style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-start', padding: '0.5rem 0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-                                                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#2563eb', background: '#eff6ff', padding: '0.15rem 0.375rem', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>{a.type}</div>
+                                                    <div key={a.id} style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-start', padding: '0.5rem 0.75rem', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px' }}>
+                                                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.info, background: `${T.info}14`, padding: '0.15rem 0.375rem', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>{a.type}</div>
                                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                                            <div style={{ fontSize: '0.75rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.notes || '—'}</div>
-                                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '0.1rem' }}>{a.date}</div>
+                                                            <div style={{ fontSize: '0.75rem', color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.notes || '—'}</div>
+                                                            <div style={{ fontSize: '0.6875rem', color: T.inkMuted, marginTop: '0.1rem' }}>{a.date}</div>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -2116,19 +2117,19 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Open Tasks */}
                                 {matchedOpp && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Open Tasks</div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Open Tasks</div>
                                         {openTasks.length === 0 ? (
-                                            <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No open tasks</div>
+                                            <div style={{ fontSize: '0.8125rem', color: T.inkMuted, fontStyle: 'italic' }}>No open tasks</div>
                                         ) : (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                                                 {openTasks.map(t => (
-                                                    <div key={t.id} style={{ display: 'flex', gap: '0.625rem', alignItems: 'center', padding: '0.5rem 0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-                                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: t.priority === 'High' ? '#ef4444' : t.priority === 'Low' ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
+                                                    <div key={t.id} style={{ display: 'flex', gap: '0.625rem', alignItems: 'center', padding: '0.5rem 0.75rem', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px' }}>
+                                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: t.priority === 'High' ? T.danger : t.priority === 'Low' ? T.ok : T.warn, flexShrink: 0 }} />
                                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
-                                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>Due {t.dueDate || '—'}</div>
+                                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                                                            <div style={{ fontSize: '0.6875rem', color: T.inkMuted }}>Due {t.dueDate || '—'}</div>
                                                         </div>
-                                                        <span style={{ fontSize: '0.6875rem', color: '#64748b', background: '#e2e8f0', padding: '0.1rem 0.375rem', borderRadius: '4px', flexShrink: 0 }}>{t.type}</span>
+                                                        <span style={{ fontSize: '0.6875rem', color: T.inkMid, background: T.border, padding: '0.1rem 0.375rem', borderRadius: '4px', flexShrink: 0 }}>{t.type}</span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -2138,13 +2139,13 @@ dbFetch('/.netlify/functions/users?me=true')
                             </div>
 
                             {/* Footer actions */}
-                            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #ddd8cf', display: 'flex', gap: '0.5rem', flexShrink: 0, background: '#fff' }}>
+                            <div style={{ padding: '1rem 1.5rem', borderTop: `1px solid ${T.border}`, display: 'flex', gap: '0.5rem', flexShrink: 0, background: T.surface }}>
                                 <button onClick={() => { setMeetingPrepOpen(false); handleAddActivity(matchedOpp?.id || null); }}
-                                    style={{ flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', background: '#1c1917', color: '#f5f1eb', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    style={{ flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', background: '#1c1917', color: T.surface, fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     + Log Activity
                                 </button>
                                 <button onClick={() => { setMeetingPrepOpen(false); setTaskRailId('new'); setTaskRailMode('new'); setEditingTask({ opportunityId: matchedOpp?.id || '', relatedTo: matchedOpp?.id || '' }); }}
-                                    style={{ flex: 1, padding: '0.5rem', border: '1px solid #ddd8cf', borderRadius: '8px', background: '#e8e3da', color: '#78716c', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    style={{ flex: 1, padding: '0.5rem', border: `1px solid ${T.border}`, borderRadius: '8px', background: T.border, color: T.inkMuted, fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     + Add Task
                                 </button>
                             </div>
@@ -2160,17 +2161,17 @@ dbFetch('/.netlify/functions/users?me=true')
             {showNavGuard && (
                 <div style={{ position:'fixed', inset:0, zIndex:99999, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(42,38,34,0.55)' }}
                      onClick={navGuardCancel}>
-                    <div style={{ background:'#fbf8f3', borderRadius:8, boxShadow:'0 24px 64px rgba(42,38,34,0.22)', width:420, padding:'28px 32px', fontFamily:'"Plus Jakarta Sans",system-ui,sans-serif' }}
+                    <div style={{ background:T.surface, borderRadius:8, boxShadow:'0 24px 64px rgba(42,38,34,0.22)', width:420, padding:'28px 32px', fontFamily:'"Plus Jakarta Sans",system-ui,sans-serif' }}
                          onClick={e => e.stopPropagation()}>
-                        <div style={{ fontSize:17, fontWeight:700, color:'#2a2622', marginBottom:8 }}>Unsaved changes</div>
-                        <div style={{ fontSize:13.5, color:'#5a544c', lineHeight:1.55, marginBottom:24 }}>You have unsaved changes in Settings. Save them before leaving, or discard and continue.</div>
+                        <div style={{ fontSize:17, fontWeight:700, color:T.ink, marginBottom:8 }}>Unsaved changes</div>
+                        <div style={{ fontSize:13.5, color:T.inkMid, lineHeight:1.55, marginBottom:24 }}>You have unsaved changes in Settings. Save them before leaving, or discard and continue.</div>
                         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                             <button onClick={navGuardCancel}
-                                style={{ padding:'10px 16px', background:'#2a2622', color:'#fbf8f3', border:'none', borderRadius:4, fontSize:13.5, fontWeight:600, cursor:'pointer', textAlign:'left' }}>
+                                style={{ padding:'10px 16px', background:T.ink, color:T.surface, border:'none', borderRadius:4, fontSize:13.5, fontWeight:600, cursor:'pointer', textAlign:'left' }}>
                                 Stay on Settings (save first)
                             </button>
                             <button onClick={navGuardDiscard}
-                                style={{ padding:'10px 16px', background:'transparent', color:'#9c3a2e', border:'1px solid #e6ddd0', borderRadius:4, fontSize:13.5, fontWeight:500, cursor:'pointer', textAlign:'left' }}>
+                                style={{ padding:'10px 16px', background:'transparent', color:T.danger, border:`1px solid ${T.border}`, borderRadius:4, fontSize:13.5, fontWeight:500, cursor:'pointer', textAlign:'left' }}>
                                 Discard changes and continue
                             </button>
                         </div>

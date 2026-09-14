@@ -736,7 +736,7 @@ const T = {
 (Since 14 Sep 2026 — state §0.130 — `src/tokens.js` is the only token literal in the tree. The Settings panels reach it through `settings/shared/tokens.js` and the Documents surfaces through `documents/atoms.jsx`, both re-exports. `DispatchTab` derives `const T = { ...TOKENS, r: 4 }` — the one recorded divergence. `tests/single-token-file.test.mjs` fails on any new local copy, any read of a key the object lacks, and any second override. **A new file never declares `T`; it imports it.** The object also carries `stages`, `mono`, `tint`, `surfaceInk`/`surfaceInkFg` and the radii `rSm`/`rMd`/`rLg` — the union of what the copies had.)
 
 **Hard rules:**
-- **No generic colors.** `#2563eb` and other off-brand blues/grays are forbidden — use `T.info`, `T.ink`, etc. (The old sub-tab style in §15 with `#2563eb` is off-brand; new tabs use `T.*`.)
+- **No generic colors.** `#2563eb` and other off-brand blues/grays are forbidden — use `T.info`, `T.ink`, etc. (The old sub-tab style in §15 with `#2563eb` is off-brand; new tabs use `T.*`.) The sweep that moved the six blue-era modal files onto the tokens is `scripts/migrate-blue-era.mjs` (state §0.136): add a file to its list, read the dry run, apply — it decides a blue by ROLE (a background is the ink button, a text or border is `T.info`), keeps data palettes by what the line says, and `tests/blue-era-sweep.test.mjs` keeps a swept file clean.
 - **Inline styles only.** No `btn` / `btn-secondary` / `action-btn` / `modal-actions` classes in new/edited components.
 - Pills: `borderRadius: 999`. Dark drag-handle headers: `#1c1917`. Base radius `T.r` (3).
 

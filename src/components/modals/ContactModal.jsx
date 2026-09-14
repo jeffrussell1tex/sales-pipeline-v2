@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
+import { T } from '../../tokens.js';
 
 // Module scope, NOT inside ContactModal. Declared inline it was a new component
 // type on every parent render, so React unmounted and remounted it — and because
@@ -27,11 +28,11 @@ const ContactSearchField = ({ label, searchVal, setSearchVal, showSugg, setShowS
             {(selectedItems || []).length > 0 && (
                 <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.375rem' }}>
                     {(selectedItems || []).map((p, i) => (
-                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', background: '#dbeafe', color: '#1e40af', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}>
+                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', background: `${T.info}14`, color: T.info, padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}>
                             {p.name}
                             <button type="button"
                                 onClick={() => handleChange(fieldName, selectedItems.filter((_, idx) => idx !== i))}
-                                style={{ background: 'none', border: 'none', color: '#1e40af', cursor: 'pointer', fontSize: '0.875rem', padding: 0, lineHeight: 1 }}>×</button>
+                                style={{ background: 'none', border: 'none', color: T.info, cursor: 'pointer', fontSize: '0.875rem', padding: 0, lineHeight: 1 }}>×</button>
                         </span>
                     ))}
                 </div>
@@ -42,24 +43,24 @@ const ContactSearchField = ({ label, searchVal, setSearchVal, showSugg, setShowS
                 onBlur={() => setTimeout(() => setShowSugg(false), 250)}
                 autoComplete="off" />
             {showDropdown && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                     {filtered.slice(0, 8).map(c => (
                         <div key={c.id}
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { handleChange(fieldName, [...(selectedItems || []), { id: c.id, name: c.firstName + ' ' + c.lastName }]); setSearchVal(''); setShowSugg(false); }}
-                            style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', fontSize: '0.875rem', borderBottom: '1px solid #f1f3f5' }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
+                            style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', fontSize: '0.875rem', borderBottom: `1px solid ${T.surface2}` }}
+                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             <strong>{c.firstName} {c.lastName}</strong>
-                            {c.title   && <span style={{ color: '#64748b' }}> — {c.title}</span>}
-                            {c.company && <span style={{ color: '#94a3b8' }}> ({c.company})</span>}
+                            {c.title   && <span style={{ color: T.inkMid }}> — {c.title}</span>}
+                            {c.company && <span style={{ color: T.inkMuted }}> ({c.company})</span>}
                         </div>
                     ))}
                     <div
                         onMouseDown={e => e.preventDefault()}
                         onClick={() => openNestedNewContact(fieldName, searchVal)}
-                        style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', color: '#2563eb', fontWeight: '600', fontSize: '0.875rem', borderTop: filtered.length > 0 ? '1px solid #e2e8f0' : 'none' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                        style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', color: T.info, fontWeight: '600', fontSize: '0.875rem', borderTop: filtered.length > 0 ? `1px solid ${T.border}` : 'none' }}
+                        onMouseEnter={e => e.currentTarget.style.background = `${T.info}14`}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         + New Contact
                     </div>
@@ -189,9 +190,9 @@ export default function ContactModal({
     const tabBtnStyle = (active) => ({
         padding: '0.5rem 1.25rem',
         border: 'none',
-        borderBottom: active ? '2px solid #2563eb' : '2px solid transparent',
+        borderBottom: active ? `2px solid ${T.info}` : '2px solid transparent',
         background: 'transparent',
-        color: active ? '#2563eb' : '#64748b',
+        color: active ? T.info : T.inkMid,
         fontWeight: active ? '700' : '500',
         fontSize: '0.875rem',
         cursor: 'pointer',
@@ -206,11 +207,11 @@ export default function ContactModal({
         {errorMessage && (
             <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
                  onClick={e => e.stopPropagation()}>
-                <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: '420px', width: '90%', textAlign: 'center' }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.5rem' }}>⚠️</div>
-                    <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.0625rem', fontWeight: '700', color: '#1e293b' }}>Failed to Save Contact</h3>
-                    <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6 }}>{errorMessage}</p>
-                    <button onClick={onDismissError} style={{ padding: '0.5rem 1.5rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#1e293b', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>OK</button>
+                <div style={{ background: T.surface, borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: '420px', width: '90%', textAlign: 'center' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: `${T.danger}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.5rem' }}>⚠️</div>
+                    <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.0625rem', fontWeight: '700', color: T.ink }}>Failed to Save Contact</h3>
+                    <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: T.inkMid, lineHeight: 1.6 }}>{errorMessage}</p>
+                    <button onClick={onDismissError} style={{ padding: '0.5rem 1.5rem', borderRadius: '6px', border: `1px solid ${T.border}`, background: T.surface2, color: T.ink, fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>OK</button>
                 </div>
             </div>
         )}
@@ -232,10 +233,10 @@ export default function ContactModal({
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
-                background: '#fff',
+                background: T.surface,
                 borderRadius: '12px',
                 boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
-                border: '1px solid #e5e2db',
+                border: `1px solid ${T.border}`,
             }}
         >
             {/* ── Drag handle header ── */}
@@ -253,14 +254,14 @@ export default function ContactModal({
                     flexShrink: 0,
                 }}
             >
-                <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', cursor: 'inherit', userSelect: 'none' }}>
+                <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: T.surface, cursor: 'inherit', userSelect: 'none' }}>
                     {contact ? 'Edit Contact' : 'New Contact'}
                 </h2>
                 <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em' }}>⠿ drag</span>
             </div>
 
             {/* ── Sub-tabs ── */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#fafaf9', flexShrink: 0 }}>
+            <div style={{ display: 'flex', borderBottom: `1px solid ${T.border}`, background: T.surface, flexShrink: 0 }}>
                 <button style={tabBtnStyle(activeContactTab === 'primary')}    onClick={() => setActiveContactTab('primary')}>Primary Info</button>
                 <button style={tabBtnStyle(activeContactTab === 'additional')} onClick={() => setActiveContactTab('additional')}>Additional Info</button>
             </div>
@@ -298,18 +299,18 @@ export default function ContactModal({
                                     onFocus={() => setShowCompanySuggestions(companySearch.length > 0)}
                                     autoComplete="off" />
                                 {showCompanySuggestions && (
-                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                         {filteredAccounts.map(acc => (
                                             <div key={acc.id} onClick={() => handleSelectCompany(acc.name)}
-                                                style={{ padding: '0.75rem', cursor: 'pointer', borderBottom: '1px solid #e2e8f0' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
+                                                style={{ padding: '0.75rem', cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
+                                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                                 {acc.name}
                                             </div>
                                         ))}
                                         <div onClick={handleAddNewAccount}
-                                            style={{ padding: '0.75rem', cursor: 'pointer', color: '#2563eb', fontWeight: '600' }}
-                                            onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
+                                            style={{ padding: '0.75rem', cursor: 'pointer', color: T.info, fontWeight: '600' }}
+                                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                             + Add New Account
                                         </div>
@@ -327,7 +328,7 @@ export default function ContactModal({
                             {/* Address */}
                             <div className="form-group full"><label>Street Address</label><input type="text" value={formData.address} onChange={e => handleChange('address', e.target.value)} placeholder="123 Main Street" /></div>
                             <div className="form-group full">
-                                <label>Address Line 2 <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>Suite, floor, unit, etc.</span></label>
+                                <label>Address Line 2 <span style={{ fontSize: '0.75rem', color: T.inkMuted, fontWeight: '400' }}>Suite, floor, unit, etc.</span></label>
                                 <input type="text" value={formData.address2 || ''} onChange={e => handleChange('address2', e.target.value)} placeholder="Suite 100" />
                             </div>
                             <div className="form-group"><label>City</label><input type="text" value={formData.city} onChange={e => handleChange('city', e.target.value)} /></div>
@@ -344,19 +345,19 @@ export default function ContactModal({
                                     onBlur={() => setTimeout(() => setShowContactRepSugg(false), 200)}
                                     placeholder="Type or select rep..." autoComplete="off" />
                                 {showContactRepSugg && (
-                                    <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                         {contactAllRepNames.filter(r => r.toLowerCase().includes(contactRepSearch.toLowerCase())).map((r, i) => (
                                             <div key={i}
                                                 onMouseDown={e => e.preventDefault()}
                                                 onClick={() => { setContactRepSearch(r); setShowContactRepSugg(false); }}
-                                                style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontSize: '0.875rem', fontWeight: '600' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
+                                                style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: `1px solid ${T.surface2}`, fontSize: '0.875rem', fontWeight: '600' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                                 {r}
                                             </div>
                                         ))}
                                         {contactAllRepNames.filter(r => r.toLowerCase().includes(contactRepSearch.toLowerCase())).length === 0 && (
-                                            <div style={{ padding: '0.625rem 0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No reps found — add in Settings</div>
+                                            <div style={{ padding: '0.625rem 0.75rem', color: T.inkMuted, fontSize: '0.8125rem' }}>No reps found — add in Settings</div>
                                         )}
                                     </div>
                                 )}
@@ -379,7 +380,7 @@ export default function ContactModal({
                                         autoComplete="off"
                                     />
                                     {showPersonaSugg && (
-                                        <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                        <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                             {(settings.buyerPersonas || [])
                                                 .filter(p => {
                                                     // Support both legacy strings and rich objects
@@ -393,8 +394,8 @@ export default function ContactModal({
                                                         <div key={i}
                                                             onMouseDown={e => e.preventDefault()}
                                                             onClick={() => { setPersonaSearch(name); handleChange('buyerPersona', name); setShowPersonaSugg(false); }}
-                                                            style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                                                            onMouseEnter={e => e.currentTarget.style.background = '#f8f6f2'}
+                                                            style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: `1px solid ${T.surface2}`, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = T.surface}
                                                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                                             {isRich && (
                                                                 <span style={{ width: 20, height: 20, borderRadius: 3, background: `${p.color}22`, border: `1px solid ${p.color}55`, color: p.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
@@ -402,7 +403,7 @@ export default function ContactModal({
                                                                 </span>
                                                             )}
                                                             <span style={{ fontSize: '0.875rem', fontWeight: '600', color: isRich ? p.color : 'inherit' }}>{name}</span>
-                                                            {isRich && p.desc && <span style={{ fontSize: '0.75rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.desc}</span>}
+                                                            {isRich && p.desc && <span style={{ fontSize: '0.75rem', color: T.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.desc}</span>}
                                                         </div>
                                                     );
                                                 })
@@ -411,7 +412,7 @@ export default function ContactModal({
                                                 const name = typeof p === 'string' ? p : p.name;
                                                 return (p.active !== false) && name.toLowerCase().includes(personaSearch.toLowerCase());
                                             }).length === 0 && (
-                                                <div style={{ padding: '0.625rem 0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No personas match — add in Settings</div>
+                                                <div style={{ padding: '0.625rem 0.75rem', color: T.inkMuted, fontSize: '0.8125rem' }}>No personas match — add in Settings</div>
                                             )}
                                         </div>
                                     )}
@@ -422,17 +423,17 @@ export default function ContactModal({
                                 <label>Do Not Contact</label>
                                 <div
                                     onClick={() => setFormData(prev => ({ ...prev, doNotContact: !prev.doNotContact }))}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', userSelect: 'none', padding: '0.625rem 0.875rem', borderRadius: '8px', border: formData.doNotContact ? '1px solid #fca5a5' : '1px solid #e5e2db', background: formData.doNotContact ? '#fef2f2' : '#f0ece4', transition: 'all 0.15s' }}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', userSelect: 'none', padding: '0.625rem 0.875rem', borderRadius: '8px', border: formData.doNotContact ? `1px solid ${T.danger}33` : `1px solid ${T.border}`, background: formData.doNotContact ? `${T.danger}14` : T.bg, transition: 'all 0.15s' }}
                                 >
-                                    <div style={{ width: '36px', height: '20px', borderRadius: '999px', background: formData.doNotContact ? '#dc2626' : '#d6d3ce', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
-                                        <div style={{ position: 'absolute', width: '14px', height: '14px', background: '#fff', borderRadius: '50%', top: '3px', left: formData.doNotContact ? '19px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                    <div style={{ width: '36px', height: '20px', borderRadius: '999px', background: formData.doNotContact ? T.danger : T.border, position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                                        <div style={{ position: 'absolute', width: '14px', height: '14px', background: T.surface, borderRadius: '50%', top: '3px', left: formData.doNotContact ? '19px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                                     </div>
                                     <div>
-                                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: formData.doNotContact ? '#dc2626' : '#57534e' }}>
+                                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: formData.doNotContact ? T.danger : T.inkMid }}>
                                             {formData.doNotContact ? '🚫 Do Not Contact — flagged' : 'Not flagged'}
                                         </div>
                                         {formData.doNotContact && (
-                                            <div style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '0.125rem' }}>
+                                            <div style={{ fontSize: '0.75rem', color: T.danger, marginTop: '0.125rem' }}>
                                                 Emails blocked · Activity warnings active
                                             </div>
                                         )}
@@ -473,22 +474,22 @@ export default function ContactModal({
                                     value={formData.notes || ''}
                                     onChange={e => handleChange('notes', e.target.value)}
                                     rows={4}
-                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
+                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: T.bg, color: '#1c1917', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
                                 />
                             </div>
 
                             {/* ── Custom fields ── */}
                             {(settings?.customFieldsByObject?.Contacts || []).filter(f => (f.visibility||'').includes('Detail')).length > 0 && (
                                 <>
-                                    <div className="form-group full" style={{ borderTop: '1px solid #e5e2db', paddingTop: '1rem', marginTop: '0.25rem' }}>
-                                        <label style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Custom Fields</label>
+                                    <div className="form-group full" style={{ borderTop: `1px solid ${T.border}`, paddingTop: '1rem', marginTop: '0.25rem' }}>
+                                        <label style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.gold, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Custom Fields</label>
                                     </div>
                                     {(settings?.customFieldsByObject?.Contacts || []).filter(f => (f.visibility||'').includes('Detail')).map(f => {
                                         const apiKey = f.api.replace(/^[^.]+\./, '');
                                         const val = formData[apiKey] ?? formData[f.api] ?? '';
                                         return (
                                             <div key={f.api} className="form-group">
-                                                <label>{f.label}{f.required && <span style={{ color: '#ef4444', marginLeft: 3 }}>*</span>}</label>
+                                                <label>{f.label}{f.required && <span style={{ color: T.danger, marginLeft: 3 }}>*</span>}</label>
                                                 {f.type === 'Toggle' ? (
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6 }}>
                                                         <input type="checkbox" checked={!!val} onChange={e => handleChange(apiKey, e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }}/>
@@ -514,20 +515,20 @@ export default function ContactModal({
 
                     {/* ── Duplicate warning ── */}
                     {duplicateContactWarning && (
-                        <div style={{ margin: '0 0 1rem', padding: '1rem', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px' }}>
-                            <div style={{ fontWeight: '700', color: '#92400e', marginBottom: '0.5rem' }}>⚠ Duplicate Contact Found</div>
-                            <div style={{ fontSize: '0.875rem', color: '#78350f', marginBottom: '0.75rem' }}>
+                        <div style={{ margin: '0 0 1rem', padding: '1rem', background: `${T.warn}18`, border: `1px solid ${T.warn}40`, borderRadius: '8px' }}>
+                            <div style={{ fontWeight: '700', color: T.warn, marginBottom: '0.5rem' }}>⚠ Duplicate Contact Found</div>
+                            <div style={{ fontSize: '0.875rem', color: T.warn, marginBottom: '0.75rem' }}>
                                 A contact named <strong>"{duplicateContactWarning.firstName} {duplicateContactWarning.lastName}"</strong>
                                 {duplicateContactWarning.company ? ` at ${duplicateContactWarning.company}` : ''} already exists. Create a duplicate?
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                 <button type="button"
                                     onClick={() => { setDuplicateContactWarning(null); onSave({ ...formData, company: companySearch }); }}
-                                    style={{ padding: '0.375rem 0.75rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: '600', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
+                                    style={{ padding: '0.375rem 0.75rem', background: T.warn, color: T.surface, border: 'none', borderRadius: '4px', fontWeight: '600', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
                                     Yes, Create Duplicate
                                 </button>
                                 <button type="button" onClick={() => setDuplicateContactWarning(null)}
-                                    style={{ padding: '0.375rem 0.75rem', background: '#fff', color: '#64748b', border: '1px solid #d1d5db', borderRadius: '4px', fontWeight: '600', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
+                                    style={{ padding: '0.375rem 0.75rem', background: T.surface, color: T.inkMid, border: `1px solid ${T.borderStrong}`, borderRadius: '4px', fontWeight: '600', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
                                     Cancel
                                 </button>
                             </div>
@@ -538,7 +539,7 @@ export default function ContactModal({
                     <div className="modal-actions">
                         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
                         <button type="submit" className="btn" disabled={saving} style={{ opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {saving && <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
+                            {saving && <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: T.surface, borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
                             {saving ? 'Saving…' : (contact ? 'Update' : 'Create')}
                         </button>
                     </div>
