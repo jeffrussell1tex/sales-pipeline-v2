@@ -6,6 +6,8 @@ import { dbFetch, dbWrite, waitForToken } from '../utils/storage';
 import { planVisitState, buildVisitQueue, buildRenewalQueue, renewedExpiry } from '../utils/planVisits.js';
 import { defaultWorkWeek, DEFAULT_SHIFT_HOURS } from '../utils/workWeek.js';
 import { to12h } from '../utils/customerNotifications.js';
+// The week board's drop planner — the crew after a drop, the gates, the partial PUT (state §0.134).
+import { planWeekDrop } from '../utils/weekDrop.js';
 import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 import { T as TOKENS } from '../tokens.js';
 
@@ -1664,14 +1666,72 @@ const normaliseTech = (t) => ({
 // ── Week board: technician rows x 7 day columns ───────────────────────────────
 // Keeps the "who is loaded" read of the day board. An hour axis does not extend
 // to a week (12 columns becomes 84), so the cell is the unit instead of the hour.
-const WeekBoardView = ({ jobs, techs, skills, blocks, blockTypes, anchor, onJobClick }) => {
+// A job card DRAGS to another cell (state §0.134): another day on the same row
+// moves its date; another technician's row hands that seat of the crew over;
+// the parent's onMove runs the gates and the write, and moveState is its answer
+// (busy / error / notice), shown in the strip above the grid.
+const WeekBoardView = ({ jobs, techs, skills, blocks, blockTypes, anchor, onJobClick, onMove, moveState, onDismiss }) => {
     const weekStart = startOfWeek(anchor);
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
     const todayStr = ymd(new Date());
     const RAIL_W = 190;
+    const busy = !!moveState?.busy;
+
+    // The card in hand and the cell under it. HTML5 drag: the id travels in
+    // dataTransfer for Firefox's sake; the job itself is read from props on drop.
+    const [drag, setDrag] = useState(null);   // { jobId, fromTechId }
+    const [over, setOver] = useState(null);   // { techId, dateStr }
+    const startDrag = (e, j, fromTechId) => {
+        if (busy || j.isBridge) { e.preventDefault(); return; }
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', j.id); } catch { /* older engines */ }
+        setDrag({ jobId: j.id, fromTechId });
+    };
+    const endDrag = () => { setDrag(null); setOver(null); };
+    const isOver = (techId, dateStr) => !!over && over.techId === techId && over.dateStr === dateStr;
+    const cellHandlers = (techId, dateStr) => ({
+        onDragOver: (e) => {
+            if (!drag) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (!isOver(techId, dateStr)) setOver({ techId, dateStr });
+        },
+        onDragLeave: () => { if (isOver(techId, dateStr)) setOver(null); },
+        onDrop: (e) => {
+            e.preventDefault();
+            if (!drag) return;
+            const job = jobs.find(x => x.id === drag.jobId);
+            endDrag();
+            if (job && onMove) onMove({ job, fromTechId: drag.fromTechId, toTechId: techId, toDate: dateStr });
+        },
+    });
+    const cardStyle = (j, base) => ({ ...base,
+        cursor: busy ? 'default' : drag ? 'grabbing' : 'grab',
+        opacity: drag?.jobId === j.id ? 0.45 : 1 });
+    const overStyle = (on) => on ? { outline: `2px dashed ${T.goldInk}`, outlineOffset: -2, background: `${T.gold}33` } : null;
+    const dismissBtn = { padding: '3px 8px', background: 'transparent', border: `1px solid ${T.border}`,
+        borderRadius: T.r, fontSize: 12, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, lineHeight: 1 };
 
     return (
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {moveState?.error ? (
+                <div role="alert" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px',
+                    background: `${T.danger}12`, borderBottom: `1px solid ${T.border}`, borderLeft: `3px solid ${T.danger}` }}>
+                    <span style={{ flex: 1, fontSize: 12.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{moveState.error}</span>
+                    <button onClick={onDismiss} style={dismissBtn}>Dismiss</button>
+                </div>
+            ) : moveState?.notice ? (
+                <div role="status" style={{ flexShrink: 0, padding: '7px 12px', fontSize: 12.5, color: T.ok, fontWeight: 600, fontFamily: T.sans,
+                    background: `${T.ok}12`, borderBottom: `1px solid ${T.border}`, borderLeft: `3px solid ${T.ok}` }}>
+                    {moveState.notice}
+                </div>
+            ) : (
+                <div style={{ flexShrink: 0, padding: '5px 12px', fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans,
+                    borderBottom: `1px solid ${T.border}` }}>
+                    {busy ? 'Moving\u2026' : 'Drag a job to another day to reschedule it, or onto another technician\u2019s row to hand it over.'}
+                </div>
+            )}
+            <div style={{ flex: 1, overflow: 'auto' }}>
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 3,
                 background: T.surface, borderBottom: `1px solid ${T.border}` }}>
                 <div style={{ width: RAIL_W, flexShrink: 0, borderRight: `1px solid ${T.border}` }}/>
@@ -1699,7 +1759,9 @@ const WeekBoardView = ({ jobs, techs, skills, blocks, blockTypes, anchor, onJobC
 
             {/* Jobs with a date but no crew. Week renders jobs inside technician
                 rows, so without this row an uncrewed job is invisible here while
-                still showing in the month grid — the two views disagreed. */}
+                still showing in the month grid — the two views disagreed. A card
+                here drags to another day (a date move) or onto a technician's
+                row (that technician becomes its crew, held with no time). */}
             {(() => {
                 const uncrewed = jobs.filter(j => (j.assignedTechIds || []).length === 0);
                 if (uncrewed.length === 0) return null;
@@ -1715,12 +1777,15 @@ const WeekBoardView = ({ jobs, techs, skills, blocks, blockTypes, anchor, onJobC
                             const ds = ymd(d);
                             const cellJobs = uncrewed.filter(j => j.scheduledDate === ds);
                             return (
-                                <div key={ds} style={{ flex: 1, minWidth: 120, borderRight: `1px solid ${T.border}`,
-                                    padding: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <div key={ds} {...cellHandlers(null, ds)}
+                                    style={{ flex: 1, minWidth: 120, borderRight: `1px solid ${T.border}`,
+                                        padding: 5, display: 'flex', flexDirection: 'column', gap: 4, ...overStyle(isOver(null, ds)) }}>
                                     {cellJobs.map(j => (
                                         <div key={j.id} onClick={() => onJobClick(j)}
-                                            style={{ padding: '4px 6px', borderRadius: T.r, cursor: 'pointer',
-                                                background: T.surface, border: `1px dashed ${T.warn}` }}>
+                                            draggable={!busy && !j.isBridge}
+                                            onDragStart={e => startDrag(e, j, null)} onDragEnd={endDrag}
+                                            style={cardStyle(j, { padding: '4px 6px', borderRadius: T.r,
+                                                background: T.surface, border: `1px dashed ${T.warn}` })}>
                                             <div style={{ fontSize: 11, fontWeight: 600, color: T.ink, fontFamily: T.sans,
                                                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                 {j.title || j.customer}
@@ -1755,10 +1820,12 @@ const WeekBoardView = ({ jobs, techs, skills, blocks, blockTypes, anchor, onJobC
                             const cellBlocks = blocksOnDate(blocks, tech.id, ds);
                             const cellOff    = cellBlocks.find(b => b.allDay !== false);
                             return (
-                                <div key={ds} style={{ flex: 1, minWidth: 120, borderRight: `1px solid ${T.border}`,
-                                    padding: 5, display: 'flex', flexDirection: 'column', gap: 4,
-                                    background: cellOff ? `${T.borderStrong}44`
-                                        : ds === todayStr ? `${T.gold}12` : 'transparent' }}>
+                                <div key={ds} {...cellHandlers(tech.id, ds)}
+                                    style={{ flex: 1, minWidth: 120, borderRight: `1px solid ${T.border}`,
+                                        padding: 5, display: 'flex', flexDirection: 'column', gap: 4,
+                                        background: cellOff ? `${T.borderStrong}44`
+                                            : ds === todayStr ? `${T.gold}12` : 'transparent',
+                                        ...overStyle(isOver(tech.id, ds)) }}>
                                     {cellBlocks.map(b => {
                                         const bt = (blockTypes || []).find(t => t.id === b.blockType);
                                         const col = bt?.color || T.warn;
@@ -1774,8 +1841,10 @@ const WeekBoardView = ({ jobs, techs, skills, blocks, blockTypes, anchor, onJobC
                                     })}
                                     {cellJobs.map(j => (
                                         <div key={j.id} onClick={() => onJobClick(j)}
-                                            style={{ padding: '4px 6px', borderRadius: T.r, cursor: 'pointer',
-                                                background: T.surface2, borderLeft: `3px solid ${prioColor(j.priority)}` }}>
+                                            draggable={!busy && !j.isBridge}
+                                            onDragStart={e => startDrag(e, j, tech.id)} onDragEnd={endDrag}
+                                            style={cardStyle(j, { padding: '4px 6px', borderRadius: T.r,
+                                                background: T.surface2, borderLeft: `3px solid ${prioColor(j.priority)}` })}>
                                             <div style={{ fontSize: 11, fontWeight: 600, color: T.ink, fontFamily: T.sans,
                                                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                 {j.title || j.customer}
@@ -1791,6 +1860,7 @@ const WeekBoardView = ({ jobs, techs, skills, blocks, blockTypes, anchor, onJobC
                     </div>
                 );
             })}
+            </div>
         </div>
     );
 };
@@ -5629,6 +5699,108 @@ export default function DispatchTab() {
         setView('queue');
     };
 
+    // ── Drag-to-reschedule on the week board (state §0.134) ──────────────────
+    // A drop is a write path: planWeekDrop runs the crew builder's gates
+    // (rostered, not out, inside the shift, no clash) over the board's own
+    // reads, the equipment gate (§0.116) runs here for a new day, and a
+    // technician the builder would only assign with an override is confirmed
+    // the same way. The PUT is partial — only what changed, never status — and
+    // the row on screen adopts the server's answer; the refusal or the result
+    // shows in the strip above the grid.
+    const [weekMove, setWeekMove] = useState({ busy: false, error: '', notice: '' });
+    const weekMoveTimer = useRef(null);
+    useEffect(() => () => clearTimeout(weekMoveTimer.current), []);
+    const handleWeekMove = async ({ job, fromTechId, toTechId, toDate }) => {
+        if (weekMove.busy) return;
+        const blockTypes = settings?.dispatchBlockTypes || [];
+        const lookup = (techId) => {
+            const tech = techs.find(t => t.id === techId);
+            if (!tech) return null;
+            return {
+                tech,
+                shift:     shiftForDate(tech, toDate),
+                dayBlocks: blocksOnDate(blocks, techId, toDate),
+                rivals:    jobs.filter(j => j.id !== job.id && (j.assignedTechIds || []).includes(techId) && j.scheduledDate === toDate && j.start != null),
+            };
+        };
+        const plan = planWeekDrop({ job, fromTechId, toTechId, toDate, lookup, blockTypes });
+        if (!plan.ok) { if (!plan.noop) setWeekMove({ busy: false, error: plan.reason, notice: '' }); return; }
+
+        // A new day competes for equipment with that day's jobs. The gate the
+        // builder runs at scheduling, then the reserved units re-picked for the
+        // new day so a unit is never held by two jobs at once.
+        let payload = plan.payload;
+        let reserved = null;
+        if (plan.dateChanged && (job.equipCategories || []).length) {
+            const probe = { start: job.start, durationHrs: job.durationHrs };
+            const conf = equipmentConflicts(job, jobs, equipment, toDate, probe);
+            if (conf.length) {
+                setWeekMove({ busy: false, error: `Equipment unavailable on ${toDate} — ${conf.map(describeConflict).join('; ')}.`, notice: '' });
+                return;
+            }
+            if ((job.assignedEquipment || []).length) {
+                reserved = pickEquipmentFor(job.equipCategories, equipment, overlappingRivals(job, jobs, toDate, probe)).picked;
+                payload = { ...payload, assignedEquipmentIds: reserved };
+            }
+        }
+
+        const toTech   = plan.crewChanged ? techs.find(t => t.id === toTechId) : null;
+        const fromTech = techs.find(t => t.id === fromTechId) || null;
+        const name     = job.title || job.customer;
+        const where    = `${toDate}${toTech ? ` · ${toTech.name}` : ''}`;
+        // The blockers the crew builder shows an Override for. The hard gates
+        // above already covered rostering, time off and the clash.
+        const soft = toTech
+            ? scoreTech(toTech, job, jobs, skills, { blocks, blockTypes, vehicles, dateStr: toDate }).blockers
+                .filter(b => !/^(Not rostered|Off ·|Double-booked)/.test(b))
+            : [];
+
+        const commit = async (overridden) => {
+            setWeekMove({ busy: true, error: '', notice: '' });
+            try {
+                const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(job.id), {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    if (res.status === 403) throw new Error('Your role cannot reschedule jobs.');
+                    throw new Error(data.error || ('HTTP ' + res.status));
+                }
+                const saved = data.job || null;
+                setJobs(prev => prev.map(j => j.id === job.id
+                    ? { ...j,
+                        scheduledDate:   saved?.scheduledDate ?? toDate,
+                        assignedTechIds: plan.crew,
+                        window:          saved ? queueWindow(saved) : j.window,
+                        assignedEquipment: reserved ?? j.assignedEquipment,
+                        // The server decided and recorded the customer notification (§0.111).
+                        publicToken: saved?.publicToken ?? j.publicToken ?? null,
+                        customerNotifications: Array.isArray(saved?.customerNotifications) ? saved.customerNotifications : (j.customerNotifications || []) }
+                    : j));
+                if (saved) setJobsRaw(prev => prev.map(j => j.id === job.id ? saved : j));
+                if (addAudit) {
+                    addAudit(overridden.length ? 'dispatch.reschedule.override' : 'dispatch.reschedule', 'dispatch_job', job.id, name,
+                        `Moved from ${job.scheduledDate}${fromTech ? ` · ${fromTech.name}` : ''} to ${where}`
+                        + (reserved ? ` — reserved: ${reserved.map(id => unitLabel(id, equipment)).join(', ') || 'none'}` : '')
+                        + (overridden.length ? ` — OVERRIDE: ${overridden.join(' | ')}` : ''));
+                }
+                setWeekMove({ busy: false, error: '', notice: `Moved ${name} to ${where}.`
+                    + (reserved ? ` Reserved: ${reserved.map(id => unitLabel(id, equipment)).join(', ') || 'none'}.` : '') });
+                clearTimeout(weekMoveTimer.current);
+                weekMoveTimer.current = setTimeout(() => setWeekMove(st => ({ ...st, notice: '' })), 8000);
+            } catch (e) {
+                setWeekMove({ busy: false, error: e.message, notice: '' });
+            }
+        };
+
+        if (soft.length && showConfirm) {
+            showConfirm(`${toTech.name} does not meet this job's requirements: ${soft.join('; ')}. Move it anyway?`, () => commit(soft), true);
+            return;
+        }
+        await commit([]);
+    };
+
     if (loading) {
         return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.inkMuted, fontFamily: T.sans }}>Loading dispatch…</div>;
     }
@@ -5885,7 +6057,9 @@ export default function DispatchTab() {
                         ) : boardRange === 'week' ? (
                             <WeekBoardView jobs={rangeJobs} techs={filteredTechs} skills={skills}
                                 blocks={blocks} blockTypes={settings?.dispatchBlockTypes || []}
-                                anchor={boardAnchor} onJobClick={handleJobClick}/>
+                                anchor={boardAnchor} onJobClick={handleJobClick}
+                                onMove={handleWeekMove} moveState={weekMove}
+                                onDismiss={() => setWeekMove({ busy: false, error: '', notice: '' })}/>
                         ) : (
                             <MonthBoardView jobs={rangeJobs} techs={filteredTechs}
                                 anchor={boardAnchor} onJobClick={handleJobClick}

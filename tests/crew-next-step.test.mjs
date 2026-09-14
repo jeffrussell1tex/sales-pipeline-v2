@@ -36,8 +36,15 @@ test('the refusal and success banners sit beside the card, not at the bottom', (
     const card = s.indexOf('<CrewNextStep');
     const bar = s.indexOf('{/* Action bar.');
     assert.ok(alert > 0 && alert < card && card < bar, 'alert → card → action bar, in that order');
-    assert.equal(s.match(/<div role="alert"/g).length, 1, 'one refusal banner');
-    assert.equal(s.match(/<div role="status"/g).length, 1, 'one success banner');
+    // The count is the crew builder's own: the week board has a refusal and a
+    // success strip of its own since §0.134 (drag-to-reschedule), in its own
+    // component, so the file holds two of each and the builder still one.
+    const builder = s.slice(s.indexOf('const CrewBuilderView = ('), s.indexOf('const normaliseTech = ('));
+    assert.equal(builder.match(/<div role="alert"/g).length, 1, 'one refusal banner in the crew builder');
+    assert.equal(builder.match(/<div role="status"/g).length, 1, 'one success banner in the crew builder');
+    const week = s.slice(s.indexOf('const WeekBoardView = ('), s.indexOf('const MonthBoardView = ('));
+    assert.equal(week.match(/<div role="alert"/g).length, 1, 'and one refusal strip on the week board');
+    assert.equal(week.match(/<div role="status"/g).length, 1, 'and one success strip on the week board');
 });
 
 test('Wait for group schedule persists the crew with NO time and the status unchanged; Release clears it', () => {

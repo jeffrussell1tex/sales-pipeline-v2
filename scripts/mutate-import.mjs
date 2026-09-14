@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -2390,6 +2390,47 @@ const mutations = [
         "src/Tabs/ReportsTab.jsx",
         "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }} title=\"Open this report\"",
         "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); }} title=\"Open this report\""],
+
+    // ── Drag-to-reschedule on the week board (0.134) ─────────────────────────
+    ["week drop: a held crew dragged to another day is promoted to 'scheduled' — a confirmation goes to the customer for a job with no time",
+        "src/utils/weekDrop.js",
+        "    if (dateChanged) payload.scheduledDate = toDate;",
+        "    if (dateChanged) { payload.scheduledDate = toDate; payload.status = 'scheduled'; }"],
+
+    ["week drop: the roster gate is gone — a job lands on a technician's day off",
+        "src/utils/weekDrop.js",
+        "        if (!ctx.shift) return refuse(`${name} is not rostered on ${dayNameOf(toDate) || toDate}.`);",
+        "        if (false && !ctx.shift) return refuse(`${name} is not rostered on ${dayNameOf(toDate) || toDate}.`);"],
+
+    ["week drop: a day move checks only the newcomer — the co-tech's PTO on the new day is never seen",
+        "src/utils/weekDrop.js",
+        "    const checked = dateChanged ? next.crew : (next.changed ? [toTechId] : []);",
+        "    const checked = next.changed ? [toTechId] : [];"],
+
+    ["week drop: a drop on the same cell writes anyway (a PUT, an audit line, a notice for nothing)",
+        "src/utils/weekDrop.js",
+        "    if (!next.changed && !dateChanged) return { ok: false, noop: true };",
+        "    if (false) return { ok: false, noop: true };"],
+
+    ["week drop: dragging from A's row onto C's ADDS C instead of replacing A — the crew grows on every hand-over",
+        "src/utils/weekDrop.js",
+        "        return { crew: cur.map(id => id === fromTechId ? toTechId : id), changed: true, swapped: { from: fromTechId, to: toTechId } };",
+        "        return { crew: [toTechId, ...cur], changed: true, swapped: { from: fromTechId, to: toTechId } };"],
+
+    ["week board: the planner's refusal is ignored — the write goes ahead on a technician who is out",
+        "src/Tabs/DispatchTab.jsx",
+        "        if (!plan.ok) { if (!plan.noop) setWeekMove({ busy: false, error: plan.reason, notice: '' }); return; }",
+        "        if (!plan.ok && plan.noop) { return; }"],
+
+    ["week board: the equipment gate never runs on a new day — a reserved unit is held by two jobs at once",
+        "src/Tabs/DispatchTab.jsx",
+        "        if (plan.dateChanged && (job.equipCategories || []).length) {",
+        "        if (false) {"],
+
+    ["week board: nothing is draggable again (the crew rows' cards)",
+        "src/Tabs/DispatchTab.jsx",
+        "                                            draggable={!busy && !j.isBridge}\n                                            onDragStart={e => startDrag(e, j, tech.id)} onDragEnd={endDrag}",
+        "                                            draggable={false}\n                                            onDragStart={e => startDrag(e, j, tech.id)} onDragEnd={endDrag}"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────
