@@ -2349,6 +2349,11 @@ const mutations = [
         'netlify/functions/score-leads-batch.mjs',
         '            const r = await scoreOrg(orgId);',
         '            const r = await scoreOrg(orgId, { force: true });'],
+
+    ['automation modal: the error never renders — "Name is required" on step 1 and Next looks dead again (Jeff, 14 Sep)',
+        'src/Tabs/settings/integrations/AutomationsDetail.jsx',
+        "                {error && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error}</div>}",
+        "                {false && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error}</div>}"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

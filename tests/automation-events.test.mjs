@@ -455,3 +455,15 @@ test('the engine posts the Block Kit shape through the send-slack template, with
     assert.ok(panel.includes("                            {group === 'Tasks' && ("), 'the Tasks group says how its triggers fire');
     assert.ok(panel.includes('Task overdue is checked every hour: a rule fires once per task per week, at the assignee\'s alert hour, for an open task whose due date has passed.'));
 });
+
+test('the modal\'s error renders on WHICHEVER step raised it — "Name is required" on step 1 was invisible inside step 4 and Next looked dead (Jeff, 14 Sep)', () => {
+    const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
+    const modal = s.slice(s.indexOf('const AutomationModal = ('), s.indexOf('<IntModalFooter>'));
+    const errLine = "                {error && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error}</div>}";
+    const at = modal.indexOf(errLine);
+    assert.ok(at > 0, 'one error line, in the modal body');
+    assert.ok(at > modal.lastIndexOf('{step === 4 && (<>'), 'after the last step block — not inside any of them');
+    assert.ok(!modal.includes("                        {error && <div style={{ fontSize:12, color:T.danger }}>{error}</div>}"), 'REGRESSION: the step-4-only render is gone');
+    assert.equal((modal.match(/\{error &&/g) || []).length, 1, 'exactly one render, shared by every step');
+    assert.ok(s.includes("if(step===1&&!name.trim()){setError('Name is required');return;}"), 'the step-1 gate still names what is missing');
+});

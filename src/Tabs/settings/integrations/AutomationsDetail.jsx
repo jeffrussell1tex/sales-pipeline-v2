@@ -296,9 +296,13 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
                                 </div>
                             ))}
                         </div>
-                        {error && <div style={{ fontSize:12, color:T.danger }}>{error}</div>}
                     </div>
                 </>)}
+                {/* The message renders on WHICHEVER step raised it. It sat inside step 4
+                    alone, so "Name is required" on step 1 was invisible and Next looked
+                    dead (Jeff, 14 Sep: "I can't move a new automation from trigger stage
+                    to conditions"). */}
+                {error && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error}</div>}
             </div>
             <IntModalFooter>
                 {step > 1 && <IntBtn label="← Back" onClick={() => setStep(s=>s-1)}/>}
