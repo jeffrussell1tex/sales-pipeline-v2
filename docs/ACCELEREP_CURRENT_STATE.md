@@ -5837,7 +5837,7 @@ at the ship.
 
 **Not done, flagged:** the 140 remaining off-brand literals in 18 files (list above); the three dialogs still on the `.modal` CSS class; the stage pill palette and the avatar palette kept as they were (on-brand alternatives exist — `T.stages` — but the pills are the app’s stage vocabulary, Jeff’s call); CSS variables (`var(--text-secondary)` etc.) in these files were not the ask and stay; the paused signal migration (§0.129) untouched.
 
-**Verified:** six gates (169 files; 93 function files), **824/824 unit** (5 new), 170/170 integration (unchanged — nothing server-side changed; not re-run), **516/516 mutations after a printed green baseline**, build guard OK 2,532 kB `index-5_oMz9NV.js`, `dist/` cleared. Browser: the handoff says what was observed. **NOT shipped.** Bundle only — no function, no schema change.
+**Verified:** six gates (169 files; 93 function files), **824/824 unit** (5 new), 170/170 integration (unchanged — nothing server-side changed; not re-run), **516/516 mutations after a printed green baseline**, build guard OK 2,532 kB `index-5_oMz9NV.js`, `dist/` cleared. Browser: the handoff says what was observed — and Jeff on dev (14 Sep, `index-5_oMz9NV.js`): "everything testing correctly". **NOT shipped.** Bundle only — no function, no schema change.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
