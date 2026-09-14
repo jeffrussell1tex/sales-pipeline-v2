@@ -5818,7 +5818,7 @@ at the ship.
 
 **Not done, flagged:** recipients are roster members only (no outside addresses — a deliberate allowlist); one hour slot per schedule; the email is a table, not the chart; Home draws a pinned report over the app’s visibility (`visibleOpportunities`) while the tab scopes by the role gate on names — the two can differ for a Manager; a report whose owner leaves the roster stops delivering with a named error on the card; the Jobs tile shows `report-deliveries` as "never" on prod until the first hour after a ship; the delivery hour is the schedule’s zone, the dedup window a constant; the "Pinned" live tiles in the library are still the four hard-coded ones; touch on the week board and the day/month drags (§0.134) unchanged.
 
-**Verified:** six gates (169 files; 93 function files), **819/819 unit** (11 new), **170/170 integration** (6 new), **513/513 mutations after a printed green baseline**, build guard OK 2,532 kB `index-ODWcjiOD.js`, `dist/` cleared. Browser: the handoff says what was observed. **NOT shipped.** Functions AND bundle, netlify.toml; no schema change.
+**Verified:** six gates (169 files; 93 function files), **819/819 unit** (11 new), **170/170 integration** (6 new), **513/513 mutations after a printed green baseline**, build guard OK 2,532 kB `index-ODWcjiOD.js`, `dist/` cleared. Browser: the handoff says what was observed — and Jeff's screenshots (14 Sep) show the delivered EMAIL and the SLACK post rendered as designed (the table, the total, the "14 more rows" line, the Open button). **NOT shipped.** Functions AND bundle, netlify.toml; no schema change.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
