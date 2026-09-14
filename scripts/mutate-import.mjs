@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -902,12 +902,12 @@ const mutations = [
     // ── Dead controls wired or removed (0.68 batch 6) ───────────────────────
     ['reports: handleSaveReport drops the template id from the payload (a saved card that opens nothing)',
         'src/Tabs/ReportsTab.jsx',
-        "chartType, description, config, ownerId: currentUser",
-        "chartType, description, ownerId: currentUser"],
+        "chartType, description, config, filters, ownerId: currentUser",
+        "chartType, description, filters, ownerId: currentUser"],
     ['reports: a saved card no longer opens its template',
         'src/Tabs/ReportsTab.jsx',
-        "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); }}",
-        "onClick={()=>{}}"],
+        "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }}",
+        "onClick={()=>{ if (false && r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }}"],
     ['reports: Duplicate opens a blank canvas again instead of copying',
         'src/Tabs/ReportsTab.jsx',
         "name: r.src.name + ' (copy)'",
@@ -2354,6 +2354,42 @@ const mutations = [
         'src/Tabs/settings/integrations/AutomationsDetail.jsx',
         "                {error && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error}</div>}",
         "                {false && <div style={{ marginTop:12, padding:'8px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.danger }}>{error}</div>}"],
+
+    // ── The report builder runs real queries (0.133) ─────────────────────────
+    ["report builder: an open deal's \"Close date\" is its last stage change again (closeDayOf alone)",
+        "src/utils/reportQuery.js",
+        "    D('close_date',         'Close date',         'month', (o) => monthOf(CLOSED_STAGES.includes(o.stage) ? closeDayOf(o) : o.forecastedCloseDate) || NONE),",
+        "    D('close_date',         'Close date',         'month', (o) => monthOf(closeDayOf(o) || o.forecastedCloseDate) || NONE),"],
+
+    ["report builder: the period is ignored — \"Q3\" reports all time",
+        "src/utils/reportQuery.js",
+        "    const inPeriod = range ? scanned.filter(r => inRange(sourceDayOf[source](r), range)) : scanned;",
+        "    const inPeriod = scanned;"],
+
+    ["report builder: a saved report's field by LABEL no longer resolves — every report saved before 0.133 loses its measures",
+        "src/utils/reportQuery.js",
+        "        || (label && list.find(f => f.label.toLowerCase() === label.toLowerCase()))",
+        "        || (false && label && list.find(f => f.label.toLowerCase() === label.toLowerCase()))"],
+
+    ["report builder: a stacked bar with one dimension draws an empty stack instead of falling back",
+        "src/utils/reportQuery.js",
+        "    if (want === 'stacked') return dims.length >= 2 ? build('stacked') : fallback('bar', 'A stacked bar needs two dimensions — showing a bar of the first.');",
+        "    if (want === 'stacked') return build('stacked');"],
+
+    ["report builder: Update preview no longer runs the query — the old picture stays whatever the user picks",
+        "src/Tabs/ReportsTab.jsx",
+        "            <button onClick={()=>{setBuilderResult(runBuilder());setBuilderDirty(false);setBuilderRendered(true);}} style={{",
+        "            <button onClick={()=>{setBuilderDirty(false);setBuilderRendered(true);}} style={{"],
+
+    ["report builder: a reopened report saves as a NEW row every time",
+        "src/Tabs/ReportsTab.jsx",
+        "                method: existingId ? 'PUT' : 'POST',",
+        "                method: 'POST',"],
+
+    ["report builder: the library card no longer opens a builder report",
+        "src/Tabs/ReportsTab.jsx",
+        "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }} title=\"Open this report\"",
+        "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); }} title=\"Open this report\""],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

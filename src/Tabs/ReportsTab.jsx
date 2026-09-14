@@ -16,6 +16,11 @@ import { repDeals } from '../utils/repDeals';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
 import { T } from '../tokens.js';
+// The report builder's query engine and its chart (state §0.133): the preview
+// and an opened saved report are the same runReport() over the tab's scoped
+// sets, drawn by the same component.
+import { REPORT_SOURCES, REPORT_PERIODS, REPORT_CHARTS, fieldsFor, runReport } from '../utils/reportQuery.js';
+import ReportChart from '../components/ReportChart.jsx';
 
 export default function ReportsTab({ leadsEnabled = true }) {
     const {
@@ -2089,6 +2094,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                 currentUser={currentUser}
                                 savedReportsList={savedReportsList}
                                 setSavedReportsList={setSavedReportsList}
+                                leads={reportsLeads}
                             />
                         )}
                         </div>
@@ -2100,7 +2106,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
 // ─────────────────────────────────────────────────────────────
 //  Saved Reports Tab — proper React component (hooks-safe)
 // ─────────────────────────────────────────────────────────────
-function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp }) {
+function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp, leads = [] }) {
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
     const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
@@ -2116,6 +2122,41 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const [builderMetrics, setBuilderMetrics] = React.useState([{id:'arr',label:'Revenue',kind:'metric'}]);
     const [builderChart, setBuilderChart] = React.useState('stacked');
     const [builderAdvanced, setBuilderAdvanced] = React.useState(false);
+    // §0.133 — the builder runs a real query. The period is the builder's own
+    // (the tab's selector scopes the SETS; this scopes the report), the name is
+    // what a save stores, editingReportId is set when a saved report was opened
+    // (Save then PUTs it in place), and builderResult is runReport()'s answer.
+    const [builderPeriod, setBuilderPeriod] = React.useState('all');
+    const [builderName, setBuilderName] = React.useState('Untitled report');
+    const [editingReportId, setEditingReportId] = React.useState(null);
+    const [builderResult, setBuilderResult] = React.useState(null);
+    const builderDefinition = () => ({ source: builderSource, dims: builderDims, metrics: builderMetrics, period: builderPeriod, limit: builderChart === 'table' ? 200 : 12 });
+    const builderData = () => ({ opportunities: reportsOpps || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} });
+    const runBuilder = () => runReport(builderDefinition(), builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 });
+    // A saved report opens INTO the builder: its definition seeds the state, the
+    // query runs, and Save updates that row.
+    const openSavedReport = (r) => {
+        const src = REPORT_SOURCES.includes(r.source) ? r.source : 'Opportunities';
+        const f = fieldsFor(src);
+        const dims = (Array.isArray(r.dims) ? r.dims : []).map(d => ({ id: d.id, label: d.label, kind: 'dim' }));
+        const metrics = (Array.isArray(r.metrics) ? r.metrics : []).map(m => ({ id: m.id, label: m.label, kind: 'metric' }));
+        const period = r.filters?.period && REPORT_PERIODS.some(p => p.value === r.filters.period) ? r.filters.period : 'all';
+        const chart = REPORT_CHARTS.some(c => c.id === r.chartType) ? r.chartType : 'table';
+        setBuilderSource(src);
+        setBuilderDims(dims.length ? dims : f.defaults.dims.map(id => { const d = f.dims.find(x => x.id === id); return { id: d.id, label: d.label, kind: 'dim' }; }));
+        setBuilderMetrics(metrics.length ? metrics : f.defaults.metrics.map(id => { const m = f.metrics.find(x => x.id === id); return { id: m.id, label: m.label, kind: 'metric' }; }));
+        setBuilderPeriod(period);
+        setBuilderChart(chart);
+        setBuilderName(r.name || 'Untitled report');
+        setEditingReportId(r.id);
+        setBuilderAdvanced(true);
+        setBuilderTab('Data');
+        setBuilderResult(runReport({ source: src, dims, metrics, period, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 }));
+        setBuilderDirty(false);
+        setBuilderRendered(true);
+        setCreateMode('blank');
+        setShowCreateReport(true);
+    };
     // Saved reports library state
     // Use shared state from ReportsTab so ActivityHistory saves appear here immediately
     const savedReportsList = savedReportsListProp ?? [];
@@ -2124,23 +2165,26 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const [saveError, setSaveError] = React.useState(null);
 
     // Save report handler — used by both blank and AI builder Save to library buttons
-    const handleSaveReport = React.useCallback(async ({ name, source, dims, metrics, chartType, description, config = null }) => {
+    const handleSaveReport = React.useCallback(async ({ id: existingId = null, name, source, dims, metrics, chartType, description, config = null, filters = null }) => {
         setSaveState('saving');
         setSaveError(null);
-        const id = 'rpt_' + crypto.randomUUID();
-        const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, config, ownerId: currentUser, ownerName: currentUser };
+        // §0.133: a report opened from the library saves back to ITS row (PUT);
+        // a new one is a POST. The endpoint's PUT is an owner-or-Admin upsert.
+        const id = existingId || ('rpt_' + crypto.randomUUID());
+        const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, config, filters, ownerId: currentUser, ownerName: currentUser };
         try {
             // dbFetch returns a Response — check ok, then parse. This used to
             // read `data?.report` off the Response AND never checked ok, so a
             // rejected save showed "Saved" while the report never persisted.
             const res = await dbFetch('/.netlify/functions/saved-reports', {
-                method: 'POST',
+                method: existingId ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
-            setSavedReportsList(prev => [data?.report || payload, ...prev]);
+            const saved = data?.report || payload;
+            setSavedReportsList(prev => prev.some(r => r.id === saved.id) ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev]);
             setSaveState('saved');
             setTimeout(() => setSaveState('idle'), 3000);
             setShowCreateReport(false);
@@ -3648,19 +3692,11 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         ];
 
         // Sources
-        const SOURCES = ['Opportunities','Accounts','Leads','Activity','Quotes'];
-        const ALL_DIMS    = ['Owner','Stage','Close date','Industry','Territory','Lead source','Competitor'];
-        const ALL_METRICS = ['Revenue','# of deals','Avg deal size','Days to close','# activities'];
-        const CHART_TYPES = [
-            {id:'stacked',label:'Stacked bar',desc:'Sub-groups within a total'},
-            {id:'bar',    label:'Bar',        desc:'Compare across categories'},
-            {id:'line',   label:'Line',       desc:'Show trend over time'},
-            {id:'funnel', label:'Funnel',     desc:'Conversion through stages'},
-            {id:'table',  label:'Table',      desc:'Row-by-row detail view'},
-            {id:'kpi',    label:'KPI card',   desc:'Big number with delta'},
-            {id:'heatmap',label:'Heatmap',    desc:'Density across two dims'},
-            {id:'scatter',label:'Scatter',    desc:'Relationship between metrics'},
-        ];
+        // The sources, the charts: the query engine's lists (§0.133). Quotes are
+        // not held by this tab, so they are not offered; heatmap and scatter were
+        // never drawn, so they are not offered either.
+        const SOURCES = REPORT_SOURCES;
+        const CHART_TYPES = REPORT_CHARTS;
 
         // Shared sub-components (all inline, no hooks at top level here since we're not conditionally calling any)
         const GhostBtnD = ({onClick, children}) => (
@@ -3682,7 +3718,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             </div>
         );
         const UpdateBtn = () => (
-            <button onClick={()=>{setBuilderDirty(false);setBuilderRendered(true);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:builderDirty?T.ink:T.surface, color:builderDirty?T.surface:T.inkMid, border:`1px solid ${builderDirty?T.ink:T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, position:'relative' }}>
+            <button onClick={()=>{setBuilderResult(runBuilder());setBuilderDirty(false);setBuilderRendered(true);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:builderDirty?T.ink:T.surface, color:builderDirty?T.surface:T.inkMid, border:`1px solid ${builderDirty?T.ink:T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, position:'relative' }}>
                 ↺ Update preview
                 {builderDirty && <span style={{ position:'absolute', top:-3, right:-3, width:6, height:6, borderRadius:'50%', background:T.warn, border:`1.5px solid ${T.surface}` }}/>}
             </button>
@@ -3693,7 +3729,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12, paddingBottom:12, borderBottom:`1px solid ${T.border}` }}>
                 <div style={{ flex:1 }}>
                     <div style={{ ...ebD(T.inkMuted), marginBottom:6, display:'flex', gap:6 }}>
-                        <span>Reports</span><span style={{ opacity:0.4 }}>/</span><span>New</span><span style={{ opacity:0.4 }}>/</span>
+                        <span>Reports</span><span style={{ opacity:0.4 }}>/</span><span>{editingReportId ? 'Saved' : 'New'}</span><span style={{ opacity:0.4 }}>/</span>
                         <span style={{ color:T.ink }}>{breadcrumb}</span>
                     </div>
                     <div style={{ fontSize:22, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.4, lineHeight:1.1 }}>{title}</div>
@@ -3778,7 +3814,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                             { eyebrow:'Duplicate', title:'An existing report', desc:'Copy one you already have and tweak it. Yours or shared.', badge:'from library', mode:'duplicate',
                               glyph:<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={T.inkMid} strokeWidth="1.2"><rect x="6" y="6" width="18" height="22" rx="1"/><rect x="14" y="12" width="18" height="22" rx="1" fill={T.surface}/></svg> },
                         ].map(card => (
-                            <button key={card.mode} onClick={()=>setCreateMode(card.mode)}
+                            <button key={card.mode} onClick={()=>{ setBuilderTab('Data'); if (card.mode==='blank') { setEditingReportId(null); setBuilderName('Untitled report'); setBuilderResult(null); setBuilderRendered(false); setBuilderDirty(true); } setCreateMode(card.mode); }}
                                 style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 18px 16px', textAlign:'left', cursor:'pointer', fontFamily:T.sans, display:'flex', flexDirection:'column', gap:6, transition:'border-color 120ms' }}
                                 onMouseEnter={e=>e.currentTarget.style.borderColor=T.ink}
                                 onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
@@ -3996,7 +4032,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
                         {/* Right — config rail */}
                         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-                            <TabStrip tabs={['Data','Filters','Chart','Format']} active={builderTab} onChange={setBuilderTab}/>
+                            <TabStrip tabs={['Data','Filters','Chart']} active={builderTab} onChange={setBuilderTab}/>
                             <div style={{ flex:1, overflow:'auto', padding:'14px' }}>
                                 {builderTab==='Data' && (
                                     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
@@ -4049,18 +4085,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                         </div>
                                     </div>
                                 )}
-                                {builderTab==='Format' && (
-                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Number format</div>
-                                            <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>$1.2K (short) <span style={{ color:T.inkMuted }}>▾</span></div>
-                                        </div>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Show totals</div>
-                                            <div style={{ display:'flex', gap:6 }}>
-                                                {['Row','Column','Grand'].map((t,i)=><button key={t} style={{ padding:'4px 10px', fontSize:11, fontFamily:T.sans, background:i===0?T.ink:T.surface, color:i===0?T.surface:T.ink, border:`1px solid ${i===0?T.ink:T.border}`, borderRadius:2, cursor:'pointer' }}>{t}</button>)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
@@ -4070,17 +4094,23 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
         // ── BLANK builder ────────────────────────────────────────────
         if (createMode === 'blank') {
-            // Full field definitions matching V2 design — basic shown always, advanced behind toggle
-            const BASIC_DIMS    = ['Owner','Stage','Close date','Industry','Territory'];
-            const ADVANCED_DIMS = ['Lead source','Competitor','Loss reason','Created date','Last activity date','Product line','Deal tier','Forecast category'];
-            const BASIC_METRICS    = ['Revenue','# of deals','Avg deal size'];
-            const ADVANCED_METRICS = ['Days to close','Days in stage','AI score','# activities'];
-            const allAvailDims    = [...BASIC_DIMS, ...(builderAdvanced ? ADVANCED_DIMS : [])].filter(d=>!builderDims.find(x=>x.label===d));
-            const allAvailMetrics = [...BASIC_METRICS, ...(builderAdvanced ? ADVANCED_METRICS : [])].filter(m=>!builderMetrics.find(x=>x.label===m));
+            // The fields the query engine backs for this source (§0.133) — basic
+            // shown always, advanced behind the toggle. Nothing here is offered
+            // without a column behind it.
+            const fields = fieldsFor(builderSource);
+            const allAvailDims    = fields.dims.filter(d => (builderAdvanced || !d.advanced) && !builderDims.some(x => x.id === d.id));
+            const allAvailMetrics = fields.metrics.filter(m => (builderAdvanced || !m.advanced) && !builderMetrics.some(x => x.id === m.id));
+            const chooseSource = (s) => {
+                const f = fieldsFor(s);
+                setBuilderSource(s);
+                setBuilderDims(f.defaults.dims.map(id => { const d = f.dims.find(x => x.id === id); return { id: d.id, label: d.label, kind: 'dim' }; }));
+                setBuilderMetrics(f.defaults.metrics.map(id => { const m = f.metrics.find(x => x.id === id); return { id: m.id, label: m.label, kind: 'metric' }; }));
+                setBuilderDirty(true);
+            };
             return (
                 <div style={{ fontFamily:T.sans, color:T.ink }}>
-                    <BuilderHeader title="Untitled report" breadcrumb="Blank canvas"
-                        onSave={()=>handleSaveReport({ name:'Untitled report', source:builderSource, dims:builderDims, metrics:builderMetrics, chartType:builderChart, description:`${builderSource} · ${builderDims.map(d=>d.label).join(', ')}` })}/>
+                    <BuilderHeader title={builderName.trim() || 'Untitled report'} breadcrumb={editingReportId ? 'Saved report' : 'Blank canvas'}
+                        onSave={()=>handleSaveReport({ id: editingReportId, name: builderName.trim() || 'Untitled report', source:builderSource, dims:builderDims, metrics:builderMetrics, chartType:builderChart, filters:{ period: builderPeriod }, description:`${builderSource} · ${builderDims.map(d=>d.label).join(', ') || 'totals'} · ${builderMetrics.map(m=>m.label).join(', ')}` })}/>
 
                     {/* Body */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14 }}>
@@ -4093,29 +4123,21 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                 </span>
                                 <div style={{ flex:1 }}/>
                             </div>
+                            {/* The name lives HERE, not in BuilderHeader: that header is a component
+                                declared inline, and a form control inside it would remount and lose
+                                focus on every keystroke (guide §16, the inline rule). */}
+                            <input value={builderName} onChange={e=>setBuilderName(e.target.value)} placeholder="Name this report" aria-label="Report name"
+                                style={{ fontSize:14, fontWeight:600, fontFamily:T.sans, color:T.ink, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'7px 10px', width:'100%', maxWidth:520, boxSizing:'border-box' }}/>
                             {builderRendered ? (
                                 <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'20px 24px', minHeight:320, display:'flex', flexDirection:'column', gap:14 }}>
-                                    <div style={{ fontFamily:serif, fontStyle:'italic', fontSize:18, color:T.ink, letterSpacing:-0.3 }}>Open pipeline by owner <span style={{ fontSize:12, color:T.inkMuted, fontStyle:'normal', fontFamily:T.sans }}>· preview — dimensions and metrics are not applied yet</span></div>
-                                    <div style={{ display:'flex', flexDirection:'column', gap:10, flex:1 }}>
-                                        {(() => {
-                                            // Real open pipeline by owner from the scoped deals. This drew
-                                            // five constant bars against real names (0.68 item 12).
-                                            const rows = openPipelineByRep(reportsOpps, 5);
-                                            const max = Math.max(...rows.map(r=>r.value), 1);
-                                            if (rows.length === 0) return <div style={{ textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', padding:'2rem', fontFamily:T.sans }}>No open pipeline in scope to chart.</div>;
-                                            return rows.map(r => (
-                                                <div key={r.rep} style={{ display:'flex', alignItems:'center', gap:12 }}>
-                                                    <div style={{ width:110, fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.rep}</div>
-                                                    <div style={{ flex:1, height:20, background:T.surface2, borderRadius:2, overflow:'hidden' }}>
-                                                        <div style={{ width:`${(r.value/max)*100}%`, height:'100%', background:T.goldInk, opacity:0.8 }}/>
-                                                    </div>
-                                                    <div style={{ width:48, fontSize:12, fontWeight:600, color:T.ink, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtS(r.value)}</div>
-                                                </div>
-                                            ));
-                                        })()}
+                                    {/* The real query (§0.133): runReport over the tab's scoped sets, drawn
+                                        by ReportChart — the same pair an opened saved report renders through. */}
+                                    <div style={{ fontFamily:serif, fontStyle:'italic', fontSize:18, color:T.ink, letterSpacing:-0.3 }}>{builderName.trim() || 'Untitled report'} <span style={{ fontSize:12, color:T.inkMuted, fontStyle:'normal', fontFamily:T.sans }}>· {builderSource} · {REPORT_PERIODS.find(p=>p.value===builderPeriod)?.label || 'All time'}</span></div>
+                                    <div style={{ flex:1 }}>
+                                        <ReportChart result={builderResult} chartType={builderChart}/>
                                     </div>
                                     <div style={{ fontSize:11, color:T.inkMuted, paddingTop:10, borderTop:`1px solid ${T.border}`, fontFamily:T.sans }}>
-                                        Chart: <strong style={{ color:T.ink }}>{CHART_TYPES.find(c=>c.id===builderChart)?.label||'Stacked bar'}</strong> · {builderDims.length} dimensions · {builderMetrics.length} metrics
+                                        Chart: <strong style={{ color:T.ink }}>{CHART_TYPES.find(c=>c.id===builderChart)?.label||'Bar'}</strong> · {builderResult ? `${builderResult.count} of ${builderResult.scanned} ${builderSource.toLowerCase()} in the period · ${builderResult.rows.length} group${builderResult.rows.length===1?'':'s'}` : 'not run'} · grouped by {builderDims.map(d=>d.label).join(', ') || 'nothing'} · measuring {builderMetrics.map(m=>m.label).join(', ')}
                                     </div>
                                 </div>
                             ) : (
@@ -4146,14 +4168,14 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                 </div>
                             </div>
 
-                            <TabStrip tabs={['Data','Filters','Chart','Format']} active={builderTab} onChange={setBuilderTab}/>
+                            <TabStrip tabs={['Data','Filters','Chart']} active={builderTab} onChange={setBuilderTab}/>
                             <div style={{ flex:1, overflow:'auto', padding:'14px' }}>
                                 {builderTab==='Data' && (
                                     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
                                         <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Data source</div>
                                             <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                                                 {SOURCES.map(s=>(
-                                                    <button key={s} onClick={()=>{ setBuilderSource(s); setBuilderDirty(true); }}
+                                                    <button key={s} onClick={()=>chooseSource(s)}
                                                         style={{ padding:'4px 10px', fontSize:11.5, fontFamily:T.sans, background:builderSource===s?T.ink:T.surface, color:builderSource===s?T.surface:T.ink, border:`1px solid ${builderSource===s?T.ink:T.border}`, borderRadius:2, cursor:'pointer' }}>{s}</button>
                                                 ))}
                                             </div>
@@ -4163,9 +4185,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                             <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:8, display:'flex', flexWrap:'wrap', gap:5, minHeight:38 }}>
                                                 {builderDims.map(d=><FieldChip key={d.id} label={d.label} kind="dim" onRemove={()=>{ setBuilderDims(builderDims.filter(x=>x.id!==d.id)); setBuilderDirty(true); }}/>)}
                                                 {allAvailDims.map(d=>(
-                                                    <button key={d} onClick={()=>{ setBuilderDims([...builderDims,{id:d.toLowerCase().replace(/[^a-z0-9]/g,'_'),label:d,kind:'dim'}]); setBuilderDirty(true); }}
+                                                    <button key={d.id} onClick={()=>{ setBuilderDims([...builderDims,{id:d.id,label:d.label,kind:'dim'}]); setBuilderDirty(true); }}
                                                         style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'3px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
-                                                        <span style={{ fontSize:10, color:T.inkMuted }}>+</span> {d}
+                                                        <span style={{ fontSize:10, color:T.inkMuted }}>+</span> {d.label}
                                                     </button>
                                                 ))}
                                                 {allAvailDims.length===0&&builderDims.length>0&&<span style={{ fontSize:11, color:T.inkMuted, padding:'3px 4px', fontFamily:T.sans }}>Toggle Advanced for more fields</span>}
@@ -4176,9 +4198,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                             <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:8, display:'flex', flexWrap:'wrap', gap:5, minHeight:38 }}>
                                                 {builderMetrics.map(m=><FieldChip key={m.id} label={m.label} kind="metric" onRemove={()=>{ setBuilderMetrics(builderMetrics.filter(x=>x.id!==m.id)); setBuilderDirty(true); }}/>)}
                                                 {allAvailMetrics.map(m=>(
-                                                    <button key={m} onClick={()=>{ setBuilderMetrics([...builderMetrics,{id:m.toLowerCase().replace(/[^a-z0-9]/g,'_'),label:m,kind:'metric'}]); setBuilderDirty(true); }}
+                                                    <button key={m.id} onClick={()=>{ setBuilderMetrics([...builderMetrics,{id:m.id,label:m.label,kind:'metric'}]); setBuilderDirty(true); }}
                                                         style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'3px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
-                                                        <span style={{ fontSize:10, color:T.inkMuted }}>+</span> {m}
+                                                        <span style={{ fontSize:10, color:T.inkMuted }}>+</span> {m.label}
                                                     </button>
                                                 ))}
                                                 {allAvailMetrics.length===0&&builderMetrics.length>0&&<span style={{ fontSize:11, color:T.inkMuted, padding:'3px 4px', fontFamily:T.sans }}>Toggle Advanced for more fields</span>}
@@ -4196,12 +4218,19 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                 )}
                                 {builderTab==='Filters' && (
                                     <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                                        <div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Period</div>
-                                        <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>This quarter <span style={{ color:T.inkMuted }}>▾</span></div>
-                                        <div style={{ ...ebD(T.inkMid), marginBottom:4 }}>Filters</div>
-                                        <button style={{ padding:'5px 8px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:2, fontSize:11, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:4 }}>+ Add filter</button>
-                                        <div style={{ ...ebD(T.inkMid), marginBottom:4, marginTop:4 }}>Compare to</div>
-                                        <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>Previous quarter <span style={{ color:T.inkMuted }}>▾</span></div>
+                                        {/* The period is real (§0.133): it reads the source's own day through
+                                            the tab's reportPeriod, so "Q3" here is the tab's Q3. The old
+                                            add-filter button and compare-to picker were labels with nothing
+                                            behind them and are gone until something computes them. */}
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Period</div>
+                                            <select value={builderPeriod} onChange={e=>{ setBuilderPeriod(e.target.value); setBuilderDirty(true); }}
+                                                style={{ width:'100%', padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, fontFamily:T.sans }}>
+                                                {REPORT_PERIODS.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
+                                            </select>
+                                        </div>
+                                        <div style={{ fontSize:11, color:T.inkMuted, lineHeight:1.45, fontFamily:T.sans }}>
+                                            Deals count by forecasted close date (or creation when none), activities by their date, leads and accounts by creation. The Rep / Team / Territory slice above the tab applies first.
+                                        </div>
                                     </div>
                                 )}
                                 {builderTab==='Chart' && (
@@ -4215,18 +4244,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                                     <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.3 }}>{ct.desc}</div>
                                                 </button>
                                             ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {builderTab==='Format' && (
-                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Number format</div>
-                                            <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>$1.2K (short) <span style={{ color:T.inkMuted }}>▾</span></div>
-                                        </div>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Show totals</div>
-                                            <div style={{ display:'flex', gap:6 }}>
-                                                {['Row','Column','Grand'].map((t,i)=><button key={t} style={{ padding:'4px 10px', fontSize:11, fontFamily:T.sans, background:i===0?T.ink:T.surface, color:i===0?T.surface:T.ink, border:`1px solid ${i===0?T.ink:T.border}`, borderRadius:2, cursor:'pointer' }}>{t}</button>)}
-                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -4250,7 +4267,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                     <input value={srchQ} onChange={e=>setSrchQ(e.target.value)} placeholder="Search your library…" style={{ width:'100%', padding:'7px 10px 7px 30px', border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:T.sans, outline:'none', boxSizing:'border-box' }}/>
                 </div>
                 <div style={{ flex:1 }}/>
-                <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');setAiPrompt('');setAiGenerated(false);setBuilderTab('data');setBuilderDirty(true);setBuilderRendered(false);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ Create report</button>
+                <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');setAiPrompt('');setAiGenerated(false);setBuilderTab('Data');setBuilderDirty(true);setBuilderRendered(false);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ Create report</button>
             </div>
 
             {filteredPinned.length > 0 && (
@@ -4264,7 +4281,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 <SectionS title="Your reports" subtitle="Reports you've created and saved to your library" count={`${filteredSaved.length} report${filteredSaved.length!==1?'s':''}`}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
                         {filteredSaved.map(r=>(
-                            <div key={r.id} onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); }} title={r.config?.templateId ? 'Open this report' : 'Built in the report builder — opening it is not wired yet'} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, cursor:'pointer', minHeight:100 }}
+                            <div key={r.id} onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }} title="Open this report" style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, cursor:'pointer', minHeight:100 }}
                                 onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
                                 onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
                                 <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans }}>{r.source||'Opportunities'}</div>

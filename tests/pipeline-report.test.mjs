@@ -197,7 +197,10 @@ test('ReportsTab: the last fabricated constants are gone and the Activity compar
     assert.match(src, /const repsInScope3 = repsInScopeOf\(settings\.users,/);
     assert.match(src, /reportsActivities\.filter\(a=>activityRepOf\(a\)===rep&&dayOf\(a\.date\|\|a\.createdAt\)===d\.date\)/, 'heat cells: unclipped set, local day');
     assert.match(src, /c\.v===0\)\.length>=5\)/, 'the coaching threshold');
-    assert.match(src, /const rows = openPipelineByRep\(reportsOpps, 5\);/);
+    // The builder's preview was openPipelineByRep(reportsOpps, 5) whatever the user
+    // picked; since §0.133 it is the real query drawn by ReportChart.
+    assert.match(src, /<ReportChart result=\{builderResult\} chartType=\{builderChart\}\/>/, 'the builder preview is runReport() drawn by ReportChart (§0.133)');
+    assert.doesNotMatch(src, /const rows = openPipelineByRep\(reportsOpps, 5\);/, 'the fixed preview is gone');
 });
 
 // ── Batch 5b: cycle time and quarter membership from the real close day ─────
