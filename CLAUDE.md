@@ -98,7 +98,8 @@ One commit per verified batch; doc patch in the same commit.
 - `sanitize()` is a full-row builder: a partial PUT payload wipes absent
   columns unless the endpoint merges first —
   `sanitize({ ...existing, ...data })` (the users/leads pattern). Check this
-  shape on every endpoint before trusting its PUT; it has been wrong twice.
+  shape on every endpoint before trusting its PUT; it has been wrong three
+  times (the third: `saved-reports`, 14 Sep 2026 — state §0.135).
 - `bulkUpsert` must fail closed: `undefined` reads as `null` and can treat
   every owned row as unassigned.
 - Every `settings.extra` key must appear in BOTH the GET response object and

@@ -1120,7 +1120,11 @@ export default function TasksTab() {
     // (§16's unmatched-select rule).
     const [scope,  setScope]  = useState(() => localStorage.getItem('tab:tasks:scope') === 'all' ? 'all' : 'mine');
     const setScopePersist     = v => { setScope(v); localStorage.setItem('tab:tasks:scope', v); };
-    const [range,  setRange]  = useState('week');
+    // The date range is a preference too (Jeff, 14 Sep: All time reset to the default on
+    // every return) — persisted like scope, validated on read (§16's unmatched-select rule).
+    const TASK_RANGES = ['today', 'week', 'month', 'all'];
+    const [range,  setRangeRaw] = useState(() => { const v = localStorage.getItem('tab:tasks:range'); return TASK_RANGES.includes(v) ? v : 'week'; });
+    const setRange = v => { setRangeRaw(v); localStorage.setItem('tab:tasks:range', v); };
     const [search, setSearch] = useState('');
     const [activityOpen, setActivityOpen] = useState(false);
     const searchRef = useRef(null);

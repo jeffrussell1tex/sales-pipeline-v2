@@ -152,6 +152,24 @@ function formatCurrency(val) {
 export const emailTemplates = {
 
     /**
+     * A saved report, delivered on its schedule or by "Send now" (state §0.135).
+     * The table arrives already rendered and ESCAPED (reportDelivery.js).
+     * @param {{ name, source, period, ownerName, tableHtml, count, url, cadence, trigger }} d
+     */
+    reportDelivery({ name, source, period, ownerName, tableHtml, count, url, cadence, trigger }) {
+        const title = name || 'Report';
+        const subject = `${title} — ${source || 'Opportunities'} · ${period || 'All time'}`;
+        const how = trigger === 'manual' ? 'sent now from Accelerep' : `your ${cadence || 'scheduled'} delivery`;
+        const html = layout(subject, `
+            <h2>${escHtml(title)}</h2>
+            <p>${escHtml(source || 'Opportunities')} · ${escHtml(period || 'All time')}${ownerName ? ` · saved by ${escHtml(ownerName)}` : ''} · ${Number(count) || 0} row${Number(count) === 1 ? '' : 's'} in the period — ${escHtml(how)}.</p>
+            ${tableHtml || '<p>Nothing in this period.</p>'}
+            ${url ? `<a class="btn" href="${escHtml(url)}">Open in Accelerep →</a>` : ''}
+        `);
+        return { subject, html };
+    },
+
+    /**
      * To the CUSTOMER: their visit is booked, or its date/time changed (state §0.111).
      * @param {{ companyName, customerName, jobTitle, when, techFirstName, statusUrl }} d
      */

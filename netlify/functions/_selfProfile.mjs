@@ -21,6 +21,8 @@ export const SELF_EDITABLE_KEYS = Object.freeze([
     'emailSignature',
     // What I want to hear about, and when
     'notificationPrefs', 'digestTime', 'smsNotifications', 'timezone',
+    // Which saved reports sit on my Home (state §0.135) — ids, mine to choose
+    'pinnedReports',
 ]);
 
 // Field-present semantics, the same contract mergeForUpdate keeps: a key sent

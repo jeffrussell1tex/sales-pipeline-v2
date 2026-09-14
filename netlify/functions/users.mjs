@@ -115,6 +115,9 @@ export const handler = async (event) => {
             digestTime:    data.digestTime    || '08:00',
             smsNotifications: data.smsNotifications || null,
             timezone:         data.timezone         || null,
+            // The saved reports pinned to this member's Home (state §0.135): ids,
+            // strings only, capped — a report that no longer exists is skipped on read.
+            pinnedReports:    Array.isArray(data.pinnedReports) ? data.pinnedReports.filter(x => typeof x === 'string').slice(0, 50) : null,
             status:           data.status            || null,
             // Quota fields — stored in profile jsonb so they survive DB round-trips
             annualQuota:   data.annualQuota   ?? null,

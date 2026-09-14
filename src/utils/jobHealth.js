@@ -19,6 +19,7 @@ export const SCHEDULED_JOBS = Object.freeze([
     Object.freeze({ job: 'digest',            label: 'Daily digest',     cron: '0 * * * *', cadenceMs: 3600000 }),
     Object.freeze({ job: 'task-reminders',    label: 'Task reminders',   cron: '* * * * *', cadenceMs: 60000 }),
     Object.freeze({ job: 'score-leads-batch', label: 'Lead scoring',     cron: '0 6 * * *', cadenceMs: 86400000 }),
+    Object.freeze({ job: 'report-deliveries', label: 'Report delivery',  cron: '0 * * * *', cadenceMs: 3600000 }),
 ]);
 
 export const HEARTBEAT_GRACE_MS = 10 * 60 * 1000;   // a run may be slow, and Netlify's cron is not to the second

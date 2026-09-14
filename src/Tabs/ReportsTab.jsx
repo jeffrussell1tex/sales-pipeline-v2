@@ -21,6 +21,10 @@ import { T } from '../tokens.js';
 // sets, drawn by the same component.
 import { REPORT_SOURCES, REPORT_PERIODS, REPORT_CHARTS, fieldsFor, runReport } from '../utils/reportQuery.js';
 import ReportChart from '../components/ReportChart.jsx';
+import { useAuth } from '@clerk/clerk-react';
+// A saved report's delivery schedule — the shape the endpoint stores and the
+// hourly job reads (state §0.135) — and the words for it on the card.
+import { DELIVERY_CADENCES, WEEKDAYS, cleanDelivery, deliverySummary, deliveryHasChannel, isTimezone } from '../utils/reportDelivery.js';
 
 export default function ReportsTab({ leadsEnabled = true }) {
     const {
@@ -2106,6 +2110,127 @@ export default function ReportsTab({ leadsEnabled = true }) {
 // ─────────────────────────────────────────────────────────────
 //  Saved Reports Tab — proper React component (hooks-safe)
 // ─────────────────────────────────────────────────────────────
+// ── A library card (state §0.135) ────────────────────────────────────────────
+// Module scope, data as props (guide §16). The footer holds the owner, a Shared
+// mark and the controls this viewer may use: Pin / Pinned (mine to choose — it
+// puts the report on my Home), Share / Unshare and Deliver (the owner's or an
+// Admin's), and delete (the same). A template report has no query to deliver.
+const LibraryCard = ({ r, mayTouch, pinned, currentUser, onOpen, onPin, onShare, onDeliver, onDelete }) => {
+    const small = (active) => ({ background: 'transparent', border: `1px solid ${active ? T.goldInk : T.border}`, borderRadius: 999, color: active ? T.goldInk : T.inkMid, cursor: 'pointer', fontSize: 10, fontWeight: 600, padding: '2px 7px', lineHeight: 1.4, fontFamily: T.sans });
+    const stop = (fn) => (e) => { e.stopPropagation(); fn(r); };
+    const delivery = r.config?.delivery;
+    return (
+        <div onClick={() => onOpen(r)} title="Open this report" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6, cursor: 'pointer', minHeight: 118 }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+            onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: T.inkMuted, fontFamily: T.sans }}>{r.source || 'Opportunities'}</div>
+                {r.isShared && <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: T.ok, fontFamily: T.sans }}>Shared</span>}
+            </div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: T.ink, letterSpacing: -0.1, fontFamily: T.sans, lineHeight: 1.25 }}>{r.name}</div>
+            {r.description && <div style={{ fontSize: 11.5, color: T.inkMuted, lineHeight: 1.4, fontFamily: T.sans }}>{r.description}</div>}
+            {delivery?.enabled && (
+                <div style={{ fontSize: 10.5, color: delivery.lastError ? T.danger : T.inkMid, fontFamily: T.sans }} title={delivery.lastError || ''}>
+                    ⏱ {deliverySummary(delivery)}{delivery.lastError ? ' · last send failed' : ''}
+                </div>
+            )}
+            <div style={{ marginTop: 'auto', paddingTop: 6, borderTop: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.ownerName || currentUser}</span>
+                <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button onClick={stop(onPin)} title={pinned ? 'Remove from your Home' : 'Pin to your Home'} style={small(pinned)}>{pinned ? 'Pinned' : 'Pin'}</button>
+                    {mayTouch && <button onClick={stop(onShare)} title={r.isShared ? 'Stop sharing with the team' : 'Share with the team'} style={small(!!r.isShared)}>{r.isShared ? 'Unshare' : 'Share'}</button>}
+                    {mayTouch && !r.config?.templateId && <button onClick={stop(onDeliver)} title="Schedule an email or Slack delivery" style={small(!!delivery?.enabled)}>Deliver</button>}
+                    {mayTouch && <button onClick={stop(onDelete)} title="Delete this report" style={{ background: 'transparent', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>}
+                </span>
+            </div>
+        </div>
+    );
+};
+
+// ── The delivery dialog (state §0.135) ───────────────────────────────────────
+// Module scope, data as props. The draft is the stored schedule or a first one
+// (weekly, Monday 8:00 in the browser's zone, to me); Save PUTs `delivery` —
+// the endpoint validates it and keeps the job's stamps; Save & send now saves,
+// then runs the report through the same path the hourly job takes and prints
+// what went where. Slack is offered only when the workspace has it connected.
+const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, note, onSave, onSendNow, onClose }) => {
+    const browserTz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })();
+    const [draft, setDraft] = React.useState(() => cleanDelivery(report?.config?.delivery)
+        || { enabled: true, cadence: 'weekly', hour: 8, weekday: 1, dayOfMonth: 1, timezone: browserTz, emailTo: currentUserId ? [currentUserId] : [], slack: false, lastDeliveredAt: null, lastError: null });
+    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    const members = (users || []).filter(u => u.active !== false && u.id).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const toggleTo = (id) => set('emailTo', draft.emailTo.includes(id) ? draft.emailTo.filter(x => x !== id) : [...draft.emailTo, id]);
+    const tzOk = isTimezone(draft.timezone);
+    const canSend = tzOk && deliveryHasChannel(draft);
+    const field = { padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontFamily: T.sans, color: T.ink, background: T.surface };
+    const label = { fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans, marginBottom: 4 };
+    const btn = (primary, off = false) => ({ padding: '7px 14px', borderRadius: T.r, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans, cursor: busy || off ? 'default' : 'pointer', border: primary ? 'none' : `1px solid ${T.border}`, background: primary ? T.ink : 'transparent', color: primary ? T.surface : T.inkMid, opacity: busy || off ? 0.55 : 1 });
+    const hourLabel = (h) => `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? 'AM' : 'PM'}`;
+    return (
+        <div onClick={() => !busy && onClose()} style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.5)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 20, width: 540, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Schedule delivery</div>
+                    <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans, lineHeight: 1.5 }}>{report?.name} — run on the server at the hour you pick, over what you can see, and sent as a table.</div>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontFamily: T.sans, color: T.ink }}>
+                    <input type="checkbox" checked={draft.enabled} onChange={e => set('enabled', e.target.checked)}/> Delivery on
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div><div style={label}>How often</div>
+                        <select value={draft.cadence} onChange={e => set('cadence', e.target.value)} style={{ ...field, width: '100%' }}>
+                            {DELIVERY_CADENCES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        </select></div>
+                    {draft.cadence === 'weekly' && (<div><div style={label}>On</div>
+                        <select value={draft.weekday} onChange={e => set('weekday', Number(e.target.value))} style={{ ...field, width: '100%' }}>
+                            {WEEKDAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+                        </select></div>)}
+                    {draft.cadence === 'monthly' && (<div><div style={label}>On day</div>
+                        <select value={draft.dayOfMonth} onChange={e => set('dayOfMonth', Number(e.target.value))} style={{ ...field, width: '100%' }}>
+                            {Array.from({ length: 28 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                        </select></div>)}
+                    <div><div style={label}>At</div>
+                        <select value={draft.hour} onChange={e => set('hour', Number(e.target.value))} style={{ ...field, width: '100%' }}>
+                            {Array.from({ length: 24 }, (_, h) => h).map(h => <option key={h} value={h}>{hourLabel(h)}</option>)}
+                        </select></div>
+                    <div><div style={label}>Time zone</div>
+                        <input value={draft.timezone} onChange={e => set('timezone', e.target.value)} placeholder="America/Chicago" style={{ ...field, width: '100%', boxSizing: 'border-box', borderColor: tzOk ? T.border : T.danger }}/>
+                        {!tzOk && <div style={{ fontSize: 11, color: T.danger, fontFamily: T.sans, marginTop: 3 }}>Not a time zone name (like America/Chicago, or UTC).</div>}</div>
+                </div>
+                <div>
+                    <div style={label}>Email to</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, maxHeight: 160, overflowY: 'auto', border: `1px solid ${T.border}`, borderRadius: T.r, padding: 8 }}>
+                        {members.length === 0 && <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>No members loaded yet.</div>}
+                        {members.map(u => (
+                            <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontFamily: T.sans, color: u.email ? T.ink : T.inkMuted, minWidth: 0 }}>
+                                <input type="checkbox" checked={draft.emailTo.includes(u.id)} onChange={() => toggleTo(u.id)}/>
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={u.email || 'no email on the roster'}>{u.name}{u.email ? '' : ' (no email)'}</span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontFamily: T.sans, color: slackConfigured ? T.ink : T.inkMuted }}>
+                    <input type="checkbox" checked={draft.slack} disabled={!slackConfigured} onChange={e => set('slack', e.target.checked)}/>
+                    {slackConfigured ? 'Post to the workspace’s Slack channel' : 'Post to Slack — no Slack webhook is connected (Settings → Integrations → Connected apps)'}
+                </label>
+                {(draft.lastDeliveredAt || draft.lastError) && (
+                    <div style={{ fontSize: 11.5, color: draft.lastError ? T.danger : T.inkMuted, fontFamily: T.sans }}>
+                        {draft.lastDeliveredAt ? `Last sent ${new Date(draft.lastDeliveredAt).toLocaleString()}` : 'Never sent'}{draft.lastError ? ` · ${draft.lastError}` : ''}
+                    </div>
+                )}
+                {note && (
+                    <div role={note.ok ? 'status' : 'alert'} style={{ fontSize: 12.5, fontWeight: 600, color: note.ok ? T.ok : T.danger, fontFamily: T.sans, padding: '6px 10px', background: note.ok ? `${T.ok}12` : `${T.danger}12`, borderLeft: `3px solid ${note.ok ? T.ok : T.danger}`, borderRadius: T.r, lineHeight: 1.5 }}>{note.text}</div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={onClose} disabled={busy} style={btn(false)}>Close</button>
+                    <button onClick={() => onSendNow(draft)} disabled={busy || !canSend} title={canSend ? 'Save this schedule and send the report now' : 'Pick a recipient, or turn Slack on, first'} style={btn(false, !canSend)}>{busy ? 'Working…' : 'Save & send now'}</button>
+                    <button onClick={() => onSave(draft)} disabled={busy || !tzOk} style={btn(true, !tzOk)}>{busy ? 'Working…' : 'Save schedule'}</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimedActivities, activities, scopedRepNames = null, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp, leads = [] }) {
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
@@ -2163,6 +2288,82 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const setSavedReportsList = setSavedReportsListProp ?? (() => {});
     const [saveState, setSaveState] = React.useState('idle'); // 'idle'|'saving'|'saved'|'error'
     const [saveError, setSaveError] = React.useState(null);
+
+    // ── Sharing, pins and delivery (state §0.135) ────────────────────────────
+    const { userId: clerkUserId } = useAuth();
+    const { myProfile, setMyProfile, currentUserId, userRole } = useApp();
+    const mayTouch = (r) => userRole === 'Admin' || r.ownerId === clerkUserId;
+    const [libError, setLibError] = React.useState('');
+    const [deliveryFor, setDeliveryFor] = React.useState(null);     // the report whose schedule dialog is open
+    const [deliveryBusy, setDeliveryBusy] = React.useState(false);
+    const [deliveryNote, setDeliveryNote] = React.useState(null);   // { ok, text }
+    // A PARTIAL PUT: the endpoint merges it over the stored row and answers
+    // with the row, which the list adopts — never the body.
+    const patchReport = async (id, patch) => {
+        setLibError('');
+        const res = await dbFetch('/.netlify/functions/saved-reports', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...patch }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(res.status === 403 ? 'Only the report’s owner or an Admin can change it.' : (data.error || ('HTTP ' + res.status)));
+        if (data.report) setSavedReportsList(prev => prev.map(r => r.id === data.report.id ? data.report : r));
+        return data.report || null;
+    };
+    const toggleShare = async (r) => { try { await patchReport(r.id, { isShared: !r.isShared }); } catch (e) { setLibError(e.message); } };
+    const pinnedIds = Array.isArray(myProfile?.pinnedReports) ? myProfile.pinnedReports : [];
+    const isPinned = (r) => pinnedIds.includes(r.id);
+    // The pin list is MINE: it rides my own profile row through the self-service
+    // allowlist (§18b34), written before the state moves (the persistent-data rule).
+    const togglePin = async (r) => {
+        if (!myProfile?.id) { setLibError('Your profile has not loaded yet — try again in a moment.'); return; }
+        const next = isPinned(r) ? pinnedIds.filter(id => id !== r.id) : [...pinnedIds, r.id];
+        setLibError('');
+        const res = await dbFetch('/.netlify/functions/users?me=true', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: myProfile.id, pinnedReports: next }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { setLibError(data.error || ('Pin not saved — HTTP ' + res.status)); return; }
+        const stored = Array.isArray(data.user?.pinnedReports) ? data.user.pinnedReports : next;
+        if (setMyProfile) setMyProfile(prev => ({ ...(prev || {}), ...(data.user || {}), pinnedReports: stored }));
+    };
+    const openDelivery = (r) => { setDeliveryNote(null); setDeliveryFor(r); };
+    const saveDelivery = async (delivery) => {
+        setDeliveryBusy(true); setDeliveryNote(null);
+        try { const saved = await patchReport(deliveryFor.id, { delivery }); if (saved) setDeliveryFor(saved); setDeliveryNote({ ok: true, text: delivery.enabled ? `Schedule saved — ${deliverySummary(saved?.config?.delivery || delivery)}.` : 'Schedule saved, delivery off.' }); return saved; }
+        catch (e) { setDeliveryNote({ ok: false, text: e.message }); return null; }
+        finally { setDeliveryBusy(false); }
+    };
+    // Save, then the same path the hourly job takes — and say what went where.
+    const sendNow = async (delivery) => {
+        setDeliveryBusy(true); setDeliveryNote(null);
+        try {
+            const saved = await patchReport(deliveryFor.id, { delivery });
+            const res = await dbFetch('/.netlify/functions/saved-reports?action=deliver&id=' + encodeURIComponent(deliveryFor.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            const data = await res.json().catch(() => ({}));
+            const went = [...(data.sent?.email || []), ...(data.sent?.slack ? ['Slack'] : [])];
+            const text = (went.length ? `Sent to ${went.join(', ')} — ${data.rows ?? 0} row${data.rows === 1 ? '' : 's'} in the period.` : 'Nothing was sent.') + (Array.isArray(data.errors) && data.errors.length ? ` ${data.errors.join(' ')}` : '');
+            setDeliveryNote({ ok: res.ok, text: res.ok ? text : (data.error || text) });
+            if (data.delivery && saved) {
+                const stamped = { ...saved, config: { ...(saved.config || {}), delivery: data.delivery } };
+                setDeliveryFor(stamped);
+                setSavedReportsList(prev => prev.map(r => r.id === stamped.id ? stamped : r));
+            }
+        } catch (e) { setDeliveryNote({ ok: false, text: e.message }); }
+        finally { setDeliveryBusy(false); }
+    };
+    const openCard = (r) => { if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); };
+    const confirmDelete = (r) => showConfirm(`Delete the saved report "${r.name}"?`, async () => {
+        const rd = await dbWrite('/.netlify/functions/saved-reports', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id }) });
+        if (!rd.ok) { setLibError(`Report not deleted — ${rd.error}`); return; }
+        setSavedReportsList(prev => prev.filter(x => x.id !== r.id));
+    });
+    // Home's "Open →" on a pinned report: the id waits in localStorage until
+    // the library has loaded, then that report opens once.
+    React.useEffect(() => {
+        let pending = null;
+        try { pending = localStorage.getItem('tab:reports:openReport'); } catch { pending = null; }
+        if (!pending || !savedReportsList.length) return;
+        const r = savedReportsList.find(x => x.id === pending);
+        if (!r) return;
+        try { localStorage.removeItem('tab:reports:openReport'); } catch { /* storage unavailable */ }
+        openCard(r);
+    }, [savedReportsList]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Save report handler — used by both blank and AI builder Save to library buttons
     const handleSaveReport = React.useCallback(async ({ id: existingId = null, name, source, dims, metrics, chartType, description, config = null, filters = null }) => {
@@ -4277,25 +4478,36 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                     </div>
                 </SectionS>
             )}
-            {filteredSaved.length > 0 && (
-                <SectionS title="Your reports" subtitle="Reports you've created and saved to your library" count={`${filteredSaved.length} report${filteredSaved.length!==1?'s':''}`}>
+            {libError && (
+                <div role="alert" style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', marginBottom:12, background:`${T.danger}12`, borderLeft:`3px solid ${T.danger}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, color:T.danger, fontFamily:T.sans }}>
+                    <span style={{ flex:1 }}>{libError}</span>
+                    <button onClick={()=>setLibError('')} style={{ background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer', fontSize:12, padding:'3px 8px', fontFamily:T.sans }}>Dismiss</button>
+                </div>
+            )}
+            {filteredSaved.some(r=>r.ownerId===clerkUserId) && (
+                <SectionS title="Your reports" subtitle="Reports you've created and saved to your library — share one with the team, pin it to your Home, or schedule its delivery" count={`${filteredSaved.filter(r=>r.ownerId===clerkUserId).length} report${filteredSaved.filter(r=>r.ownerId===clerkUserId).length!==1?'s':''}`}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
-                        {filteredSaved.map(r=>(
-                            <div key={r.id} onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }} title="Open this report" style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, cursor:'pointer', minHeight:100 }}
-                                onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
-                                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                                <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans }}>{r.source||'Opportunities'}</div>
-                                <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, letterSpacing:-0.1, fontFamily:T.sans, lineHeight:1.25 }}>{r.name}</div>
-                                {r.description && <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.4, fontFamily:T.sans }}>{r.description}</div>}
-                                <div style={{ marginTop:'auto', paddingTop:6, borderTop:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>
-                                    <span>{r.ownerName||currentUser}</span>
-                                    <button onClick={(e)=>{ e.stopPropagation(); showConfirm(`Delete the saved report "${r.name}"?`, async () => { const rd = await dbWrite('/.netlify/functions/saved-reports',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); if(!rd.ok){ window.alert(`Report not deleted \u2014 ${rd.error}`); return; } setSavedReportsList(prev=>prev.filter(x=>x.id!==r.id)); }); }}
-                                        style={{ background:'transparent', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>×</button>
-                                </div>
-                            </div>
+                        {filteredSaved.filter(r=>r.ownerId===clerkUserId).map(r=>(
+                            <LibraryCard key={r.id} r={r} mayTouch={mayTouch(r)} pinned={isPinned(r)} currentUser={currentUser}
+                                onOpen={openCard} onPin={togglePin} onShare={toggleShare} onDeliver={openDelivery} onDelete={confirmDelete}/>
                         ))}
                     </div>
                 </SectionS>
+            )}
+            {filteredSaved.some(r=>r.ownerId!==clerkUserId) && (
+                <SectionS title="Shared with you" subtitle="Reports other members shared with the team — open them, pin them; only the owner or an Admin changes them" count={`${filteredSaved.filter(r=>r.ownerId!==clerkUserId).length} report${filteredSaved.filter(r=>r.ownerId!==clerkUserId).length!==1?'s':''}`}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+                        {filteredSaved.filter(r=>r.ownerId!==clerkUserId).map(r=>(
+                            <LibraryCard key={r.id} r={r} mayTouch={mayTouch(r)} pinned={isPinned(r)} currentUser={currentUser}
+                                onOpen={openCard} onPin={togglePin} onShare={toggleShare} onDeliver={openDelivery} onDelete={confirmDelete}/>
+                        ))}
+                    </div>
+                </SectionS>
+            )}
+            {deliveryFor && (
+                <DeliveryDialog report={deliveryFor} users={settings?.users || []} slackConfigured={!!settings?.connectedApps?.slack}
+                    currentUserId={currentUserId} busy={deliveryBusy} note={deliveryNote}
+                    onSave={saveDelivery} onSendNow={sendNow} onClose={()=>{ setDeliveryFor(null); setDeliveryNote(null); }}/>
             )}
             {filteredSaved.length === 0 && !srchQ && (
                 <div style={{ marginBottom:20, padding:'14px 16px', background:T.surface, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, display:'flex', alignItems:'center', justifyContent:'space-between', fontFamily:T.sans }}>

@@ -1530,6 +1530,7 @@ dbFetch('/.netlify/functions/users?me=true')
         currentUser,
         currentUserId,
         myProfile,   // the caller's own users row (/users?me) — the contact rail names the owner of a pre-§0.104 row from it
+        setMyProfile, // the pin list on it is edited from the report library (state §0.135)
         userRole,
         clerkUser,
         canSeeAll: userRole === 'Admin' || userRole === 'Manager',

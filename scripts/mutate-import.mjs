@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -906,8 +906,8 @@ const mutations = [
         "chartType, description, filters, ownerId: currentUser"],
     ['reports: a saved card no longer opens its template',
         'src/Tabs/ReportsTab.jsx',
-        "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }}",
-        "onClick={()=>{ if (false && r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }}"],
+        "    const openCard = (r) => { if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); };",
+        "    const openCard = (r) => { if (false && r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); };"],
     ['reports: Duplicate opens a blank canvas again instead of copying',
         'src/Tabs/ReportsTab.jsx',
         "name: r.src.name + ' (copy)'",
@@ -2388,8 +2388,8 @@ const mutations = [
 
     ["report builder: the library card no longer opens a builder report",
         "src/Tabs/ReportsTab.jsx",
-        "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }} title=\"Open this report\"",
-        "onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); }} title=\"Open this report\""],
+        "    const openCard = (r) => { if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); };",
+        "    const openCard = (r) => { if (r.config?.templateId) setActiveTemplate(r.config.templateId); };"],
 
     // ── Drag-to-reschedule on the week board (0.134) ─────────────────────────
     ["week drop: a held crew dragged to another day is promoted to 'scheduled' — a confirmation goes to the customer for a job with no time",
@@ -2431,6 +2431,72 @@ const mutations = [
         "src/Tabs/DispatchTab.jsx",
         "                                            draggable={!busy && !j.isBridge}\n                                            onDragStart={e => startDrag(e, j, tech.id)} onDragEnd={endDrag}",
         "                                            draggable={false}\n                                            onDragStart={e => startDrag(e, j, tech.id)} onDragEnd={endDrag}"],
+
+    // ── Saved reports: sharing, delivery, pins (0.135) ────────────────────────
+    ["saved reports: GET returns every row in the org again — a rep reads another member's unshared report",
+        "netlify/functions/saved-reports.mjs",
+        "                : and(eq(savedReports.orgId, orgId), or(eq(savedReports.ownerId, userId), eq(savedReports.isShared, true)));",
+        "                : eq(savedReports.orgId, orgId);"],
+
+    ["saved reports: PUT re-stamps the owner with the caller — an Admin's rename takes the report",
+        "netlify/functions/saved-reports.mjs",
+        "                ownerId:   existing.ownerId,                       // never the caller's",
+        "                ownerId:   userId,"],
+
+    ["saved reports: the schedule's recipients are no longer limited to this org's roster",
+        "netlify/functions/saved-reports.mjs",
+        "        d.emailTo = d.emailTo.filter(id => ids.has(id));",
+        "        d.emailTo = d.emailTo;"],
+
+    ["saved reports: the job's stamp is overwritten by a client save (lastDeliveredAt from the body)",
+        "netlify/functions/saved-reports.mjs",
+        "    d.lastDeliveredAt = prior?.lastDeliveredAt ?? null;",
+        "    d.lastDeliveredAt = d.lastDeliveredAt ?? prior?.lastDeliveredAt ?? null;"],
+
+    ["report delivery: a rep's report runs over the whole org (the owner's scope ignored)",
+        "netlify/functions/report-deliveries.mjs",
+        "    const all = canSeeAll(owner?.role);",
+        "    const all = true;"],
+
+    ["report delivery: the recipients are resolved without the org — another org's member with that id gets the report",
+        "netlify/functions/report-deliveries.mjs",
+        "        .where(and(eq(users.orgId, orgId), inArray(users.id, ids)));",
+        "        .where(inArray(users.id, ids));"],
+
+    ["report delivery: the weekly cadence fires every day at the hour",
+        "src/utils/reportDelivery.js",
+        "    if (d.cadence === 'weekly' && clock.weekday !== d.weekday) return { due: false, reason: `not the day (${WEEKDAYS[clock.weekday]}, wants ${WEEKDAYS[d.weekday]})` };",
+        "    if (false && d.cadence === 'weekly' && clock.weekday !== d.weekday) return { due: false, reason: 'x' };"],
+
+    ["report delivery: a delivery already sent this window goes out again every hour of that hour",
+        "src/utils/reportDelivery.js",
+        "    if (Number.isFinite(last) && nowMs - last < MIN_GAP_MS[d.cadence]) return { due: false, reason: 'already delivered this window' };",
+        "    if (false) return { due: false, reason: 'already delivered this window' };"],
+
+    ["report delivery: cleanDelivery keeps whatever keys arrive (orgId through the schedule)",
+        "src/utils/reportDelivery.js",
+        "    return {\n        enabled:    raw.enabled === true,",
+        "    return {\n        ...raw,\n        enabled:    raw.enabled === true,"],
+
+    ["report delivery: the html table no longer escapes a group key",
+        "src/utils/reportDelivery.js",
+        "    const tr = (cells, bold = false) => `<tr>${cells.map(c => `<td style=\"padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;${bold ? 'font-weight:700;' : ''}color:#1a1a2e\">${escHtml(c)}</td>`).join('')}</tr>`;",
+        "    const tr = (cells, bold = false) => `<tr>${cells.map(c => `<td style=\"padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;${bold ? 'font-weight:700;' : ''}color:#1a1a2e\">${c}</td>`).join('')}</tr>`;"],
+
+    ["report library: the pin is only local state — gone on refresh",
+        "src/Tabs/ReportsTab.jsx",
+        "        const res = await dbFetch('/.netlify/functions/users?me=true', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: myProfile.id, pinnedReports: next }) });",
+        "        const res = { ok: true, json: async () => ({ user: { pinnedReports: next } }) };"],
+
+    ["Home: pinned reports load before an org is active (the §18b38 gate gone)",
+        "src/Tabs/HomeTab.jsx",
+        "        if (!orgId || !currentUserId) { setHomeReports([]); return undefined; }",
+        "        if (false) { setHomeReports([]); return undefined; }"],
+
+    ["tab prefs: the Tasks range is not persisted again",
+        "src/Tabs/TasksTab.jsx",
+        "    const setRange = v => { setRangeRaw(v); localStorage.setItem('tab:tasks:range', v); };",
+        "    const setRange = v => { setRangeRaw(v); };"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

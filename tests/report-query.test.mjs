@@ -216,7 +216,11 @@ test('the builder is wired to the engine: sources and charts from the module, fi
 test('a saved report OPENS into the builder and saves back to its own row; the name is an input outside the inline header; the leads reach the builder', () => {
     const s = code(read('src/Tabs/ReportsTab.jsx'));
     assert.ok(s.includes('    const openSavedReport = (r) => {'));
-    assert.ok(s.includes("onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); }} title=\"Open this report\""), 'the library card opens a builder report');
+    // Since §0.135 the card is a module-scope LibraryCard whose onOpen is the
+    // library's openCard — a template report opens its template, any other
+    // opens INTO the builder.
+    assert.ok(s.includes("const openCard = (r) => { if (r.config?.templateId) setActiveTemplate(r.config.templateId); else openSavedReport(r); };"), 'the library card opens a builder report');
+    assert.ok(s.includes("onOpen={openCard} onPin={togglePin} onShare={toggleShare} onDeliver={openDelivery} onDelete={confirmDelete}/>"), 'and the card is wired to it');
     assert.ok(!s.includes('opening it is not wired yet'));
     assert.ok(s.includes("        setEditingReportId(r.id);") && s.includes("        setBuilderResult(runReport({ source: src, dims, metrics, period, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 }));"), 'opening runs the saved definition');
     assert.ok(s.includes("                method: existingId ? 'PUT' : 'POST',"), 'a reopened report saves in place');

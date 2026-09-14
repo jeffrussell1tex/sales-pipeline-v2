@@ -48,7 +48,9 @@ test('the six template Save buttons save a real report that names its template, 
     // §0.133: the handler also takes an existing id (a reopened builder report saves in place) and the filters.
     assert.match(src, /const handleSaveReport = React\.useCallback\(async \(\{ id: existingId = null, name, source, dims, metrics, chartType, description, config = null, filters = null \}\)/);
     assert.match(src, /chartType, description, config, filters, ownerId: currentUser/);
-    assert.match(src, /onClick=\{\(\)=>\{ if \(r\.config\?\.templateId\) setActiveTemplate\(r\.config\.templateId\); else openSavedReport\(r\); \}\}/, 'a saved card opens its template, or the builder report it is');
+    // Since §0.135 the card is the module-scope LibraryCard and its onOpen is openCard.
+    assert.match(src, /const openCard = \(r\) => \{ if \(r\.config\?\.templateId\) setActiveTemplate\(r\.config\.templateId\); else openSavedReport\(r\); \};/, 'a saved card opens its template, or the builder report it is');
+    assert.match(src, /onOpen=\{openCard\}/, 'and the card is wired to it');
 });
 
 test('Duplicate lists the real saved reports and copies one; Email to owner mails an address, not a name', () => {

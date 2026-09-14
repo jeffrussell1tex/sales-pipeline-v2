@@ -24,6 +24,11 @@ schedule = "* * * * *"
 [functions."score-leads-batch"]
 schedule = "0 6 * * *"
 
+# Saved-report deliveries (state §0.135): hourly; each schedule's own hour and
+# timezone decide when it fires; the heartbeat gate decides which site runs it.
+[functions."report-deliveries"]
+schedule = "0 * * * *"
+
 # Security headers — served on every response. These improve the domain's
 # standing with corporate proxy / reputation engines (Zscaler, Netskope, etc.)
 # and are good practice regardless. Deliberately NO Content-Security-Policy yet:

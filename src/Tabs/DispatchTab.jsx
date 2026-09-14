@@ -4952,7 +4952,11 @@ export default function DispatchTab() {
     // Open one job's record in the Jobs view, from the queue's cards or its header.
     const [openJobRequest, setOpenJobRequest] = useState(null);
     const openJobRecord = (id) => { setOpenJobRequest({ id, at: Date.now() }); setView('jobs'); };
-    const [boardRange,   setBoardRange]   = useState('today');   // 'today' | 'week' | 'month'
+    // The board's range is a preference (Jeff, 14 Sep: it reset to Today on every return) —
+    // persisted like the sub-view, validated on read. The anchor date is NOT: a stored
+    // week would strand a returning dispatcher on a stale week; the range re-anchors on today.
+    const [boardRange,   setBoardRangeRaw] = useState(() => { const v = localStorage.getItem('tab:dispatch:boardRange'); return ['today', 'week', 'month'].includes(v) ? v : 'today'; });
+    const setBoardRange = (r) => { setBoardRangeRaw(r); localStorage.setItem('tab:dispatch:boardRange', r); };
     const [boardAnchor,  setBoardAnchor]  = useState(() => new Date());
 
     // ── New Job form state ────────────────────────────────────────────────────

@@ -7,6 +7,10 @@ import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
 import { openStagesOf, commitFallbackStages } from '../utils/stageOrder';
 import { isAddressedTo, isReadBy, sortNotes, audienceLabel } from '../utils/coachingNotes';
 import { T } from '../tokens.js';
+import { dbFetch } from '../utils/storage';
+// Pinned saved reports (state §0.135): the same engine and chart the Reports tab uses.
+import { runReport, REPORT_CHARTS } from '../utils/reportQuery.js';
+import ReportChart from '../components/ReportChart.jsx';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (V1 — matches variation1.jsx TOKENS exactly)
@@ -148,6 +152,7 @@ export default function HomeTab() {
         calendarEvents, calendarConnected, calendarLoading,
         setActiveTab, isMobile,
         coachingNotes, markCoachingNoteRead, currentUserId,
+        myProfile, leads,
         setEditingOpp, setShowModal,
         setEditingTask, setShowTaskModal,
         setTaskRailId, setTaskRailMode,
@@ -158,6 +163,37 @@ export default function HomeTab() {
     } = useApp();
 
     const { userId, orgId } = useAuth();
+
+    // ── Pinned reports (state §0.135) ─────────────────────────────────────────
+    // The ids ride my profile (the library's Pin); the rows come from the
+    // library endpoint, loaded per active org and never before one (§18b38);
+    // each report is run HERE over what this viewer can see and drawn by the
+    // chart the Reports tab draws. A template report has no query — it links.
+    const [homeReports, setHomeReports] = React.useState([]);
+    React.useEffect(() => {
+        if (!orgId || !currentUserId) { setHomeReports([]); return undefined; }
+        let cancelled = false;
+        dbFetch('/.netlify/functions/saved-reports')
+            .then(r => (r.ok ? r.json() : { reports: [] }))
+            .then(d => { if (!cancelled) setHomeReports(Array.isArray(d?.reports) ? d.reports : []); })
+            .catch(() => { if (!cancelled) setHomeReports([]); });
+        return () => { cancelled = true; };
+    }, [orgId, currentUserId]);
+    const pinnedReports = React.useMemo(() => {
+        const ids = Array.isArray(myProfile?.pinnedReports) ? myProfile.pinnedReports : [];
+        if (!ids.length || !homeReports.length) return [];
+        const data = { opportunities: visibleOpportunities || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} };
+        const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
+        return ids.map(id => homeReports.find(r => r.id === id)).filter(Boolean).map(r => ({
+            report: r,
+            chartType: REPORT_CHARTS.some(c => c.id === r.chartType) ? r.chartType : 'table',
+            result: r.config?.templateId ? null : runReport({ source: r.source, dims: r.dims || [], metrics: r.metrics || [], period: r.filters?.period || 'all', limit: 8 }, data, { fiscalStart }),
+        }));
+    }, [myProfile, homeReports, visibleOpportunities, accounts, leads, activities, settings]);
+    const openPinnedReport = (r) => {
+        try { localStorage.setItem('tab:reports:subTab', 'custom'); localStorage.setItem('tab:reports:openReport', r.id); } catch { /* storage unavailable */ }
+        setActiveTab('reports');
+    };
     const [calSrc, setCalSrc] = React.useState('all'); // 'all' | 'user' | 'org'
     const connectMyCalendar = () => {
         const qs = new URLSearchParams({ provider: 'google', scope: 'user', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User', from: 'home' });
@@ -716,6 +752,35 @@ export default function HomeTab() {
                                         <div style={{ fontSize: '0.5625rem', fontWeight: '700', color: item.categoryColor, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.375rem', fontFamily: T.sans }}>{item.category}</div>
                                         <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink, lineHeight: 1.35, marginBottom: '0.375rem', fontFamily: T.sans }}>{item.title}</div>
                                         <div style={{ fontSize: '0.75rem', color: T.inkMid, lineHeight: 1.5, fontFamily: T.sans }}>{item.body}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* PINNED REPORTS (state §0.135) — saved reports pinned from the library, run over what this viewer can see */}
+                    {pinnedReports.length > 0 && (
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '0.625rem' }}>
+                                <div style={eyebrow()}>Pinned reports</div>
+                                <button onClick={() => { try { localStorage.setItem('tab:reports:subTab', 'custom'); } catch { /* storage unavailable */ } setActiveTab('reports'); }}
+                                    style={{ fontSize: '0.75rem', color: T.goldInk, fontWeight: '600', background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.sans }}>
+                                    Manage in Reports →
+                                </button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '0.75rem' }}>
+                                {pinnedReports.map(({ report: r, result, chartType }) => (
+                                    <div key={r.id} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rSm, padding: '0.875rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                                            <div style={{ minWidth: 0 }}>
+                                                <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: T.ink, fontFamily: T.sans, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                                                <div style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>{r.source || 'Opportunities'}{r.ownerName ? ` · ${r.ownerName}` : ''}</div>
+                                            </div>
+                                            <button onClick={() => openPinnedReport(r)} style={{ fontSize: '0.75rem', color: T.goldInk, fontWeight: '600', background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>Open →</button>
+                                        </div>
+                                        {result
+                                            ? <ReportChart result={result} chartType={chartType}/>
+                                            : <div style={{ fontSize: '0.75rem', color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic' }}>A template report — open it in Reports.</div>}
                                     </div>
                                 ))}
                             </div>

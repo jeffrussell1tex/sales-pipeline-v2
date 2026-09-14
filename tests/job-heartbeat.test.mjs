@@ -24,9 +24,9 @@ const at = (msAgo) => new Date(NOW - msAgo).toISOString();
 
 // ── the pure module ──────────────────────────────────────────────────────────
 
-test('the four scheduled jobs are the four in netlify.toml, with the same crons', () => {
+test('the five scheduled jobs are the five in netlify.toml, with the same crons', () => {
     const toml = read('netlify.toml');
-    assert.equal(SCHEDULED_JOBS.length, 4);
+    assert.equal(SCHEDULED_JOBS.length, 5);
     for (const j of SCHEDULED_JOBS) {
         assert.match(toml, new RegExp(`\\[functions\\."${j.job}"\\]\\r?\\nschedule = "${j.cron.replace(/\*/g, '\\*')}"`), `${j.job} is scheduled ${j.cron} in netlify.toml`);
         assert.ok(existsSync(new URL(`../netlify/functions/${j.job}.mjs`, import.meta.url)), `${j.job}.mjs exists`);
@@ -37,7 +37,7 @@ test('the four scheduled jobs are the four in netlify.toml, with the same crons'
 
 test('jobHealth: never / ok / stalled / error, per job, against the given clock', () => {
     const none = jobHealth([], NOW);
-    assert.deepEqual(none.map(j => [j.job, j.status, j.ok]), [['pipeline-alerts', 'never', false], ['digest', 'never', false], ['task-reminders', 'never', false], ['score-leads-batch', 'never', false]]);
+    assert.deepEqual(none.map(j => [j.job, j.status, j.ok]), [['pipeline-alerts', 'never', false], ['digest', 'never', false], ['task-reminders', 'never', false], ['score-leads-batch', 'never', false], ['report-deliveries', 'never', false]]);
     const rows = [
         { job: 'pipeline-alerts',   lastStartedAt: at(5 * MIN), lastFinishedAt: at(4 * MIN), lastStatus: 'ok', okCount: 3, errorCount: 0 },
         { job: 'digest',            lastStartedAt: at(3 * H),   lastFinishedAt: at(3 * H),   lastStatus: 'ok', okCount: '7', errorCount: 1 },
@@ -54,7 +54,7 @@ test('jobHealth: never / ok / stalled / error, per job, against the given clock'
     assert.equal(by['task-reminders'].status, 'error');
     assert.equal(by['task-reminders'].lastError, 'boom');
     assert.equal(by['score-leads-batch'].status, 'ok', 'a daily job 20h old is on time');
-    assert.equal(h.length, 4, 'an unknown row is ignored');
+    assert.equal(h.length, 5, 'an unknown row is ignored');
     assert.equal(by['pipeline-alerts'].ageMs, 4 * MIN);
     // Boundaries for the hourly window: 2h10m.
     assert.equal(jobHealth([{ job: 'digest', lastFinishedAt: at(2 * H + 9 * MIN), lastStatus: 'ok' }], NOW)[1].status, 'ok');
@@ -62,7 +62,7 @@ test('jobHealth: never / ok / stalled / error, per job, against the given clock'
     // Started and never finished: recent is "never" (still running or died mid-run once), old is stalled.
     assert.equal(jobHealth([{ job: 'pipeline-alerts', lastStartedAt: at(2 * MIN), lastStatus: 'running' }], NOW)[0].status, 'never');
     assert.equal(jobHealth([{ job: 'pipeline-alerts', lastStartedAt: at(5 * H), lastStatus: 'running' }], NOW)[0].status, 'stalled');
-    assert.equal(jobHealth(null, NOW).length, 4, 'garbage rows: four verdicts, all never');
+    assert.equal(jobHealth(null, NOW).length, 5, 'garbage rows: five verdicts, all never');
     assert.equal(jobHealth([{ job: 'digest', lastFinishedAt: 'not a date', lastStatus: 'ok' }], NOW)[1].status, 'never', 'an unreadable date is no finish');
 });
 
@@ -117,7 +117,7 @@ test('jobHealth with enabled:false is "disabled" for every job whatever the rows
         { job: 'task-reminders',    lastStartedAt: at(MIN),     lastFinishedAt: at(MIN),     lastStatus: 'ok', okCount: 9, errorCount: 0 },
     ];
     const h = jobHealth(fresh, NOW, { enabled: false });
-    assert.equal(h.length, 4);
+    assert.equal(h.length, 5);
     assert.ok(h.every(j => j.status === 'disabled' && j.ok === false), 'REGRESSION (item 36): old rows would otherwise read ok or stalled on a site that no longer runs anything');
     assert.equal(h[0].okCount, 3, 'the row\'s counts still ride along');
     assert.deepEqual(jobsCheck(h), { id: 'jobs', label: 'Scheduled jobs not enabled on this site (JOBS_ENABLED)', ok: false }, 'REGRESSION: a forgotten flag on prod must never read as healthy');
