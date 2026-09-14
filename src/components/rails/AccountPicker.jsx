@@ -7,12 +7,8 @@
 import React, { useState } from 'react';
 import { dbFetch } from '../../utils/storage';
 import { useApp } from '../../AppContext';
+import { T } from '../../tokens.js';
 
-const T = {
-    surface: '#fbf8f3', surface2: '#f5efe3', surface3: '#f0ece4',
-    border: '#e6ddd0', ink: '#2a2622', ink3: '#8a8378', info: '#3a5a7a',
-    r: 3, sans: "'Plus Jakarta Sans', system-ui, sans-serif",
-};
 
 export default function AccountPicker({ value, onChange, onSelectAccount, onError, placeholder, filterFn }) {
     // accounts + setAccounts come from context so this drops into any component under
@@ -69,7 +65,7 @@ export default function AccountPicker({ value, onChange, onSelectAccount, onErro
                     {filtered.slice(0, 8).map((a) => (
                         <div key={a.id} onMouseDown={e => e.preventDefault()} onClick={() => pick(a)}
                             style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}`, color: T.ink }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface3}
+                            onMouseEnter={e => e.currentTarget.style.background = T.bg}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             {a.name}
                         </div>
@@ -77,7 +73,7 @@ export default function AccountPicker({ value, onChange, onSelectAccount, onErro
                     {!exact && (
                         <div onMouseDown={e => e.preventDefault()} onClick={createAccount}
                             style={{ padding: '8px 10px', fontSize: 13, cursor: creating ? 'default' : 'pointer', color: T.info, fontWeight: 600, background: T.surface2 }}
-                            onMouseEnter={e => { if (!creating) e.currentTarget.style.background = T.surface3; }}
+                            onMouseEnter={e => { if (!creating) e.currentTarget.style.background = T.bg; }}
                             onMouseLeave={e => e.currentTarget.style.background = T.surface2}>
                             {creating ? 'Creating\u2026' : `\u2795 Create \u201c${(value || '').trim()}\u201d as a new account`}
                         </div>

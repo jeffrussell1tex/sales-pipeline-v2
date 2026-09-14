@@ -10,12 +10,8 @@ import React from 'react';
 import { useApp } from '../../AppContext';
 import { emailPartsOf, emailEnvelopeOf, canEditActivity } from '../../utils/activityView';
 import { parseLocalDate } from '../../utils/dateLocal';
+import { T } from '../../tokens.js';
 
-const T = {
-    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3', border: '#e6ddd0', borderStrong: '#d4c8b4',
-    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378', gold: '#c8b99a', goldInk: '#7a6a48',
-    sans: '"Plus Jakarta Sans", system-ui, sans-serif', r: 3,
-};
 
 const fmtWhen = (v) => {
     const d = parseLocalDate(v);

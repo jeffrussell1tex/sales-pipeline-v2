@@ -1,16 +1,9 @@
-// settings/shared/tokens.js — design tokens + shared colour/status maps
+// settings/shared/tokens.js — the Settings panels' import point for the design
+// tokens (re-exported from src/tokens.js — ONE copy for the whole app since
+// 14 Sep 2026) + the shared colour/status maps below.
+import { T } from '../../../tokens.js';
+export { T };
 
-// ── Design tokens ────────────────────────────────────────────
-export const T = {
-    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
-    border: '#e6ddd0', borderStrong: '#d4c8b4',
-    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
-    gold: '#c8b99a', goldInk: '#7a6a48',
-    danger: '#9c3a2e', warn: '#b87333', ok: '#4d6b3d', info: '#3a5a7a',
-    sans: '"Plus Jakarta Sans", system-ui, sans-serif',
-    serif: 'Georgia, serif',
-    r: 3,
-};
 
 export const eb = (color) => ({ fontSize: 11, fontWeight: 700, color: color || T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans });
 

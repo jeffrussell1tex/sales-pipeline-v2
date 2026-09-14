@@ -3,26 +3,9 @@ import { OrganizationSwitcher, useOrganizationList, useAuth } from '@clerk/clerk
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
+import { T } from '../../tokens.js';
 
 // ── Design tokens ────────────────────────────────────────────
-const T = {
-    surfaceInk:   '#2a2622',
-    surfaceInkFg: '#e6ddd0',
-    gold:         '#c8b99a',
-    goldInk:      '#7a6a48',
-    border:       '#e6ddd0',
-    surface:      '#fbf8f3',
-    surface2:     '#f5efe3',
-    bg:           '#f0ece4',
-    ink:          '#2a2622',
-    inkMid:       '#5a544c',
-    inkMuted:     '#8a8378',
-    danger:       '#9c3a2e',
-    warn:         '#b87333',
-    ok:           '#4d6b3d',
-    sans:         '"Plus Jakarta Sans", system-ui, sans-serif',
-    r:            3,
-};
 
 const Icon = ({ name, size = 16, color = 'currentColor', sw = 1.5 }) => {
     const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round' };

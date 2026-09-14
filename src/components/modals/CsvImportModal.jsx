@@ -7,13 +7,8 @@ import {
     mergeReceipts, receiptFromPreflight, isClean, isPartial, describeReceipt,
     receiptFromError, emptyReceipt,
 } from '../../utils/importReceipt';
+import { T } from '../../tokens.js';
 
-const T = {
-    bg:'#f0ece4', surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', borderStrong:'#d4c8b4',
-    ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378', gold:'#c8b99a', goldInk:'#7a6a48',
-    danger:'#9c3a2e', warn:'#b87333', ok:'#4d6b3d', info:'#3a5a7a',
-    sans:'"Plus Jakarta Sans", system-ui, sans-serif', r:3,
-};
 const modalActions = { display:'flex', justifyContent:'flex-end', gap:8, marginTop:20, paddingTop:16, borderTop:`1px solid ${T.border}` };
 const priBtn = { padding:'8px 16px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans };
 const secBtn = { padding:'8px 16px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans };

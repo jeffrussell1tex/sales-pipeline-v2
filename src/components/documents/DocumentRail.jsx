@@ -14,7 +14,7 @@ import {
 function DetailField({ label, children }) {
     return (
         <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>{label}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>{label}</div>
             <div style={{ fontSize: 13, color: T.ink }}>{children}</div>
         </div>
     );
@@ -88,7 +88,7 @@ export default function DocumentRail() {
         <button onClick={onClick} style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
             padding: '8px 6px', borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans,
-            background: primary ? T.ink : T.surface, color: primary ? '#f5f1eb' : T.ink2,
+            background: primary ? T.ink : T.surface, color: primary ? '#f5f1eb' : T.inkMid,
             border: primary ? 'none' : `1px solid ${T.border}`,
         }}>{label}</button>
     );
@@ -122,7 +122,7 @@ export default function DocumentRail() {
                     {/* Linked to */}
                     <SectionHeading label={`Linked to · ${(doc.links || []).length} records`} action={<button style={linkText} onClick={onAddLink}>＋ Add link</button>} />
                     {(doc.links || []).length === 0 ? (
-                        <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic' }}>Not linked to any records yet.</div>
+                        <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>Not linked to any records yet.</div>
                     ) : (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                             {(doc.links || []).map((l) => (
@@ -130,7 +130,7 @@ export default function DocumentRail() {
                             ))}
                         </div>
                     )}
-                    <div style={{ fontSize: 11, color: T.ink3, marginTop: 8 }}>This file appears under each linked Account, Contact, Opportunity, Task &amp; Activity.</div>
+                    <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 8 }}>This file appears under each linked Account, Contact, Opportunity, Task &amp; Activity.</div>
 
                     {/* Details */}
                     <SectionHeading label="Details" />
@@ -161,9 +161,9 @@ export default function DocumentRail() {
                     {/* Version history */}
                     <SectionHeading label={`Version history${versions.length ? ` · ${versions.length} versions` : ''}`} action={<button style={linkText} onClick={onNewVersion}>↑ Upload new version</button>} />
                     {loadingVersions ? (
-                        <div style={{ fontSize: 12, color: T.ink3 }}>Loading…</div>
+                        <div style={{ fontSize: 12, color: T.inkMuted }}>Loading…</div>
                     ) : versions.length === 0 ? (
-                        <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic' }}>No version history.</div>
+                        <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No version history.</div>
                     ) : (
                         versions.slice().sort((a, b) => b.v - a.v).map((ver) => {
                             const isCurrent = ver.v === (doc.version || 1);
@@ -174,14 +174,14 @@ export default function DocumentRail() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                             <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>Version {ver.v}</span>
                                             {isCurrent && <span style={{ fontSize: 9, fontWeight: 800, color: T.gold, background: 'rgba(200,185,154,0.15)', border: '1px solid rgba(200,185,154,0.3)', borderRadius: 3, padding: '1px 6px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Current</span>}
-                                            <span style={{ fontSize: 11, color: T.ink3 }}>{fmtSize(ver.sizeKb)}</span>
+                                            <span style={{ fontSize: 11, color: T.inkMuted }}>{fmtSize(ver.sizeKb)}</span>
                                         </div>
-                                        {ver.note && <div style={{ fontSize: 12, color: T.ink2, marginTop: 2 }}>{ver.note}</div>}
-                                        <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>{ver.byName || 'Unknown'} · {fmtDateLong(ver.createdAt)}</div>
+                                        {ver.note && <div style={{ fontSize: 12, color: T.inkMid, marginTop: 2 }}>{ver.note}</div>}
+                                        <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2 }}>{ver.byName || 'Unknown'} · {fmtDateLong(ver.createdAt)}</div>
                                     </div>
                                     <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                                        <button onClick={() => downloadDoc && downloadDoc(doc.id, ver.v)} title="Download this version" style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.ink2, cursor: 'pointer', fontSize: 11, padding: '3px 7px', fontFamily: T.sans }}>↓</button>
-                                        {!isCurrent && <button onClick={() => restoreVersion && restoreVersion(doc.id, ver.v)} title="Restore this version" style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.ink2, cursor: 'pointer', fontSize: 11, padding: '3px 7px', fontFamily: T.sans }}>↺</button>}
+                                        <button onClick={() => downloadDoc && downloadDoc(doc.id, ver.v)} title="Download this version" style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, cursor: 'pointer', fontSize: 11, padding: '3px 7px', fontFamily: T.sans }}>↓</button>
+                                        {!isCurrent && <button onClick={() => restoreVersion && restoreVersion(doc.id, ver.v)} title="Restore this version" style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, cursor: 'pointer', fontSize: 11, padding: '3px 7px', fontFamily: T.sans }}>↺</button>}
                                     </div>
                                 </div>
                             );

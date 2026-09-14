@@ -1,22 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
+import { T } from '../../tokens.js';
 
 // Warm stone / ink design tokens
-const T = {
-    sans:         '"Plus Jakarta Sans", system-ui, sans-serif',
-    serif:        '"Source Serif 4", Georgia, serif',
-    surface:      '#fbf8f3',
-    surface2:     '#f5efe3',
-    surface3:     '#f0ece4',
-    border:       '#e6ddd0',
-    borderStrong: '#d4c8b4',
-    ink:          '#2a2622',
-    inkMid:       '#5a544c',
-    inkMuted:     '#8a8378',
-    danger:       '#9c3a2e',
-    r:            3,
-};
 
 export default function LostReasonModal({ oppName, onSave, onSkip }) {
     const lostCategories = ['Pricing / Budget', 'Competitor', 'No Decision / Stalled', 'Product Fit', 'Timing', 'Relationship / Trust', 'Internal Priority Change', 'Other'];
@@ -98,7 +85,7 @@ export default function LostReasonModal({ oppName, onSave, onSkip }) {
                 <button type="button" onClick={() => onSave(category, notes.trim())} disabled={!category}
                     style={{ flex: 1, padding: '10px 16px', border: 'none', borderRadius: T.r, fontWeight: 700, fontSize: 13, fontFamily: T.sans,
                         transition: 'all 0.12s', cursor: category ? 'pointer' : 'not-allowed',
-                        background: category ? T.danger : T.surface3,
+                        background: category ? T.danger : T.bg,
                         color: category ? '#fef4e6' : T.inkMuted }}>
                     Save Loss Reason
                 </button>

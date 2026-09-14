@@ -1,20 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { T } from '../../tokens.js';
 
 // ── Design tokens (Option D handoff — warm stone/ink) ─────────────────────────
-const T = {
-    sans:         '"Plus Jakarta Sans", system-ui, sans-serif',
-    bg:           '#f0ece4',
-    surface:      '#fbf8f3',
-    border:       '#e6ddd0',
-    borderStrong: '#d4c8b4',
-    ink:          '#2a2622',
-    inkMid:       '#5a544c',
-    inkMuted:     '#8a8378',
-    goldInk:      '#7a6a48',
-    tint:         'rgba(200,185,154,0.20)',
-    radiusMd:     4,
-};
 
 const MENU_MAX_H = 214;
 
@@ -292,7 +280,7 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
                     border: open ? `1.5px solid ${T.goldInk}` : `1px solid ${T.border}`,
                     // Compensate the 0.5px border delta so the field doesn't shift when opened
                     margin: open ? '-0.5px' : 0,
-                    borderRadius: T.radiusMd, cursor: disabled ? 'default' : 'pointer',
+                    borderRadius: T.rMd, cursor: disabled ? 'default' : 'pointer',
                     fontFamily: T.sans, textAlign: 'left', opacity: disabled ? 0.55 : 1,
                 }}
             >
@@ -323,7 +311,7 @@ export default function TimeDropdown({ value, onChange, stepMinutes = 30, disabl
                         top: pos.dropUp ? undefined : pos.top,
                         bottom: pos.dropUp ? window.innerHeight - pos.top : undefined,
                         background: T.surface, border: `1px solid ${T.borderStrong}`,
-                        borderRadius: T.radiusMd, boxShadow: '0 10px 28px rgba(0,0,0,0.14)',
+                        borderRadius: T.rMd, boxShadow: '0 10px 28px rgba(0,0,0,0.14)',
                         maxHeight: MENU_MAX_H, overflow: 'auto', padding: 4, boxSizing: 'border-box',
                         fontFamily: T.sans,
                     }}

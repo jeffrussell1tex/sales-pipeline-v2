@@ -7,31 +7,11 @@ import AccountPicker from '../rails/AccountPicker';
 import RecordDocuments from '../documents/RecordDocuments';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
+import { T } from '../../tokens.js';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (inline — no build-time import needed)
 // ─────────────────────────────────────────────────────────────
-const T = {
-    bg:           '#f0ece4',
-    surface:      '#fbf8f3',
-    surface2:     '#f5efe3',
-    surfaceInk:   '#2a2622',
-    surfaceInkFg: '#e6ddd0',
-    border:       '#e6ddd0',
-    borderStrong: '#d4c8b4',
-    ink:          '#2a2622',
-    inkMid:       '#5a544c',
-    inkMuted:     '#8a8378',
-    gold:         '#c8b99a',
-    goldInk:      '#7a6a48',
-    danger:       '#9c3a2e',
-    warn:         '#b87333',
-    ok:           '#4d6b3d',
-    info:         '#3a5a7a',
-    sans:         '"Plus Jakarta Sans", system-ui, sans-serif',
-    serif:        '"Source Serif 4", Georgia, serif',
-    r:            3,   // radiusSm
-};
 
 // Stage colour map — for StageRibbon
 const STAGE_COLORS = {

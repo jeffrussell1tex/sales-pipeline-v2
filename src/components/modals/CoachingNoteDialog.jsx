@@ -7,12 +7,8 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../AppContext';
 import { newNotePayload } from '../../utils/coachingNotes';
+import { T } from '../../tokens.js';
 
-const T = {
-    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3', border: '#e6ddd0', borderStrong: '#d4c8b4',
-    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378', gold: '#c8b99a', goldInk: '#7a6a48', danger: '#9c3a2e',
-    sans: '"Plus Jakarta Sans", system-ui, sans-serif', r: 3,
-};
 
 const avatarBg = (name) => {
     const p = ['#9c6b4a', '#7a5a3c', '#5a6e5a', '#6b5a7a', '#8a5a5a', '#5a7a8a', '#7a6b5a', '#4a6b5a'];

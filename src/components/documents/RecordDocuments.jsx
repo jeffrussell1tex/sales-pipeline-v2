@@ -88,7 +88,7 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => setShowPicker(true)}
-                        style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.ink2, borderRadius: T.r, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                        style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.inkMid, borderRadius: T.r, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                         🔗 Link existing
                     </button>
                     <button onClick={openUpload}
@@ -103,13 +103,13 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
             )}
 
             {/* Drag hint */}
-            <div style={{ border: `1px dashed ${T.border}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: T.ink3, textAlign: 'center' }}>
+            <div style={{ border: `1px dashed ${T.border}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: T.inkMuted, textAlign: 'center' }}>
                 {busy ? 'Uploading…' : 'Drag files here to attach them to this record'}
             </div>
 
             {/* List */}
             {docs.length === 0 ? (
-                <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', padding: '8px 0' }}>No documents linked yet.</div>
+                <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', padding: '8px 0' }}>No documents linked yet.</div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {docs.map((doc) => (
@@ -120,17 +120,17 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</span>
-                                    {doc.version > 1 && <span style={{ fontSize: 10, color: T.ink3, fontWeight: 600 }}>v{doc.version}</span>}
+                                    {doc.version > 1 && <span style={{ fontSize: 10, color: T.inkMuted, fontWeight: 600 }}>v{doc.version}</span>}
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
                                     <CategoryPill category={doc.category} />
-                                    <span style={{ fontSize: 11, color: T.ink3 }}>{fmtSize(doc.sizeKb)} · {fmtDate(doc.modifiedAt)}</span>
+                                    <span style={{ fontSize: 11, color: T.inkMuted }}>{fmtSize(doc.sizeKb)} · {fmtDate(doc.modifiedAt)}</span>
                                 </div>
                             </div>
                             <button onClick={(e) => { e.stopPropagation(); downloadDoc && downloadDoc(doc.id); }} title="Download"
-                                style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.ink2, cursor: 'pointer', fontSize: 12, padding: '3px 7px', flexShrink: 0 }}>↓</button>
+                                style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, cursor: 'pointer', fontSize: 12, padding: '3px 7px', flexShrink: 0 }}>↓</button>
                             <button onClick={(e) => { e.stopPropagation(); unlinkHere(doc); }} title="Unlink from this record"
-                                style={{ background: 'none', border: 'none', color: T.ink3, cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '2px 4px', flexShrink: 0 }}>×</button>
+                                style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '2px 4px', flexShrink: 0 }}>×</button>
                         </div>
                     ))}
                 </div>
@@ -141,7 +141,7 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
                 <div style={{ position: 'absolute', inset: -4, borderRadius: 6, border: `2px dashed ${T.gold}`, background: 'rgba(200,185,154,0.14)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 5 }}>
                     <div style={{ fontSize: 22, color: T.gold }}>↑</div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>Drop to attach to {recordName}</div>
-                    <div style={{ fontSize: 11, color: T.ink3 }}>Files link to this record automatically</div>
+                    <div style={{ fontSize: 11, color: T.inkMuted }}>Files link to this record automatically</div>
                 </div>
             )}
 

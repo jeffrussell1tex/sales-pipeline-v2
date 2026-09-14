@@ -36,14 +36,14 @@ export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClo
                 <div style={{ padding: '16px 18px 12px', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>Link an existing document</div>
-                        <button onClick={onClose} style={{ background: 'none', border: 'none', color: T.ink3, fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: 2 }}>×</button>
+                        <button onClick={onClose} style={{ background: 'none', border: 'none', color: T.inkMuted, fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: 2 }}>×</button>
                     </div>
                     <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search documents…" autoFocus
                         style={{ width: '100%', marginTop: 12, padding: '8px 12px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface2, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', outline: 'none' }} />
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, borderTop: `1px solid ${T.border}` }}>
                     {rows.length === 0 ? (
-                        <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: T.ink3 }}>No other documents available.</div>
+                        <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>No other documents available.</div>
                     ) : rows.map((doc) => {
                         const on = !!selected[doc.id];
                         return (
@@ -54,7 +54,7 @@ export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClo
                                     <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 1 }}>
                                         <CategoryPill category={doc.category} />
-                                        <span style={{ fontSize: 11, color: T.ink3 }}>{fmtSize(doc.sizeKb)} · {fmtDate(doc.modifiedAt)}</span>
+                                        <span style={{ fontSize: 11, color: T.inkMuted }}>{fmtSize(doc.sizeKb)} · {fmtDate(doc.modifiedAt)}</span>
                                     </div>
                                 </div>
                                 <div style={{ width: 18, height: 18, borderRadius: T.r, border: `1.5px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -65,7 +65,7 @@ export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClo
                     })}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '12px 18px', borderTop: `1px solid ${T.border}`, background: T.surface2, flexShrink: 0 }}>
-                    <button onClick={onClose} style={{ background: 'none', border: `1px solid ${T.border}`, color: T.ink2, borderRadius: T.r, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
+                    <button onClick={onClose} style={{ background: 'none', border: `1px solid ${T.border}`, color: T.inkMid, borderRadius: T.r, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
                     <button onClick={() => onConfirm && onConfirm(Object.values(selected))} disabled={count === 0}
                         style={{ background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: count === 0 ? 'default' : 'pointer', fontFamily: T.sans, opacity: count === 0 ? 0.5 : 1 }}>
                         Link {count || ''} document{count === 1 ? '' : 's'}

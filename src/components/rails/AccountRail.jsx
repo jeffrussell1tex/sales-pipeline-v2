@@ -2,21 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../AppContext';
 import ActivityRowText from './ActivityRowText';
 import RecordDocuments from '../documents/RecordDocuments';
+import { T } from '../../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const T = {
-    sans:    '"Plus Jakarta Sans", system-ui, sans-serif',
-    surface: '#fbf8f3',
-    surface2:'#f5efe3',
-    surface3:'#f0ece4',
-    border:  '#e6ddd0',
-    ink:     '#2a2622',
-    ink2:    '#5a544c',
-    ink3:    '#8a8378',
-    gold:    '#c8b99a',
-    danger:  '#9c3a2e',
-    r:       3,
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -50,7 +38,7 @@ function ReadRow({ label, value, wide }) {
     if (!value && value !== 0) return null;
     return (
         <div style={{ gridColumn: wide ? '1 / -1' : undefined, marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{label}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{label}</div>
             <div style={{ fontSize: 13, color: T.ink, lineHeight: 1.45, wordBreak: 'break-word' }}>{value}</div>
         </div>
     );
@@ -67,7 +55,7 @@ function SectionHeading({ label }) {
 function FieldGroup({ label, wide, children }) {
     return (
         <div style={{ gridColumn: wide ? '1 / -1' : undefined, marginBottom: 10 }}>
-            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</label>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</label>
             {children}
         </div>
     );
@@ -113,7 +101,7 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { onSelect(s); setOpen(false); }}
                             style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface3}
+                            onMouseEnter={e => e.currentTarget.style.background = T.bg}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >{s}</div>
                     ))}
@@ -456,7 +444,7 @@ export default function AccountRail() {
             style={{
                 background: 'none', border: 'none',
                 borderBottom: activeTab === id ? `2px solid ${T.ink}` : '2px solid transparent',
-                color: activeTab === id ? T.ink : T.ink3,
+                color: activeTab === id ? T.ink : T.inkMuted,
                 fontWeight: activeTab === id ? 700 : 500,
                 fontSize: 12, padding: '8px 14px', cursor: 'pointer', fontFamily: T.sans,
             }}
@@ -528,7 +516,7 @@ export default function AccountRail() {
                     ].map(({ label, value }) => (
                         <div key={label} style={{ flex: 1, padding: '8px 0', textAlign: 'center', borderRight: `1px solid ${T.border}` }}>
                             <div style={{ fontSize: 16, fontWeight: 700, color: T.ink }}>{value}</div>
-                            <div style={{ fontSize: 9, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
                         </div>
                     ))}
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -577,7 +565,7 @@ export default function AccountRail() {
                                 Create anyway
                             </button>
                             <button onClick={() => setDupWarning(null)}
-                                style={{ padding: '4px 10px', background: '#fff', color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
+                                style={{ padding: '4px 10px', background: '#fff', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
                                 Cancel
                             </button>
                         </div>
@@ -602,7 +590,7 @@ export default function AccountRail() {
                                                 <span>{parent?.name || parentSearch}</span>
                                                 <button type="button"
                                                     onClick={() => { hc('parentAccountId', null); setParentSearch(''); }}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.ink3, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
                                             </div>
                                         );
                                     })() : (
@@ -660,7 +648,7 @@ export default function AccountRail() {
                                                 <span key={ct} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 6px 3px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink }}>
                                                     {ct}
                                                     <button type="button" onClick={() => hc('customerTypes', (formData.customerTypes || []).filter(x => x !== ct))}
-                                                        style={{ background: 'none', border: 'none', color: T.ink3, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                                                        style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                                                 </span>
                                             ))}
                                         </div>
@@ -680,7 +668,7 @@ export default function AccountRail() {
                                 <ReadRow label="Phone" value={account?.phone} />
                                 {account?.website && (
                                     <div style={{ marginBottom: 10 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Website</div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Website</div>
                                         <a href={account.website.startsWith('http') ? account.website : 'https://' + account.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: '#3a5a7a', textDecoration: 'none' }}>{account.website}</a>
                                     </div>
                                 )}
@@ -734,7 +722,7 @@ export default function AccountRail() {
                                     {account.country && <div>{account.country}</div>}
                                 </div>
                             ) : (
-                                <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', marginBottom: 10 }}>No address on file</div>
+                                <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', marginBottom: 10 }}>No address on file</div>
                             )
                         )}
 
@@ -749,9 +737,9 @@ export default function AccountRail() {
                                             style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '7px 10px', cursor: 'pointer', textAlign: 'left', fontFamily: T.sans, width: '100%' }}>
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{ fontSize: 12, fontWeight: 600, color: T.ink }}>{s.name}</div>
-                                                {s.verticalMarket && <div style={{ fontSize: 11, color: T.ink3, marginTop: 1 }}>{s.verticalMarket}</div>}
+                                                {s.verticalMarket && <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 1 }}>{s.verticalMarket}</div>}
                                             </div>
-                                            <span style={{ fontSize: 11, color: T.ink3 }}>→</span>
+                                            <span style={{ fontSize: 11, color: T.inkMuted }}>→</span>
                                         </button>
                                     ))}
                                 </div>
@@ -799,13 +787,13 @@ export default function AccountRail() {
                                 </FieldGroup>
                                 {/* Do Not Contact */}
                                 <div style={{ gridColumn: '1 / -1', marginBottom: 10 }}>
-                                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Do Not Contact</label>
+                                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Do Not Contact</label>
                                     <div onClick={() => hc('doNotContact', !formData.doNotContact)}
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 10px', borderRadius: T.r, border: formData.doNotContact ? `1px solid ${T.danger}` : `1px solid ${T.border}`, background: formData.doNotContact ? '#fef2f2' : T.surface3 }}>
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 10px', borderRadius: T.r, border: formData.doNotContact ? `1px solid ${T.danger}` : `1px solid ${T.border}`, background: formData.doNotContact ? '#fef2f2' : T.bg }}>
                                         <div style={{ width: 32, height: 18, borderRadius: 999, background: formData.doNotContact ? T.danger : '#d6d3ce', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
                                             <div style={{ position: 'absolute', width: 12, height: 12, background: '#fff', borderRadius: '50%', top: 3, left: formData.doNotContact ? 17 : 3, transition: 'left 0.2s' }} />
                                         </div>
-                                        <span style={{ fontSize: 12, fontWeight: 600, color: formData.doNotContact ? T.danger : T.ink2 }}>
+                                        <span style={{ fontSize: 12, fontWeight: 600, color: formData.doNotContact ? T.danger : T.inkMid }}>
                                             {formData.doNotContact ? '🚫 Do Not Contact — flagged' : 'Not flagged'}
                                         </span>
                                     </div>
@@ -821,7 +809,7 @@ export default function AccountRail() {
                                 <ReadRow label="NAICS Code" value={account?.naicsCode} />
                                 {account?.linkedInUrl && (
                                     <div style={{ gridColumn: '1 / -1', marginBottom: 10 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>LinkedIn</div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>LinkedIn</div>
                                         <a href={account.linkedInUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: '#3a5a7a', textDecoration: 'none' }}>{account.linkedInUrl}</a>
                                     </div>
                                 )}
@@ -861,7 +849,7 @@ export default function AccountRail() {
                     <>
                         <SectionHeading label={`Contacts (${accountContacts.length})`} />
                         {accountContacts.length === 0 ? (
-                            <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic' }}>No contacts linked to this account</div>
+                            <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No contacts linked to this account</div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                 {accountContacts.map(c => (
@@ -873,9 +861,9 @@ export default function AccountRail() {
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>{c.firstName} {c.lastName}</div>
-                                            {c.title && <div style={{ fontSize: 11, color: T.ink3 }}>{c.title}</div>}
+                                            {c.title && <div style={{ fontSize: 11, color: T.inkMuted }}>{c.title}</div>}
                                         </div>
-                                        <span style={{ fontSize: 11, color: T.ink3 }}>→</span>
+                                        <span style={{ fontSize: 11, color: T.inkMuted }}>→</span>
                                     </button>
                                 ))}
                             </div>
@@ -892,13 +880,13 @@ export default function AccountRail() {
                     <>
                         <SectionHeading label={`Open Opportunities (${openOpps.length})`} />
                         {openOpps.length === 0 ? (
-                            <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', marginBottom: 14 }}>No open opportunities</div>
+                            <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', marginBottom: 14 }}>No open opportunities</div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
                                 {openOpps.map(o => (
                                     <div key={o.id} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '8px 10px' }}>
                                         <div style={{ fontSize: 12, fontWeight: 600, color: T.ink }}>{o.opportunityName || o.account}</div>
-                                        <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>
+                                        <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2 }}>
                                             {o.stage}{o.value ? ` · $${Number(o.value).toLocaleString()}` : ''}
                                             {o.closeDate ? ` · Close ${o.closeDate}` : ''}
                                         </div>
@@ -909,20 +897,20 @@ export default function AccountRail() {
 
                         <SectionHeading label={`Activity History (${accountActivities.length})`} />
                         {accountActivities.length === 0 ? (
-                            <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', marginBottom: 14 }}>No activity history</div>
+                            <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', marginBottom: 14 }}>No activity history</div>
                         ) : (
                             <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden', marginBottom: 14 }}>
                                 {accountActivities.map((a, idx) => {
                                     const relOpp = a.opportunityId ? (opportunities || []).find(o => o.id === a.opportunityId) : null;
                                     return (
                                         <div key={idx} onClick={() => setViewingActivity(a)} title="Open" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', cursor: 'pointer', borderBottom: idx < accountActivities.length - 1 ? `1px solid ${T.border}` : 'none', background: idx % 2 === 0 ? '#fff' : T.surface }}>
-                                            <span style={{ fontSize: 11, color: T.ink3, flexShrink: 0, width: 52, paddingTop: 1 }}>
+                                            <span style={{ fontSize: 11, color: T.inkMuted, flexShrink: 0, width: 52, paddingTop: 1 }}>
                                                 {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                             </span>
                                             <span style={{ background: 'rgba(58,90,122,0.1)', color: T.ink, padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{a.type || 'Note'}</span>
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <ActivityRowText activity={a} />
-                                                {relOpp && <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>{relOpp.opportunityName || relOpp.account}</div>}
+                                                {relOpp && <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2 }}>{relOpp.opportunityName || relOpp.account}</div>}
                                             </div>
                                         </div>
                                     );
@@ -938,7 +926,7 @@ export default function AccountRail() {
                             </button>
                             <button
                                 onClick={() => { setTaskRailId('new'); setTaskRailMode('new'); }}
-                                style={{ flex: 1, padding: '8px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                style={{ flex: 1, padding: '8px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Add Task
                             </button>
                         </div>
@@ -949,9 +937,9 @@ export default function AccountRail() {
             {/* ── Footer: Save/Discard (edit mode) ─────────────────────────── */}
             {isEditing && (
                 <div style={{ flexShrink: 0, borderTop: `1px solid ${T.border}`, padding: '12px 16px', background: T.surface, display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {dirty && <span style={{ fontSize: 11, color: T.ink3, flex: 1 }}>Unsaved changes</span>}
+                    {dirty && <span style={{ fontSize: 11, color: T.inkMuted, flex: 1 }}>Unsaved changes</span>}
                     <button onClick={handleDiscard}
-                        style={{ padding: '8px 16px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, marginLeft: 'auto' }}>
+                        style={{ padding: '8px 16px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, marginLeft: 'auto' }}>
                         Discard
                     </button>
                     <button onClick={handleSave} disabled={accountModalSaving}

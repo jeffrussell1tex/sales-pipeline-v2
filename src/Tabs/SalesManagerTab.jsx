@@ -7,27 +7,9 @@ import { currentQuarter } from '../utils/quarters';
 import { fiscalRange } from '../utils/reportPeriod';
 import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
 import { forecastCallOf, withForecastCall, bestCaseOf } from '../utils/forecastCall';
+import { T } from '../tokens.js';
 
 // ── V1 Design tokens ──────────────────────────────────────────
-const T = {
-    bg:           '#f0ece4',
-    surface:      '#fbf8f3',
-    surface2:     '#f5efe3',
-    border:       '#e6ddd0',
-    borderStrong: '#d4c8b4',
-    ink:          '#2a2622',
-    inkMid:       '#5a544c',
-    inkMuted:     '#8a8378',
-    gold:         '#c8b99a',
-    goldInk:      '#7a6a48',
-    danger:       '#9c3a2e',
-    warn:         '#b87333',
-    ok:           '#4d6b3d',
-    info:         '#3a5a7a',
-    sans:         '"Plus Jakarta Sans", system-ui, sans-serif',
-    serif:        'Georgia, serif',
-    r:            3,
-};
 
 const fmtV = v => { const n = parseFloat(v)||0; return n >= 1e6 ? '$'+(n/1e6).toFixed(1)+'M' : n >= 1e3 ? '$'+Math.round(n/1e3)+'K' : '$'+n.toLocaleString(); };
 

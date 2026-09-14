@@ -3,23 +3,9 @@ import { useApp } from '../../AppContext';
 import ActivityRowText from './ActivityRowText';
 import AttachmentsStrip from '../documents/AttachmentsStrip';
 import TimeDropdown from '../ui/TimeDropdown';
+import { T } from '../../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const T = {
-    sans:    '"Plus Jakarta Sans", system-ui, sans-serif',
-    surface: '#fbf8f3',
-    surface2:'#f5efe3',
-    surface3:'#f0ece4',
-    border:  '#e6ddd0',
-    ink:     '#2a2622',
-    ink2:    '#5a544c',
-    ink3:    '#8a8378',
-    gold:    '#c8b99a',
-    danger:  '#9c3a2e',
-    warn:    '#b87333',
-    ok:      '#4d6b3d',
-    r:       3,
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,7 +20,7 @@ function SectionHeading({ label }) {
 function FieldGroup({ label, wide, children }) {
     return (
         <div style={{ gridColumn: wide ? '1 / -1' : undefined, marginBottom: 10 }}>
-            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</label>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</label>
             {children}
         </div>
     );
@@ -44,7 +30,7 @@ function ReadRow({ label, value, wide }) {
     if (!value && value !== 0) return null;
     return (
         <div style={{ gridColumn: wide ? '1 / -1' : undefined, marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{label}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{label}</div>
             <div style={{ fontSize: 13, color: T.ink, lineHeight: 1.45 }}>{value}</div>
         </div>
     );
@@ -91,7 +77,7 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { onSelect(s); setOpen(false); }}
                             style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface3}
+                            onMouseEnter={e => e.currentTarget.style.background = T.bg}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >{s}</div>
                     ))}
@@ -407,10 +393,10 @@ export default function TaskRail() {
                 <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(42,38,34,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
                     <div style={{ background: T.surface, borderRadius: T.r + 2, padding: 20, width: '100%', maxWidth: 400, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Complete task</div>
-                        <div style={{ fontSize: 12, color: T.ink3, marginBottom: 14 }}>Add completion notes? (optional)</div>
+                        <div style={{ fontSize: 12, color: T.inkMuted, marginBottom: 14 }}>Add completion notes? (optional)</div>
 
                         <div style={{ marginBottom: 10 }}>
-                            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Activity Type</label>
+                            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Activity Type</label>
                             <select value={completionType} onChange={e => setCompletionType(e.target.value)}
                                 style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans }}>
                                 {(settings?.taskTypes || ['Call','Meeting','Email','Demo','Follow-up']).map(tt => <option key={tt} value={tt}>{tt}</option>)}
@@ -418,7 +404,7 @@ export default function TaskRail() {
                         </div>
 
                         <div style={{ marginBottom: 14 }}>
-                            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Notes <span style={{ fontWeight: 400, textTransform: 'none', color: T.ink3 }}>(optional)</span></label>
+                            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Notes <span style={{ fontWeight: 400, textTransform: 'none', color: T.inkMuted }}>(optional)</span></label>
                             <textarea value={completionNotes} onChange={e => setCompletionNotes(e.target.value)}
                                 rows={4} placeholder="What was discussed? Any next steps?"
                                 autoFocus
@@ -428,7 +414,7 @@ export default function TaskRail() {
 
                         <div style={{ display: 'flex', gap: 8 }}>
                             <button onClick={() => { setCompletionPrompt(false); setCompletionNotes(''); }}
-                                style={{ padding: '8px 14px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                style={{ padding: '8px 14px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 Cancel
                             </button>
                             <button onClick={handleConfirmComplete}
@@ -461,7 +447,7 @@ export default function TaskRail() {
                             </FieldGroup>
                             <FieldGroup label="Type">
                                 <select value={formData.type || ''} onChange={e => hc('type', e.target.value)}
-                                    style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: formData.type ? T.ink : T.ink3, fontFamily: T.sans }}>
+                                    style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: formData.type ? T.ink : T.inkMuted, fontFamily: T.sans }}>
                                     <option value="">— Select type —</option>
                                     {taskTypes.map(tt => <option key={tt} value={tt}>{tt}</option>)}
                                 </select>
@@ -491,7 +477,7 @@ export default function TaskRail() {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, width: 'fit-content', fontFamily: T.sans }}>
                                         <span>{assignSearch}</span>
                                         <button type="button" onClick={() => setAssignSearch('')}
-                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.ink3, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
                                     </div>
                                 ) : (
                                     <Typeahead value={assignSearch} onChange={setAssignSearch} suggestions={allRepNames} onSelect={v => { setAssignSearch(v); setDirty(true); }} placeholder="Search users…" dropUp />
@@ -527,7 +513,7 @@ export default function TaskRail() {
                                                         setSelectedContacts(!hasPrimary && next.length > 0 ? next.map((x, j) => j === 0 ? { ...x, primary: true } : x) : next);
                                                         setDirty(true);
                                                     }}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.ink3, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px', flexShrink: 0 }}>×</button>
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px', flexShrink: 0 }}>×</button>
                                             </div>
                                         ))}
                                     </div>
@@ -568,14 +554,14 @@ export default function TaskRail() {
                                                             setTimeout(() => contactInputRef.current?.focus(), 0);
                                                         }}
                                                         style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
-                                                        onMouseEnter={e => e.currentTarget.style.background = T.surface3}
+                                                        onMouseEnter={e => e.currentTarget.style.background = T.bg}
                                                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                                         <div style={{ fontWeight: 600, color: T.ink }}>{c.firstName} {c.lastName}</div>
-                                                        {(c.title || c.company) && <div style={{ fontSize: 11, color: T.ink3 }}>{[c.title, c.company].filter(Boolean).join(' · ')}</div>}
+                                                        {(c.title || c.company) && <div style={{ fontSize: 11, color: T.inkMuted }}>{[c.title, c.company].filter(Boolean).join(' · ')}</div>}
                                                     </div>
                                                 ))}
                                                 {matched.length === 0 && (
-                                                    <div style={{ padding: '10px', fontSize: 12, color: T.ink3, fontFamily: T.sans }}>
+                                                    <div style={{ padding: '10px', fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>
                                                         {contactSearch ? 'No matches found' : 'No contacts available'}
                                                     </div>
                                                 )}
@@ -595,13 +581,13 @@ export default function TaskRail() {
                         <SectionHeading label="Task Details" />
                         <div style={grid2}>
                             {task?.description && (
-                                <div style={{ gridColumn: '1 / -1', marginBottom: 10, padding: '8px 10px', background: T.surface2, borderRadius: T.r, fontSize: 13, color: T.ink2, lineHeight: 1.5 }}>
+                                <div style={{ gridColumn: '1 / -1', marginBottom: 10, padding: '8px 10px', background: T.surface2, borderRadius: T.r, fontSize: 13, color: T.inkMid, lineHeight: 1.5 }}>
                                     {task.description}
                                 </div>
                             )}
                             {task?.dueDate && (
                                 <div style={{ marginBottom: 10 }}>
-                                    <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Due</div>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Due</div>
                                     <div style={{ fontSize: 13, color: T.ink, fontWeight: 600 }}>
                                         {new Date(task.dueDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                                         {task.dueTime ? ` · ${task.dueTime}` : ''}
@@ -629,7 +615,7 @@ export default function TaskRail() {
                                 <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
                                     {taskActivities.map((a, idx) => (
                                         <div key={idx} onClick={() => setViewingActivity(a)} title="Open" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', cursor: 'pointer', borderBottom: idx < taskActivities.length - 1 ? `1px solid ${T.border}` : 'none', background: idx % 2 === 0 ? '#fff' : T.surface }}>
-                                            <span style={{ fontSize: 11, color: T.ink3, flexShrink: 0, width: 52, paddingTop: 1 }}>
+                                            <span style={{ fontSize: 11, color: T.inkMuted, flexShrink: 0, width: 52, paddingTop: 1 }}>
                                                 {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                             </span>
                                             <span style={{ background: 'rgba(58,90,122,0.1)', color: T.ink, padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{a.type || 'Note'}</span>
@@ -657,7 +643,7 @@ export default function TaskRail() {
                     ) : isNew && newTaskId ? (
                         <AttachmentsStrip recordType="task" recordId={newTaskId} recordName={formData.title || 'New task'} recordSub={formData.dueDate ? `Due ${formData.dueDate}` : ''} />
                     ) : (
-                        <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', padding: '2px 0 4px' }}>
+                        <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', padding: '2px 0 4px' }}>
                             You can attach related documents once the task is created.
                         </div>
                     )}
@@ -667,9 +653,9 @@ export default function TaskRail() {
             {/* ── Footer: Save/Discard (edit mode) ─────────────────────────── */}
             {isEditing && (
                 <div style={{ flexShrink: 0, borderTop: `1px solid ${T.border}`, padding: '12px 16px', background: T.surface, display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {dirty && <span style={{ fontSize: 11, color: T.ink3, flex: 1 }}>Unsaved changes</span>}
+                    {dirty && <span style={{ fontSize: 11, color: T.inkMuted, flex: 1 }}>Unsaved changes</span>}
                     <button onClick={handleDiscard}
-                        style={{ padding: '8px 16px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, marginLeft: 'auto' }}>
+                        style={{ padding: '8px 16px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, marginLeft: 'auto' }}>
                         Discard
                     </button>
                     <button onClick={handleSave} disabled={taskModalSaving}

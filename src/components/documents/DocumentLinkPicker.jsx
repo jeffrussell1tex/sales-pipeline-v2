@@ -100,7 +100,7 @@ export default function DocumentLinkPicker() {
         const active = typeFilter === key;
         return (
             <button key={key} onClick={() => setTypeFilter(key)}
-                style={{ background: active ? T.ink : T.surface, color: active ? '#f5f1eb' : T.ink2, border: `1px solid ${active ? T.ink : T.border}`, borderRadius: 999, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                style={{ background: active ? T.ink : T.surface, color: active ? '#f5f1eb' : T.inkMid, border: `1px solid ${active ? T.ink : T.border}`, borderRadius: 999, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
                 {label}
             </button>
         );
@@ -119,12 +119,12 @@ export default function DocumentLinkPicker() {
                 <div style={{ padding: '16px 18px 12px', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>Link this document to…</div>
-                        <button onClick={close} style={{ background: 'none', border: 'none', color: T.ink3, fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: 2 }}>×</button>
+                        <button onClick={close} style={{ background: 'none', border: 'none', color: T.inkMuted, fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: 2 }}>×</button>
                     </div>
                     <div style={{ position: 'relative', marginTop: 12 }}>
                         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search records…" autoFocus
                             style={{ width: '100%', padding: '8px 12px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface2, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', outline: 'none' }} />
-                        {selectedCount > 0 && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: T.ink3 }}>{selectedCount} linked</span>}
+                        {selectedCount > 0 && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: T.inkMuted }}>{selectedCount} linked</span>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
                         {filterPill('all', 'All')}
@@ -135,10 +135,10 @@ export default function DocumentLinkPicker() {
                 {/* Results */}
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, borderTop: `1px solid ${T.border}` }}>
                     {grouped.length === 0 ? (
-                        <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: T.ink3 }}>No matching records.</div>
+                        <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>No matching records.</div>
                     ) : grouped.map(([type, rows]) => (
                         <div key={type}>
-                            <div style={{ padding: '10px 18px 4px', fontSize: 10, fontWeight: 700, color: T.ink3, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{ENTITY_META[type].label}s</div>
+                            <div style={{ padding: '10px 18px 4px', fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{ENTITY_META[type].label}s</div>
                             {rows.map((c) => {
                                 const on = !!selected[c.key];
                                 return (
@@ -149,7 +149,7 @@ export default function DocumentLinkPicker() {
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                                            {c.sub && <div style={{ fontSize: 11, color: T.ink3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.sub}</div>}
+                                            {c.sub && <div style={{ fontSize: 11, color: T.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.sub}</div>}
                                         </div>
                                         <div style={{ width: 18, height: 18, borderRadius: T.r, border: `1.5px solid ${on ? T.ink : T.border}`, background: on ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                             {on && <span style={{ color: '#f5f1eb', fontSize: 12, lineHeight: 1 }}>✓</span>}
@@ -163,7 +163,7 @@ export default function DocumentLinkPicker() {
 
                 {/* Footer */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderTop: `1px solid ${T.border}`, background: T.surface2, flexShrink: 0 }}>
-                    <span style={{ fontSize: 11, color: T.ink3 }}>One document can link to any number of records.</span>
+                    <span style={{ fontSize: 11, color: T.inkMuted }}>One document can link to any number of records.</span>
                     <button onClick={done} style={{ background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Done</button>
                 </div>
             </div>

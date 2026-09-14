@@ -2,28 +2,9 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import { isoLocal } from '../utils/dateLocal';
+import { T } from '../tokens.js';
 
 // ── Design tokens ──────────────────────────────────────────────
-const T = {
-    bg:           '#f0ece4',
-    surface:      '#fbf8f3',
-    surface2:     '#f5efe3',
-    border:       '#e6ddd0',
-    borderStrong: '#d4c8b4',
-    ink:          '#2a2622',
-    inkMid:       '#5a544c',
-    inkMuted:     '#8a8378',
-    gold:         '#c8b99a',
-    goldInk:      '#7a6a48',
-    danger:       '#9c3a2e',
-    warn:         '#b87333',
-    ok:           '#4d6b3d',
-    info:         '#3a5a7a',
-    sans:         '"Plus Jakarta Sans", system-ui, sans-serif',
-    serif:        'Georgia, serif',
-    r:            3,
-    rMd:          4,
-};
 
 // ── Helpers ─────────────────────────────────────────────────────
 const fmtCurrency = v => {

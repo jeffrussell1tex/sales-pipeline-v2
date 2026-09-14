@@ -1,30 +1,15 @@
 // src/components/documents/atoms.jsx
 // ════════════════════════════════════════════════════════════════════════════
-// Shared primitives for the Documents feature. Per the coding guide, non-settings
-// areas define `T` locally; rather than copy the token object into five files,
-// this module is the single source for the feature (same values as the rails'
-// local T) and is imported by every Documents surface. Pure, prop-driven,
-// module-scope components only (no inline sub-components).
+// Shared primitives for the Documents feature. The design tokens come from
+// src/tokens.js (one copy for the whole app since 14 Sep 2026) and are
+// re-exported here so every Documents surface keeps its `import { T } from
+// './atoms'`. Pure, prop-driven, module-scope components only (no inline
+// sub-components).
 // ════════════════════════════════════════════════════════════════════════════
 
 import React from 'react';
-
-// ── Design tokens (identical palette to the rails' local T) ──────────────────
-export const T = {
-    sans:     '"Plus Jakarta Sans", system-ui, sans-serif',
-    surface:  '#fbf8f3',
-    surface2: '#f5efe3',
-    surface3: '#f0ece4',
-    border:   '#e6ddd0',
-    ink:      '#2a2622',
-    ink2:     '#5a544c',
-    ink3:     '#8a8378',
-    gold:     '#c8b99a',
-    danger:   '#9c3a2e',
-    info:     '#3a5a7a',
-    good:     '#4d6b3d',
-    r:        3,
-};
+import { T } from '../../tokens.js';
+export { T };   // the Documents surfaces import T from here
 
 // ── Formatters ───────────────────────────────────────────────────────────────
 export function fmtSize(kb) {
@@ -66,7 +51,7 @@ const FILE_META = {
     csv:  { label: 'CSV', color: '#4d6b3d', bg: '#eaf0e6' },
     txt:  { label: 'TXT', color: '#5a544c', bg: '#f0ece4' },
 };
-export const fileMeta = (ext) => FILE_META[String(ext || '').toLowerCase()] || { label: (ext || 'FILE').toUpperCase().slice(0, 4), color: T.ink2, bg: T.surface3 };
+export const fileMeta = (ext) => FILE_META[String(ext || '').toLowerCase()] || { label: (ext || 'FILE').toUpperCase().slice(0, 4), color: T.inkMid, bg: T.bg };
 
 export function FileTypeBadge({ ext, size = 36 }) {
     const m = fileMeta(ext);
@@ -90,7 +75,7 @@ const CATEGORY_STYLE = {
     'Spec sheet': { color: '#5a544c', bg: '#f0ece4' },
     'Note':       { color: '#8a8378', bg: '#f0ece4' },
 };
-export const categoryStyle = (cat) => CATEGORY_STYLE[cat] || { color: T.ink2, bg: T.surface3 };
+export const categoryStyle = (cat) => CATEGORY_STYLE[cat] || { color: T.inkMid, bg: T.bg };
 
 export function CategoryPill({ category }) {
     if (!category) return null;
@@ -143,7 +128,7 @@ export function LinkChip({ link, onRemove }) {
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.name || link.recordId}</span>
             {onRemove && (
                 <button onClick={(e) => { e.stopPropagation(); onRemove(link); }}
-                    style={{ background: 'none', border: 'none', color: T.ink3, cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0, flexShrink: 0 }}
+                    style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0, flexShrink: 0 }}
                     title="Remove link">×</button>
             )}
         </span>
@@ -171,7 +156,7 @@ export function VisibilityControl({ value = 'team', onChange, disabled }) {
                             fontFamily: T.sans,
                         }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: T.ink }}>{o.label}</div>
-                        <div style={{ fontSize: 10, color: T.ink3, marginTop: 1 }}>{o.hint}</div>
+                        <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 1 }}>{o.hint}</div>
                     </button>
                 );
             })}
@@ -181,13 +166,13 @@ export function VisibilityControl({ value = 'team', onChange, disabled }) {
 
 // ── Linked-to chip row (compact, with +N overflow) ───────────────────────────
 export function LinkedToRow({ links = [], max = 2 }) {
-    if (!links.length) return <span style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic' }}>—</span>;
+    if (!links.length) return <span style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>—</span>;
     const shown = links.slice(0, max);
     const extra = links.length - shown.length;
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
             {shown.map((l) => <LinkChip key={l.id || `${l.type}:${l.recordId}`} link={l} />)}
-            {extra > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.ink3, flexShrink: 0 }}>+{extra}</span>}
+            {extra > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, flexShrink: 0 }}>+{extra}</span>}
         </div>
     );
 }

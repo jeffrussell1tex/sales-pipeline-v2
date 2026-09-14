@@ -15,6 +15,7 @@ import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStage
 import { repDeals } from '../utils/repDeals';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import { dbFetch, dbWrite } from '../utils/storage';
+import { T } from '../tokens.js';
 
 export default function ReportsTab({ leadsEnabled = true }) {
     const {
@@ -441,7 +442,6 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                           {/* ── Shared primitives (scoped to this block) ── */}
                           {(() => {
-                            const T = { bg:'#f0ece4', surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', borderStrong:'#d4c8b4', ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378', gold:'#c8b99a', ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e', sans:'"Plus Jakarta Sans",system-ui,sans-serif', serif:'Georgia,serif', r:3 };
                             const fmt = (v) => { const n=parseFloat(v)||0; if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3)return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n).toLocaleString(); };
                             const eb  = (c) => ({ fontSize:10, fontWeight:700, color:c||T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans });
                             const HBar = ({ value, max, color, h=6 }) => { const p=Math.min(100,Math.max(0,(value/Math.max(max,1))*100)); return <div style={{ height:h, background:T.surface2, borderRadius:h/2, overflow:'hidden', flex:1 }}><div style={{ width:p+'%', height:'100%', background:color, borderRadius:h/2 }}/></div>; };
@@ -837,8 +837,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                           {/* ── V2 Quota Attainment Leaderboard ── */}
                           {(() => {
-                            const T2 = { surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378', gold:'#c8b99a', ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e', sans:'"Plus Jakarta Sans",system-ui,sans-serif', serif:'Georgia,serif', r:3 };
-                            const eb2 = (c) => ({ fontSize:10, fontWeight:700, color:c||T2.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T2.sans });
+                            const eb2 = (c) => ({ fontSize:10, fontWeight:700, color:c||T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans });
                             const fmt2 = (v) => { const n=parseFloat(v)||0; if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3)return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n).toLocaleString(); };
 
                             // Build per-rep stats
@@ -884,7 +883,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             }).sort((a,b)=>b.attain-a.attain);
 
                             if(repRows.length===0&&totalQuota2===0){
-                              return <div style={{ background:T2.surface, border:`1px solid ${T2.border}`, borderRadius:T2.r, padding:'1.25rem', color:T2.inkMuted, fontSize:'0.8125rem', fontFamily:T2.sans }}>No quota data. Configure rep quotas in Settings → Team.</div>;
+                              return <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'1.25rem', color:T.inkMuted, fontSize:'0.8125rem', fontFamily:T.sans }}>No quota data. Configure rep quotas in Settings → Team.</div>;
                             }
 
                             // Sparkline (simplified — trend from monthly won revenue)
@@ -897,7 +896,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                               const max=Math.max(...pts,1);
                               const w=80,h=20;
                               const path=pts.map((v,i)=>`${i===0?'M':'L'}${Math.round((i/(pts.length-1))*w)},${Math.round(h-(v/max)*h)}`).join(' ');
-                              const trendColor=pts[pts.length-1]>=pts[0]?T2.ok:T2.danger;
+                              const trendColor=pts[pts.length-1]>=pts[0]?T.ok:T.danger;
                               return <svg width={w} height={h+4} style={{ display:'block' }}><path d={path} fill="none" stroke={trendColor} strokeWidth={1.4} strokeLinejoin="round" strokeLinecap="round"/><circle cx={Math.round((pts.length-1)/(pts.length-1)*w)} cy={Math.round(h-(pts[pts.length-1]/max)*h)} r={2} fill={trendColor}/></svg>;
                             };
 
@@ -954,34 +953,34 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                     <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, margin:'0 8px' }}>
                                       {kpis.map(k=>(
                                         <div key={k.label} style={{
-                                          background:T2.surface,
-                                          border:`1px solid ${T2.border}`,
-                                          borderRadius:T2.r,
+                                          background:T.surface,
+                                          border:`1px solid ${T.border}`,
+                                          borderRadius:T.r,
                                           padding:'14px 18px',
                                         }}>
-                                          <div style={eb2(T2.inkMuted)}>{k.label}</div>
-                                          <div style={{ fontSize:26, fontWeight:700, color:T2.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T2.sans }}>{k.value}</div>
+                                          <div style={eb2(T.inkMuted)}>{k.label}</div>
+                                          <div style={{ fontSize:26, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T.sans }}>{k.value}</div>
                                           <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5 }}>
                                             {hasComparison && k.delta ? (
                                               <>
                                                 <span style={{
                                                   fontSize:11, fontWeight:700,
-                                                  color: k.delta.neutral ? T2.inkMuted : k.delta.good ? T2.ok : T2.danger,
-                                                  fontFamily:T2.sans,
+                                                  color: k.delta.neutral ? T.inkMuted : k.delta.good ? T.ok : T.danger,
+                                                  fontFamily:T.sans,
                                                   display:'inline-flex', alignItems:'center', gap:2,
                                                 }}>
                                                   {!k.delta.neutral && (
                                                     <svg width="7" height="7" viewBox="0 0 8 8" style={{ display:'inline-block', marginRight:1 }}>
                                                       <polygon points={k.delta.good ? '4,1 7,7 1,7' : '4,7 7,1 1,1'}
-                                                        fill={k.delta.good ? T2.ok : T2.danger}/>
+                                                        fill={k.delta.good ? T.ok : T.danger}/>
                                                     </svg>
                                                   )}
                                                   {k.delta.neutral ? '' : (k.delta.good ? '+' : '')}{Math.abs(k.delta.rawPct).toFixed(1)}%
                                                 </span>
-                                                <span style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>{compareLabel2}</span>
+                                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{compareLabel2}</span>
                                               </>
                                             ) : (
-                                              <span style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>{k.sub}</span>
+                                              <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{k.sub}</span>
                                             )}
                                           </div>
                                         </div>
@@ -992,18 +991,18 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                                 {/* Leaderboard — segmented bars */}
                                 {repRows.length > 0 && (
-                                  <div style={{ background:T2.surface, border:`1px solid ${T2.border}`, borderRadius:T2.r, padding:'20px 22px' }}>
+                                  <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'20px 22px' }}>
                                     {/* Header */}
                                     <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
                                       <div style={{ flex:1 }}>
-                                        <div style={{ fontSize:16, fontFamily:T2.serif, fontStyle:'italic', fontWeight:400, color:T2.ink, lineHeight:1.1 }}>Quota attainment — leaderboard</div>
-                                        <div style={{ fontSize:11.5, color:T2.inkMuted, marginTop:3, fontFamily:T2.sans }}>Closed + commit vs quota, this period</div>
+                                        <div style={{ fontSize:16, fontFamily:T.serif, fontStyle:'italic', fontWeight:400, color:T.ink, lineHeight:1.1 }}>Quota attainment — leaderboard</div>
+                                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>Closed + commit vs quota, this period</div>
                                       </div>
-                                      <div style={{ display:'flex', gap:14, fontSize:11, color:T2.inkMid, fontFamily:T2.sans }}>
-                                        {[{c:'#3a5530',l:'Closed'},{c:T2.gold,l:'Commit'},{c:'dashed',l:'100% quota'}].map(({c,l})=>(
+                                      <div style={{ display:'flex', gap:14, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                                        {[{c:'#3a5530',l:'Closed'},{c:T.gold,l:'Commit'},{c:'dashed',l:'100% quota'}].map(({c,l})=>(
                                           <span key={l} style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
                                             {c==='dashed'
-                                              ? <svg width="14" height="8"><line x1="7" y1="0" x2="7" y2="8" stroke={T2.ink} strokeWidth="1.5" strokeDasharray="2 2"/></svg>
+                                              ? <svg width="14" height="8"><line x1="7" y1="0" x2="7" y2="8" stroke={T.ink} strokeWidth="1.5" strokeDasharray="2 2"/></svg>
                                               : <span style={{ width:10,height:10,background:c,borderRadius:2 }}/>}
                                             {l}
                                           </span>
@@ -1011,39 +1010,39 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                       </div>
                                     </div>
                                     {/* Column headers */}
-                                    <div style={{ display:'grid', gridTemplateColumns:'180px 1fr 60px 84px 65px', gap:12, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T2.border}`, marginBottom:6 }}>
-                                      {['Rep','Progress','Attain','Trend (6mo)','Quota'].map((h,i)=><div key={i} style={{ ...eb2(T2.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>)}
+                                    <div style={{ display:'grid', gridTemplateColumns:'180px 1fr 60px 84px 65px', gap:12, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T.border}`, marginBottom:6 }}>
+                                      {['Rep','Progress','Attain','Trend (6mo)','Quota'].map((h,i)=><div key={i} style={{ ...eb2(T.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>)}
                                     </div>
                                     {/* Rep rows */}
                                     {repRows.map((r,i)=>{
-                                      const attainColor=r.attain>=1?T2.ok:r.attain>=0.8?T2.ink:r.attain>=0.6?T2.warn:T2.danger;
+                                      const attainColor=r.attain>=1?T.ok:r.attain>=0.8?T.ink:r.attain>=0.6?T.warn:T.danger;
                                       const totalPct=r.attain+r.commitPct;
                                       return (
-                                        <div key={r.rep} style={{ display:'grid', gridTemplateColumns:'180px 1fr 60px 84px 65px', gap:12, alignItems:'center', padding:'9px 0', borderBottom:i<repRows.length-1?`1px solid ${T2.border}`:'none' }}>
+                                        <div key={r.rep} style={{ display:'grid', gridTemplateColumns:'180px 1fr 60px 84px 65px', gap:12, alignItems:'center', padding:'9px 0', borderBottom:i<repRows.length-1?`1px solid ${T.border}`:'none' }}>
                                           {/* Name */}
                                           <div style={{ display:'flex', alignItems:'center', gap:9 }}>
                                             <div style={{ width:28, height:28, borderRadius:'50%', background:'#9c6b4a', color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0, textTransform:'uppercase' }}>
                                               {r.rep.split(' ').map(w=>w[0]).join('').slice(0,2)}
                                             </div>
                                             <div style={{ minWidth:0 }}>
-                                              <div style={{ fontSize:13, fontWeight:600, color:T2.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T2.sans }}>{r.rep}</div>
-                                              <div style={{ fontSize:10.5, color:T2.inkMuted, marginTop:1, fontFamily:T2.sans }}>{r.role}</div>
+                                              <div style={{ fontSize:13, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T.sans }}>{r.rep}</div>
+                                              <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{r.role}</div>
                                             </div>
                                           </div>
                                           {/* Segmented bar */}
                                           <div style={{ position:'relative' }}>
-                                            <div style={{ height:14, background:T2.surface2, borderRadius:2, overflow:'hidden', display:'flex' }}>
+                                            <div style={{ height:14, background:T.surface2, borderRadius:2, overflow:'hidden', display:'flex' }}>
                                               <div style={{ width:`${Math.min((r.attain/maxWidth)*100,100)}%`, background:'#3a5530', height:'100%' }}/>
-                                              <div style={{ width:`${Math.min((r.commitPct/maxWidth)*100,100-(r.attain/maxWidth)*100)}%`, background:T2.gold, height:'100%' }}/>
+                                              <div style={{ width:`${Math.min((r.commitPct/maxWidth)*100,100-(r.attain/maxWidth)*100)}%`, background:T.gold, height:'100%' }}/>
                                             </div>
-                                            <div style={{ position:'absolute', top:-2, bottom:-2, left:`${(1/maxWidth)*100}%`, borderLeft:`1.5px dashed ${T2.ink}` }}/>
+                                            <div style={{ position:'absolute', top:-2, bottom:-2, left:`${(1/maxWidth)*100}%`, borderLeft:`1.5px dashed ${T.ink}` }}/>
                                           </div>
                                           {/* Attainment % */}
-                                          <div style={{ textAlign:'right', fontSize:14, fontWeight:700, color:attainColor, fontFamily:T2.sans }}>{Math.round(r.attain*100)}%</div>
+                                          <div style={{ textAlign:'right', fontSize:14, fontWeight:700, color:attainColor, fontFamily:T.sans }}>{Math.round(r.attain*100)}%</div>
                                           {/* Sparkline */}
                                           <div style={{ display:'flex', justifyContent:'flex-end' }}><Spark2 rep={r.rep}/></div>
                                           {/* Quota */}
-                                          <div style={{ textAlign:'right', fontSize:12, color:T2.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmt2(r.quota)}</div>
+                                          <div style={{ textAlign:'right', fontSize:12, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmt2(r.quota)}</div>
                                         </div>
                                       );
                                     })}
@@ -1052,16 +1051,16 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                                 {/* Rep metrics table */}
                                 {repRows.length > 1 && (
-                                  <div style={{ background:T2.surface, border:`1px solid ${T2.border}`, borderRadius:T2.r, padding:'20px 22px 8px' }}>
+                                  <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'20px 22px 8px' }}>
                                     <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
                                       <div style={{ flex:1 }}>
-                                        <div style={{ fontSize:16, fontFamily:T2.serif, fontStyle:'italic', fontWeight:400, color:T2.ink, lineHeight:1.1 }}>Rep metrics</div>
-                                        <div style={{ fontSize:11.5, color:T2.inkMuted, marginTop:3, fontFamily:T2.sans }}>How each rep compares to team average on the fundamentals</div>
+                                        <div style={{ fontSize:16, fontFamily:T.serif, fontStyle:'italic', fontWeight:400, color:T.ink, lineHeight:1.1 }}>Rep metrics</div>
+                                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>How each rep compares to team average on the fundamentals</div>
                                       </div>
                                     </div>
-                                    <div style={{ display:'grid', gridTemplateColumns:'160px 56px 90px 90px 80px 100px', gap:10, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T2.border}` }}>
+                                    <div style={{ display:'grid', gridTemplateColumns:'160px 56px 90px 90px 80px 100px', gap:10, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T.border}` }}>
                                       {['Rep','Deals','Win rate','Avg deal','Cycle','Activity ratio'].map((h,i)=>(
-                                        <div key={i} style={{ ...eb2(T2.inkMuted), textAlign:i===0?'left':'right' }}>{h}</div>
+                                        <div key={i} style={{ ...eb2(T.inkMuted), textAlign:i===0?'left':'right' }}>{h}</div>
                                       ))}
                                     </div>
                                     {(() => {
@@ -1083,15 +1082,15 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                                       // DiffCell: shows value + "X% vs team" or "avg" beneath
                                       const DiffCell = ({ value, avg, fmt3, inverted=false }) => {
-                                        if(value===null||value===undefined) return <div style={{ textAlign:'right', fontSize:12, color:T2.inkMuted, fontFamily:T2.sans }}>—</div>;
+                                        if(value===null||value===undefined) return <div style={{ textAlign:'right', fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>—</div>;
                                         const p = avg>0 ? ((value-avg)/avg*100) : 0;
                                         const good = inverted ? p<0 : p>0;
                                         const isAvg = Math.abs(p) < 5;
-                                        const col = isAvg ? T2.inkMuted : good ? T2.ok : T2.danger;
+                                        const col = isAvg ? T.inkMuted : good ? T.ok : T.danger;
                                         return (
                                           <div style={{ textAlign:'right' }}>
-                                            <div style={{ fontSize:13, fontWeight:600, color:T2.ink, fontFamily:T2.sans }}>{fmt3(value)}</div>
-                                            <div style={{ fontSize:10, color:col, fontWeight:600, marginTop:1, fontFamily:T2.sans }}>
+                                            <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{fmt3(value)}</div>
+                                            <div style={{ fontSize:10, color:col, fontWeight:600, marginTop:1, fontFamily:T.sans }}>
                                               {isAvg ? 'avg' : `${p>0?'+':''}${p.toFixed(0)}% vs team`}
                                             </div>
                                           </div>
@@ -1101,16 +1100,16 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                       return (
                                         <>
                                           {repRows.map((r,i)=>(
-                                            <div key={r.rep} style={{ display:'grid', gridTemplateColumns:'160px 56px 90px 90px 80px 100px', gap:10, alignItems:'center', padding:'10px 0', borderBottom:`1px solid ${T2.border}` }}>
+                                            <div key={r.rep} style={{ display:'grid', gridTemplateColumns:'160px 56px 90px 90px 80px 100px', gap:10, alignItems:'center', padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
                                               {/* Rep avatar + name */}
                                               <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
                                                 <div style={{ width:26, height:26, borderRadius:'50%', background:'#9c6b4a', color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, flexShrink:0, textTransform:'uppercase' }}>
                                                   {r.rep.split(' ').map(w=>w[0]).join('').slice(0,2)}
                                                 </div>
-                                                <div style={{ fontSize:13, fontWeight:600, color:T2.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:T2.sans }}>{r.rep}</div>
+                                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:T.sans }}>{r.rep}</div>
                                               </div>
                                               {/* Deals */}
-                                              <div style={{ textAlign:'right', fontSize:13, fontWeight:500, color:T2.ink, fontFamily:T2.sans }}>{r.wonCount}</div>
+                                              <div style={{ textAlign:'right', fontSize:13, fontWeight:500, color:T.ink, fontFamily:T.sans }}>{r.wonCount}</div>
                                               {/* Win rate */}
                                               <DiffCell value={r.winRate} avg={teamAvgWR} fmt3={v=>Math.round(v*100)+'%'}/>
                                               {/* Avg deal */}
@@ -1123,13 +1122,13 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                           ))}
 
                                           {/* Team avg footer row */}
-                                          <div style={{ display:'grid', gridTemplateColumns:'160px 56px 90px 90px 80px 100px', gap:10, alignItems:'center', padding:'10px 0', borderTop:`1px dashed ${T2.border}` }}>
-                                            <div style={{ fontSize:11, fontWeight:700, color:T2.inkMuted, letterSpacing:0.4, textTransform:'uppercase', fontFamily:T2.sans }}>Team avg</div>
+                                          <div style={{ display:'grid', gridTemplateColumns:'160px 56px 90px 90px 80px 100px', gap:10, alignItems:'center', padding:'10px 0', borderTop:`1px dashed ${T.border}` }}>
+                                            <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, letterSpacing:0.4, textTransform:'uppercase', fontFamily:T.sans }}>Team avg</div>
                                             <div/>
-                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T2.inkMuted, fontFamily:T2.sans }}>{Math.round(teamAvgWR*100)}%</div>
-                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T2.inkMuted, fontFamily:T2.sans }}>{fmt2(Math.round(teamAvgAD))}</div>
-                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T2.inkMuted, fontFamily:T2.sans }}>{Math.round(teamAvgCy)}d</div>
-                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T2.inkMuted, fontFamily:T2.sans }}>{teamAvgAR.toFixed(2)}×</div>
+                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans }}>{Math.round(teamAvgWR*100)}%</div>
+                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans }}>{fmt2(Math.round(teamAvgAD))}</div>
+                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans }}>{Math.round(teamAvgCy)}d</div>
+                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans }}>{teamAvgAR.toFixed(2)}×</div>
                                           </div>
                                         </>
                                       );
@@ -1147,8 +1146,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                no deals behind it. The lists come from the SAME period-filtered sets the
                                leaderboard sums, so the total here is the leaderboard's number. ── */}
                           {reportsRep && (() => {
-                            const T2c = { surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378', ok:'#4d6b3d', danger:'#9c3a2e', sans:'"Plus Jakarta Sans",system-ui,sans-serif', serif:'Georgia,serif', r:3 };
-                            const eb2c = (c) => ({ fontSize:10, fontWeight:700, color:c||T2c.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T2c.sans });
+                            const eb2c = (c) => ({ fontSize:10, fontWeight:700, color:c||T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans });
                             const fmt2c = (v) => { const n=parseFloat(v)||0; if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3)return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n).toLocaleString(); };
                             const fmtDay2c = (s) => s ? new Date(s+'T12:00:00').toLocaleDateString('en-US',{ month:'short', day:'numeric', year:'numeric' }) : 'no close day';
                             const d = repDeals(wonOpps, lostOpps, reportsRep);
@@ -1156,12 +1154,12 @@ export default function ReportsTab({ leadsEnabled = true }) {
                               : reportTimePeriod === 'custom' ? `${reportDateFrom || '…'} to ${reportDateTo || '…'}`
                               : reportTimePeriod === 'FY' ? `FY ${currentFiscalYear(fiscalStart)}`
                               : `${reportTimePeriod} FY${currentFiscalYear(fiscalStart)}`;
-                            const panel2c = { background:T2c.surface, border:`1px solid ${T2c.border}`, borderRadius:T2c.r, padding:'20px 22px 14px' };
+                            const panel2c = { background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'20px 22px 14px' };
                             const hdr2c = { display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 };
-                            const title2c = { fontSize:16, fontFamily:T2c.serif, fontStyle:'italic', fontWeight:400, color:T2c.ink, lineHeight:1.1, letterSpacing:-0.2 };
-                            const sub2c = { fontSize:11.5, color:T2c.inkMuted, marginTop:3, fontFamily:T2c.sans };
-                            const cell2c = { fontSize:12, color:T2c.inkMid, fontFamily:T2c.sans, whiteSpace:'nowrap' };
-                            const total2c = { display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'10px 0 4px', borderTop:`2px solid ${T2c.ink}`, marginTop:4, fontSize:12.5, fontWeight:700, color:T2c.ink, fontFamily:T2c.sans };
+                            const title2c = { fontSize:16, fontFamily:T.serif, fontStyle:'italic', fontWeight:400, color:T.ink, lineHeight:1.1, letterSpacing:-0.2 };
+                            const sub2c = { fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans };
+                            const cell2c = { fontSize:12, color:T.inkMid, fontFamily:T.sans, whiteSpace:'nowrap' };
+                            const total2c = { display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'10px 0 4px', borderTop:`2px solid ${T.ink}`, marginTop:4, fontSize:12.5, fontWeight:700, color:T.ink, fontFamily:T.sans };
                             return (
                               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
                                 {/* Won */}
@@ -1171,31 +1169,31 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                       <div style={title2c}>Won deals — {reportsRep}</div>
                                       <div style={sub2c}>Closed Won, {periodLabel2c} · newest close first</div>
                                     </div>
-                                    <span style={{ fontSize:12, color:T2c.inkMid, fontFamily:T2c.sans }}>
+                                    <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>
                                       {d.totals.winRate != null ? `${Math.round(d.totals.winRate*100)}% win rate` : 'no closed deals'}
                                     </span>
                                   </div>
                                   {d.won.length === 0 ? (
-                                    <div style={{ padding:'1.5rem 0', color:T2c.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T2c.sans }}>No won deals in this period.</div>
+                                    <div style={{ padding:'1.5rem 0', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No won deals in this period.</div>
                                   ) : (
                                     <>
-                                      <div style={{ display:'grid', gridTemplateColumns:'1fr 96px 56px 84px', gap:10, padding:'0 0 6px', borderBottom:`1px solid ${T2c.border}` }}>
+                                      <div style={{ display:'grid', gridTemplateColumns:'1fr 96px 56px 84px', gap:10, padding:'0 0 6px', borderBottom:`1px solid ${T.border}` }}>
                                         {['Deal','Closed','Cycle','ARR'].map((h,i)=><div key={h} style={{ ...eb2c(), textAlign:i===0?'left':'right' }}>{h}</div>)}
                                       </div>
                                       {d.won.map((r,i)=>(
-                                        <div key={r.id||i} style={{ display:'grid', gridTemplateColumns:'1fr 96px 56px 84px', gap:10, alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${T2c.border}` }}>
+                                        <div key={r.id||i} style={{ display:'grid', gridTemplateColumns:'1fr 96px 56px 84px', gap:10, alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
                                           <div style={{ minWidth:0 }}>
-                                            <div style={{ fontSize:13, fontWeight:600, color:T2c.ink, fontFamily:T2c.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
-                                            {r.account && r.account !== r.name && <div style={{ fontSize:11, color:T2c.inkMuted, fontFamily:T2c.sans }}>{r.account}</div>}
+                                            <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
+                                            {r.account && r.account !== r.name && <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{r.account}</div>}
                                           </div>
                                           <div style={{ ...cell2c, textAlign:'right' }}>{fmtDay2c(r.closeDay)}</div>
                                           <div style={{ ...cell2c, textAlign:'right' }}>{r.cycleDays != null ? r.cycleDays+'d' : '—'}</div>
-                                          <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T2c.ok, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmt2c(r.arr)}</div>
+                                          <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ok, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmt2c(r.arr)}</div>
                                         </div>
                                       ))}
                                       <div style={total2c}>
                                         <span>Total</span>
-                                        <span>{d.totals.wonCount} won · {fmt2c(d.totals.wonArr)} ARR{d.totals.wonImpl > 0 && <span style={{ fontWeight:500, color:T2c.inkMid }}> · +{fmt2c(d.totals.wonImpl)} implementation</span>}</span>
+                                        <span>{d.totals.wonCount} won · {fmt2c(d.totals.wonArr)} ARR{d.totals.wonImpl > 0 && <span style={{ fontWeight:500, color:T.inkMid }}> · +{fmt2c(d.totals.wonImpl)} implementation</span>}</span>
                                       </div>
                                     </>
                                   )}
@@ -1209,22 +1207,22 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                     </div>
                                   </div>
                                   {d.lost.length === 0 ? (
-                                    <div style={{ padding:'1.5rem 0', color:T2c.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T2c.sans }}>No lost deals in this period.</div>
+                                    <div style={{ padding:'1.5rem 0', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No lost deals in this period.</div>
                                   ) : (
                                     <>
-                                      <div style={{ display:'grid', gridTemplateColumns:'1fr 96px 84px', gap:10, padding:'0 0 6px', borderBottom:`1px solid ${T2c.border}` }}>
+                                      <div style={{ display:'grid', gridTemplateColumns:'1fr 96px 84px', gap:10, padding:'0 0 6px', borderBottom:`1px solid ${T.border}` }}>
                                         {['Deal','Closed','ARR'].map((h,i)=><div key={h} style={{ ...eb2c(), textAlign:i===0?'left':'right' }}>{h}</div>)}
                                       </div>
                                       {d.lost.map((r,i)=>(
-                                        <div key={r.id||i} style={{ display:'grid', gridTemplateColumns:'1fr 96px 84px', gap:10, alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${T2c.border}` }}>
+                                        <div key={r.id||i} style={{ display:'grid', gridTemplateColumns:'1fr 96px 84px', gap:10, alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
                                           <div style={{ minWidth:0 }}>
-                                            <div style={{ fontSize:13, fontWeight:600, color:T2c.ink, fontFamily:T2c.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
-                                            <div style={{ fontSize:11, color:T2c.inkMuted, fontFamily:T2c.sans }}>
+                                            <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
                                               {r.account && r.account !== r.name ? r.account + ' · ' : ''}left {r.exitStage || 'an unrecorded stage'} · {r.lossReason || 'no reason recorded'}
                                             </div>
                                           </div>
                                           <div style={{ ...cell2c, textAlign:'right' }}>{fmtDay2c(r.closeDay)}</div>
-                                          <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T2c.danger, fontFamily:'ui-monospace,Menlo,monospace' }}>−{fmt2c(r.arr)}</div>
+                                          <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.danger, fontFamily:'ui-monospace,Menlo,monospace' }}>−{fmt2c(r.arr)}</div>
                                         </div>
                                       ))}
                                       <div style={total2c}>
@@ -1241,8 +1239,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                           {/* Why deals are lost + Activity mix */}
                           {(() => {
-                            const T2b = { surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378', ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e', gold:'#c8b99a', sans:'"Plus Jakarta Sans",system-ui,sans-serif', serif:'Georgia,serif', r:3 };
-                            const eb2b = (c) => ({ fontSize:10, fontWeight:700, color:c||T2b.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T2b.sans });
+                            const eb2b = (c) => ({ fontSize:10, fontWeight:700, color:c||T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans });
 
                             // Why deals are lost
                             const totalClosed = wonOpps.length + lostOpps.length;
@@ -1263,12 +1260,12 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             const actColors = { 'Call':'#3a5a7a','Email':'#c8b99a','Meeting':'#4d6b3d','Demo':'#b87333','Note':'#8a8378','Other':'#5a4a7a' };
                             const maxAct = Math.max(...actRows.map(([,c])=>c),1);
 
-                            const PanelB = ({children,style}) => <div style={{ background:T2b.surface, border:`1px solid ${T2b.border}`, borderRadius:T2b.r, padding:'20px 22px 22px', ...style }}>{children}</div>;
+                            const PanelB = ({children,style}) => <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'20px 22px 22px', ...style }}>{children}</div>;
                             const SecHdrB = ({title,sub,right}) => (
                               <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
                                 <div style={{ flex:1 }}>
-                                  <div style={{ fontSize:16, fontFamily:T2b.serif, fontStyle:'italic', fontWeight:400, color:T2b.ink, lineHeight:1.1, letterSpacing:-0.2 }}>{title}</div>
-                                  {sub&&<div style={{ fontSize:11.5, color:T2b.inkMuted, marginTop:3, fontFamily:T2b.sans }}>{sub}</div>}
+                                  <div style={{ fontSize:16, fontFamily:T.serif, fontStyle:'italic', fontWeight:400, color:T.ink, lineHeight:1.1, letterSpacing:-0.2 }}>{title}</div>
+                                  {sub&&<div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{sub}</div>}
                                 </div>
                                 {right}
                               </div>
@@ -1281,21 +1278,21 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                 <PanelB>
                                   <SecHdrB title="Why deals are lost" sub={`${lostTotal} closed-lost deals, trailing 90 days`}/>
                                   {lostTotal === 0 ? (
-                                    <div style={{ padding:'2rem', textAlign:'center', color:T2b.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T2b.sans }}>No lost deals in this period.</div>
+                                    <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No lost deals in this period.</div>
                                   ) : (
                                     <>
                                       {lostRows.map(([cat,cnt],i)=>(
-                                        <div key={cat} style={{ display:'grid', gridTemplateColumns:'1fr 36px 46px', gap:10, alignItems:'center', padding:'9px 0', borderTop: i===0?'none':`1px solid ${T2b.border}` }}>
+                                        <div key={cat} style={{ display:'grid', gridTemplateColumns:'1fr 36px 46px', gap:10, alignItems:'center', padding:'9px 0', borderTop: i===0?'none':`1px solid ${T.border}` }}>
                                           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                                            <span style={{ width:3, height:18, background:i===0?T2b.danger:i===1?T2b.warn:T2b.inkMuted, borderRadius:1.5, flexShrink:0 }}/>
-                                            <span style={{ fontSize:13, color:T2b.ink, fontWeight:500, fontFamily:T2b.sans }}>{cat}</span>
+                                            <span style={{ width:3, height:18, background:i===0?T.danger:i===1?T.warn:T.inkMuted, borderRadius:1.5, flexShrink:0 }}/>
+                                            <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{cat}</span>
                                           </div>
-                                          <div style={{ textAlign:'right', fontSize:12, color:T2b.inkMuted, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{cnt}</div>
-                                          <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T2b.ink, fontFamily:T2b.sans }}>{Math.round(cnt/lostTotal*100)}%</div>
+                                          <div style={{ textAlign:'right', fontSize:12, color:T.inkMuted, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{cnt}</div>
+                                          <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{Math.round(cnt/lostTotal*100)}%</div>
                                         </div>
                                       ))}
-                                      <div style={{ marginTop:12, padding:'8px 12px', background:T2b.surface2, borderRadius:T2b.r, fontSize:12, color:T2b.inkMid, lineHeight:1.5, fontFamily:T2b.sans }}>
-                                        <strong style={{ color:T2b.ink, fontWeight:700 }}>Biggest leak:</strong>{' '}
+                                      <div style={{ marginTop:12, padding:'8px 12px', background:T.surface2, borderRadius:T.r, fontSize:12, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>
+                                        <strong style={{ color:T.ink, fontWeight:700 }}>Biggest leak:</strong>{' '}
                                         {lostRows[0] ? `${Math.round(lostRows[0][1]/lostTotal*100)}% of losses are "${lostRows[0][0]}"` : 'No loss reason data'}.
                                         {lostRows[0]?.[0]==='Unknown'||lostRows[0]?.[0]==='No decision'?' Indicates qualification / urgency problem more than feature gap.':''}
                                       </div>
@@ -1307,28 +1304,28 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                 <PanelB>
                                   <SecHdrB title="Activity mix" sub="How reps are spending time this quarter"/>
                                   {actTotal === 0 ? (
-                                    <div style={{ padding:'2rem', textAlign:'center', color:T2b.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T2b.sans }}>No activities logged this period.</div>
+                                    <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No activities logged this period.</div>
                                   ) : (
                                     <>
                                       {/* Stacked bar */}
-                                      <div style={{ height:10, display:'flex', borderRadius:2, overflow:'hidden', border:`1px solid ${T2b.border}`, marginBottom:14 }}>
+                                      <div style={{ height:10, display:'flex', borderRadius:2, overflow:'hidden', border:`1px solid ${T.border}`, marginBottom:14 }}>
                                         {actRows.map(([type,cnt])=>(
-                                          <div key={type} style={{ width:`${(cnt/actTotal)*100}%`, background:actColors[type]||T2b.inkMuted, height:'100%' }} title={`${type}: ${cnt}`}/>
+                                          <div key={type} style={{ width:`${(cnt/actTotal)*100}%`, background:actColors[type]||T.inkMuted, height:'100%' }} title={`${type}: ${cnt}`}/>
                                         ))}
                                       </div>
                                       {/* Rows */}
                                       {actRows.map(([type,cnt],i)=>(
-                                        <div key={type} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 48px', gap:10, alignItems:'center', padding:'8px 0', borderTop:i===0?'none':`1px solid ${T2b.border}` }}>
+                                        <div key={type} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 48px', gap:10, alignItems:'center', padding:'8px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
                                           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                            <span style={{ width:10, height:10, background:actColors[type]||T2b.inkMuted, borderRadius:2, flexShrink:0 }}/>
-                                            <span style={{ fontSize:13, color:T2b.ink, fontWeight:500, fontFamily:T2b.sans }}>{type}</span>
+                                            <span style={{ width:10, height:10, background:actColors[type]||T.inkMuted, borderRadius:2, flexShrink:0 }}/>
+                                            <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{type}</span>
                                           </div>
-                                          <div style={{ height:6, background:T2b.surface2, borderRadius:3, overflow:'hidden' }}>
-                                            <div style={{ width:`${(cnt/maxAct)*100}%`, height:'100%', background:actColors[type]||T2b.inkMuted, borderRadius:3 }}/>
+                                          <div style={{ height:6, background:T.surface2, borderRadius:3, overflow:'hidden' }}>
+                                            <div style={{ width:`${(cnt/maxAct)*100}%`, height:'100%', background:actColors[type]||T.inkMuted, borderRadius:3 }}/>
                                           </div>
                                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:4 }}>
-                                            <span style={{ fontSize:12, fontWeight:600, color:T2b.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{cnt}</span>
-                                            <span style={{ fontSize:12, fontWeight:700, color:T2b.ink, fontFamily:T2b.sans }}>{Math.round(cnt/actTotal*100)}%</span>
+                                            <span style={{ fontSize:12, fontWeight:600, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{cnt}</span>
+                                            <span style={{ fontSize:12, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{Math.round(cnt/actTotal*100)}%</span>
                                           </div>
                                         </div>
                                       ))}
@@ -1351,16 +1348,15 @@ export default function ReportsTab({ leadsEnabled = true }) {
                         <div style={{ display:'flex', flexDirection:'column', gap:'1rem', padding:'1rem 1.25rem 1.5rem' }}>
                           {(() => {
                             const now = new Date();
-                            const T3 = { surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', borderStrong:'#d4c8b4', ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378', gold:'#c8b99a', ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e', info:'#3a5a7a', sans:'"Plus Jakarta Sans",system-ui,sans-serif', serif:'Georgia,serif', r:3 };
                             const fmt3 = (v) => { const n=parseFloat(v)||0; if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3)return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n).toLocaleString(); };
-                            const eb3 = (c) => ({ fontSize:10, fontWeight:700, color:c||T3.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T3.sans });
-                            const HBar3 = ({ value, max, color, h=6 }) => { const p=Math.min(100,Math.max(0,(value/Math.max(max,1))*100)); return <div style={{ height:h, background:T3.surface2, borderRadius:h/2, overflow:'hidden', flex:1 }}><div style={{ width:p+'%', height:'100%', background:color, borderRadius:h/2 }}/></div>; };
-                            const Panel3 = ({ children, p='20px 22px 22px' }) => <div style={{ background:T3.surface, border:`1px solid ${T3.border}`, borderRadius:T3.r, padding:p }}>{children}</div>;
+                            const eb3 = (c) => ({ fontSize:10, fontWeight:700, color:c||T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans });
+                            const HBar3 = ({ value, max, color, h=6 }) => { const p=Math.min(100,Math.max(0,(value/Math.max(max,1))*100)); return <div style={{ height:h, background:T.surface2, borderRadius:h/2, overflow:'hidden', flex:1 }}><div style={{ width:p+'%', height:'100%', background:color, borderRadius:h/2 }}/></div>; };
+                            const Panel3 = ({ children, p='20px 22px 22px' }) => <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:p }}>{children}</div>;
                             const SecHdr3 = ({ title, sub, right }) => (
                               <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
                                 <div style={{ flex:1 }}>
-                                  <div style={{ fontSize:16, fontFamily:T3.serif, fontStyle:'italic', fontWeight:400, color:T3.ink, lineHeight:1.1, letterSpacing:-0.2 }}>{title}</div>
-                                  {sub && <div style={{ fontSize:11.5, color:T3.inkMuted, marginTop:3, fontFamily:T3.sans }}>{sub}</div>}
+                                  <div style={{ fontSize:16, fontFamily:T.serif, fontStyle:'italic', fontWeight:400, color:T.ink, lineHeight:1.1, letterSpacing:-0.2 }}>{title}</div>
+                                  {sub && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{sub}</div>}
                                 </div>
                                 {right}
                               </div>
@@ -1384,7 +1380,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                               return { date:isoLocal(d), dow:d.getDay(), short:d.toLocaleDateString('en-US',{weekday:'narrow'}), label:d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) };
                             });
                             const heatColorFor = (v) => {
-                              if(v===0)return T3.surface2;
+                              if(v===0)return T.surface2;
                               if(v===1)return '#e6dcc9';
                               if(v===2)return '#d4c094';
                               if(v===3)return '#b89e68';
@@ -1416,7 +1412,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             const typeMap = allActs.reduce((acc,a)=>{ const t=a.type||'Other'; acc[t]=(acc[t]||0)+1; return acc; },{});
                             const typeRows3 = Object.entries(typeMap).sort((a,b)=>b[1]-a[1]);
                             const maxType3 = Math.max(...typeRows3.map(([,c])=>c),1);
-                            const typeColors3 = { 'Call':T3.info, 'Email':T3.gold, 'Meeting':T3.ok, 'Demo':T3.warn, 'Note':T3.inkMuted, 'Other':T3.inkMuted };
+                            const typeColors3 = { 'Call':T.info, 'Email':T.gold, 'Meeting':T.ok, 'Demo':T.warn, 'Note':T.inkMuted, 'Other':T.inkMuted };
 
                             // ── Account coverage matrix — top open opps by Revenue vs activity count
                             const topOpenByARR = [...openOpps].sort((a,b)=>(parseFloat(b.arr)||0)-(parseFloat(a.arr)||0)).slice(0,9);
@@ -1475,24 +1471,24 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                   return (
                                     <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, margin:'0 8px' }}>
                                       {kpis3.map(k=>(
-                                        <div key={k.label} style={{ background:T3.surface, border:`1px solid ${T3.border}`, borderRadius:T3.r, padding:'14px 18px' }}>
-                                          <div style={eb3(T3.inkMuted)}>{k.label}</div>
-                                          <div style={{ fontSize:26, fontWeight:700, color:T3.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T3.sans }}>{k.value}</div>
+                                        <div key={k.label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'14px 18px' }}>
+                                          <div style={eb3(T.inkMuted)}>{k.label}</div>
+                                          <div style={{ fontSize:26, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T.sans }}>{k.value}</div>
                                           <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5 }}>
                                             {hasComparison3 && k.delta ? (
                                               <>
-                                                <span style={{ fontSize:11, fontWeight:700, color: k.delta.neutral?T3.inkMuted:k.delta.good?T3.ok:T3.danger, fontFamily:T3.sans, display:'inline-flex', alignItems:'center', gap:2 }}>
+                                                <span style={{ fontSize:11, fontWeight:700, color: k.delta.neutral?T.inkMuted:k.delta.good?T.ok:T.danger, fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:2 }}>
                                                   {!k.delta.neutral && (
                                                     <svg width="7" height="7" viewBox="0 0 8 8" style={{ display:'inline-block', marginRight:1 }}>
-                                                      <polygon points={k.delta.good ? '4,1 7,7 1,7' : '4,7 7,1 1,1'} fill={k.delta.good ? T3.ok : T3.danger}/>
+                                                      <polygon points={k.delta.good ? '4,1 7,7 1,7' : '4,7 7,1 1,1'} fill={k.delta.good ? T.ok : T.danger}/>
                                                     </svg>
                                                   )}
                                                   {k.delta.neutral ? '' : (k.delta.good ? '+' : '')}{Math.abs(k.delta.rawPct).toFixed(1)}%
                                                 </span>
-                                                <span style={{ fontSize:11, color:T3.inkMuted, fontFamily:T3.sans }}>{compareLabel3}</span>
+                                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{compareLabel3}</span>
                                               </>
                                             ) : (
-                                              <span style={{ fontSize:11, color:T3.inkMuted, fontFamily:T3.sans }}>{k.sub}</span>
+                                              <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{k.sub}</span>
                                             )}
                                           </div>
                                         </div>
@@ -1505,33 +1501,33 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                 <Panel3>
                                   <SecHdr3 title="Team activity rhythm" sub="Daily activity density by rep, last 14 days"
                                     right={
-                                      <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, color:T3.inkMid, fontFamily:T3.sans }}>
+                                      <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
                                         <span>Less</span>
-                                        {[0,1,2,3,4,5].map(v=><span key={v} style={{ width:11, height:11, background:heatColorFor(v), borderRadius:2, border:v===0?`1px solid ${T3.border}`:'none' }}/>)}
+                                        {[0,1,2,3,4,5].map(v=><span key={v} style={{ width:11, height:11, background:heatColorFor(v), borderRadius:2, border:v===0?`1px solid ${T.border}`:'none' }}/>)}
                                         <span>More</span>
                                       </div>
                                     }/>
                                   {heatRows.length === 0 ? (
-                                    <div style={{ padding:'2rem', textAlign:'center', color:T3.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T3.sans }}>No activity data for this period.</div>
+                                    <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No activity data for this period.</div>
                                   ) : (
                                     <>
                                       {/* Day header row */}
                                       <div style={{ display:'grid', gridTemplateColumns:`140px repeat(14,1fr) 70px`, gap:3, marginBottom:6, alignItems:'center' }}>
                                         <div/>
                                         {heatDays.map(d=>(
-                                          <div key={d.date} style={{ textAlign:'center', fontSize:9.5, color:T3.inkMuted, fontWeight:600, opacity:d.dow===0||d.dow===6?0.45:1, letterSpacing:0.3 }}>{d.short}</div>
+                                          <div key={d.date} style={{ textAlign:'center', fontSize:9.5, color:T.inkMuted, fontWeight:600, opacity:d.dow===0||d.dow===6?0.45:1, letterSpacing:0.3 }}>{d.short}</div>
                                         ))}
-                                        <div style={{ textAlign:'right', ...eb3(T3.inkMuted), fontSize:9 }}>14d</div>
+                                        <div style={{ textAlign:'right', ...eb3(T.inkMuted), fontSize:9 }}>14d</div>
                                       </div>
                                       {/* Rep rows */}
                                       {heatRows.map(row=>(
                                         <div key={row.rep} style={{ display:'grid', gridTemplateColumns:`140px repeat(14,1fr) 70px`, gap:3, marginBottom:3, alignItems:'center' }}>
-                                          <div style={{ fontSize:12, fontWeight:500, color:T3.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8, fontFamily:T3.sans }}>{row.rep}</div>
+                                          <div style={{ fontSize:12, fontWeight:500, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:8, fontFamily:T.sans }}>{row.rep}</div>
                                           {row.cells.map((c,j)=>(
                                             <div key={j} style={{ height:22, background:heatColorFor(c.v), borderRadius:2, opacity:c.dow===0||c.dow===6?0.65:1 }}
                                               title={`${row.rep} — ${c.label} — ${c.count} activities`}/>
                                           ))}
-                                          <div style={{ textAlign:'right', fontSize:12, fontWeight:600, color:T3.ink, fontFamily:'ui-monospace,Menlo,monospace', paddingLeft:8 }}>{row.total14}</div>
+                                          <div style={{ textAlign:'right', fontSize:12, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', paddingLeft:8 }}>{row.total14}</div>
                                         </div>
                                       ))}
                                       {/* Coaching callout if any rep has many zero-days */}
@@ -1539,8 +1535,8 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                         const lowReps = heatRows.filter(r=>r.cells.filter(c=>c.dow!==0&&c.dow!==6&&c.v===0).length>=5).map(r=>r.rep);
                                         if(lowReps.length===0)return null;
                                         return (
-                                          <div style={{ marginTop:12, padding:'8px 12px', background:`rgba(156,58,46,0.08)`, border:`1px solid rgba(156,58,46,0.2)`, borderRadius:T3.r, fontSize:12, color:T3.ink, fontFamily:T3.sans }}>
-                                            <strong style={{ fontWeight:700, color:T3.danger }}>Coaching flag:</strong>{' '}
+                                          <div style={{ marginTop:12, padding:'8px 12px', background:`rgba(156,58,46,0.08)`, border:`1px solid rgba(156,58,46,0.2)`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans }}>
+                                            <strong style={{ fontWeight:700, color:T.danger }}>Coaching flag:</strong>{' '}
                                             {lowReps.join(', ')} {lowReps.length===1?'has':'have'} 5 or more zero-activity weekdays out of the last 10.
                                           </div>
                                         );
@@ -1555,7 +1551,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                   <Panel3>
                                     <SecHdr3 title="Activity → outcome" sub="How raw activity converts to won deals"/>
                                     {funnelSteps[0].count === 0 ? (
-                                      <div style={{ padding:'1.5rem', textAlign:'center', color:T3.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T3.sans }}>No activity data for this period.</div>
+                                      <div style={{ padding:'1.5rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No activity data for this period.</div>
                                     ) : funnelSteps.map((s,i)=>{
                                       const maxC=funnelSteps[0].count||1;
                                       // Cap at 100% — never let a bar overflow the panel
@@ -1567,26 +1563,26 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                       return (
                                         <div key={s.step} style={{ marginBottom:12 }}>
                                           <div style={{ display:'flex', alignItems:'baseline', gap:8, marginBottom:4 }}>
-                                            <div style={{ fontSize:12.5, fontWeight:500, color:T3.ink, flex:1, fontFamily:T3.sans }}>{s.step}</div>
-                                            <div style={{ fontSize:14, fontWeight:700, color:T3.ink, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>{s.count.toLocaleString()}</div>
+                                            <div style={{ fontSize:12.5, fontWeight:500, color:T.ink, flex:1, fontFamily:T.sans }}>{s.step}</div>
+                                            <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>{s.count.toLocaleString()}</div>
                                           </div>
                                           {/* Bar row — overflow:hidden prevents any child from escaping */}
                                           <div style={{ position:'relative', height:20, overflow:'hidden', borderRadius:2 }}>
                                             <div style={{ width:widthPct+'%', height:'100%', background:funnelColors[i], borderRadius:2, display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:6, boxSizing:'border-box', minWidth:stepLabel&&!showLabelInside?0:undefined }}>
                                               {stepLabel && showLabelInside && (
-                                                <span style={{ fontSize:10.5, fontWeight:600, color:'rgba(255,255,255,0.85)', whiteSpace:'nowrap', fontFamily:T3.sans }}>{stepLabel}</span>
+                                                <span style={{ fontSize:10.5, fontWeight:600, color:'rgba(255,255,255,0.85)', whiteSpace:'nowrap', fontFamily:T.sans }}>{stepLabel}</span>
                                               )}
                                             </div>
                                             {stepLabel && !showLabelInside && (
-                                              <span style={{ position:'absolute', left:widthPct+'%', top:'50%', transform:'translateY(-50%)', paddingLeft:6, fontSize:10.5, fontWeight:600, color:stepConv>=0.5?T3.ok:stepConv>=0.3?T3.inkMid:T3.danger, whiteSpace:'nowrap', fontFamily:T3.sans, maxWidth:`${100-widthPct}%`, overflow:'hidden', textOverflow:'ellipsis' }}>{stepLabel}</span>
+                                              <span style={{ position:'absolute', left:widthPct+'%', top:'50%', transform:'translateY(-50%)', paddingLeft:6, fontSize:10.5, fontWeight:600, color:stepConv>=0.5?T.ok:stepConv>=0.3?T.inkMid:T.danger, whiteSpace:'nowrap', fontFamily:T.sans, maxWidth:`${100-widthPct}%`, overflow:'hidden', textOverflow:'ellipsis' }}>{stepLabel}</span>
                                             )}
                                           </div>
                                         </div>
                                       );
                                     })}
                                     {funnelSteps[0].count>0&&(
-                                      <div style={{ marginTop:8, padding:'10px 12px', background:T3.surface2, borderRadius:T3.r, fontSize:12, color:T3.inkMid, lineHeight:1.5, fontFamily:T3.sans }}>
-                                        <strong style={{ color:T3.ink, fontWeight:700 }}>Overall:</strong>{' '}
+                                      <div style={{ marginTop:8, padding:'10px 12px', background:T.surface2, borderRadius:T.r, fontSize:12, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>
+                                        <strong style={{ color:T.ink, fontWeight:700 }}>Overall:</strong>{' '}
                                         {wonOpps.length>0?`~${Math.round(totalActs/Math.max(wonOpps.length,1))} activities per closed-won deal.`:'No closed-won deals this period yet.'}
                                       </div>
                                     )}
@@ -1596,22 +1592,22 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                   <Panel3>
                                     <SecHdr3 title="Activity mix & effectiveness" sub="Volume by type, this period"/>
                                     {typeRows3.length===0?(
-                                      <div style={{ padding:'1.5rem', textAlign:'center', color:T3.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T3.sans }}>No activities logged this period.</div>
+                                      <div style={{ padding:'1.5rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No activities logged this period.</div>
                                     ):(
                                       <>
-                                        <div style={{ display:'grid', gridTemplateColumns:'100px 1fr 55px', gap:10, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T3.border}`, marginBottom:2 }}>
-                                          {['Type','Volume','Count'].map((h,i)=><div key={i} style={{ ...eb3(T3.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>)}
+                                        <div style={{ display:'grid', gridTemplateColumns:'100px 1fr 55px', gap:10, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T.border}`, marginBottom:2 }}>
+                                          {['Type','Volume','Count'].map((h,i)=><div key={i} style={{ ...eb3(T.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>)}
                                         </div>
                                         {typeRows3.map(([type,cnt],i)=>{
-                                          const color=typeColors3[type]||T3.inkMuted;
+                                          const color=typeColors3[type]||T.inkMuted;
                                           return (
-                                            <div key={type} style={{ display:'grid', gridTemplateColumns:'100px 1fr 55px', gap:10, alignItems:'center', padding:'9px 0', borderBottom:i<typeRows3.length-1?`1px solid ${T3.border}`:'none' }}>
+                                            <div key={type} style={{ display:'grid', gridTemplateColumns:'100px 1fr 55px', gap:10, alignItems:'center', padding:'9px 0', borderBottom:i<typeRows3.length-1?`1px solid ${T.border}`:'none' }}>
                                               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                                 <span style={{ width:10, height:10, background:color, borderRadius:2 }}/>
-                                                <span style={{ fontSize:13, color:T3.ink, fontWeight:500, fontFamily:T3.sans }}>{type}</span>
+                                                <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{type}</span>
                                               </div>
                                               <HBar3 value={cnt} max={maxType3} color={color}/>
-                                              <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T3.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{cnt}</div>
+                                              <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{cnt}</div>
                                             </div>
                                           );
                                         })}
@@ -1624,26 +1620,26 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                 <Panel3 p="20px 22px 10px">
                                   <SecHdr3 title="Account coverage" sub="Top open deals — is activity matching deal size?"/>
                                   {oppActs.length===0?(
-                                    <div style={{ padding:'1.5rem', textAlign:'center', color:T3.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T3.sans }}>No open opportunities to show.</div>
+                                    <div style={{ padding:'1.5rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No open opportunities to show.</div>
                                   ):(
                                     <>
-                                      <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 90px 60px', gap:10, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T3.border}` }}>
-                                        {['Account','Revenue','Activity','Count'].map((h,i)=><div key={i} style={{ ...eb3(T3.inkMuted), textAlign:i>=3?'right':'left' }}>{h}</div>)}
+                                      <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 90px 60px', gap:10, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T.border}` }}>
+                                        {['Account','Revenue','Activity','Count'].map((h,i)=><div key={i} style={{ ...eb3(T.inkMuted), textAlign:i>=3?'right':'left' }}>{h}</div>)}
                                       </div>
                                       {oppActs.map((o,i)=>{
                                         const cold = o.actCount===0||(o.actCount<3&&(parseFloat(o.arr)||0)>20000);
                                         return (
-                                          <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr 100px 90px 60px', gap:10, alignItems:'center', padding:'9px 0', borderBottom:i<oppActs.length-1?`1px solid ${T3.border}`:'none' }}>
+                                          <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr 100px 90px 60px', gap:10, alignItems:'center', padding:'9px 0', borderBottom:i<oppActs.length-1?`1px solid ${T.border}`:'none' }}>
                                             <div style={{ minWidth:0 }}>
-                                              <div style={{ fontSize:13, fontWeight:600, color:T3.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:6, fontFamily:T3.sans }}>
+                                              <div style={{ fontSize:13, fontWeight:600, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
                                                 {o.opportunityName||o.account||'—'}
-                                                {cold&&<span style={{ fontSize:10, fontWeight:700, color:T3.danger, background:'rgba(156,58,46,0.12)', padding:'1px 6px', borderRadius:10, letterSpacing:0.3, fontFamily:T3.sans }}>UNDER-COVERED</span>}
+                                                {cold&&<span style={{ fontSize:10, fontWeight:700, color:T.danger, background:'rgba(156,58,46,0.12)', padding:'1px 6px', borderRadius:10, letterSpacing:0.3, fontFamily:T.sans }}>UNDER-COVERED</span>}
                                               </div>
-                                              <div style={{ fontSize:11, color:T3.inkMuted, marginTop:1, fontFamily:T3.sans }}>{o.stage} · {fmt3(o.arr)}</div>
+                                              <div style={{ fontSize:11, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{o.stage} · {fmt3(o.arr)}</div>
                                             </div>
-                                            <HBar3 value={parseFloat(o.arr)||0} max={maxArr3} color={T3.ink}/>
-                                            <HBar3 value={o.actCount} max={maxAct3} color={cold?T3.danger:T3.gold}/>
-                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:cold?T3.danger:T3.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{o.actCount}</div>
+                                            <HBar3 value={parseFloat(o.arr)||0} max={maxArr3} color={T.ink}/>
+                                            <HBar3 value={o.actCount} max={maxAct3} color={cold?T.danger:T.gold}/>
+                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:cold?T.danger:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{o.actCount}</div>
                                           </div>
                                         );
                                       })}
@@ -1664,14 +1660,6 @@ export default function ReportsTab({ leadsEnabled = true }) {
                             ════════════════════════════════════════════ */}
                         {reportSubTab === 'leads' && leadsEnabled && (() => {
                             // ── Design tokens (warm-stone, matches Pipeline / Performance / Activity)
-                            const T4 = {
-                                surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', borderStrong:'#d4c8b4',
-                                ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
-                                gold:'#c8b99a', goldInk:'#7a6a48',
-                                ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e', info:'#3a5a7a',
-                                sans:'"Plus Jakarta Sans",system-ui,sans-serif',
-                                serif:'Georgia,serif', r:3,
-                            };
                             // Warm ramp for sources — darkest = top source
                             const SOURCE_RAMP4 = ['#7a5a3c','#8a6d4a','#a08358','#b49875','#c5aa89','#d4bfa2','#e0cfb8'];
                             const SCORE_BAND_COLORS4 = { Hot:'#8a4f1c', Warm:'#b87333', Cool:'#b0a088', Cold:'#c9c0b0' };
@@ -1687,19 +1675,19 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                             // ── Primitives
                             const fmtM4 = v => { const n=parseFloat(v)||0; return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+Math.round(n/1e3)+'K':'$'+Math.round(n); };
-                            const eb4 = c => ({ fontSize:10, fontWeight:700, color:c||T4.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T4.sans });
+                            const eb4 = c => ({ fontSize:10, fontWeight:700, color:c||T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans });
                             const HBar4 = ({ value, max, color, height=6 }) => {
                                 const pct = Math.min(100, Math.max(0, (value/Math.max(max,1))*100));
-                                return <div style={{ flex:1, height, background:T4.surface2, borderRadius:height/2, overflow:'hidden' }}><div style={{ width:pct+'%', height:'100%', background:color, borderRadius:height/2 }}/></div>;
+                                return <div style={{ flex:1, height, background:T.surface2, borderRadius:height/2, overflow:'hidden' }}><div style={{ width:pct+'%', height:'100%', background:color, borderRadius:height/2 }}/></div>;
                             };
                             const Panel4 = ({ children, p='20px 22px 22px' }) => (
-                                <div style={{ background:T4.surface, border:`1px solid ${T4.border}`, borderRadius:T4.r, padding:p }}>{children}</div>
+                                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:p }}>{children}</div>
                             );
                             const SecHdr4 = ({ title, sub, right }) => (
                                 <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
                                     <div style={{ flex:1 }}>
-                                        <div style={{ fontSize:16, fontFamily:T4.serif, fontStyle:'italic', fontWeight:400, color:T4.ink, lineHeight:1.1, letterSpacing:-0.2 }}>{title}</div>
-                                        {sub && <div style={{ fontSize:11.5, color:T4.inkMuted, marginTop:3, fontFamily:T4.sans }}>{sub}</div>}
+                                        <div style={{ fontSize:16, fontFamily:T.serif, fontStyle:'italic', fontWeight:400, color:T.ink, lineHeight:1.1, letterSpacing:-0.2 }}>{title}</div>
+                                        {sub && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{sub}</div>}
                                     </div>
                                     {right}
                                 </div>
@@ -1801,7 +1789,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                             if (total4 === 0) return (
                                 <div style={{ display:'flex', flexDirection:'column', gap:'1rem', padding:'1rem 1.25rem 1.5rem' }}>
-                                    <div style={{ background:T4.surface, border:`1px solid ${T4.border}`, borderRadius:T4.r, padding:'3rem', textAlign:'center', color:T4.inkMuted, fontSize:14, fontFamily:T4.sans, fontStyle:'italic' }}>
+                                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'3rem', textAlign:'center', color:T.inkMuted, fontSize:14, fontFamily:T.sans, fontStyle:'italic' }}>
                                         No leads in this period. Leads will appear here once created.
                                     </div>
                                 </div>
@@ -1819,10 +1807,10 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                         { label:'Est. pipeline',value:fmtM4(agg4.estPipeline),    sub:'from open leads' },
                                         { label:'Avg score',    value:agg4.avgScore,              sub:`${agg4.hot} hot · ${agg4.warm} warm` },
                                     ].map(k => (
-                                        <div key={k.label} style={{ background:T4.surface, border:`1px solid ${T4.border}`, borderRadius:T4.r, padding:'14px 18px' }}>
-                                            <div style={eb4(T4.inkMuted)}>{k.label}</div>
-                                            <div style={{ fontSize:26, fontWeight:700, color:T4.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T4.sans, fontFeatureSettings:'"tnum"' }}>{k.value}</div>
-                                            <div style={{ fontSize:11, color:T4.inkMuted, marginTop:5, fontFamily:T4.sans }}>{k.sub}</div>
+                                        <div key={k.label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'14px 18px' }}>
+                                            <div style={eb4(T.inkMuted)}>{k.label}</div>
+                                            <div style={{ fontSize:26, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T.sans, fontFeatureSettings:'"tnum"' }}>{k.value}</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{k.sub}</div>
                                         </div>
                                     ))}
                                 </div>
@@ -1849,10 +1837,10 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                                 sub="Every lead’s farthest stage reached — and where they drop out"
                                                 right={
                                                     <div style={{ display:'flex', alignItems:'center', gap:16 }}>
-                                                        {[{c:T4.gold,l:'reached stage'},{c:T4.danger,o:0.6,l:'dropped at step'}].map(x=>(
+                                                        {[{c:T.gold,l:'reached stage'},{c:T.danger,o:0.6,l:'dropped at step'}].map(x=>(
                                                             <div key={x.l} style={{ display:'flex', alignItems:'center', gap:8 }}>
                                                                 <span style={{ width:10, height:10, background:x.c, borderRadius:2, opacity:x.o||1 }}/>
-                                                                <span style={{ fontSize:11.5, color:T4.inkMid, fontFamily:T4.sans }}>{x.l}</span>
+                                                                <span style={{ fontSize:11.5, color:T.inkMid, fontFamily:T.sans }}>{x.l}</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -1861,23 +1849,23 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                             <div style={{ display:'flex', flexDirection:'column', gap:2, marginTop:14 }}>
                                                 {rows.map((row, i) => {
                                                     const st4 = STATUS_STYLES4[row.status] || {};
-                                                    const fill = i === rows.length-1 ? T4.ok : st4.dot || T4.gold;
+                                                    const fill = i === rows.length-1 ? T.ok : st4.dot || T.gold;
                                                     const barPct = maxN ? (row.count/maxN)*100 : 0;
                                                     return (
                                                         <div key={row.status} style={{ display:'flex', alignItems:'center', gap:18 }}>
                                                             <div style={{ width:150, textAlign:'right', paddingRight:4, flexShrink:0 }}>
-                                                                <div style={{ fontSize:13, fontWeight:600, color:T4.ink, fontFamily:T4.sans }}>{row.status}</div>
-                                                                <div style={{ fontSize:10.5, color:T4.inkMuted, letterSpacing:0.3, textTransform:'uppercase', marginTop:1, fontFamily:T4.sans }}>
+                                                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{row.status}</div>
+                                                                <div style={{ fontSize:10.5, color:T.inkMuted, letterSpacing:0.3, textTransform:'uppercase', marginTop:1, fontFamily:T.sans }}>
                                                                     {row.pctFromPrev != null ? `${row.pctFromPrev}% of prior` : 'Top of funnel'}
                                                                 </div>
                                                             </div>
                                                             <div style={{ flex:1, position:'relative', height:56, display:'flex', alignItems:'center' }}>
                                                                 <div style={{ height:46, width:`${Math.max(barPct,5)}%`, background:fill, borderRadius:3, display:'flex', alignItems:'center', paddingLeft:14, boxSizing:'border-box', overflow:'hidden' }}>
-                                                                    <span style={{ fontSize:20, fontWeight:700, color:'#fbf8f3', fontFeatureSettings:'"tnum"', letterSpacing:-0.5, fontFamily:T4.sans }}>{row.count}</span>
-                                                                    <span style={{ fontSize:11, color:'rgba(251,248,243,0.75)', marginLeft:8, fontWeight:500, fontFamily:T4.sans }}>{row.pctOfTotal}% of total</span>
+                                                                    <span style={{ fontSize:20, fontWeight:700, color:'#fbf8f3', fontFeatureSettings:'"tnum"', letterSpacing:-0.5, fontFamily:T.sans }}>{row.count}</span>
+                                                                    <span style={{ fontSize:11, color:'rgba(251,248,243,0.75)', marginLeft:8, fontWeight:500, fontFamily:T.sans }}>{row.pctOfTotal}% of total</span>
                                                                 </div>
                                                                 {row.drop > 0 && (
-                                                                    <div style={{ marginLeft:10, padding:'3px 9px', borderRadius:3, background:'rgba(156,58,46,0.10)', border:'1px solid rgba(156,58,46,0.25)', fontSize:11, fontWeight:600, color:T4.danger, fontFeatureSettings:'"tnum"', fontFamily:T4.sans, whiteSpace:'nowrap' }}>
+                                                                    <div style={{ marginLeft:10, padding:'3px 9px', borderRadius:3, background:'rgba(156,58,46,0.10)', border:'1px solid rgba(156,58,46,0.25)', fontSize:11, fontWeight:600, color:T.danger, fontFeatureSettings:'"tnum"', fontFamily:T.sans, whiteSpace:'nowrap' }}>
                                                                         −{row.drop} dropped
                                                                     </div>
                                                                 )}
@@ -1887,7 +1875,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                                 })}
                                             </div>
                                             {/* Footer strip */}
-                                            <div style={{ marginTop:18, padding:'12px 16px', background:T4.surface2, borderRadius:T4.r, display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:20 }}>
+                                            <div style={{ marginTop:18, padding:'12px 16px', background:T.surface2, borderRadius:T.r, display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:20 }}>
                                                 {[
                                                     { k:'Overall conversion',  v:`${(agg4.convRate*100).toFixed(1)}%`,                       sub:`${agg4.converted} of ${total4} leads` },
                                                     { k:'Marked dead',         v:agg4.dead,                                                   sub:agg4.dead===0?'no losses recorded':`${Math.round((agg4.dead/total4)*100)}% leak` },
@@ -1895,9 +1883,9 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                                     { k:'Lead → opp velocity', v:agg4.avgVelocity!=null?agg4.avgVelocity+'d':'—',        sub:agg4.avgVelocity!=null?'median days to convert':'no conversions yet' },
                                                 ].map(s => (
                                                     <div key={s.k}>
-                                                        <div style={eb4(T4.inkMuted)}>{s.k}</div>
-                                                        <div style={{ fontSize:18, fontWeight:700, color:T4.ink, fontFeatureSettings:'"tnum"', lineHeight:1.1, marginTop:2, fontFamily:T4.sans }}>{s.v}</div>
-                                                        <div style={{ fontSize:11, color:T4.inkMuted, marginTop:2, fontFamily:T4.sans }}>{s.sub}</div>
+                                                        <div style={eb4(T.inkMuted)}>{s.k}</div>
+                                                        <div style={{ fontSize:18, fontWeight:700, color:T.ink, fontFeatureSettings:'"tnum"', lineHeight:1.1, marginTop:2, fontFamily:T.sans }}>{s.v}</div>
+                                                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{s.sub}</div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -1912,16 +1900,16 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                     <Panel4 p="18px 20px 20px">
                                         <SecHdr4 title="By source" sub={`${agg4.sources.length} channels, ${total4} leads`}/>
                                         {agg4.sources.length === 0
-                                            ? <div style={{ color:T4.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T4.sans }}>No source data.</div>
+                                            ? <div style={{ color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No source data.</div>
                                             : (() => {
                                                 const maxSrc = Math.max(...agg4.sources.map(s=>s.count), 1);
                                                 return (
                                                     <div style={{ display:'flex', flexDirection:'column', gap:7, marginTop:6 }}>
                                                         {agg4.sources.map((s, i) => (
                                                             <div key={s.name} style={{ display:'grid', gridTemplateColumns:'120px 1fr 28px', alignItems:'center', gap:12 }}>
-                                                                <span style={{ fontSize:12, color:T4.ink, fontFamily:T4.sans }}>{s.name}</span>
+                                                                <span style={{ fontSize:12, color:T.ink, fontFamily:T.sans }}>{s.name}</span>
                                                                 <HBar4 value={s.count} max={maxSrc} color={SOURCE_RAMP4[i]||SOURCE_RAMP4[SOURCE_RAMP4.length-1]} height={8}/>
-                                                                <span style={{ fontSize:12, color:T4.inkMid, textAlign:'right', fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T4.sans }}>{s.count}</span>
+                                                                <span style={{ fontSize:12, color:T.inkMid, textAlign:'right', fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T.sans }}>{s.count}</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -1944,8 +1932,8 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                                 return (
                                                     <div key={b.label}>
                                                         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                                                            <span style={{ fontSize:12, color:T4.ink, fontFamily:T4.sans }}>{b.label}</span>
-                                                            <span style={{ fontSize:12, color:T4.inkMid, fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T4.sans }}>{b.count} leads</span>
+                                                            <span style={{ fontSize:12, color:T.ink, fontFamily:T.sans }}>{b.label}</span>
+                                                            <span style={{ fontSize:12, color:T.inkMid, fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T.sans }}>{b.count} leads</span>
                                                         </div>
                                                         <HBar4 value={b.count} max={maxB} color={b.color} height={6}/>
                                                     </div>
@@ -1960,19 +1948,19 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                     <SecHdr4
                                         title="Source ROI"
                                         sub="Volume · average lead score · conversion rate · est. pipeline"
-                                        right={<span style={{ fontSize:11, color:T4.inkMuted, fontStyle:'italic', fontFamily:T4.sans }}>Sorted by pipeline value</span>}
+                                        right={<span style={{ fontSize:11, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>Sorted by pipeline value</span>}
                                     />
                                     {agg4.sources.length === 0
-                                        ? <div style={{ color:T4.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T4.sans, marginTop:8 }}>No source data.</div>
+                                        ? <div style={{ color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans, marginTop:8 }}>No source data.</div>
                                         : (() => {
                                             const sortedSrc = [...agg4.sources].sort((a,b) => b.rev - a.rev);
                                             const maxCnt = Math.max(...sortedSrc.map(s=>s.count), 1);
                                             const maxRev = Math.max(...sortedSrc.map(s=>s.rev), 1);
                                             return (
                                                 <div style={{ marginTop:8 }}>
-                                                    <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1.1fr 0.7fr 0.6fr 1.1fr', padding:'8px 0', borderBottom:`1px solid ${T4.border}` }}>
+                                                    <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1.1fr 0.7fr 0.6fr 1.1fr', padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
                                                         {['Source','Volume','Avg score','Conv','Est. pipeline'].map((h,i)=>(
-                                                            <div key={h} style={{ ...eb4(T4.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>
+                                                            <div key={h} style={{ ...eb4(T.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>
                                                         ))}
                                                     </div>
                                                     {sortedSrc.map((s, i, arr) => {
@@ -1991,26 +1979,26 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                                         const bench = getBench(s.name);
                                                         const convPct = Math.round(s.convRate * 100);
                                                         const convColor = s.convRate === 0
-                                                            ? T4.inkMuted
-                                                            : convPct >= bench.good ? T4.ok
-                                                            : convPct >= bench.avg  ? T4.warn
-                                                            : T4.danger;
+                                                            ? T.inkMuted
+                                                            : convPct >= bench.good ? T.ok
+                                                            : convPct >= bench.avg  ? T.warn
+                                                            : T.danger;
                                                         return (
-                                                        <div key={s.name} style={{ display:'grid', gridTemplateColumns:'1.2fr 1.1fr 0.7fr 0.6fr 1.1fr', padding:'11px 0', borderBottom:i===arr.length-1?'none':`1px solid ${T4.surface2}`, alignItems:'center' }}>
-                                                            <div style={{ fontSize:12.5, color:T4.ink, fontWeight:600, fontFamily:T4.sans }}>{s.name}</div>
+                                                        <div key={s.name} style={{ display:'grid', gridTemplateColumns:'1.2fr 1.1fr 0.7fr 0.6fr 1.1fr', padding:'11px 0', borderBottom:i===arr.length-1?'none':`1px solid ${T.surface2}`, alignItems:'center' }}>
+                                                            <div style={{ fontSize:12.5, color:T.ink, fontWeight:600, fontFamily:T.sans }}>{s.name}</div>
                                                             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                                                 <HBar4 value={s.count} max={maxCnt} color={SOURCE_RAMP4[i]||SOURCE_RAMP4[SOURCE_RAMP4.length-1]} height={6}/>
-                                                                <span style={{ fontSize:11.5, color:T4.inkMid, fontFeatureSettings:'"tnum"', minWidth:16, textAlign:'right', fontWeight:600, fontFamily:T4.sans }}>{s.count}</span>
+                                                                <span style={{ fontSize:11.5, color:T.inkMid, fontFeatureSettings:'"tnum"', minWidth:16, textAlign:'right', fontWeight:600, fontFamily:T.sans }}>{s.count}</span>
                                                             </div>
                                                             <div style={{ textAlign:'right', fontFeatureSettings:'"tnum"' }}>
-                                                                <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:2, background:`rgba(122,90,60,${Math.min(0.22,s.avgScore/300)})`, color:T4.ink, fontWeight:600, fontSize:12, fontFamily:T4.sans }}>{s.avgScore}</span>
+                                                                <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:2, background:`rgba(122,90,60,${Math.min(0.22,s.avgScore/300)})`, color:T.ink, fontWeight:600, fontSize:12, fontFamily:T.sans }}>{s.avgScore}</span>
                                                             </div>
-                                                            <div style={{ textAlign:'right', fontFeatureSettings:'"tnum"', fontWeight:700, color:convColor, fontFamily:T4.sans }}>
+                                                            <div style={{ textAlign:'right', fontFeatureSettings:'"tnum"', fontWeight:700, color:convColor, fontFamily:T.sans }}>
                                                                 {s.convRate > 0 ? convPct + '%' : '—'}
                                                             </div>
                                                             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                                                                <HBar4 value={s.rev} max={maxRev} color={T4.goldInk} height={4}/>
-                                                                <span style={{ fontSize:12.5, color:T4.ink, fontWeight:700, fontFeatureSettings:'"tnum"', minWidth:44, textAlign:'right', fontFamily:T4.sans }}>{fmtM4(s.rev)}</span>
+                                                                <HBar4 value={s.rev} max={maxRev} color={T.goldInk} height={4}/>
+                                                                <span style={{ fontSize:12.5, color:T.ink, fontWeight:700, fontFeatureSettings:'"tnum"', minWidth:44, textAlign:'right', fontFamily:T.sans }}>{fmtM4(s.rev)}</span>
                                                             </div>
                                                         </div>
                                                         );
@@ -2025,25 +2013,25 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                 <Panel4 p="18px 20px 20px">
                                     <SecHdr4 title="Rep lead performance" sub="Assigned · converted · rate · est. Revenue"/>
                                     <div style={{ marginTop:4 }}>
-                                        <div style={{ display:'grid', gridTemplateColumns:'1.2fr 0.6fr 0.7fr 0.6fr 0.8fr', padding:'8px 0', borderBottom:`1px solid ${T4.border}` }}>
+                                        <div style={{ display:'grid', gridTemplateColumns:'1.2fr 0.6fr 0.7fr 0.6fr 0.8fr', padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
                                             {['Rep','Assigned','Converted','Rate','Est. Revenue'].map((h,i)=>(
-                                                <div key={h} style={{ ...eb4(T4.inkMuted), textAlign:i===0?'left':'right' }}>{h}</div>
+                                                <div key={h} style={{ ...eb4(T.inkMuted), textAlign:i===0?'left':'right' }}>{h}</div>
                                             ))}
                                         </div>
                                         {agg4.reps.slice(0,10).map((r, i, arr) => {
                                             const isUnassigned = r.rep === 'Unassigned';
                                             return (
-                                                <div key={r.rep} style={{ display:'grid', gridTemplateColumns:'1.2fr 0.6fr 0.7fr 0.6fr 0.8fr', padding:'9px 0', borderBottom:i===arr.length-1?'none':`1px solid ${T4.surface2}`, alignItems:'center' }}>
+                                                <div key={r.rep} style={{ display:'grid', gridTemplateColumns:'1.2fr 0.6fr 0.7fr 0.6fr 0.8fr', padding:'9px 0', borderBottom:i===arr.length-1?'none':`1px solid ${T.surface2}`, alignItems:'center' }}>
                                                     <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                                                        {isUnassigned && <span style={{ width:6, height:6, background:T4.danger, borderRadius:'50%', flexShrink:0 }}/>}
-                                                        <span style={{ fontSize:12.5, color:isUnassigned?T4.danger:T4.ink, fontWeight:isUnassigned?700:600, fontFamily:T4.sans }}>{r.rep}</span>
+                                                        {isUnassigned && <span style={{ width:6, height:6, background:T.danger, borderRadius:'50%', flexShrink:0 }}/>}
+                                                        <span style={{ fontSize:12.5, color:isUnassigned?T.danger:T.ink, fontWeight:isUnassigned?700:600, fontFamily:T.sans }}>{r.rep}</span>
                                                     </div>
-                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:T4.ink, fontFamily:T4.sans }}>{r.assigned}</div>
-                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:r.converted?T4.ok:T4.inkMuted, fontFamily:T4.sans }}>{r.converted}</div>
-                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:T4.inkMid, fontFamily:T4.sans }}>
+                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:T.ink, fontFamily:T.sans }}>{r.assigned}</div>
+                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:r.converted?T.ok:T.inkMuted, fontFamily:T.sans }}>{r.converted}</div>
+                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:T.inkMid, fontFamily:T.sans }}>
                                                         {r.assigned && !isUnassigned ? (r.rate ? Math.round(r.rate*100)+'%' : '—') : '—'}
                                                     </div>
-                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:T4.ink, fontWeight:600, fontFamily:T4.sans }}>{fmtM4(r.rev)}</div>
+                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:T.ink, fontWeight:600, fontFamily:T.sans }}>{fmtM4(r.rev)}</div>
                                                 </div>
                                             );
                                         })}
@@ -2161,33 +2149,25 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     }, [currentUser]);
 
     // ── Design tokens
-    const TS = {
-        surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', borderStrong:'#d4c8b4',
-        ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
-        gold:'#c8b99a', goldInk:'#7a6a48',
-        ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e',
-        sans:'"Plus Jakarta Sans",system-ui,sans-serif',
-        serif:'Georgia,serif', r:3,
-    };
-    const ebS = c => ({ fontSize:10, fontWeight:700, color:c||TS.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:TS.sans });
+    const ebS = c => ({ fontSize:10, fontWeight:700, color:c||T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans });
     const avBgS = name => { const p=['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a','#7a6b5a','#4a6b5a']; let h=0; for(const c of(name||''))h=(h*31+c.charCodeAt(0))|0; return p[Math.abs(h)%p.length]; };
     const AvatarS = ({ name, size=20 }) => { const init=(name||'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase(); return <div style={{ width:size,height:size,borderRadius:'50%',background:avBgS(name),color:'#fef4e6',display:'flex',alignItems:'center',justifyContent:'center',fontSize:Math.round(size*0.38),fontWeight:700,flexShrink:0 }}>{init}</div>; };
 
     // ── Mini preview primitives
     const MiniBar = ({ data, colors, h=38 }) => {
         const max = Math.max(...data.map(Math.abs), 1);
-        return <div style={{ display:'flex', alignItems:'flex-end', gap:2, height:h }}>{data.map((v,i) => <div key={i} style={{ flex:1, height:`${(Math.abs(v)/max)*100}%`, background:(colors&&colors[i])||(v<0?TS.danger:TS.ink), borderRadius:1, minHeight:2 }}/>)}</div>;
+        return <div style={{ display:'flex', alignItems:'flex-end', gap:2, height:h }}>{data.map((v,i) => <div key={i} style={{ flex:1, height:`${(Math.abs(v)/max)*100}%`, background:(colors&&colors[i])||(v<0?T.danger:T.ink), borderRadius:1, minHeight:2 }}/>)}</div>;
     };
     const MiniBarH = ({ data, colors, h=38 }) => {
         const max = Math.max(...data.map(Math.abs), 1);
-        return <div style={{ display:'flex', flexDirection:'column', gap:2, height:h, justifyContent:'center' }}>{data.map((v,i) => <div key={i} style={{ height:Math.max(3,h/data.length-3), width:`${(v/max)*100}%`, background:(colors&&colors[i])||TS.ink, borderRadius:1 }}/>)}</div>;
+        return <div style={{ display:'flex', flexDirection:'column', gap:2, height:h, justifyContent:'center' }}>{data.map((v,i) => <div key={i} style={{ height:Math.max(3,h/data.length-3), width:`${(v/max)*100}%`, background:(colors&&colors[i])||T.ink, borderRadius:1 }}/>)}</div>;
     };
     const MiniLineS = ({ data, h=38 }) => {
         const w=120, valid=data.filter(v=>v!=null);
         const max=Math.max(...valid,1), min=Math.min(...valid,0), range=Math.max(max-min,0.01);
         const xF=i=>(i/(data.length-1))*w, yF=v=>h-((v-min)/range)*h;
         const path=data.map((v,i)=>`${i===0?'M':'L'}${xF(i)},${yF(v)}`).join(' ');
-        return <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display:'block', height:h }}><path d={path+` L${w},${h} L0,${h} Z`} fill={TS.ink} opacity={0.1}/><path d={path} fill="none" stroke={TS.ink} strokeWidth={1.5} strokeLinejoin="round"/><circle cx={xF(data.length-1)} cy={yF(data[data.length-1])} r={2.5} fill={TS.ink}/></svg>;
+        return <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display:'block', height:h }}><path d={path+` L${w},${h} L0,${h} Z`} fill={T.ink} opacity={0.1}/><path d={path} fill="none" stroke={T.ink} strokeWidth={1.5} strokeLinejoin="round"/><circle cx={xF(data.length-1)} cy={yF(data[data.length-1])} r={2.5} fill={T.ink}/></svg>;
     };
     const MiniStackedS = ({ segments, h=38 }) => {
         const total = segments.reduce((s,g)=>s+g.v,0)||1;
@@ -2195,7 +2175,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     };
     const MiniFunnelS = ({ steps, h=38 }) => (
         <div style={{ height:h, display:'flex', flexDirection:'column', gap:2, justifyContent:'center' }}>
-            {steps.map((s,i)=><div key={i} style={{ height:7, width:`${s*100}%`, background:['#b0a088','#b07a55','#3a5530'][i]||TS.ink, borderRadius:1 }}/>)}
+            {steps.map((s,i)=><div key={i} style={{ height:7, width:`${s*100}%`, background:['#b0a088','#b07a55','#3a5530'][i]||T.ink, borderRadius:1 }}/>)}
         </div>
     );
     const PreviewS = ({ preview, h=38 }) => {
@@ -2204,7 +2184,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         if(preview.kind==='line')    return <MiniLineS data={preview.data} h={h}/>;
         if(preview.kind==='stacked') return <MiniStackedS segments={preview.segments} h={h}/>;
         if(preview.kind==='funnel')  return <MiniFunnelS steps={preview.steps} h={h}/>;
-        if(preview.kind==='number')  return <div style={{ height:h, display:'flex', alignItems:'center', gap:6 }}><div style={{ fontSize:24, fontWeight:700, color:TS.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{preview.big}</div><div style={{ fontSize:10.5, color:TS.inkMuted, lineHeight:1.2 }}>{preview.sub}</div></div>;
+        if(preview.kind==='number')  return <div style={{ height:h, display:'flex', alignItems:'center', gap:6 }}><div style={{ fontSize:24, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{preview.big}</div><div style={{ fontSize:10.5, color:T.inkMuted, lineHeight:1.2 }}>{preview.sub}</div></div>;
         return null;
     };
 
@@ -2256,19 +2236,19 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const [hov, setHov] = React.useState(false);
         return (
             <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-                style={{ background:TS.surface, border:`1px solid ${hov?TS.borderStrong:TS.border}`, borderRadius:TS.r, padding:'14px 16px 12px', display:'flex', flexDirection:'column', gap:8, cursor:'pointer', minHeight:168, transition:'border-color 120ms' }}>
+                style={{ background:T.surface, border:`1px solid ${hov?T.borderStrong:T.border}`, borderRadius:T.r, padding:'14px 16px 12px', display:'flex', flexDirection:'column', gap:8, cursor:'pointer', minHeight:168, transition:'border-color 120ms' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div style={{ ...ebS(TS.inkMuted), fontSize:9.5 }}>{r.basedOn}</div>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={TS.goldInk} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v4M8 2h8l-1 7 3 3v2H6v-2l3-3-1-7z"/></svg>
+                    <div style={{ ...ebS(T.inkMuted), fontSize:9.5 }}>{r.basedOn}</div>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.goldInk} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v4M8 2h8l-1 7 3 3v2H6v-2l3-3-1-7z"/></svg>
                 </div>
-                <div style={{ fontSize:14.5, fontWeight:600, color:TS.ink, letterSpacing:-0.1, lineHeight:1.25 }}>{r.name}</div>
+                <div style={{ fontSize:14.5, fontWeight:600, color:T.ink, letterSpacing:-0.1, lineHeight:1.25 }}>{r.name}</div>
                 <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
-                    <div style={{ fontSize:22, fontWeight:700, color:TS.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{r.headline}</div>
-                    <div style={{ fontSize:11, color:TS.inkMuted }}>{r.subhead}</div>
+                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{r.headline}</div>
+                    <div style={{ fontSize:11, color:T.inkMuted }}>{r.subhead}</div>
                 </div>
                 <div style={{ marginTop:'auto' }}><PreviewS preview={r.preview} h={42}/></div>
-                <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:TS.inkMuted, paddingTop:8, borderTop:`1px solid ${TS.border}` }}>
-                    <span style={{ background:'rgba(77,107,61,0.1)', color:TS.ok, fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:2 }}>LIVE</span>
+                <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:T.inkMuted, paddingTop:8, borderTop:`1px solid ${T.border}` }}>
+                    <span style={{ background:'rgba(77,107,61,0.1)', color:T.ok, fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:2 }}>LIVE</span>
                     <span>{r.subhead}</span>
                 </div>
             </div>
@@ -2279,14 +2259,14 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         return (
             <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
                 onClick={() => setActiveTemplate(t.id)}
-                style={{ background:hov?TS.surface2:TS.surface, border:`${hov?'1px solid':'1px dashed'} ${TS.borderStrong}`, borderRadius:TS.r, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start', cursor:'pointer', transition:'background 120ms' }}>
-                <div style={{ width:36, height:36, borderRadius:TS.r, background:TS.surface2, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:18 }}>{t.icon}</div>
+                style={{ background:hov?T.surface2:T.surface, border:`${hov?'1px solid':'1px dashed'} ${T.borderStrong}`, borderRadius:T.r, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start', cursor:'pointer', transition:'background 120ms' }}>
+                <div style={{ width:36, height:36, borderRadius:T.r, background:T.surface2, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:18 }}>{t.icon}</div>
                 <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ ...ebS(TS.inkMuted), fontSize:9.5, marginBottom:3 }}>{t.basedOn}</div>
-                    <div style={{ fontSize:13.5, fontWeight:600, color:TS.ink, letterSpacing:-0.1 }}>{t.name}</div>
-                    <div style={{ fontSize:11.5, color:TS.inkMuted, lineHeight:1.45, marginTop:3 }}>{t.description}</div>
+                    <div style={{ ...ebS(T.inkMuted), fontSize:9.5, marginBottom:3 }}>{t.basedOn}</div>
+                    <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, letterSpacing:-0.1 }}>{t.name}</div>
+                    <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.45, marginTop:3 }}>{t.description}</div>
                 </div>
-                <div style={{ fontSize:11, fontWeight:600, color:TS.goldInk, letterSpacing:0.3, textTransform:'uppercase', whiteSpace:'nowrap', paddingTop:2 }}>Start →</div>
+                <div style={{ fontSize:11, fontWeight:600, color:T.goldInk, letterSpacing:0.3, textTransform:'uppercase', whiteSpace:'nowrap', paddingTop:2 }}>Start →</div>
             </div>
         );
     };
@@ -2294,11 +2274,11 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         <div style={{ marginBottom:28 }}>
             <div style={{ display:'flex', alignItems:'flex-end', gap:10, marginBottom:12 }}>
                 <div style={{ flex:1 }}>
-                    <div style={{ fontSize:16, fontFamily:TS.serif, fontStyle:'italic', fontWeight:400, color:TS.ink, lineHeight:1.1, letterSpacing:-0.2, display:'flex', alignItems:'baseline', gap:10 }}>
+                    <div style={{ fontSize:16, fontFamily:T.serif, fontStyle:'italic', fontWeight:400, color:T.ink, lineHeight:1.1, letterSpacing:-0.2, display:'flex', alignItems:'baseline', gap:10 }}>
                         {title}
-                        <span style={{ fontSize:12, color:TS.inkMuted, fontFamily:TS.sans, fontStyle:'normal', fontWeight:500 }}>{count}</span>
+                        <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans, fontStyle:'normal', fontWeight:500 }}>{count}</span>
                     </div>
-                    {subtitle && <div style={{ fontSize:11.5, color:TS.inkMuted, marginTop:3, fontFamily:TS.sans }}>{subtitle}</div>}
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
                 </div>
             </div>
             {children}
@@ -2308,7 +2288,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
     // ── Deal Review template — live data computed here ──
     if (activeTemplate === 't1') {
-        const T = TS;
         const serif = T.serif;
         const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
@@ -2495,7 +2474,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
     // ── Stage Conversion Deep-Dive template ──
     if (activeTemplate === 't5') {
-        const T = TS;
         const serif = T.serif;
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
         const stageColorMap = stagePalette(openStagesOf(settings));
@@ -2751,7 +2729,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
     // ── Forecast vs Actual template ──
     if (activeTemplate === 't6') {
-        const T = TS;
         const serif = T.serif;
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
         const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
@@ -2964,7 +2941,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
     // ── Win / Loss Analysis template ──
     if (activeTemplate === 't2') {
-        const T = TS;
         const serif = T.serif;
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
         const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
@@ -3150,7 +3126,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
     // ── Rep Scorecard template ──
     if (activeTemplate === 't3') {
-        const T = TS;
         const serif = T.serif;
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
         const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
@@ -3412,7 +3387,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
     // ── Territory Coverage template ──
     if (activeTemplate === 't4') {
-        const T = TS;
         const serif = T.serif;
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
         const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
@@ -3657,7 +3631,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
     // ── Create Report flow ──────────────────────────────────────────
     if (showCreateReport) {
-        const T = TS;
         const serif = T.serif;
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
         const closeCreate = () => { setShowCreateReport(false); setCreateMode('picker'); };
@@ -4269,11 +4242,11 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             {/* Toolbar */}
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
                 <div style={{ position:'relative', flex:1, maxWidth:340 }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TS.inkMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-                    <input value={srchQ} onChange={e=>setSrchQ(e.target.value)} placeholder="Search your library…" style={{ width:'100%', padding:'7px 10px 7px 30px', border:`1px solid ${TS.border}`, borderRadius:TS.r, background:TS.surface, color:TS.ink, fontSize:12.5, fontFamily:TS.sans, outline:'none', boxSizing:'border-box' }}/>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                    <input value={srchQ} onChange={e=>setSrchQ(e.target.value)} placeholder="Search your library…" style={{ width:'100%', padding:'7px 10px 7px 30px', border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:T.sans, outline:'none', boxSizing:'border-box' }}/>
                 </div>
                 <div style={{ flex:1 }}/>
-                <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');setAiPrompt('');setAiGenerated(false);setBuilderTab('data');setBuilderDirty(true);setBuilderRendered(false);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:TS.ink, color:TS.surface, border:'none', borderRadius:TS.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:TS.sans }}>+ Create report</button>
+                <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');setAiPrompt('');setAiGenerated(false);setBuilderTab('data');setBuilderDirty(true);setBuilderRendered(false);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ Create report</button>
             </div>
 
             {filteredPinned.length > 0 && (
@@ -4287,16 +4260,16 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 <SectionS title="Your reports" subtitle="Reports you've created and saved to your library" count={`${filteredSaved.length} report${filteredSaved.length!==1?'s':''}`}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
                         {filteredSaved.map(r=>(
-                            <div key={r.id} onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); }} title={r.config?.templateId ? 'Open this report' : 'Built in the report builder — opening it is not wired yet'} style={{ background:TS.surface, border:`1px solid ${TS.border}`, borderRadius:TS.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, cursor:'pointer', minHeight:100 }}
-                                onMouseEnter={e=>e.currentTarget.style.borderColor=TS.borderStrong}
-                                onMouseLeave={e=>e.currentTarget.style.borderColor=TS.border}>
-                                <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:TS.inkMuted, fontFamily:TS.sans }}>{r.source||'Opportunities'}</div>
-                                <div style={{ fontSize:13.5, fontWeight:600, color:TS.ink, letterSpacing:-0.1, fontFamily:TS.sans, lineHeight:1.25 }}>{r.name}</div>
-                                {r.description && <div style={{ fontSize:11.5, color:TS.inkMuted, lineHeight:1.4, fontFamily:TS.sans }}>{r.description}</div>}
-                                <div style={{ marginTop:'auto', paddingTop:6, borderTop:`1px solid ${TS.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:TS.inkMuted, fontFamily:TS.sans }}>
+                            <div key={r.id} onClick={()=>{ if (r.config?.templateId) setActiveTemplate(r.config.templateId); }} title={r.config?.templateId ? 'Open this report' : 'Built in the report builder — opening it is not wired yet'} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, cursor:'pointer', minHeight:100 }}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
+                                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                                <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans }}>{r.source||'Opportunities'}</div>
+                                <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, letterSpacing:-0.1, fontFamily:T.sans, lineHeight:1.25 }}>{r.name}</div>
+                                {r.description && <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.4, fontFamily:T.sans }}>{r.description}</div>}
+                                <div style={{ marginTop:'auto', paddingTop:6, borderTop:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>
                                     <span>{r.ownerName||currentUser}</span>
                                     <button onClick={(e)=>{ e.stopPropagation(); showConfirm(`Delete the saved report "${r.name}"?`, async () => { const rd = await dbWrite('/.netlify/functions/saved-reports',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); if(!rd.ok){ window.alert(`Report not deleted \u2014 ${rd.error}`); return; } setSavedReportsList(prev=>prev.filter(x=>x.id!==r.id)); }); }}
-                                        style={{ background:'transparent', border:'none', color:TS.inkMuted, cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>×</button>
+                                        style={{ background:'transparent', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>×</button>
                                 </div>
                             </div>
                         ))}
@@ -4304,12 +4277,12 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 </SectionS>
             )}
             {filteredSaved.length === 0 && !srchQ && (
-                <div style={{ marginBottom:20, padding:'14px 16px', background:TS.surface, border:`1px dashed ${TS.borderStrong}`, borderRadius:TS.r, display:'flex', alignItems:'center', justifyContent:'space-between', fontFamily:TS.sans }}>
+                <div style={{ marginBottom:20, padding:'14px 16px', background:T.surface, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, display:'flex', alignItems:'center', justifyContent:'space-between', fontFamily:T.sans }}>
                     <div>
-                        <div style={{ fontSize:13, fontWeight:600, color:TS.ink }}>No saved reports yet</div>
-                        <div style={{ fontSize:11.5, color:TS.inkMuted, marginTop:3 }}>Create a report using the builder and click "Save to library" to see it here.</div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>No saved reports yet</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3 }}>Create a report using the builder and click "Save to library" to see it here.</div>
                     </div>
-                    <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');}} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', background:TS.ink, border:'none', borderRadius:TS.r, fontSize:12, fontWeight:600, color:TS.surface, cursor:'pointer', fontFamily:TS.sans }}>+ Create one</button>
+                    <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');}} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Create one</button>
                 </div>
             )}
             {filteredTemplates.length > 0 && (
@@ -4320,7 +4293,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 </SectionS>
             )}
             {filteredPinned.length===0 && filteredSaved.length===0 && filteredTemplates.length===0 && srchQ && (
-                <div style={{ padding:'3rem', textAlign:'center', color:TS.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:TS.sans }}>No reports match "{srchQ}"</div>
+                <div style={{ padding:'3rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No reports match "{srchQ}"</div>
             )}
         </div>
     );
@@ -4510,11 +4483,6 @@ function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
     const [showPersona,setShowPersona]= React.useState(false);
     const btnRef = React.useRef();
 
-    const T2 = {
-        surface:'#fbf8f3', border:'#e6ddd0', borderStrong:'#d4c8b4',
-        ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
-        danger:'#9c3a2e', sans:'"Plus Jakarta Sans", system-ui, sans-serif',
-    };
 
     const toggle = (e) => {
         e.stopPropagation();
@@ -4537,18 +4505,18 @@ function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
         top:  rect.bottom + 4,
         left: rect.right - (showPersona ? 180 : 160),
         zIndex: 9999,
-        background: T2.surface,
-        border: `1px solid ${T2.borderStrong}`,
+        background: T.surface,
+        border: `1px solid ${T.borderStrong}`,
         borderRadius: 6,
         boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
         minWidth: showPersona ? 180 : 160,
-        fontFamily: T2.sans,
+        fontFamily: T.sans,
         overflow: 'hidden',
     } : null;
 
     const itemStyle = (danger) => ({
         padding: '9px 14px', fontSize: 12.5, cursor: 'pointer',
-        color: danger ? T2.danger : T2.ink, display: 'flex',
+        color: danger ? T.danger : T.ink, display: 'flex',
         alignItems: 'center', gap: 8, userSelect: 'none',
         transition: 'background 80ms',
     });
@@ -4557,7 +4525,7 @@ function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
         <>
             <button ref={btnRef} onClick={toggle}
                 style={{ background:'none', border:'none', cursor:'pointer', padding:'4px 6px',
-                    borderRadius:4, color: T2.inkMuted, fontSize:16, lineHeight:1,
+                    borderRadius:4, color: T.inkMuted, fontSize:16, lineHeight:1,
                     display:'flex', alignItems:'center', justifyContent:'center' }}>
                 ⋮
             </button>
@@ -4570,9 +4538,9 @@ function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
                                 onMouseLeave={e=>e.currentTarget.style.background='transparent'}
                                 onClick={() => { setShowPersona(true); }}>
                                 <span>🎭</span> Buyer Persona
-                                <span style={{ marginLeft:'auto', fontSize:10, color:T2.inkMuted }}>▶</span>
+                                <span style={{ marginLeft:'auto', fontSize:10, color:T.inkMuted }}>▶</span>
                             </div>
-                            <div style={{ borderTop:`1px solid ${T2.border}` }}/>
+                            <div style={{ borderTop:`1px solid ${T.border}` }}/>
                             <div style={itemStyle(true)}
                                 onMouseEnter={e=>e.currentTarget.style.background='#f5efe3'}
                                 onMouseLeave={e=>e.currentTarget.style.background='transparent'}
@@ -4583,9 +4551,9 @@ function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
                     ) : (
                         <>
                             <div style={{ padding:'8px 14px 6px', fontSize:10, fontWeight:700,
-                                color:T2.inkMuted, textTransform:'uppercase', letterSpacing:0.5,
-                                borderBottom:`1px solid ${T2.border}`, display:'flex', alignItems:'center', gap:6 }}>
-                                <span style={{ cursor:'pointer', color:T2.inkMid }}
+                                color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5,
+                                borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:6 }}>
+                                <span style={{ cursor:'pointer', color:T.inkMid }}
                                     onClick={() => setShowPersona(false)}>◀</span>
                                 Assign persona
                             </div>
@@ -4597,15 +4565,15 @@ function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
                                         onMouseLeave={e=>e.currentTarget.style.background='transparent'}
                                         onClick={() => { setOpen(false); onSetPersona(contact, p.id); }}>
                                         <span style={{ width:14, height:14, borderRadius:'50%',
-                                            background: p.color || T2.inkMuted, flexShrink:0,
+                                            background: p.color || T.inkMuted, flexShrink:0,
                                             display:'inline-block' }}/>
                                         <span>{p.name}</span>
-                                        {active && <span style={{ marginLeft:'auto', fontSize:11, color:p.color || T2.inkMuted }}>✓</span>}
+                                        {active && <span style={{ marginLeft:'auto', fontSize:11, color:p.color || T.inkMuted }}>✓</span>}
                                     </div>
                                 );
                             })}
                             {(!buyerPersonas||buyerPersonas.length===0) && (
-                                <div style={{ padding:'10px 14px', fontSize:12, color:T2.inkMuted, fontStyle:'italic' }}>
+                                <div style={{ padding:'10px 14px', fontSize:12, color:T.inkMuted, fontStyle:'italic' }}>
                                     No personas configured
                                 </div>
                             )}
@@ -4628,14 +4596,6 @@ function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
 
     React.useEffect(() => { searchRef.current?.focus(); }, []);
 
-    const T2 = {
-        bg:'#f0ece4', surface:'#fbf8f3', surface2:'#f5efe3',
-        border:'#e6ddd0', borderStrong:'#d4c8b4',
-        ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
-        ok:'#4d6b3d', info:'#3a5a7a', danger:'#9c3a2e',
-        gold:'#c8b99a', goldInk:'#7a6a48',
-        sans:'"Plus Jakarta Sans", system-ui, sans-serif',
-    };
 
     const available = (allContacts || []).filter(c => {
         if (alreadyIds.has(c.id)) return false;
@@ -4656,8 +4616,8 @@ function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
     });
 
     return (
-        <div style={{ borderTop:`1px solid ${T2.border}`, background:T2.surface2, padding:'14px 22px' }}>
-            <div style={{ marginBottom:10, fontSize:12, fontWeight:700, color:T2.inkMid, fontFamily:T2.sans }}>
+        <div style={{ borderTop:`1px solid ${T.border}`, background:T.surface2, padding:'14px 22px' }}>
+            <div style={{ marginBottom:10, fontSize:12, fontWeight:700, color:T.inkMid, fontFamily:T.sans }}>
                 Select contacts to add to this deal
             </div>
             {/* Search */}
@@ -4667,15 +4627,15 @@ function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search contacts by name, company, email…"
                 style={{ width:'100%', boxSizing:'border-box', padding:'7px 10px', fontSize:12.5,
-                    border:`1px solid ${T2.borderStrong}`, borderRadius:4, background:T2.surface,
-                    color:T2.ink, fontFamily:T2.sans, outline:'none', marginBottom:10 }}
+                    border:`1px solid ${T.borderStrong}`, borderRadius:4, background:T.surface,
+                    color:T.ink, fontFamily:T.sans, outline:'none', marginBottom:10 }}
             />
             {/* Contact list */}
-            <div style={{ maxHeight:220, overflowY:'auto', border:`1px solid ${T2.border}`, borderRadius:4,
-                background:T2.surface, marginBottom:12 }}>
+            <div style={{ maxHeight:220, overflowY:'auto', border:`1px solid ${T.border}`, borderRadius:4,
+                background:T.surface, marginBottom:12 }}>
                 {available.length === 0 ? (
-                    <div style={{ padding:'16px', fontSize:12.5, color:T2.inkMuted, fontStyle:'italic',
-                        textAlign:'center', fontFamily:T2.sans }}>
+                    <div style={{ padding:'16px', fontSize:12.5, color:T.inkMuted, fontStyle:'italic',
+                        textAlign:'center', fontFamily:T.sans }}>
                         {search.trim() ? 'No contacts match that search.' : 'All contacts are already on this deal.'}
                     </div>
                 ) : available.map((c, i) => {
@@ -4685,21 +4645,21 @@ function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
                     return (
                         <div key={c.id} onClick={() => toggle(c.id)}
                             style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px',
-                                cursor:'pointer', borderBottom: i < available.length-1 ? `1px solid ${T2.border}` : 'none',
-                                background: checked ? `${T2.goldInk}10` : 'transparent',
+                                cursor:'pointer', borderBottom: i < available.length-1 ? `1px solid ${T.border}` : 'none',
+                                background: checked ? `${T.goldInk}10` : 'transparent',
                                 transition:'background 100ms' }}
-                            onMouseEnter={e => { if (!checked) e.currentTarget.style.background = T2.surface2; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = checked ? `${T2.goldInk}10` : 'transparent'; }}>
+                            onMouseEnter={e => { if (!checked) e.currentTarget.style.background = T.surface2; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = checked ? `${T.goldInk}10` : 'transparent'; }}>
                             <input type="checkbox" checked={checked} onChange={() => toggle(c.id)}
                                 onClick={e => e.stopPropagation()}
-                                style={{ width:14, height:14, accentColor:T2.goldInk, flexShrink:0, cursor:'pointer' }}/>
-                            <div style={{ width:28, height:28, borderRadius:'50%', background:T2.ink, color:'#fbf8f3',
+                                style={{ width:14, height:14, accentColor:T.goldInk, flexShrink:0, cursor:'pointer' }}/>
+                            <div style={{ width:28, height:28, borderRadius:'50%', background:T.ink, color:'#fbf8f3',
                                 fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                                 {initials}
                             </div>
                             <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ fontSize:12.5, fontWeight:700, color:T2.ink, fontFamily:T2.sans }}>{fullName}</div>
-                                <div style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>
+                                <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{fullName}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
                                     {[c.title, c.company].filter(Boolean).join(' · ') || c.email || '—'}
                                 </div>
                             </div>
@@ -4711,22 +4671,22 @@ function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <button onClick={onCancel} disabled={saving}
                     style={{ padding:'7px 16px', fontSize:12.5, fontWeight:600, borderRadius:4,
-                        border:`1px solid ${T2.borderStrong}`, background:T2.surface, color:T2.inkMid,
-                        cursor:'pointer', fontFamily:T2.sans }}>
+                        border:`1px solid ${T.borderStrong}`, background:T.surface, color:T.inkMid,
+                        cursor:'pointer', fontFamily:T.sans }}>
                     Cancel
                 </button>
                 <button
                     onClick={() => onSave([...selected])}
                     disabled={selected.size === 0 || saving}
                     style={{ padding:'7px 18px', fontSize:12.5, fontWeight:700, borderRadius:4,
-                        border:'none', background: selected.size === 0 ? T2.border : T2.ink,
-                        color: selected.size === 0 ? T2.inkMuted : '#fbf8f3',
-                        cursor: selected.size === 0 ? 'default' : 'pointer', fontFamily:T2.sans,
+                        border:'none', background: selected.size === 0 ? T.border : T.ink,
+                        color: selected.size === 0 ? T.inkMuted : '#fbf8f3',
+                        cursor: selected.size === 0 ? 'default' : 'pointer', fontFamily:T.sans,
                         transition:'background 150ms' }}>
                     {saving ? 'Saving…' : `Add ${selected.size > 0 ? selected.size : ''} contact${selected.size !== 1 ? 's' : ''}`}
                 </button>
                 {selected.size > 0 && (
-                    <span style={{ fontSize:11.5, color:T2.inkMuted, fontFamily:T2.sans }}>
+                    <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>
                         {selected.size} selected
                     </span>
                 )}
@@ -4749,36 +4709,26 @@ function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
 // The object is a pure literal with no local dependencies, so hoisting it is
 // behaviour-neutral and both scopes now resolve the same T. check-tdz's
 // shouty-constant escape had been skipping the name outright; see 18b0.
-const T_ACTIVITY = {
-    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
-    border: '#e6ddd0', borderStrong: '#d4c8b4',
-    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
-    gold: '#c8b99a', goldInk: '#7a6a48',
-    danger: '#9c3a2e', warn: '#b87333', ok: '#4d6b3d', info: '#3a5a7a',
-    sans: '"Plus Jakarta Sans", system-ui, sans-serif',
-    serif: 'Georgia, serif',
-    r: 3,
-};
 
 const EntitySelector = ({ label, selected, filtered, search, setSearch, open, setOpen, onSelect, refEl, nameOf }) => (
     <div ref={refEl} style={{ position:'relative', minWidth:260 }}>
-        <div onClick={() => setOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', background:T_ACTIVITY.surface, border:`1px solid ${T_ACTIVITY.borderStrong}`, borderRadius:T_ACTIVITY.r, cursor:'pointer', fontSize:13, color:T_ACTIVITY.ink, fontFamily:T_ACTIVITY.sans }}>
-            <span style={{ flex:1, fontWeight: selected ? 500 : 400, color: selected ? T_ACTIVITY.ink : T_ACTIVITY.inkMuted }}>{selected ? nameOf(selected) : `Type to search ${label}s…`}</span>
-            <span style={{ fontSize:9, color:T_ACTIVITY.inkMuted }}>▾</span>
+        <div onClick={() => setOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, cursor:'pointer', fontSize:13, color:T.ink, fontFamily:T.sans }}>
+            <span style={{ flex:1, fontWeight: selected ? 500 : 400, color: selected ? T.ink : T.inkMuted }}>{selected ? nameOf(selected) : `Type to search ${label}s…`}</span>
+            <span style={{ fontSize:9, color:T.inkMuted }}>▾</span>
         </div>
         {open && (
-            <div style={{ position:'absolute', top:'100%', left:0, right:0, marginTop:3, zIndex:200, background:T_ACTIVITY.surface, border:`1px solid ${T_ACTIVITY.borderStrong}`, borderRadius:T_ACTIVITY.r, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', overflow:'hidden', maxHeight:260, display:'flex', flexDirection:'column' }}>
-                <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T_ACTIVITY.border}` }}>
-                    <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${label}s…`} style={{ width:'100%', border:'none', outline:'none', fontSize:12, color:T_ACTIVITY.ink, background:'transparent', fontFamily:T_ACTIVITY.sans }} />
+            <div style={{ position:'absolute', top:'100%', left:0, right:0, marginTop:3, zIndex:200, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', overflow:'hidden', maxHeight:260, display:'flex', flexDirection:'column' }}>
+                <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}` }}>
+                    <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${label}s…`} style={{ width:'100%', border:'none', outline:'none', fontSize:12, color:T.ink, background:'transparent', fontFamily:T.sans }} />
                 </div>
                 <div style={{ overflowY:'auto', flex:1 }}>
                     {filtered.length === 0 ? (
-                        <div style={{ padding:'12px', fontSize:12, color:T_ACTIVITY.inkMuted, fontFamily:T_ACTIVITY.sans }}>No results.</div>
+                        <div style={{ padding:'12px', fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>No results.</div>
                     ) : filtered.map(item => (
                         <div key={item.id} onClick={() => { onSelect(item.id); setOpen(false); setSearch(''); }}
-                            style={{ padding:'8px 12px', fontSize:13, color:T_ACTIVITY.ink, cursor:'pointer', fontFamily:T_ACTIVITY.sans, background: item.id === (selected?.id) ? T_ACTIVITY.surface2 : 'transparent', fontWeight: item.id === (selected?.id) ? 600 : 400 }}
-                            onMouseEnter={e=>e.currentTarget.style.background=T_ACTIVITY.surface2}
-                            onMouseLeave={e=>e.currentTarget.style.background=item.id===(selected?.id)?T_ACTIVITY.surface2:'transparent'}>
+                            style={{ padding:'8px 12px', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans, background: item.id === (selected?.id) ? T.surface2 : 'transparent', fontWeight: item.id === (selected?.id) ? 600 : 400 }}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                            onMouseLeave={e=>e.currentTarget.style.background=item.id===(selected?.id)?T.surface2:'transparent'}>
                             {nameOf(item)}
                         </div>
                     ))}
@@ -4789,7 +4739,6 @@ const EntitySelector = ({ label, selected, filtered, search, setSearch, open, se
 );
 
 function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
-    const T = T_ACTIVITY;
     // Same: read from the parent's closure, absent here.
     const { setViewingAccount } = useApp();
 

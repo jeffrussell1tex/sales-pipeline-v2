@@ -719,9 +719,10 @@ const subTabStyle = (tab) => ({
 
 ### The actual design system (warm "stone / ink")
 
-The app does **not** use a CSS framework or the `index.css` button classes for new work. Every component file declares its own design-token object and styles inline:
+The app does **not** use a CSS framework or the `index.css` button classes for new work. Styles are inline, and every file reads the design tokens from the ONE token object, `src/tokens.js` (§18b39):
 
 ```js
+import { T } from '../tokens.js';   // the only declaration is src/tokens.js:
 const T = {
   bg:'#f0ece4', surface:'#fbf8f3', surface2:'#f5efe3',
   border:'#e6ddd0', borderStrong:'#d4c8b4',
@@ -732,7 +733,7 @@ const T = {
 };
 ```
 
-(Settings panels import a shared `T` from `settings/shared/tokens.js`; other areas define `T` locally.)
+(Since 14 Sep 2026 — state §0.130 — `src/tokens.js` is the only token literal in the tree. The Settings panels reach it through `settings/shared/tokens.js` and the Documents surfaces through `documents/atoms.jsx`, both re-exports. `DispatchTab` derives `const T = { ...TOKENS, r: 4 }` — the one recorded divergence. `tests/single-token-file.test.mjs` fails on any new local copy, any read of a key the object lacks, and any second override. **A new file never declares `T`; it imports it.** The object also carries `stages`, `mono`, `tint`, `surfaceInk`/`surfaceInkFg` and the radii `rSm`/`rMd`/`rLg` — the union of what the copies had.)
 
 **Hard rules:**
 - **No generic colors.** `#2563eb` and other off-brand blues/grays are forbidden — use `T.info`, `T.ink`, etc. (The old sub-tab style in §15 with `#2563eb` is off-brand; new tabs use `T.*`.)
@@ -3488,3 +3489,11 @@ effects' gate / clear / deps, and `waitForToken`'s behaviour and loud give-up;
 five mutants. Before adding a fetch that runs on mount: does it key on
 `activeOrgId`? If it must run signed-out (a public route), it does not go
 through `dbFetch`.
+
+## 18b39. One Token Object — Import It, Never Declare It (hard rule)
+
+**Origin (state §0.130, 14 Sep 2026).** Every non-Settings file declared its own copy of the design-token object — 24 files, and `ReportsTab.jsx` eight (`T`, `T2`, `T2b`, `T2c`, `T3`, `T4`, `TS`, `T_ACTIVITY`, plus `const T = TS` aliases per template). The colours never drifted. Everything else did: five spellings of the serif stack (`"Source Serif 4"` and `"Tiempos"` first in some — faces the app never loads, so every screen rendered Georgia regardless), one radius (`r: 4` in Dispatch, 3 everywhere else), four alias keys (`ink2`, `ink3`, `surface3`, `radiusMd`) meaning the same values as `inkMid`, `inkMuted`, `bg`, `rMd`, and **three reads of keys a copy never had** — `T.r` in HomeTab (a box and a button with no radius), `T.info` inside the report templates whose `TS` had no `info` (a Call's colour falling to grey; a chip's `borderLeft: 3px solid undefined`, no border) — each silently `undefined`, no error anywhere. A "design update" against that tree would have had to be applied 32 times.
+
+**The rule.** `src/tokens.js` is the only token literal. A file that needs a token imports it — `import { T } from '<relative>/tokens.js'` (Settings: `settings/shared/tokens.js`; Documents: `documents/atoms.jsx`; both re-exports). A local `const T = { … }`, a second object spread over `T` with a changed value, or a read of a key `T` does not have is a defect, and `tests/single-token-file.test.mjs` fails on each (the harness carries four mutants for it). A deliberate divergence is a one-line derived object with a comment naming it — `DispatchTab`'s `const T = { ...TOKENS, r: 4 }` is the only one — never a copy.
+
+**Why a scripted migration and not a find-and-replace.** The copies were parsed (`@babel/parser`), every `<Name>.<key>` read was resolved to the innermost declaration in scope (the `const T = TS` aliases included), and the value it resolved to was compared with the canonical value before a byte was written; the three undefined reads above were the only differences, each accepted by hand and named in the state doc. The same method is the template for any token-shaped consolidation: prove value identity per read, then rewrite.

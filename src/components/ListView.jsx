@@ -2,39 +2,9 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { quarterOf, quarterRange, groupByQuarter } from '../utils/quarters';
 import { todayLocal } from '../utils/dateLocal';
+import { T } from '../tokens.js';
 
 // ── Tokens — exact match to PipelineTab ──────────────────────
-const T = {
-    bg:           '#f0ece4',
-    surface:      '#fbf8f3',
-    surface2:     '#f5efe3',
-    border:       '#e6ddd0',
-    borderStrong: '#d4c8b4',
-    ink:          '#2a2622',
-    inkMid:       '#5a544c',
-    inkMuted:     '#8a8378',
-    gold:         '#c8b99a',
-    goldInk:      '#7a6a48',
-    danger:       '#9c3a2e',
-    warn:         '#b87333',
-    ok:           '#4d6b3d',
-    sans:  '"Plus Jakarta Sans", system-ui, sans-serif',
-    serif: 'Georgia, "Source Serif 4", serif',
-    rSm: 3, rMd: 4, rLg: 6,
-    stages: {
-        'Prospecting':        '#b0a088',
-        'Qualification':      '#c8a978',
-        'Discovery':          '#b07a55',
-        'Evaluation (Demo)':  '#b07a55',
-        'Proposal':           '#b87333',
-        'Negotiation':        '#7a5a3c',
-        'Negotiation/Review': '#7a5a3c',
-        'Contracts':          '#4d6b3d',
-        'Closing':            '#4d6b3d',
-        'Closed Won':         '#3a5530',
-        'Closed Lost':        '#9c3a2e',
-    },
-};
 
 const stageColor = (s) => T.stages[s] || T.inkMuted;
 const eyebrow = { fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans };

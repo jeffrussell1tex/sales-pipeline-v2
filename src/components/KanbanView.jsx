@@ -1,40 +1,9 @@
 import React from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
+import { T } from '../tokens.js';
 
 // ── Tokens — exact match to TOKENS in mockup ─────────────────
-const T = {
-    bg:           '#f0ece4',
-    surface:      '#fbf8f3',
-    surface2:     '#f5efe3',
-    surfaceInk:   '#2a2622',
-    border:       '#e6ddd0',
-    borderStrong: '#d4c8b4',
-    ink:          '#2a2622',
-    inkMid:       '#5a544c',
-    inkMuted:     '#8a8378',
-    gold:         '#c8b99a',
-    danger:       '#9c3a2e',
-    warn:         '#b87333',
-    ok:           '#4d6b3d',
-    // Stage colors from mockup — desaturated, accent-only
-    stages: {
-        'Prospecting':        '#b0a088',
-        'Qualification':      '#c8a978',
-        'Discovery':          '#b07a55',
-        'Evaluation (Demo)':  '#b07a55',
-        'Proposal':           '#b87333',
-        'Negotiation':        '#7a5a3c',
-        'Negotiation/Review': '#7a5a3c',
-        'Contracts':          '#4d6b3d',
-        'Closing':            '#4d6b3d',
-        'Closed Won':         '#3a5530',
-        'Closed Lost':        '#9c3a2e',
-    },
-    sans:    '"Plus Jakarta Sans", system-ui, sans-serif',
-    rSm:  3,
-    rMd:  4,
-};
 
 const sc = (stage) => T.stages[stage] || T.inkMuted;
 

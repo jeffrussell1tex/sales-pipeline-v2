@@ -3,21 +3,9 @@ import { useApp } from '../../AppContext';
 import AttachmentsStrip from '../documents/AttachmentsStrip';
 import AccountPicker from './AccountPicker';
 import { dbFetch } from '../../utils/storage';
+import { T } from '../../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const T = {
-    sans:    '"Plus Jakarta Sans", system-ui, sans-serif',
-    surface: '#fbf8f3',
-    surface2:'#f5efe3',
-    surface3:'#f0ece4',
-    border:  '#e6ddd0',
-    ink:     '#2a2622',
-    ink2:    '#5a544c',
-    ink3:    '#8a8378',
-    gold:    '#c8b99a',
-    danger:  '#9c3a2e',
-    r:       3,
-};
 
 function SectionHeading({ label }) {
     return (
@@ -30,7 +18,7 @@ function SectionHeading({ label }) {
 function FieldGroup({ label, wide, children }) {
     return (
         <div style={{ gridColumn: wide ? '1 / -1' : undefined, marginBottom: 10 }}>
-            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</label>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</label>
             {children}
         </div>
     );
@@ -55,7 +43,7 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                     {filtered.slice(0, 8).map((s, i) => (
                         <div key={i} onMouseDown={e => e.preventDefault()} onClick={() => { onSelect(s); setOpen(false); }}
                             style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface3}
+                            onMouseEnter={e => e.currentTarget.style.background = T.bg}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >{s}</div>
                     ))}
@@ -85,10 +73,10 @@ function ContactMultiSelect({ contacts, value, onChange, placeholder }) {
                 {selected.map(id => {
                     const c = (contacts || []).find(x => x.id === id);
                     return (
-                        <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: T.surface3, border: `1px solid ${T.border}`, borderRadius: 999, padding: '2px 4px 2px 9px', fontSize: 12, color: T.ink2 }}>
+                        <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 999, padding: '2px 4px 2px 9px', fontSize: 12, color: T.inkMid }}>
                             {nameOf(c)}
                             <button type="button" aria-label={'Remove ' + nameOf(c)} onMouseDown={e => e.preventDefault()} onClick={() => remove(id)}
-                                style={{ border: 'none', background: 'none', color: T.ink3, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
+                                style={{ border: 'none', background: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
                         </span>
                     );
                 })}
@@ -109,9 +97,9 @@ function ContactMultiSelect({ contacts, value, onChange, placeholder }) {
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => add(c.id)}
                             style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}`, color: T.ink }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface3}
+                            onMouseEnter={e => e.currentTarget.style.background = T.bg}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            {nameOf(c)}{c.company ? <span style={{ color: T.ink3 }}> · {c.company}</span> : ''}
+                            {nameOf(c)}{c.company ? <span style={{ color: T.inkMuted }}> · {c.company}</span> : ''}
                         </div>
                     ))}
                 </div>
@@ -332,7 +320,7 @@ export default function ActivityRail() {
             {/* ── Footer ────────────────────────────────────────────────────── */}
             <div style={{ flexShrink: 0, borderTop: `1px solid ${T.border}`, padding: '12px 16px', background: T.surface, display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button onClick={closeRail}
-                    style={{ padding: '8px 16px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                    style={{ padding: '8px 16px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                     Cancel
                 </button>
                 <button onClick={handleSave} disabled={activityModalSaving}

@@ -59,19 +59,19 @@ function DocRow({ doc, onOpen, onMenu }) {
                 <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {doc.name}
-                        {doc.version > 1 && <span style={{ fontSize: 11, color: T.ink3, fontWeight: 600, marginLeft: 6 }}>v{doc.version}</span>}
+                        {doc.version > 1 && <span style={{ fontSize: 11, color: T.inkMuted, fontWeight: 600, marginLeft: 6 }}>v{doc.version}</span>}
                     </div>
-                    <div style={{ fontSize: 11, color: T.ink3, marginTop: 1 }}>{m.label} · .{(doc.ext || '').toLowerCase()}</div>
+                    <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 1 }}>{m.label} · .{(doc.ext || '').toLowerCase()}</div>
                 </div>
             </div>
             <div><CategoryPill category={doc.category} /></div>
             <div style={{ minWidth: 0 }}><LinkedToRow links={doc.links} max={2} /></div>
-            <div style={{ fontSize: 12, color: T.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.ownerName || '—'}</div>
-            <div style={{ fontSize: 12, color: T.ink2 }}>{fmtDate(doc.modifiedAt)}</div>
-            <div style={{ fontSize: 12, color: T.ink2 }}>{fmtSize(doc.sizeKb)}</div>
+            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.ownerName || '—'}</div>
+            <div style={{ fontSize: 12, color: T.inkMid }}>{fmtDate(doc.modifiedAt)}</div>
+            <div style={{ fontSize: 12, color: T.inkMid }}>{fmtSize(doc.sizeKb)}</div>
             <button
                 onClick={(e) => { e.stopPropagation(); onMenu(doc, e.currentTarget.getBoundingClientRect()); }}
-                style={{ background: 'none', border: 'none', color: T.ink3, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '4px 6px', borderRadius: T.r, opacity: hover ? 1 : 0.5 }}
+                style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '4px 6px', borderRadius: T.r, opacity: hover ? 1 : 0.5 }}
                 title="More">⋯</button>
         </div>
     );
@@ -128,7 +128,7 @@ export default function DocumentsTab() {
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18 }}>
                 <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: T.ink3, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                         Documents · {documents.length} files · {fmtSize(totalSize)}
                     </div>
                     <div style={{ fontSize: 26, fontWeight: 700, color: T.ink, marginTop: 2 }}>Documents</div>
@@ -155,18 +155,18 @@ export default function DocumentsTab() {
                     <option value="all">Any owner</option>
                     {owners.map((o) => <option key={o} value={o}>{o}</option>)}
                 </Select>
-                <span style={{ fontSize: 12, color: T.ink3, marginLeft: 'auto' }}>{filtered.length} shown</span>
+                <span style={{ fontSize: 12, color: T.inkMuted, marginLeft: 'auto' }}>{filtered.length} shown</span>
             </div>
 
             {/* Table */}
             <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden', background: T.surface }}>
-                <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 12, padding: '9px 16px', background: T.surface2, borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, color: T.ink3, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 12, padding: '9px 16px', background: T.surface2, borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                     <div>Document</div><div>Category</div><div>Linked to</div><div>Owner</div><div>Modified</div><div>Size</div><div />
                 </div>
                 {docsLoading && documents.length === 0 ? (
-                    <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 13, color: T.ink3 }}>Loading documents…</div>
+                    <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>Loading documents…</div>
                 ) : filtered.length === 0 ? (
-                    <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 13, color: T.ink3 }}>
+                    <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>
                         {documents.length === 0 ? 'No documents yet. Upload your first file to get started.' : 'No documents match your filters.'}
                     </div>
                 ) : (

@@ -1,18 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
+import { T } from '../tokens.js';
 
 // ─── Design tokens ────────────────────────────────────────────
-const T = {
-    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
-    border: '#e6ddd0', borderStrong: '#d4c8b4',
-    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
-    gold: '#c8b99a', goldInk: '#7a6a48',
-    ok: '#4d6b3d', warn: '#b87333', danger: '#9c3a2e', info: '#3a5a7a',
-    sans: '"Plus Jakarta Sans", system-ui, sans-serif',
-    serif: 'Georgia, serif',
-    r: 3,
-};
 
 // ─── Helpers ──────────────────────────────────────────────────
 const fmt = (n) => {

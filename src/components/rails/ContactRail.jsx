@@ -5,21 +5,9 @@ import { dbFetch } from '../../utils/storage';
 import RecordDocuments from '../documents/RecordDocuments';
 import AccountPicker from './AccountPicker';
 import { cleanEmailTemplates, mergeContext, renderForContact, mailtoHref } from '../../utils/emailTemplates.js';
+import { T } from '../../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const T = {
-    sans:    '"Plus Jakarta Sans", system-ui, sans-serif',
-    surface: '#fbf8f3',
-    surface2:'#f5efe3',
-    surface3:'#f0ece4',
-    border:  '#e6ddd0',
-    ink:     '#2a2622',
-    ink2:    '#5a544c',
-    ink3:    '#8a8378',
-    gold:    '#c8b99a',
-    danger:  '#9c3a2e',
-    r:       3,
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,7 +40,7 @@ function ReadRow({ label, value, wide }) {
     if (!value && value !== 0) return null;
     return (
         <div style={{ gridColumn: wide ? '1 / -1' : undefined, marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{label}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{label}</div>
             <div style={{ fontSize: 13, color: T.ink, lineHeight: 1.45, wordBreak: 'break-word' }}>{value}</div>
         </div>
     );
@@ -69,7 +57,7 @@ function SectionHeading({ label }) {
 function FieldGroup({ label, wide, children }) {
     return (
         <div style={{ gridColumn: wide ? '1 / -1' : undefined, marginBottom: 10 }}>
-            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</label>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</label>
             {children}
         </div>
     );
@@ -115,7 +103,7 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { onSelect(s); setOpen(false); }}
                             style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface3}
+                            onMouseEnter={e => e.currentTarget.style.background = T.bg}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >{s}</div>
                     ))}
@@ -162,7 +150,7 @@ const TemplatePicker = ({ contact, templates, ctx, onPick, onBlank }) => {
     };
     return (
         <div style={{ padding: '8px 16px 10px', background: T.surface2, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
-            <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }} htmlFor="contact-email-template">
+            <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }} htmlFor="contact-email-template">
                 Email {contact.firstName || contact.email} with…
             </label>
             <select id="contact-email-template" value="" onChange={e => choose(e.target.value)} aria-label="Email template"
@@ -174,7 +162,7 @@ const TemplatePicker = ({ contact, templates, ctx, onPick, onBlank }) => {
                     return <option key={t.id} value={t.id}>{t.name}{subject ? ` — ${subject}` : ''}</option>;
                 })}
             </select>
-            <div style={{ marginTop: 6, fontSize: 11, color: T.ink3, fontFamily: T.sans }}>
+            <div style={{ marginTop: 6, fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
                 Opens in your own mail client with the fields filled in — nothing is sent until you press Send there.
             </div>
         </div>
@@ -466,7 +454,7 @@ export default function ContactRail() {
             onClick={() => setActiveTab(id)}
             style={{
                 background: 'none', border: 'none', borderBottom: activeTab === id ? `2px solid ${T.ink}` : '2px solid transparent',
-                color: activeTab === id ? T.ink : T.ink3, fontWeight: activeTab === id ? 700 : 500,
+                color: activeTab === id ? T.ink : T.inkMuted, fontWeight: activeTab === id ? 700 : 500,
                 fontSize: 12, padding: '8px 14px', cursor: 'pointer', fontFamily: T.sans,
                 transition: 'all 0.15s',
             }}
@@ -532,25 +520,25 @@ export default function ContactRail() {
                 <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: T.surface2, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
                     {contact.email && emailTemplates.length === 0 && (
                         <a href={`mailto:${contact.email}`} onClick={() => openCommLog('Email')}
-                           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.ink2, textDecoration: 'none', cursor: 'pointer' }}>
+                           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.inkMid, textDecoration: 'none', cursor: 'pointer' }}>
                             ✉ Email
                         </a>
                     )}
                     {contact.email && emailTemplates.length > 0 && (
                         <button type="button" onClick={() => setShowTemplates(v => !v)} aria-expanded={showTemplates} title="Email with a template, or a blank email"
-                           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: showTemplates ? T.ink : T.surface, border: `1px solid ${showTemplates ? T.ink : T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: showTemplates ? '#f5f1eb' : T.ink2, cursor: 'pointer', fontFamily: T.sans }}>
+                           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: showTemplates ? T.ink : T.surface, border: `1px solid ${showTemplates ? T.ink : T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: showTemplates ? '#f5f1eb' : T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                             ✉ Email ▾
                         </button>
                     )}
                     {contact.phone && (
                         <a href={`tel:${contact.phone}`} onClick={() => openCommLog('Call')}
-                           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.ink2, textDecoration: 'none' }}>
+                           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.inkMid, textDecoration: 'none' }}>
                             ☎ Call
                         </a>
                     )}
                     <button
                         onClick={() => handleAddActivity && handleAddActivity(null, contact.id)}
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.ink2, cursor: 'pointer', fontFamily: T.sans }}>
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                         ✎ Log
                     </button>
                     <button
@@ -607,7 +595,7 @@ export default function ContactRail() {
                                 Create anyway
                             </button>
                             <button onClick={() => setDupWarning(null)}
-                                style={{ padding: '4px 10px', background: '#fff', color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
+                                style={{ padding: '4px 10px', background: '#fff', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
                                 Cancel
                             </button>
                         </div>
@@ -677,7 +665,7 @@ export default function ContactRail() {
                                 {/* Company chip — clicking opens Account rail (stack) */}
                                 {formData.company && (
                                     <div style={{ marginBottom: 10 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Company</div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Company</div>
                                         <button
                                             onClick={() => handleOpenAccountRail(formData.company)}
                                             style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '3px 10px', fontSize: 12, fontWeight: 600, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}
@@ -711,25 +699,25 @@ export default function ContactRail() {
                             <div style={grid2}>
                                 {formData.email && (
                                     <div style={{ marginBottom: 10 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Work Email</div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Work Email</div>
                                         <a href={`mailto:${formData.email}`} style={{ fontSize: 13, color: '#3a5a7a', textDecoration: 'none' }}>{formData.email}</a>
                                     </div>
                                 )}
                                 {formData.personalEmail && (
                                     <div style={{ marginBottom: 10 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Personal Email</div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Personal Email</div>
                                         <a href={`mailto:${formData.personalEmail}`} style={{ fontSize: 13, color: '#3a5a7a', textDecoration: 'none' }}>{formData.personalEmail}</a>
                                     </div>
                                 )}
                                 {formData.phone && (
                                     <div style={{ marginBottom: 10 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Work Phone</div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Work Phone</div>
                                         <a href={`tel:${formData.phone}`} style={{ fontSize: 13, color: '#3a5a7a', textDecoration: 'none' }}>{formData.phone}</a>
                                     </div>
                                 )}
                                 {formData.mobile && (
                                     <div style={{ marginBottom: 10 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Mobile</div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Mobile</div>
                                         <a href={`tel:${formData.mobile}`} style={{ fontSize: 13, color: '#3a5a7a', textDecoration: 'none' }}>{formData.mobile}</a>
                                     </div>
                                 )}
@@ -770,7 +758,7 @@ export default function ContactRail() {
                                         {formData.country && <div>{formData.country}</div>}
                                     </div>
                                 ) : (
-                                    <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic' }}>No address on file</div>
+                                    <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No address on file</div>
                                 )}
                             </div>
                         )}
@@ -802,13 +790,13 @@ export default function ContactRail() {
                                 </FieldGroup>
                                 {/* Do Not Contact toggle */}
                                 <div style={{ gridColumn: '1 / -1', marginBottom: 10 }}>
-                                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.ink3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Do Not Contact</label>
+                                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Do Not Contact</label>
                                     <div onClick={() => hc('doNotContact', !formData.doNotContact)}
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 10px', borderRadius: T.r, border: formData.doNotContact ? `1px solid ${T.danger}` : `1px solid ${T.border}`, background: formData.doNotContact ? '#fef2f2' : T.surface3 }}>
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 10px', borderRadius: T.r, border: formData.doNotContact ? `1px solid ${T.danger}` : `1px solid ${T.border}`, background: formData.doNotContact ? '#fef2f2' : T.bg }}>
                                         <div style={{ width: 32, height: 18, borderRadius: 999, background: formData.doNotContact ? T.danger : '#d6d3ce', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
                                             <div style={{ position: 'absolute', width: 12, height: 12, background: '#fff', borderRadius: '50%', top: 3, left: formData.doNotContact ? 17 : 3, transition: 'left 0.2s' }} />
                                         </div>
-                                        <span style={{ fontSize: 12, fontWeight: 600, color: formData.doNotContact ? T.danger : T.ink2 }}>
+                                        <span style={{ fontSize: 12, fontWeight: 600, color: formData.doNotContact ? T.danger : T.inkMid }}>
                                             {formData.doNotContact ? '🚫 Do Not Contact — flagged' : 'Not flagged'}
                                         </span>
                                     </div>
@@ -834,7 +822,7 @@ export default function ContactRail() {
                                     {openOpps.slice(0, 5).map(o => (
                                         <div key={o.id} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '7px 10px', fontSize: 12 }}>
                                             <div style={{ fontWeight: 600, color: T.ink }}>{o.opportunityName || o.account}</div>
-                                            <div style={{ color: T.ink3, marginTop: 2 }}>{o.stage} {o.value ? `· $${Number(o.value).toLocaleString()}` : ''}</div>
+                                            <div style={{ color: T.inkMuted, marginTop: 2 }}>{o.stage} {o.value ? `· $${Number(o.value).toLocaleString()}` : ''}</div>
                                         </div>
                                     ))}
                                 </div>
@@ -873,7 +861,7 @@ export default function ContactRail() {
                                         <div style={{ fontSize: 13, color: T.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{formData.notes}</div>
                                     </>
                                 ) : (
-                                    <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic' }}>No additional info on file</div>
+                                    <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No additional info on file</div>
                                 )}
                             </div>
                         )}
@@ -915,13 +903,13 @@ export default function ContactRail() {
                         {/* Open Opportunities */}
                         <SectionHeading label="Open Opportunities" />
                         {openOpps.length === 0 ? (
-                            <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', marginBottom: 16 }}>No open opportunities</div>
+                            <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', marginBottom: 16 }}>No open opportunities</div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
                                 {openOpps.map(o => (
                                     <div key={o.id} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '8px 10px' }}>
                                         <div style={{ fontSize: 12, fontWeight: 600, color: T.ink }}>{o.opportunityName || o.account}</div>
-                                        <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>
+                                        <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2 }}>
                                             {o.stage}{o.value ? ` · $${Number(o.value).toLocaleString()}` : ''}
                                         </div>
                                     </div>
@@ -932,20 +920,20 @@ export default function ContactRail() {
                         {/* Activity History */}
                         <SectionHeading label={`Activity History (${contactActivities.length})`} />
                         {contactActivities.length === 0 ? (
-                            <div style={{ fontSize: 12, color: T.ink3, fontStyle: 'italic', marginBottom: 16 }}>No activity history</div>
+                            <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', marginBottom: 16 }}>No activity history</div>
                         ) : (
                             <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden', marginBottom: 16 }}>
                                 {contactActivities.map((a, idx) => {
                                     const relOpp = a.opportunityId ? (opportunities || []).find(o => o.id === a.opportunityId) : null;
                                     return (
                                         <div key={idx} onClick={() => setViewingActivity(a)} title="Open" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', cursor: 'pointer', borderBottom: idx < contactActivities.length - 1 ? `1px solid ${T.border}` : 'none', background: idx % 2 === 0 ? '#fff' : T.surface }}>
-                                            <span style={{ fontSize: 11, color: T.ink3, flexShrink: 0, width: 52, paddingTop: 1 }}>
+                                            <span style={{ fontSize: 11, color: T.inkMuted, flexShrink: 0, width: 52, paddingTop: 1 }}>
                                                 {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                             </span>
                                             <span style={{ background: 'rgba(58,90,122,0.1)', color: T.ink, padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{a.type || 'Note'}</span>
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <ActivityRowText activity={a} />
-                                                {relOpp && <div style={{ fontSize: 11, color: T.ink3, marginTop: 2 }}>{relOpp.opportunityName || relOpp.account}</div>}
+                                                {relOpp && <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2 }}>{relOpp.opportunityName || relOpp.account}</div>}
                                             </div>
                                         </div>
                                     );
@@ -961,7 +949,7 @@ export default function ContactRail() {
                             </button>
                             <button
                                 onClick={() => { setTaskRailId('new'); setTaskRailMode('new'); }}
-                                style={{ flex: 1, padding: '8px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                style={{ flex: 1, padding: '8px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 + Add Task
                             </button>
                         </div>
@@ -973,10 +961,10 @@ export default function ContactRail() {
             {isEditing && (
                 <div style={{ flexShrink: 0, borderTop: `1px solid ${T.border}`, padding: '12px 16px', background: T.surface, display: 'flex', gap: 8, alignItems: 'center' }}>
                     {dirty && (
-                        <span style={{ fontSize: 11, color: T.ink3, flex: 1 }}>Unsaved changes</span>
+                        <span style={{ fontSize: 11, color: T.inkMuted, flex: 1 }}>Unsaved changes</span>
                     )}
                     <button onClick={handleDiscard}
-                        style={{ padding: '8px 16px', background: T.surface2, color: T.ink2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, marginLeft: 'auto' }}>
+                        style={{ padding: '8px 16px', background: T.surface2, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, marginLeft: 'auto' }}>
                         Discard
                     </button>
                     <button onClick={handleSave} disabled={contactModalSaving}
