@@ -5795,7 +5795,7 @@ export default function DispatchTab() {
         };
 
         if (soft.length && showConfirm) {
-            showConfirm(`${toTech.name} does not meet this job's requirements: ${soft.join('; ')}. Move it anyway?`, () => commit(soft), true);
+            showConfirm(`${toTech.name} does not meet this job's requirements: ${soft.join('; ')}. Move it anyway?`, () => commit(soft), false);
             return;
         }
         await commit([]);

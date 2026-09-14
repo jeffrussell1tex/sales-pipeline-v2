@@ -166,7 +166,7 @@ test('the parent’s handler: the planner’s refusal is shown, the equipment ga
     assert.ok(s.includes('assignedTechIds: plan.crew,') && s.includes('window:          saved ? queueWindow(saved) : j.window,'), 'the client row follows the plan and the server');
     assert.ok(s.includes('if (saved) setJobsRaw(prev => prev.map(j => j.id === job.id ? saved : j));'), 'the Jobs view’s raw copy follows too');
     assert.ok(s.includes(".filter(b => !/^(Not rostered|Off ·|Double-booked)/.test(b))"), 'the soft blockers are the ones the builder overrides; the hard gates ran already');
-    assert.ok(s.includes("showConfirm(`${toTech.name} does not meet this job's requirements: ${soft.join('; ')}. Move it anyway?`, () => commit(soft), true);"), 'the app-wide confirm, like the builder’s Override');
+    assert.ok(s.includes("showConfirm(`${toTech.name} does not meet this job's requirements: ${soft.join('; ')}. Move it anyway?`, () => commit(soft), false);"), 'the app-wide confirm, like the builder’s Override — the INFO variant: its button reads Confirm; the danger variant’s reads Delete (seen in the pane, 14 Sep)');
     assert.ok(s.includes("addAudit(overridden.length ? 'dispatch.reschedule.override' : 'dispatch.reschedule', 'dispatch_job', job.id, name,"));
     assert.ok(s.includes("if (res.status === 403) throw new Error('Your role cannot reschedule jobs.');"));
     assert.ok(s.includes('onMove={handleWeekMove} moveState={weekMove}'), 'wired into the week range of the board');
