@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -2239,8 +2239,8 @@ const mutations = [
     // ── Post to Slack; momentum and score drop fire the engine (0.127) ──────
     ['slack action: the post is gated by a pipeline-alert switch the Admin may have off',
         'netlify/functions/dispatch-automations.mjs',
-        '            const posted = await sendSlackToOrg(orgId, { text });',
-        "            const posted = await sendSlackToOrg(orgId, { text }, 'dealSilent');"],
+        "            const posted = await sendSlackToOrg(orgId, slackTemplates.automation({ message, ruleName: rule.name, triggerLabel: triggerOf(triggerEvent)?.label || triggerEvent, subject: eventSubject(data) }));",
+        "            const posted = await sendSlackToOrg(orgId, slackTemplates.automation({ message, ruleName: rule.name, triggerLabel: triggerOf(triggerEvent)?.label || triggerEvent, subject: eventSubject(data) }), 'dealSilent');"],
 
     ['slack action: a blank message is accepted at Create (a post that says nothing)',
         'src/Tabs/settings/integrations/AutomationsDetail.jsx',
@@ -2303,6 +2303,52 @@ const mutations = [
         'src/components/documents/atoms.jsx',
         "|| { label: (ext || 'FILE').toUpperCase().slice(0, 4), color: T.inkMid, bg: T.bg };",
         "|| { label: (ext || 'FILE').toUpperCase().slice(0, 4), color: T.ink2, bg: T.surface3 };"],
+
+    // ── task.overdue, Slack blocks, Train now (0.132) ─────────────────────────
+    ['task.overdue: the job scans every org, not only those with a rule — ledger rows for orgs that asked for nothing',
+        'netlify/functions/pipeline-alerts.mjs',
+        '                    if (!orgsWithRule.has(task.orgId)) continue;',
+        '                    if (false) continue;'],
+
+    ['task.overdue: the cross-tenant check is gone — a task fires at a same-named user of another org',
+        'netlify/functions/pipeline-alerts.mjs',
+        '                    if (assignee.orgId !== task.orgId) continue;',
+        '                    if (false) continue;'],
+
+    ['task.overdue: the dedup is gone — every hour, every overdue task, forever',
+        'netlify/functions/pipeline-alerts.mjs',
+        "                    if (await wasRecentlyAlerted(task.orgId, assignee.name, task.id, 'taskOverdue')) { skipped++; continue; }",
+        '                    if (false) { skipped++; continue; }'],
+
+    ['task.overdue: the trigger is offered as a save-time event — a rule on it waits for a save that never comes',
+        'src/utils/automationEvents.js',
+        "    Object.freeze({ value: 'task.overdue',              label: 'Task overdue (past its due date)',             group: 'Tasks',       kind: 'hourly', entity: 'task' }),",
+        "    Object.freeze({ value: 'task.overdue',              label: 'Task overdue (past its due date)',             group: 'Tasks',       kind: 'event', entity: 'task' }),"],
+
+    ['send_slack: the plain-text post returns — no rule, no trigger, no record on the message',
+        'netlify/functions/dispatch-automations.mjs',
+        "            const posted = await sendSlackToOrg(orgId, slackTemplates.automation({ message, ruleName: rule.name, triggerLabel: triggerOf(triggerEvent)?.label || triggerEvent, subject: eventSubject(data) }));",
+        "            const posted = await sendSlackToOrg(orgId, { text: message });"],
+
+    ['Slack blocks: the section is not escaped — a deal name with < breaks the post',
+        'src/utils/automationEvents.js',
+        "        { type: 'section', text: { type: 'mrkdwn', text: mrkdwn(text) } },",
+        "        { type: 'section', text: { type: 'mrkdwn', text } },"],
+
+    ['Train now: force skips the engine floor too — a 12-row "model" is stored',
+        'netlify/functions/score-leads-batch.mjs',
+        "    else if (decided.length < MODEL_MIN_ROWS)                reason = 'below-engine-floor';",
+        "    else if (!force && decided.length < MODEL_MIN_ROWS)      reason = 'below-engine-floor';"],
+
+    ['Train now: the Admin gate is gone — any member retrains the workspace model',
+        'netlify/functions/train-lead-model.mjs',
+        "    const forbidden = requireRole(auth, ['Admin'], HEADERS);",
+        "    const forbidden = null; // requireRole(auth, ['Admin'], HEADERS);"],
+
+    ['Train now: the nightly batch forces every org — the threshold the Admin set means nothing',
+        'netlify/functions/score-leads-batch.mjs',
+        '            const r = await scoreOrg(orgId);',
+        '            const r = await scoreOrg(orgId, { force: true });'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

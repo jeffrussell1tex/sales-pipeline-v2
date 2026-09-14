@@ -25,10 +25,10 @@ import { db }          from '../../db/index.js';
 import { automations, automationRuns, tasks, opportunities, users } from '../../db/schema.js';
 import { eq, and }     from 'drizzle-orm';
 import { sendEmail }   from './send-email.mjs';
-import { sendSlackToOrg } from './send-slack.mjs';
+import { sendSlackToOrg, slackTemplates } from './send-slack.mjs';
 import { resolveOwnerId, rosterUserById } from './_lib.mjs';
 import {
-    isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, eventSubject,
+    isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, eventSubject, triggerOf,
 } from '../../src/utils/automationEvents.js';
 
 // ── Condition evaluation ──────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ async function repEmail(orgId, name) {
 }
 
 // ── Action execution ──────────────────────────────────────────────────────────
-const executeAction = async (action, orgId, triggerEvent, data) => {
+const executeAction = async (action, orgId, triggerEvent, data, rule = {}) => {
     switch (action.type) {
 
         case 'create_task': {
@@ -142,9 +142,12 @@ const executeAction = async (action, orgId, triggerEvent, data) => {
             // Connected apps), rendered with the event's merge fields. No alert
             // type: the rule IS the switch; the org's webhook and its master
             // switch still gate the post, and an unconnected Slack is a skip.
+            // Block Kit since §0.132: the rendered message is the section, a
+            // context line names the rule, the trigger and the record, and a
+            // button opens the app — the shape every other alert posts.
             const p = action.params || {};
-            const text = renderMerge(String(p.message || '').trim() || `Automation: ${eventSubject(data) || triggerEvent}`, data);
-            const posted = await sendSlackToOrg(orgId, { text });
+            const message = renderMerge(String(p.message || '').trim() || `Automation: ${eventSubject(data) || triggerEvent}`, data);
+            const posted = await sendSlackToOrg(orgId, slackTemplates.automation({ message, ruleName: rule.name, triggerLabel: triggerOf(triggerEvent)?.label || triggerEvent, subject: eventSubject(data) }));
             return posted ? { type: 'send_slack', status: 'ok' } : { type: 'send_slack', status: 'skipped', reason: 'Slack is not connected for this workspace' };
         }
 
@@ -222,7 +225,7 @@ export const dispatchAutomations = async (orgId, triggerEvent, data) => {
                 const actions = Array.isArray(rule.actions) ? rule.actions : [];
                 for (const action of actions) {
                     try {
-                        const result = await executeAction(action, orgId, triggerEvent, payload);
+                        const result = await executeAction(action, orgId, triggerEvent, payload, rule);
                         if (result?.status === 'ok') actionsExecuted++;
                         if (result?.status === 'skipped') notes.push(`${result.type}: skipped — ${result.reason}`);
                         if (result?.status === 'error')   notes.push(`${result.type}: ${result.reason}`);

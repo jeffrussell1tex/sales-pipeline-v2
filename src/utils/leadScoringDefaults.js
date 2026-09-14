@@ -54,3 +54,20 @@ export const DEFAULT_LEAD_SCORING = {
 /** A lead that has been decided either way — what the predictive model trains on. */
 export const DECIDED_STATUSES = Object.freeze(['Converted', 'Dead']);
 export const isDecidedLead = (lead) => DECIDED_STATUSES.includes(lead?.status);
+
+// What an Admin's "Train now" answers (state §0.132). train-lead-model.mjs says
+// which gate stopped a training — the engine's floor, predictive off, scoring
+// off, a failure — and the panel prints it, so a click is never a silent no-op.
+// Pure, so the wording is a unit test.
+export const trainNowMessage = (data) => {
+    const d = data || {};
+    const model = d.leadScoring?.predictive?.model;
+    if (d.ok) return { ok: true, text: `Model trained on ${model?.n ?? d.decided} decided leads · ${model?.accuracy ?? '?'}% training accuracy.` };
+    switch (d.reason) {
+        case 'below-engine-floor': return { ok: false, text: `Needs at least ${d.minRows ?? 20} decided (Converted / Dead) leads to train — this workspace has ${d.decided ?? 0}.` };
+        case 'predictive-off':     return { ok: false, text: 'Turn predictive scoring on and save, then train.' };
+        case 'scoring-off':        return { ok: false, text: 'Lead scoring is off for this workspace.' };
+        case 'training-failed':    return { ok: false, text: 'Training failed on the server — nothing changed. Try again; if it repeats, check the function log.' };
+        default:                   return { ok: false, text: d.error || 'Nothing was trained.' };
+    }
+};

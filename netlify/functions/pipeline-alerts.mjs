@@ -22,7 +22,7 @@
  */
 
 import { db } from '../../db/index.js';
-import { opportunities, activities, users, recommendationLog, dispatchCustomers, dispatchServicePlans } from '../../db/schema.js';
+import { opportunities, activities, users, recommendationLog, dispatchCustomers, dispatchServicePlans, tasks, automations } from '../../db/schema.js';
 import { eq, and, gte } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
@@ -32,7 +32,7 @@ import { withHeartbeat }                              from './_heartbeat.mjs';
 // stuck, close date lapsed — fire a rule at the point they post to Slack, so
 // once per deal per signal per DEDUP_DAYS, at the rep's alert hour.
 import { dispatchAutomations }                        from './dispatch-automations.mjs';
-import { dealEventData }                              from '../../src/utils/automationEvents.js';
+import { dealEventData, taskEventData }               from '../../src/utils/automationEvents.js';
 // The same recurrence arithmetic the Service Due queue renders (state §0.110).
 import { buildRenewalQueue }                          from '../../src/utils/planVisits.js';
 
@@ -507,6 +507,53 @@ const run = async () => {
 
         } // end for loop
 
+        // ── Signal 7: Task overdue (state §0.132) ─────────────────────────────
+        // A TASK signal for the rules engine alone — no email, no SMS, no Slack
+        // of its own: the rule is the switch (the §0.127 shape). Only an org
+        // that has an active task.overdue rule is scanned, so an org with none
+        // writes nothing to the ledger. For each open task past its due date
+        // whose assignee is an active user of THAT org, once per task per
+        // DEDUP_DAYS at the assignee's alert hour — deduped through the same
+        // ledger the task reminders use, the task id in the opportunityId
+        // column under actionType 'taskOverdue'. Never fails the run.
+        let overdueFired = 0;
+        try {
+            const ruleRows = await db.select({ orgId: automations.orgId }).from(automations)
+                .where(and(eq(automations.triggerEvent, 'task.overdue'), eq(automations.active, true)));
+            const orgsWithRule = new Set(ruleRows.map(r => r.orgId));
+            if (orgsWithRule.size > 0) {
+                const allTasks = await db.select().from(tasks);
+                for (const task of allTasks) {
+                    if (!orgsWithRule.has(task.orgId)) continue;
+                    if (task.completed || task.status === 'Completed') continue;
+                    if (!task.dueDate || task.dueDate >= todayStr) continue;
+                    const assignee = task.assignedTo ? userByName[task.assignedTo] : null;
+                    if (!assignee?.email || !assignee.active) continue;
+                    // Cross-tenant safety: the assignee must be THIS org's user.
+                    if (assignee.orgId !== task.orgId) continue;
+                    const aProfile      = assignee.profile || {};
+                    const aTz           = assignee.timezone || aProfile.timezone || 'UTC';
+                    const aAlertTimeStr = assignee.alertTime || assignee.digestTime || aProfile.alertTime || aProfile.digestTime || '08:00';
+                    const [aAlertHour]  = aAlertTimeStr.split(':').map(Number);
+                    if (localHourToUtc(aAlertHour, aTz) !== nowHour) continue;
+                    if (await wasRecentlyAlerted(task.orgId, assignee.name, task.id, 'taskOverdue')) { skipped++; continue; }
+                    const daysOverdue = daysBetween(task.dueDate, todayStr);
+                    try {
+                        await logAlert(task.orgId, assignee.name, 'taskOverdue',
+                            { id: task.id, opportunityName: task.title || 'Task', arr: null, stage: 'task' },
+                            `Overdue ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} (due ${task.dueDate})`);
+                        await dispatchAutomations(task.orgId, 'task.overdue', taskEventData(task, { days_overdue: daysOverdue }));
+                        overdueFired++;
+                        console.log(`taskOverdue → rule (${task.title}, ${daysOverdue}d, ${assignee.name})`);
+                    } catch (err) {
+                        console.error(`taskOverdue error (${task.title}):`, err.message);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('pipeline-alerts: task overdue scan failed:', err.message);
+        }
+
         // ── Signal 6: Agreement renewal (state §0.110) ────────────────────────
         // A DISPATCH signal, not a deal one. Per org, every customer whose
         // maintenance agreement is inside its plan's renewal window (or past it)
@@ -572,9 +619,9 @@ const run = async () => {
             console.error('pipeline-alerts: agreement renewals failed:', err.message);
         }
 
-        const summary = `${emailsSent} emails sent (${renewalsSent} renewals), ${smsSent} SMS sent, ${skipped} skipped (dedup)`;
+        const summary = `${emailsSent} emails sent (${renewalsSent} renewals), ${smsSent} SMS sent, ${overdueFired} overdue-task rules fired, ${skipped} skipped (dedup)`;
         console.log('pipeline-alerts: complete —', summary);
-        return { statusCode: 200, body: JSON.stringify({ emailsSent, smsSent, skipped }) };
+        return { statusCode: 200, body: JSON.stringify({ emailsSent, smsSent, overdueFired, skipped }) };
 
     } catch (err) {
         console.error('pipeline-alerts: fatal error:', err.message);

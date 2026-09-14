@@ -33,6 +33,7 @@ import { eq }      from 'drizzle-orm';
 import { serverErrorBody } from './_lib.mjs';
 import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
 import { slackAlertEnabled, dealSlackEvents } from '../../src/utils/slackAlerts.js';
+import { automationSlackMessage } from '../../src/utils/automationEvents.js';
 
 // ── Core send function ────────────────────────────────────────────────────────
 /**
@@ -135,6 +136,13 @@ const fmtArr = (v) => {
 };
 
 export const slackTemplates = {
+
+    // An automation rule's Post to Slack action (state §0.132): the Admin's
+    // rendered message as the section, the rule / trigger / record as the
+    // context line, the app button — the same Block Kit shape as every alert
+    // below. Built by the pure helper so its shape is a unit test.
+    automation: ({ message, ruleName, triggerLabel, subject }) =>
+        automationSlackMessage({ message, ruleName, triggerLabel, subject, appUrl: APP_URL }),
 
     // A dispatch customer's maintenance agreement is inside its renewal window
     // or has expired (state §0.110) — posted under the org's 'agreementRenewal' switch

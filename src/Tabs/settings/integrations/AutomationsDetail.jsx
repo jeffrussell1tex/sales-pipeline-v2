@@ -208,6 +208,9 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
                     {TRIGGER_GROUPS.map(group => (
                         <div key={group} style={{ marginBottom:14 }}>
                             <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:6, fontFamily:T.sans }}>{group}</div>
+                            {group === 'Tasks' && (
+                                <div style={{ fontSize:11.5, color:T.inkMid, marginBottom:8 }}>Task completed fires the moment a task is ticked. Task overdue is checked every hour: a rule fires once per task per week, at the assignee's alert hour, for an open task whose due date has passed.</div>
+                            )}
                             {group === 'Deal health' && (
                                 <div style={{ fontSize:11.5, color:T.inkMid, marginBottom:8 }}>Checked every hour. A rule fires once per deal per signal per week, at the deal rep's alert hour — the same moment the signal is emailed and posted.</div>
                             )}

@@ -13,8 +13,11 @@
 //
 //   - ONE vocabulary. The panel renders AUTOMATION_TRIGGERS; the engine refuses
 //     a trigger that is not in it (fail closed — a typo at a call site fires
-//     nothing, the slackAlertEnabled precedent). task.overdue is gone from the
-//     picker: nothing computes it. task.completed is fired by tasks.mjs.
+//     nothing, the slackAlertEnabled precedent). task.completed is fired by
+//     tasks.mjs. task.overdue — offered for months while nothing computed it,
+//     struck in §0.124 — is back since §0.132: the hourly job scans every open
+//     task past its due date for an org that has a rule on it, and fires once
+//     per task per week at the assignee's alert hour (the task-reminders ledger).
 //   - The hourly job fires opportunity.silent / .stuck / .close_lapsed at the
 //     same point it posts to Slack: once per deal per signal per week (the
 //     recommendation-log dedup), at the rep's alert hour, for a deal whose rep
@@ -52,6 +55,7 @@ export const AUTOMATION_TRIGGERS = Object.freeze([
     Object.freeze({ value: 'lead.created',              label: 'Lead created',                                 group: 'Leads',       kind: 'event',  entity: 'lead' }),
     Object.freeze({ value: 'lead.converted',            label: 'Lead converted',                               group: 'Leads',       kind: 'event',  entity: 'lead' }),
     Object.freeze({ value: 'task.completed',            label: 'Task completed',                               group: 'Tasks',       kind: 'event',  entity: 'task' }),
+    Object.freeze({ value: 'task.overdue',              label: 'Task overdue (past its due date)',             group: 'Tasks',       kind: 'hourly', entity: 'task' }),
 ]);
 export const TRIGGER_GROUPS  = Object.freeze(['Pipeline', 'Deal health', 'Leads', 'Tasks']);
 export const TRIGGER_VALUES  = Object.freeze(AUTOMATION_TRIGGERS.map(t => t.value));
@@ -91,7 +95,9 @@ const LEAD_FIELDS = [
 const TASK_FIELDS = [
     F('title',          'Task title'),
     F('type',           'Task type'),
+    F('priority',       'Priority'),
     F('assigned_to',    'Assigned to'),
+    F('due_date',       'Due date'),
     F('opportunity_id', 'Deal id'),
     F('completed_date', 'Completed on'),
 ];
@@ -109,6 +115,7 @@ export const EVENT_FIELDS = Object.freeze({
     'lead.created':              Object.freeze([...LEAD_FIELDS]),
     'lead.converted':            Object.freeze([...LEAD_FIELDS]),
     'task.completed':            Object.freeze([...TASK_FIELDS]),
+    'task.overdue':              Object.freeze([...TASK_FIELDS, F('days_overdue', 'Days overdue')]),
 });
 
 /** The fields a condition or a merge field can name for this trigger ([] for an unknown one). */
@@ -161,7 +168,9 @@ export function taskEventData(task, extra = {}) {
         id:             t.id ?? null,
         title:          t.title ?? null,
         type:           t.type ?? null,
+        priority:       t.priority ?? null,
         assigned_to:    t.assignedTo ?? null,
+        due_date:       t.dueDate ?? null,
         opportunity_id: t.opportunityId ?? null,
         completed_date: t.completedDate ?? null,
         owner_id:       t.ownerId ?? null,
@@ -318,4 +327,29 @@ export function assigneeParams(value, roster) {
     if (v.startsWith('name:')) return { assignedTo: v.slice(5), assignedToId: '' };
     const u = (Array.isArray(roster) ? roster : []).find(r => r && r.id === v);
     return u ? { assignedTo: String(u.name), assignedToId: u.id } : { assignedTo: '', assignedToId: '' };
+}
+
+// ── The send_slack action's message (state §0.132) ───────────────────────────
+// §0.127 posted the Admin's rendered text alone. The pipeline alerts post
+// Block Kit — a section, a context line, a button — and a rule's post now
+// takes the same shape: the message is the section (the Admin's own words,
+// rendered), the context line names the rule, the trigger and the record it
+// fired for, and the button opens the app. `text` stays the plain message —
+// it is the notification preview and the fallback for a client without blocks.
+// Pure, so the shape is a unit test; send-slack.mjs wraps it as a template.
+const mrkdwn = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+export function automationSlackMessage({ message, ruleName, triggerLabel, subject, appUrl } = {}) {
+    const text = str(message, 3000) || 'Automation fired';
+    const context = [
+        ruleName ? `Automation: *${mrkdwn(str(ruleName, 200))}*` : 'Automation',
+        triggerLabel ? mrkdwn(str(triggerLabel, 200)) : null,
+        subject ? mrkdwn(str(subject, 200)) : null,
+    ].filter(Boolean).join(' · ');
+    const blocks = [
+        { type: 'section', text: { type: 'mrkdwn', text: mrkdwn(text) } },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: context }] },
+    ];
+    if (appUrl) blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open Accelerep →' }, url: String(appUrl), action_id: 'open_app' }] });
+    return { text, blocks };
 }

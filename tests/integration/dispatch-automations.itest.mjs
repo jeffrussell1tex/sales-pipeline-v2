@@ -26,10 +26,14 @@ mock.module(new URL('../../netlify/functions/send-email.mjs', import.meta.url).h
     },
 });
 // The engine posts to Slack through the org-aware sender (§0.127); stub it too.
+// The Block Kit template (§0.132) is the real pure helper, wrapped as the real
+// module wraps it — so the shape the engine hands the sender is the real shape.
 const slackPosts = [];
+const { automationSlackMessage } = await import('../../src/utils/automationEvents.js');
 mock.module(new URL('../../netlify/functions/send-slack.mjs', import.meta.url).href, {
     namedExports: {
         sendSlackToOrg: async (orgId, msg, alertType) => { slackPosts.push({ orgId, msg, alertType }); return true; },
+        slackTemplates: { automation: (p) => automationSlackMessage({ ...p, appUrl: 'https://itest.local' }) },
     },
 });
 
@@ -167,12 +171,18 @@ test('a silent deal: update_field cannot hand the deal to another org, the allow
     assert.equal(slackPosts[0].orgId, A, 'to A\'s Slack');
     assert.equal(slackPosts[0].msg.text, 'Acme — HVAC has been silent 16 days', 'merge fields rendered');
     assert.equal(slackPosts[0].alertType, undefined, 'no alert type — the rule is the switch');
+    // §0.132: Block Kit — the message as the section, the rule / trigger / deal as the context, the app button
+    const blocks = slackPosts[0].msg.blocks;
+    assert.equal(blocks.length, 3);
+    assert.equal(blocks[0].text.text, 'Acme — HVAC has been silent 16 days');
+    assert.equal(blocks[1].elements[0].text, 'Automation: *Silent → flag* · Deal gone silent (no activity for 14 days) · Acme — HVAC');
+    assert.equal(blocks[2].elements[0].url, 'https://itest.local');
 });
 
 test('a trigger outside the vocabulary fires nothing — no run, no task, no write', async () => {
     const before = (await db.select().from(automationRuns).where(eq(automationRuns.orgId, A))).length;
     await dispatchAutomations(A, 'opportunity.stage-changed', dealEventData(await oppRow(), { to_stage: 'Proposal' }));
-    await dispatchAutomations(A, 'task.overdue', { id: 'x' });
+    await dispatchAutomations(A, 'task.snoozed', { id: 'x' });   // (task.overdue joined the vocabulary in §0.132)
     assert.equal((await db.select().from(automationRuns).where(eq(automationRuns.orgId, A))).length, before);
     assert.equal((await tasksIn(A)).length, 1);
 });
@@ -214,5 +224,30 @@ test('the picker\'s id owns the task in THIS org and refreshes the name; an id f
     assert.ok(cross, 'the cross-org task exists');
     assert.equal(cross.ownerId, KAREN_A, 'B\'s id never resolves in A; the name did, in A');
     assert.notEqual(cross.ownerId, KAREN_B);
+    assert.equal((await tasksIn(B)).length, 0, 'B still has no task');
+});
+
+test('task.overdue (§0.132): a rule on it creates a follow-up linked to the overdue task\'s deal, owned by the assignee resolved in A; the run names the task; B never sees it', async () => {
+    const { taskEventData } = await import('../../src/utils/automationEvents.js');
+    await db.insert(automations).values({
+        id: 'auto_itest_A_overdue', orgId: A, name: 'Overdue → chase', triggerEvent: 'task.overdue',
+        conditions: [{ field: 'days_overdue', operator: 'gte', value: 3 }],
+        actions: [{ type: 'create_task', params: { title: 'Chase: {{title}} ({{days_overdue}}d late)', dueOffsetDays: 0 } }], active: true, runCount: 0,
+    });
+    const overdue = { id: 'task_itest_auto_overdue', title: 'Send SOW', type: 'Follow-up', priority: 'High', assignedTo: 'Karen Rep', dueDate: '2026-09-10', opportunityId: OPP_A, orgId: A };
+    // 2 days late: the condition refuses → a skipped run, no task
+    await dispatchAutomations(A, 'task.overdue', taskEventData(overdue, { days_overdue: 2 }));
+    assert.equal((await tasksIn(A)).filter(r => r.title.startsWith('Chase:')).length, 0);
+    // 5 days late: the follow-up is created, linked and owned
+    await dispatchAutomations(A, 'task.overdue', taskEventData(overdue, { days_overdue: 5 }));
+    const chase = (await tasksIn(A)).find(r => r.title === 'Chase: Send SOW (5d late)');
+    assert.ok(chase, 'the follow-up exists');
+    assert.equal(chase.opportunityId, OPP_A, 'linked to the overdue task\'s deal');
+    assert.equal(chase.assignedTo, 'Karen Rep', 'the same assignee by default');
+    assert.equal(chase.ownerId, KAREN_A, 'owned by A\'s Karen');
+    const runs = await runsFor(A, 'auto_itest_A_overdue');
+    assert.equal(runs.length, 2);
+    assert.deepEqual(runs.map(r => r.status).sort(), ['skipped', 'success']);
+    assert.ok(runs.every(r => r.triggeredBy === 'task_itest_auto_overdue'), 'the run names the task it fired for');
     assert.equal((await tasksIn(B)).length, 0, 'B still has no task');
 });

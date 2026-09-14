@@ -5,7 +5,8 @@ import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
-import { DEFAULT_LEAD_SCORING, isDecidedLead } from '../../../utils/leadScoringDefaults.js';
+import { DEFAULT_LEAD_SCORING, isDecidedLead, trainNowMessage } from '../../../utils/leadScoringDefaults.js';
+import { dbFetch } from '../../../utils/storage';
 
 const FIELD_OPTS = [
     { v: 'title',        l: 'Title' },
@@ -114,6 +115,26 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
         setDirty(true);
     };
 
+    // Train now (state §0.132): the server runs the nightly pass for THIS org
+    // with the threshold set aside, and answers with the org's saved config —
+    // the model on it when trained — which becomes the settings prop, so the
+    // status box below reads the server's truth. Disabled while the form is
+    // dirty: training reads the SAVED config, and a stale button would lie.
+    const [training, setTraining] = useState(false);
+    const [trainMsg, setTrainMsg] = useState(null);
+    const handleTrainNow = async () => {
+        setTraining(true); setTrainMsg(null);
+        try {
+            const res  = await dbFetch('/.netlify/functions/train-lead-model', { method: 'POST' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Training refused (${res.status})`);
+            if (data.ok && data.leadScoring) setSettings(prev => ({ ...prev, leadScoring: data.leadScoring }));
+            setTrainMsg(trainNowMessage(data));
+        } catch (e) {
+            setTrainMsg({ ok: false, text: e.message });
+        } finally { setTraining(false); }
+    };
+
     const handleCancel = () => { const s = JSON.parse(JSON.stringify(saved)); setCfg(s); setDirty(false); };
     const handleReset  = () => { setCfg(JSON.parse(JSON.stringify(DEFAULT_LEAD_SCORING))); setDirty(true); };
     const handleSave   = async () => {
@@ -201,6 +222,21 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
                             ? <>Model trained on <b style={{ color: T.ink }}>{cfg.predictive.model.n}</b> decided leads · <b style={{ color: T.ink }}>{cfg.predictive.model.accuracy}%</b> training accuracy · last trained {cfg.predictive.model.trainedAt ? new Date(cfg.predictive.model.trainedAt).toLocaleDateString() : '—'}. A win-probability now shows on each lead.</>
                             : <>No model yet. <b style={{ color: T.ink }}>{decidedCount}</b> of <b style={{ color: T.ink }}>{cfg.predictive?.minClosedRecords ?? 150}</b> decided (Converted / Dead) leads so far{cfg.predictive?.enabled ? '' : ' — and predictive scoring is off'}. The model trains automatically on the nightly run once the threshold is met and the switch above is on.</>}
                     </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                        <button onClick={handleTrainNow} disabled={training || dirty}
+                            title={dirty ? 'Save your changes first — training reads the saved configuration' : 'Train the model now on every decided lead, whatever the threshold'}
+                            style={{ padding: '6px 14px', background: (training || dirty) ? T.surface2 : T.ink, color: (training || dirty) ? T.inkMuted : T.surface, border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 700, cursor: (training || dirty) ? 'default' : 'pointer', fontFamily: T.sans }}>
+                            {training ? 'Training…' : 'Train now'}
+                        </button>
+                        <span style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                            {dirty ? 'Save first — training reads the saved configuration.' : 'Runs the nightly pass for this workspace now, ignoring the threshold above (the engine still needs 20 decided leads).'}
+                        </span>
+                    </div>
+                    {trainMsg && (
+                        <div style={{ marginTop: 10, padding: '8px 12px', borderLeft: `3px solid ${trainMsg.ok ? T.ok : T.danger}`, background: trainMsg.ok ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)', borderRadius: 4, fontSize: 12, color: T.ink, fontFamily: T.sans }}>
+                            {trainMsg.text}
+                        </div>
+                    )}
                 </CSectionCard>
             </div>
         </CategoryDetailChrome>

@@ -15,7 +15,7 @@ import {
     EVENT_FIELDS, conditionFields, dealEventData, leadEventData, taskEventData, renderMerge, eventSubject,
     taskFromAction, TASK_PRIORITIES, UPDATABLE_OPPORTUNITY_FIELDS, UPDATABLE_FIELD_OPTIONS, updateFieldPatch,
 } from '../src/utils/automationEvents.js';
-import { assigneeOptions, assigneeParams } from '../src/utils/automationEvents.js';
+import { assigneeOptions, assigneeParams, automationSlackMessage } from '../src/utils/automationEvents.js';
 import { isoLocal } from '../src/utils/dateLocal.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -23,16 +23,17 @@ const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//'))
 
 // ── the vocabulary ───────────────────────────────────────────────────────────
 
-test('one vocabulary: twelve triggers in four groups; the five deal-health signals are hourly; task.overdue is gone (nothing computes it)', () => {
-    assert.equal(AUTOMATION_TRIGGERS.length, 12);
+test('one vocabulary: thirteen triggers in four groups; the five deal-health signals and task.overdue are hourly (§0.132: the job computes it now)', () => {
+    assert.equal(AUTOMATION_TRIGGERS.length, 13);
     assert.deepEqual(TRIGGER_GROUPS, ['Pipeline', 'Deal health', 'Leads', 'Tasks']);
     for (const t of AUTOMATION_TRIGGERS) {
         assert.ok(TRIGGER_GROUPS.includes(t.group), `${t.value} is in a known group`);
         assert.ok(Array.isArray(EVENT_FIELDS[t.value]) && EVENT_FIELDS[t.value].length > 0, `${t.value} carries fields`);
         assert.ok(['event', 'hourly'].includes(t.kind));
     }
-    assert.deepEqual(HOURLY_TRIGGERS, ['opportunity.silent', 'opportunity.stuck', 'opportunity.close_lapsed', 'opportunity.momentum', 'opportunity.score_drop']);
-    assert.ok(!TRIGGER_VALUES.includes('task.overdue'), 'nothing fires task.overdue — it is not offered');
+    assert.deepEqual(HOURLY_TRIGGERS, ['opportunity.silent', 'opportunity.stuck', 'opportunity.close_lapsed', 'opportunity.momentum', 'opportunity.score_drop', 'task.overdue']);
+    assert.equal(triggerOf('task.overdue').kind, 'hourly', 'task.overdue is computed by the hourly job, never fired from a save — a rule on it must not expect a save to trip it');
+    assert.equal(triggerOf('task.overdue').group, 'Tasks');
     assert.ok(TRIGGER_VALUES.includes('task.completed'), 'tasks.mjs fires task.completed');
     assert.equal(triggerOf('opportunity.silent').label, 'Deal gone silent (no activity for 14 days)');
     assert.equal(triggerOf('nope'), null);
@@ -200,7 +201,7 @@ test('org-scoping scans the engine now (it was on the skip list); tasks.itest st
 test('the hourly job fires opportunity.silent / .stuck / .close_lapsed right after each Slack post — inside the dedup block, on the signal alone', () => {
     const s = code(read('netlify/functions/pipeline-alerts.mjs'));
     assert.ok(s.includes("import { dispatchAutomations }                        from './dispatch-automations.mjs';"));
-    assert.ok(s.includes("import { dealEventData }                              from '../../src/utils/automationEvents.js';"));
+    assert.ok(s.includes("import { dealEventData, taskEventData }               from '../../src/utils/automationEvents.js';"));
     const pairs = [
         ["'dealSilent');",  "                        await dispatchAutomations(orgId, 'opportunity.silent', dealEventData(opp, { days_silent: daysSilent }));"],
         ["'dealStuck');",   "                        await dispatchAutomations(orgId, 'opportunity.stuck', dealEventData(opp, { days_in_stage: daysInStage, avg_days_in_stage: avgForStage }));"],
@@ -312,10 +313,10 @@ test('the panel picks the assignee from the roster and stores both keys; the eng
 
 test('send_slack: the engine posts the rendered message through the org-aware sender with NO alert type (the rule is the switch); the panel offers it, requires a message, names it in the review', () => {
     const e = code(read('netlify/functions/dispatch-automations.mjs'));
-    assert.ok(e.includes("import { sendSlackToOrg } from './send-slack.mjs';"));
+    assert.ok(e.includes("import { sendSlackToOrg, slackTemplates } from './send-slack.mjs';"));
     assert.ok(e.includes("        case 'send_slack': {"));
-    assert.ok(e.includes("            const text = renderMerge(String(p.message || '').trim() || `Automation: ${eventSubject(data) || triggerEvent}`, data);"), 'merge fields render; a blank message still says what fired');
-    assert.ok(e.includes('            const posted = await sendSlackToOrg(orgId, { text });'), 'no alert type: not gated by a pipeline-alert switch the Admin may have off; the webhook and the master switch still gate');
+    assert.ok(e.includes("            const message = renderMerge(String(p.message || '').trim() || `Automation: ${eventSubject(data) || triggerEvent}`, data);"), 'merge fields render; a blank message still says what fired');
+    assert.ok(e.includes('            const posted = await sendSlackToOrg(orgId, slackTemplates.automation({ message, ruleName: rule.name, triggerLabel: triggerOf(triggerEvent)?.label || triggerEvent, subject: eventSubject(data) }));'), 'no alert type: not gated by a pipeline-alert switch the Admin may have off; the webhook and the master switch still gate (Block Kit since §0.132)');
     assert.ok(e.includes("            return posted ? { type: 'send_slack', status: 'ok' } : { type: 'send_slack', status: 'skipped', reason: 'Slack is not connected for this workspace' };"), 'an unconnected Slack is a skip that says why');
     const s = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
     assert.ok(s.includes("    { value:'send_slack',   label:'Post to Slack',     icon:'💬' },"));
@@ -387,4 +388,70 @@ test('an existing automation can be EDITED — the same modal seeded from the ru
     const fn = code(read('netlify/functions/automations.mjs'));
     for (const k of ['name', 'triggerEvent', 'conditions', 'actions']) assert.ok(fn.includes(`if (data.${k}`), `PUT applies ${k}`);
     assert.ok(fn.includes('.where(and(eq(automations.id, data.id), eq(automations.orgId, orgId)))'), 'org-scoped');
+});
+
+// ── §0.132: task.overdue, Slack blocks ───────────────────────────────────────
+
+test('task.overdue: the payload carries the due date, the priority and the day count; the condition builder offers them', () => {
+    const keys = conditionFields('task.overdue').map(f => f.key);
+    for (const k of ['title', 'type', 'priority', 'assigned_to', 'due_date', 'opportunity_id', 'days_overdue']) assert.ok(keys.includes(k), k);
+    assert.ok(conditionFields('task.completed').map(f => f.key).includes('due_date'), 'a completed task carries its due date too');
+    const t = taskEventData({ id: 't1', title: 'Call', priority: 'High', assignedTo: 'Karen Rep', dueDate: '2026-09-10', opportunityId: 'o1' }, { days_overdue: 4 });
+    assert.equal(t.due_date, '2026-09-10'); assert.equal(t.priority, 'High'); assert.equal(t.days_overdue, 4);
+    for (const f of conditionFields('task.overdue')) assert.ok(f.key in t, f.key);
+    assert.equal(renderMerge('{{title}} is {{days_overdue}}d overdue (due {{due_date}})', t), 'Call is 4d overdue (due 2026-09-10)');
+    const follow = taskFromAction({ params: { title: 'Chase {{title}}' } }, 'task.overdue', t, { now: new Date('2026-09-14T15:00:00Z') });
+    assert.equal(follow.opportunityId, 'o1', 'a task created from an overdue task links the same deal');
+    assert.equal(follow.assignedTo, 'Karen Rep', 'and goes to the same assignee by default');
+});
+
+test('the hourly job scans overdue tasks for orgs that have a rule, at the assignee\'s alert hour, once per task per week — and nothing else fires for it', () => {
+    const s = code(read('netlify/functions/pipeline-alerts.mjs'));
+    assert.ok(s.includes('dispatchServicePlans, tasks, automations } from'), 'the tasks and automations tables are read');
+    const gate = s.indexOf("                .where(and(eq(automations.triggerEvent, 'task.overdue'), eq(automations.active, true)));");
+    assert.ok(gate > 0, 'only orgs with an active task.overdue rule are scanned');
+    assert.ok(s.includes('                    if (!orgsWithRule.has(task.orgId)) continue;'));
+    assert.ok(s.includes("                    if (task.completed || task.status === 'Completed') continue;"), 'open tasks only');
+    assert.ok(s.includes('                    if (!task.dueDate || task.dueDate >= todayStr) continue;'), 'past the due date only');
+    assert.ok(s.includes('                    if (assignee.orgId !== task.orgId) continue;'), 'cross-tenant: the assignee is THIS org\'s user');
+    assert.ok(s.includes('                    if (localHourToUtc(aAlertHour, aTz) !== nowHour) continue;'), 'at the assignee\'s alert hour');
+    const dedup = s.indexOf("                    if (await wasRecentlyAlerted(task.orgId, assignee.name, task.id, 'taskOverdue')) { skipped++; continue; }");
+    const log   = s.indexOf("                        await logAlert(task.orgId, assignee.name, 'taskOverdue',");
+    const fire  = s.indexOf("                        await dispatchAutomations(task.orgId, 'task.overdue', taskEventData(task, { days_overdue: daysOverdue }));");
+    assert.ok(gate < dedup && dedup < log && log < fire, 'gate → dedup → ledger → the rule');
+    assert.ok(s.includes('                    const daysOverdue = daysBetween(task.dueDate, todayStr);'), 'days overdue = today minus the due date');
+    const section = s.slice(gate, s.indexOf('        let renewalsSent = 0;', gate));   // comments are stripped: end at the renewals' first code line
+    assert.ok(section.length > 500 && section.length < 4000, 'the task section is bounded');
+    assert.ok(!/sendEmail|sendSms|trySendSms|sendSlackToOrg/.test(section), 'no email, SMS or Slack of its own — the rule is the switch');
+    assert.equal((s.match(/'task\.overdue'/g) || []).length, 2, 'the rule read and the fire, nothing else');
+});
+
+test('automationSlackMessage: the rendered message is the section, the context names the rule / trigger / record, the button opens the app; text stays the plain message; mrkdwn is escaped', () => {
+    const m = automationSlackMessage({ message: 'Acme <b> & Co has been silent 16 days', ruleName: 'Silent → flag', triggerLabel: 'Deal gone silent (no activity for 14 days)', subject: 'Acme — HVAC', appUrl: 'https://app.example' });
+    assert.equal(m.text, 'Acme <b> & Co has been silent 16 days', 'the notification preview is the plain message');
+    assert.equal(m.blocks.length, 3);
+    assert.deepEqual(m.blocks[0], { type: 'section', text: { type: 'mrkdwn', text: 'Acme &lt;b&gt; &amp; Co has been silent 16 days' } });
+    assert.equal(m.blocks[1].type, 'context');
+    assert.equal(m.blocks[1].elements[0].text, 'Automation: *Silent → flag* · Deal gone silent (no activity for 14 days) · Acme — HVAC');
+    assert.equal(m.blocks[2].type, 'actions');
+    assert.equal(m.blocks[2].elements[0].url, 'https://app.example');
+    const bare = automationSlackMessage({ message: '' });
+    assert.equal(bare.text, 'Automation fired');
+    assert.equal(bare.blocks.length, 2, 'no app url, no button');
+    assert.equal(bare.blocks[1].elements[0].text, 'Automation');
+});
+
+test('the engine posts the Block Kit shape through the send-slack template, with the rule\'s name and the trigger\'s label; the panel says how Tasks triggers fire', () => {
+    const s = code(read('netlify/functions/dispatch-automations.mjs'));
+    assert.ok(s.includes("import { sendSlackToOrg, slackTemplates } from './send-slack.mjs';"));
+    assert.ok(s.includes('const executeAction = async (action, orgId, triggerEvent, data, rule = {}) => {'), 'the rule reaches the action');
+    assert.ok(s.includes('                        const result = await executeAction(action, orgId, triggerEvent, payload, rule);'));
+    assert.ok(s.includes('            const posted = await sendSlackToOrg(orgId, slackTemplates.automation({ message, ruleName: rule.name, triggerLabel: triggerOf(triggerEvent)?.label || triggerEvent, subject: eventSubject(data) }));'), 'one line: the rule\'s name, the trigger\'s label, the record — and NO third argument (an alert type would gate it)');
+    assert.ok(!s.includes('await sendSlackToOrg(orgId, { text });'), 'REGRESSION: the plain-text post is gone');
+    const slack = code(read('netlify/functions/send-slack.mjs'));
+    assert.ok(slack.includes("import { automationSlackMessage } from '../../src/utils/automationEvents.js';"));
+    assert.ok(slack.includes('        automationSlackMessage({ message, ruleName, triggerLabel, subject, appUrl: APP_URL }),'), 'the template delegates to the pure helper with the app url');
+    const panel = code(read('src/Tabs/settings/integrations/AutomationsDetail.jsx'));
+    assert.ok(panel.includes("                            {group === 'Tasks' && ("), 'the Tasks group says how its triggers fire');
+    assert.ok(panel.includes('Task overdue is checked every hour: a rule fires once per task per week, at the assignee\'s alert hour, for an open task whose due date has passed.'));
 });

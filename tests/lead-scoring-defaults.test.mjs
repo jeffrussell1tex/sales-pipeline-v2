@@ -55,7 +55,7 @@ test('decided leads are Converted or Dead — what the predictive model trains o
 
 test('the Settings panel imports the shared defaults and keeps no mirror; Reset uses them; the readiness line counts decided leads', () => {
     const panel = code(read('src/Tabs/settings/salesProcess/LeadScoringDetail.jsx'));
-    assert.ok(panel.includes("import { DEFAULT_LEAD_SCORING, isDecidedLead } from '../../../utils/leadScoringDefaults.js';"));
+    assert.ok(panel.includes("import { DEFAULT_LEAD_SCORING, isDecidedLead, trainNowMessage } from '../../../utils/leadScoringDefaults.js';"), 'the defaults, the decided test and the Train-now wording (§0.132) all come from the one pure module');
     assert.ok(!panel.includes('const DEFAULT_LEAD_SCORING = {'), 'the drifted mirror is gone');
     assert.ok(!panel.includes("value: ['Website','Webinar','LinkedIn'], points: 10"), 'no stale rule literal survives');
     assert.ok(panel.includes('    const handleReset  = () => { setCfg(JSON.parse(JSON.stringify(DEFAULT_LEAD_SCORING))); setDirty(true); };'), 'Reset restores the shared defaults — ten engagement rules');
