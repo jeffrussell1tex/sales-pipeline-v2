@@ -124,9 +124,11 @@ export default function DocumentsTab() {
     };
 
     return (
-        <div style={{ padding: '1.5rem', fontFamily: T.sans }}>
+        <div className="tab-page" style={{ gap: 0, fontFamily: T.sans }}>
             {/* Header — the same title block every tab uses (Jeff, 14 Sep): the serif
-                title, the counts in the caption line; full width like the other tabs. */}
+                title, the counts in the caption line; full width like the other tabs.
+                `.tab-page` gives the same gutter as every tab at every width (it shrinks
+                under 640px); its column gap is zeroed — this page spaces itself. */}
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', paddingBottom: 14 }}>
                 <div>
                     <div style={{ fontSize: 28, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 5 }}>Documents</div>

@@ -242,9 +242,11 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const winRate = (wonOpps.length + lostOpps.length) > 0 ? (wonOpps.length / (wonOpps.length + lostOpps.length) * 100) : 0;
 
                 return (
-                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.5rem', boxSizing: 'border-box' }}>
-                        {/* The page carries the same 1.5rem gutter as every other tab (Jeff, 14 Sep:
-                            the title sat against the header band and left of the other tabs'). */}
+                    <div className="tab-page" style={{ gap: 0, display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
+                        {/* `.tab-page` gives this page the same gutter as every other tab at every
+                            width (Jeff, 14 Sep: the title sat against the header band and left of
+                            the other tabs'); its column gap is zeroed — the sub-tab nav and the
+                            panels space themselves. */}
 
                         {/* ── Page header — the title block every tab uses ── */}
                         <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:14, fontFamily:T.sans }}>
