@@ -242,13 +242,15 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const winRate = (wonOpps.length + lostOpps.length) > 0 ? (wonOpps.length / (wonOpps.length + lostOpps.length) * 100) : 0;
 
                 return (
-                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.5rem', boxSizing: 'border-box' }}>
+                        {/* The page carries the same 1.5rem gutter as every other tab (Jeff, 14 Sep:
+                            the title sat against the header band and left of the other tabs'). */}
 
-                        {/* ── Page header — V1 serif italic pattern ── */}
-                        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:12, fontFamily:'"Plus Jakarta Sans", system-ui, sans-serif' }}>
+                        {/* ── Page header — the title block every tab uses ── */}
+                        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:14, fontFamily:T.sans }}>
                             <div>
-                                <div style={{ fontSize:28, fontFamily:'Georgia, serif', fontStyle:'italic', fontWeight:300, letterSpacing:-0.8, color:'#2a2622', lineHeight:1, marginBottom:5 }}>Reports</div>
-                                <div style={{ fontSize:12, color:'#8a8378' }}>Pipeline performance and revenue insights</div>
+                                <div style={{ fontSize:28, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, letterSpacing:-0.8, color:T.ink, lineHeight:1, marginBottom:5 }}>Reports</div>
+                                <div style={{ fontSize:12, color:T.inkMuted }}>Pipeline performance and revenue insights</div>
                             </div>
                         </div>
 

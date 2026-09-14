@@ -1262,13 +1262,16 @@ export default function TasksTab() {
             {/* ── Page header — Slim variant ── */}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, paddingBottom: 14 }}>
                 <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: T.inkMuted, marginBottom: 3, fontFamily: T.sans }}>
-                        Tasks · Today is {todayDisplay}
-                    </div>
-                    <div style={{ fontSize: 28, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1 }}>
+                    {/* The page title, then the date, then the counts — the same title block
+                        every tab uses (Jeff, 14 Sep: the date "moved under the Tasks label
+                        and above the 0 due today"). */}
+                    <div style={{ fontSize: 28, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 5 }}>
                         Tasks
                     </div>
-                    <div style={{ fontSize: 12, color: T.inkMid, marginTop: 6, display: 'flex', gap: 14, fontFamily: T.sans }}>
+                    <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>
+                        Today is {todayDisplay}
+                    </div>
+                    <div style={{ fontSize: 12, color: T.inkMid, marginTop: 4, display: 'flex', gap: 14, fontFamily: T.sans }}>
                         {headerCounts.overdue > 0 && <span><span style={{ color: T.danger, fontWeight: 700 }}>{headerCounts.overdue}</span> overdue</span>}
                         <span><span style={{ color: T.ink, fontWeight: 700 }}>{headerCounts.dueToday}</span> due today</span>
                         <span style={{ color: T.inkMuted }}>{headerCounts.completed} done this week</span>

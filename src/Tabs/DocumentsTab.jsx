@@ -124,14 +124,17 @@ export default function DocumentsTab() {
     };
 
     return (
-        <div style={{ padding: '20px 28px', fontFamily: T.sans, maxWidth: 1280, margin: '0 auto' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18 }}>
+        <div style={{ padding: '1.5rem', fontFamily: T.sans }}>
+            {/* Header — the same title block every tab uses (Jeff, 14 Sep): the serif
+                title, the counts in the caption line; full width like the other tabs. */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', paddingBottom: 14 }}>
                 <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                        Documents · {documents.length} files · {fmtSize(totalSize)}
+                    <div style={{ fontSize: 28, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 5 }}>Documents</div>
+                    <div style={{ fontSize: 12, color: T.inkMuted }}>
+                        <span style={{ fontWeight: 600, color: T.ink }}>{documents.length}</span> {documents.length === 1 ? 'file' : 'files'}
+                        <span style={{ margin: '0 7px', color: T.border }}>·</span>
+                        <span style={{ fontWeight: 600, color: T.ink }}>{fmtSize(totalSize)}</span>
                     </div>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: T.ink, marginTop: 2 }}>Documents</div>
                 </div>
                 <button onClick={openUpload}
                     style={{ background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>

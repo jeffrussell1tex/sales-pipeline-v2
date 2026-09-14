@@ -17,11 +17,13 @@ export default function SettingsTab() {
         <div className="tab-page" style={{ fontFamily:T.sans }}>
             {/* Page header */}
             <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16 }}>
-                <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
-                    <div style={{ fontSize:26, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>
+                {/* The same title block every tab uses (Jeff, 14 Sep) — the serif title,
+                    the caption line; the gold rule stays on the panel headings only. */}
+                <div>
+                    <div style={{ fontSize:28, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, letterSpacing:-0.8, color:T.ink, lineHeight:1, marginBottom:5 }}>
                         Settings
                     </div>
-                    <div style={{ fontSize:13, color:T.inkMid, marginTop:4, fontFamily:T.sans }}>
+                    <div style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>
                         Workspace admin console · manage users, pipelines, security, and integrations
                     </div>
                 </div>

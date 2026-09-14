@@ -5643,11 +5643,12 @@ export default function DispatchTab() {
     if (isTech) {
         return (
             <div className="tab-page" style={{ background: T.bg, minHeight: '100%' }}>
-                <div style={{ padding: '4px 0 14px' }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, letterSpacing: 1,
-                        textTransform: 'uppercase', fontFamily: T.sans }}>Dispatch</div>
-                    <div style={{ fontSize: 24, fontStyle: 'italic', fontWeight: 300, color: T.ink, fontFamily: T.serif }}>
-                        My jobs
+                <div style={{ padding: '0 0 14px' }}>
+                    <div style={{ fontSize: 28, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 5 }}>
+                        Dispatch
+                    </div>
+                    <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>
+                        <span style={{ fontWeight: 600, color: T.ink }}>My jobs</span>
                     </div>
                 </div>
                 <TechnicianView
@@ -5666,15 +5667,22 @@ export default function DispatchTab() {
         <div ref={pageRef} className="tab-page" style={{ fontFamily: T.sans, display: 'flex', flexDirection: 'column',
             height: pageTop != null ? `calc(100vh - ${pageTop}px)` : '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
             {/* Page header */}
+            {/* The same title block every tab uses (Jeff, 14 Sep): the tab's name in the
+                serif, the view's own label folded into the caption line below it. */}
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-                padding: '14px 20px 14px', borderBottom: `1px solid ${T.border}`, background: T.bg, flexShrink: 0 }}>
-                <div style={{ borderLeft: `3px solid ${T.goldInk}`, paddingLeft: 10 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3 }}>DISPATCH</div>
-                    <div style={{ fontSize: 24, color: T.ink, letterSpacing: -0.3, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300 }}>
-                        {view === 'board' ? boardRangeLabel : view === 'queue' ? 'Jobs to schedule' : view === 'techs' ? `${techsRaw.length} technician${techsRaw.length === 1 ? '' : 's'}` : `${customers.length} dispatch customer${customers.length === 1 ? '' : 's'}`}
+                padding: '0 0 14px', flexShrink: 0 }}>
+                <div>
+                    <div style={{ fontSize: 28, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 5 }}>
+                        Dispatch
                     </div>
-                    <div style={{ fontSize: 13, color: T.inkMid, marginTop: 4, display: 'flex', gap: 10, alignItems: 'center' }}>
-                        <span>{techs.length} techs available · {jobs.length} jobs</span>
+                    <div style={{ fontSize: 12, color: T.inkMuted, display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <span>
+                            <span style={{ fontWeight: 600, color: T.ink }}>
+                                {view === 'board' ? boardRangeLabel : view === 'queue' ? 'Jobs to schedule' : view === 'techs' ? `${techsRaw.length} technician${techsRaw.length === 1 ? '' : 's'}` : `${customers.length} dispatch customer${customers.length === 1 ? '' : 's'}`}
+                            </span>
+                            <span style={{ margin: '0 7px', color: T.border }}>·</span>
+                            {techs.length} techs available · {jobs.length} jobs
+                        </span>
                         {urgentUnassigned > 0 && <>
                             <span style={{ color: T.inkMuted }}>•</span>
                             <span style={{ color: T.warn, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
