@@ -3,12 +3,14 @@
  * (state §0.135; Jeff: "Saved reports: sharing, scheduled email or Slack
  * delivery, pin to dashboard").
  *
- * Runs every hour (netlify.toml), wrapped in the heartbeat like every other
- * scheduled function — so only the site whose JOBS_ENABLED is "true" runs it,
- * and the Jobs tile says when it last did. For every saved report whose
- * config.delivery is enabled and DUE at this hour in its own timezone
- * (src/utils/reportDelivery.js decides; a send inside the cadence's window is
- * never repeated), the report is RUN on the server with the same pure engine
+ * Runs every five minutes (netlify.toml; hourly until §0.140, when the time
+ * became any minute), wrapped in the heartbeat like every other scheduled
+ * function — so only the site whose JOBS_ENABLED is "true" runs it, and the
+ * Jobs tile says when it last did. For every saved report whose
+ * config.delivery is enabled and DUE at this run in its own timezone
+ * (src/utils/reportDelivery.js decides: from the scheduled minute for a short
+ * window; a send inside the cadence's window is never repeated), the report
+ * is RUN on the server with the same pure engine
  * the Reports tab uses (src/utils/reportQuery.js) over the OWNER's read of the
  * org — the whole org when the owner's role can see all (the server's rule for
  * a Manager, CLAUDE.md), else the owner's own rows — and sent: by email to the

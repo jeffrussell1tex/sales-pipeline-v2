@@ -25,7 +25,7 @@ import ReportChart from '../components/ReportChart.jsx';
 import { useAuth } from '@clerk/clerk-react';
 // A saved report's delivery schedule — the shape the endpoint stores and the
 // hourly job reads (state §0.135) — and the words for it on the card.
-import { DELIVERY_CADENCES, WEEKDAYS, cleanDelivery, deliverySummary, deliveryHasChannel, isTimezone } from '../utils/reportDelivery.js';
+import { DELIVERY_CADENCES, WEEKDAYS, DELIVERY_RUN_EVERY_MIN, cleanDelivery, deliverySummary, deliveryHasChannel, isTimezone, timeLabel } from '../utils/reportDelivery.js';
 
 export default function ReportsTab({ leadsEnabled = true }) {
     const {
@@ -2247,13 +2247,17 @@ const WhereEditor = ({ source, where, onChange }) => {
 // Module scope, data as props. The draft is the stored schedule or a first one
 // (weekly, Monday 8:00 in the browser's zone, to me); Save PUTs `delivery` —
 // the endpoint validates it and keeps the job's stamps; Save & send now saves,
-// then runs the report through the same path the hourly job takes and prints
-// what went where. Slack is offered only when the workspace has it connected.
+// then runs the report through the same path the scheduled job takes and
+// prints what went where. Slack is offered only when the workspace has it
+// connected. The time is a time input, any minute (§0.140 — the job runs every
+// five minutes); it was a select of 24 hours.
 const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, note, onSave, onSendNow, onClose }) => {
     const browserTz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })();
     const [draft, setDraft] = React.useState(() => cleanDelivery(report?.config?.delivery)
-        || { enabled: true, cadence: 'weekly', hour: 8, weekday: 1, dayOfMonth: 1, timezone: browserTz, emailTo: currentUserId ? [currentUserId] : [], slack: false, lastDeliveredAt: null, lastError: null });
+        || { enabled: true, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: browserTz, emailTo: currentUserId ? [currentUserId] : [], slack: false, lastDeliveredAt: null, lastError: null });
     const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    // "HH:MM" from the input → hour and minute together (one state move, never a half-set time)
+    const setTime = (hhmm) => { const [h, m] = String(hhmm || '').split(':').map(Number); if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h, minute: m })); };
     const members = (users || []).filter(u => u.active !== false && u.id).sort((a, b) => String(a.name).localeCompare(String(b.name)));
     const toggleTo = (id) => set('emailTo', draft.emailTo.includes(id) ? draft.emailTo.filter(x => x !== id) : [...draft.emailTo, id]);
     const tzOk = isTimezone(draft.timezone);
@@ -2261,13 +2265,12 @@ const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, n
     const field = { padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontFamily: T.sans, color: T.ink, background: T.surface };
     const label = { fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans, marginBottom: 4 };
     const btn = (primary, off = false) => ({ padding: '7px 14px', borderRadius: T.r, fontSize: 12.5, fontWeight: 600, fontFamily: T.sans, cursor: busy || off ? 'default' : 'pointer', border: primary ? 'none' : `1px solid ${T.border}`, background: primary ? T.ink : 'transparent', color: primary ? T.surface : T.inkMid, opacity: busy || off ? 0.55 : 1 });
-    const hourLabel = (h) => `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? 'AM' : 'PM'}`;
     return (
         <div onClick={() => !busy && onClose()} style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.5)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div onClick={e => e.stopPropagation()} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 20, width: 540, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Schedule delivery</div>
-                    <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans, lineHeight: 1.5 }}>{report?.name} — run on the server at the hour you pick, over what you can see, and sent as a table.</div>
+                    <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans, lineHeight: 1.5 }}>{report?.name} — run on the server at the time you pick, over what you can see, and sent as a table.</div>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontFamily: T.sans, color: T.ink }}>
                     <input type="checkbox" checked={draft.enabled} onChange={e => set('enabled', e.target.checked)}/> Delivery on
@@ -2286,9 +2289,8 @@ const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, n
                             {Array.from({ length: 28 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
                         </select></div>)}
                     <div><div style={label}>At</div>
-                        <select value={draft.hour} onChange={e => set('hour', Number(e.target.value))} style={{ ...field, width: '100%' }}>
-                            {Array.from({ length: 24 }, (_, h) => h).map(h => <option key={h} value={h}>{hourLabel(h)}</option>)}
-                        </select></div>
+                        <input type="time" value={timeLabel(draft.hour, draft.minute)} onChange={e => setTime(e.target.value)} aria-label="Delivery time" style={{ ...field, width: '100%', boxSizing: 'border-box' }}/>
+                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 3 }}>Any time, to the minute — it goes out within about {DELIVERY_RUN_EVERY_MIN} minutes of it.</div></div>
                     <div><div style={label}>Time zone</div>
                         <input value={draft.timezone} onChange={e => set('timezone', e.target.value)} placeholder="America/Chicago" style={{ ...field, width: '100%', boxSizing: 'border-box', borderColor: tzOk ? T.border : T.danger }}/>
                         {!tzOk && <div style={{ fontSize: 11, color: T.danger, fontFamily: T.sans, marginTop: 3 }}>Not a time zone name (like America/Chicago, or UTC).</div>}</div>

@@ -2580,6 +2580,32 @@ const mutations = [
         "netlify/functions/report-deliveries.mjs",
         "period, from: row.filters?.from || '', to: row.filters?.to || '', where: row.filters?.where || [], limit: 200 },",
         "period, limit: 200 },"],
+
+    // ── A delivery at any minute (0.140) ─────────────────────────────────────
+    ["report delivery: the window is the rest of the day — a schedule saved at 15:00 for 08:30 fires at 15:05",
+        "src/utils/reportDelivery.js",
+        "    if (local < target || local >= target + DELIVERY_WINDOW_MIN) return { due: false, reason: `not the time (${timeLabel(clock.hour, clock.minute)} in ${d.timezone}, wants ${timeLabel(d.hour, d.minute)})` };",
+        "    if (local < target) return { due: false, reason: `not the time (${timeLabel(clock.hour, clock.minute)} in ${d.timezone}, wants ${timeLabel(d.hour, d.minute)})` };"],
+
+    ["report delivery: the minute is ignored — 08:30 fires at 08:00",
+        "src/utils/reportDelivery.js",
+        "    const target = d.hour * 60 + d.minute;",
+        "    const target = d.hour * 60;"],
+
+    ["report delivery: cleanDelivery drops the minute — every schedule is :00 again",
+        "src/utils/reportDelivery.js",
+        "        minute:     intIn(raw.minute, 0, 59, 0),",
+        "        minute:     0,"],
+
+    ["report delivery: the job is hourly again while the dialog promises the minute",
+        "netlify.toml",
+        "schedule = \"*/5 * * * *\"",
+        "schedule = \"0 * * * *\""],
+
+    ["report delivery: the dialog sets the hour and drops the minute",
+        "src/Tabs/ReportsTab.jsx",
+        "if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h, minute: m }));",
+        "if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h }));"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

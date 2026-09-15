@@ -150,8 +150,8 @@ test('a schedule is stored in its allowlisted shape; recipients outside this org
     const r = await call('PUT', ORG_A, { user: OWNER, body: { id: R_MINE, delivery: { enabled: true, cadence: 'weekly', hour: 8, weekday: 1, timezone: 'America/Chicago', emailTo: [REP_ROW, B_ROW, 'usr_nobody'], slack: false, orgId: ORG_B, lastDeliveredAt: '2020-01-01T00:00:00.000Z' } } });
     assert.equal(r.statusCode, 200);
     const d = json(r).report.config.delivery;
-    assert.deepEqual(d, { enabled: true, cadence: 'weekly', hour: 8, weekday: 1, dayOfMonth: 1, timezone: 'America/Chicago', emailTo: [REP_ROW], slack: false, lastDeliveredAt: null, lastError: null },
-        'the allowlisted shape; org B’s member and a stranger dropped; a client cannot write the job’s stamp');
+    assert.deepEqual(d, { enabled: true, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: 'America/Chicago', emailTo: [REP_ROW], slack: false, lastDeliveredAt: null, lastError: null },
+        'the allowlisted shape (the minute since §0.140, :00 when a body has none); org B’s member and a stranger dropped; a client cannot write the job’s stamp');
     // the builder saves the report in place with config: null — the schedule stays
     const saved = json(await call('PUT', ORG_A, { user: OWNER, body: { id: R_MINE, name: 'Mine', source: 'Opportunities', dims: [{ id: 'owner' }], metrics: [{ id: 'revenue' }, { id: 'deals' }], chartType: 'bar', description: null, config: null, filters: { period: 'all' } } })).report;
     assert.equal(saved.config?.delivery?.enabled, true, 'REGRESSION: a builder save must not wipe the schedule');

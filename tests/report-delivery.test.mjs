@@ -9,8 +9,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-    DELIVERY_CADENCES, WEEKDAYS, MAX_DELIVERY_ROWS, isTimezone, cleanDelivery, deliveryHasChannel, localClock, deliveryDue,
-    deliverySummary, deliveryTable, deliveryText, periodLabel, slackBlocksForReport, deliveryHtmlTable,
+    DELIVERY_CADENCES, WEEKDAYS, MAX_DELIVERY_ROWS, DELIVERY_WINDOW_MIN, DELIVERY_RUN_EVERY_MIN, isTimezone, cleanDelivery, deliveryHasChannel, localClock, deliveryDue,
+    deliverySummary, deliveryTable, deliveryText, periodLabel, slackBlocksForReport, deliveryHtmlTable, timeLabel,
 } from '../src/utils/reportDelivery.js';
 import { runReport } from '../src/utils/reportQuery.js';
 
@@ -22,11 +22,12 @@ test('cleanDelivery is an allowlist: only the schedule’s keys survive, each co
     assert.equal(cleanDelivery(null), null);
     assert.equal(cleanDelivery('weekly'), null);
     assert.equal(cleanDelivery([1]), null);
-    const d = cleanDelivery({ enabled: 'yes', cadence: 'hourly', hour: '27', weekday: 9, dayOfMonth: 31, timezone: 'Mars/Olympus', emailTo: ['usr_a', 'usr_a', 7, ' usr_b ', ''], slack: 1, orgId: 'org_B', ownerId: 'x', lastDeliveredAt: 5, lastError: 'e'.repeat(400) });
-    assert.deepEqual(d, { enabled: false, cadence: 'weekly', hour: 8, weekday: 1, dayOfMonth: 1, timezone: 'UTC', emailTo: ['usr_a', 'usr_b'], slack: false, lastDeliveredAt: null, lastError: 'e'.repeat(300) });
+    const d = cleanDelivery({ enabled: 'yes', cadence: 'hourly', hour: '27', minute: '61', weekday: 9, dayOfMonth: 31, timezone: 'Mars/Olympus', emailTo: ['usr_a', 'usr_a', 7, ' usr_b ', ''], slack: 1, orgId: 'org_B', ownerId: 'x', lastDeliveredAt: 5, lastError: 'e'.repeat(400) });
+    assert.deepEqual(d, { enabled: false, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: 'UTC', emailTo: ['usr_a', 'usr_b'], slack: false, lastDeliveredAt: null, lastError: 'e'.repeat(300) });
     assert.ok(!('orgId' in d) && !('ownerId' in d), 'a body cannot smuggle a column through the schedule');
-    const ok = cleanDelivery({ enabled: true, cadence: 'monthly', hour: 17, dayOfMonth: 15, timezone: 'America/Chicago', emailTo: ['usr_1'], slack: true, lastDeliveredAt: '2026-09-01T00:00:00.000Z' });
-    assert.equal(ok.enabled, true); assert.equal(ok.cadence, 'monthly'); assert.equal(ok.hour, 17); assert.equal(ok.dayOfMonth, 15); assert.equal(ok.timezone, 'America/Chicago'); assert.equal(ok.slack, true); assert.equal(ok.lastDeliveredAt, '2026-09-01T00:00:00.000Z');
+    const ok = cleanDelivery({ enabled: true, cadence: 'monthly', hour: 17, minute: 30, dayOfMonth: 15, timezone: 'America/Chicago', emailTo: ['usr_1'], slack: true, lastDeliveredAt: '2026-09-01T00:00:00.000Z' });
+    assert.equal(ok.enabled, true); assert.equal(ok.cadence, 'monthly'); assert.equal(ok.hour, 17); assert.equal(ok.minute, 30); assert.equal(ok.dayOfMonth, 15); assert.equal(ok.timezone, 'America/Chicago'); assert.equal(ok.slack, true); assert.equal(ok.lastDeliveredAt, '2026-09-01T00:00:00.000Z');
+    assert.equal(cleanDelivery({ enabled: true, hour: 9 }).minute, 0, 'a schedule stored before §0.140 has no minute and reads as :00');
     assert.equal(DELIVERY_CADENCES.length, 3); assert.equal(WEEKDAYS[0], 'Sunday');
     assert.ok(isTimezone('UTC') && isTimezone('Europe/London') && !isTimezone('') && !isTimezone('Nowhere/Land') && !isTimezone(5));
 });
@@ -37,21 +38,46 @@ test('a schedule with nobody to send to is not a schedule; the summary says what
     assert.equal(deliveryHasChannel(cleanDelivery({ enabled: true, emailTo: ['usr_1'] })), true);
     assert.equal(deliverySummary(null), 'Not scheduled');
     assert.equal(deliverySummary({ enabled: true, cadence: 'weekly', hour: 8, weekday: 1, timezone: 'America/Chicago', emailTo: ['a', 'b'], slack: true }), 'Every week · Monday 08:00 America/Chicago · email to 2 · Slack');
+    assert.equal(deliverySummary({ enabled: true, cadence: 'weekly', hour: 8, minute: 30, weekday: 1, timezone: 'America/Chicago', emailTo: ['a', 'b'], slack: true }), 'Every week · Monday 08:30 America/Chicago · email to 2 · Slack', 'the minute is said (§0.140)');
     assert.equal(deliverySummary({ enabled: true, cadence: 'monthly', hour: 17, dayOfMonth: 15, timezone: 'UTC' }), 'Every month · day 15 17:00 UTC · no recipients');
     assert.equal(deliverySummary({ enabled: false, cadence: 'daily', hour: 6, timezone: 'UTC', slack: true }), 'Every day · 06:00 UTC · off');
+    assert.equal(timeLabel(7, 5), '07:05'); assert.equal(timeLabel(23), '23:00');
 });
 
-test('localClock reads the wall clock in the schedule’s zone, not the server’s', () => {
+test('localClock reads the wall clock in the schedule’s zone, not the server’s — to the minute', () => {
     // 2026-09-14 13:00 UTC is a Monday: 08:00 in Chicago (CDT), 22:00 Monday in Tokyo...
     const now = new Date('2026-09-14T13:00:00Z');
-    assert.deepEqual(localClock(now, 'UTC'), { hour: 13, weekday: 1, day: 14 });
-    assert.deepEqual(localClock(now, 'America/Chicago'), { hour: 8, weekday: 1, day: 14 });
-    assert.deepEqual(localClock(now, 'Asia/Tokyo'), { hour: 22, weekday: 1, day: 14 });
+    assert.deepEqual(localClock(now, 'UTC'), { hour: 13, minute: 0, weekday: 1, day: 14 });
+    assert.deepEqual(localClock(now, 'America/Chicago'), { hour: 8, minute: 0, weekday: 1, day: 14 });
+    assert.deepEqual(localClock(now, 'Asia/Tokyo'), { hour: 22, minute: 0, weekday: 1, day: 14 });
+    assert.deepEqual(localClock(new Date('2026-09-14T13:37:00Z'), 'America/Chicago'), { hour: 8, minute: 37, weekday: 1, day: 14 });
+    assert.deepEqual(localClock(new Date('2026-09-14T13:37:00Z'), 'Asia/Kolkata'), { hour: 19, minute: 7, weekday: 1, day: 14 }, 'a half-hour zone');
     // 2026-09-14 03:00 UTC is Sunday evening in Chicago and Monday in Tokyo.
     const late = new Date('2026-09-14T03:00:00Z');
-    assert.deepEqual(localClock(late, 'America/Chicago'), { hour: 22, weekday: 0, day: 13 });
-    assert.deepEqual(localClock(late, 'Asia/Tokyo'), { hour: 12, weekday: 1, day: 14 });
+    assert.deepEqual(localClock(late, 'America/Chicago'), { hour: 22, minute: 0, weekday: 0, day: 13 });
+    assert.deepEqual(localClock(late, 'Asia/Tokyo'), { hour: 12, minute: 0, weekday: 1, day: 14 });
     assert.deepEqual(localClock(late, 'Not/AZone'), localClock(late, 'UTC'), 'an unknown zone reads as UTC, never throws');
+});
+
+test('deliveryDue (§0.140): due from the scheduled minute for a short window — not before, not the rest of the day', () => {
+    assert.equal(DELIVERY_WINDOW_MIN, 15); assert.equal(DELIVERY_RUN_EVERY_MIN, 5);
+    assert.ok(DELIVERY_WINDOW_MIN >= DELIVERY_RUN_EVERY_MIN * 2, 'a missed run has another chance');
+    const at = (iso) => new Date(iso);
+    const daily = { enabled: true, cadence: 'daily', hour: 8, minute: 30, timezone: 'America/Chicago', slack: true };
+    assert.equal(deliveryDue(daily, at('2026-09-14T13:00:00Z')).due, false, '08:00 is before 08:30');
+    assert.equal(deliveryDue(daily, at('2026-09-14T13:29:00Z')).due, false, '08:29 is before');
+    assert.equal(deliveryDue(daily, at('2026-09-14T13:30:00Z')).due, true, '08:30 on the minute');
+    assert.equal(deliveryDue(daily, at('2026-09-14T13:35:00Z')).due, true, 'the next run, 08:35');
+    assert.equal(deliveryDue(daily, at('2026-09-14T13:44:00Z')).due, true, '08:44 is the last minute of the window');
+    assert.equal(deliveryDue(daily, at('2026-09-14T13:45:00Z')).due, false, '08:45 is past it');
+    assert.equal(deliveryDue(daily, at('2026-09-14T20:02:00Z')).due, false, 'a schedule saved at 15:00 for 08:30 does NOT fire at 15:02');
+    assert.match(deliveryDue(daily, at('2026-09-14T20:02:00Z')).reason, /not the time \(15:02 in America\/Chicago, wants 08:30\)/);
+    assert.equal(deliveryDue({ ...daily, minute: 0 }, at('2026-09-14T13:07:00Z')).due, true, 'a schedule with no minute is :00 and 08:07 is inside its window');
+    assert.equal(deliveryDue(daily, at('2026-09-14T13:35:00Z'), '2026-09-14T13:30:30Z').due, false, 'sent five minutes ago: the same window');
+    assert.equal(deliveryDue(daily, at('2026-09-15T13:31:00Z'), '2026-09-14T13:30:30Z').due, true, 'the next day at 08:31: due');
+    const lateNight = { enabled: true, cadence: 'daily', hour: 23, minute: 55, timezone: 'UTC', slack: true };
+    assert.equal(deliveryDue(lateNight, at('2026-09-14T23:55:00Z')).due, true);
+    assert.equal(deliveryDue(lateNight, at('2026-09-15T00:05:00Z')).due, false, 'the window does not wrap past midnight — the 23:55 run is the one');
 });
 
 test('deliveryDue: the hour in the zone, the weekday or the day of month for the cadence, and never twice in one window', () => {
@@ -135,7 +161,7 @@ test('saved-reports: GET is own + shared (an Admin reads the org); PUT is read-t
     assert.ok(s.includes(".where(and(eq(savedReports.id, id), eq(savedReports.orgId, orgId)))\n                .returning();"), 'the update is by id AND org');
 });
 
-test('report-deliveries: hourly, heartbeat-wrapped, every read by the row’s org, the owner’s scope, the stamp by id and org', () => {
+test('report-deliveries: every five minutes (§0.140; hourly before), heartbeat-wrapped, every read by the row’s org, the owner’s scope, the stamp by id and org', () => {
     const s = code(read('netlify/functions/report-deliveries.mjs'));
     assert.ok(s.includes("export const handler = withHeartbeat('report-deliveries', run);"));
     assert.ok(s.includes('.where(and(eq(users.orgId, row.orgId), eq(users.clerkUserId, row.ownerId)));'), 'the owner on ITS org’s roster');
@@ -146,9 +172,9 @@ test('report-deliveries: hourly, heartbeat-wrapped, every read by the row’s or
     assert.ok(s.includes('.where(and(eq(savedReports.id, row.id), eq(savedReports.orgId, row.orgId)));'), 'the stamp is org-scoped');
     assert.ok(s.includes("if (d.slack) {\n        const posted = await sendSlackToOrg(row.orgId, slackBlocksForReport("), 'Slack through the org sender');
     const toml = read('netlify.toml');
-    assert.ok(toml.includes('[functions."report-deliveries"]') && /report-deliveries"\]\r?\nschedule = "0 \* \* \* \*"/.test(toml), 'scheduled hourly');
+    assert.ok(toml.includes('[functions."report-deliveries"]') && /report-deliveries"\]\r?\nschedule = "\*\/5 \* \* \* \*"/.test(toml), 'scheduled every five minutes');
     const jobs = code(read('src/utils/jobHealth.js'));
-    assert.ok(jobs.includes("Object.freeze({ job: 'report-deliveries', label: 'Report delivery',  cron: '0 * * * *', cadenceMs: 3600000 }),"), 'in the registry the Jobs tile reads');
+    assert.ok(jobs.includes("Object.freeze({ job: 'report-deliveries', label: 'Report delivery',  cron: '*/5 * * * *', cadenceMs: 300000 }),"), 'in the registry the Jobs tile reads, the same cadence');
     const email = code(read('netlify/functions/send-email.mjs'));
     assert.ok(email.includes('reportDelivery({ name, source, period, ownerName, tableHtml, count, url, cadence, trigger }) {'), 'the email template');
 });
@@ -165,6 +191,11 @@ test('the library: cards are one module-scope component; Share / Pin / Deliver /
     const s = code(read('src/Tabs/ReportsTab.jsx'));
     assert.ok(s.includes('const LibraryCard = ({ r, mayTouch, pinned, currentUser, onOpen, onPin, onShare, onDeliver, onDelete }) => {'), 'module scope, data as props');
     assert.ok(s.includes('const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, note, onSave, onSendNow, onClose }) => {'));
+    // §0.140 — the time is a time input, any minute; the 24-hour select and its label are gone
+    assert.ok(s.includes('<input type="time" value={timeLabel(draft.hour, draft.minute)} onChange={e => setTime(e.target.value)} aria-label="Delivery time"'), 'a time input');
+    assert.ok(s.includes("if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h, minute: m }));"), 'hour and minute set together, validated');
+    assert.ok(!s.includes('hourLabel') && !s.includes("Array.from({ length: 24 }, (_, h) => h)"), 'the hour select is gone');
+    assert.ok(s.includes('at the time you pick') && !s.includes('at the hour you pick'));
     assert.ok(s.includes("const mayTouch = (r) => userRole === 'Admin' || r.ownerId === clerkUserId;"), 'the owner or an Admin — the endpoint’s rule, on the card');
     assert.ok(s.includes("{mayTouch && <button onClick={stop(onShare)}") && s.includes("{mayTouch && !r.config?.templateId && <button onClick={stop(onDeliver)}"), 'Share and Deliver only for those who may; no delivery for a template');
     assert.ok(s.includes("body: JSON.stringify({ id, ...patch }) });") && s.includes('if (data.report) setSavedReportsList(prev => prev.map(r => r.id === data.report.id ? data.report : r));'), 'a partial PUT; the list adopts the server’s row');

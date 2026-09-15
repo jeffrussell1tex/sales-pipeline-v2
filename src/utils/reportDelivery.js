@@ -7,8 +7,17 @@
 //
 // The schedule lives at saved_reports.config.delivery — no new column — and is
 // an ALLOWLISTED shape (guide §18b37: configuration that drives a write is a
-// request): cadence, hour, weekday, day-of-month, timezone, the roster ids the
-// email goes to, whether Slack posts. Nothing else is stored, whatever arrives.
+// request): cadence, hour, minute, weekday, day-of-month, timezone, the roster
+// ids the email goes to, whether Slack posts. Nothing else is stored, whatever
+// arrives.
+//
+// The time is to the minute (§0.140 — Jeff: "can we make the AT a selectable
+// time where users can include any time they want"): the job runs every five
+// minutes and a delivery is due from its minute for DELIVERY_WINDOW_MIN
+// minutes — long enough for three runs to try, short enough that a schedule
+// saved at 15:00 for 08:00 does NOT fire at 15:05 (the hourly job's
+// "clock.hour === d.hour" had that property by accident; the window keeps it
+// on purpose). A schedule stored before §0.140 has no minute and reads as :00.
 import { chartData, formatMetric, formatKey, REPORT_PERIODS } from './reportQuery.js';
 
 export const DELIVERY_CADENCES = Object.freeze([
@@ -18,6 +27,8 @@ export const DELIVERY_CADENCES = Object.freeze([
 ]);
 export const WEEKDAYS = Object.freeze(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
 export const MAX_DELIVERY_ROWS = 25;   // what a Slack message and an email table carry; the app has the rest
+export const DELIVERY_WINDOW_MIN = 15; // minutes after the scheduled time during which a run may send it (three five-minute runs)
+export const DELIVERY_RUN_EVERY_MIN = 5;   // the job's cadence (netlify.toml, jobHealth.js) — the words on the dialog read it
 
 const intIn = (v, lo, hi, dflt) => { const n = Number(v); return Number.isInteger(n) && n >= lo && n <= hi ? n : dflt; };
 
@@ -40,6 +51,7 @@ export function cleanDelivery(raw) {
         enabled:    raw.enabled === true,
         cadence,
         hour:       intIn(raw.hour, 0, 23, 8),
+        minute:     intIn(raw.minute, 0, 59, 0),
         weekday:    intIn(raw.weekday, 0, 6, 1),
         dayOfMonth: intIn(raw.dayOfMonth, 1, 28, 1),
         timezone:   isTimezone(raw.timezone) ? raw.timezone : 'UTC',
@@ -56,22 +68,27 @@ export function deliveryHasChannel(d) {
     return !!d && (d.slack === true || (Array.isArray(d.emailTo) && d.emailTo.length > 0));
 }
 
-/** The local wall clock in a zone: { hour, weekday (0 = Sunday), day }. Falls back to UTC. */
+/** The local wall clock in a zone: { hour, minute, weekday (0 = Sunday), day }. Falls back to UTC. */
 export function localClock(now, timezone) {
     const d = now instanceof Date ? now : new Date(now);
     const tz = isTimezone(timezone) ? timezone : 'UTC';
-    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false, weekday: 'short', day: 'numeric' }).formatToParts(d);
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false, weekday: 'short', day: 'numeric' }).formatToParts(d);
     const get = (t) => parts.find(p => p.type === t)?.value;
     const rawHour = parseInt(get('hour'), 10);
     const hour = rawHour === 24 ? 0 : (Number.isFinite(rawHour) ? rawHour : d.getUTCHours());
+    const rawMinute = parseInt(get('minute'), 10);
+    const minute = Number.isFinite(rawMinute) ? rawMinute : d.getUTCMinutes();
     const weekday = Math.max(0, ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(get('weekday')));
     const day = parseInt(get('day'), 10) || d.getUTCDate();
-    return { hour, weekday, day };
+    return { hour, minute, weekday, day };
 }
 
+/** "08:30" for a schedule's hour and minute. */
+export const timeLabel = (hour, minute = 0) => `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+
 // The gap under which a second send in the same window is the same send: the
-// job runs hourly and Netlify's cron is not to the second, so "not within the
-// last 20 hours" is what "once a day" means here.
+// job runs every five minutes and Netlify's cron is not to the second, so
+// "not within the last 20 hours" is what "once a day" means here.
 const MIN_GAP_MS = { daily: 20 * 3600e3, weekly: 6 * 86400e3, monthly: 27 * 86400e3 };
 
 /**
@@ -84,7 +101,10 @@ export function deliveryDue(delivery, now = new Date(), lastDeliveredAt = delive
     if (!d.enabled) return { due: false, reason: 'off' };
     if (!deliveryHasChannel(d)) return { due: false, reason: 'no recipients' };
     const clock = localClock(now, d.timezone);
-    if (clock.hour !== d.hour) return { due: false, reason: `not the hour (${clock.hour} in ${d.timezone}, wants ${d.hour})` };
+    // Due from the scheduled minute for DELIVERY_WINDOW_MIN minutes — not before, not the rest of the day.
+    const target = d.hour * 60 + d.minute;
+    const local = clock.hour * 60 + clock.minute;
+    if (local < target || local >= target + DELIVERY_WINDOW_MIN) return { due: false, reason: `not the time (${timeLabel(clock.hour, clock.minute)} in ${d.timezone}, wants ${timeLabel(d.hour, d.minute)})` };
     if (d.cadence === 'weekly' && clock.weekday !== d.weekday) return { due: false, reason: `not the day (${WEEKDAYS[clock.weekday]}, wants ${WEEKDAYS[d.weekday]})` };
     if (d.cadence === 'monthly' && clock.day !== d.dayOfMonth) return { due: false, reason: `not the day of month (${clock.day}, wants ${d.dayOfMonth})` };
     const last = lastDeliveredAt ? Date.parse(lastDeliveredAt) : NaN;
@@ -93,13 +113,13 @@ export function deliveryDue(delivery, now = new Date(), lastDeliveredAt = delive
     return { due: true, reason: 'due' };
 }
 
-/** One line for the card: "Every week · Monday 08:00 America/Chicago · email to 2 · Slack". */
+/** One line for the card: "Every week · Monday 08:30 America/Chicago · email to 2 · Slack". */
 export function deliverySummary(delivery) {
     const d = cleanDelivery(delivery);
     if (!d) return 'Not scheduled';
     const cadence = DELIVERY_CADENCES.find(c => c.id === d.cadence)?.label || d.cadence;
     const when = d.cadence === 'weekly' ? `${WEEKDAYS[d.weekday]} ` : d.cadence === 'monthly' ? `day ${d.dayOfMonth} ` : '';
-    const hour = `${String(d.hour).padStart(2, '0')}:00`;
+    const hour = timeLabel(d.hour, d.minute);
     const to = [];
     if (d.emailTo.length) to.push(`email to ${d.emailTo.length}`);
     if (d.slack) to.push('Slack');
