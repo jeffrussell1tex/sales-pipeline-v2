@@ -23,7 +23,8 @@ test('cleanDelivery is an allowlist: only the schedule’s keys survive, each co
     assert.equal(cleanDelivery('weekly'), null);
     assert.equal(cleanDelivery([1]), null);
     const d = cleanDelivery({ enabled: 'yes', cadence: 'hourly', hour: '27', minute: '61', weekday: 9, dayOfMonth: 31, timezone: 'Mars/Olympus', emailTo: ['usr_a', 'usr_a', 7, ' usr_b ', ''], slack: 1, orgId: 'org_B', ownerId: 'x', lastDeliveredAt: 5, lastError: 'e'.repeat(400) });
-    assert.deepEqual(d, { enabled: false, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: 'UTC', emailTo: ['usr_a', 'usr_b'], slack: false, lastDeliveredAt: null, lastError: 'e'.repeat(300) });
+    assert.deepEqual(d, { enabled: false, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: 'UTC', emailTo: ['usr_a', 'usr_b'], slack: false, lastDeliveredAt: null, lastSentAt: null, lastError: 'e'.repeat(300) });
+    assert.equal(cleanDelivery({ lastSentAt: '2026-09-15T16:29:37.692Z', lastDeliveredAt: 7 }).lastSentAt, '2026-09-15T16:29:37.692Z', 'lastSentAt is a stamp of its own (any send); a non-string lastDeliveredAt reads as null');
     assert.ok(!('orgId' in d) && !('ownerId' in d), 'a body cannot smuggle a column through the schedule');
     const ok = cleanDelivery({ enabled: true, cadence: 'monthly', hour: 17, minute: 30, dayOfMonth: 15, timezone: 'America/Chicago', emailTo: ['usr_1'], slack: true, lastDeliveredAt: '2026-09-01T00:00:00.000Z' });
     assert.equal(ok.enabled, true); assert.equal(ok.cadence, 'monthly'); assert.equal(ok.hour, 17); assert.equal(ok.minute, 30); assert.equal(ok.dayOfMonth, 15); assert.equal(ok.timezone, 'America/Chicago'); assert.equal(ok.slack, true); assert.equal(ok.lastDeliveredAt, '2026-09-01T00:00:00.000Z');
@@ -155,7 +156,7 @@ test('saved-reports: GET is own + shared (an Admin reads the org); PUT is read-t
     assert.ok(s.includes('config:    configFor(data.config, existing.config, delivery),'));
     assert.ok(s.includes('const d = cleanDelivery(bodyDelivery);'), 'the schedule is the allowlisted shape');
     assert.ok(s.includes('const roster = await db.select({ id: users.id }).from(users).where(eq(users.orgId, orgId));') && s.includes('d.emailTo = d.emailTo.filter(id => ids.has(id));'), 'recipients: this org’s roster only');
-    assert.ok(s.includes('d.lastDeliveredAt = prior?.lastDeliveredAt ?? null;'), 'the job’s stamp survives a client save');
+    assert.ok(s.includes('d.lastDeliveredAt = prior?.lastDeliveredAt ?? null;') && s.includes('d.lastSentAt      = prior?.lastSentAt ?? null;'), 'the job’s stamps survive a client save');
     assert.ok(s.includes("if (event.httpMethod === 'POST' && params.action === 'deliver') {") && s.includes("const result = await deliverReport(row, { now: new Date(), trigger: 'manual' });"), 'Send now is the job’s own path');
     assert.ok(!s.includes('onConflictDoUpdate'), 'no upsert on PUT any more');
     assert.ok(s.includes(".where(and(eq(savedReports.id, id), eq(savedReports.orgId, orgId)))\n                .returning();"), 'the update is by id AND org');
@@ -169,6 +170,9 @@ test('report-deliveries: every five minutes (§0.140; hourly before), heartbeat-
     assert.ok(s.includes('const all = canSeeAll(owner?.role);'), 'the server’s rule: a Manager sees the org');
     assert.ok(s.includes(': db.select().from(table).where(and(eq(table.orgId, orgId), eq(table.ownerId, owner.id))));'), 'a rep’s report runs over the rep’s rows');
     assert.ok(s.includes("const { due: isDue } = deliveryDue(d, now);"), 'the pure module decides what is due');
+    // A Send now is not the scheduled delivery: it stamps lastSentAt only, so the day's schedule still fires
+    // (observed on prod, 15 Sep: an 11:29 Send now made a 12:00 daily "already delivered this window").
+    assert.ok(s.includes("        lastSentAt:      delivered ? now.toISOString() : d.lastSentAt,\n        lastDeliveredAt: delivered && trigger === 'schedule' ? now.toISOString() : d.lastDeliveredAt,"), 'only a scheduled send moves the dedup key');
     assert.ok(s.includes('.where(and(eq(savedReports.id, row.id), eq(savedReports.orgId, row.orgId)));'), 'the stamp is org-scoped');
     assert.ok(s.includes("if (d.slack) {\n        const posted = await sendSlackToOrg(row.orgId, slackBlocksForReport("), 'Slack through the org sender');
     const toml = read('netlify.toml');

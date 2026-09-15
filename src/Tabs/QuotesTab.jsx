@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import { T } from '../tokens.js';
+import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
 
 // ─── Design tokens ────────────────────────────────────────────
 
@@ -284,14 +285,13 @@ const QuotePDFPreview = ({ quote, opp, products }) => {
 };
 
 // ─── Template picker modal ────────────────────────────────────
-const TemplatePickerModal = ({ opp, products, onPick, onClose }) => {
+// The org's saved templates that can START a quote (usableQuoteTemplates —
+// state §0.142), or ONE placeholder saying where templates come from. This
+// modal drew four invented cards ("SMB Starter" … with made-up win rates) and
+// the parent ignored the pick; Jeff: "It looks to me like all the templates
+// are fake place holders … remove the fake ones and just add a place holder".
+const TemplatePickerModal = ({ opp, templates, onPick, onClose }) => {
     const [selected, setSelected] = useState(null);
-    const templates = useMemo(() => [
-        { id: 'smb',    name: 'SMB Starter',     desc: 'Core + Pipeline + Reports + Basic onboarding. 10–50 seats.', productIds: (products || []).filter(p => ['platform', 'modules'].includes(p.category)).slice(0, 4).map(p => p.id), winRate: 0.48 },
-        { id: 'growth', name: 'Growth Package',  desc: 'Full core modules + white-glove services. 50–200 seats.',   productIds: (products || []).filter(p => ['platform', 'modules', 'services'].includes(p.category)).slice(0, 6).map(p => p.id), winRate: 0.44 },
-        { id: 'ent',    name: 'Enterprise',      desc: 'Premium stack + dedicated CSM. 200+ seats, multi-year.',    productIds: (products || []).slice(0, 8).map(p => p.id), winRate: 0.57 },
-        { id: 'trial',  name: 'Trial → Paid',    desc: 'Minimal Core + basic onboarding. Conversion template.',     productIds: (products || []).slice(0, 2).map(p => p.id), winRate: 0.52 },
-    ], [products]);
 
     return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(26,22,18,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }} onClick={onClose}>
@@ -307,6 +307,11 @@ const TemplatePickerModal = ({ opp, products, onPick, onClose }) => {
                     </div>
                 </div>
                 <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, overflowY: 'auto' }}>
+                    {templates.length === 0 && (
+                        <div style={{ gridColumn: '1 / -1', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r + 1, padding: '14px 16px', fontSize: 12, color: T.inkMid, lineHeight: 1.5, fontFamily: T.sans }}>
+                            {NO_TEMPLATES_NOTE}
+                        </div>
+                    )}
                     {templates.map(t => {
                         const isSel = selected === t.id;
                         return (
@@ -315,15 +320,15 @@ const TemplatePickerModal = ({ opp, products, onPick, onClose }) => {
                                 <div style={{ fontSize: 14, fontWeight: 600, color: T.ink, marginBottom: 4, fontFamily: T.sans }}>{t.name}</div>
                                 <div style={{ fontSize: 11.5, color: T.inkMid, lineHeight: 1.45, marginBottom: 12, fontFamily: T.sans }}>{t.desc}</div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${T.border}` }}>
-                                    {(products || []).filter(p => t.productIds.includes(p.id)).slice(0, 4).map(p => (
+                                    {t.products.slice(0, 4).map(p => (
                                         <div key={p.id} style={{ fontSize: 11, color: T.inkMid, display: 'flex', alignItems: 'center', gap: 6, fontFamily: T.sans }}>
                                             <span style={{ width: 4, height: 4, borderRadius: 2, background: T.inkMuted }} />{p.name}
                                         </div>
                                     ))}
+                                    {t.products.length > 4 && <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>… and {t.products.length - 4} more</div>}
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>
-                                    <span>{Math.round(t.winRate * 100)}% avg win rate</span>
-                                    <span style={{ color: T.inkMid, fontWeight: 600 }}>{t.productIds.length} line items</span>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>
+                                    <span style={{ color: T.inkMid, fontWeight: 600 }}>{t.productIds.length} line item{t.productIds.length === 1 ? '' : 's'}</span>
                                 </div>
                             </div>
                         );
@@ -338,7 +343,7 @@ const TemplatePickerModal = ({ opp, products, onPick, onClose }) => {
                     <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>You can edit anything after the quote is created.</div>
                     <div style={{ display: 'flex', gap: 8 }}>
                         <button onClick={onClose} style={{ background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, padding: '8px 14px', fontSize: 12.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
-                        <button onClick={() => selected && onPick(selected)} disabled={!selected} style={{ background: selected ? T.ink : T.surface2, color: selected ? T.surface : T.inkMuted, border: 'none', padding: '8px 16px', fontSize: 12.5, fontWeight: 600, borderRadius: T.r, cursor: selected ? 'pointer' : 'not-allowed', fontFamily: T.sans }}>
+                        <button onClick={() => selected && onPick(selected === 'blank' ? 'blank' : templates.find(t => t.id === selected))} disabled={!selected} style={{ background: selected ? T.ink : T.surface2, color: selected ? T.surface : T.inkMuted, border: 'none', padding: '8px 16px', fontSize: 12.5, fontWeight: 600, borderRadius: T.r, cursor: selected ? 'pointer' : 'not-allowed', fontFamily: T.sans }}>
                             Create quote →
                         </button>
                     </div>
@@ -1304,7 +1309,9 @@ export default function QuotesTab() {
     };
 
     // ── Handlers ──────────────────────────────────────────────
-    const handleNewQuoteForOpp = async (oppId) => {
+    // `template` (§0.142): a usable saved template from the picker seeds the
+    // line items; null (Start from scratch, or the old callers) is a blank quote.
+    const handleNewQuoteForOpp = async (oppId, template = null) => {
         if (!canEdit) return;
         setSaving(true); setError(null);
         try {
@@ -1316,7 +1323,7 @@ export default function QuotesTab() {
                 version: 1,
                 name: (opp?.opportunityName || opp?.account || 'Quote') + ' v1',
                 opportunityId: oppId,
-                lineItems: [],
+                lineItems: template ? templateLineItems(template, products) : [],
                 status: 'Draft',
                 createdBy: currentUser,
                 paymentTerms: 'Net 30 · Annual',
@@ -1803,9 +1810,9 @@ export default function QuotesTab() {
             {tplOpp && (
                 <TemplatePickerModal
                     opp={tplOpp}
-                    products={products || []}
+                    templates={usableQuoteTemplates(settings?.quoteTemplates, products)}
                     onClose={() => setTplOpp(null)}
-                    onPick={() => { setTplOpp(null); handleNewQuoteForOpp(tplOpp.id); }}
+                    onPick={(pick) => { setTplOpp(null); handleNewQuoteForOpp(tplOpp.id, pick === 'blank' ? null : pick); }}
                 />
             )}
         </div>

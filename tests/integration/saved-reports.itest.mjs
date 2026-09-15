@@ -150,7 +150,7 @@ test('a schedule is stored in its allowlisted shape; recipients outside this org
     const r = await call('PUT', ORG_A, { user: OWNER, body: { id: R_MINE, delivery: { enabled: true, cadence: 'weekly', hour: 8, weekday: 1, timezone: 'America/Chicago', emailTo: [REP_ROW, B_ROW, 'usr_nobody'], slack: false, orgId: ORG_B, lastDeliveredAt: '2020-01-01T00:00:00.000Z' } } });
     assert.equal(r.statusCode, 200);
     const d = json(r).report.config.delivery;
-    assert.deepEqual(d, { enabled: true, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: 'America/Chicago', emailTo: [REP_ROW], slack: false, lastDeliveredAt: null, lastError: null },
+    assert.deepEqual(d, { enabled: true, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: 'America/Chicago', emailTo: [REP_ROW], slack: false, lastDeliveredAt: null, lastSentAt: null, lastError: null },
         'the allowlisted shape (the minute since §0.140, :00 when a body has none); org B’s member and a stranger dropped; a client cannot write the job’s stamp');
     // the builder saves the report in place with config: null — the schedule stays
     const saved = json(await call('PUT', ORG_A, { user: OWNER, body: { id: R_MINE, name: 'Mine', source: 'Opportunities', dims: [{ id: 'owner' }], metrics: [{ id: 'revenue' }, { id: 'deals' }], chartType: 'bar', description: null, config: null, filters: { period: 'all' } } })).report;
@@ -174,10 +174,14 @@ test('Send now runs the report over the OWNER’s read and mails the chosen memb
     assert.match(mails[0].subject, /^REPORT Mine All time 2$/);
     assert.ok(mails[0].html.includes('Owner Person') && mails[0].html.includes('$50K'), 'the owner’s deals, summed');
     assert.ok(!mails[0].html.includes('Org B Rep') && !mails[0].html.includes('Rep Person'), 'nothing of org B, nothing of another rep');
-    assert.ok(out.delivery.lastDeliveredAt, 'stamped');
+    // A Send now stamps lastSentAt and NOT lastDeliveredAt — the scheduled send's dedup key
+    // (15 Sep, prod: an 11:29 Send now made the 12:00 daily "already delivered this window").
+    assert.ok(out.delivery.lastSentAt, 'stamped as a send');
+    assert.equal(out.delivery.lastDeliveredAt, null, 'a Send now is not the scheduled delivery');
     assert.equal(out.delivery.lastError, null);
     const [row] = await db.select().from(savedReports).where(eq(savedReports.id, R_MINE));
-    assert.equal(row.config.delivery.lastDeliveredAt, out.delivery.lastDeliveredAt, 'the stamp is on the row');
+    assert.equal(row.config.delivery.lastSentAt, out.delivery.lastSentAt, 'the stamp is on the row');
+    assert.equal(row.config.delivery.lastDeliveredAt, null);
     // an Admin owner would see the whole org: the Admin's own report, sent now
     await db.insert(savedReports).values([{ id: 'rpt_itest_sr_admin', orgId: ORG_A, ownerId: ADMIN, ownerName: 'Admin Person', name: 'Org view', source: 'Opportunities', dims: [{ id: 'owner' }], metrics: [{ id: 'deals' }], chartType: 'table', filters: { period: 'all' }, config: { delivery: { enabled: true, cadence: 'daily', hour: 8, timezone: 'UTC', emailTo: [ADMIN_ROW], slack: false } }, isShared: false }]);
     mails.length = 0;

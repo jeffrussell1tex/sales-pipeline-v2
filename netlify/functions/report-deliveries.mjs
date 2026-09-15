@@ -16,7 +16,8 @@
  * a Manager, CLAUDE.md), else the owner's own rows — and sent: by email to the
  * roster members the schedule names (their addresses read from THIS org's
  * roster, never from the schedule), and/or to the workspace's Slack webhook.
- * The outcome is stamped back onto the schedule (lastDeliveredAt, lastError).
+ * The outcome is stamped back onto the schedule (lastSentAt for any send,
+ * lastDeliveredAt for a SCHEDULED one — the dedup key — and lastError).
  *
  * `deliverReport` is also what the endpoint's "Send now" calls (saved-reports
  * ?action=deliver) — one path for both, like train-lead-model and the batch.
@@ -118,7 +119,16 @@ export async function deliverReport(row, { now = new Date(), trigger = 'schedule
     }
 
     const delivered = sent.email.length > 0 || sent.slack;
-    const stamped = { ...d, lastDeliveredAt: delivered ? now.toISOString() : d.lastDeliveredAt, lastError: errors.length ? errors.join(' | ').slice(0, 300) : null };
+    // A scheduled send stamps lastDeliveredAt (the dedup key); ANY send stamps
+    // lastSentAt (the dialog's "Last sent"). A Send now must never count as the
+    // day's scheduled delivery — it did until 15 Sep and a 12:00 schedule was
+    // skipped as "already delivered this window" after an 11:29 Send now.
+    const stamped = {
+        ...d,
+        lastSentAt:      delivered ? now.toISOString() : d.lastSentAt,
+        lastDeliveredAt: delivered && trigger === 'schedule' ? now.toISOString() : d.lastDeliveredAt,
+        lastError:       errors.length ? errors.join(' | ').slice(0, 300) : null,
+    };
     await db.update(savedReports)
         .set({ config: { ...(row.config || {}), delivery: stamped }, updatedAt: new Date() })
         .where(and(eq(savedReports.id, row.id), eq(savedReports.orgId, row.orgId)));

@@ -60,6 +60,7 @@ const deliveryFor = async (bodyDelivery, existingDelivery, orgId) => {
     }
     const prior = cleanDelivery(existingDelivery);
     d.lastDeliveredAt = prior?.lastDeliveredAt ?? null;
+    d.lastSentAt      = prior?.lastSentAt ?? null;
     d.lastError       = prior?.lastError ?? null;
     return d;
 };

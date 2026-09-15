@@ -2261,7 +2261,7 @@ const WhereEditor = ({ source, where, onChange }) => {
 const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, note, onSave, onSendNow, onClose }) => {
     const browserTz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })();
     const [draft, setDraft] = React.useState(() => cleanDelivery(report?.config?.delivery)
-        || { enabled: true, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: browserTz, emailTo: currentUserId ? [currentUserId] : [], slack: false, lastDeliveredAt: null, lastError: null });
+        || { enabled: true, cadence: 'weekly', hour: 8, minute: 0, weekday: 1, dayOfMonth: 1, timezone: browserTz, emailTo: currentUserId ? [currentUserId] : [], slack: false, lastDeliveredAt: null, lastSentAt: null, lastError: null });
     const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
     // "HH:MM" from the input → hour and minute together (one state move, never a half-set time)
     const setTime = (hhmm) => { const [h, m] = String(hhmm || '').split(':').map(Number); if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h, minute: m })); };
@@ -2322,9 +2322,10 @@ const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, n
                     <input type="checkbox" checked={draft.slack} disabled={!slackConfigured} onChange={e => set('slack', e.target.checked)}/>
                     {slackConfigured ? 'Post to the workspace’s Slack channel' : 'Post to Slack — no Slack webhook is connected (Settings → Integrations → Connected apps)'}
                 </label>
-                {(draft.lastDeliveredAt || draft.lastError) && (
+                {(draft.lastSentAt || draft.lastDeliveredAt || draft.lastError) && (
                     <div style={{ fontSize: 11.5, color: draft.lastError ? T.danger : T.inkMuted, fontFamily: T.sans }}>
-                        {draft.lastDeliveredAt ? `Last sent ${new Date(draft.lastDeliveredAt).toLocaleString()}` : 'Never sent'}{draft.lastError ? ` · ${draft.lastError}` : ''}
+                        {/* Any send (a Send now included) reads as "Last sent"; the scheduled one is named when it differs. */}
+                        {(draft.lastSentAt || draft.lastDeliveredAt) ? `Last sent ${new Date(draft.lastSentAt || draft.lastDeliveredAt).toLocaleString()}` : 'Never sent'}{draft.lastDeliveredAt && draft.lastSentAt && draft.lastDeliveredAt !== draft.lastSentAt ? ` · last scheduled send ${new Date(draft.lastDeliveredAt).toLocaleString()}` : ''}{draft.lastError ? ` · ${draft.lastError}` : ''}
                     </div>
                 )}
                 {note && (

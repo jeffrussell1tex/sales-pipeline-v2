@@ -58,7 +58,13 @@ export function cleanDelivery(raw) {
         emailTo,
         slack:      raw.slack === true,
         // Stamped by the job, never by the client: kept when present, else null.
+        // lastDeliveredAt is the last SCHEDULED send — the dedup key deliveryDue
+        // reads. lastSentAt is any send, "Send now" included — the words on the
+        // dialog. They were one stamp until 15 Sep: a Send now at 11:29 marked the
+        // day's 12:00 schedule "already delivered this window" and it never went
+        // (observed on prod, Jeff: "they do not seem to be being sent").
         lastDeliveredAt: typeof raw.lastDeliveredAt === 'string' ? raw.lastDeliveredAt : null,
+        lastSentAt:      typeof raw.lastSentAt === 'string' ? raw.lastSentAt : null,
         lastError:       typeof raw.lastError === 'string' ? raw.lastError.slice(0, 300) : null,
     };
 }

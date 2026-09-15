@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -2611,6 +2611,27 @@ const mutations = [
         "src/utils/reportQuery.js",
         "const textFilters = (dims) => dims.filter(d => d.kind === 'text' || d.kind === 'stage').map(d => F(d.id, d.label, 'text', ['eq', 'ne', 'in'], textTest(d)));",
         "const textFilters = (dims) => dims.filter(d => d.kind === 'text').map(d => F(d.id, d.label, 'text', ['eq', 'ne', 'in'], textTest(d)));"],
+
+    ["report delivery: a Send now counts as the day's scheduled delivery again — the 12:00 schedule is skipped after an 11:29 Send now",
+        "netlify/functions/report-deliveries.mjs",
+        "        lastDeliveredAt: delivered && trigger === 'schedule' ? now.toISOString() : d.lastDeliveredAt,",
+        "        lastDeliveredAt: delivered ? now.toISOString() : d.lastDeliveredAt,"],
+
+    // ── The Start-quote picker: usable templates or one placeholder (0.142) ──
+    ["quote templates: a metadata-only template (no products) is offered again — a pick that seeds nothing",
+        "src/utils/quoteTemplates.js",
+        "        if (!ids.length) continue;",
+        "        if (false) continue;"],
+
+    ["quote templates: the pick is ignored again — every card makes the same blank quote",
+        "src/Tabs/QuotesTab.jsx",
+        "                lineItems: template ? templateLineItems(template, products) : [],",
+        "                lineItems: [],"],
+
+    ["quote templates: the placeholder never shows — an empty picker with only Start from scratch",
+        "src/Tabs/QuotesTab.jsx",
+        "                    {templates.length === 0 && (",
+        "                    {false && ("],
 
     // ── Claude reads report prompts when an Admin turns it on (0.141) ────────
     ["report prompt (Claude): the Admin's switch is ignored — every workspace's sentences go to Claude",
