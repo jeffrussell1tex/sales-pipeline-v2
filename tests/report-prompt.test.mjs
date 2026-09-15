@@ -239,7 +239,8 @@ test('ReportsTab: the prompt is read into the builder (every part a chip), the f
     assert.ok(s.includes("setBuilderResult(runReport({ source: src, dims, metrics, period, from, to, where, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 }));"));
     assert.ok(s.includes('<WhereEditor source={builderSource} where={builderWhere} onChange={w=>{ setBuilderWhere(w); setBuilderDirty(true); }}/>'), 'the Filters tab edits them');
     assert.ok(s.includes('<option value="custom">Custom range…</option>'), 'the custom range is offered');
-    assert.ok(s.includes("<PromptBanner interpretation={aiInterpretation} onEdit={()=>setCreateMode('picker')} onDismiss={()=>setAiInterpretation(null)}/>"));
+    assert.ok(s.includes("<PromptBanner interpretation={aiInterpretation} onEdit={()=>{ setAiPrompt(aiInterpretation.prompt); setCreateMode('picker'); }} onDismiss={()=>setAiInterpretation(null)}/>"), 'Edit prompt restores the sentence');
+    assert.ok(s.includes("        setAiPrompt('');   // the rail's Ask AI box starts empty"), 'the rail box does not carry the last prompt (observed: a second prompt typed into the old one)');
     assert.ok(s.includes("breadcrumb={editingReportId ? 'Saved report' : aiInterpretation ? 'AI-generated' : 'Blank canvas'}"));
     assert.ok(s.includes('setBuilderWhere([]);   // filters are the source’s own') || s.includes("setBuilderWhere([]);   // filters are the source's own"), 'a new source drops the old source’s filters');
 });

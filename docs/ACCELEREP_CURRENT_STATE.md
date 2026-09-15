@@ -5885,6 +5885,8 @@ at the ship.
 
 **Verified:** six gates (170 files; 93 function files), **838/838 unit**, **170/170 integration**, **529/529 mutations after a printed green baseline** (no restore residue), build guard OK 2,545 kB `index-GQgZt6NE.js`, `dist/` cleared. Browser: the handoff says what was observed. **NOT shipped.** Functions AND bundle (`report-deliveries.mjs` runs the filters) — no schema change.
 
+**The follow-up, observed in the pane (15 Sep, after §0.140).** The picker's box and the rail's "Ask AI" box share `aiPrompt`, so after a prompt was applied the rail still held the sentence and a second prompt typed there landed INSIDE the first ("Closed won revenue by iDeals stuck more than 14 days, by repndustry this year" — read, faithfully, as won + silent 14 days + revenue, a KPI card). Now `applyPrompt` clears `aiPrompt` (the rail starts empty) and the banner's "Edit prompt" restores the sentence into the picker's box before it opens. Two scans pin it. Bundle only.
+
 ### 0.140 A report delivery at any minute — a time input on the dialog, the schedule to the minute, the job every five minutes with a short due window (15 Sep, eighteenth session — Jeff, with a screenshot of the dialog: "On scheduling reports can we make the AT a selectable time where users can include any time they want")
 
 **What it was.** The delivery dialog’s "At" was a `<select>` of twenty-four hours ("8:00 AM" … "11:00 PM"); the schedule stored `hour` only; the job ran hourly (`0 * * * *`) and `deliveryDue` fired when `clock.hour === d.hour` in the schedule’s zone. Half past anything was impossible, and the words on the dialog said "at the hour you pick".

@@ -2385,6 +2385,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         setBuilderName(r.name);
         setBuilderAdvanced(true);
         setAiInterpretation({ prompt, understood: r.understood, notes: r.notes });
+        setAiPrompt('');   // the rail's Ask AI box starts empty — observed: a second prompt typed into the old sentence; Edit prompt restores it
         setBuilderResult(runReport({ ...d, limit: d.chartType === 'table' ? 200 : 12 }, builderData(), { fiscalStart }));
         setBuilderDirty(false);
         setBuilderRendered(true);
@@ -4268,7 +4269,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             const filterCount = builderWhere.length + (builderPeriod !== 'all' ? 1 : 0);
             return (
                 <div style={{ fontFamily:T.sans, color:T.ink }}>
-                    <PromptBanner interpretation={aiInterpretation} onEdit={()=>setCreateMode('picker')} onDismiss={()=>setAiInterpretation(null)}/>
+                    <PromptBanner interpretation={aiInterpretation} onEdit={()=>{ setAiPrompt(aiInterpretation.prompt); setCreateMode('picker'); }} onDismiss={()=>setAiInterpretation(null)}/>
                     <BuilderHeader title={builderName.trim() || 'Untitled report'} breadcrumb={editingReportId ? 'Saved report' : aiInterpretation ? 'AI-generated' : 'Blank canvas'}
                         onSave={()=>handleSaveReport({ id: editingReportId, name: builderName.trim() || 'Untitled report', source:builderSource, dims:builderDims, metrics:builderMetrics, chartType:builderChart, filters:{ period: builderPeriod, from: builderPeriod==='custom' ? builderFrom : '', to: builderPeriod==='custom' ? builderTo : '', where: builderWhere }, description:`${builderSource} · ${builderDims.map(d=>d.label).join(', ') || 'totals'} · ${builderMetrics.map(m=>m.label).join(', ')}${builderWhere.length ? ' · ' + builderWhere.map(w=>whereLabel(builderSource, w)).join(', ') : ''}` })}/>
 
