@@ -56,6 +56,21 @@ test('templateLineItems: the configurator’s own line-item shape, one per resol
     assert.match(NO_TEMPLATES_NOTE, /Settings → Quoting → Quote templates/);
 });
 
+test('QuotesTab: money is set in the app’s face — no dollar amount in monospace; quote numbers and SKUs may stay monospace (Jeff, 15 Sep: "make the dollar amounts be the same font as the text in the rest of the app")', () => {
+    const lines = read('src/Tabs/QuotesTab.jsx').split(/\r?\n/);
+    // A line renders money when it prints a formatted amount or a totals row's
+    // value. Its style is on that line or the one above it (the Catalog's list
+    // price is a two-line element) — the harness proved a one-line read blind.
+    const money = lines.map((l, i) => [i + 1, (lines[i - 1] || '') + '\n' + l]).filter(([, ctx]) => /\{fmtFull\(|\{fmt\(|\{r\.v\}|toLocaleString\(\)\}/.test(ctx.split('\n')[1]));
+    assert.ok(money.length >= 6, `expected the six money sites, found ${money.length}`);
+    for (const [n, ctx] of money) assert.ok(!/monospace/.test(ctx), `QuotesTab.jsx:${n} sets money in monospace: ${ctx.trim().slice(0, 160)}`);
+    // Nineteen lines print money (stat-card literals and the print template
+    // among them, which carry no style of their own); the six the batch moved
+    // off monospace name the face explicitly.
+    assert.ok(money.filter(([, ctx]) => ctx.includes('fontFamily: T.sans')).length >= 6, 'the six moved money sites name the app face explicitly');
+    assert.ok(lines.some(l => l.includes('{quote.quoteNumber}') && l.includes('monospace')), 'an identifier (the quote number) keeps the monospace face');
+});
+
 test('QuotesTab: the picker lists the org’s usable templates or ONE placeholder, never the four invented cards; the pick seeds the quote', () => {
     const s = code(read('src/Tabs/QuotesTab.jsx'));
     assert.ok(s.includes("import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';"));

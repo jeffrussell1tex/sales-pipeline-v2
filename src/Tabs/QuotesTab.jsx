@@ -250,8 +250,8 @@ const QuotePDFPreview = ({ quote, opp, products }) => {
                                 <td style={{ padding: '8px', fontSize: 12.5, color: '#2a2622', fontWeight: 500 }}>{li.productName}</td>
                                 <td style={{ padding: '8px', fontSize: 11 }}><TypeBadge type={li.productType} /></td>
                                 <td style={{ padding: '8px', fontSize: 12.5, textAlign: 'right', color: T.inkMid }}>{li.quantity || 1}</td>
-                                <td style={{ padding: '8px', fontSize: 12.5, textAlign: 'right', fontFamily: 'ui-monospace,Menlo,monospace' }}>{fmtFull(li.netPrice)}</td>
-                                <td style={{ padding: '8px', fontSize: 13, textAlign: 'right', fontFamily: 'ui-monospace,Menlo,monospace', fontWeight: 600, color: '#2a2622' }}>{fmtFull(li.lineTotal)}</td>
+                                <td style={{ padding: '8px', fontSize: 12.5, textAlign: 'right', fontFamily: T.sans }}>{fmtFull(li.netPrice)}</td>
+                                <td style={{ padding: '8px', fontSize: 13, textAlign: 'right', fontFamily: T.sans, fontWeight: 600, color: '#2a2622' }}>{fmtFull(li.lineTotal)}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -265,7 +265,7 @@ const QuotePDFPreview = ({ quote, opp, products }) => {
                         ].map(r => (
                             <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: r.bold ? '1.5px solid #2a2622' : undefined, marginTop: r.bold ? 4 : 0 }}>
                                 <span style={{ fontFamily: T.sans, fontSize: r.bold ? 13 : 11.5, fontWeight: r.bold ? 700 : 400, color: r.muted ? T.inkMid : '#2a2622' }}>{r.l}</span>
-                                <span style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: r.bold ? 14 : 11.5, fontWeight: r.bold ? 700 : 400, color: r.muted ? T.inkMid : '#2a2622' }}>{r.v}</span>
+                                <span style={{ fontFamily: T.sans, fontSize: r.bold ? 14 : 11.5, fontWeight: r.bold ? 700 : 400, color: r.muted ? T.inkMid : '#2a2622' }}>{r.v}</span>
                             </div>
                         ))}
                     </div>
@@ -436,7 +436,7 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
                                 {(Number(li.discountPct) || 0) > 0 ? `-${Number(li.discountPct)}%` : '—'}
                                 {discChg && <div style={{ fontSize: 9, color: T.inkMuted, textDecoration: 'line-through' }}>{Number(otherLi.discountPct) || 0}%</div>}
                             </div>
-                            <div style={{ textAlign: 'right', color: T.ink, fontWeight: 600, fontFamily: 'ui-monospace,Menlo,monospace' }}>{fmt(li.lineTotal)}</div>
+                            <div style={{ textAlign: 'right', color: T.ink, fontWeight: 600, fontFamily: T.sans }}>{fmt(li.lineTotal)}</div>
                         </div>
                     );
                 })}
@@ -682,7 +682,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                             ].map(r => (
                                 <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: r.bold ? 'none' : `1px solid ${T.border}`, background: r.bold ? T.surface2 : 'transparent' }}>
                                     <span style={{ fontSize: r.bold ? 13 : 11.5, fontWeight: r.bold ? 700 : 400, color: r.color || (r.muted ? T.inkMid : T.ink), fontFamily: T.sans }}>{r.l}</span>
-                                    <span style={{ fontSize: r.bold ? 15 : 12, fontWeight: r.bold ? 800 : 600, color: r.color || (r.bold ? T.ink : T.inkMid), fontFamily: 'ui-monospace,Menlo,monospace' }}>{r.v}</span>
+                                    <span style={{ fontSize: r.bold ? 15 : 12, fontWeight: r.bold ? 800 : 600, color: r.color || (r.bold ? T.ink : T.inkMid), fontFamily: T.sans }}>{r.v}</span>
                                 </div>
                             ))}
                         </div>
@@ -1008,7 +1008,8 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
                                             <div style={{ fontSize: 10.5, color: T.inkMuted, marginTop: 1, fontFamily: T.sans }}>{typeLabel}{unitLabel ? ` · ${unitLabel}` : ''}</div>
                                         </div>
                                         {/* List price */}
-                                        <div style={{ fontSize: 12, fontWeight: 600, color: prod.customPrice ? T.info : T.ink, fontFamily: 'ui-monospace,Menlo,monospace', fontStyle: prod.customPrice ? 'italic' : 'normal' }}>
+                                        {/* Money is set in the app's face, like every other tab; only identifiers (quote numbers, SKUs) stay monospace (Jeff, 15 Sep). */}
+                                        <div style={{ fontSize: 12, fontWeight: 600, color: prod.customPrice ? T.info : T.ink, fontFamily: T.sans, fontStyle: prod.customPrice ? 'italic' : 'normal' }}>
                                             {prod.customPrice ? 'Variable' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString()}
                                         </div>
                                         {/* Attach */}

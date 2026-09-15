@@ -2700,6 +2700,12 @@ const mutations = [
         "await auditAs(orgId, userId, { action: 'user.invited',",
         "void ({ action: 'user_invited',"],
 
+    // ── §0.146 money in the app's face on the Quotes tab ─────────────────────
+    ["quotes font: the catalog's list price goes back to monospace (Jeff's circled column)",
+        "src/Tabs/QuotesTab.jsx",
+        "color: prod.customPrice ? T.info : T.ink, fontFamily: T.sans, fontStyle: prod.customPrice ? 'italic' : 'normal' }}>",
+        "color: prod.customPrice ? T.info : T.ink, fontFamily: 'ui-monospace,Menlo,monospace', fontStyle: prod.customPrice ? 'italic' : 'normal' }}>"],
+
     // ── §0.145 every integration suite targets the test database ─────────────
     ["itest targets: the heartbeat suite imports db without redirecting to DATABASE_URL_TEST again (the original defect — the app database on a machine with .env)",
         "tests/integration/job-heartbeat.itest.mjs",
