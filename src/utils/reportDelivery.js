@@ -169,8 +169,14 @@ export function deliveryText(table) {
     return out.join('\n');
 }
 
-/** The period's label, from the engine's own list. */
-export function periodLabel(period) {
+/**
+ * The period's label, from the engine's own list — and a custom range as its
+ * two days ("2026-09-01 to 2026-09-15"). The first delivered custom-range
+ * report (Jeff's, 15 Sep) read "All time" in the email while its rows were
+ * the fortnight's: the label ignored the bounds the run used.
+ */
+export function periodLabel(period, from = '', to = '') {
+    if (period === 'custom') return `${from || '…'} to ${to || '…'}`;
     return REPORT_PERIODS.find(p => p.value === (period || 'all'))?.label || 'All time';
 }
 
@@ -178,15 +184,16 @@ export function periodLabel(period) {
  * Slack Block Kit for a delivered report: a header, a context line, the table
  * in a code block (Slack has no tables), a button to the app.
  */
-export function slackBlocksForReport({ name, source, period, ownerName, table, url }) {
+export function slackBlocksForReport({ name, source, period, from = '', to = '', ownerName, table, url }) {
     const text = deliveryText(table);
+    const label = periodLabel(period, from, to);
     const blocks = [
         { type: 'header', text: { type: 'plain_text', text: String(name || 'Report').slice(0, 150), emoji: false } },
-        { type: 'context', elements: [{ type: 'mrkdwn', text: `${source || 'Opportunities'} · ${periodLabel(period)}${ownerName ? ` · saved by ${ownerName}` : ''} · ${table?.count ?? 0} row${table?.count === 1 ? '' : 's'} in the period` }] },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: `${source || 'Opportunities'} · ${label}${ownerName ? ` · saved by ${ownerName}` : ''} · ${table?.count ?? 0} row${table?.count === 1 ? '' : 's'} in the period` }] },
         { type: 'section', text: { type: 'mrkdwn', text: '```' + text.slice(0, 2900) + '```' } },
     ];
     if (url) blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open in Accelerep', emoji: false }, url }] });
-    return { text: `${name || 'Report'} — ${source || 'Opportunities'} · ${periodLabel(period)}`, blocks };
+    return { text: `${name || 'Report'} — ${source || 'Opportunities'} · ${label}`, blocks };
 }
 
 const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));

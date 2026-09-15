@@ -375,5 +375,5 @@ test('Home and the delivery job run the whole saved definition — the filters a
     const home = code(read('src/Tabs/HomeTab.jsx'));
     assert.ok(home.includes("period: r.filters?.period || 'all', from: r.filters?.from || '', to: r.filters?.to || '', where: r.filters?.where || [], limit: 8 }"));
     const job = code(read('netlify/functions/report-deliveries.mjs'));
-    assert.ok(job.includes("period, from: row.filters?.from || '', to: row.filters?.to || '', where: row.filters?.where || [], limit: 200 },"));
+    assert.ok(job.includes("const from = row.filters?.from || '', to = row.filters?.to || '';") && job.includes("period, from, to, where: row.filters?.where || [], limit: 200 },"));
 });

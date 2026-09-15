@@ -90,10 +90,11 @@ export async function deliverReport(row, { now = new Date(), trigger = 'schedule
 
     const data = await loadReportData(row.orgId, owner);
     const period = row.filters?.period || 'all';
+    const from = row.filters?.from || '', to = row.filters?.to || '';
     // The whole saved definition runs — the period, its custom bounds and the
     // row filters (§0.139) — so the table sent is the picture the builder showed.
     const result = runReport(
-        { source: row.source, dims: Array.isArray(row.dims) ? row.dims : [], metrics: Array.isArray(row.metrics) ? row.metrics : [], period, from: row.filters?.from || '', to: row.filters?.to || '', where: row.filters?.where || [], limit: 200 },
+        { source: row.source, dims: Array.isArray(row.dims) ? row.dims : [], metrics: Array.isArray(row.metrics) ? row.metrics : [], period, from, to, where: row.filters?.where || [], limit: 200 },
         data, { fiscalStart: data.fiscalStart, today: now });
     const table = deliveryTable(result);
     const url = siteUrl();
@@ -105,7 +106,7 @@ export async function deliverReport(row, { now = new Date(), trigger = 'schedule
     for (const r of recipients) {
         try {
             const tpl = emailTemplates.reportDelivery({
-                name: row.name, source: row.source, period: periodLabel(period), ownerName: owner.name,
+                name: row.name, source: row.source, period: periodLabel(period, from, to), ownerName: owner.name,
                 tableHtml: deliveryHtmlTable(table), count: table.count, url, cadence: d.cadence, trigger,
             });
             await sendEmail({ to: r.email, ...tpl });
@@ -113,7 +114,7 @@ export async function deliverReport(row, { now = new Date(), trigger = 'schedule
         } catch (e) { errors.push(`email to ${r.email}: ${String(e.message || e).slice(0, 120)}`); }
     }
     if (d.slack) {
-        const posted = await sendSlackToOrg(row.orgId, slackBlocksForReport({ name: row.name, source: row.source, period, ownerName: owner.name, table, url }));
+        const posted = await sendSlackToOrg(row.orgId, slackBlocksForReport({ name: row.name, source: row.source, period, from, to, ownerName: owner.name, table, url }));
         if (posted) sent.slack = true;
         else errors.push('Slack: this workspace has no Slack webhook connected, or the post failed.');
     }

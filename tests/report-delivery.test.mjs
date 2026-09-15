@@ -129,6 +129,9 @@ test('deliveryTable / deliveryText: the engine’s result as a header, formatted
     assert.match(deliveryText(bt), /… 4 more rows in the app$/);
     assert.equal(deliveryText(deliveryTable(null)), 'Nothing in this period.');
     assert.equal(periodLabel('Q3'), 'Q3'); assert.equal(periodLabel('FY'), 'This fiscal year'); assert.equal(periodLabel(undefined), 'All time'); assert.equal(periodLabel('q3'), 'All time', 'an unknown key reads as all time, like the engine');
+    assert.equal(periodLabel('custom', '2026-09-01', '2026-09-15'), '2026-09-01 to 2026-09-15', 'a custom range is its two days — the first delivered one read "All time" (15 Sep)');
+    assert.equal(periodLabel('custom', '', '2026-09-15'), '… to 2026-09-15');
+    assert.match(slackBlocksForReport({ name: 'x', period: 'custom', from: '2026-09-01', to: '2026-09-15', table: deliveryTable(result) }).blocks[1].elements[0].text, /Opportunities · 2026-09-01 to 2026-09-15/);
 });
 
 test('slackBlocksForReport is Block Kit — a header, a context line, the table in a code block, a button to the app; the html table escapes every cell', () => {
@@ -175,6 +178,7 @@ test('report-deliveries: every five minutes (§0.140; hourly before), heartbeat-
     assert.ok(s.includes("        lastSentAt:      delivered ? now.toISOString() : d.lastSentAt,\n        lastDeliveredAt: delivered && trigger === 'schedule' ? now.toISOString() : d.lastDeliveredAt,"), 'only a scheduled send moves the dedup key');
     assert.ok(s.includes('.where(and(eq(savedReports.id, row.id), eq(savedReports.orgId, row.orgId)));'), 'the stamp is org-scoped');
     assert.ok(s.includes("if (d.slack) {\n        const posted = await sendSlackToOrg(row.orgId, slackBlocksForReport("), 'Slack through the org sender');
+    assert.ok(s.includes('period: periodLabel(period, from, to), ownerName: owner.name,') && s.includes('slackBlocksForReport({ name: row.name, source: row.source, period, from, to, ownerName: owner.name, table, url })'), 'the email and the post name the custom range the run used');
     const toml = read('netlify.toml');
     assert.ok(toml.includes('[functions."report-deliveries"]') && /report-deliveries"\]\r?\nschedule = "\*\/5 \* \* \* \*"/.test(toml), 'scheduled every five minutes');
     const jobs = code(read('src/utils/jobHealth.js'));

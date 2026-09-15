@@ -2578,7 +2578,7 @@ const mutations = [
 
     ["report filters: the delivery job runs the report without its filters — the email shows a different picture than the builder",
         "netlify/functions/report-deliveries.mjs",
-        "period, from: row.filters?.from || '', to: row.filters?.to || '', where: row.filters?.where || [], limit: 200 },",
+        "period, from, to, where: row.filters?.where || [], limit: 200 },",
         "period, limit: 200 },"],
 
     // ── A delivery at any minute (0.140) ─────────────────────────────────────
