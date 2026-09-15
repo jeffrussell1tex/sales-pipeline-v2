@@ -10,7 +10,7 @@
 // not be able to retrain the workspace's model. Never scheduled — the nightly
 // batch (score-leads-batch.mjs) is the only timed caller of scoreOrg.
 import { verifyAuth, requireRole } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 import { scoreOrg, MODEL_MIN_ROWS } from './score-leads-batch.mjs';
 
 const HEADERS = {
@@ -33,6 +33,8 @@ export const handler = async (event) => {
     try {
         const r = await scoreOrg(orgId, { force: true });
         if (r.skipped) return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: false, reason: 'scoring-off', minRows: MODEL_MIN_ROWS }) };
+        // An Admin's Train now re-scores every lead in the org (§0.143).
+        await auditAs(orgId, auth.userId, { action: 'lead_model.trained', entityType: 'lead_model', entityId: orgId, entityName: 'Lead scoring model', detail: r.modelTrained ? `trained on ${r.decided} decided leads · ${r.leadsUpdated} leads re-scored` : `not trained (${r.reason}) · ${r.leadsUpdated} leads re-scored on the rules` });
         return {
             statusCode: 200, headers: HEADERS,
             body: JSON.stringify({

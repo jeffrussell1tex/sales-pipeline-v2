@@ -21,7 +21,7 @@ import { db } from '../../db/index.js';
 import { opportunities, activities, settings } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 // The org's BYOK key, else the site's — one helper for every Anthropic call
 // (state §0.141; this file carried its own copy of the decrypt before).
 import { resolveAnthropicKey } from './_aiKey.mjs';
@@ -193,6 +193,11 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
             // Non-fatal — still return the score
         }
 
+        // The deal's data left the app for the model — the log says so, on the deal (§0.143).
+        await auditAs(orgId, auth.userId, {
+            action: 'ai.deal_scored', entityType: 'opportunity', entityId: opportunityId, entityName: opp.opportunityName || opp.account || 'Unnamed',
+            detail: `claude-haiku-4-5 · ${usingOrgKey ? 'the workspace’s key' : 'the site key'} · score ${scoreData.score} (${scoreData.verdict})`,
+        });
         return { statusCode: 200, headers, body: JSON.stringify({ ...scoreData, usingOrgKey }) };
 
     } catch (err) {

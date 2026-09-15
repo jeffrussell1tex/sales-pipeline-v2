@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { dispatchVehicles } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -98,6 +98,7 @@ export const handler = async (event) => {
             const [inserted] = await db.select().from(dispatchVehicles)
                 .where(and(eq(dispatchVehicles.id, data.id), eq(dispatchVehicles.orgId, orgId)));
 
+            await auditAs(orgId, auth.userId, { action: 'dispatch_vehicle.created', entityType: 'dispatch_vehicle', entityId: inserted.id, entityName: inserted.name, detail: [inserted.year, inserted.make, inserted.model].filter(Boolean).join(' ') || inserted.type || null });
             return { statusCode: 201, headers, body: JSON.stringify({ vehicle: normalise(inserted) }) };
         }
 
@@ -123,6 +124,7 @@ export const handler = async (event) => {
                 .where(and(eq(dispatchVehicles.id, id), eq(dispatchVehicles.orgId, orgId)));
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await auditAs(orgId, auth.userId, { action: 'dispatch_vehicle.updated', entityType: 'dispatch_vehicle', entityId: updated.id, entityName: updated.name, detail: `${updated.status || 'active'}${updated.assignedTechId ? ' · assigned' : ''}` });
             return { statusCode: 200, headers, body: JSON.stringify({ vehicle: normalise(updated) }) };
         }
 
@@ -130,8 +132,10 @@ export const handler = async (event) => {
         if (event.httpMethod === 'DELETE') {
             const id = (event.queryStringParameters || {}).id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
-            await db.delete(dispatchVehicles)
-                .where(and(eq(dispatchVehicles.id, id), eq(dispatchVehicles.orgId, orgId)));
+            const [gone] = await db.delete(dispatchVehicles)
+                .where(and(eq(dispatchVehicles.id, id), eq(dispatchVehicles.orgId, orgId)))
+                .returning({ id: dispatchVehicles.id, name: dispatchVehicles.name });
+            if (gone) await auditAs(orgId, auth.userId, { action: 'dispatch_vehicle.deleted', entityType: 'dispatch_vehicle', entityId: gone.id, entityName: gone.name, detail: null });
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }
 

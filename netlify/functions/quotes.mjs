@@ -2,7 +2,16 @@ import { db } from '../../db/index.js';
 import { quotes, opportunities, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and, desc, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, withNumberRetry } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
+
+// A status the client sets on PUT names the event (§0.143); anything else is an update.
+const QUOTE_STATUS_ACTIONS = Object.freeze({
+    'Pending Approval': 'quote.submitted',
+    Approved:           'quote.approved',
+    Rejected:           'quote.rejected',
+    Sent:               'quote.sent',
+    Accepted:           'quote.accepted',
+});
 
 const headers = {
     'Content-Type': 'application/json',
@@ -230,6 +239,10 @@ export const handler = async (event) => {
                 const quoteNumber = await resolveQuoteNumber(orgId, data);
                 return db.insert(quotes).values({ ...basePayload, quoteNumber }).returning();
             }, { label: 'quote number' });
+            await auditAs(orgId, auth.userId, {
+                action: 'quote.created', entityType: 'quote', entityId: inserted.id, entityName: inserted.name || inserted.quoteNumber,
+                detail: `${inserted.quoteNumber} v${inserted.version} · ${lineItems.length} line item${lineItems.length === 1 ? '' : 's'}`,
+            });
             return { statusCode: 201, headers, body: JSON.stringify({ quote: inserted }) };
         }
 
@@ -304,6 +317,10 @@ export const handler = async (event) => {
                     .onConflictDoUpdate({ target: quotes.id, setWhere: eq(quotes.orgId, orgId), set: payload })
                     .returning();
             }, { label: 'quote number' });
+            await auditAs(orgId, auth.userId, {
+                action: QUOTE_STATUS_ACTIONS[data.status] || 'quote.updated', entityType: 'quote', entityId: updated.id, entityName: updated.name || updated.quoteNumber,
+                detail: `${updated.quoteNumber} v${updated.version} · ${updated.status || 'Draft'}${statusUpdates.approvalTier ? ' · ' + statusUpdates.approvalTier : ''}`,
+            });
             return { statusCode: 200, headers, body: JSON.stringify({ quote: updated }) };
         }
 
@@ -313,8 +330,10 @@ export const handler = async (event) => {
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id query param required' }) };
 
-            await db.delete(quotes)
-                .where(and(eq(quotes.id, id), eq(quotes.orgId, orgId)));
+            const [gone] = await db.delete(quotes)
+                .where(and(eq(quotes.id, id), eq(quotes.orgId, orgId)))
+                .returning({ id: quotes.id, name: quotes.name, quoteNumber: quotes.quoteNumber, version: quotes.version });
+            if (gone) await auditAs(orgId, auth.userId, { action: 'quote.deleted', entityType: 'quote', entityId: gone.id, entityName: gone.name || gone.quoteNumber, detail: `${gone.quoteNumber} v${gone.version}` });
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
 

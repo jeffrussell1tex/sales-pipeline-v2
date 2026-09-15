@@ -21,8 +21,8 @@ import { db }            from '../../db/index.js';
 import { savedReports, users } from '../../db/schema.js';
 import { eq, and, or, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite, isAdmin } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
-import { cleanDelivery } from '../../src/utils/reportDelivery.js';
+import { serverErrorBody, auditAs } from './_lib.mjs';
+import { cleanDelivery, deliverySummary } from '../../src/utils/reportDelivery.js';
 import { deliverReport } from './report-deliveries.mjs';
 
 const headers = {
@@ -116,6 +116,12 @@ export const handler = async (event) => {
             if (!row) return notFound;
             if (!mayTouch(row)) return forbiddenOwner;
             const result = await deliverReport(row, { now: new Date(), trigger: 'manual' });
+            // The audit log says where it went (§0.143). The job logs its own scheduled sends.
+            const went = [...(result.sent?.email || []), ...(result.sent?.slack ? ['Slack'] : [])];
+            await auditAs(orgId, userId, {
+                action: 'saved_report.sent_now', entityType: 'saved_report', entityId: row.id, entityName: row.name,
+                detail: (went.length ? `Sent to ${went.join(', ')} — ${result.rows} rows` : `Not sent: ${(result.errors || []).join(' | ')}`).slice(0, 300),
+            });
             return { statusCode: result.ok ? 200 : 400, headers, body: JSON.stringify(result) };
         }
 
@@ -126,6 +132,10 @@ export const handler = async (event) => {
             const delivery = 'delivery' in data ? await deliveryFor(data.delivery, null, orgId) : null;
             const payload = sanitize({ ...data, orgId, ownerId: userId, config: configFor(data.config, null, delivery) });
             const [inserted] = await db.insert(savedReports).values(payload).returning();
+            await auditAs(orgId, userId, {
+                action: 'saved_report.created', entityType: 'saved_report', entityId: inserted.id, entityName: inserted.name,
+                detail: inserted.description || `${inserted.source || 'Opportunities'}${inserted.isShared ? ' · shared' : ''}`,
+            });
             return { statusCode: 201, headers, body: JSON.stringify({ report: inserted }) };
         }
 
@@ -152,6 +162,13 @@ export const handler = async (event) => {
                 .set({ ...set, updatedAt: new Date() })
                 .where(and(eq(savedReports.id, id), eq(savedReports.orgId, orgId)))
                 .returning();
+            // One event per gesture (§0.143): a schedule carries the schedule in words,
+            // a share toggle is its own event, everything else is an update.
+            const action = 'delivery' in data ? 'saved_report.scheduled' : ('isShared' in data && !('name' in data) && !('dims' in data)) ? (data.isShared ? 'saved_report.shared' : 'saved_report.unshared') : 'saved_report.updated';
+            await auditAs(orgId, userId, {
+                action, entityType: 'saved_report', entityId: updated.id, entityName: updated.name,
+                detail: action === 'saved_report.scheduled' ? deliverySummary(updated.config?.delivery) : null,
+            });
             return { statusCode: 200, headers, body: JSON.stringify({ report: updated }) };
         }
 
@@ -163,6 +180,7 @@ export const handler = async (event) => {
             if (row && !mayTouch(row)) return forbiddenOwner;
             await db.delete(savedReports)
                 .where(and(eq(savedReports.id, id), eq(savedReports.orgId, orgId)));
+            if (row) await auditAs(orgId, userId, { action: 'saved_report.deleted', entityType: 'saved_report', entityId: id, entityName: row.name, detail: row.description || null });
             return { statusCode: 200, headers, body: JSON.stringify({ deleted: id }) };
         }
 

@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { dashboardConfigs } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 export const handler = async (event) => {
     const headers = {
@@ -37,6 +37,7 @@ export const handler = async (event) => {
                     set: { widgets, updatedAt: new Date() },
                 })
                 .returning();
+            await auditAs(orgId, userId, { action: 'dashboard.updated', entityType: 'dashboard', entityId: id, entityName: 'My dashboard', detail: `${widgets.length} widget${widgets.length === 1 ? '' : 's'}` });
             return { statusCode: 200, headers, body: JSON.stringify({ config: upserted }) };
         }
 

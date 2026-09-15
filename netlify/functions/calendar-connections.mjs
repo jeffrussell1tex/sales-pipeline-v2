@@ -17,7 +17,7 @@ import { db } from '../../db/index.js';
 import { userCalendarConnections, orgCalendarConnections } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 export const handler = async (event) => {
     const headers = {
@@ -115,6 +115,7 @@ export const handler = async (event) => {
                 await db
                     .delete(userCalendarConnections)
                     .where(eq(userCalendarConnections.id, id));
+                await auditAs(orgId, userId, { action: 'calendar.disconnected', entityType: 'calendar_connection', entityId: id, entityName: 'My calendar', detail: 'personal connection removed' });
 
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
             }
@@ -141,6 +142,7 @@ export const handler = async (event) => {
                 await db
                     .delete(orgCalendarConnections)
                     .where(eq(orgCalendarConnections.id, id));
+                await auditAs(orgId, userId, { action: 'calendar.disconnected', entityType: 'calendar_connection', entityId: id, entityName: 'Company calendar', detail: 'the workspace connection removed by an Admin' });
 
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
             }

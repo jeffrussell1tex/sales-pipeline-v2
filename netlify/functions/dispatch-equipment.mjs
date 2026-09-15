@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { dispatchEquipment } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -92,6 +92,7 @@ export const handler = async (event) => {
             const [inserted] = await db.select().from(dispatchEquipment)
                 .where(and(eq(dispatchEquipment.id, data.id), eq(dispatchEquipment.orgId, orgId)));
 
+            await auditAs(orgId, auth.userId, { action: 'dispatch_equipment.created', entityType: 'dispatch_equipment', entityId: inserted.id, entityName: inserted.name, detail: [inserted.category, inserted.assetTag].filter(Boolean).join(' · ') || null });
             return { statusCode: 201, headers, body: JSON.stringify({ item: normalise(inserted) }) };
         }
 
@@ -139,6 +140,12 @@ export const handler = async (event) => {
                 .where(and(eq(dispatchEquipment.id, id), eq(dispatchEquipment.orgId, orgId)));
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            // A check-out / check-in is its own event; a field edit is an update (§0.143).
+            await auditAs(orgId, auth.userId, {
+                action: action === 'checkout' ? 'dispatch_equipment.checked_out' : action === 'checkin' ? 'dispatch_equipment.checked_in' : 'dispatch_equipment.updated',
+                entityType: 'dispatch_equipment', entityId: updated.id, entityName: updated.name,
+                detail: action === 'checkout' ? [updated.checkedOutToId ? 'to a technician' : null, updated.checkedOutJobId ? `job ${updated.checkedOutJobId}` : null].filter(Boolean).join(' · ') : (updated.status || 'available'),
+            });
             return { statusCode: 200, headers, body: JSON.stringify({ item: normalise(updated) }) };
         }
 
@@ -146,8 +153,10 @@ export const handler = async (event) => {
         if (event.httpMethod === 'DELETE') {
             const id = (event.queryStringParameters || {}).id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
-            await db.delete(dispatchEquipment)
-                .where(and(eq(dispatchEquipment.id, id), eq(dispatchEquipment.orgId, orgId)));
+            const [gone] = await db.delete(dispatchEquipment)
+                .where(and(eq(dispatchEquipment.id, id), eq(dispatchEquipment.orgId, orgId)))
+                .returning({ id: dispatchEquipment.id, name: dispatchEquipment.name });
+            if (gone) await auditAs(orgId, auth.userId, { action: 'dispatch_equipment.deleted', entityType: 'dispatch_equipment', entityId: gone.id, entityName: gone.name, detail: null });
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }
 

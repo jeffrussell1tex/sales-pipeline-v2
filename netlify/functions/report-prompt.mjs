@@ -34,7 +34,7 @@ import { db } from '../../db/index.js';
 import { settings as settingsTable, users } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 import { resolveAnthropicKey } from './_aiKey.mjs';
 import { REPORT_PROMPT_MODEL, MAX_PROMPT_CHARS, SET_REPORT_TOOL, systemPromptFor, validateReading } from './_reportPromptShape.mjs';
 import { promptVocabulary } from '../../src/utils/reportPrompt.js';
@@ -90,22 +90,33 @@ export const handler = async (event) => {
                 messages: [{ role: 'user', content: `Sentence: ${prompt}` }],
             }),
         });
+        // Every outcome past this point is ONE answer and ONE audit row — the
+        // sentence left the app, and the log says as whom, on which key, and how it went (§0.143).
+        let outcome = 'read', reply;
         if (!response.ok) {
             const text = await response.text().catch(() => '');
             console.error('report-prompt: Anthropic API error', response.status, text.slice(0, 300));
-            return answer(200, { unavailable: true, reason: 'error', status: response.status });
+            outcome = `error ${response.status}`;
+            reply = { unavailable: true, reason: 'error', status: response.status };
+        } else {
+            const result = await response.json();
+            const call = Array.isArray(result?.content) ? result.content.find(b => b?.type === 'tool_use' && b?.name === SET_REPORT_TOOL.name) : null;
+            if (result?.stop_reason === 'refusal') { outcome = 'refused'; reply = { unavailable: true, reason: 'refused' }; }
+            else if (!call || !call.input || typeof call.input !== 'object') { outcome = 'unreadable'; reply = { unavailable: true, reason: 'unreadable' }; }
+            else {
+                // One line per reading in the function log: what the model said BEFORE
+                // the allowlists — the only way to tell a model that omitted a filter
+                // from a validator that dropped one (observed on dev, 15 Sep).
+                console.log(`report-prompt: model input ${JSON.stringify(call.input).slice(0, 1500)}`);
+                const { definition, name, notes } = validateReading(call.input, prompt);
+                reply = { readBy: 'claude', model: REPORT_PROMPT_MODEL, usingOrgKey, definition, name, notes };
+            }
         }
-        const result = await response.json();
-        if (result?.stop_reason === 'refusal') return answer(200, { unavailable: true, reason: 'refused' });
-        const call = Array.isArray(result?.content) ? result.content.find(b => b?.type === 'tool_use' && b?.name === SET_REPORT_TOOL.name) : null;
-        if (!call || !call.input || typeof call.input !== 'object') return answer(200, { unavailable: true, reason: 'unreadable' });
-
-        // One line per reading in the function log: what the model said BEFORE
-        // the allowlists — the only way to tell a model that omitted a filter
-        // from a validator that dropped one (observed on dev, 15 Sep).
-        console.log(`report-prompt: model input ${JSON.stringify(call.input).slice(0, 1500)}`);
-        const { definition, name, notes } = validateReading(call.input, prompt);
-        return answer(200, { readBy: 'claude', model: REPORT_PROMPT_MODEL, usingOrgKey, definition, name, notes });
+        await auditAs(orgId, auth.userId, {
+            action: 'ai.report_prompt', entityType: 'ai_reading', entityId: 'report-prompt', entityName: prompt.slice(0, 120),
+            detail: `${REPORT_PROMPT_MODEL} · ${usingOrgKey ? 'the workspace’s key' : 'the site key'} · ${outcome}`,
+        });
+        return answer(200, reply);
     } catch (err) {
         console.error('report-prompt error:', err.message);
         return { statusCode: 500, headers, body: serverErrorBody(err, 'report-prompt') };

@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { dispatchServicePlans, dispatchCustomers } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -140,6 +140,7 @@ export const handler = async (event) => {
             const [inserted] = await db.select().from(dispatchServicePlans)
                 .where(and(eq(dispatchServicePlans.id, data.id), eq(dispatchServicePlans.orgId, orgId)));
 
+            await auditAs(orgId, auth.userId, { action: 'dispatch_plan.created', entityType: 'dispatch_plan', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.cadence || 'custom'}${inserted.price != null ? ` · $${Number(inserted.price).toLocaleString()}` : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ plan: normalise(inserted) }) };
         }
 
@@ -184,6 +185,7 @@ export const handler = async (event) => {
                 .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await auditAs(orgId, auth.userId, { action: 'dispatch_plan.updated', entityType: 'dispatch_plan', entityId: updated.id, entityName: updated.name, detail: `${updated.cadence || 'custom'} · ${updated.active === false ? 'inactive' : 'active'}` });
             return { statusCode: 200, headers, body: JSON.stringify({ plan: normalise(updated) }) };
         }
 
@@ -209,8 +211,10 @@ export const handler = async (event) => {
                 };
             }
 
-            await db.delete(dispatchServicePlans)
-                .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)));
+            const [gone] = await db.delete(dispatchServicePlans)
+                .where(and(eq(dispatchServicePlans.id, id), eq(dispatchServicePlans.orgId, orgId)))
+                .returning({ id: dispatchServicePlans.id, name: dispatchServicePlans.name });
+            if (gone) await auditAs(orgId, auth.userId, { action: 'dispatch_plan.deleted', entityType: 'dispatch_plan', entityId: gone.id, entityName: gone.name, detail: null });
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }
 

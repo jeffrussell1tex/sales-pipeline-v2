@@ -13,7 +13,7 @@ import { db }          from '../../db/index.js';
 import { automations, automationRuns } from '../../db/schema.js';
 import { eq, and, desc, asc } from 'drizzle-orm';
 import { verifyAuth }  from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const headers = {
     'Content-Type':                'application/json',
@@ -81,6 +81,7 @@ export const handler = async (event) => {
                 createdAt:    new Date(),
                 updatedAt:    new Date(),
             }).returning();
+            await auditAs(orgId, userId, { action: 'automation.created', entityType: 'automation', entityId: inserted.id, entityName: inserted.name, detail: `on ${inserted.triggerEvent} · ${inserted.actions.length} action${inserted.actions.length === 1 ? '' : 's'}${inserted.active ? '' : ' · paused'}` });
             return { statusCode: 201, headers, body: JSON.stringify({ automation: inserted }) };
         }
 
@@ -100,6 +101,7 @@ export const handler = async (event) => {
                 .where(and(eq(automations.id, data.id), eq(automations.orgId, orgId)))
                 .returning();
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await auditAs(orgId, userId, { action: 'automation.updated', entityType: 'automation', entityId: updated.id, entityName: updated.name, detail: `on ${updated.triggerEvent} · ${(updated.actions || []).length} action${(updated.actions || []).length === 1 ? '' : 's'} · ${updated.active ? 'active' : 'paused'}` });
             return { statusCode: 200, headers, body: JSON.stringify({ automation: updated }) };
         }
 
@@ -107,7 +109,8 @@ export const handler = async (event) => {
         if (event.httpMethod === 'DELETE') {
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            await db.delete(automations).where(and(eq(automations.id, id), eq(automations.orgId, orgId)));
+            const [gone] = await db.delete(automations).where(and(eq(automations.id, id), eq(automations.orgId, orgId))).returning({ id: automations.id, name: automations.name, triggerEvent: automations.triggerEvent });
+            if (gone) await auditAs(orgId, userId, { action: 'automation.deleted', entityType: 'automation', entityId: gone.id, entityName: gone.name, detail: `was on ${gone.triggerEvent}` });
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
 

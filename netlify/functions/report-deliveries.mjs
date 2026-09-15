@@ -33,6 +33,7 @@ import { canSeeAll } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSlackToOrg } from './send-slack.mjs';
 import { withHeartbeat } from './_heartbeat.mjs';
+import { writeAudit } from './_lib.mjs';
 import { runReport } from '../../src/utils/reportQuery.js';
 import {
     cleanDelivery, deliveryDue, deliveryHasChannel, deliveryTable, deliveryHtmlTable, slackBlocksForReport, periodLabel,
@@ -133,6 +134,14 @@ export async function deliverReport(row, { now = new Date(), trigger = 'schedule
     await db.update(savedReports)
         .set({ config: { ...(row.config || {}), delivery: stamped }, updatedAt: new Date() })
         .where(and(eq(savedReports.id, row.id), eq(savedReports.orgId, row.orgId)));
+    // A scheduled send is the JOB's event in the org's audit log, named as such
+    // (§0.143); a Send now is the endpoint's, under the caller's name.
+    if (trigger === 'schedule') await writeAudit(row.orgId, {
+        action: delivered ? 'report_delivery.sent' : 'report_delivery.failed',
+        entityType: 'report_delivery', entityId: row.id, entityName: row.name,
+        detail: (delivered ? `Sent to ${[...sent.email, ...(sent.slack ? ['Slack'] : [])].join(', ')} — ${table.count} rows` : `Not sent: ${errors.join(' | ')}`).slice(0, 300),
+        userId: null, userName: 'Report delivery job',
+    });
     return { ok: errors.length === 0, sent, errors, rows: table.count, delivery: stamped };
 }
 

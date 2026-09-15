@@ -15,7 +15,7 @@ import { quotes, opportunities, contacts, accounts, users } from '../../db/schem
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { sendEmail } from './send-email.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const APP_URL = process.env.APP_URL || 'https://accelerep.netlify.app';
 
@@ -229,6 +229,8 @@ export const handler = async (event) => {
         await db.update(quotes)
             .set({ status: 'Sent to Customer', updatedAt: new Date() })
             .where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId)));
+        // A quote left the app for a customer's inbox (§0.143).
+        await auditAs(orgId, userId, { action: 'quote.emailed', entityType: 'quote', entityId: quoteId, entityName: quoteNum, detail: `To ${customerEmail} · ${accountName}` });
 
         return {
             statusCode: 200,

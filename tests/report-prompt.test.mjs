@@ -330,8 +330,9 @@ test('report-prompt.mjs: the gates in order — auth, the org’s switch, a key 
     assert.ok(s.includes("messages: [{ role: 'user', content: `Sentence: ${prompt}` }],"), 'the sentence is the whole user turn');
     assert.ok(s.includes("tool_choice: { type: 'auto', disable_parallel_tool_use: true },") && s.includes('tools: [SET_REPORT_TOOL],'));
     assert.ok(s.includes("output_config: { effort: 'low' },"), 'a sentence into a small object: low effort');
-    assert.ok(s.includes("if (result?.stop_reason === 'refusal') return answer(200, { unavailable: true, reason: 'refused' });"));
-    assert.ok(s.includes("return answer(200, { unavailable: true, reason: 'unreadable' });") && s.includes("return answer(200, { unavailable: true, reason: 'error', status: response.status });"), 'every failure is an unavailable the client falls back on');
+    assert.ok(s.includes("if (result?.stop_reason === 'refusal') { outcome = 'refused'; reply = { unavailable: true, reason: 'refused' }; }"));
+    assert.ok(s.includes("reply = { unavailable: true, reason: 'unreadable' }; }") && s.includes("reply = { unavailable: true, reason: 'error', status: response.status };"), 'every failure is an unavailable the client falls back on');
+    assert.ok(s.includes("return answer(200, reply);") && s.indexOf("await auditAs(orgId, auth.userId, {") < s.indexOf("return answer(200, reply);"), 'one answer, one audit row, the audit before the answer (§0.143)');
     assert.ok(s.includes('const { definition, name, notes } = validateReading(call.input, prompt);'), 'the model’s answer is validated, never trusted');
     assert.ok(s.includes("import { REPORT_PROMPT_MODEL, MAX_PROMPT_CHARS, SET_REPORT_TOOL, systemPromptFor, validateReading } from './_reportPromptShape.mjs';"), 'the pure half is the tested one');
     assert.ok(!s.includes('apiKey:') && !s.includes('apiKey }'), 'the key is never in a response body');

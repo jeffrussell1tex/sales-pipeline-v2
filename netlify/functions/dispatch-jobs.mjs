@@ -7,7 +7,7 @@ import {
 } from '../../db/schema.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
-import { serverErrorBody, withNumberRetry, getCallerName } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry, getCallerName, auditAs } from './_lib.mjs';
 // Customer-facing notifications (state §0.111): decided and sent AFTER the row
 // is written, from the stored before/after rows; never changes the response.
 import { notifyCustomer } from './_customerNotify.mjs';
@@ -221,14 +221,17 @@ export const handler = async (event) => {
                     .onConflictDoUpdate({ target: dispatchJobLineItems.id, setWhere: eq(dispatchJobLineItems.orgId, orgId), set: { ...row, createdAt: undefined } });
                 const [inserted] = await db.select().from(dispatchJobLineItems)
                     .where(and(eq(dispatchJobLineItems.id, data.id), eq(dispatchJobLineItems.orgId, orgId)));
+                await auditAs(orgId, userId, { action: 'dispatch_job.line_item_added', entityType: 'dispatch_job', entityId: data.jobId, entityName: inserted.description, detail: `${inserted.itemType} · qty ${inserted.quantity} · $${Number(inserted.totalPrice || 0).toLocaleString()}` });
                 return { statusCode: 201, headers, body: JSON.stringify({ lineItem: normaliseLineItem(inserted) }) };
             }
 
             if (event.httpMethod === 'DELETE') {
                 const id = params.id;
                 if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
-                await db.delete(dispatchJobLineItems)
-                    .where(and(eq(dispatchJobLineItems.id, id), eq(dispatchJobLineItems.orgId, orgId)));
+                const [gone] = await db.delete(dispatchJobLineItems)
+                    .where(and(eq(dispatchJobLineItems.id, id), eq(dispatchJobLineItems.orgId, orgId)))
+                    .returning({ jobId: dispatchJobLineItems.jobId, description: dispatchJobLineItems.description, itemType: dispatchJobLineItems.itemType });
+                if (gone) await auditAs(orgId, userId, { action: 'dispatch_job.line_item_removed', entityType: 'dispatch_job', entityId: gone.jobId, entityName: gone.description, detail: gone.itemType });
                 return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
             }
         }
@@ -355,6 +358,7 @@ export const handler = async (event) => {
             await notifyCustomer({ orgId, before: priorJob || null, after: written, actorName: await getCallerName(userId, orgId) });
             const [inserted] = await db.select().from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
+            await auditAs(orgId, userId, { action: 'dispatch_job.created', entityType: 'dispatch_job', entityId: inserted.id, entityName: `${inserted.jobNumber} · ${inserted.title || 'Untitled'}`, detail: `${inserted.status}${inserted.jobType ? ' · ' + inserted.jobType : ''}${inserted.scheduledDate ? ' · ' + inserted.scheduledDate : ''}` });
 
             return { statusCode: 201, headers, body: JSON.stringify({ job: normaliseJob(inserted) }) };
         }
@@ -407,6 +411,7 @@ export const handler = async (event) => {
                 await notifyCustomer({ orgId, before: current, after: written, actorName: await getCallerName(userId, orgId) });
                 const [updatedRow] = await db.select().from(dispatchJobs)
                     .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+                await auditAs(orgId, userId, { action: 'dispatch_job.updated', entityType: 'dispatch_job', entityId: id, entityName: `${updatedRow.jobNumber} · ${updatedRow.title || 'Untitled'}`, detail: `in the field · ${'status' in data && data.status !== current.status ? `${current.status} → ${data.status}` : attempted.join(', ')}` });
 
                 return { statusCode: 200, headers, body: JSON.stringify({ job: normaliseJob(updatedRow) }) };
             }
@@ -458,6 +463,11 @@ export const handler = async (event) => {
             await notifyCustomer({ orgId, before: current, after: written, actorName: await getCallerName(userId, orgId) });
             const [updated] = await db.select().from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+            {
+                const changed = Object.keys(updates).filter(k => k !== 'updatedAt');
+                const transition = toStatus && toStatus !== fromStatus ? `${fromStatus} → ${toStatus}` : null;
+                await auditAs(orgId, userId, { action: 'dispatch_job.updated', entityType: 'dispatch_job', entityId: id, entityName: `${updated.jobNumber} · ${updated.title || 'Untitled'}`, detail: [transition, changed.join(', ')].filter(Boolean).join(' · ').slice(0, 300) || null });
+            }
 
             return { statusCode: 200, headers, body: JSON.stringify({ job: normaliseJob(updated) }) };
         }
@@ -465,6 +475,8 @@ export const handler = async (event) => {
         if (event.httpMethod === 'DELETE') {
             const id = params.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+            const [doomed] = await db.select({ jobNumber: dispatchJobs.jobNumber, title: dispatchJobs.title, status: dispatchJobs.status }).from(dispatchJobs)
+                .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
             // Cascade delete line items and history
             await db.delete(dispatchJobLineItems)
                 .where(and(eq(dispatchJobLineItems.jobId, id), eq(dispatchJobLineItems.orgId, orgId)));
@@ -472,6 +484,7 @@ export const handler = async (event) => {
                 .where(and(eq(dispatchJobStatusHistory.jobId, id), eq(dispatchJobStatusHistory.orgId, orgId)));
             await db.delete(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, id), eq(dispatchJobs.orgId, orgId)));
+            if (doomed) await auditAs(orgId, userId, { action: 'dispatch_job.deleted', entityType: 'dispatch_job', entityId: id, entityName: `${doomed.jobNumber} · ${doomed.title || 'Untitled'}`, detail: `was ${doomed.status}` });
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }
 

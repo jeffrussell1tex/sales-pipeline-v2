@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { products } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -63,6 +63,7 @@ export const handler = async (event) => {
                 minPrice: data.minPrice != null ? String(data.minPrice) : null,
             };
             const [inserted] = await db.insert(products).values(payload).returning();
+            await auditAs(orgId, auth.userId, { action: 'product.created', entityType: 'product', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.category || 'uncategorised'} · list $${Number(inserted.listPrice || 0).toLocaleString()}` });
             return { statusCode: 201, headers, body: JSON.stringify({ product: inserted }) };
         }
 
@@ -83,6 +84,7 @@ export const handler = async (event) => {
                 .insert(products).values({ ...payload, createdAt: new Date() })
                 .onConflictDoUpdate({ target: products.id, setWhere: eq(products.orgId, orgId), set: payload })
                 .returning();
+            await auditAs(orgId, auth.userId, { action: 'product.updated', entityType: 'product', entityId: updated.id, entityName: updated.name, detail: `${updated.category || 'uncategorised'} · list $${Number(updated.listPrice || 0).toLocaleString()}${updated.active === false ? ' · inactive' : ''}` });
             return { statusCode: 200, headers, body: JSON.stringify({ product: updated }) };
         }
 
@@ -92,9 +94,11 @@ export const handler = async (event) => {
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id query param required' }) };
 
-            await db.update(products)
+            const [off] = await db.update(products)
                 .set({ active: false, updatedAt: new Date() })
-                .where(and(eq(products.id, id), eq(products.orgId, orgId)));
+                .where(and(eq(products.id, id), eq(products.orgId, orgId)))
+                .returning({ id: products.id, name: products.name });
+            if (off) await auditAs(orgId, auth.userId, { action: 'product.deactivated', entityType: 'product', entityId: off.id, entityName: off.name, detail: 'Removed from the catalog (kept on past quotes)' });
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
 

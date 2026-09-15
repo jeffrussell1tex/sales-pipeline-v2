@@ -2,7 +2,7 @@ import { db }         from '../../db/index.js';
 import { dsrQueue }   from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -95,6 +95,7 @@ export const handler = async (event) => {
                     createdBy: userId,
                 })
                 .returning();
+            await auditAs(orgId, userId, { action: 'dsr.created', entityType: 'dsr', entityId: inserted.id, entityName: inserted.subject, detail: `${inserted.type} · due ${slaLabel(inserted.slaDeadline)}` });
 
             return {
                 statusCode: 201,
@@ -128,6 +129,7 @@ export const handler = async (event) => {
                     },
                 })
                 .returning();
+            await auditAs(orgId, userId, { action: 'dsr.updated', entityType: 'dsr', entityId: upserted.id, entityName: upserted.subject, detail: `${upserted.type} · ${upserted.status || 'open'}` });
 
             return {
                 statusCode: 200,
@@ -143,9 +145,11 @@ export const handler = async (event) => {
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'id is required' }) };
 
-            await db
+            const [gone] = await db
                 .delete(dsrQueue)
-                .where(and(eq(dsrQueue.id, id), eq(dsrQueue.orgId, orgId)));
+                .where(and(eq(dsrQueue.id, id), eq(dsrQueue.orgId, orgId)))
+                .returning({ id: dsrQueue.id, subject: dsrQueue.subject, type: dsrQueue.type });
+            if (gone) await auditAs(orgId, userId, { action: 'dsr.deleted', entityType: 'dsr', entityId: gone.id, entityName: gone.subject, detail: gone.type });
 
             return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ success: true }) };
         }

@@ -2,7 +2,9 @@ import { db } from '../../db/index.js';
 import { dispatchTechnicians } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
+
+const techName = (t) => [t?.firstName, t?.lastName].filter(Boolean).join(' ') || t?.email || 'Technician';
 import { defaultWorkWeek } from '../../src/utils/workWeek.js';
 
 const headers = {
@@ -110,6 +112,7 @@ export const handler = async (event) => {
             const [inserted] = await db.select().from(dispatchTechnicians)
                 .where(and(eq(dispatchTechnicians.id, data.id), eq(dispatchTechnicians.orgId, orgId)));
 
+            await auditAs(orgId, userId, { action: 'dispatch_technician.created', entityType: 'dispatch_technician', entityId: inserted.id, entityName: techName(inserted), detail: `${inserted.employmentType || 'employee'} · ${inserted.status || 'active'}` });
             return { statusCode: 201, headers, body: JSON.stringify({ technician: normalise(inserted) }) };
         }
 
@@ -140,6 +143,7 @@ export const handler = async (event) => {
                 .where(and(eq(dispatchTechnicians.id, id), eq(dispatchTechnicians.orgId, orgId)));
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await auditAs(orgId, userId, { action: 'dispatch_technician.updated', entityType: 'dispatch_technician', entityId: updated.id, entityName: techName(updated), detail: `${updated.employmentType || 'employee'} · ${updated.status || 'active'}` });
             return { statusCode: 200, headers, body: JSON.stringify({ technician: normalise(updated) }) };
         }
 
@@ -149,8 +153,10 @@ export const handler = async (event) => {
             const id = params.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id query param required' }) };
 
-            await db.delete(dispatchTechnicians)
-                .where(and(eq(dispatchTechnicians.id, id), eq(dispatchTechnicians.orgId, orgId)));
+            const [gone] = await db.delete(dispatchTechnicians)
+                .where(and(eq(dispatchTechnicians.id, id), eq(dispatchTechnicians.orgId, orgId)))
+                .returning({ id: dispatchTechnicians.id, firstName: dispatchTechnicians.firstName, lastName: dispatchTechnicians.lastName, email: dispatchTechnicians.email });
+            if (gone) await auditAs(orgId, userId, { action: 'dispatch_technician.deleted', entityType: 'dispatch_technician', entityId: gone.id, entityName: techName(gone), detail: null });
 
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }

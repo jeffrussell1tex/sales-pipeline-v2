@@ -2,7 +2,7 @@ import { db }              from '../../db/index.js';
 import { exportSchedules } from '../../db/schema.js';
 import { eq, and, desc }   from 'drizzle-orm';
 import { verifyAuth }      from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -63,6 +63,7 @@ export const handler = async (event) => {
                 .insert(exportSchedules)
                 .values({ ...sanitize(data), orgId, createdBy: userId })
                 .returning();
+            await auditAs(orgId, userId, { action: 'export_schedule.created', entityType: 'export_schedule', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.scope} · ${inserted.format || 'CSV'} · ${inserted.cadence || 'scheduled'}` });
             return { statusCode: 201, headers: HEADERS, body: JSON.stringify({ schedule: inserted }) };
         }
 
@@ -82,6 +83,7 @@ export const handler = async (event) => {
                     set: { ...updateFields, updatedAt: new Date() },
                 })
                 .returning();
+            await auditAs(orgId, userId, { action: 'export_schedule.updated', entityType: 'export_schedule', entityId: upserted.id, entityName: upserted.name, detail: `${upserted.scope} · ${upserted.format || 'CSV'} · ${upserted.cadence || 'scheduled'} · ${upserted.enabled === false ? 'paused' : 'active'}` });
             return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ schedule: upserted }) };
         }
 
@@ -90,9 +92,11 @@ export const handler = async (event) => {
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'id is required' }) };
 
-            await db
+            const [gone] = await db
                 .delete(exportSchedules)
-                .where(and(eq(exportSchedules.id, id), eq(exportSchedules.orgId, orgId)));
+                .where(and(eq(exportSchedules.id, id), eq(exportSchedules.orgId, orgId)))
+                .returning({ id: exportSchedules.id, name: exportSchedules.name, scope: exportSchedules.scope });
+            if (gone) await auditAs(orgId, userId, { action: 'export_schedule.deleted', entityType: 'export_schedule', entityId: gone.id, entityName: gone.name, detail: gone.scope });
             return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ success: true }) };
         }
 

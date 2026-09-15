@@ -26,7 +26,7 @@ import { webhookSubscriptions } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { createHmac, randomBytes } from 'crypto';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 // ── Supported event types ─────────────────────────────────────────────────────
 export const WEBHOOK_EVENTS = [
@@ -45,6 +45,10 @@ export const WEBHOOK_EVENTS = [
 const generateSecret = () => 'whsec_' + randomBytes(24).toString('hex');
 
 const requireAdmin = (userRole) => userRole === 'Admin';
+
+// The host of a target URL for the audit log — never the path or its query (a
+// signed callback URL can carry a token).
+const hostOf = (url) => { try { return new URL(String(url)).host; } catch { return 'invalid url'; } };
 
 const signPayload = (secret, payloadJson) =>
     'sha256=' + createHmac('sha256', secret).update(payloadJson).digest('hex');
@@ -188,6 +192,7 @@ export const handler = async (event) => {
                 updatedAt:  new Date(),
             });
 
+            await auditAs(orgId, userId, { action: 'webhook.created', entityType: 'webhook', entityId: id, entityName: data.name.trim(), detail: `${hostOf(data.targetUrl)} · ${data.eventTypes.join(', ')}` });
             // Return the secret ONCE — not shown again after this
             return {
                 statusCode: 201,
@@ -234,6 +239,11 @@ export const handler = async (event) => {
             }
 
             await db.update(webhookSubscriptions).set(updates).where(eq(webhookSubscriptions.id, data.id));
+            // A rotated secret is its own event (§0.143): the old signature stops verifying from this moment.
+            await auditAs(orgId, userId, {
+                action: newSecret ? 'webhook.secret_rotated' : 'webhook.updated', entityType: 'webhook', entityId: existing.id, entityName: updates.name ?? existing.name,
+                detail: `${hostOf(updates.targetUrl ?? existing.targetUrl)} · ${(updates.eventTypes ?? existing.eventTypes ?? []).join(', ')} · ${(updates.active ?? existing.active) ? 'active' : 'paused'}`,
+            });
 
             return {
                 statusCode: 200,
@@ -258,6 +268,7 @@ export const handler = async (event) => {
             if (!existing) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Webhook not found.' }) };
 
             await db.delete(webhookSubscriptions).where(eq(webhookSubscriptions.id, id));
+            await auditAs(orgId, userId, { action: 'webhook.deleted', entityType: 'webhook', entityId: existing.id, entityName: existing.name, detail: `${hostOf(existing.targetUrl)} · ${(existing.eventTypes || []).join(', ')}` });
 
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

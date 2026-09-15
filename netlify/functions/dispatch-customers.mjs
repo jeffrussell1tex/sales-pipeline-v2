@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { dispatchCustomers, dispatchServiceLocations } from '../../db/schema.js';
 import { eq, and, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, withNumberRetry } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -162,6 +162,7 @@ export const handler = async (event) => {
                     .onConflictDoUpdate({ target: dispatchServiceLocations.id, setWhere: eq(dispatchServiceLocations.orgId, orgId), set: { ...row, createdAt: undefined } });
                 const [inserted] = await db.select().from(dispatchServiceLocations)
                     .where(and(eq(dispatchServiceLocations.id, data.id), eq(dispatchServiceLocations.orgId, orgId)));
+                await auditAs(orgId, auth.userId, { action: 'dispatch_location.created', entityType: 'dispatch_customer', entityId: inserted.customerId, entityName: inserted.name, detail: [inserted.address, inserted.city].filter(Boolean).join(', ') || null });
                 return { statusCode: 201, headers, body: JSON.stringify({ location: normaliseLoc(inserted) }) };
             }
 
@@ -178,14 +179,17 @@ export const handler = async (event) => {
                 const [updated] = await db.select().from(dispatchServiceLocations)
                     .where(and(eq(dispatchServiceLocations.id, id), eq(dispatchServiceLocations.orgId, orgId)));
                 if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+                await auditAs(orgId, auth.userId, { action: 'dispatch_location.updated', entityType: 'dispatch_customer', entityId: updated.customerId, entityName: updated.name, detail: Object.keys(updates).filter(k => k !== 'updatedAt').join(', ') || null });
                 return { statusCode: 200, headers, body: JSON.stringify({ location: normaliseLoc(updated) }) };
             }
 
             if (event.httpMethod === 'DELETE') {
                 const id = params.id;
                 if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
-                await db.delete(dispatchServiceLocations)
-                    .where(and(eq(dispatchServiceLocations.id, id), eq(dispatchServiceLocations.orgId, orgId)));
+                const [gone] = await db.delete(dispatchServiceLocations)
+                    .where(and(eq(dispatchServiceLocations.id, id), eq(dispatchServiceLocations.orgId, orgId)))
+                    .returning({ customerId: dispatchServiceLocations.customerId, name: dispatchServiceLocations.name });
+                if (gone) await auditAs(orgId, auth.userId, { action: 'dispatch_location.deleted', entityType: 'dispatch_customer', entityId: gone.customerId, entityName: gone.name, detail: null });
                 return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
             }
         }
@@ -256,6 +260,7 @@ export const handler = async (event) => {
 
             const [inserted] = await db.select().from(dispatchCustomers)
                 .where(and(eq(dispatchCustomers.id, data.id), eq(dispatchCustomers.orgId, orgId)));
+            await auditAs(orgId, auth.userId, { action: 'dispatch_customer.created', entityType: 'dispatch_customer', entityId: inserted.id, entityName: inserted.name, detail: `${inserted.customerNumber}${inserted.customerType ? ' · ' + inserted.customerType : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ customer: normaliseCust(inserted) }) };
         }
 
@@ -277,14 +282,17 @@ export const handler = async (event) => {
             const [updated] = await db.select().from(dispatchCustomers)
                 .where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId)));
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await auditAs(orgId, auth.userId, { action: 'dispatch_customer.updated', entityType: 'dispatch_customer', entityId: updated.id, entityName: updated.name, detail: Object.keys(updates).filter(k => k !== 'updatedAt').join(', ').slice(0, 300) || null });
             return { statusCode: 200, headers, body: JSON.stringify({ customer: normaliseCust(updated) }) };
         }
 
         if (event.httpMethod === 'DELETE') {
             const id = params.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
-            await db.delete(dispatchCustomers)
-                .where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId)));
+            const [gone] = await db.delete(dispatchCustomers)
+                .where(and(eq(dispatchCustomers.id, id), eq(dispatchCustomers.orgId, orgId)))
+                .returning({ id: dispatchCustomers.id, name: dispatchCustomers.name, customerNumber: dispatchCustomers.customerNumber });
+            if (gone) await auditAs(orgId, auth.userId, { action: 'dispatch_customer.deleted', entityType: 'dispatch_customer', entityId: gone.id, entityName: gone.name, detail: gone.customerNumber });
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }
 

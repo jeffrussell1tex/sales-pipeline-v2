@@ -33,6 +33,7 @@ import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import { leadEventData } from '../../src/utils/automationEvents.js';
 import { sendSlackToOrg, slackTemplates } from './send-slack.mjs';
+import { writeAudit } from './_lib.mjs';
 import { esc } from '../../src/utils/customerNotifications.js';
 import { TOKEN_RE, INTAKE_FIELDS, HONEYPOT_FIELD, cleanWebToLead, cleanIntake } from '../../src/utils/webToLead.js';
 
@@ -186,6 +187,14 @@ export const handler = async (event) => {
         const sc = scoreLead({ ...base, createdAt: new Date().toISOString() }, org.scoring, Date.now(), []);
         const scored = sc ? { ...sc, scoreUpdatedAt: new Date() } : {};
         const [inserted] = await db.insert(leads).values({ ...base, ...scored, orgId: org.orgId }).returning();
+        // No signed-in caller: the form itself is the actor (§0.143). writeAudit
+        // never throws, so the submission cannot fail on it.
+        await writeAudit(org.orgId, {
+            action: 'lead.received', entityType: 'lead', entityId: inserted.id,
+            entityName: [inserted.firstName, inserted.lastName].filter(Boolean).join(' ') || inserted.company || inserted.email || 'Web lead',
+            detail: `${inserted.source || 'Web form'}${inserted.company ? ' · ' + inserted.company : ''}${inserted.score != null ? ' · score ' + inserted.score : ''}`,
+            userId: null, userName: 'Web form',
+        });
 
         // The same fan-out leads.mjs POST does — none of it may fail the submission.
         await dispatchWebhook(org.orgId, 'lead.created', {

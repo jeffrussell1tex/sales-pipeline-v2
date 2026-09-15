@@ -2,7 +2,10 @@ import { db } from '../../db/index.js';
 import { spiffClaims } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
+
+// A status a manager sets names the event (§0.143); a rep's edit is an update.
+const CLAIM_STATUS_ACTIONS = Object.freeze({ approved: 'spiff_claim.approved', rejected: 'spiff_claim.rejected', paid: 'spiff_claim.paid' });
 
 const headers = {
     'Content-Type': 'application/json',
@@ -65,6 +68,7 @@ export const handler = async (event) => {
             const [inserted] = await db.insert(spiffClaims)
                 .values({ ...sanitize(data), orgId })
                 .returning();
+            await auditAs(orgId, auth.userId, { action: 'spiff_claim.submitted', entityType: 'spiff_claim', entityId: inserted.id, entityName: `${inserted.repName} · ${inserted.spiffName || inserted.spiffId}`, detail: `${inserted.account || inserted.opportunityName || ''}${inserted.amount != null ? ` · $${Number(inserted.amount).toLocaleString()}` : ''}`.trim() || null });
             return { statusCode: 201, headers, body: JSON.stringify({ spiffClaim: inserted }) };
         }
 
@@ -84,6 +88,7 @@ export const handler = async (event) => {
                 .values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: spiffClaims.id, setWhere: eq(spiffClaims.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
+            await auditAs(orgId, auth.userId, { action: CLAIM_STATUS_ACTIONS[data.status] || 'spiff_claim.updated', entityType: 'spiff_claim', entityId: upserted.id, entityName: `${upserted.repName} · ${upserted.spiffName || upserted.spiffId}`, detail: `${upserted.status || 'pending'}${upserted.amount != null ? ` · $${Number(upserted.amount).toLocaleString()}` : ''}` });
             return { statusCode: 200, headers, body: JSON.stringify({ spiffClaim: upserted }) };
         }
 
@@ -94,7 +99,8 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
-            await db.delete(spiffClaims).where(and(eq(spiffClaims.id, id), eq(spiffClaims.orgId, orgId)));
+            const [gone] = await db.delete(spiffClaims).where(and(eq(spiffClaims.id, id), eq(spiffClaims.orgId, orgId))).returning({ id: spiffClaims.id, repName: spiffClaims.repName, spiffName: spiffClaims.spiffName, spiffId: spiffClaims.spiffId, status: spiffClaims.status });
+            if (gone) await auditAs(orgId, auth.userId, { action: 'spiff_claim.deleted', entityType: 'spiff_claim', entityId: gone.id, entityName: `${gone.repName} · ${gone.spiffName || gone.spiffId}`, detail: `was ${gone.status || 'pending'}` });
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
 

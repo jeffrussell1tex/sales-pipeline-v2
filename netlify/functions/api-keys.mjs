@@ -3,7 +3,7 @@ import { apiKeys } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { createHash, randomBytes } from 'crypto';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -82,6 +82,8 @@ export const handler = async (event) => {
                 updatedAt: new Date(),
             });
 
+            // The log carries the name and the PREFIX only — never the key (§0.143).
+            await auditAs(orgId, userId, { action: 'apikey.created', entityType: 'apikey', entityId: id, entityName: data.name.trim(), detail: `${prefix}… · read` });
             // Return the plaintext key ONCE — it is never retrievable again
             return {
                 statusCode: 201,
@@ -118,6 +120,7 @@ export const handler = async (event) => {
                 .update(apiKeys)
                 .set({ revokedAt: new Date(), updatedAt: new Date() })
                 .where(eq(apiKeys.id, id));
+            await auditAs(orgId, userId, { action: 'apikey.revoked', entityType: 'apikey', entityId: existing.id, entityName: existing.name, detail: `${existing.keyPrefix}…` });
 
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

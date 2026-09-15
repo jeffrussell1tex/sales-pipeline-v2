@@ -20,7 +20,7 @@ import { users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { sendEmail } from './send-email.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const APP_URL = process.env.APP_URL || 'https://accelerep.netlify.app';
 
@@ -136,6 +136,8 @@ export const handler = async (event) => {
             subject: `You've been invited to Accelerep`,
             html: inviteEmailHtml({ name: nameTrimmed, role: roleLabel, appUrl: APP_URL }),
         });
+        // The log's own warn-list names 'user.invited' — it was never written until §0.143.
+        await auditAs(orgId, userId, { action: 'user.invited', entityType: 'user', entityId: pendingId, entityName: nameTrimmed, detail: `${emailLower} · ${roleLabel}${team ? ' · ' + team : ''}` });
 
         return {
             statusCode: 200,

@@ -39,7 +39,7 @@ import { db } from '../../db/index.js';
 import { documents, documentLinks, documentVersions } from '../../db/schema.js';
 import { eq, and, inArray, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, allowOrigin } from './_lib.mjs';
+import { serverErrorBody, allowOrigin, auditAs } from './_lib.mjs';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -257,6 +257,7 @@ export const handler = async (event) => {
         });
 
         const inserted = await insertLinks(orgId, id, links);
+        await auditAs(orgId, userId, { action: 'document.created', entityType: 'document', entityId: id, entityName: name, detail: `${row.category} · ${row.ext || 'file'} · ${row.sizeKb} KB · ${row.visibilityKind}${inserted.length ? ` · linked to ${inserted.length}` : ''}` });
         return { statusCode: 201, headers, body: JSON.stringify({ document: { ...row, visibility: row.visibilityKind, links: inserted } }) };
       }
 
@@ -277,6 +278,7 @@ export const handler = async (event) => {
         await db.update(documents)
           .set({ version: v, storageKey, sizeKb: Number(sizeKb) || 0, contentType: contentType || doc.contentType, modifiedAt: now, updatedAt: now })
           .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
+        await auditAs(orgId, userId, { action: 'document.version_added', entityType: 'document', entityId: id, entityName: doc.name, detail: `v${v} · ${Number(sizeKb) || 0} KB${note ? ' · ' + String(note).slice(0, 120) : ''}` });
         return { statusCode: 200, headers, body: JSON.stringify({ ok: true, version: v }) };
       }
 
@@ -299,6 +301,7 @@ export const handler = async (event) => {
         await db.update(documents)
           .set({ version: v, storageKey: src.storageKey, sizeKb: src.sizeKb, modifiedAt: now, updatedAt: now })
           .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
+        await auditAs(orgId, userId, { action: 'document.version_restored', entityType: 'document', entityId: id, entityName: doc.name, detail: `v${v} restored from v${src.v}` });
         return { statusCode: 200, headers, body: JSON.stringify({ ok: true, version: v }) };
       }
 
@@ -309,6 +312,7 @@ export const handler = async (event) => {
           .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
         if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
         const inserted = await insertLinks(orgId, id, links);
+        if (inserted.length) await auditAs(orgId, userId, { action: 'document.linked', entityType: 'document', entityId: id, entityName: doc.name, detail: inserted.map(l => `${l.type} ${l.name || l.recordId}`).join(', ').slice(0, 300) });
         return { statusCode: 200, headers, body: JSON.stringify({ links: inserted }) };
       }
 
@@ -328,6 +332,7 @@ export const handler = async (event) => {
       const [updated] = await db.update(documents).set(set)
         .where(and(eq(documents.id, data.id), eq(documents.orgId, orgId))).returning();
       if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+      await auditAs(orgId, userId, { action: 'document.updated', entityType: 'document', entityId: updated.id, entityName: updated.name, detail: Object.keys(set).filter(k => k !== 'updatedAt').join(', ') || null });
       return { statusCode: 200, headers, body: JSON.stringify({ document: { ...updated, visibility: updated.visibilityKind } }) };
     }
 
@@ -336,11 +341,15 @@ export const handler = async (event) => {
       if (action === 'link') {
         const linkId = qs.linkId || (JSON.parse(event.body || '{}').linkId);
         if (!linkId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'linkId required' }) };
-        await db.delete(documentLinks).where(and(eq(documentLinks.id, linkId), eq(documentLinks.orgId, orgId)));
+        const [unlinked] = await db.delete(documentLinks).where(and(eq(documentLinks.id, linkId), eq(documentLinks.orgId, orgId)))
+          .returning({ documentId: documentLinks.documentId, recordType: documentLinks.recordType, recordName: documentLinks.recordName, recordId: documentLinks.recordId });
+        if (unlinked) await auditAs(orgId, userId, { action: 'document.unlinked', entityType: 'document', entityId: unlinked.documentId, entityName: null, detail: `${unlinked.recordType} ${unlinked.recordName || unlinked.recordId}` });
         return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
       }
       const id = qs.id;
       if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+      const [doomed] = await db.select({ name: documents.name, version: documents.version }).from(documents)
+        .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
       // best-effort blob cleanup (don't fail the row delete on storage error)
       try {
         const vers = await db.select().from(documentVersions)
@@ -351,6 +360,7 @@ export const handler = async (event) => {
       await db.delete(documentVersions).where(and(eq(documentVersions.orgId, orgId), eq(documentVersions.documentId, id)));
       await db.delete(documentLinks).where(and(eq(documentLinks.orgId, orgId), eq(documentLinks.documentId, id)));
       await db.delete(documents).where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
+      if (doomed) await auditAs(orgId, userId, { action: 'document.deleted', entityType: 'document', entityId: id, entityName: doomed.name, detail: `${doomed.version || 1} version${(doomed.version || 1) === 1 ? '' : 's'} removed` });
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
     }
 

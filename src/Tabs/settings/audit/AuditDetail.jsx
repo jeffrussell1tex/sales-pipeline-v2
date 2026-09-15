@@ -317,7 +317,12 @@ const mapEntityTypeToCat = (entityType) => {
     const map = {
         user:'admin', role:'admin', territory:'admin', team:'admin',
         opportunity:'data', account:'data', contact:'data', lead:'data', task:'data', activity:'data', pipeline:'data', stage:'data', pricebook:'data', quote:'data', coaching_note:'data',
+        // §0.143 — every write path writes the log; each new entity type has a home.
+        saved_report:'data', report_delivery:'data', product:'data', document:'data', dashboard:'data', spiff_claim:'data', recommendation:'data',
+        dispatch_job:'data', dispatch_customer:'data', dispatch_technician:'data', dispatch_vehicle:'data', dispatch_equipment:'data', dispatch_plan:'data', dispatch_block:'data', lead_model:'data',
         apikey:'security', webhook:'security', setting:'security', settings:'security', export:'security', audit_stream:'security',
+        ai_reading:'security', dsr:'security', export_schedule:'security', backup:'security', calendar_connection:'security',
+        automation:'admin',
         login:'auth', mfa:'auth', sso:'auth', session:'auth',
         billing:'billing', plan:'billing', seat:'billing',
     };

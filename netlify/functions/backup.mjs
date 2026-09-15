@@ -9,7 +9,7 @@ import {
 } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -189,6 +189,7 @@ export const handler = async (event) => {
                 triggeredBy: userId,
                 createdAt:   new Date(),
             });
+            await auditAs(orgId, userId, { action: 'backup.created', entityType: 'backup', entityId: snapId, entityName: 'Manual snapshot', detail: `${recordCount} records · ${formatSize(sizeBytes)}` });
 
             return {
                 statusCode: 200,
@@ -231,6 +232,7 @@ export const handler = async (event) => {
                     updatedAt:       new Date(),
                 },
             });
+            await auditAs(orgId, userId, { action: 'backup.schedule_set', entityType: 'backup', entityId: schedId, entityName: 'Backup schedule', detail: `${frequency || 'Daily'} at ${timeUtc || '03:00'} UTC · keep ${retentionDays != null ? Number(retentionDays) : 30} days` });
 
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }
@@ -365,6 +367,9 @@ export const handler = async (event) => {
                     createdAt:   new Date(),
                 });
             } catch { /* non-fatal */ }
+            // A restore writes rows into every table it names — the most consequential
+            // write an Admin can make, and the one the log must carry (§0.143).
+            await auditAs(orgId, userId, { action: 'backup.restored', entityType: 'backup', entityId: snapId, entityName: 'Restore from file', detail: `${imported} records imported${errs.length ? ` · ${errs.length} error${errs.length === 1 ? '' : 's'}` : ''}` });
 
             return {
                 statusCode: errs.length && imported === 0 ? 500 : 200,

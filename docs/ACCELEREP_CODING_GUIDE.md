@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** September 15, 2026 · rules current through **§18b41** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** September 15, 2026 · rules current through **§18b42** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3523,4 +3523,16 @@ through `dbFetch`.
 4. **The examples the surface offers are ones it reads in full.** A starter chip is a promise; a test proves each starter produces a definition with no "cannot do" note. The old starters named fields the builder does not have.
 5. **Deterministic first; a model is an enhancer with a fallback, never the only path.** The interpreter is pure, keyless and tested by running it over sentences (the mutation harness pins the source, the filters, the fiscal calendar, the notes). A Claude-backed reading, if added, returns the same shape, is validated by the same allowlists, and falls back to the local reader when no key is configured — a feature a customer paid for does not stop working when an API key lapses.
 6. **The org’s own words come from the org, never from a guess.** Stage names and roster names become filters only when the caller hands them in (`opts.stages`, `opts.people`), a first name only when one person carries it. "Karen" in a workspace with two Karens filters nobody.
+
+
+## 18b42. Every Write Path Writes The Audit Log — Through `auditAs`, Named, With The Word For What Happened (hard rule)
+
+**Origin (§0.143, 15 Sep 2026).** Jeff opened the Audit log with a day’s work behind him and found fourteen rows. Thirteen endpoint files wrote audit rows — mostly for the `*.cleared` mass-deletes — and thirty-one that insert, update, delete, send, or hand data to a model wrote none: saved reports, deliveries, Claude’s readings, quotes, quote emails, webhooks, API keys, documents, exports, backups (a restore!), merges, invites (the UI’s warn-list named `user.invited`; no code ever wrote it), and all of dispatch. A log that records the rare mass-delete and not the daily quote is not an audit log; it is a false comfort — a customer’s compliance officer reads "fourteen rows" as "fourteen things happened".
+
+1. **A function that writes the database, sends something out, or hands data to a model writes an audit row, in the same request, after the write.** `tests/audit-coverage.test.mjs` scans every `netlify/functions/*.mjs` for `.insert(` / `.update(` / `.delete(` and fails the suite by name when the file has no `auditAs(` or `writeAudit(`. The exemptions are an allowlist WITH A REASON each (the log itself; a job whose heartbeat is its record; an inbound webhook whose activity is its record). A new exemption is a documented decision, not a way past the test.
+2. **Through `auditAs(orgId, auth.userId, fields)` — never `writeAudit` with a caller.** `auditAs` resolves the display name and writes the Clerk id with it; the name lookup cannot throw into the write path. `writeAudit` is for the two callers with no signed-in user, and they name themselves (`'Report delivery job'`, `'Web form'`). A row whose Actor reads a bare id or "System" for a signed-in caller is a bug.
+3. **The action is the word for what happened, a literal in the file, under 50 characters.** `entity.verb`: `quote.submitted`, not `quote.updated` with the status in the detail; `webhook.secret_rotated`, not `webhook.updated`; `dispatch_equipment.checked_out`, not a field list. A status PUT is named by the status it sets (`QUOTE_STATUS_ACTIONS`, `CLAIM_STATUS_ACTIONS`). The test pins every word as a literal so a template string cannot hide one.
+4. **The entity is the thing a reader would look for; the detail says what changed, in words, and never a secret.** A line item’s row sits on its job, a location’s on its customer, a merge’s on the survivor (the archived name and the undo id in the detail). A delete reads its name BEFORE the delete (or `.returning()` it) so the row is not "deleted <id>". The detail carries a webhook’s HOST (never the path or query), an API key’s prefix (never the key), an export’s scope and size, a restore’s counts, a status transition as `from → to`. Nothing a customer typed into a secret field, ever.
+5. **One send, one row.** A job that delivers what an endpoint also sends audits only its OWN trigger (`trigger === 'schedule'`); the endpoint’s Send now is the endpoint’s row. Two rows for one email is a log that cannot be counted.
+6. **The UI knows every entity type.** `mapEntityTypeToCat` in `AuditDetail.jsx` names each type’s category; the test pins the map. An unknown type falling into the default category is a row the filter hides.
 

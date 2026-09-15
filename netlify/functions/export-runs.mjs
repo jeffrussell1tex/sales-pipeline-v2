@@ -4,7 +4,7 @@ import { exportRuns, exportSchedules,
          tasks, activities, leads }                                   from '../../db/schema.js';
 import { eq, and, desc }                                              from 'drizzle-orm';
 import { verifyAuth, requireWrite }                                   from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -132,6 +132,8 @@ export const handler = async (event) => {
                     status:      'ok',
                 })
                 .returning();
+            // A whole table left the app as a file — the log says which, how big, by whom (§0.143).
+            await auditAs(orgId, userId, { action: 'export.run', entityType: 'export', entityId: run.id, entityName: name, detail: `${data.scope} · ${format} · ${rows.length} rows · ${Math.round(sizeBytes / 1024)} KB` });
 
             // Return the CSV/JSON as a base64-encoded download payload
             // The client will decode and trigger a browser download.

@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { dispatchScheduleBlocks } from '../../db/schema.js';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, getCallerName } from './_lib.mjs';
+import { serverErrorBody, getCallerName, auditAs } from './_lib.mjs';
 
 // Technician availability exceptions — PTO, sick, training, jury duty and so on.
 // The dispatch_schedule_blocks table was declared in schema.ts but had no
@@ -102,6 +102,7 @@ export const handler = async (event) => {
             const [inserted] = await db.select().from(dispatchScheduleBlocks)
                 .where(and(eq(dispatchScheduleBlocks.id, data.id), eq(dispatchScheduleBlocks.orgId, orgId)));
 
+            await auditAs(orgId, userId, { action: 'dispatch_block.created', entityType: 'dispatch_block', entityId: inserted.id, entityName: inserted.title || inserted.blockType, detail: `${inserted.blockType} · ${inserted.startDate}${inserted.endDate && inserted.endDate !== inserted.startDate ? ' → ' + inserted.endDate : ''}${inserted.allDay ? ' · all day' : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ block: normalise(inserted) }) };
         }
 
@@ -128,6 +129,7 @@ export const handler = async (event) => {
                 .where(and(eq(dispatchScheduleBlocks.id, id), eq(dispatchScheduleBlocks.orgId, orgId)));
 
             if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await auditAs(orgId, userId, { action: 'dispatch_block.updated', entityType: 'dispatch_block', entityId: updated.id, entityName: updated.title || updated.blockType, detail: `${updated.blockType} · ${updated.startDate}${updated.endDate && updated.endDate !== updated.startDate ? ' → ' + updated.endDate : ''}` });
             return { statusCode: 200, headers, body: JSON.stringify({ block: normalise(updated) }) };
         }
 
@@ -136,8 +138,10 @@ export const handler = async (event) => {
         if (event.httpMethod === 'DELETE') {
             const id = (event.queryStringParameters || {}).id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
-            await db.delete(dispatchScheduleBlocks)
-                .where(and(eq(dispatchScheduleBlocks.id, id), eq(dispatchScheduleBlocks.orgId, orgId)));
+            const [gone] = await db.delete(dispatchScheduleBlocks)
+                .where(and(eq(dispatchScheduleBlocks.id, id), eq(dispatchScheduleBlocks.orgId, orgId)))
+                .returning({ id: dispatchScheduleBlocks.id, title: dispatchScheduleBlocks.title, blockType: dispatchScheduleBlocks.blockType, startDate: dispatchScheduleBlocks.startDate });
+            if (gone) await auditAs(orgId, userId, { action: 'dispatch_block.deleted', entityType: 'dispatch_block', entityId: gone.id, entityName: gone.title || gone.blockType, detail: `${gone.blockType} · ${gone.startDate}` });
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }
 

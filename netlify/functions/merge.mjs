@@ -5,7 +5,7 @@ import {
 } from '../../db/schema.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 // ── Notes on atomicity ────────────────────────────────────────────────────────
 // This project runs drizzle-orm/neon-http (@netlify/neon). That driver has NO
@@ -71,9 +71,9 @@ export const handler = async (event) => {
         if (body.reverse) {
             if (body.mergeLogId) {
                 const [lg] = await db.select({ entityType: mergeLog.entityType }).from(mergeLog).where(and(eq(mergeLog.id, body.mergeLogId), eq(mergeLog.orgId, orgId)));
-                if (lg?.entityType === 'contact') return await reverseContactMerge({ body, orgId, headers });
+                if (lg?.entityType === 'contact') return await reverseContactMerge({ body, orgId, userId, headers });
             }
-            return await reverseAccountMerge({ body, orgId, headers });
+            return await reverseAccountMerge({ body, orgId, userId, headers });
         }
 
         // ── MERGE ─────────────────────────────────────────────────────────────
@@ -204,6 +204,8 @@ export const handler = async (event) => {
 
         const [updatedSurvivor] = await db.select().from(accounts).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId)));
         const summary = rewrites.reduce((acc, r) => { acc[r.table] = (acc[r.table] || 0) + r.ids.length; return acc; }, {});
+        // The merge log is the undo record; the audit log is the who-did-what record (§0.143).
+        await auditAs(orgId, userId, { action: 'account.merged', entityType: 'account', entityId: survivorId, entityName: survName, detail: `${archName} merged in · ${Object.values(summary).reduce((a, n) => a + n, 0)} references repointed · undo ${logId}` });
 
         return { statusCode: 200, headers, body: JSON.stringify({ account: updatedSurvivor, archivedId, mergeLogId: logId, rewriteSummary: summary }) };
     } catch (err) {
@@ -218,7 +220,7 @@ export const handler = async (event) => {
 // the loser, and restores the survivor's merge-touched fields from its snapshot.
 // Caveat: field-level restore of the survivor (name + the keys that were resolved)
 // will override any later manual edit to those same fields — acceptable for undo.
-async function reverseAccountMerge({ body, orgId, headers }) {
+async function reverseAccountMerge({ body, orgId, userId, headers }) {
     const { mergeLogId } = body;
     if (!mergeLogId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'mergeLogId is required to reverse a merge.' }) };
 
@@ -251,6 +253,7 @@ async function reverseAccountMerge({ body, orgId, headers }) {
     ops.push(db.update(mergeLog).set({ status: 'reversed', reversedAt: now }).where(and(eq(mergeLog.id, mergeLogId), eq(mergeLog.orgId, orgId))));
 
     await db.batch(ops);
+    await auditAs(orgId, userId, { action: 'account.merge_undone', entityType: 'account', entityId: log.survivorId, entityName: log.survivorName, detail: `${log.archivedName} restored · undo of ${mergeLogId}` });
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, reversed: mergeLogId, restoredId: log.archivedId }) };
 }
@@ -390,12 +393,13 @@ async function mergeContacts({ body, orgId, userId, headers }) {
     const [updatedSurvivor] = await db.select().from(contacts).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId)));
     const summary = {};
     for (const r of rewrites) summary[r.table + '.' + r.column] = (r.ids ? r.ids.length : (r.rows ? r.rows.length : 0));
+    await auditAs(orgId, userId, { action: 'contact.merged', entityType: 'contact', entityId: survivorId, entityName: survName, detail: `${archName} merged in · ${Object.values(summary).reduce((a, n) => a + n, 0)} references repointed · undo ${logId}` });
 
     return { statusCode: 200, headers, body: JSON.stringify({ contact: updatedSurvivor, archivedId, mergeLogId: logId, rewriteSummary: summary }) };
 }
 
 // ── Reverse a contact merge ─────────────────────────────────────────────────────
-async function reverseContactMerge({ body, orgId, headers }) {
+async function reverseContactMerge({ body, orgId, userId, headers }) {
     const { mergeLogId } = body;
     if (!mergeLogId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'mergeLogId is required to reverse a merge.' }) };
 
@@ -438,5 +442,6 @@ async function reverseContactMerge({ body, orgId, headers }) {
     ops.push(db.update(mergeLog).set({ status: 'reversed', reversedAt: now }).where(and(eq(mergeLog.id, mergeLogId), eq(mergeLog.orgId, orgId))));
 
     await db.batch(ops);
+    await auditAs(orgId, userId, { action: 'contact.merge_undone', entityType: 'contact', entityId: log.survivorId, entityName: log.survivorName, detail: `${log.archivedName} restored · undo of ${mergeLogId}` });
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, reversed: mergeLogId, restoredId: log.archivedId }) };
 }

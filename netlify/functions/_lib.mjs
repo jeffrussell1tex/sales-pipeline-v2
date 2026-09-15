@@ -59,6 +59,17 @@ export async function writeAudit(orgId, { action, entityType, entityId, entityNa
     }
 }
 
+// ── Audit as the caller (state §0.143) ───────────────────────────────────────
+// writeAudit with the caller NAMED. The log's Actor column reads userName,
+// then userId — so a row written with only the Clerk id shows "user_3AS…".
+// The name lookup is scoped to the org and cached (resolveCaller); it never
+// throws into the write path — an unresolvable caller is logged by id.
+export async function auditAs(orgId, clerkUserId, fields) {
+    let userName = null;
+    try { userName = clerkUserId ? await getCallerName(clerkUserId, orgId) : null; } catch { userName = null; }
+    return writeAudit(orgId, { ...fields, userId: clerkUserId || null, userName });
+}
+
 // ── Caller identity ──────────────────────────────────────────────────────────
 //
 // Resolves a Clerk userId to the caller's ROSTER ROW for this org: their

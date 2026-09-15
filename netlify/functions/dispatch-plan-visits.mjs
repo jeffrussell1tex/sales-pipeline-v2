@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { dispatchPlanVisits, dispatchCustomers } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, resolveCaller } from './_lib.mjs';
+import { serverErrorBody, resolveCaller, auditAs } from './_lib.mjs';
 import { randomUUID } from 'crypto';
 import { isYmd } from '../../src/utils/planVisits.js';
 
@@ -75,7 +75,7 @@ export const handler = async (event) => {
 
             // The customer must be THIS org's. A customerId from another org is a
             // 404 here, never a row written under the caller's org against it.
-            const [cust] = await db.select({ id: dispatchCustomers.id }).from(dispatchCustomers)
+            const [cust] = await db.select({ id: dispatchCustomers.id, name: dispatchCustomers.name }).from(dispatchCustomers)
                 .where(and(eq(dispatchCustomers.id, data.customerId), eq(dispatchCustomers.orgId, orgId)));
             if (!cust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };
 
@@ -108,6 +108,7 @@ export const handler = async (event) => {
                     eq(dispatchPlanVisits.planId, data.planId),
                     eq(dispatchPlanVisits.dueDate, data.dueDate),
                 ));
+            await auditAs(orgId, userId, { action: 'dispatch_visit.logged', entityType: 'dispatch_customer', entityId: saved.customerId, entityName: cust.name, detail: `${saved.action} · due ${saved.dueDate}${saved.deferredTo ? ' → ' + saved.deferredTo : ''}${saved.reason ? ' · ' + saved.reason : ''}`.slice(0, 300) });
             return { statusCode: 201, headers, body: JSON.stringify({ visit: normalise(saved) }) };
         }
 
@@ -116,8 +117,9 @@ export const handler = async (event) => {
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
             const gone = await db.delete(dispatchPlanVisits)
                 .where(and(eq(dispatchPlanVisits.id, id), eq(dispatchPlanVisits.orgId, orgId)))
-                .returning({ id: dispatchPlanVisits.id });
+                .returning({ id: dispatchPlanVisits.id, customerId: dispatchPlanVisits.customerId, action: dispatchPlanVisits.action, dueDate: dispatchPlanVisits.dueDate });
             if (!gone.length) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+            await auditAs(orgId, userId, { action: 'dispatch_visit.deleted', entityType: 'dispatch_customer', entityId: gone[0].customerId, entityName: null, detail: `${gone[0].action} · due ${gone[0].dueDate} · record removed` });
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }
 

@@ -2,7 +2,7 @@ import { db } from '../../db/index.js';
 import { recommendationLog, opportunities, activities, tasks } from '../../db/schema.js';
 import { eq, and, desc, gte, notLike } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -156,6 +156,7 @@ export const handler = async (event) => {
                 outcome:       'pending',
                 dismissedAt:   new Date(),
             }).returning();
+            await auditAs(orgId, auth.userId, { action: 'recommendation.dismissed', entityType: 'recommendation', entityId: inserted.id, entityName: inserted.dealName || inserted.actionType, detail: `${inserted.actionType}${inserted.signal ? ' · ' + inserted.signal : ''}${inserted.stage ? ' · ' + inserted.stage : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ log: inserted }) };
         }
 
