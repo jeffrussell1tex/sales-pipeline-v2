@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** September 15, 2026 · rules current through **§18b42** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** September 15, 2026 · rules current through **§18b43** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3536,3 +3536,12 @@ through `dbFetch`.
 5. **One send, one row.** A job that delivers what an endpoint also sends audits only its OWN trigger (`trigger === 'schedule'`); the endpoint’s Send now is the endpoint’s row. Two rows for one email is a log that cannot be counted.
 6. **The UI knows every entity type.** `mapEntityTypeToCat` in `AuditDetail.jsx` names each type’s category; the test pins the map. An unknown type falling into the default category is a row the filter hides.
 
+
+## 18b43. An Integration Suite’s First Statement Points The Client At The Test Database — And A Scan Pins It In Every Suite (hard rule)
+
+**Origin (§0.145, 15 Sep 2026).** `db/index.ts` builds the Neon client at import from `NETLIFY_DATABASE_URL`. Eighteen suites reassigned it from `DATABASE_URL_TEST` as their first statement; the nineteenth did not. On CI, with no `.env`, the client threw and the job was red for days. On the developer’s machine, where `.env` names the APPLICATION database, that suite deleted and wrote its rows in live data on every `test:int` — and reported green, because the schema guard checks columns and the app database has them all. Nothing in the run said which database it had touched.
+
+1. **The refusal and the redirect are the first two statements of every `*.itest.mjs`, before any `import`.** `if (!process.env.DATABASE_URL_TEST) throw …` then `process.env.NETLIFY_DATABASE_URL = process.env.DATABASE_URL_TEST;`. An `import` above them has already built the client on whatever the shell held. A dynamic import later in the file does not excuse the order — the next edit adds a static one.
+2. **A scan, not a convention.** `tests/itest-targets-test-db.test.mjs` reads every suite and fails by name on a missing refusal, a redirect out of order, or a redirect after the first import; it also checks the `test:int` script names every suite in the directory. A convention held for eighteen files and failed silently on the nineteenth.
+3. **"It passed locally" is not evidence the suite touched the test database.** A green local run proves the queries ran somewhere with the columns. When a suite is new, read its target once: the test database should show its rows (or their absence after cleanup) and the app database should show nothing of its names — read-only, both.
+4. **The hard rule applies to tests.** A `DELETE` in a `before` hook is a delete; the CLAUDE.md rule against destructive commands on live data does not exempt code that meant to hit a different database.

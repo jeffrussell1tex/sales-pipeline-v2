@@ -7,6 +7,19 @@
 // namespace (guide §18b25's intent) and deletes them before and after. The
 // site is what the process's URL says, so the suite names two sites of its
 // own and proves one never reads the other's row.
+//
+// 1) Point the db client at the test branch BEFORE anything imports db/index.ts.
+// This suite was the ONE of nineteen without these lines (§0.145, 15 Sep): on
+// CI, with no .env, the Neon client threw at import and the integration job was
+// red on every run since 13 Sep; on a machine with .env it ran against the
+// APPLICATION database — the shared main branch — deleting and writing its
+// itest_hb_* rows there. tests/itest-targets-test-db.test.mjs now pins these
+// two lines in every suite.
+if (!process.env.DATABASE_URL_TEST) {
+    throw new Error('DATABASE_URL_TEST is not set — refusing to run integration tests against a non-test database. See TESTING.md.');
+}
+process.env.NETLIFY_DATABASE_URL = process.env.DATABASE_URL_TEST;
+
 import { test, before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
