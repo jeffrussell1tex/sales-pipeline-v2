@@ -967,13 +967,19 @@ function PlateRow({ item, idx, total, urgencyBorder, getStageColor, T, fmtArr })
                 transition: 'background 0.1s',
                 cursor: item.onClick ? 'pointer' : 'default',
             }}>
-            {/* Time / urgency label */}
-            <div style={{ width: '68px', flexShrink: 0 }}>
+            {/* Time / urgency label. Wide enough for the longest stage name on its own
+                line ("Negotiation/Review", "Evaluation (Demo)") — at 68px the stage wrapped
+                under the amount and its unbreakable word ran across the title column
+                (Jeff's screenshot, 15 Sep); the ellipsis is the guard for anything longer. */}
+            <div style={{ width: '136px', flexShrink: 0, minWidth: 0 }}>
                 <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: item.timeColor, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: T.sans }}>
                     {item.timeLabel}
                 </div>
                 {item.arr > 0 && item.stage && (
-                    <div style={{ fontSize: '0.6875rem', color: T.inkMuted, marginTop: '2px', fontFamily: T.sans }}>{fmtArr(item.arr)} · {item.stage}</div>
+                    <div style={{ fontSize: '0.6875rem', color: T.inkMuted, marginTop: '2px', fontFamily: T.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${fmtArr(item.arr)} · ${item.stage}`}>
+                        <span>{fmtArr(item.arr)}</span>
+                        <span style={{ display: 'block', color: sc.text || T.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.stage}</span>
+                    </div>
                 )}
             </div>
 
