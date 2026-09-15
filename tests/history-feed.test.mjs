@@ -97,9 +97,12 @@ test('ReportsTab: the History tab reads real columns; PDF export escapes; labels
     assert.ok(src.includes('Current quarter quota</div>'));
     assert.ok(!src.includes('% of forecast · '));
     assert.ok(!src.includes('to hit forecast · '));
-    // the AI builder no longer claims to have interpreted the prompt
+    // the AI builder no longer claims to have interpreted the prompt — and since
+    // §0.139 it reads it for real (tests/report-prompt.test.mjs); the old
+    // admission and the old claim are both gone
     assert.ok(!src.includes('I built a <strong>horizontal bar chart'));
-    assert.ok(src.includes('does not interpret prompts yet'));
+    assert.ok(!src.includes('does not interpret prompts yet'));
+    assert.ok(src.includes("import { interpretPrompt, PROMPT_STARTERS } from '../utils/reportPrompt.js';"));
     // dead state gone
     assert.ok(!src.includes('actPeriod') && !src.includes('commissionReportFilter'));
     // helper wiring

@@ -87,8 +87,10 @@ export async function deliverReport(row, { now = new Date(), trigger = 'schedule
 
     const data = await loadReportData(row.orgId, owner);
     const period = row.filters?.period || 'all';
+    // The whole saved definition runs — the period, its custom bounds and the
+    // row filters (§0.139) — so the table sent is the picture the builder showed.
     const result = runReport(
-        { source: row.source, dims: Array.isArray(row.dims) ? row.dims : [], metrics: Array.isArray(row.metrics) ? row.metrics : [], period, limit: 200 },
+        { source: row.source, dims: Array.isArray(row.dims) ? row.dims : [], metrics: Array.isArray(row.metrics) ? row.metrics : [], period, from: row.filters?.from || '', to: row.filters?.to || '', where: row.filters?.where || [], limit: 200 },
         data, { fiscalStart: data.fiscalStart, today: now });
     const table = deliveryTable(result);
     const url = siteUrl();

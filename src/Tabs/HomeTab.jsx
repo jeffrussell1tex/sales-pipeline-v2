@@ -187,7 +187,7 @@ export default function HomeTab() {
         return ids.map(id => homeReports.find(r => r.id === id)).filter(Boolean).map(r => ({
             report: r,
             chartType: REPORT_CHARTS.some(c => c.id === r.chartType) ? r.chartType : 'table',
-            result: r.config?.templateId ? null : runReport({ source: r.source, dims: r.dims || [], metrics: r.metrics || [], period: r.filters?.period || 'all', limit: 8 }, data, { fiscalStart }),
+            result: r.config?.templateId ? null : runReport({ source: r.source, dims: r.dims || [], metrics: r.metrics || [], period: r.filters?.period || 'all', from: r.filters?.from || '', to: r.filters?.to || '', where: r.filters?.where || [], limit: 8 }, data, { fiscalStart }),
         }));
     }, [myProfile, homeReports, visibleOpportunities, accounts, leads, activities, settings]);
     const openPinnedReport = (r) => {

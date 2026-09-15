@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** September 13, 2026 · rules current through **§18b38**.
+**Updated:** September 15, 2026 · rules current through **§18b41** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3512,3 +3512,15 @@ through `dbFetch`.
 4. **The rules are a pure module with the surface’s reads injected** (`lookup(techId) → { tech, shift, dayBlocks, rivals }`), so they are tested by RUNNING with fixtures — the swap, the no-op, each refusal in its words, the co-tech’s day off on a day move — and mutated (a promoted status, a gate gone, a swap that adds). The board and the handler are source scans.
 5. **Adopt the server’s row, both copies.** The client row follows the server’s answer (the date, the notification trail, the token); the raw copy the Jobs view reads follows too. An optimistic move that survived a refused write is how "it didn’t save" starts.
 6. **Refuse where the gesture happened.** A strip above the grid, `role="alert"`, dismissable; the result `role="status"`, timed. Never a console line.
+
+## 18b41. A Box That Says "AI" Reads Its Prompt — A Fixed Answer Is A Stub, And A Stub Is Labelled, Not Dressed (hard rule)
+
+**Origin (§0.139, 15 Sep 2026).** The report picker’s "Ask AI" box took a prompt, showed the SAME hard-coded "stuck deals by rep" chart for every sentence, dressed it with seven fixed chips and a "Fields below were inferred by AI" note, and admitted the truth in one small line: "The report builder does not interpret prompts yet". Jeff typed "Quota Performance By Rep", got the stuck-deals chart with his words as its title, and reported the feature as broken — which it was, by the only measure that matters: what the surface promised. Read against the code before building: the engine had no row filters either, so the one report the stub drew could not be built by hand.
+
+1. **A prompt surface interprets, or it does not exist.** A control that reads as intelligent — "Ask AI", "Generate", "inferred" — must turn its input into the definition the feature runs on, or it is removed. A stub that always answers the same thing is not a preview of a feature; it is a wrong answer with a confident face. If the reading is not built yet, the box is not shown.
+2. **Read into the feature’s own vocabulary, never beside it.** The interpretation emits only ids the engine already resolves (`fieldsFor`, `filtersFor`), validated by the same allowlists a hand-built definition passes through, and lands in the SAME builder — every part a chip, editable, run by the real engine. A parallel renderer for the "AI" path (the stub had its own computation and its own chart) is how the fake stayed plausible for two months.
+3. **What cannot be done is said, in words, where the answer is.** Every phrase the reader recognises but cannot honour (win rate, forecast accuracy, a field the source lacks, a span of quarters) is NAMED in the result and shown under the reading — never silently dropped, never mapped to the nearest thing. A default that stood in for something unread is said too ("Only the data source was recognised").
+4. **The examples the surface offers are ones it reads in full.** A starter chip is a promise; a test proves each starter produces a definition with no "cannot do" note. The old starters named fields the builder does not have.
+5. **Deterministic first; a model is an enhancer with a fallback, never the only path.** The interpreter is pure, keyless and tested by running it over sentences (the mutation harness pins the source, the filters, the fiscal calendar, the notes). A Claude-backed reading, if added, returns the same shape, is validated by the same allowlists, and falls back to the local reader when no key is configured — a feature a customer paid for does not stop working when an API key lapses.
+6. **The org’s own words come from the org, never from a guess.** Stage names and roster names become filters only when the caller hands them in (`opts.stages`, `opts.people`), a first name only when one person carries it. "Karen" in a workspace with two Karens filters nobody.
+

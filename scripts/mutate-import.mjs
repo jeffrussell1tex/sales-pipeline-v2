@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -2363,8 +2363,8 @@ const mutations = [
 
     ["report builder: the period is ignored — \"Q3\" reports all time",
         "src/utils/reportQuery.js",
-        "    const inPeriod = range ? scanned.filter(r => inRange(sourceDayOf[source](r), range)) : scanned;",
-        "    const inPeriod = scanned;"],
+        "    const inRangeRows = range ? scanned.filter(r => inRange(sourceDayOf[source](r), range)) : scanned;",
+        "    const inRangeRows = scanned;"],
 
     ["report builder: a saved report's field by LABEL no longer resolves — every report saved before 0.133 loses its measures",
         "src/utils/reportQuery.js",
@@ -2524,6 +2524,62 @@ const mutations = [
         "src/components/rails/AccountRail.jsx",
         "                    <div style={{ background: `${T.warn}18`, border: `1px solid ${T.warn}40`, borderRadius: T.r, padding: '10px 12px', marginBottom: 12 }}>",
         "                    <div style={{ background: '#fef3c7', border: `1px solid ${T.warn}40`, borderRadius: T.r, padding: '10px 12px', marginBottom: 12 }}>"],
+
+    // ── The report builder reads its prompt; the engine has row filters (0.139) ──
+    ["report filters: the where list is ignored — every filtered report reports every row",
+        "src/utils/reportQuery.js",
+        "    const inPeriod = where.length\n        ? inRangeRows.filter(r => where.every(w => filters.find(f => f.id === w.id).test(r, ctx, w.op, w.value)))\n        : inRangeRows;",
+        "    const inPeriod = inRangeRows;"],
+
+    ["report filters: ANY filter passing is enough (every → some)",
+        "src/utils/reportQuery.js",
+        "        ? inRangeRows.filter(r => where.every(w => filters.find(f => f.id === w.id).test(r, ctx, w.op, w.value)))",
+        "        ? inRangeRows.filter(r => where.some(w => filters.find(f => f.id === w.id).test(r, ctx, w.op, w.value)))"],
+
+    ["report filters: an unknown filter id is kept instead of dropped (the allowlist is gone)",
+        "src/utils/reportQuery.js",
+        "        if (!f) { dropped.push(raw); continue; }",
+        "        if (!f) { out.push({ id: str(raw.id), op: raw.op, value: raw.value }); continue; }"],
+
+    ["report filters: 'open' means every deal (the status test says yes to everything)",
+        "src/utils/reportQuery.js",
+        "    F('status', 'Status', 'choice', ['eq'], (o, ctx, op, value) => (value === 'open' ? isOpenDeal(o) : value === 'won' ? o.stage === 'Closed Won' : value === 'lost' ? o.stage === 'Closed Lost' : true),",
+        "    F('status', 'Status', 'choice', ['eq'], (o, ctx, op, value) => (value === 'open' ? true : value === 'won' ? o.stage === 'Closed Won' : value === 'lost' ? o.stage === 'Closed Lost' : true),"],
+
+    ["report prompt: every prompt is the stuck-deals report again (the source is fixed, the filters hard-coded)",
+        "src/utils/reportPrompt.js",
+        "    const { source, word: sourceWord } = detectSource(t);",
+        "    const { source, word: sourceWord } = { source: 'Opportunities', word: 'deals' }; where.push({ id: 'no_activity_days', op: 'gte', value: 14 });"],
+
+    ["report prompt: a stuck deal is no longer read as an open one",
+        "src/utils/reportPrompt.js",
+        "        else if (state.stuck) addWhere({ id: 'status', op: 'eq', value: 'open' });   // a stuck deal is an open one",
+        "        else if (false) addWhere({ id: 'status', op: 'eq', value: 'open' });"],
+
+    ["report prompt: 'last fiscal year' reads as THIS fiscal year (the rule order flipped back)",
+        "src/utils/reportPrompt.js",
+        "        [/\\b(?:last|previous|prior) (?:fiscal )?year\\b/,                             () => { const r = fiscalRange(q.fiscalYear - 1, 'FY', fiscalStart); return { ...r, period: 'custom', label: `Last fiscal year (FY${q.fiscalYear - 1})` }; }],\n        [/\\b(this|current) (?:fiscal )?year\\b|\\bytd\\b|\\byear to date\\b|\\bfiscal year\\b|\\bthis fy\\b/, () => ({ period: 'FY', label: 'This fiscal year' })],",
+        "        [/\\b(this|current) (?:fiscal )?year\\b|\\bytd\\b|\\byear to date\\b|\\bfiscal year\\b|\\bthis fy\\b/, () => ({ period: 'FY', label: 'This fiscal year' })],\n        [/\\b(?:last|previous|prior) (?:fiscal )?year\\b/,                             () => { const r = fiscalRange(q.fiscalYear - 1, 'FY', fiscalStart); return { ...r, period: 'custom', label: `Last fiscal year (FY${q.fiscalYear - 1})` }; }],"],
+
+    ["report prompt: what cannot be done is swallowed silently (the notes are never written)",
+        "src/utils/reportPrompt.js",
+        "    for (const [re, note] of UNSUPPORTED) if (re.test(t)) { notes.push(note); consume(re); }",
+        "    for (const [re, note] of UNSUPPORTED) if (re.test(t)) { consume(re); }"],
+
+    ["report prompt: the tab runs the prompt through the old fixed view (Generate no longer reads it)",
+        "src/Tabs/ReportsTab.jsx",
+        "            const handleGenerate = () => applyPrompt(aiPrompt);",
+        "            const handleGenerate = () => { setBuilderName(aiPrompt); setCreateMode('blank'); setShowCreateReport(true); };"],
+
+    ["report filters: a saved report reopens without its filters",
+        "src/Tabs/ReportsTab.jsx",
+        "        setBuilderWhere(where);\n        setBuilderChart(chart);",
+        "        setBuilderWhere([]);\n        setBuilderChart(chart);"],
+
+    ["report filters: the delivery job runs the report without its filters — the email shows a different picture than the builder",
+        "netlify/functions/report-deliveries.mjs",
+        "period, from: row.filters?.from || '', to: row.filters?.to || '', where: row.filters?.where || [], limit: 200 },",
+        "period, limit: 200 },"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

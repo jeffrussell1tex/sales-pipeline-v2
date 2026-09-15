@@ -19,7 +19,8 @@ import { T } from '../tokens.js';
 // The report builder's query engine and its chart (state §0.133): the preview
 // and an opened saved report are the same runReport() over the tab's scoped
 // sets, drawn by the same component.
-import { REPORT_SOURCES, REPORT_PERIODS, REPORT_CHARTS, fieldsFor, runReport } from '../utils/reportQuery.js';
+import { REPORT_SOURCES, REPORT_PERIODS, REPORT_CHARTS, fieldsFor, filtersFor, whereLabel, runReport } from '../utils/reportQuery.js';
+import { interpretPrompt, PROMPT_STARTERS } from '../utils/reportPrompt.js';
 import ReportChart from '../components/ReportChart.jsx';
 import { useAuth } from '@clerk/clerk-react';
 // A saved report's delivery schedule — the shape the endpoint stores and the
@@ -2147,6 +2148,101 @@ const LibraryCard = ({ r, mayTouch, pinned, currentUser, onOpen, onPin, onShare,
     );
 };
 
+// ── The prompt's reading (state §0.139) ──────────────────────────────────────
+// Module scope, data as props. What interpretPrompt() understood, as chips, and
+// what it could not do, in words — above a builder whose every part is the
+// interpretation and editable. Before this the "AI-generated" view drew one
+// hard-coded picture for every prompt and said so in small print.
+const PromptBanner = ({ interpretation, onEdit, onDismiss }) => {
+    if (!interpretation) return null;
+    const { prompt, understood, notes } = interpretation;
+    const eb = { fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: T.goldInk, fontFamily: T.sans };
+    return (
+        <div style={{ background: `${T.gold}22`, border: `1px solid ${T.gold}`, borderRadius: T.r + 1, padding: '14px 16px', marginBottom: 12, fontFamily: T.sans }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <div style={{ width: 26, height: 26, background: T.gold, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13 }}>✦</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                        <span style={eb}>Your prompt</span>
+                        <span style={{ fontSize: 12, color: T.ink, fontStyle: 'italic' }}>"{prompt}"</span>
+                        <button onClick={onEdit} style={{ background: 'transparent', border: 'none', padding: 0, fontSize: 11, color: T.goldInk, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, textDecoration: 'underline' }}>Edit prompt</button>
+                    </div>
+                    <div style={{ fontSize: 12, color: T.ink, marginBottom: 8 }}>Read as the report below — every part is a chip on the right; change any of them and click Update preview.</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {understood.map((u, i) => (
+                            <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: T.surface, border: `1px solid ${T.gold}`, borderRadius: 10, fontSize: 11 }}>
+                                <span style={{ color: T.inkMuted, fontSize: 9.5, fontWeight: 600, letterSpacing: 0.5 }}>{u.kind.toUpperCase()}</span>
+                                <span style={{ color: T.ink, fontWeight: 500 }}>{u.text}</span>
+                            </div>
+                        ))}
+                    </div>
+                    {notes.length > 0 && (
+                        <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 11.5, color: T.inkMid, lineHeight: 1.5 }}>
+                            {notes.map((n, i) => <li key={i}>{n}</li>)}
+                        </ul>
+                    )}
+                </div>
+                <button onClick={onDismiss} title="Keep the report, hide this note" style={{ background: 'transparent', border: `1px solid ${T.borderStrong}`, color: T.ink, padding: '6px 12px', fontSize: 11, fontWeight: 500, borderRadius: 2, cursor: 'pointer', fontFamily: T.sans, flexShrink: 0 }}>✓ Looks right</button>
+            </div>
+        </div>
+    );
+};
+
+// ── The row filters (state §0.139) ───────────────────────────────────────────
+// Module scope, data as props — a form control inside a component declared
+// inline remounts on every keystroke (guide §16). The chips are the report's
+// `where` in words (whereLabel); the add row offers only filtersFor(source).
+const WhereEditor = ({ source, where, onChange }) => {
+    const filters = filtersFor(source);
+    const [fieldId, setFieldId] = React.useState(filters[0]?.id || '');
+    const [op, setOp] = React.useState(filters[0]?.ops[0] || 'eq');
+    const [value, setValue] = React.useState('');
+    const f = filters.find(x => x.id === fieldId) || filters[0];
+    React.useEffect(() => { setFieldId(filters[0]?.id || ''); setOp(filters[0]?.ops[0] || 'eq'); setValue(''); }, [source]);   // eslint-disable-line react-hooks/exhaustive-deps
+    const pick = (id) => { const nf = filters.find(x => x.id === id); setFieldId(id); setOp(nf?.ops[0] || 'eq'); setValue(nf?.kind === 'choice' ? (nf.options[0]?.value || '') : ''); };
+    const ready = f && (f.kind === 'number' ? Number.isFinite(Number(value)) && value !== '' : f.kind === 'choice' ? !!(value || f.options[0]?.value) : !!value.trim());
+    const add = () => {
+        if (!ready) return;
+        const v = f.kind === 'number' ? Number(value) : f.kind === 'choice' ? (value || f.options[0].value) : value.trim();
+        onChange([...(where || []).filter(w => !(w.id === f.id && w.op === op)), { id: f.id, op, value: v }]);
+        setValue('');
+    };
+    const field = { padding: '5px 8px', border: `1px solid ${T.border}`, borderRadius: 2, fontSize: 11.5, fontFamily: T.sans, color: T.ink, background: T.surface };
+    const OPS = { gte: '≥', lte: '≤', eq: 'is', ne: 'is not', in: 'is one of' };
+    return (
+        <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: T.inkMid, fontFamily: T.sans, marginBottom: 6 }}>Only rows where</div>
+            <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 8, display: 'flex', flexWrap: 'wrap', gap: 5, minHeight: 38, marginBottom: 8 }}>
+                {(where || []).map((w, i) => (
+                    <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px 3px 6px', background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.warn}`, borderRadius: 2, fontSize: 12, color: T.ink, fontFamily: T.sans }}>
+                        {whereLabel(source, w)}
+                        <button onClick={() => onChange(where.filter((_, j) => j !== i))} title="Remove this filter" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', color: T.inkMuted, fontSize: 11, lineHeight: 1 }}>×</button>
+                    </div>
+                ))}
+                {(where || []).length === 0 && <span style={{ fontSize: 11, color: T.inkMuted, padding: '3px 4px', fontFamily: T.sans }}>No row filters — every row in the period counts.</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                <select value={fieldId} onChange={e => pick(e.target.value)} style={{ ...field, flex: '1 1 120px' }} aria-label="Filter field">
+                    {filters.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
+                </select>
+                {f && f.kind !== 'choice' && (
+                    <select value={op} onChange={e => setOp(e.target.value)} style={{ ...field, width: 90 }} aria-label="Filter operator">
+                        {f.ops.filter(o => o !== 'in').map(o => <option key={o} value={o}>{OPS[o]}</option>)}
+                    </select>
+                )}
+                {f && f.kind === 'choice' && (
+                    <select value={value || f.options[0]?.value || ''} onChange={e => setValue(e.target.value)} style={{ ...field, flex: '1 1 120px' }} aria-label="Filter value">
+                        {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                )}
+                {f && f.kind === 'number' && <input type="number" value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder={f.unit === 'money' ? 'dollars' : f.unit === 'days' ? 'days' : 'number'} style={{ ...field, width: 90 }} aria-label="Filter value"/>}
+                {f && f.kind === 'text' && <input value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder={`a ${f.label.toLowerCase()}`} style={{ ...field, flex: '1 1 120px' }} aria-label="Filter value"/>}
+                <button onClick={add} disabled={!ready} style={{ padding: '5px 10px', background: ready ? T.ink : T.surface2, color: ready ? T.surface : T.inkMuted, border: 'none', borderRadius: 2, fontSize: 11, fontWeight: 600, cursor: ready ? 'pointer' : 'not-allowed', fontFamily: T.sans }}>+ Add</button>
+            </div>
+        </div>
+    );
+};
+
 // ── The delivery dialog (state §0.135) ───────────────────────────────────────
 // Module scope, data as props. The draft is the stored schedule or a first one
 // (weekly, Monday 8:00 in the browser's zone, to me); Save PUTs `delivery` —
@@ -2238,7 +2334,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const [showCreateReport, setShowCreateReport] = React.useState(false);
     const [createMode, setCreateMode] = React.useState('picker');
     const [aiPrompt, setAiPrompt] = React.useState('');
-    const [aiGenerated, setAiGenerated] = React.useState(false);
+    // §0.139 — what the last prompt was read as ({ prompt, understood, notes }),
+    // shown above the builder it seeded; null when the builder was not seeded by a prompt.
+    const [aiInterpretation, setAiInterpretation] = React.useState(null);
     const [builderTab, setBuilderTab] = React.useState('Data');
     const [builderDirty, setBuilderDirty] = React.useState(true);
     const [builderRendered, setBuilderRendered] = React.useState(false);
@@ -2255,9 +2353,43 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     const [builderName, setBuilderName] = React.useState('Untitled report');
     const [editingReportId, setEditingReportId] = React.useState(null);
     const [builderResult, setBuilderResult] = React.useState(null);
-    const builderDefinition = () => ({ source: builderSource, dims: builderDims, metrics: builderMetrics, period: builderPeriod, limit: builderChart === 'table' ? 200 : 12 });
+    // §0.139 — the row filters and a custom range are part of the definition
+    // (saved at filters.where / .from / .to, run by the engine everywhere the report runs).
+    const [builderWhere, setBuilderWhere] = React.useState([]);
+    const [builderFrom, setBuilderFrom] = React.useState('');
+    const [builderTo, setBuilderTo] = React.useState('');
+    const builderDefinition = () => ({ source: builderSource, dims: builderDims, metrics: builderMetrics, period: builderPeriod, from: builderFrom, to: builderTo, where: builderWhere, limit: builderChart === 'table' ? 200 : 12 });
     const builderData = () => ({ opportunities: reportsOpps || [], accounts: accounts || [], leads: leads || [], activities: activities || [], settings: settings || {} });
     const runBuilder = () => runReport(builderDefinition(), builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 });
+    // §0.139 — a prompt is READ into the same definition a hand-built report is,
+    // the builder seeded with it, the real engine run: every part editable. The
+    // org's own stage names and roster let "in Proposal" / "Karen's deals" become
+    // filters; nothing else is guessed (reportPrompt.js).
+    const applyPrompt = (text) => {
+        const prompt = String(text || '').trim();
+        if (!prompt) return;
+        const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
+        const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });
+        const d = r.definition;
+        setEditingReportId(null);
+        setBuilderSource(d.source);
+        setBuilderDims(d.dims);
+        setBuilderMetrics(d.metrics);
+        setBuilderPeriod(d.period);
+        setBuilderFrom(d.from);
+        setBuilderTo(d.to);
+        setBuilderWhere(d.where);
+        setBuilderChart(d.chartType);
+        setBuilderName(r.name);
+        setBuilderAdvanced(true);
+        setAiInterpretation({ prompt, understood: r.understood, notes: r.notes });
+        setBuilderResult(runReport({ ...d, limit: d.chartType === 'table' ? 200 : 12 }, builderData(), { fiscalStart }));
+        setBuilderDirty(false);
+        setBuilderRendered(true);
+        setBuilderTab('Data');
+        setCreateMode('blank');
+        setShowCreateReport(true);
+    };
     // A saved report opens INTO the builder: its definition seeds the state, the
     // query runs, and Save updates that row.
     const openSavedReport = (r) => {
@@ -2265,18 +2397,25 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const f = fieldsFor(src);
         const dims = (Array.isArray(r.dims) ? r.dims : []).map(d => ({ id: d.id, label: d.label, kind: 'dim' }));
         const metrics = (Array.isArray(r.metrics) ? r.metrics : []).map(m => ({ id: m.id, label: m.label, kind: 'metric' }));
-        const period = r.filters?.period && REPORT_PERIODS.some(p => p.value === r.filters.period) ? r.filters.period : 'all';
+        const period = r.filters?.period === 'custom' ? 'custom' : (r.filters?.period && REPORT_PERIODS.some(p => p.value === r.filters.period) ? r.filters.period : 'all');
+        const from = period === 'custom' && typeof r.filters?.from === 'string' ? r.filters.from : '';
+        const to = period === 'custom' && typeof r.filters?.to === 'string' ? r.filters.to : '';
+        const where = Array.isArray(r.filters?.where) ? r.filters.where : [];
         const chart = REPORT_CHARTS.some(c => c.id === r.chartType) ? r.chartType : 'table';
         setBuilderSource(src);
         setBuilderDims(dims.length ? dims : f.defaults.dims.map(id => { const d = f.dims.find(x => x.id === id); return { id: d.id, label: d.label, kind: 'dim' }; }));
         setBuilderMetrics(metrics.length ? metrics : f.defaults.metrics.map(id => { const m = f.metrics.find(x => x.id === id); return { id: m.id, label: m.label, kind: 'metric' }; }));
         setBuilderPeriod(period);
+        setBuilderFrom(from);
+        setBuilderTo(to);
+        setBuilderWhere(where);
         setBuilderChart(chart);
         setBuilderName(r.name || 'Untitled report');
         setEditingReportId(r.id);
+        setAiInterpretation(null);
         setBuilderAdvanced(true);
         setBuilderTab('Data');
-        setBuilderResult(runReport({ source: src, dims, metrics, period, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 }));
+        setBuilderResult(runReport({ source: src, dims, metrics, period, from, to, where, limit: chart === 'table' ? 200 : 12 }, builderData(), { fiscalStart: parseInt(settings?.fiscalYearStart) || 10 }));
         setBuilderDirty(false);
         setBuilderRendered(true);
         setCreateMode('blank');
@@ -3884,13 +4023,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
         const closeCreate = () => { setShowCreateReport(false); setCreateMode('picker'); };
 
-        // AI starters
-        const AI_STARTERS = [
-            'Deals stuck more than 14 days, by rep',
-            'Win rate by lead source, last 6 months',
-            'Avg days from proposal to close, by deal tier',
-            'Forecast accuracy by rep, last 4 quarters',
-        ];
+        // The starters are the interpreter's own (§0.139): each one is a prompt
+        // it reads in full, so a click never lands on a "cannot do" note.
+        const AI_STARTERS = PROMPT_STARTERS;
 
         // Sources
         // The sources, the charts: the query engine's lists (§0.133). Quotes are
@@ -3914,7 +4049,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             <div style={{ display:'flex', borderBottom:`1px solid ${T.border}` }}>
                 {tabs.map(t => {
                     const a = active===t;
-                    return <button key={t} onClick={()=>onChange(t)} style={{ background:'transparent', border:'none', padding:'9px 14px', fontSize:12, fontWeight:a?600:500, color:a?T.ink:T.inkMuted, borderBottom:a?`2px solid ${T.ink}`:'2px solid transparent', marginBottom:-1, cursor:'pointer', fontFamily:T.sans }}>{t}{t==='Data'&&builderDims.length+builderMetrics.length>0?<span style={{ marginLeft:5, background:a?T.ink:T.surface2, color:a?T.surface:T.inkMid, fontSize:10, padding:'1px 5px', borderRadius:8, fontWeight:600 }}>{builderDims.length+builderMetrics.length}</span>:null}</button>;
+                    const n = t==='Data' ? builderDims.length+builderMetrics.length : t==='Filters' ? builderWhere.length+(builderPeriod!=='all'?1:0) : 0;
+                    return <button key={t} onClick={()=>onChange(t)} style={{ background:'transparent', border:'none', padding:'9px 14px', fontSize:12, fontWeight:a?600:500, color:a?T.ink:T.inkMuted, borderBottom:a?`2px solid ${T.ink}`:'2px solid transparent', marginBottom:-1, cursor:'pointer', fontFamily:T.sans }}>{t}{n>0?<span style={{ marginLeft:5, background:a?T.ink:T.surface2, color:a?T.surface:T.inkMid, fontSize:10, padding:'1px 5px', borderRadius:8, fontWeight:600 }}>{n}</span>:null}</button>;
                 })}
             </div>
         );
@@ -3951,14 +4087,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
 
         // ── PICKER ──────────────────────────────────────────────────
         if (createMode === 'picker') {
-            const handleGenerate = () => {
-                if (!aiPrompt.trim()) return;
-                setAiGenerated(true);
-                setCreateMode('ai');
-                setBuilderTab('Data');
-                setBuilderDirty(false);
-                setBuilderRendered(true);
-            };
+            // §0.139 — the prompt is read into a definition and the builder opens on it.
+            const handleGenerate = () => applyPrompt(aiPrompt);
             return (
                 <div style={{ fontFamily:T.sans, color:T.ink }}>
                     {/* Page header */}
@@ -4015,7 +4145,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                             { eyebrow:'Duplicate', title:'An existing report', desc:'Copy one you already have and tweak it. Yours or shared.', badge:'from library', mode:'duplicate',
                               glyph:<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={T.inkMid} strokeWidth="1.2"><rect x="6" y="6" width="18" height="22" rx="1"/><rect x="14" y="12" width="18" height="22" rx="1" fill={T.surface}/></svg> },
                         ].map(card => (
-                            <button key={card.mode} onClick={()=>{ setBuilderTab('Data'); if (card.mode==='blank') { setEditingReportId(null); setBuilderName('Untitled report'); setBuilderResult(null); setBuilderRendered(false); setBuilderDirty(true); } setCreateMode(card.mode); }}
+                            <button key={card.mode} onClick={()=>{ setBuilderTab('Data'); if (card.mode==='blank') { setEditingReportId(null); setAiInterpretation(null); setBuilderWhere([]); setBuilderFrom(''); setBuilderTo(''); setBuilderName('Untitled report'); setBuilderResult(null); setBuilderRendered(false); setBuilderDirty(true); } setCreateMode(card.mode); }}
                                 style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 18px 16px', textAlign:'left', cursor:'pointer', fontFamily:T.sans, display:'flex', flexDirection:'column', gap:6, transition:'border-color 120ms' }}
                                 onMouseEnter={e=>e.currentTarget.style.borderColor=T.ink}
                                 onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
@@ -4117,182 +4247,6 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
             );
         }
 
-        // ── AI GENERATED ─────────────────────────────────────────────
-        if (createMode === 'ai') {
-            // Stuck deals computed from real data for the preview
-            const stuckReps = {};
-            const now14 = new Date(); now14.setDate(now14.getDate()-14);
-            const iso14 = isoLocal(now14);
-            (reportsOpps||[]).filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost').forEach(o=>{
-                const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
-                if (!lastAct?.date || lastAct.date <= iso14) {
-                    const rep = o.salesRep||o.assignedTo||'Unassigned';
-                    if (!stuckReps[rep]) stuckReps[rep]={count:0,arr:0};
-                    stuckReps[rep].count++;
-                    stuckReps[rep].arr += parseFloat(o.arr)||0;
-                }
-            });
-            const stuckRows = Object.entries(stuckReps).map(([rep,d])=>({rep,count:d.count,arr:d.arr})).sort((a,b)=>b.count-a.count).slice(0,8);
-            const maxCount = Math.max(...stuckRows.map(r=>r.count),1);
-            const maxArr   = Math.max(...stuckRows.map(r=>r.arr),1);
-            const totalStuck = stuckRows.reduce((s,r)=>s+r.count,0);
-            const totalArrStuck = stuckRows.reduce((s,r)=>s+r.arr,0);
-            const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
-            const avBg = name => { const p=['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a']; let h=0; for(const c of(name||'')) h=(h*31+c.charCodeAt(0))|0; return p[Math.abs(h)%p.length]; };
-
-            return (
-                <div style={{ fontFamily:T.sans, color:T.ink }}>
-                    {/* AI interpretation banner */}
-                    <div style={{ background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:T.r+1, padding:'14px 16px', marginBottom:12 }}>
-                        <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
-                            <div style={{ width:26, height:26, background:T.gold, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:13 }}>✦</div>
-                            <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap' }}>
-                                    <span style={{ ...ebD(T.goldInk), fontSize:9.5 }}>Your prompt</span>
-                                    <span style={{ fontSize:12, color:T.ink, fontStyle:'italic' }}>"{aiPrompt||'Deals stuck more than 14 days, by rep'}"</span>
-                                    <button onClick={()=>setCreateMode('picker')} style={{ background:'transparent', border:'none', padding:0, fontSize:11, color:T.goldInk, fontWeight:600, cursor:'pointer', fontFamily:T.sans, textDecoration:'underline' }}>Edit prompt</button>
-                                </div>
-                                <div style={{ fontSize:12, color:T.ink, marginBottom:8, fontFamily:T.sans }}>
-                                    The report builder does not interpret prompts yet. This is the built-in <strong>stuck deals by rep</strong> view — open deals with <strong>no activity in 14+ days</strong>, grouped by owner — computed from your data; your prompt becomes the report's name. {stuckRows.length} reps have stuck deals.
-                                </div>
-                                <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                                    {[['Source','Opportunities'],['Filter','No activity >14d'],['Filter','Stage open'],['Group','Owner'],['Measure','# deals'],['Measure','ARR at risk'],['Chart','Horizontal bar']].map(([l,v],i)=>(
-                                        <div key={i} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px', background:T.surface, border:`1px solid ${T.gold}`, borderRadius:10, fontSize:11, fontFamily:T.sans }}>
-                                            <span style={{ color:T.inkMuted, fontSize:9.5, fontWeight:600, letterSpacing:0.5 }}>{l.toUpperCase()}</span>
-                                            <span style={{ color:T.ink, fontWeight:500 }}>{v}</span>
-                                            <span style={{ color:T.inkMuted, fontSize:11 }}>×</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            <div style={{ display:'flex', flexDirection:'column', gap:6, flexShrink:0 }}>
-                                <button onClick={closeCreate} style={{ background:T.ink, color:T.surface, border:'none', padding:'6px 12px', fontSize:11, fontWeight:600, borderRadius:2, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:5 }}>✓ Looks right</button>
-                                <button onClick={()=>setCreateMode('picker')} style={{ background:'transparent', color:T.ink, border:`1px solid ${T.borderStrong}`, padding:'6px 12px', fontSize:11, fontWeight:500, borderRadius:2, cursor:'pointer', fontFamily:T.sans }}>Try another</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Page header */}
-                    <BuilderHeader title="Stuck deals by rep" breadcrumb="AI-generated"
-                        onSave={()=>handleSaveReport({ name: aiPrompt||'Stuck deals by rep', source:'Opportunities', dims:[{id:'owner',label:'Owner',kind:'dim'}], metrics:[{id:'count',label:'# of deals',kind:'metric'},{id:'arr',label:'ARR at risk',kind:'metric'}], chartType:'bar', description:'Open deals with no activity in 14+ days, by rep' })}/>
-
-                    {/* Body — preview + config rail */}
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14 }}>
-                        {/* Left — preview */}
-                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                                <UpdateBtn/>
-                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Up to date · {stuckRows.length} rows · generated just now</span>
-                                <div style={{ flex:1 }}/>
-                                
-                            </div>
-                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 22px', display:'flex', flexDirection:'column', gap:12 }}>
-                                <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
-                                    <div>
-                                        <div style={{ fontSize:18, fontFamily:serif, fontStyle:'italic', color:T.ink, letterSpacing:-0.3, lineHeight:1.1 }}>
-                                            {aiPrompt||'Deals stuck more than 14 days, by rep'}
-                                        </div>
-                                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>Open opps · no activity in 14+ days · as of today</div>
-                                    </div>
-                                    <div style={{ display:'flex', gap:12, fontSize:10.5, color:T.inkMid, fontFamily:T.sans }}>
-                                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:9, height:9, background:T.danger, borderRadius:1, display:'block' }}/># stuck deals</span>
-                                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:9, height:9, background:T.inkMid, opacity:0.6, borderRadius:1, display:'block' }}/>ARR at risk</span>
-                                    </div>
-                                </div>
-                                {stuckRows.length === 0 ? (
-                                    <div style={{ padding:'2rem', textAlign:'center', color:T.ok, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>✓ No stuck deals — all open opportunities have recent activity!</div>
-                                ) : stuckRows.map(r=>(
-                                    <div key={r.rep} style={{ display:'flex', alignItems:'center', gap:12 }}>
-                                        <div style={{ width:130, flexShrink:0, display:'flex', alignItems:'center', gap:8 }}>
-                                            <div style={{ width:22, height:22, borderRadius:'50%', background:avBg(r.rep), color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700, flexShrink:0 }}>
-                                                {r.rep.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
-                                            </div>
-                                            <span style={{ fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.rep}</span>
-                                        </div>
-                                        <div style={{ flex:1, display:'flex', flexDirection:'column', gap:3 }}>
-                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                                <div style={{ flex:1, height:10, background:T.surface2, borderRadius:1 }}>
-                                                    <div style={{ width:`${(r.count/maxCount)*100}%`, height:'100%', background:T.danger, borderRadius:1 }}/>
-                                                </div>
-                                                <div style={{ width:28, fontSize:11, fontWeight:600, color:T.ink, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{r.count}</div>
-                                            </div>
-                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                                <div style={{ flex:1, height:6, background:T.surface2, borderRadius:1 }}>
-                                                    <div style={{ width:`${(r.arr/maxArr)*100}%`, height:'100%', background:T.inkMid, opacity:0.55, borderRadius:1 }}/>
-                                                </div>
-                                                <div style={{ width:28, fontSize:10.5, color:T.inkMid, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(r.arr)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                                <div style={{ paddingTop:10, borderTop:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
-                                    <span>Total: <strong style={{ color:T.ink }}>{totalStuck} stuck deals</strong> · <strong style={{ color:T.ink }}>{fmtShort(totalArrStuck)}</strong> at risk across {stuckRows.length} rep{stuckRows.length!==1?'s':''}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Right — config rail */}
-                        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-                            <TabStrip tabs={['Data','Filters','Chart']} active={builderTab} onChange={setBuilderTab}/>
-                            <div style={{ flex:1, overflow:'auto', padding:'14px' }}>
-                                {builderTab==='Data' && (
-                                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                                        <div style={{ padding:'8px 10px', background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:2, fontSize:11, color:T.inkMid, display:'flex', gap:6, fontFamily:T.sans }}>
-                                            ✦ <span>Fields below were inferred by AI. Edit any chip — preview updates when you click Update.</span>
-                                        </div>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Data source</div>
-                                            <div style={{ padding:'8px 10px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, display:'flex', gap:8, alignItems:'center', fontFamily:T.sans }}>
-                                                <span style={{ fontWeight:600, color:T.ink }}>Opportunities</span><span style={{ color:T.inkMuted }}>· {(reportsOpps||[]).length} rows</span>
-                                            </div>
-                                        </div>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Group by</div>
-                                            <div style={{ display:'flex', gap:5 }}><FieldChip label="Owner" kind="dim"/></div>
-                                        </div>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Measure</div>
-                                            <div style={{ display:'flex', gap:5 }}><FieldChip label="# of deals" kind="metric"/><FieldChip label="ARR at risk" kind="metric"/></div>
-                                        </div>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Sort</div>
-                                            <div style={{ padding:'6px 10px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11.5, color:T.ink, fontFamily:T.sans }}>By <strong># of deals</strong> descending</div>
-                                        </div>
-                                    </div>
-                                )}
-                                {builderTab==='Filters' && (
-                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                                        <div style={{ padding:'8px 10px', background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:2, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
-                                            ✦ AI interpreted "stuck more than 14 days" as <strong>no activity in 14+ days</strong>.
-                                        </div>
-                                        {[['Last activity date','≤','Today − 14 days',true],['Stage','is not','Closed Won · Closed Lost',true]].map(([f,op,v,ai],i)=>(
-                                            <div key={i} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 8px', background:T.surface2, border:`1px solid ${ai?T.gold:T.border}`, borderRadius:2, fontSize:11.5, fontFamily:T.sans }}>
-                                                {ai&&<span style={{ fontSize:10 }}>✦</span>}
-                                                <span style={{ fontWeight:600, color:T.ink }}>{f}</span>
-                                                <span style={{ color:T.inkMuted }}>{op}</span>
-                                                <span style={{ fontWeight:500, color:T.ink }}>{v}</span>
-                                                <div style={{ flex:1 }}/><span style={{ color:T.inkMuted, cursor:'pointer' }}>×</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {builderTab==='Chart' && (
-                                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                                        <div style={{ ...ebD(T.inkMid), marginBottom:4 }}>Visualization type</div>
-                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
-                                            {CHART_TYPES.map(ct=>(
-                                                <button key={ct.id} onClick={()=>setBuilderChart(ct.id)}
-                                                    style={{ background:T.surface, border:`1px solid ${builderChart===ct.id?T.ink:T.border}`, borderRadius:T.r, padding:'10px 8px', cursor:'pointer', textAlign:'left', fontFamily:T.sans, boxShadow:builderChart===ct.id?`inset 0 0 0 1px ${T.ink}`:'none' }}>
-                                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{ct.label}</div>
-                                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.3 }}>{ct.desc}</div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
         // ── BLANK builder ────────────────────────────────────────────
         if (createMode === 'blank') {
             // The fields the query engine backs for this source (§0.133) — basic
@@ -4306,12 +4260,15 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                 setBuilderSource(s);
                 setBuilderDims(f.defaults.dims.map(id => { const d = f.dims.find(x => x.id === id); return { id: d.id, label: d.label, kind: 'dim' }; }));
                 setBuilderMetrics(f.defaults.metrics.map(id => { const m = f.metrics.find(x => x.id === id); return { id: m.id, label: m.label, kind: 'metric' }; }));
+                setBuilderWhere([]);   // filters are the source's own
                 setBuilderDirty(true);
             };
+            const filterCount = builderWhere.length + (builderPeriod !== 'all' ? 1 : 0);
             return (
                 <div style={{ fontFamily:T.sans, color:T.ink }}>
-                    <BuilderHeader title={builderName.trim() || 'Untitled report'} breadcrumb={editingReportId ? 'Saved report' : 'Blank canvas'}
-                        onSave={()=>handleSaveReport({ id: editingReportId, name: builderName.trim() || 'Untitled report', source:builderSource, dims:builderDims, metrics:builderMetrics, chartType:builderChart, filters:{ period: builderPeriod }, description:`${builderSource} · ${builderDims.map(d=>d.label).join(', ') || 'totals'} · ${builderMetrics.map(m=>m.label).join(', ')}` })}/>
+                    <PromptBanner interpretation={aiInterpretation} onEdit={()=>setCreateMode('picker')} onDismiss={()=>setAiInterpretation(null)}/>
+                    <BuilderHeader title={builderName.trim() || 'Untitled report'} breadcrumb={editingReportId ? 'Saved report' : aiInterpretation ? 'AI-generated' : 'Blank canvas'}
+                        onSave={()=>handleSaveReport({ id: editingReportId, name: builderName.trim() || 'Untitled report', source:builderSource, dims:builderDims, metrics:builderMetrics, chartType:builderChart, filters:{ period: builderPeriod, from: builderPeriod==='custom' ? builderFrom : '', to: builderPeriod==='custom' ? builderTo : '', where: builderWhere }, description:`${builderSource} · ${builderDims.map(d=>d.label).join(', ') || 'totals'} · ${builderMetrics.map(m=>m.label).join(', ')}${builderWhere.length ? ' · ' + builderWhere.map(w=>whereLabel(builderSource, w)).join(', ') : ''}` })}/>
 
                     {/* Body */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14 }}>
@@ -4338,7 +4295,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                         <ReportChart result={builderResult} chartType={builderChart}/>
                                     </div>
                                     <div style={{ fontSize:11, color:T.inkMuted, paddingTop:10, borderTop:`1px solid ${T.border}`, fontFamily:T.sans }}>
-                                        Chart: <strong style={{ color:T.ink }}>{CHART_TYPES.find(c=>c.id===builderChart)?.label||'Bar'}</strong> · {builderResult ? `${builderResult.count} of ${builderResult.scanned} ${builderSource.toLowerCase()} in the period · ${builderResult.rows.length} group${builderResult.rows.length===1?'':'s'}` : 'not run'} · grouped by {builderDims.map(d=>d.label).join(', ') || 'nothing'} · measuring {builderMetrics.map(m=>m.label).join(', ')}
+                                        Chart: <strong style={{ color:T.ink }}>{CHART_TYPES.find(c=>c.id===builderChart)?.label||'Bar'}</strong> · {builderResult ? `${builderResult.count} of ${builderResult.scanned} ${builderSource.toLowerCase()} in the period${builderResult.where?.length ? ' and the filters' : ''} · ${builderResult.rows.length} group${builderResult.rows.length===1?'':'s'}` : 'not run'} · grouped by {builderDims.map(d=>d.label).join(', ') || 'nothing'} · measuring {builderMetrics.map(m=>m.label).join(', ')}{builderWhere.length ? ` · only ${builderWhere.map(w=>whereLabel(builderSource, w).toLowerCase()).join(', ')}` : ''}
                                     </div>
                                 </div>
                             ) : (
@@ -4361,10 +4318,10 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                 </div>
                                 <div style={{ display:'flex', gap:6, background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, padding:'6px 8px' }}>
                                     <input value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)}
-                                        onKeyDown={e=>{ if(e.key==='Enter'&&aiPrompt.trim()){ setCreateMode('ai'); setBuilderRendered(true); setBuilderDirty(false); }}}
+                                        onKeyDown={e=>{ if(e.key==='Enter') applyPrompt(aiPrompt); }}
                                         placeholder="Describe what you want to see…"
                                         style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:T.sans, fontSize:12, color:T.ink }}/>
-                                    <button onClick={()=>{ if(aiPrompt.trim()){ setCreateMode('ai'); setBuilderRendered(true); setBuilderDirty(false); }}}
+                                    <button onClick={()=>applyPrompt(aiPrompt)}
                                         style={{ background:T.ink, color:T.surface, border:'none', padding:'3px 8px', fontSize:10, fontWeight:700, borderRadius:2, cursor:'pointer', fontFamily:T.sans, letterSpacing:0.4 }}>GO</button>
                                 </div>
                             </div>
@@ -4427,11 +4384,22 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                             <select value={builderPeriod} onChange={e=>{ setBuilderPeriod(e.target.value); setBuilderDirty(true); }}
                                                 style={{ width:'100%', padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, fontFamily:T.sans }}>
                                                 {REPORT_PERIODS.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
+                                                <option value="custom">Custom range…</option>
                                             </select>
+                                            {builderPeriod==='custom' && (
+                                                /* §0.139 — the engine's custom range (periodRange 'custom'); either end may be open */
+                                                <div style={{ display:'flex', gap:6, marginTop:6, alignItems:'center' }}>
+                                                    <input type="date" value={builderFrom} onChange={e=>{ setBuilderFrom(e.target.value); setBuilderDirty(true); }} aria-label="From" style={{ flex:1, padding:'5px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11.5, color:T.ink, fontFamily:T.sans }}/>
+                                                    <span style={{ fontSize:11, color:T.inkMuted }}>to</span>
+                                                    <input type="date" value={builderTo} onChange={e=>{ setBuilderTo(e.target.value); setBuilderDirty(true); }} aria-label="To" style={{ flex:1, padding:'5px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11.5, color:T.ink, fontFamily:T.sans }}/>
+                                                </div>
+                                            )}
                                         </div>
                                         <div style={{ fontSize:11, color:T.inkMuted, lineHeight:1.45, fontFamily:T.sans }}>
                                             Deals count by forecasted close date (or creation when none), activities by their date, leads and accounts by creation. The Rep / Team / Territory slice above the tab applies first.
                                         </div>
+                                        {/* §0.139 — row filters: the engine's allowlist for this source, in words */}
+                                        <WhereEditor source={builderSource} where={builderWhere} onChange={w=>{ setBuilderWhere(w); setBuilderDirty(true); }}/>
                                     </div>
                                 )}
                                 {builderTab==='Chart' && (
@@ -4468,7 +4436,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                     <input value={srchQ} onChange={e=>setSrchQ(e.target.value)} placeholder="Search your library…" style={{ width:'100%', padding:'7px 10px 7px 30px', border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:T.sans, outline:'none', boxSizing:'border-box' }}/>
                 </div>
                 <div style={{ flex:1 }}/>
-                <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');setAiPrompt('');setAiGenerated(false);setBuilderTab('Data');setBuilderDirty(true);setBuilderRendered(false);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ Create report</button>
+                <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');setAiPrompt('');setAiInterpretation(null);setBuilderTab('Data');setBuilderDirty(true);setBuilderRendered(false);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ Create report</button>
             </div>
 
             {filteredPinned.length > 0 && (

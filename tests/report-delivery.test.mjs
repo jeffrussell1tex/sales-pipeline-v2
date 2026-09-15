@@ -176,7 +176,7 @@ test('the library: cards are one module-scope component; Share / Pin / Deliver /
     const home = code(read('src/Tabs/HomeTab.jsx'));
     assert.ok(home.includes("if (!orgId || !currentUserId) { setHomeReports([]); return undefined; }"), 'the load keys on an active org and a resolved caller (§18b38)');
     assert.ok(home.includes("const ids = Array.isArray(myProfile?.pinnedReports) ? myProfile.pinnedReports : [];"));
-    assert.ok(home.includes("result: r.config?.templateId ? null : runReport({ source: r.source, dims: r.dims || [], metrics: r.metrics || [], period: r.filters?.period || 'all', limit: 8 }, data, { fiscalStart }),"), 'run over what the viewer sees');
+    assert.ok(home.includes("result: r.config?.templateId ? null : runReport({ source: r.source, dims: r.dims || [], metrics: r.metrics || [], period: r.filters?.period || 'all', from: r.filters?.from || '', to: r.filters?.to || '', where: r.filters?.where || [], limit: 8 }, data, { fiscalStart }),"), 'run over what the viewer sees, the whole definition (§0.139)');
     assert.ok(home.includes("<ReportChart result={result} chartType={chartType}/>"));
     assert.ok(home.includes("localStorage.setItem('tab:reports:openReport', r.id);"));
     const app = code(read('src/App.jsx'));

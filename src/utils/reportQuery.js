@@ -146,6 +146,94 @@ export function fieldsFor(source) {
 }
 export const isReportSource = (source) => Object.prototype.hasOwnProperty.call(FIELDS, source);
 
+// ── Row filters (state §0.139) ──────────────────────────────────────────────
+// A definition may carry `where: [{ id, op, value }]` — conditions on the rows
+// BEFORE they are grouped. Until §0.139 the only filter was the period, so a
+// report like "open deals with no activity in 14+ days" could not be built at
+// all (the "AI-generated" view faked it with a hard-coded computation that no
+// prompt could change). Like the fields, every filter here has a column behind
+// it and the list is the allowlist: an unknown id or op is dropped and named.
+//
+// filter: { id, label, kind: 'choice' | 'number' | 'text', ops, options?, unit?,
+//           test(row, ctx, op, value) → boolean }
+//   choice: value is one of `options[].value` (op 'eq')
+//   number: value is a number (ops 'gte' | 'lte'); `unit` says how to read it
+//   text:   value is a string, or an array for 'in'; compared to the DIMENSION
+//           of the same id, case-insensitively (ops 'eq' | 'ne' | 'in')
+const F = (id, label, kind, ops, test, extra = {}) => Object.freeze({ id, label, kind, ops: Object.freeze(ops), test, ...extra });
+const numVal = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+const cmp = (op, actual, wanted) => (actual == null ? false : op === 'lte' ? actual <= wanted : actual >= wanted);
+const eqText = (a, b) => str(a).toLowerCase() === str(b).toLowerCase();
+const textTest = (dim) => (row, ctx, op, value) => {
+    const actual = dim.valueOf(row, ctx);
+    if (op === 'in') return (Array.isArray(value) ? value : [value]).some(v => eqText(actual, v));
+    const same = eqText(actual, value);
+    return op === 'ne' ? !same : same;
+};
+/** Every text dimension of a source as an equality filter — the row's grouping value, compared. */
+const textFilters = (dims) => dims.filter(d => d.kind === 'text').map(d => F(d.id, d.label, 'text', ['eq', 'ne', 'in'], textTest(d)));
+
+const daysSinceLastActivity = (o, ctx) => {
+    const last = ctx.lastActivityByOpp.get(o.id);
+    // A deal with no activity at all has been silent since it was created.
+    return daysBetween(dayOf(last || o.createdDate || o.createdAt), ctx.today);
+};
+const OPP_FILTERS = [
+    F('status', 'Status', 'choice', ['eq'], (o, ctx, op, value) => (value === 'open' ? isOpenDeal(o) : value === 'won' ? o.stage === 'Closed Won' : value === 'lost' ? o.stage === 'Closed Lost' : true),
+        { options: Object.freeze([Object.freeze({ value: 'open', label: 'Open deals' }), Object.freeze({ value: 'won', label: 'Closed won' }), Object.freeze({ value: 'lost', label: 'Closed lost' })]) }),
+    F('no_activity_days', 'Days since last activity', 'number', ['gte', 'lte'], (o, ctx, op, value) => cmp(op, daysSinceLastActivity(o, ctx), value), { unit: 'days' }),
+    F('days_in_stage',    'Days in current stage',    'number', ['gte', 'lte'], (o, ctx, op, value) => cmp(op, daysBetween(dayOf(o.stageChangedDate || o.createdDate || o.createdAt), ctx.today), value), { unit: 'days' }),
+    F('arr',              'Deal size',                'number', ['gte', 'lte'], (o, ctx, op, value) => cmp(op, num(o.arr), value), { unit: 'money' }),
+    ...textFilters(OPP_DIMS),
+];
+const LEAD_FILTERS = [
+    F('score', 'Lead score', 'number', ['gte', 'lte'], (l, ctx, op, value) => cmp(op, l.score == null || l.score === '' ? null : num(l.score), value), { unit: 'score' }),
+    ...textFilters(LEAD_DIMS),
+];
+const WHERE = Object.freeze({
+    Opportunities: Object.freeze(OPP_FILTERS),
+    Accounts:      Object.freeze(textFilters(ACCOUNT_DIMS)),
+    Leads:         Object.freeze(LEAD_FILTERS),
+    Activity:      Object.freeze(textFilters(ACTIVITY_DIMS)),
+});
+/** The filters a source offers. Unknown source → Opportunities. */
+export function filtersFor(source) {
+    return WHERE[source] || WHERE.Opportunities;
+}
+
+/**
+ * The stored `where` list against the allowlist: each entry resolved to its
+ * filter, its op checked, its value coerced to the filter's kind. Entries that
+ * do not resolve are dropped and returned so a caller can say so.
+ * → { where: [{ id, op, value }], dropped: [raw…] }
+ */
+export function resolveWhere(source, where) {
+    const list = filtersFor(isReportSource(source) ? source : 'Opportunities');
+    const out = [], dropped = [];
+    for (const raw of (Array.isArray(where) ? where : [])) {
+        const f = raw && typeof raw === 'object' ? list.find(x => x.id === str(raw.id)) : null;
+        const op = f && f.ops.includes(raw.op) ? raw.op : (f ? f.ops[0] : null);
+        if (!f) { dropped.push(raw); continue; }
+        let value;
+        if (f.kind === 'number') { value = numVal(raw.value); if (value == null) { dropped.push(raw); continue; } }
+        else if (f.kind === 'choice') { value = str(raw.value); if (!f.options.some(o => o.value === value)) { dropped.push(raw); continue; } }
+        else if (op === 'in') { value = (Array.isArray(raw.value) ? raw.value : [raw.value]).map(str).filter(Boolean); if (!value.length) { dropped.push(raw); continue; } }
+        else { value = str(raw.value); if (!value) { dropped.push(raw); continue; } }
+        out.push({ id: f.id, op, value });
+    }
+    return { where: out, dropped };
+}
+
+const OP_WORDS = { gte: '≥', lte: '≤', eq: 'is', ne: 'is not', in: 'is one of' };
+/** One filter in words: "Open deals", "Days since last activity ≥ 14", "Owner is Karen". */
+export function whereLabel(source, w) {
+    const f = filtersFor(source).find(x => x.id === w?.id);
+    if (!f) return String(w?.id || '?');
+    if (f.kind === 'choice') return f.options.find(o => o.value === w.value)?.label || `${f.label} ${w.value}`;
+    if (f.kind === 'number') return `${f.label} ${OP_WORDS[w.op] || w.op} ${f.unit === 'money' ? formatMetric(w.value, 'money') : w.value}`;
+    return `${f.label} ${OP_WORDS[w.op] || w.op} ${Array.isArray(w.value) ? w.value.join(', ') : w.value}`;
+}
+
 const norm = (s) => str(s).toLowerCase().replace(/[^a-z0-9]/g, '_');
 /**
  * A field by id, by label (case-insensitive), or by the id a label makes — so a
@@ -222,7 +310,7 @@ const stageRank = (stages) => { const m = new Map(); stages.forEach((s, i) => m.
 
 /**
  * Run a report definition over the datasets.
- *   def:  { source, dims: [ref…], metrics: [ref…], period: 'all'|'FY'|'Q1'..'Q4'|'custom', from, to, limit }
+ *   def:  { source, dims: [ref…], metrics: [ref…], period: 'all'|'FY'|'Q1'..'Q4'|'custom', from, to, where: [{ id, op, value }…], limit }
  *   data: { opportunities, accounts, leads, activities, pipelines, settings }
  *   opts: { today: Date, fiscalStart: number }
  * → { source, dims, metrics, rows: [{ keys: [v…], values: { [metric.id]: number|null }, n }], totals, count, scanned, period, dropped, warnings }
@@ -236,10 +324,17 @@ export function runReport(def, data, opts = {}) {
     const rowsAll = (source === 'Opportunities' ? data?.opportunities : source === 'Accounts' ? data?.accounts : source === 'Leads' ? data?.leads : data?.activities);
     const scanned = Array.isArray(rowsAll) ? rowsAll.filter(Boolean) : [];
     const range = periodRange(def?.period || 'all', fiscalStart, { today, from: def?.from || '', to: def?.to || '' });
-    const inPeriod = range ? scanned.filter(r => inRange(sourceDayOf[source](r), range)) : scanned;
     const ctx = { ...buildContext(data, todayDay), settings: data?.settings || {} };
+    // The period first, then the row filters (§0.139) — every filter must hold.
+    const { where, dropped: droppedWhere } = resolveWhere(source, def?.where);
+    const filters = filtersFor(source);
+    const inRangeRows = range ? scanned.filter(r => inRange(sourceDayOf[source](r), range)) : scanned;
+    const inPeriod = where.length
+        ? inRangeRows.filter(r => where.every(w => filters.find(f => f.id === w.id).test(r, ctx, w.op, w.value)))
+        : inRangeRows;
     const warnings = [];
     if (dropped.length) warnings.push(`${dropped.length} field${dropped.length === 1 ? '' : 's'} this report was saved with no longer exist${dropped.length === 1 ? 's' : ''} for ${source}: ${dropped.map(d => (d && typeof d === 'object' ? d.label || d.id : d)).join(', ')}.`);
+    if (droppedWhere.length) warnings.push(`${droppedWhere.length} filter${droppedWhere.length === 1 ? '' : 's'} this report was saved with could not be applied for ${source}: ${droppedWhere.map(w => (w && typeof w === 'object' ? w.id : w)).join(', ')}.`);
 
     // group
     const groups = new Map();
@@ -269,7 +364,7 @@ export function runReport(def, data, opts = {}) {
     return {
         source, dims, metrics, rows, totals,
         count: inPeriod.length, scanned: scanned.length,
-        period: range, dropped, warnings,
+        period: range, where, dropped, warnings,
     };
 }
 
