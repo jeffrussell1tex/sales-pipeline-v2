@@ -44,6 +44,7 @@ test('filtersFor: every source has an allowlist; deals carry status, silence, st
     assert.deepEqual(opp.slice(0, 4), ['status', 'no_activity_days', 'days_in_stage', 'arr']);
     for (const d of fieldsFor('Opportunities').dims.filter(d => d.kind === 'text')) assert.ok(opp.includes(d.id), `text dim ${d.id} is a filter`);
     assert.ok(!opp.includes('close_date'), 'a month dimension is the period’s business, not a filter');
+    assert.ok(opp.includes('stage'), 'the Stage dimension (kind stage) is a filter too — "deals in Proposal" (observed dropped on dev, 15 Sep)');
     assert.deepEqual(filtersFor('Activity').map(f => f.id), ['rep', 'type', 'outcome']);
     assert.deepEqual(filtersFor('Leads').map(f => f.id), ['score', 'assigned_to', 'source', 'status', 'score_bucket']);
     assert.deepEqual(filtersFor('Accounts').map(f => f.id), ['owner', 'industry', 'territory', 'tier', 'segment', 'state']);
@@ -90,6 +91,13 @@ test('runReport applies every filter after the period: status, silence, stage ag
     assert.equal(ids({ source: 'Opportunities', where: [{ id: 'owner', op: 'eq', value: 'karen' }] }), 2, 'the owner compared without case');
     assert.equal(ids({ source: 'Opportunities', where: [{ id: 'owner', op: 'ne', value: 'Karen' }] }), 2);
     assert.equal(ids({ source: 'Opportunities', where: [{ id: 'industry', op: 'eq', value: 'None' }] }), 1, 'a blank industry groups as None and filters as None');
+    assert.equal(ids({ source: 'Opportunities', where: [{ id: 'stage', op: 'eq', value: 'proposal' }] }), 1, 'a stage, compared without case');
+    assert.equal(ids({ source: 'Opportunities', where: [{ id: 'stage', op: 'in', value: ['Proposal', 'Discovery'] }] }), 2);
+    // The whole path the readers take: the interpreter's stage filter must SURVIVE the engine's allowlist.
+    const readStage = interpretPrompt('Karen deals in Proposal', { today: TODAY, fiscalStart: 1, stages: ['Prospecting', 'Discovery', 'Proposal'], people: ['Karen Russell'] }).definition;
+    assert.deepEqual(resolveWhere('Opportunities', readStage.where).dropped, [], 'nothing the interpreter emits is dropped by the engine');
+    assert.equal(run({ ...readStage, dims: [], metrics: [{ id: 'deals' }] }).count, 0, 'Karen Russell owns nothing here (the fixture’s owner is "Karen") — the filters RAN');
+    assert.equal(run({ source: 'Opportunities', dims: [], metrics: [{ id: 'deals' }], where: readStage.where.filter(w => w.id === 'stage') }).count, 1, 'and the stage filter alone finds o1');
     assert.equal(ids({ source: 'Opportunities', period: 'Q3', where: [{ id: 'status', op: 'eq', value: 'won' }] }), 1, 'the period first (o2 closes in Q3 of a January fiscal year)');
     assert.equal(ids({ source: 'Opportunities', period: 'Q4', where: [{ id: 'status', op: 'eq', value: 'won' }] }), 0);
     assert.equal(run({ source: 'Activity', dims: [], metrics: [{ id: 'activities' }], where: [{ id: 'type', op: 'in', value: ['Call', 'Meeting'] }] }).count, 2);
@@ -286,6 +294,9 @@ test('report-prompt: Claude’s answer passes the SAME allowlists a saved report
     assert.deepEqual([list.definition.period, list.definition.from, list.definition.to], ['custom', '2026-08-17', '2026-09-15']);
     assert.equal(list.name, 'Calls and meetings', 'no name from the model: the prompt');
     assert.equal(validateReading({ period: 'custom', from: 'yesterday', to: '' }, 'p').definition.period, 'all', 'a custom period with no readable bound is all time');
+    const none = validateReading({ source: 'Opportunities', dims: [], metrics: ['deals'], period: 'Q4', from: 'none', to: 'none', where: [{ id: 'status', op: 'eq', value: 'open' }], chartType: 'kpi', name: 'n', notes: [] }, 'p').definition;
+    assert.deepEqual([none.period, none.from, none.to], ['Q4', '', ''], 'the word none (the schema’s stand-in for an empty string) reads as no bound');
+    assert.equal(SET_REPORT_TOOL.input_schema.properties.from.description, 'yyyy-mm-dd when period is custom; otherwise exactly the word none.', 'never an empty required string (observed on dev)');
     assert.equal(validateReading(null, 'p').definition.source, 'Opportunities', 'nothing at all is still a definition');
 });
 
@@ -296,6 +307,7 @@ test('report-prompt: the system prompt carries the vocabulary, the calendar and 
     assert.ok(sys.includes('fiscal years start in month 10; today is 2026-09-15'));
     assert.ok(sys.includes('Stage names in this workspace: Prospecting | Proposal') && sys.includes('Roster names in this workspace: Karen Russell | Ryan Algie'));
     assert.ok(sys.includes('a stuck deal is an open one'), 'the same reading rules as the built-in reader');
+    assert.ok(sys.includes('write the word none in both from and to — never leave a string empty') && sys.includes('a condition that is only in the name is lost'), 'the two rules the first readings on dev taught');
     assert.ok(systemPromptFor({ vocabulary: {}, today: 'd', fiscalStart: 1, stages: [], people: [] }).includes('(none configured)'));
     assert.equal(SET_REPORT_TOOL.strict, true);
     assert.equal(SET_REPORT_TOOL.input_schema.additionalProperties, false);

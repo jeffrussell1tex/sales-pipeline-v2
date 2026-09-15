@@ -100,6 +100,10 @@ export const handler = async (event) => {
         const call = Array.isArray(result?.content) ? result.content.find(b => b?.type === 'tool_use' && b?.name === SET_REPORT_TOOL.name) : null;
         if (!call || !call.input || typeof call.input !== 'object') return answer(200, { unavailable: true, reason: 'unreadable' });
 
+        // One line per reading in the function log: what the model said BEFORE
+        // the allowlists — the only way to tell a model that omitted a filter
+        // from a validator that dropped one (observed on dev, 15 Sep).
+        console.log(`report-prompt: model input ${JSON.stringify(call.input).slice(0, 1500)}`);
         const { definition, name, notes } = validateReading(call.input, prompt);
         return answer(200, { readBy: 'claude', model: REPORT_PROMPT_MODEL, usingOrgKey, definition, name, notes });
     } catch (err) {

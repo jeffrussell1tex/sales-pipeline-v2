@@ -2607,6 +2607,11 @@ const mutations = [
         "if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h, minute: m }));",
         "if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h }));"],
 
+    ["report filters: the Stage dimension is no longer a filter — 'deals in Proposal' is dropped by both readers again",
+        "src/utils/reportQuery.js",
+        "const textFilters = (dims) => dims.filter(d => d.kind === 'text' || d.kind === 'stage').map(d => F(d.id, d.label, 'text', ['eq', 'ne', 'in'], textTest(d)));",
+        "const textFilters = (dims) => dims.filter(d => d.kind === 'text').map(d => F(d.id, d.label, 'text', ['eq', 'ne', 'in'], textTest(d)));"],
+
     // ── Claude reads report prompts when an Admin turns it on (0.141) ────────
     ["report prompt (Claude): the Admin's switch is ignored — every workspace's sentences go to Claude",
         "netlify/functions/report-prompt.mjs",

@@ -24,8 +24,13 @@ export const SET_REPORT_TOOL = Object.freeze({
             dims:      { type: 'array', items: { type: 'string' }, description: 'Dimension ids of the chosen source, in the order the sentence names them (0–3).' },
             metrics:   { type: 'array', items: { type: 'string' }, description: 'Metric ids of the chosen source (1–3).' },
             period:    { type: 'string', enum: [...REPORT_PERIODS.map(p => p.value), 'custom'] },
-            from:      { type: 'string', description: 'yyyy-mm-dd when period is custom, else empty.' },
-            to:        { type: 'string', description: 'yyyy-mm-dd when period is custom, else empty.' },
+            // Never an EMPTY required string: observed on dev (15 Sep) — with "" as
+            // the expected value the model's tool call twice spilled other
+            // parameters' text into `from` / `to` (once taking the whole `where`
+            // list with it). A defined word to write when there is no date keeps
+            // every string non-empty; validateReading reads anything but a date as none.
+            from:      { type: 'string', description: 'yyyy-mm-dd when period is custom; otherwise exactly the word none.' },
+            to:        { type: 'string', description: 'yyyy-mm-dd when period is custom; otherwise exactly the word none.' },
             where: {
                 type: 'array',
                 items: {
@@ -61,7 +66,8 @@ export function systemPromptFor({ vocabulary, today, fiscalStart, stages, people
         '- Over/under $N → arr gte/lte N (k = thousand, m = million). "in stage more than N days" → days_in_stage gte N.',
         '- Group by what follows "by" / "per" / "for each", in sentence order. "over time" / "by month" → the source\'s month dimension and a line chart.',
         '- A stage name from the list below after "in", "at" or before "stage" → the filter stage eq that name, spelled exactly. A roster name (or a first name only when exactly one person has it) → the owner/assigned_to/rep filter eq the full name.',
-        `- Periods: this quarter is the CURRENT fiscal quarter (fiscal years start in month ${fiscalStart}; today is ${today}); Q1–Q4 are this fiscal year's quarters; "this year" is FY; "all time" is all; any other window (last 30 days, last quarter, last month, this month, last year) is custom with from and to as yyyy-mm-dd computed from today. With no period, use all.`,
+        `- Periods: this quarter is the CURRENT fiscal quarter (fiscal years start in month ${fiscalStart}; today is ${today}); Q1–Q4 are this fiscal year's quarters; "this year" is FY; "all time" is all; any other window (last 30 days, last quarter, last month, this month, last year) is custom with from and to as yyyy-mm-dd computed from today. With no period, use all. When the period is not custom, write the word none in both from and to — never leave a string empty.`,
+        '- Every condition the sentence states goes in `where` — a stage, a silence, a size, a status, a person. The name is a title only; a condition that is only in the name is lost.',
         '- Chart: a said chart stands. Unsaid: no dimension → kpi; a month dimension → line; two dimensions → stacked; else bar.',
         '',
         'Vocabulary (JSON):',

@@ -170,8 +170,14 @@ const textTest = (dim) => (row, ctx, op, value) => {
     const same = eqText(actual, value);
     return op === 'ne' ? !same : same;
 };
-/** Every text dimension of a source as an equality filter — the row's grouping value, compared. */
-const textFilters = (dims) => dims.filter(d => d.kind === 'text').map(d => F(d.id, d.label, 'text', ['eq', 'ne', 'in'], textTest(d)));
+/**
+ * Every text dimension of a source as an equality filter — the row's grouping
+ * value, compared. The Stage dimension too: it is text with an ORDER (kind
+ * 'stage'), and "deals in Proposal" is the filter the interpreter and Claude
+ * both emit — the first cut skipped it and both readers' stage filter was
+ * dropped by the allowlist (observed on dev, 15 Sep).
+ */
+const textFilters = (dims) => dims.filter(d => d.kind === 'text' || d.kind === 'stage').map(d => F(d.id, d.label, 'text', ['eq', 'ne', 'in'], textTest(d)));
 
 const daysSinceLastActivity = (o, ctx) => {
     const last = ctx.lastActivityByOpp.get(o.id);
