@@ -21,29 +21,10 @@ import { db } from '../../db/index.js';
 import { opportunities, activities, settings } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { createDecipheriv, createHash } from 'crypto';
 import { serverErrorBody } from './_lib.mjs';
-
-// ── Decrypt org-level BYOK key (mirrors settings.mjs decrypt helper) ──────────
-function decryptOrgKey(stored) {
-    if (!stored) return null;
-    try {
-        const raw = process.env.SETTINGS_ENCRYPTION_KEY || '';
-        if (!raw) return null;
-        const key    = createHash('sha256').update(raw).digest();
-        const parts  = stored.split(':');
-        if (parts.length !== 3) return null;
-        const iv        = Buffer.from(parts[0], 'hex');
-        const tag       = Buffer.from(parts[1], 'hex');
-        const encrypted = Buffer.from(parts[2], 'hex');
-        const decipher  = createDecipheriv('aes-256-gcm', key, iv);
-        decipher.setAuthTag(tag);
-        return decipher.update(encrypted) + decipher.final('utf8');
-    } catch (err) {
-        console.error('ai-score: org key decryption failed:', err.message);
-        return null;
-    }
-}
+// The org's BYOK key, else the site's — one helper for every Anthropic call
+// (state §0.141; this file carried its own copy of the decrypt before).
+import { resolveAnthropicKey } from './_aiKey.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -65,11 +46,7 @@ export const handler = async (event) => {
         .from(settings)
         .where(eq(settings.orgId, orgId))
         .limit(1);
-    const orgApiKey = orgSettingsRow?.extra?.anthropicApiKey
-        ? decryptOrgKey(orgSettingsRow.extra.anthropicApiKey)
-        : null;
-    const apiKey = orgApiKey || process.env.ANTHROPIC_API_KEY || null;
-    const usingOrgKey = !!orgApiKey;
+    const { apiKey, usingOrgKey } = resolveAnthropicKey(orgSettingsRow?.extra);
 
     if (!apiKey) return { statusCode: 503, headers, body: JSON.stringify({ error: 'No Anthropic API key configured. Add your key in Settings → AI Features, or contact your administrator.' }) };
 

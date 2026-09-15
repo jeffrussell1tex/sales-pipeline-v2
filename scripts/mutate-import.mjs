@@ -2606,6 +2606,42 @@ const mutations = [
         "src/Tabs/ReportsTab.jsx",
         "if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h, minute: m }));",
         "if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h }));"],
+
+    // ── Claude reads report prompts when an Admin turns it on (0.141) ────────
+    ["report prompt (Claude): the Admin's switch is ignored — every workspace's sentences go to Claude",
+        "netlify/functions/report-prompt.mjs",
+        "        if (!(row?.extra?.aiReportPromptsEnabled === true)) return answer(200, { unavailable: true, reason: 'off' });",
+        "        if (false) return answer(200, { unavailable: true, reason: 'off' });"],
+
+    ["report prompt (Claude): the model's answer is trusted as-is — an invented filter id reaches the engine",
+        "netlify/functions/_reportPromptShape.mjs",
+        "    const { where, dropped: droppedWhere } = resolveWhere(source, rawWhere);",
+        "    const where = rawWhere, droppedWhere = [];"],
+
+    ["report prompt (Claude): an unknown source is kept instead of read as deals",
+        "netlify/functions/_reportPromptShape.mjs",
+        "    const source = isReportSource(input?.source) ? input.source : 'Opportunities';",
+        "    const source = input?.source || 'Opportunities';"],
+
+    ["report prompt (Claude): the settings switch is written by PUT but never returned by GET (one half)",
+        "netlify/functions/settings.mjs",
+        "                aiReportPromptsEnabled: row.extra?.aiReportPromptsEnabled ?? false,",
+        ""],
+
+    ["report prompt (Claude): the tab calls Claude for every workspace, switch or not",
+        "src/Tabs/ReportsTab.jsx",
+        "        if (settings?.aiReportPromptsEnabled === true) {",
+        "        if (true) {"],
+
+    ["report prompt (Claude): with Claude off, nothing tells members that AI assistance exists",
+        "src/Tabs/ReportsTab.jsx",
+        "        } else {\n            extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);\n        }",
+        "        } else {\n        }"],
+
+    ["report prompt (Claude): the built-in reader no longer runs when Claude did not answer — an empty builder",
+        "src/Tabs/ReportsTab.jsx",
+        "        if (!reading) {\n            const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });",
+        "        if (!reading) {\n            const r = { name: prompt, definition: { source: 'Opportunities', dims: [], metrics: [], period: 'all', from: '', to: '', where: [], chartType: 'kpi' }, notes: [] }; void interpretPrompt; void openStagesOf;"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

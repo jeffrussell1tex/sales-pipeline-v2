@@ -95,6 +95,9 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     // clear a key that is already stored.
     const [apiKeyInput, setApiKeyInput] = React.useState('');
     const [keyAction,   setKeyAction]   = React.useState(null); // null | 'set' | 'clear'
+    // §0.141 — Claude reads the report builder's prompts (settings.aiReportPromptsEnabled).
+    // Off, the builder's own reader runs and says AI assistance is available here.
+    const [aiPrompts, setAiPrompts] = React.useState(false);
 
 
     // ── Initialise from settings prop (same pattern as all other panels) ───────
@@ -125,6 +128,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 dispatchEnabled: settings.dispatchEnabled === true,
             });
             setAiSettings(settings.aiSettings || AI_DEFAULTS);
+            setAiPrompts(settings.aiReportPromptsEnabled === true);
         }
         setLoading(false);
     }, [settings]);
@@ -156,6 +160,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 leadsEnabled:   tabViz.leadsEnabled,
                 quotesEnabled:  tabViz.quotesEnabled,
                 dispatchEnabled: tabViz.dispatchEnabled,
+                aiReportPromptsEnabled: aiPrompts,
             };
             if (keyAction === 'set' && apiKeyInput.trim()) payload.anthropicApiKey = apiKeyInput.trim();
             if (keyAction === 'clear')                     payload.anthropicApiKey = null;
@@ -179,6 +184,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 leadsEnabled:   tabViz.leadsEnabled,
                 quotesEnabled:  tabViz.quotesEnabled,
                 dispatchEnabled: tabViz.dispatchEnabled,
+                aiReportPromptsEnabled: aiPrompts,
                 // Reflect the new key state locally. The plaintext is never held
                 // in app state, so the last-4 hint is dropped until the next load.
                 ...(keyAction ? {
@@ -375,6 +381,22 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                             <option>Allow with warning</option>
                         </select>
                     </FL>
+                </div>
+                {/* §0.141 — the one switch that sends anything to Claude today. Off: the
+                    report builder's own reader runs and tells members this is available. */}
+                <div onClick={() => { setAiPrompts(v => !v); setDirty(true); }} role="switch" aria-checked={aiPrompts}
+                    style={{ marginTop:14, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: aiPrompts ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
+                    <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${aiPrompts?T.ok:T.border}`, background:aiPrompts?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
+                        {aiPrompts ? '✓' : ''}
+                    </span>
+                    <div>
+                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Claude reads report prompts</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>
+                            {aiPrompts
+                                ? `On · the report builder's "Ask AI" sends the prompt sentence (never your records) to Claude${keyIsSet ? ' with your BYOK key' : ' with the site key (no BYOK key installed)'}; the built-in reader takes over if Claude cannot answer.`
+                                : 'Off · the report builder reads prompts with its built-in interpreter and tells members AI assistance is available here.'}
+                        </div>
+                    </div>
                 </div>
             </DataCard>
 

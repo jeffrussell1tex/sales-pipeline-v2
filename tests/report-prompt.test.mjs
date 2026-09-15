@@ -11,7 +11,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { filtersFor, resolveWhere, whereLabel, runReport, fieldsFor } from '../src/utils/reportQuery.js';
-import { interpretPrompt, normalizePrompt, PROMPT_STARTERS } from '../src/utils/reportPrompt.js';
+import { interpretPrompt, normalizePrompt, understoodFor, promptVocabulary, PROMPT_STARTERS } from '../src/utils/reportPrompt.js';
+import { validateReading, systemPromptFor, SET_REPORT_TOOL, REPORT_PROMPT_MODEL, MAX_PROMPT_CHARS } from '../netlify/functions/_reportPromptShape.mjs';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const code = (src) => src.split(/\r?\n/).filter(l => !l.trim().startsWith('//')).join('\n');
@@ -217,16 +218,16 @@ test('the name and the normalisation', () => {
 // ── the tab, Home and the job ────────────────────────────────────────────────
 test('ReportsTab: the prompt is read into the builder (every part a chip), the fake AI view is gone, the filters and a custom range are part of the definition and saved with it', () => {
     const s = code(read('src/Tabs/ReportsTab.jsx'));
-    assert.ok(s.includes("import { interpretPrompt, PROMPT_STARTERS } from '../utils/reportPrompt.js';"));
+    assert.ok(s.includes("import { interpretPrompt, understoodFor, PROMPT_STARTERS } from '../utils/reportPrompt.js';"));
     assert.ok(s.includes("import { REPORT_SOURCES, REPORT_PERIODS, REPORT_CHARTS, fieldsFor, filtersFor, whereLabel, runReport } from '../utils/reportQuery.js';"));
     const tabAt = s.indexOf('function SavedReportsTab(');
     assert.ok(tabAt > 0);
     assert.ok(s.indexOf('const PromptBanner = ({ interpretation, onEdit, onDismiss }) => {') < tabAt, 'the banner is module scope, data as props');
     assert.ok(s.indexOf('const WhereEditor = ({ source, where, onChange }) => {') < tabAt, 'the filter editor is module scope — its inputs keep focus');
-    assert.ok(s.includes('const applyPrompt = (text) => {'));
+    assert.ok(s.includes('const applyPrompt = async (text) => {'));   // async since §0.141 (Claude first when the switch is on)
     assert.ok(s.includes("const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });"), 'the org’s stages and roster are handed in');
     assert.ok(s.includes('setBuilderWhere(d.where);') && s.includes('setBuilderChart(d.chartType);') && s.includes('setBuilderName(r.name);'), 'the builder is seeded with the reading');
-    assert.ok(s.includes('setAiInterpretation({ prompt, understood: r.understood, notes: r.notes });'));
+    assert.ok(s.includes('setAiInterpretation({ prompt, readBy, understood: r.understood, notes: r.notes });'));
     assert.ok(s.includes("setBuilderResult(runReport({ ...d, limit: d.chartType === 'table' ? 200 : 12 }, builderData(), { fiscalStart }));"), 'the real engine runs it at once');
     assert.ok(s.includes("setCreateMode('blank');\n        setShowCreateReport(true);\n    };"), 'the prompt opens the ONE builder');
     assert.ok(s.includes('const handleGenerate = () => applyPrompt(aiPrompt);'), 'Generate reads the prompt');
@@ -243,6 +244,119 @@ test('ReportsTab: the prompt is read into the builder (every part a chip), the f
     assert.ok(s.includes("        setAiPrompt('');   // the rail's Ask AI box starts empty"), 'the rail box does not carry the last prompt (observed: a second prompt typed into the old one)');
     assert.ok(s.includes("breadcrumb={editingReportId ? 'Saved report' : aiInterpretation ? 'AI-generated' : 'Blank canvas'}"));
     assert.ok(s.includes('setBuilderWhere([]);   // filters are the source’s own') || s.includes("setBuilderWhere([]);   // filters are the source's own"), 'a new source drops the old source’s filters');
+});
+
+// ── Claude as the reader when an Admin turns it on (§0.141) ──────────────────
+test('understoodFor describes a DEFINITION, whichever reader made it; promptVocabulary is ids and labels only', () => {
+    const def = { source: 'Activity', dims: [{ id: 'rep' }, 'type'], metrics: [{ id: 'activities' }], period: 'custom', from: '2026-08-17', to: '2026-09-15', where: [{ id: 'type', op: 'in', value: ['Call', 'Meeting'] }], chartType: 'stacked' };
+    assert.deepEqual(understoodFor(def), [
+        { kind: 'source', text: 'Activity' }, { kind: 'filter', text: 'Type is one of Call, Meeting' },
+        { kind: 'group', text: 'Rep' }, { kind: 'group', text: 'Type' }, { kind: 'measure', text: '# of activities' },
+        { kind: 'chart', text: 'Stacked bar' }, { kind: 'period', text: '2026-08-17 to 2026-09-15' },
+    ]);
+    assert.deepEqual(understoodFor({ source: 'Quotes' }), [{ kind: 'source', text: 'Opportunities' }, { kind: 'chart', text: 'Bar' }, { kind: 'period', text: 'All time' }], 'an unknown source reads as deals; nothing is invented');
+    assert.deepEqual(understoodFor(read1('Revenue by rep').definition), read1('Revenue by rep').understood, 'the built-in reader’s chips are the same function');
+    const v = promptVocabulary();
+    assert.deepEqual(v.sources.map(s => s.id), ['Opportunities', 'Accounts', 'Leads', 'Activity']);
+    for (const s of v.sources) {
+        assert.deepEqual(s.dims.map(d => d.id), fieldsFor(s.id).dims.map(d => d.id), `${s.id} dims`);
+        assert.deepEqual(s.filters.map(f => f.id), filtersFor(s.id).map(f => f.id), `${s.id} filters`);
+        assert.ok(s.dims.every(d => !Object.hasOwn(d, 'valueOf')) && s.filters.every(f => !Object.hasOwn(f, 'test')), 'data, not functions');
+    }
+    assert.deepEqual(v.sources[0].filters[0], { id: 'status', label: 'Status', kind: 'choice', ops: ['eq'], options: ['open', 'won', 'lost'] });
+    assert.deepEqual(v.periods.map(p => p.id), ['all', 'FY', 'Q1', 'Q2', 'Q3', 'Q4', 'custom']);
+    assert.deepEqual(v.charts.map(c => c.id), ['bar', 'stacked', 'line', 'funnel', 'table', 'kpi']);
+    assert.doesNotThrow(() => JSON.stringify(v), 'it is what the system prompt embeds');
+});
+
+test('report-prompt: Claude’s answer passes the SAME allowlists a saved report does — unknown ids dropped and named, the period and chart checked, the name capped', () => {
+    const good = validateReading({ source: 'Opportunities', dims: ['owner'], metrics: ['deals', 'revenue'], period: 'all', from: '', to: '', where: [{ id: 'no_activity_days', op: 'gte', value: '14' }, { id: 'status', op: 'eq', value: 'open' }], chartType: 'bar', name: 'Stuck deals by rep', notes: [] }, 'x');
+    assert.deepEqual(good.definition, { source: 'Opportunities', dims: [{ id: 'owner', label: 'Owner', kind: 'dim' }], metrics: [{ id: 'deals', label: '# of deals', kind: 'metric' }, { id: 'revenue', label: 'Revenue', kind: 'metric' }], period: 'all', from: '', to: '', where: [{ id: 'no_activity_days', op: 'gte', value: 14 }, { id: 'status', op: 'eq', value: 'open' }], chartType: 'bar' });
+    assert.equal(good.name, 'Stuck deals by rep'); assert.deepEqual(good.notes, []);
+    const bad = validateReading({ source: 'Deals', dims: ['owner', 'competitor'], metrics: ['win_rate'], period: 'last_quarter', from: '', to: '', where: [{ id: 'quota', op: 'gte', value: '1' }, { id: 'arr', op: 'gte', value: 'lots' }, { id: 'type', op: 'in', value: 'Call, Meeting' }], chartType: 'pie', name: 'x'.repeat(200), notes: ['Win rate is not available.'] }, 'the prompt');
+    assert.equal(bad.definition.source, 'Opportunities', 'an unknown source is deals');
+    assert.deepEqual(bad.definition.dims.map(d => d.id), ['owner']);
+    assert.deepEqual(bad.definition.metrics.map(m => m.id), ['revenue'], 'no metric survived: the source’s first');
+    assert.deepEqual(bad.definition.where, [], 'quota is not a filter; an unreadable number is dropped; type is not a deal filter');
+    assert.equal(bad.definition.period, 'all'); assert.equal(bad.definition.chartType, 'bar');
+    assert.equal(bad.name.length, 80);
+    assert.deepEqual(bad.notes, ['Win rate is not available.', 'Not a field on Opportunities, left out: competitor, win_rate.', 'Not a filter on Opportunities, left out: quota, arr, type.']);
+    const list = validateReading({ source: 'Activity', dims: [], metrics: ['activities'], period: 'custom', from: '2026-08-17', to: '2026-09-15', where: [{ id: 'type', op: 'in', value: 'Call, Meeting' }], chartType: 'kpi', name: '', notes: [] }, 'Calls and meetings');
+    assert.deepEqual(list.definition.where, [{ id: 'type', op: 'in', value: ['Call', 'Meeting'] }], 'a comma list becomes the in-list');
+    assert.deepEqual([list.definition.period, list.definition.from, list.definition.to], ['custom', '2026-08-17', '2026-09-15']);
+    assert.equal(list.name, 'Calls and meetings', 'no name from the model: the prompt');
+    assert.equal(validateReading({ period: 'custom', from: 'yesterday', to: '' }, 'p').definition.period, 'all', 'a custom period with no readable bound is all time');
+    assert.equal(validateReading(null, 'p').definition.source, 'Opportunities', 'nothing at all is still a definition');
+});
+
+test('report-prompt: the system prompt carries the vocabulary, the calendar and the org’s words; the tool is strict; the model is Opus 5', () => {
+    const sys = systemPromptFor({ vocabulary: promptVocabulary(), today: '2026-09-15', fiscalStart: 10, stages: ['Prospecting', 'Proposal'], people: ['Karen Russell', 'Ryan Algie'] });
+    assert.ok(sys.includes('Use ONLY the ids in the vocabulary below. Never invent a field, a filter or a period.'));
+    assert.ok(sys.includes('"no_activity_days"') && sys.includes('"days_to_close"') && sys.includes('"score_bucket"'), 'the vocabulary is embedded');
+    assert.ok(sys.includes('fiscal years start in month 10; today is 2026-09-15'));
+    assert.ok(sys.includes('Stage names in this workspace: Prospecting | Proposal') && sys.includes('Roster names in this workspace: Karen Russell | Ryan Algie'));
+    assert.ok(sys.includes('a stuck deal is an open one'), 'the same reading rules as the built-in reader');
+    assert.ok(systemPromptFor({ vocabulary: {}, today: 'd', fiscalStart: 1, stages: [], people: [] }).includes('(none configured)'));
+    assert.equal(SET_REPORT_TOOL.strict, true);
+    assert.equal(SET_REPORT_TOOL.input_schema.additionalProperties, false);
+    assert.deepEqual(SET_REPORT_TOOL.input_schema.required, ['source', 'dims', 'metrics', 'period', 'from', 'to', 'where', 'chartType', 'name', 'notes']);
+    assert.deepEqual(SET_REPORT_TOOL.input_schema.properties.source.enum, ['Opportunities', 'Accounts', 'Leads', 'Activity']);
+    assert.deepEqual(SET_REPORT_TOOL.input_schema.properties.period.enum, ['all', 'FY', 'Q1', 'Q2', 'Q3', 'Q4', 'custom']);
+    assert.deepEqual(SET_REPORT_TOOL.input_schema.properties.where.items.properties.op.enum, ['eq', 'ne', 'in', 'gte', 'lte']);
+    assert.equal(REPORT_PROMPT_MODEL, 'claude-opus-5'); assert.equal(MAX_PROMPT_CHARS, 300);
+});
+
+test('report-prompt.mjs: the gates in order — auth, the org’s switch, a key — every read by the caller’s org; the sentence goes out, never a row; the answer is always one of two shapes', () => {
+    const s = code(read('netlify/functions/report-prompt.mjs'));
+    assert.ok(s.includes("const auth = await verifyAuth(event);") && s.includes('const { orgId } = auth;'));
+    assert.ok(s.includes(".from(settingsTable).where(eq(settingsTable.orgId, orgId)).limit(1);"), 'the settings row by org');
+    assert.ok(s.includes("if (!(row?.extra?.aiReportPromptsEnabled === true)) return answer(200, { unavailable: true, reason: 'off' });"), 'the Admin’s switch, checked before any key is read');
+    assert.ok(s.includes("const { apiKey, usingOrgKey } = resolveAnthropicKey(row?.extra);") && s.includes("if (!apiKey) return answer(200, { unavailable: true, reason: 'no_key' });"));
+    assert.ok(s.indexOf("reason: 'off'") < s.indexOf('resolveAnthropicKey(row?.extra)'), 'off before the key');
+    assert.ok(s.includes(".from(users).where(eq(users.orgId, orgId));"), 'the roster by org');
+    assert.ok(!/from\(opportunities\)|from\(leads\)|from\(accounts\)|from\(activities\)/.test(s), 'no CRM rows are read, so none can leave');
+    assert.ok(s.includes("messages: [{ role: 'user', content: `Sentence: ${prompt}` }],"), 'the sentence is the whole user turn');
+    assert.ok(s.includes("tool_choice: { type: 'auto', disable_parallel_tool_use: true },") && s.includes('tools: [SET_REPORT_TOOL],'));
+    assert.ok(s.includes("output_config: { effort: 'low' },"), 'a sentence into a small object: low effort');
+    assert.ok(s.includes("if (result?.stop_reason === 'refusal') return answer(200, { unavailable: true, reason: 'refused' });"));
+    assert.ok(s.includes("return answer(200, { unavailable: true, reason: 'unreadable' });") && s.includes("return answer(200, { unavailable: true, reason: 'error', status: response.status });"), 'every failure is an unavailable the client falls back on');
+    assert.ok(s.includes('const { definition, name, notes } = validateReading(call.input, prompt);'), 'the model’s answer is validated, never trusted');
+    assert.ok(s.includes("import { REPORT_PROMPT_MODEL, MAX_PROMPT_CHARS, SET_REPORT_TOOL, systemPromptFor, validateReading } from './_reportPromptShape.mjs';"), 'the pure half is the tested one');
+    assert.ok(!s.includes('apiKey:') && !s.includes('apiKey }'), 'the key is never in a response body');
+    const key = code(read('netlify/functions/_aiKey.mjs'));
+    assert.ok(key.includes("import { decrypt } from './crypto.mjs';") && key.includes("const apiKey = orgKey || process.env.ANTHROPIC_API_KEY || null;"), 'the org’s key, else the site’s');
+    const score = code(read('netlify/functions/ai-score.mjs'));
+    assert.ok(score.includes("const { apiKey, usingOrgKey } = resolveAnthropicKey(orgSettingsRow?.extra);") && !score.includes('createDecipheriv'), 'ai-score uses the one helper; its own copy of the decrypt is gone');
+});
+
+test('the switch: settings.aiReportPromptsEnabled in BOTH halves of settings.mjs, a client default, an Admin’s control in Features, off by default', () => {
+    const settings = code(read('netlify/functions/settings.mjs'));
+    assert.equal((settings.match(/aiReportPromptsEnabled:/g) || []).length, 2, 'the GET projection AND the PUT whitelist (18b12)');
+    assert.ok(settings.includes("aiReportPromptsEnabled: row.extra?.aiReportPromptsEnabled ?? false,"));
+    assert.ok(settings.includes("aiReportPromptsEnabled: 'aiReportPromptsEnabled' in data ? !!data.aiReportPromptsEnabled : existingExtra.aiReportPromptsEnabled ?? false,"));
+    assert.ok(code(read('src/hooks/useSettings.js')).includes('    aiReportPromptsEnabled: false,'));
+    const f = code(read('src/Tabs/settings/data/FeaturesDetail.jsx'));
+    assert.ok(f.includes('const [aiPrompts, setAiPrompts] = React.useState(false);'));
+    assert.ok(f.includes('setAiPrompts(settings.aiReportPromptsEnabled === true);'), 'read from the settings prop, never self-fetched');
+    assert.ok(f.includes('                aiReportPromptsEnabled: aiPrompts,\n            };'), 'saved with the panel');
+    assert.ok(f.includes('Claude reads report prompts'));
+});
+
+test('the tab: Claude first when the switch is on, the built-in reader for every other answer, and the banner says which read it and that AI is available', () => {
+    const s = code(read('src/Tabs/ReportsTab.jsx'));
+    assert.ok(s.includes('const applyPrompt = async (text) => {'));
+    assert.ok(s.includes("if (settings?.aiReportPromptsEnabled === true) {"), 'the org’s switch decides');
+    assert.ok(s.includes("const res = await dbFetch('/.netlify/functions/report-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, today: isoLocal(new Date()) }) });"));
+    assert.ok(s.includes("if (res.ok && data.readBy === 'claude' && data.definition) { reading = { name: data.name || prompt, definition: data.definition, notes: Array.isArray(data.notes) ? data.notes : [] }; readBy = 'claude'; }"));
+    assert.ok(s.includes("else if (data.unavailable && data.reason === 'no_key') extraNotes.push('Claude is on for this workspace but no Anthropic key is installed"), 'no key: said in words');
+    assert.ok(s.includes("} catch { extraNotes.push('Claude could not be reached — read by the built-in interpreter instead.'); }"), 'unreachable: the fallback, said');
+    assert.ok(s.includes("else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired)"), 'a rejected key is named for the Admin (observed on dev: the site key answered 401)');
+    assert.ok(s.includes("        } else {\n            extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);\n        }"), 'off: the built-in reader and the note that AI is available');
+    assert.ok(s.includes("const PROMPT_AI_AVAILABLE_NOTE = 'Read by the built-in interpreter. AI assistance is available: an Admin can turn \"Claude reads report prompts\" on under Settings → Features → AI.';"));
+    assert.ok(s.includes("        if (!reading) {\n            const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });"), 'the built-in reader runs whenever Claude did not answer');
+    assert.ok(s.includes("const r = { ...reading, understood: understoodFor(reading.definition), notes: [...reading.notes, ...extraNotes] };"), 'the chips describe the definition whichever reader made it');
+    assert.ok(s.includes("const chips = [{ kind: 'read by', text: readBy === 'claude' ? 'Claude' : 'Built-in interpreter' }, ...understood];"), 'the banner names the reader');
+    assert.ok(s.includes("{promptBusy ? 'ASKING CLAUDE…' : 'GENERATE'}") && s.includes("if (!prompt || promptBusy) return;"), 'one reading at a time');
 });
 
 test('Home and the delivery job run the whole saved definition — the filters and the custom bounds, not just the period', () => {

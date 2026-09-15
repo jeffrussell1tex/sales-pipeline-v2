@@ -97,6 +97,10 @@ export const handler = async (event) => {
                 kpiConfig:        row.extra?.kpiConfig       || null,
                 commissionPlan:   row.extra?.commissionPlan  || null,
                 aiScoringEnabled: row.extra?.aiScoringEnabled ?? false,
+                // §0.141: may report prompts be read by Claude? An Admin's switch
+                // (Settings → Features → AI); the client falls back to the built-in
+                // reader when off. Both halves, like every extra key (18b12).
+                aiReportPromptsEnabled: row.extra?.aiReportPromptsEnabled ?? false,
                 leadsEnabled:     row.extra?.leadsEnabled     ?? true,
                 // Read-side policy for leads.mjs GET: may reps see unassigned
                 // leads? Default true = the standing policy. 18b12: this key
@@ -269,6 +273,7 @@ export const handler = async (event) => {
                 commissionPlan:   'commissionPlan'   in data ? (data.commissionPlan   || null) : existingExtra.commissionPlan   || null,
                 products:         'products'         in data ? (data.products         || [])   : existingExtra.products         || [],
                 aiScoringEnabled: 'aiScoringEnabled' in data ? !!data.aiScoringEnabled : existingExtra.aiScoringEnabled ?? false,
+                aiReportPromptsEnabled: 'aiReportPromptsEnabled' in data ? !!data.aiReportPromptsEnabled : existingExtra.aiReportPromptsEnabled ?? false,
                 leadsEnabled:     'leadsEnabled'     in data ? !!data.leadsEnabled     : existingExtra.leadsEnabled     ?? true,
                 unassignedLeadsVisibleToReps: 'unassignedLeadsVisibleToReps' in data ? !!data.unassignedLeadsVisibleToReps : existingExtra.unassignedLeadsVisibleToReps ?? true,
                 customerTypes:    'customerTypes'    in data ? (data.customerTypes    || [])   : existingExtra.customerTypes    || [],

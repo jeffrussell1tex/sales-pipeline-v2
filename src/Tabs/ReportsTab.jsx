@@ -14,13 +14,14 @@ import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openP
 import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStages } from '../utils/stageOrder';
 import { repDeals } from '../utils/repDeals';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
+import TimeDropdown from '../components/ui/TimeDropdown';
 import { dbFetch, dbWrite } from '../utils/storage';
 import { T } from '../tokens.js';
 // The report builder's query engine and its chart (state §0.133): the preview
 // and an opened saved report are the same runReport() over the tab's scoped
 // sets, drawn by the same component.
 import { REPORT_SOURCES, REPORT_PERIODS, REPORT_CHARTS, fieldsFor, filtersFor, whereLabel, runReport } from '../utils/reportQuery.js';
-import { interpretPrompt, PROMPT_STARTERS } from '../utils/reportPrompt.js';
+import { interpretPrompt, understoodFor, PROMPT_STARTERS } from '../utils/reportPrompt.js';
 import ReportChart from '../components/ReportChart.jsx';
 import { useAuth } from '@clerk/clerk-react';
 // A saved report's delivery schedule — the shape the endpoint stores and the
@@ -2148,6 +2149,10 @@ const LibraryCard = ({ r, mayTouch, pinned, currentUser, onOpen, onPin, onShare,
     );
 };
 
+// §0.141 — the words under a reading the built-in interpreter did while Claude
+// is off for the workspace. Module scope: the picker and the banner share them.
+const PROMPT_AI_AVAILABLE_NOTE = 'Read by the built-in interpreter. AI assistance is available: an Admin can turn "Claude reads report prompts" on under Settings → Features → AI.';
+
 // ── The prompt's reading (state §0.139) ──────────────────────────────────────
 // Module scope, data as props. What interpretPrompt() understood, as chips, and
 // what it could not do, in words — above a builder whose every part is the
@@ -2155,8 +2160,10 @@ const LibraryCard = ({ r, mayTouch, pinned, currentUser, onOpen, onPin, onShare,
 // hard-coded picture for every prompt and said so in small print.
 const PromptBanner = ({ interpretation, onEdit, onDismiss }) => {
     if (!interpretation) return null;
-    const { prompt, understood, notes } = interpretation;
+    const { prompt, understood, notes, readBy } = interpretation;
     const eb = { fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: T.goldInk, fontFamily: T.sans };
+    // §0.141 — which reader: Claude (the workspace's switch is on and it answered) or the built-in one.
+    const chips = [{ kind: 'read by', text: readBy === 'claude' ? 'Claude' : 'Built-in interpreter' }, ...understood];
     return (
         <div style={{ background: `${T.gold}22`, border: `1px solid ${T.gold}`, borderRadius: T.r + 1, padding: '14px 16px', marginBottom: 12, fontFamily: T.sans }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -2169,8 +2176,8 @@ const PromptBanner = ({ interpretation, onEdit, onDismiss }) => {
                     </div>
                     <div style={{ fontSize: 12, color: T.ink, marginBottom: 8 }}>Read as the report below — every part is a chip on the right; change any of them and click Update preview.</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                        {understood.map((u, i) => (
-                            <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: T.surface, border: `1px solid ${T.gold}`, borderRadius: 10, fontSize: 11 }}>
+                        {chips.map((u, i) => (
+                            <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: u.kind === 'read by' ? `${T.gold}33` : T.surface, border: `1px solid ${T.gold}`, borderRadius: 10, fontSize: 11 }}>
                                 <span style={{ color: T.inkMuted, fontSize: 9.5, fontWeight: 600, letterSpacing: 0.5 }}>{u.kind.toUpperCase()}</span>
                                 <span style={{ color: T.ink, fontWeight: 500 }}>{u.text}</span>
                             </div>
@@ -2289,8 +2296,12 @@ const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, n
                             {Array.from({ length: 28 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
                         </select></div>)}
                     <div><div style={label}>At</div>
-                        <input type="time" value={timeLabel(draft.hour, draft.minute)} onChange={e => setTime(e.target.value)} aria-label="Delivery time" style={{ ...field, width: '100%', boxSizing: 'border-box' }}/>
-                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 3 }}>Any time, to the minute — it goes out within about {DELIVERY_RUN_EVERY_MIN} minutes of it.</div></div>
+                        {/* The house time control (guide: it replaces the native input everywhere a
+                            time of day is picked — Jeff: "the old time picker I hate"). Five-minute
+                            steps, the job's own cadence; type "837" to jump; a stored off-grid
+                            minute stays visible and selectable. Its × clears to '' — the time keeps. */}
+                        <TimeDropdown value={timeLabel(draft.hour, draft.minute)} onChange={v => { if (v) setTime(v); }} stepMinutes={DELIVERY_RUN_EVERY_MIN} ariaLabel="Delivery time"/>
+                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 3 }}>Any time, in {DELIVERY_RUN_EVERY_MIN}-minute steps — it goes out within about {DELIVERY_RUN_EVERY_MIN} minutes of it.</div></div>
                     <div><div style={label}>Time zone</div>
                         <input value={draft.timezone} onChange={e => set('timezone', e.target.value)} placeholder="America/Chicago" style={{ ...field, width: '100%', boxSizing: 'border-box', borderColor: tzOk ? T.border : T.danger }}/>
                         {!tzOk && <div style={{ fontSize: 11, color: T.danger, fontFamily: T.sans, marginTop: 3 }}>Not a time zone name (like America/Chicago, or UTC).</div>}</div>
@@ -2367,11 +2378,38 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     // the builder seeded with it, the real engine run: every part editable. The
     // org's own stage names and roster let "in Proposal" / "Karen's deals" become
     // filters; nothing else is guessed (reportPrompt.js).
-    const applyPrompt = (text) => {
+    // §0.141 — when an Admin has turned "Claude reads report prompts" on, the
+    // sentence goes to /report-prompt first (the same definition shape back,
+    // validated there); the built-in reader is the fallback for every other
+    // answer — off, no key, refused, unreachable — and the banner says which
+    // reader read it and, when off, that AI assistance is available.
+    const [promptBusy, setPromptBusy] = React.useState(false);
+    const applyPrompt = async (text) => {
         const prompt = String(text || '').trim();
-        if (!prompt) return;
+        if (!prompt || promptBusy) return;
         const fiscalStart = parseInt(settings?.fiscalYearStart) || 10;
-        const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });
+        let reading = null, readBy = 'local';
+        const extraNotes = [];
+        if (settings?.aiReportPromptsEnabled === true) {
+            setPromptBusy(true);
+            try {
+                const res = await dbFetch('/.netlify/functions/report-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, today: isoLocal(new Date()) }) });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.readBy === 'claude' && data.definition) { reading = { name: data.name || prompt, definition: data.definition, notes: Array.isArray(data.notes) ? data.notes : [] }; readBy = 'claude'; }
+                else if (data.unavailable && data.reason === 'no_key') extraNotes.push('Claude is on for this workspace but no Anthropic key is installed — an Admin adds one under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
+                else if (data.unavailable && data.reason === 'off') extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);
+                else if (data.unavailable && data.reason === 'error' && (data.status === 401 || data.status === 403)) extraNotes.push('Claude rejected the Anthropic key this workspace uses (invalid or expired) — an Admin can replace it under Settings → Features → AI (BYOK). Read by the built-in interpreter instead.');
+                else extraNotes.push('Claude could not read this one — read by the built-in interpreter instead.');
+            } catch { extraNotes.push('Claude could not be reached — read by the built-in interpreter instead.'); }
+            finally { setPromptBusy(false); }
+        } else {
+            extraNotes.push(PROMPT_AI_AVAILABLE_NOTE);
+        }
+        if (!reading) {
+            const r = interpretPrompt(prompt, { fiscalStart, stages: openStagesOf(settings), people: (settings?.users || []).map(u => u?.name).filter(Boolean) });
+            reading = { name: r.name, definition: r.definition, notes: r.notes };
+        }
+        const r = { ...reading, understood: understoodFor(reading.definition), notes: [...reading.notes, ...extraNotes] };
         const d = r.definition;
         setEditingReportId(null);
         setBuilderSource(d.source);
@@ -2384,7 +2422,7 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
         setBuilderChart(d.chartType);
         setBuilderName(r.name);
         setBuilderAdvanced(true);
-        setAiInterpretation({ prompt, understood: r.understood, notes: r.notes });
+        setAiInterpretation({ prompt, readBy, understood: r.understood, notes: r.notes });
         setAiPrompt('');   // the rail's Ask AI box starts empty — observed: a second prompt typed into the old sentence; Edit prompt restores it
         setBuilderResult(runReport({ ...d, limit: d.chartType === 'table' ? 200 : 12 }, builderData(), { fiscalStart }));
         setBuilderDirty(false);
@@ -4118,9 +4156,9 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                 onKeyDown={e=>{ if(e.key==='Enter'&&aiPrompt.trim()) handleGenerate(); }}
                                 placeholder="e.g. Deals stuck more than 14 days, by rep"
                                 style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:T.sans, fontSize:13, color:T.ink }}/>
-                            <button onClick={handleGenerate} disabled={!aiPrompt.trim()}
-                                style={{ background:aiPrompt.trim()?T.ink:T.surface2, color:aiPrompt.trim()?T.surface:T.inkMuted, border:'none', padding:'5px 12px', fontSize:11, fontWeight:700, borderRadius:2, cursor:aiPrompt.trim()?'pointer':'not-allowed', fontFamily:T.sans, letterSpacing:0.5 }}>
-                                GENERATE
+                            <button onClick={handleGenerate} disabled={!aiPrompt.trim() || promptBusy}
+                                style={{ background:aiPrompt.trim()&&!promptBusy?T.ink:T.surface2, color:aiPrompt.trim()&&!promptBusy?T.surface:T.inkMuted, border:'none', padding:'5px 12px', fontSize:11, fontWeight:700, borderRadius:2, cursor:aiPrompt.trim()&&!promptBusy?'pointer':'not-allowed', fontFamily:T.sans, letterSpacing:0.5 }}>
+                                {promptBusy ? 'ASKING CLAUDE…' : 'GENERATE'}
                             </button>
                         </div>
                         <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:10, alignItems:'center' }}>
@@ -4324,8 +4362,8 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
                                         onKeyDown={e=>{ if(e.key==='Enter') applyPrompt(aiPrompt); }}
                                         placeholder="Describe what you want to see…"
                                         style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:T.sans, fontSize:12, color:T.ink }}/>
-                                    <button onClick={()=>applyPrompt(aiPrompt)}
-                                        style={{ background:T.ink, color:T.surface, border:'none', padding:'3px 8px', fontSize:10, fontWeight:700, borderRadius:2, cursor:'pointer', fontFamily:T.sans, letterSpacing:0.4 }}>GO</button>
+                                    <button onClick={()=>applyPrompt(aiPrompt)} disabled={promptBusy}
+                                        style={{ background:promptBusy?T.surface2:T.ink, color:promptBusy?T.inkMuted:T.surface, border:'none', padding:'3px 8px', fontSize:10, fontWeight:700, borderRadius:2, cursor:promptBusy?'default':'pointer', fontFamily:T.sans, letterSpacing:0.4 }}>{promptBusy ? '…' : 'GO'}</button>
                                 </div>
                             </div>
 

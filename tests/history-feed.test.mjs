@@ -102,7 +102,7 @@ test('ReportsTab: the History tab reads real columns; PDF export escapes; labels
     // admission and the old claim are both gone
     assert.ok(!src.includes('I built a <strong>horizontal bar chart'));
     assert.ok(!src.includes('does not interpret prompts yet'));
-    assert.ok(src.includes("import { interpretPrompt, PROMPT_STARTERS } from '../utils/reportPrompt.js';"));
+    assert.ok(src.includes("import { interpretPrompt, understoodFor, PROMPT_STARTERS } from '../utils/reportPrompt.js';"));
     // dead state gone
     assert.ok(!src.includes('actPeriod') && !src.includes('commissionReportFilter'));
     // helper wiring

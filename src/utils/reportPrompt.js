@@ -23,7 +23,7 @@
 // Optional context (`opts.stages`, `opts.people`) lets an org's own stage
 // names and roster names become equality filters ("in Proposal", "Karen's
 // deals"); without them those words are left alone — never guessed.
-import { fieldsFor, filtersFor, whereLabel, REPORT_CHARTS, REPORT_PERIODS } from './reportQuery.js';
+import { fieldsFor, filtersFor, whereLabel, isReportSource, REPORT_CHARTS, REPORT_PERIODS } from './reportQuery.js';
 import { quarterOf } from './quarters.js';
 import { fiscalRange, priorRange } from './reportPeriod.js';
 import { isoLocal, parseLocalDate } from './dateLocal.js';
@@ -251,20 +251,19 @@ export function interpretPrompt(text, opts = {}) {
     const raw = str(text).trim();
     let t = ' ' + normalizePrompt(raw) + ' ';
     const consume = (re) => { t = t.replace(re, ' '); };
-    const notes = [], understood = [], where = [];
+    const notes = [], where = [];
     const state = {};
 
     // 1. the source — read from the whole sentence
     const { source, word: sourceWord } = detectSource(t);
     const fields = fieldsFor(source);
-    understood.push({ kind: 'source', text: source });
 
     // 2. what cannot be done — named, then removed so "tier" or "quota" is not read as a field
     for (const [re, note] of UNSUPPORTED) if (re.test(t)) { notes.push(note); consume(re); }
 
     // 3. the period
     const period = detectPeriod(t, today, fiscalStart);
-    if (period) { consume(period.consumed); understood.push({ kind: 'period', text: period.label }); }
+    if (period) consume(period.consumed);
 
     // 4. the chart — "over time" is also the source's month dimension
     if (/\b(by quarter|quarterly)\b/.test(t)) notes.push('Grouped by month — the builder has no quarter dimension yet.');
@@ -321,8 +320,6 @@ export function interpretPrompt(text, opts = {}) {
         }
         if (hit) { addWhere({ id: ownerId, op: 'eq', value: hit.name }); consume(hit.re); }
     }
-    for (const w of where) understood.push({ kind: 'filter', text: whereLabel(source, w) });
-
     // 6. the measures
     const metrics = [];
     for (const [id, re] of METRIC_WORDS[source]) { if (re.test(t)) { metrics.push(id); consume(re); } }
@@ -349,23 +346,64 @@ export function interpretPrompt(text, opts = {}) {
 
     const dimRefs = dims.map(id => fields.dims.find(d => d.id === id)).filter(Boolean).map(d => ({ id: d.id, label: d.label, kind: 'dim' }));
     const metricRefs = [...new Set(metrics)].map(id => fields.metrics.find(m => m.id === id)).filter(Boolean).map(m => ({ id: m.id, label: m.label, kind: 'metric' }));
-    for (const d of dimRefs) understood.push({ kind: 'group', text: d.label });
-    for (const m of metricRefs) understood.push({ kind: 'measure', text: m.label });
-    understood.push({ kind: 'chart', text: REPORT_CHARTS.find(c => c.id === chartType)?.label || chartType });
-    if (!period) understood.push({ kind: 'period', text: REPORT_PERIODS[0].label });
     if (!dimRefs.length && !where.length && !period && metrics.every(id => fields.defaults.metrics.includes(id) || id === 'deals')) {
         notes.push('Only the data source was recognised — the defaults are shown. Edit the fields on the right, or try one of the starters.');
     }
 
     const name = raw ? raw.charAt(0).toUpperCase() + raw.slice(1).replace(/\s+/g, ' ').slice(0, 79) : 'Untitled report';
+    const definition = {
+        source, dims: dimRefs, metrics: metricRefs, chartType,
+        period: period ? period.period : 'all', from: period?.from || '', to: period?.to || '',
+        where: where.map(w => ({ ...w })),
+    };
+    // The chips describe the DEFINITION (understoodFor) — the period chip says
+    // the sentence's window by its own name when one was read.
+    const chips = understoodFor(definition);
+    if (period) chips[chips.length - 1] = { kind: 'period', text: period.label };
+    return { name, definition, understood: chips, notes };
+}
+
+/**
+ * What a definition says, as chips: the source, each filter in words, each
+ * dimension, each measure, the chart, the period — the same list whether the
+ * definition came from this reader or from Claude (§0.141), so the banner
+ * describes the report, not the reader.
+ */
+export function understoodFor(definition) {
+    const d = definition || {};
+    const source = isReportSource(d.source) ? d.source : 'Opportunities';
+    const fields = fieldsFor(source);
+    const out = [{ kind: 'source', text: source }];
+    for (const w of (Array.isArray(d.where) ? d.where : [])) out.push({ kind: 'filter', text: whereLabel(source, w) });
+    for (const ref of (Array.isArray(d.dims) ? d.dims : [])) { const f = fields.dims.find(x => x.id === (ref?.id ?? ref)); if (f) out.push({ kind: 'group', text: f.label }); }
+    for (const ref of (Array.isArray(d.metrics) ? d.metrics : [])) { const f = fields.metrics.find(x => x.id === (ref?.id ?? ref)); if (f) out.push({ kind: 'measure', text: f.label }); }
+    out.push({ kind: 'chart', text: REPORT_CHARTS.find(c => c.id === d.chartType)?.label || String(d.chartType || 'Bar') });
+    const period = d.period === 'custom'
+        ? `${d.from || '…'} to ${d.to || '…'}`
+        : (REPORT_PERIODS.find(p => p.value === d.period)?.label || REPORT_PERIODS[0].label);
+    out.push({ kind: 'period', text: period });
+    return out;
+}
+
+/**
+ * The builder's vocabulary as data — every source with its dimensions, metrics
+ * and filters, the periods, the charts — for a reader that is not this file
+ * (the Claude-backed function hands it to the model, §0.141). Ids and labels
+ * only: no valueOf, no test.
+ */
+export function promptVocabulary() {
     return {
-        name,
-        definition: {
-            source, dims: dimRefs, metrics: metricRefs, chartType,
-            period: period ? period.period : 'all', from: period?.from || '', to: period?.to || '',
-            where: where.map(w => ({ ...w })),
-        },
-        understood, notes,
+        sources: ['Opportunities', 'Accounts', 'Leads', 'Activity'].map(id => {
+            const f = fieldsFor(id);
+            return {
+                id,
+                dims: f.dims.map(d => ({ id: d.id, label: d.label, kind: d.kind })),
+                metrics: f.metrics.map(m => ({ id: m.id, label: m.label })),
+                filters: filtersFor(id).map(x => ({ id: x.id, label: x.label, kind: x.kind, ops: [...x.ops], ...(x.options ? { options: x.options.map(o => o.value) } : {}), ...(x.unit ? { unit: x.unit } : {}) })),
+            };
+        }),
+        periods: [...REPORT_PERIODS.map(p => ({ id: p.value, label: p.label })), { id: 'custom', label: 'A custom range (from, to)' }],
+        charts: REPORT_CHARTS.map(c => ({ id: c.id, label: c.label })),
     };
 }
 

@@ -191,8 +191,10 @@ test('the library: cards are one module-scope component; Share / Pin / Deliver /
     const s = code(read('src/Tabs/ReportsTab.jsx'));
     assert.ok(s.includes('const LibraryCard = ({ r, mayTouch, pinned, currentUser, onOpen, onPin, onShare, onDeliver, onDelete }) => {'), 'module scope, data as props');
     assert.ok(s.includes('const DeliveryDialog = ({ report, users, slackConfigured, currentUserId, busy, note, onSave, onSendNow, onClose }) => {'));
-    // §0.140 — the time is a time input, any minute; the 24-hour select and its label are gone
-    assert.ok(s.includes('<input type="time" value={timeLabel(draft.hour, draft.minute)} onChange={e => setTime(e.target.value)} aria-label="Delivery time"'), 'a time input');
+    // §0.140 — the time is the HOUSE time control (TimeDropdown, five-minute steps), never the native input (Jeff: "the old time picker I hate"); the 24-hour select and its label are gone
+    assert.ok(s.includes('<TimeDropdown value={timeLabel(draft.hour, draft.minute)} onChange={v => { if (v) setTime(v); }} stepMinutes={DELIVERY_RUN_EVERY_MIN} ariaLabel="Delivery time"/>'), 'the house time dropdown');
+    assert.ok(s.includes("import TimeDropdown from '../components/ui/TimeDropdown';"));
+    assert.ok(!s.includes('type="time"'), 'no native time input anywhere in ReportsTab');
     assert.ok(s.includes("if (Number.isInteger(h) && h >= 0 && h <= 23 && Number.isInteger(m) && m >= 0 && m <= 59) setDraft(d => ({ ...d, hour: h, minute: m }));"), 'hour and minute set together, validated');
     assert.ok(!s.includes('hourLabel') && !s.includes("Array.from({ length: 24 }, (_, h) => h)"), 'the hour select is gone');
     assert.ok(s.includes('at the time you pick') && !s.includes('at the hour you pick'));
