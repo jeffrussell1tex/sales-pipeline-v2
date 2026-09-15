@@ -1,4 +1,5 @@
 import React from 'react';
+import { T } from '../tokens.js';
 
 class ErrorBoundary extends React.Component {
     constructor(props) {
@@ -33,7 +34,7 @@ class ErrorBoundary extends React.Component {
                 }}>
                     <div style={{
                         background: '#fff',
-                        border: '1px solid #fecaca',
+                        border: `1px solid ${T.danger}33`,
                         borderRadius: '12px',
                         padding: '2.5rem 2rem',
                         maxWidth: '440px',
@@ -44,14 +45,14 @@ class ErrorBoundary extends React.Component {
                         <h3 style={{
                             fontSize: '1.0625rem',
                             fontWeight: '700',
-                            color: '#1e293b',
+                            color: T.ink,
                             margin: '0 0 0.5rem',
                         }}>
                             Something went wrong
                         </h3>
                         <p style={{
                             fontSize: '0.875rem',
-                            color: '#64748b',
+                            color: T.inkMid,
                             margin: '0 0 1.5rem',
                             lineHeight: 1.6,
                         }}>
@@ -59,13 +60,13 @@ class ErrorBoundary extends React.Component {
                         </p>
                         {this.state.error?.message && (
                             <div style={{
-                                background: '#fef2f2',
-                                border: '1px solid #fecaca',
+                                background: `${T.danger}14`,
+                                border: `1px solid ${T.danger}33`,
                                 borderRadius: '6px',
                                 padding: '0.625rem 0.875rem',
                                 marginBottom: '1.5rem',
                                 fontSize: '0.75rem',
-                                color: '#b91c1c',
+                                color: T.danger,
                                 fontFamily: 'monospace',
                                 textAlign: 'left',
                                 wordBreak: 'break-word',
@@ -77,7 +78,7 @@ class ErrorBoundary extends React.Component {
                             onClick={() => this.handleReset()}
                             style={{
                                 padding: '0.5rem 1.5rem',
-                                background: '#2563eb',
+                                background: T.ink,
                                 color: '#fff',
                                 border: 'none',
                                 borderRadius: '7px',

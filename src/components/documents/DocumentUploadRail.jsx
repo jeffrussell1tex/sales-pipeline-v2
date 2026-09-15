@@ -112,7 +112,7 @@ export default function DocumentUploadRail() {
                 {/* Body */}
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '16px 18px' }}>
                     {error && (
-                        <div style={{ background: '#fef2f2', border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.danger }}>{error}</div>
+                        <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.danger }}>{error}</div>
                     )}
 
                     {/* Dropzone / selected file */}

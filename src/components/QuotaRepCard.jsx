@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import { T } from '../tokens.js';
 
 export default function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, inputSt, updateRepField, compactInput }) {
     const initials = (name) => (name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    const cardStyle = { background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' };
-    const topStyle  = { display:'flex', alignItems:'center', gap:'10px', padding:'0.75rem 1rem', borderBottom:'1px solid #f1f5f9' };
+    const cardStyle = { background:'#fff', border:`1px solid ${T.border}`, borderRadius:'10px', overflow:'hidden' };
+    const topStyle  = { display:'flex', alignItems:'center', gap:'10px', padding:'0.75rem 1rem', borderBottom:`1px solid ${T.surface2}` };
     const bodyStyle = { padding:'0.875rem 1rem', display:'flex', flexDirection:'column', gap:'8px' };
-    const lblStyle  = { fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'3px' };
+    const lblStyle  = { fontSize:'0.625rem', fontWeight:'700', color:T.inkMuted, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'3px' };
     const qGridStyle = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' };
 
     // Use local state for the input values so typing feels instant.
@@ -44,8 +45,8 @@ export default function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, in
             return (
                 <input type="number" value={localAnnual} placeholder="0"
                     onChange={e => setLocalAnnual(e.target.value)}
-                    onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitAnnual(e.target.value); }}
-                    onFocus={e => e.target.style.borderColor='#2563eb'}
+                    onBlur={e => { e.target.style.borderColor=T.border; commitAnnual(e.target.value); }}
+                    onFocus={e => e.target.style.borderColor=T.info}
                     style={inputSt} />
             );
         }
@@ -57,11 +58,11 @@ export default function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, in
                             const qKey = q.toLowerCase();
                             return (
                                 <div key={q} style={{ display:'flex', flexDirection:'column', gap:'1px' }}>
-                                    <div style={{ fontSize:'0.5rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{q}</div>
+                                    <div style={{ fontSize:'0.5rem', fontWeight:'700', color:T.inkMuted, textTransform:'uppercase' }}>{q}</div>
                                     <input type="number" value={localQ[qKey]||''} placeholder="0"
                                         onChange={e => setLocalQ(prev => ({ ...prev, [qKey]: e.target.value }))}
-                                        onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitQ(qKey, e.target.value); }}
-                                        onFocus={e => e.target.style.borderColor='#2563eb'}
+                                        onBlur={e => { e.target.style.borderColor=T.border; commitQ(qKey, e.target.value); }}
+                                        onFocus={e => e.target.style.borderColor=T.info}
                                         style={inputSt} />
                                 </div>
                             );
@@ -79,8 +80,8 @@ export default function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, in
                     {initials(u.name)}
                 </div>
                 <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1e293b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{u.name}</div>
-                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'1px' }}>{u.team || u.territory || 'No team'}</div>
+                    <div style={{ fontSize:'0.8125rem', fontWeight:'700', color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{u.name}</div>
+                    <div style={{ fontSize:'0.6875rem', color:T.inkMuted, marginTop:'1px' }}>{u.team || u.territory || 'No team'}</div>
                 </div>
             </div>
             <div style={bodyStyle}>
@@ -89,8 +90,8 @@ export default function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, in
                         <div style={lblStyle}>Annual quota</div>
                         <input type="number" value={localAnnual} placeholder="0"
                             onChange={e => setLocalAnnual(e.target.value)}
-                            onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitAnnual(e.target.value); }}
-                            onFocus={e => e.target.style.borderColor='#2563eb'}
+                            onBlur={e => { e.target.style.borderColor=T.border; commitAnnual(e.target.value); }}
+                            onFocus={e => e.target.style.borderColor=T.info}
                             style={inputSt} />
                     </div>
                 ) : (
@@ -102,8 +103,8 @@ export default function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, in
                                     <div style={lblStyle}>{q}</div>
                                     <input type="number" value={localQ[qKey]||''} placeholder="0"
                                         onChange={e => setLocalQ(prev => ({ ...prev, [qKey]: e.target.value }))}
-                                        onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitQ(qKey, e.target.value); }}
-                                        onFocus={e => e.target.style.borderColor='#2563eb'}
+                                        onBlur={e => { e.target.style.borderColor=T.border; commitQ(qKey, e.target.value); }}
+                                        onFocus={e => e.target.style.borderColor=T.info}
                                         style={{ ...inputSt, fontSize:'0.8125rem' }} />
                                 </div>
                             );

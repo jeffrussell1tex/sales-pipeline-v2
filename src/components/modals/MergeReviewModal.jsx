@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../AppContext';
+import { T } from '../../tokens.js';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
 const C = {
     surface: '#fbf8f3', white: '#ffffff', stone: '#f0ece4', stone2: '#f5efe3',
-    ink: '#1c1917', ink2: '#57534e', muted: '#78716c', faint: '#a8a29e',
+    ink: '#1c1917', ink2: T.inkMid, muted: T.inkMuted, faint: T.inkMuted,
     border: '#e5e2db', border2: '#ddd8cf', headerBg: '#1c1917', onDark: '#f5f1eb',
     ok: '#4d6b3d', warn: '#b87333', warnBg: '#fdf4e7', warnBorder: '#f0d9b5',
     r: 8,
@@ -144,7 +145,7 @@ export default function MergeReviewModal() {
                     </div>
 
                     {mergeError && (
-                        <div style={{ background: '#fef2f2', border: '1px solid #9c3a2e', borderRadius: C.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#9c3a2e' }}>
+                        <div style={{ background: `${T.danger}14`, border: '1px solid #9c3a2e', borderRadius: C.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#9c3a2e' }}>
                             {mergeError}
                         </div>
                     )}
@@ -171,7 +172,7 @@ export default function MergeReviewModal() {
                     {/* Conflicting fields */}
                     {conflicts.length > 0 && (
                         <>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.07em', textTransform: 'uppercase', margin: '1rem 0 0.4rem' }}>Resolve conflicting fields</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, letterSpacing: '0.07em', textTransform: 'uppercase', margin: '1rem 0 0.4rem' }}>Resolve conflicting fields</div>
                             <div style={{ border: `1px solid ${C.border}`, borderRadius: C.r, overflow: 'hidden' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', padding: '0.5rem 0.75rem', borderBottom: `1px solid #efe9df`, background: C.stone2 }}>
                                     <span style={{ fontSize: 11, fontWeight: 600, color: C.ink2 }}>Field</span>

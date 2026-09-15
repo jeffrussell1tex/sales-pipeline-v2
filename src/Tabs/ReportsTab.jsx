@@ -300,7 +300,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                                 <div style={{
                                   fontSize: '0.6875rem',
                                   fontWeight: '500',
-                                  color: reportSubTab === key ? '#8a8378' : '#a8a29e',
+                                  color: reportSubTab === key ? '#8a8378' : T.inkMuted,
                                   marginTop: 2,
                                   letterSpacing: 0.1,
                                 }}>{sub}</div>

@@ -2,6 +2,7 @@ import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch, dbWrite } from '../../utils/storage';
 import { isoLocal } from '../../utils/dateLocal';
+import { T } from '../../tokens.js';
 
 export default function QuickLogFab() {
     const {
@@ -22,7 +23,7 @@ export default function QuickLogFab() {
     };
     const labelStyle = {
         display: 'block', fontSize: '0.75rem', fontWeight: '600',
-        color: '#57534e', marginBottom: '0.375rem',
+        color: T.inkMid, marginBottom: '0.375rem',
     };
 
     return (
@@ -52,7 +53,7 @@ export default function QuickLogFab() {
                                             fontFamily: 'inherit', fontSize: '0.8125rem', fontWeight: '600', transition: 'all 0.15s',
                                             border: '1px solid ' + (quickLogForm.type === t ? '#1c1917' : '#e5e2db'),
                                             background: quickLogForm.type === t ? '#1c1917' : '#f0ece4',
-                                            color: quickLogForm.type === t ? '#f5f1eb' : '#57534e',
+                                            color: quickLogForm.type === t ? '#f5f1eb' : T.inkMid,
                                         }}>
                                         {t}
                                     </button>
@@ -82,7 +83,7 @@ export default function QuickLogFab() {
                                 />
                                 {quickLogForm.contactSearch.length > 0 && (
                                     <button onClick={() => { setQuickLogForm(f => ({ ...f, contactId: '', contactSearch: '' })); setQuickLogContactResults([]); }}
-                                        style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem', lineHeight: 1, padding: 0 }}>×</button>
+                                        style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: '1rem', lineHeight: 1, padding: 0 }}>×</button>
                                 )}
                             </div>
                             {quickLogContactResults.length > 0 && !quickLogForm.contactId && (
@@ -92,11 +93,11 @@ export default function QuickLogFab() {
                                         const sub = [c.title, c.company].filter(Boolean).join(' · ');
                                         return (
                                             <div key={c.id} onClick={() => { setQuickLogForm(f => ({ ...f, contactId: c.id, contactSearch: fullName })); setQuickLogContactResults([]); }}
-                                                style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: idx < quickLogContactResults.length - 1 ? '1px solid #f1f5f9' : 'none' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                                style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: idx < quickLogContactResults.length - 1 ? `1px solid ${T.surface2}` : 'none' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                 onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                                                 <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1c1917' }}>{fullName || '—'}</div>
-                                                {sub && <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{sub}</div>}
+                                                {sub && <div style={{ fontSize: '0.75rem', color: T.inkMuted }}>{sub}</div>}
                                             </div>
                                         );
                                     })}
@@ -132,13 +133,13 @@ export default function QuickLogFab() {
                             <label htmlFor="quickLogCal" style={{ fontSize: '0.875rem', fontWeight: '500', color: '#1c1917', cursor: 'pointer', userSelect: 'none' }}>
                                 📅 Add to Google Calendar
                             </label>
-                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Creates an all-day event</span>
+                            <span style={{ fontSize: '0.75rem', color: T.inkMuted }}>Creates an all-day event</span>
                         </div>
 
                         {/* Actions */}
                         <div style={{ display: 'flex', gap: '0.625rem', paddingTop: '0.25rem' }}>
                             <button onClick={() => { setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false }); setQuickLogContactResults([]); }}
-                                style={{ flex: 1, padding: '0.625rem', borderRadius: '8px', border: '1px solid #e5e2db', background: '#fff', color: '#57534e', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                style={{ flex: 1, padding: '0.625rem', borderRadius: '8px', border: '1px solid #e5e2db', background: '#fff', color: T.inkMid, fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                 Cancel
                             </button>
                             <button onClick={async () => {
@@ -184,10 +185,10 @@ export default function QuickLogFab() {
                 <div style={{ position: 'fixed', bottom: '2rem', right: isMobile ? '0.75rem' : '1.5rem', left: isMobile ? '0.75rem' : 'auto', zIndex: 9991, background: '#fff', border: '1px solid #e5e2db', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1.25rem', width: isMobile ? 'auto' : '280px' }}
                     onClick={e => e.stopPropagation()}>
                     <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.375rem' }}>✅ Activity logged!</div>
-                    <div style={{ fontSize: '0.8125rem', color: '#57534e', marginBottom: '0.875rem' }}>Create a follow-up task for <strong>{followUpPrompt.opportunityName}</strong>?</div>
+                    <div style={{ fontSize: '0.8125rem', color: T.inkMid, marginBottom: '0.875rem' }}>Create a follow-up task for <strong>{followUpPrompt.opportunityName}</strong>?</div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button onClick={() => setFollowUpPrompt(null)}
-                            style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid #e5e2db', background: '#fff', color: '#57534e', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid #e5e2db', background: '#fff', color: T.inkMid, fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                             Skip
                         </button>
                         <button onClick={() => {

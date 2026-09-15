@@ -67,6 +67,32 @@ test('the legacy .modal class the confirm dialogs still use paints the warm surf
     assert.ok(/\.modal \{\r?\n\s+background: #fbf8f3;/.test(css), '.modal background is T.surface’s value');
 });
 
+// §0.138 — the rest of the audit's table. These files keep the warm palette's own
+// values as literals (a white, a stage colour) — that was not the ask — so the
+// rule here is narrower: no TAILWIND value outside an array (a palette) line.
+const REST = [
+    'src/Tabs/QuotesTab.jsx', 'src/components/ui/ViewingBar.jsx', 'src/components/QuotaRepCard.jsx',
+    'src/components/layout/QuickLogFab.jsx', 'src/components/rails/AccountRail.jsx', 'src/components/rails/ContactRail.jsx',
+    'src/components/ErrorBoundary.jsx', 'src/components/modals/OpportunityModal.jsx',
+    'src/components/modals/ContactMergeReviewModal.jsx', 'src/components/modals/MergeReviewModal.jsx',
+    'src/Tabs/ReportsTab.jsx', 'src/components/documents/DocumentUploadRail.jsx', 'src/components/documents/RecordDocuments.jsx',
+    'src/components/rails/ActivityRail.jsx', 'src/components/rails/TaskRail.jsx',
+];
+const TAILWIND = /#(0f172a|1e293b|334155|475569|64748b|94a3b8|cbd5e1|e2e8f0|f1f5f9|f8fafc|44403c|57534e|78716c|a8a29e|dc2626|ef4444|b91c1c|991b1b|f87171|fef2f2|fee2e2|fecaca|fca5a5|10b981|059669|047857|065f46|16a34a|34d399|4ade80|d1fae5|a7f3d0|86efac|bbf7d0|f59e0b|d97706|92400e|78350f|b45309|fef3c7|fffbeb|fde68a|fcd34d|2563eb|1d4ed8|3b82f6|1e40af|1e3a8a|60a5fa|93c5fd|dbeafe|eff6ff|bfdbfe|f3e8ff|7c3aed|6b21a8)\b/i;
+
+test('the fifteen remaining files of the audit’s table carry no Tailwind value outside a palette array, and each binds T', () => {
+    for (const f of REST) {
+        const src = code(read(f));
+        // a one-line import from tokens.js, or the documents' multi-line import from './atoms'
+        assert.match(src, /import \{[^}]*\bT\b[^}]*\}\s*from\s*'[./a-zA-Z/]+(tokens\.js|atoms(\.jsx)?)';/, `${f} binds T (directly, or with the documents atoms)`);
+        const offenders = src.split('\n')
+            .map((l, i) => ({ l, n: i + 1 }))
+            .filter(({ l }) => TAILWIND.test(l) && !/^\s*(const \w+ = )?\[|\[\s*'#/.test(l) && !/'#[0-9a-f]{6}',\s*'#[0-9a-f]{6}'/i.test(l))
+            .map(({ l, n }) => `${n}: ${l.trim().slice(0, 100)}`);
+        assert.deepEqual(offenders, [], `${f} has a Tailwind colour again:\n${offenders.join('\n')}`);
+    }
+});
+
 test('the migration script keeps the data palettes by what the line says, never by line number', () => {
     const s = code(read('scripts/migrate-blue-era.mjs'));
     assert.ok(s.includes('const EXCLUDE_PATTERNS = {') && !s.includes('EXCLUDE_LINES'), 'patterns, not line numbers');

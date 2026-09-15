@@ -320,7 +320,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
             </div>
 
             {/* Journey map + swim lanes — dark panel */}
-            <div style={{ background: '#1e293b', borderRadius: '8px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+            <div style={{ background: T.ink, borderRadius: '8px', padding: '1.25rem', marginBottom: '1.5rem' }}>
                 <div style={{ marginBottom: '0.75rem', ...ey('rgba(255,255,255,0.45)') }}>Deal journey</div>
                 {(() => {
                     const count = journeyStages.length;
@@ -332,18 +332,18 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                                 if (i === 0) return null;
                                 const x1 = padX + (i - 1) * spacing + 8, x2 = padX + i * spacing - 8;
                                 const isDone = journeyStages[i - 1].status === 'done' || journeyStages[i - 1].status === 'active';
-                                const color = isDone ? (s.status === 'future' ? 'rgba(255,255,255,0.15)' : '#4ade80') : 'rgba(255,255,255,0.15)';
+                                const color = isDone ? (s.status === 'future' ? 'rgba(255,255,255,0.15)' : T.ok) : 'rgba(255,255,255,0.15)';
                                 return <rect key={`t-${i}`} x={x1} y={trackY - 2} width={Math.max(x2 - x1, 0)} height={4} rx={2} fill={color} opacity={s.status === 'future' ? 0.4 : 1}/>;
                             })}
                             {journeyStages.map((s, i) => {
                                 const cx = padX + i * spacing;
                                 const isDone = s.status === 'done', isActive = s.status === 'active';
-                                const dotFill = isDone ? '#4ade80' : isActive ? '#60a5fa' : 'rgba(255,255,255,0.2)';
-                                const labelColor = isDone ? '#86efac' : isActive ? '#93c5fd' : 'rgba(255,255,255,0.3)';
+                                const dotFill = isDone ? T.ok : isActive ? T.info : 'rgba(255,255,255,0.2)';
+                                const labelColor = isDone ? `${T.ok}40` : isActive ? `${T.info}40` : 'rgba(255,255,255,0.3)';
                                 const r = isActive ? 9 : 7;
                                 return (
                                     <g key={`d-${i}`}>
-                                        {isActive && <circle cx={cx} cy={trackY} r={13} fill="none" stroke="#3b82f6" strokeWidth={2} opacity={0.5}/>}
+                                        {isActive && <circle cx={cx} cy={trackY} r={13} fill="none" stroke={T.info} strokeWidth={2} opacity={0.5}/>}
                                         <circle cx={cx} cy={trackY} r={r} fill={dotFill}/>
                                         <text x={cx} y={52} textAnchor="middle" fill={labelColor} fontSize={9} fontWeight={isActive ? '700' : '500'} fontFamily="inherit">
                                             {s.name.length > 12 ? s.name.replace('/', '/\u200B') : s.name}
@@ -365,7 +365,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                                 <div style={{ flex: 1, height: '2px', background: 'rgba(255,255,255,0.12)', borderRadius: '1px', position: 'relative' }}>
                                     {stageEvents.map((ev, i) => (
                                         <div key={i}
-                                            style={{ position: 'absolute', left: `${pct(ev.date)}%`, top: '50%', transform: 'translate(-50%,-50%) rotate(45deg)', width: '10px', height: '10px', background: 'rgba(255,255,255,0.55)', borderRadius: '2px', cursor: 'pointer', border: '1.5px solid #1e293b' }}
+                                            style={{ position: 'absolute', left: `${pct(ev.date)}%`, top: '50%', transform: 'translate(-50%,-50%) rotate(45deg)', width: '10px', height: '10px', background: 'rgba(255,255,255,0.55)', borderRadius: '2px', cursor: 'pointer', border: `1.5px solid ${T.ink}` }}
                                             title={`${ev.label} · ${fmtDate(ev.date)}`}
                                             onMouseEnter={() => setTooltip({ title: ev.label, sub: fmtDate(ev.date) })}
                                             onMouseLeave={() => setTooltip(null)}
@@ -381,7 +381,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                                         <div style={{ flex: 1, height: '2px', background: 'rgba(255,255,255,0.12)', borderRadius: '1px', position: 'relative' }}>
                                             {acts.map((act, i) => (
                                                 <div key={i}
-                                                    style={{ position: 'absolute', left: `${pct(act.date)}%`, top: '50%', transform: 'translate(-50%,-50%)', width: '12px', height: '12px', borderRadius: '50%', background: c.dot, border: '2px solid #1e293b', cursor: 'pointer' }}
+                                                    style={{ position: 'absolute', left: `${pct(act.date)}%`, top: '50%', transform: 'translate(-50%,-50%)', width: '12px', height: '12px', borderRadius: '50%', background: c.dot, border: `2px solid ${T.ink}`, cursor: 'pointer' }}
                                                     onMouseEnter={() => setTooltip({ title: `${act.type} · ${fmtDate(act.date)}`, sub: act.notes ? act.notes.slice(0, 60) + (act.notes.length > 60 ? '…' : '') : '' })}
                                                     onMouseLeave={() => setTooltip(null)}
                                                 />
@@ -391,7 +391,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                                 );
                             })}
                             {tooltip && (
-                                <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '80px', background: '#0f172a', color: '#fff', borderRadius: '6px', padding: '6px 10px', fontSize: '0.75rem', pointerEvents: 'none', zIndex: 50, maxWidth: '260px', whiteSpace: 'normal', lineHeight: 1.4, border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '80px', background: T.ink, color: '#fff', borderRadius: '6px', padding: '6px 10px', fontSize: '0.75rem', pointerEvents: 'none', zIndex: 50, maxWidth: '260px', whiteSpace: 'normal', lineHeight: 1.4, border: '1px solid rgba(255,255,255,0.1)' }}>
                                     <div style={{ fontWeight: '700' }}>{tooltip.title}</div>
                                     {tooltip.sub && <div style={{ opacity: 0.65, marginTop: '2px' }}>{tooltip.sub}</div>}
                                 </div>

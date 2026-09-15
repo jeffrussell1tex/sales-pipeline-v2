@@ -99,7 +99,7 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
             </div>
 
             {error && (
-                <div style={{ background: '#fef2f2', border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '7px 10px', marginBottom: 8, fontSize: 12, color: T.danger }}>{error}</div>
+                <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '7px 10px', marginBottom: 8, fontSize: 12, color: T.danger }}>{error}</div>
             )}
 
             {/* Drag hint */}

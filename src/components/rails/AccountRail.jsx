@@ -542,7 +542,7 @@ export default function AccountRail() {
 
                 {/* Error / save error */}
                 {(accountModalError || saveError) && (
-                    <div style={{ background: '#fef2f2', border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.danger, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: T.danger, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span>{accountModalError || saveError}</span>
                         <button onClick={() => { setAccountModalError?.(null); setSaveError(null); }} style={{ background: 'none', border: 'none', color: T.danger, cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
                     </div>
@@ -550,18 +550,18 @@ export default function AccountRail() {
 
                 {/* Duplicate warning */}
                 {dupWarning && (
-                    <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: T.r, padding: '10px 12px', marginBottom: 12 }}>
-                        <div style={{ fontWeight: 700, color: '#92400e', fontSize: 12, marginBottom: 4 }}>⚠ Similar account{dupWarning.length > 1 ? 's' : ''} found</div>
+                    <div style={{ background: `${T.warn}18`, border: `1px solid ${T.warn}40`, borderRadius: T.r, padding: '10px 12px', marginBottom: 12 }}>
+                        <div style={{ fontWeight: 700, color: T.warn, fontSize: 12, marginBottom: 4 }}>⚠ Similar account{dupWarning.length > 1 ? 's' : ''} found</div>
                         {dupWarning.slice(0, 3).map(d => (
-                            <div key={d.id} style={{ fontSize: 12, color: '#78350f', marginBottom: 2 }}><strong>{d.name}</strong>{d.verticalMarket ? ` · ${d.verticalMarket}` : ''}</div>
+                            <div key={d.id} style={{ fontSize: 12, color: T.warn, marginBottom: 2 }}><strong>{d.name}</strong>{d.verticalMarket ? ` · ${d.verticalMarket}` : ''}</div>
                         ))}
                         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                             <button onClick={() => { const d = dupWarning[0]; if (!d) return; restoreNewRef.current = { formData, verticalSearch, repSearch, territorySearch, parentSearch, customerTypeInput, activeTab }; setDupWarning(null); setRailStack(prev => [...prev, { type: 'account', id: accountRailId, mode: accountRailMode }]); setAccountRailId(d.id); setAccountRailMode('view'); }}
-                                style={{ padding: '4px 10px', background: '#fff', color: '#92400e', border: '1px solid #fde68a', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
+                                style={{ padding: '4px 10px', background: '#fff', color: T.warn, border: `1px solid ${T.warn}40`, borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
                                 Open existing
                             </button>
                             <button onClick={() => { setDupWarning(null); handleSave(); }}
-                                style={{ padding: '4px 10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
+                                style={{ padding: '4px 10px', background: T.warn, color: '#fff', border: 'none', borderRadius: T.r, fontWeight: 600, cursor: 'pointer', fontSize: 12, fontFamily: T.sans }}>
                                 Create anyway
                             </button>
                             <button onClick={() => setDupWarning(null)}
@@ -682,7 +682,7 @@ export default function AccountRail() {
                                     return parent ? <ReadRow label="Parent Account" value={parent.name} wide /> : null;
                                 })()}
                                 {account?.doNotContact && (
-                                    <div style={{ gridColumn: '1 / -1', marginBottom: 10, background: '#fef2f2', border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '6px 10px', fontSize: 12, fontWeight: 600, color: T.danger }}>
+                                    <div style={{ gridColumn: '1 / -1', marginBottom: 10, background: `${T.danger}14`, border: `1px solid ${T.danger}`, borderRadius: T.r, padding: '6px 10px', fontSize: 12, fontWeight: 600, color: T.danger }}>
                                         🚫 Do Not Contact — flagged
                                     </div>
                                 )}
@@ -789,7 +789,7 @@ export default function AccountRail() {
                                 <div style={{ gridColumn: '1 / -1', marginBottom: 10 }}>
                                     <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Do Not Contact</label>
                                     <div onClick={() => hc('doNotContact', !formData.doNotContact)}
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 10px', borderRadius: T.r, border: formData.doNotContact ? `1px solid ${T.danger}` : `1px solid ${T.border}`, background: formData.doNotContact ? '#fef2f2' : T.bg }}>
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 10px', borderRadius: T.r, border: formData.doNotContact ? `1px solid ${T.danger}` : `1px solid ${T.border}`, background: formData.doNotContact ? `${T.danger}14` : T.bg }}>
                                         <div style={{ width: 32, height: 18, borderRadius: 999, background: formData.doNotContact ? T.danger : '#d6d3ce', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
                                             <div style={{ position: 'absolute', width: 12, height: 12, background: '#fff', borderRadius: '50%', top: 3, left: formData.doNotContact ? 17 : 3, transition: 'left 0.2s' }} />
                                         </div>

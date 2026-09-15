@@ -2513,6 +2513,17 @@ const mutations = [
         "src/index.css",
         "            background: #fbf8f3; /* T.surface",
         "            background: #ffffff; /* T.surface"],
+
+    // ── The rest of the off-brand table (0.138) ───────────────────────────────
+    ["off-brand sweep: ErrorBoundary's retry button is Tailwind blue again",
+        "src/components/ErrorBoundary.jsx",
+        "                                background: T.ink,\n                                color: '#fff',",
+        "                                background: '#2563eb',\n                                color: '#fff',"],
+
+    ["off-brand sweep: AccountRail's do-not-contact notice is the Tailwind amber wash again",
+        "src/components/rails/AccountRail.jsx",
+        "                    <div style={{ background: `${T.warn}18`, border: `1px solid ${T.warn}40`, borderRadius: T.r, padding: '10px 12px', marginBottom: 12 }}>",
+        "                    <div style={{ background: '#fef3c7', border: `1px solid ${T.warn}40`, borderRadius: T.r, padding: '10px 12px', marginBottom: 12 }}>"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

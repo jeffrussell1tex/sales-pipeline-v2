@@ -108,17 +108,17 @@ const QStatus = ({ status }) => {
 
 // ─── Input / label styles ─────────────────────────────────────
 const inp = { width: '100%', padding: '0.4rem 0.6rem', border: '1px solid #e5e2db', borderRadius: 6, fontSize: '0.8125rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' };
-const lbl = { display: 'block', fontSize: '0.6875rem', fontWeight: '600', color: '#57534e', marginBottom: '0.25rem' };
+const lbl = { display: 'block', fontSize: '0.6875rem', fontWeight: '600', color: T.inkMid, marginBottom: '0.25rem' };
 
 // ─── Type badge ───────────────────────────────────────────────
 const TYPE_COLORS = {
-    recurring:  { bg: '#dbeafe', color: '#1e40af', label: 'Recurring' },
-    'one-time': { bg: '#fef3c7', color: '#92400e', label: 'One-time' },
-    one_time:   { bg: '#fef3c7', color: '#92400e', label: 'One-time' },
-    service:    { bg: '#f3e8ff', color: '#6b21a8', label: 'Service' },
+    recurring:  { bg: `${T.info}14`, color: T.info, label: 'Recurring' },
+    'one-time': { bg: `${T.warn}18`, color: T.warn, label: 'One-time' },
+    one_time:   { bg: `${T.warn}18`, color: T.warn, label: 'One-time' },
+    service:    { bg: `${T.info}14`, color: T.info, label: 'Service' },
 };
 const TypeBadge = ({ type }) => {
-    const c = TYPE_COLORS[type] || { bg: '#f1f5f9', color: '#64748b', label: type || '—' };
+    const c = TYPE_COLORS[type] || { bg: T.surface2, color: T.inkMid, label: type || '—' };
     return <span style={{ background: c.bg, color: c.color, fontSize: '0.5625rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.15rem 0.5rem', borderRadius: 999 }}>{c.label}</span>;
 };
 
@@ -560,13 +560,13 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                     </div>
                     <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
                         {Object.keys(catalogGroups).length === 0 && (
-                            <div style={{ padding: '1rem', fontSize: 12, color: '#a8a29e', textAlign: 'center', fontFamily: T.sans }}>
+                            <div style={{ padding: '1rem', fontSize: 12, color: T.inkMuted, textAlign: 'center', fontFamily: T.sans }}>
                                 {(products || []).length === 0 ? 'No products in catalog yet.' : 'No products match.'}
                             </div>
                         )}
                         {Object.entries(catalogGroups).map(([cat, prods]) => (
                             <div key={cat}>
-                                <div style={{ padding: '6px 12px 3px', fontSize: '0.5625rem', fontWeight: 700, color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: T.sans }}>{cat}</div>
+                                <div style={{ padding: '6px 12px 3px', fontSize: '0.5625rem', fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: T.sans }}>{cat}</div>
                                 {prods.map(prod => {
                                     const alreadyAdded = lineItems.some(li => li.productId === prod.id);
                                     return (
@@ -577,7 +577,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{ fontSize: 12, fontWeight: 600, color: '#f5f1eb', lineHeight: 1.3, fontFamily: T.sans }}>{prod.name}</div>
-                                                    <div style={{ fontSize: 10.5, color: '#a8a29e', marginTop: 1, fontFamily: T.sans }}>
+                                                    <div style={{ fontSize: 10.5, color: T.inkMuted, marginTop: 1, fontFamily: T.sans }}>
                                                         {prod.customPrice ? 'Custom price' : ('$' + Number(prod.listPrice || prod.price || 0).toLocaleString() + (prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : ''))}
                                                     </div>
                                                 </div>
@@ -587,7 +587,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                                                         + Add
                                                     </button>
                                                 )}
-                                                {alreadyAdded && <span style={{ fontSize: '0.5625rem', color: '#78716c', fontFamily: T.sans }}>Added</span>}
+                                                {alreadyAdded && <span style={{ fontSize: '0.5625rem', color: T.inkMuted, fontFamily: T.sans }}>Added</span>}
                                             </div>
                                         </div>
                                     );
@@ -634,7 +634,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                                 <div key={item._key} style={{ display: 'grid', gridTemplateColumns: '1.8fr 72px 88px 72px 72px 28px', gap: 8, padding: '8px 12px', alignItems: 'center', borderBottom: `1px solid ${T.border}` }}>
                                     <div>
                                         <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{item.productName}</div>
-                                        {item.customPrice && <div style={{ fontSize: 10.5, color: '#7c3aed', fontFamily: T.sans }}>Custom price — enter below</div>}
+                                        {item.customPrice && <div style={{ fontSize: 10.5, color: T.info, fontFamily: T.sans }}>Custom price — enter below</div>}
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <TypeBadge type={item.productType} />
@@ -642,7 +642,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                                     <div style={{ textAlign: 'right' }}>
                                         <input type="number" min="0" value={item.listPrice}
                                             onChange={e => updateLine(item._key, 'listPrice', Number(e.target.value))}
-                                            style={{ ...inp, width: '100%', textAlign: 'right', padding: '3px 6px', borderColor: item.customPrice ? '#7c3aed' : undefined, boxShadow: item.customPrice ? '0 0 0 2px rgba(124,58,237,0.1)' : undefined }}
+                                            style={{ ...inp, width: '100%', textAlign: 'right', padding: '3px 6px', borderColor: item.customPrice ? T.info : undefined, boxShadow: item.customPrice ? '0 0 0 2px rgba(124,58,237,0.1)' : undefined }}
                                             placeholder={item.customPrice ? 'Enter $' : '0'}
                                         />
                                     </div>
@@ -920,21 +920,21 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
                         <div><label style={lbl}>Product Name</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inp} placeholder="e.g. Enterprise Platform" /></div>
                         <div><label style={lbl}>Category</label><select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={inp}><option value="">— Select —</option>{catOpts.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                         <div><label style={lbl}>Type</label><select value={form.productType} onChange={e => setForm(f => ({ ...f, productType: e.target.value }))} style={inp}>{typeOpts.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                        <div><label style={lbl}>Price ($)</label>{form.customPrice ? <div style={{ ...inp, color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center', fontSize: '0.75rem' }}>Rep enters on quote</div> : <input type="number" min="0" value={form.listPrice} onChange={e => setForm(f => ({ ...f, listPrice: e.target.value }))} style={inp} placeholder="0" />}</div>
+                        <div><label style={lbl}>Price ($)</label>{form.customPrice ? <div style={{ ...inp, color: T.inkMuted, fontStyle: 'italic', display: 'flex', alignItems: 'center', fontSize: '0.75rem' }}>Rep enters on quote</div> : <input type="number" min="0" value={form.listPrice} onChange={e => setForm(f => ({ ...f, listPrice: e.target.value }))} style={inp} placeholder="0" />}</div>
                         <div><label style={lbl}>Unit</label><select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} style={inp}>{unitOpts.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
                     </div>
                     <div style={{ marginBottom: '0.75rem' }}><label style={lbl}>Description</label><input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={inp} placeholder="Brief description" /></div>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', background: T.bg, border: '1px solid #e5e2db', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
                         <input type="checkbox" id="pb-custom" checked={!!form.customPrice} onChange={e => setForm(f => ({ ...f, customPrice: e.target.checked, listPrice: e.target.checked ? '' : f.listPrice }))} style={{ marginTop: 2, cursor: 'pointer' }} />
-                        <label htmlFor="pb-custom" style={{ cursor: 'pointer' }}><div style={{ fontSize: '0.8125rem', fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Custom / Variable Price</div><div style={{ fontSize: '0.75rem', color: '#78716c', marginTop: 2, fontFamily: T.sans }}>Rep enters price directly on the quote.</div></label>
+                        <label htmlFor="pb-custom" style={{ cursor: 'pointer' }}><div style={{ fontSize: '0.8125rem', fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Custom / Variable Price</div><div style={{ fontSize: '0.75rem', color: T.inkMuted, marginTop: 2, fontFamily: T.sans }}>Rep enters price directly on the quote.</div></label>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                         <input type="checkbox" id="prod-active" checked={form.active !== false} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} />
-                        <label htmlFor="prod-active" style={{ fontSize: '0.8125rem', color: '#44403c', cursor: 'pointer', fontFamily: T.sans }}>Active (visible in quote builder)</label>
+                        <label htmlFor="prod-active" style={{ fontSize: '0.8125rem', color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>Active (visible in quote builder)</label>
                     </div>
-                    {error && <div style={{ color: '#dc2626', fontSize: '0.8125rem', marginBottom: '0.5rem', fontFamily: T.sans }}>{error}</div>}
+                    {error && <div style={{ color: T.danger, fontSize: '0.8125rem', marginBottom: '0.5rem', fontFamily: T.sans }}>{error}</div>}
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={cancel} style={{ background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: 8, padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
+                        <button onClick={cancel} style={{ background: '#e8e3da', color: T.inkMuted, border: '1px solid #ddd8cf', borderRadius: 8, padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
                         <button onClick={handleSave} disabled={saving} style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: 8, padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save Product'}</button>
                     </div>
                 </div>
@@ -997,13 +997,13 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
                                         <div>
                                             <div style={{ fontSize: 12, fontWeight: 500, color: T.ink, fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 6 }}>
                                                 {prod.name}
-                                                {prod.customPrice && <span style={{ fontSize: 8.5, fontWeight: 700, color: '#7c3aed', background: '#f3e8ff', padding: '1px 4px', borderRadius: 2, textTransform: 'uppercase' }}>Custom</span>}
+                                                {prod.customPrice && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.info, background: `${T.info}14`, padding: '1px 4px', borderRadius: 2, textTransform: 'uppercase' }}>Custom</span>}
                                                 {prod.isNew && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.info, background: `${T.info}18`, padding: '1px 5px', borderRadius: 2, textTransform: 'uppercase' }}>NEW</span>}
                                             </div>
                                             <div style={{ fontSize: 10.5, color: T.inkMuted, marginTop: 1, fontFamily: T.sans }}>{typeLabel}{unitLabel ? ` · ${unitLabel}` : ''}</div>
                                         </div>
                                         {/* List price */}
-                                        <div style={{ fontSize: 12, fontWeight: 600, color: prod.customPrice ? '#7c3aed' : T.ink, fontFamily: 'ui-monospace,Menlo,monospace', fontStyle: prod.customPrice ? 'italic' : 'normal' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 600, color: prod.customPrice ? T.info : T.ink, fontFamily: 'ui-monospace,Menlo,monospace', fontStyle: prod.customPrice ? 'italic' : 'normal' }}>
                                             {prod.customPrice ? 'Variable' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString()}
                                         </div>
                                         {/* Attach */}
@@ -1065,7 +1065,7 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
             {/* Notice modal */}
             {notice && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setNotice(null)}>
-                    <div style={{ background: T.surface, borderRadius: 12, padding: '2rem', maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', textAlign: 'center', border: `1.5px solid ${notice.type === 'success' ? '#bbf7d0' : '#fecaca'}` }} onClick={e => e.stopPropagation()}>
+                    <div style={{ background: T.surface, borderRadius: 12, padding: '2rem', maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', textAlign: 'center', border: `1.5px solid ${notice.type === 'success' ? `${T.ok}40` : `${T.danger}33`}` }} onClick={e => e.stopPropagation()}>
                         <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>{notice.type === 'success' ? '✓' : '⚠'}</div>
                         <div style={{ fontSize: '1rem', fontWeight: 700, color: T.ink, marginBottom: '0.5rem', fontFamily: T.sans }}>{notice.title}</div>
                         <div style={{ fontSize: '0.875rem', color: T.inkMid, lineHeight: 1.6, marginBottom: '1.5rem', fontFamily: T.sans }}>{notice.message}</div>
@@ -1407,7 +1407,7 @@ export default function QuotesTab() {
         } catch {
             const w = window.open('', '_blank');
             if (!w) return;
-            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeQuote.quoteNumber || 'Quote'}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid #e2e8f0;font-size:0.875rem}th{background:#f8fafc;font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body><h1>${activeQuote.name || activeQuote.quoteNumber || 'Quote'}</h1><p>${configuratorOpp?.account || ''}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${li.productName}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p></body></html>`);
+            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeQuote.quoteNumber || 'Quote'}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body><h1>${activeQuote.name || activeQuote.quoteNumber || 'Quote'}</h1><p>${configuratorOpp?.account || ''}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${li.productName}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p></body></html>`);
             w.document.close(); setTimeout(() => w.print(), 400);
         }
     };
@@ -1457,7 +1457,7 @@ export default function QuotesTab() {
                 })}
             </div>
 
-            {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '0.625rem 0.875rem', fontSize: '0.8125rem', color: '#dc2626', marginBottom: 12, fontFamily: T.sans }}>{error}</div>}
+            {error && <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}33`, borderRadius: 8, padding: '0.625rem 0.875rem', fontSize: '0.8125rem', color: T.danger, marginBottom: 12, fontFamily: T.sans }}>{error}</div>}
 
             {/* ── DEALS ──────────────────────────────────────── */}
             {subTab === 'deals' && (
@@ -1473,7 +1473,7 @@ export default function QuotesTab() {
                             <div key={kpi.label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '0.75rem 1rem' }}>
                                 <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem', fontFamily: T.sans }}>{kpi.label}</div>
                                 <div style={{ fontSize: '1.5rem', fontWeight: 800, color: T.ink, lineHeight: 1, letterSpacing: '-0.02em', fontFamily: T.sans }}>{kpi.value}</div>
-                                <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '0.2rem', fontFamily: T.sans }}>{kpi.sub}</div>
+                                <div style={{ fontSize: '0.6875rem', color: T.inkMid, marginTop: '0.2rem', fontFamily: T.sans }}>{kpi.sub}</div>
                             </div>
                         ))}
                     </div>

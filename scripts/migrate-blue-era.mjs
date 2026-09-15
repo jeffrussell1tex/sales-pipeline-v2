@@ -40,12 +40,31 @@ const APPLY = process.argv.includes('--apply');
 const ROOT = process.cwd();
 
 const FILES = [
+    // §0.136 — the six blue-era modal files
     'src/components/layout/ModalLayer.jsx',
     'src/components/modals/LeadImportModal.jsx',
     'src/components/modals/OutlookImportModal.jsx',
     'src/components/modals/ContactModal.jsx',
     'src/components/modals/UserModal.jsx',
     'src/App.jsx',
+    // §0.138 — the rest of the audit's §4 table (useSettings.js is NOT here: its
+    // sixteen are stored defaults — the pipeline colour, the KPI tolerance
+    // colours, the block types — data the settings row holds, not styling)
+    'src/Tabs/QuotesTab.jsx',
+    'src/components/ui/ViewingBar.jsx',
+    'src/components/QuotaRepCard.jsx',
+    'src/components/layout/QuickLogFab.jsx',
+    'src/components/rails/AccountRail.jsx',
+    'src/components/rails/ContactRail.jsx',
+    'src/components/ErrorBoundary.jsx',
+    'src/components/modals/OpportunityModal.jsx',
+    'src/components/modals/ContactMergeReviewModal.jsx',
+    'src/components/modals/MergeReviewModal.jsx',
+    'src/Tabs/ReportsTab.jsx',
+    'src/components/documents/DocumentUploadRail.jsx',
+    'src/components/documents/RecordDocuments.jsx',
+    'src/components/rails/ActivityRail.jsx',
+    'src/components/rails/TaskRail.jsx',
 ];
 
 // Lines that hold DATA, not style — matched by what the line SAYS, never by a
@@ -92,8 +111,19 @@ const MAP = {
     // blue — by role
     '2563eb': { split: true }, '1d4ed8': { split: true }, '3b82f6': { split: true }, '1e40af': { split: true }, '1e3a8a': { split: true }, '60a5fa': { split: true },
     '93c5fd': { token: 'info', tint: '40' }, 'dbeafe': { token: 'info', tint: '14' }, 'eff6ff': { token: 'info', tint: '14' }, 'bfdbfe': { token: 'info', tint: '14' },
+    // a lone purple wash (QuotesTab) — informational, like the blue washes
+    'f3e8ff': { token: 'info', tint: '14' },
+    // purple accents (QuotesTab) and two Tailwind greens (OpportunityModal)
+    '7c3aed': { split: true }, '6b21a8': { split: true },
+    '4ade80': { token: 'ok' }, 'bbf7d0': { token: 'ok', tint: '40' },
 };
 const KEEP = new Set(['1c1917']);
+// The warm palette's OWN values and the neutrals the §0.136 pass converted in
+// the six modal files. In the §0.138 files they are left as they are: the ask
+// was the audit's off-brand (Tailwind) literals, and a white → surface swap in
+// a report card is a visible change nobody asked for. Reported as kept.
+const BRAND_VALUES = new Set(['ffffff', 'fff', 'f5f1eb', 'fafaf9', 'f8f6f2', 'fbf8f3', 'f0ece4', 'c8b99a', '7a6a48', '2a2622', 'e6ddd0', 'e8e3da', '5a544c', '9c3a2e', 'ddd8cf', 'e5e2db', 'd6d3ce', 'f1f3f5', 'f8f9fa', 'fafbfc']);
+const SIX = new Set(FILES.slice(0, 6));
 
 const BG_KEYS = new Set(['background', 'backgroundColor', 'fill']);
 const FG_KEYS = new Set(['color', 'borderColor', 'border', 'borderTop', 'borderBottom', 'borderLeft', 'borderRight', 'outline', 'stroke', 'borderTopColor', 'borderBottomColor', 'borderLeftColor', 'borderRightColor']);
@@ -137,7 +167,9 @@ function roleOf(ancestors, node) {
 }
 
 /** { inner: '${T.x}' | '${T.x}14', exact: 'T.x' | '`${T.x}14`' } */
+let CURRENT_FILE = null;
 function tokenFor(hex, role) {
+    if (CURRENT_FILE && !SIX.has(CURRENT_FILE) && BRAND_VALUES.has((hex.length === 8 ? hex.slice(0, 6) : hex).toLowerCase())) return null;
     // '#rrggbbaa': the colour by name, the alpha as written
     const alpha = hex.length === 8 ? hex.slice(6) : null;
     const e = MAP[(alpha ? hex.slice(0, 6) : hex).toLowerCase()];
@@ -163,6 +195,7 @@ function walk(node, ancestors, visit) {
 function lineOf(src, idx) { return src.slice(0, idx).split('\n').length; }
 
 function migrate(file) {
+    CURRENT_FILE = file;
     const abs = path.join(ROOT, file);
     const src = fs.readFileSync(abs, 'utf8');
     const ast = parse(src, { sourceType: 'module', plugins: ['jsx'], errorRecovery: false });
@@ -176,7 +209,8 @@ function migrate(file) {
     walk(ast.program, [], (node, ancestors) => {
         if (node.type === 'ImportDeclaration') {
             lastImportEnd = Math.max(lastImportEnd, node.end);
-            if (/tokens\.js['"];?$/.test(src.slice(node.start, node.end)) && node.specifiers.some(s => s.imported?.name === 'T')) hasT = true;
+            // T may arrive from tokens.js, documents/atoms.jsx or settings/shared/tokens.js (the re-exports) — any binding named T counts
+            if (node.specifiers.some(s => s.local?.name === 'T')) hasT = true;
             return;
         }
         if (node.type === 'StringLiteral') {
@@ -190,6 +224,9 @@ function migrate(file) {
             const role = roleOf(ancestors, node);
             const parent = ancestors[ancestors.length - 1];
             const isJsxAttr = parent?.type === 'JSXAttribute';
+            // A literal inside an array is a PALETTE (chart series, avatar colours,
+            // a stage map) — data the app keys on, never rewritten here.
+            if (parent?.type === 'ArrayExpression') { kept.push({ line, hex: inner, why: 'array literal (a palette) — by hand if at all' }); return; }
             const exact = /^#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(inner);
             if (exact) {
                 const h = inner.slice(1);
