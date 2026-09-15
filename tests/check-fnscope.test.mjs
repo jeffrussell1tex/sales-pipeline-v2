@@ -30,7 +30,15 @@ export const handler = async () => {
     assert.deepEqual(names(src), ['profile@3:wantsAlert']);
 });
 
-test('the April commit itself is flagged in both files it touched, and the fixed files are clean', () => {
+test('the April commit itself is flagged in both files it touched, and the fixed files are clean', (t) => {
+    // The fixture is a commit, so the clone must hold it. actions/checkout@v4
+    // clones ONE commit by default, and this test failed on every CI run from
+    // 13 Sep with "fatal: invalid object name 'bf4a3c5'" while passing on every
+    // machine with the history (§0.144). The workflow now fetches the history
+    // for the unit job; a clone without it skips here, in words, instead of
+    // reporting a scanner regression that did not happen.
+    try { execSync('git cat-file -e bf4a3c5^{commit}', { stdio: 'ignore' }); }
+    catch { return t.skip('bf4a3c5 is not in this clone (shallow checkout) — the April fixture cannot be read; the other tests still prove the scanner'); }
     const at = (sha, f) => execSync(`git show ${sha}:${f}`, { encoding: 'utf8' });
     const oldAlerts = undeclaredIn(at('bf4a3c5', 'netlify/functions/pipeline-alerts.mjs')).map(f => f.name);
     const oldDigest = undeclaredIn(at('bf4a3c5', 'netlify/functions/digest.mjs')).map(f => f.name);

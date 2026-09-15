@@ -9,7 +9,12 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
+      # The full history, not the default single commit: tests/check-fnscope.test.mjs
+      # reads the April commit bf4a3c5 as its regression fixture (`git show`), and a
+      # shallow clone answered "invalid object name" on every run from 13 Sep (§0.144).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
