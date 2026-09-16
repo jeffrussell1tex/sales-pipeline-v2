@@ -61,14 +61,25 @@ test('QuotesTab: money is set in the app’s face — no dollar amount in monosp
     // A line renders money when it prints a formatted amount or a totals row's
     // value. Its style is on that line or the one above it (the Catalog's list
     // price is a two-line element) — the harness proved a one-line read blind.
-    const money = lines.map((l, i) => [i + 1, (lines[i - 1] || '') + '\n' + l]).filter(([, ctx]) => /\{fmtFull\(|\{fmt\(|\{r\.v\}|toLocaleString\(\)\}/.test(ctx.split('\n')[1]));
-    assert.ok(money.length >= 6, `expected the six money sites, found ${money.length}`);
+    const money = lines.map((l, i) => [i + 1, (lines[i - 1] || '') + '\n' + l]).filter(([, ctx]) => /\{fmtFull\(|\{fmt\(|\{r\.v\}|\{r\.value\}|toLocaleString\(\)\}/.test(ctx.split('\n')[1]));
+    assert.ok(money.length >= 7, `expected the seven money sites, found ${money.length}`);
     for (const [n, ctx] of money) assert.ok(!/monospace/.test(ctx), `QuotesTab.jsx:${n} sets money in monospace: ${ctx.trim().slice(0, 160)}`);
     // Nineteen lines print money (stat-card literals and the print template
     // among them, which carry no style of their own); the six the batch moved
     // off monospace name the face explicitly.
     assert.ok(money.filter(([, ctx]) => ctx.includes('fontFamily: T.sans')).length >= 6, 'the six moved money sites name the app face explicitly');
     assert.ok(lines.some(l => l.includes('{quote.quoteNumber}') && l.includes('monospace')), 'an identifier (the quote number) keeps the monospace face');
+});
+
+test('QuotesTab: the builder’s notes reach the customer on every surface — the preview, the print fallback (escaped), and the PDF function already had them; Edit in builder is a sand bar (Jeff, 16 Sep)', () => {
+    const s = read('src/Tabs/QuotesTab.jsx');
+    assert.ok(s.includes("{quote.notes?.trim() && (") && s.includes(">{quote.notes.trim()}</div>"), 'the customer preview prints the notes');
+    assert.ok(s.includes("import { esc } from '../utils/customerNotifications';"), 'the print fallback escapes what it interpolates');
+    assert.ok(s.includes("${activeQuote.notes?.trim() ? `<h3") && s.includes("${esc(activeQuote.notes.trim())}</p>` : ''}"), 'the print fallback carries the notes, escaped');
+    assert.ok(s.includes("${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}"), 'and the payment terms');
+    const pdf = read('netlify/functions/quote-pdf.mjs');
+    assert.ok(pdf.includes("const notesText = (quote.notes && quote.notes.trim()) ? quote.notes"), 'the PDF function renders the quote’s notes');
+    assert.ok(s.includes("<button onClick={onEdit} style={{ marginTop: 10, width: '100%', background: T.gold, border: `1px solid ${T.goldInk}`"), 'Edit in builder is the sand bar, not a hairline');
 });
 
 test('QuotesTab: the picker lists the org’s usable templates or ONE placeholder, never the four invented cards; the pick seeds the quote', () => {

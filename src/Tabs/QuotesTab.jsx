@@ -3,6 +3,7 @@ import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import { T } from '../tokens.js';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
+import { esc } from '../utils/customerNotifications';
 
 // ─── Design tokens ────────────────────────────────────────────
 
@@ -270,7 +271,14 @@ const QuotePDFPreview = ({ quote, opp, products }) => {
                         ))}
                     </div>
                 </div>
-                {quote.paymentTerms && <div style={{ fontFamily: T.sans, fontSize: 11, color: T.inkMid, marginBottom: 20 }}>Payment terms: {quote.paymentTerms}</div>}
+                {quote.paymentTerms && <div style={{ fontFamily: T.sans, fontSize: 11, color: T.inkMid, marginBottom: quote.notes?.trim() ? 10 : 20 }}>Payment terms: {quote.paymentTerms}</div>}
+                {/* The builder's notes reach the customer the way the PDF already carries them (Jeff, 16 Sep: the preview left them out). */}
+                {quote.notes?.trim() && (
+                    <div style={{ fontFamily: T.sans, marginBottom: 20 }}>
+                        <div style={{ fontSize: 10, color: T.inkMuted, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>Notes</div>
+                        <div style={{ fontSize: 11.5, color: '#2a2622', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{quote.notes.trim()}</div>
+                    </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 30, fontFamily: T.sans }}>
                     {['Customer signature', 'Accelerep signature'].map(s => (
                         <div key={s}>
@@ -395,8 +403,9 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
                         </div>
                     )}
                 </div>
+                {/* The sand of Send to customer, not a hairline on the card's own colour — the bar "disappears" otherwise (Jeff, 16 Sep). */}
                 {editable && !readOnly && onEdit && (
-                    <button onClick={onEdit} style={{ marginTop: 10, width: '100%', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, padding: 6, fontSize: 12, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                    <button onClick={onEdit} style={{ marginTop: 10, width: '100%', background: T.gold, border: `1px solid ${T.goldInk}`, borderRadius: T.r, padding: 8, fontSize: 12, fontWeight: 600, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}>
                         Edit in builder →
                     </button>
                 )}
@@ -461,7 +470,7 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
                 ].map(r => (
                     <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: r.bold ? 12.5 : 11.5, fontWeight: r.bold ? 600 : 400, color: r.color || (r.bold ? T.ink : T.inkMid) }}>
                         <span>{r.label}</span>
-                        <span style={{ fontFamily: r.value ? 'ui-monospace,Menlo,monospace' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 6 }}>
                             {r.value}{r.extra}
                         </span>
                     </div>
@@ -1415,7 +1424,7 @@ export default function QuotesTab() {
         } catch {
             const w = window.open('', '_blank');
             if (!w) return;
-            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeQuote.quoteNumber || 'Quote'}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body><h1>${activeQuote.name || activeQuote.quoteNumber || 'Quote'}</h1><p>${configuratorOpp?.account || ''}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${li.productName}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p></body></html>`);
+            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeQuote.quoteNumber || 'Quote'}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body><h1>${activeQuote.name || activeQuote.quoteNumber || 'Quote'}</h1><p>${configuratorOpp?.account || ''}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${li.productName}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p>${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}${activeQuote.notes?.trim() ? `<h3 style="font-size:0.75rem;text-transform:uppercase;color:#8a8378;margin-top:1.5rem">Notes</h3><p style="white-space:pre-wrap">${esc(activeQuote.notes.trim())}</p>` : ''}</body></html>`);
             w.document.close(); setTimeout(() => w.print(), 400);
         }
     };

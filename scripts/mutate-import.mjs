@@ -2706,6 +2706,17 @@ const mutations = [
         "color: prod.customPrice ? T.info : T.ink, fontFamily: T.sans, fontStyle: prod.customPrice ? 'italic' : 'normal' }}>",
         "color: prod.customPrice ? T.info : T.ink, fontFamily: 'ui-monospace,Menlo,monospace', fontStyle: prod.customPrice ? 'italic' : 'normal' }}>"],
 
+    // ── §0.147 the builder's notes reach the customer; the saved card's totals in the app's face ──
+    ["quotes notes: the customer preview drops the notes again (the original defect)",
+        "src/Tabs/QuotesTab.jsx",
+        "{quote.notes?.trim() && (",
+        "{false && ("],
+
+    ["quotes font: the saved card's totals go back to monospace (List total / Discount / Net — Jeff's second circle)",
+        "src/Tabs/QuotesTab.jsx",
+        "<span style={{ fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 6 }}>",
+        "<span style={{ fontFamily: r.value ? 'ui-monospace,Menlo,monospace' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>"],
+
     // ── §0.145 every integration suite targets the test database ─────────────
     ["itest targets: the heartbeat suite imports db without redirecting to DATABASE_URL_TEST again (the original defect — the app database on a machine with .env)",
         "tests/integration/job-heartbeat.itest.mjs",
