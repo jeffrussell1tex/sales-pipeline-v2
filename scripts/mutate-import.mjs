@@ -2706,6 +2706,24 @@ const mutations = [
         "color: prod.customPrice ? T.info : T.ink, fontFamily: T.sans, fontStyle: prod.customPrice ? 'italic' : 'normal' }}>",
         "color: prod.customPrice ? T.info : T.ink, fontFamily: 'ui-monospace,Menlo,monospace', fontStyle: prod.customPrice ? 'italic' : 'normal' }}>"],
 
+    // ── §0.148 the Recently changed card names a system actor in full ─────────
+    ["recently changed: the job's row reads \"Report report delivery sent\" again (the original defect)",
+        "src/Tabs/AdminView.jsx",
+        "<strong>{r.system ? (r.who || '') : (r.who || '').split(' ')[0]}</strong>",
+        "<strong>{(r.who || '').split(' ')[0]}</strong>"],
+
+    // ── §0.148 the Settings feed keys on the active org ───────────────────────
+    ["settings feed: the Recently changed load is mount-only again — an org switch keeps the last org's rows",
+        "src/Tabs/AdminView.jsx",
+        "            .catch(() => {});\n        return () => { cancelled = true; };\n    }, [activeOrgId]);",
+        "            .catch(() => {});\n        return () => { cancelled = true; };\n    }, []);"],
+
+    // ── §0.148 the price book's money in the app's face ───────────────────────
+    ["price book font: the list price goes back to monospace",
+        "src/Tabs/settings/quoting/PriceBookDetail.jsx",
+        "<div style={{ fontFamily:T.sans, fontSize:13, fontWeight:600, color:T.ink }}>{fmt$(product.listPrice)}</div>",
+        "<div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, fontWeight:600, color:T.ink }}>{fmt$(product.listPrice)}</div>"],
+
     // ── §0.147 the builder's notes reach the customer; the saved card's totals in the app's face ──
     ["quotes notes: the customer preview drops the notes again (the original defect)",
         "src/Tabs/QuotesTab.jsx",

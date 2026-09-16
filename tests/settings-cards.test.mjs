@@ -135,3 +135,19 @@ test('the shared panel headers show "Last edited" only when both values are give
     }
     assert.doesNotMatch(read('src/Tabs/settings/security/SsoDetail.jsx'), /Last edited by Morgan|Last edited never/, 'a fictional editor');
 });
+
+test('Recently changed: a person prints their first name, a system actor (no signed-in user) its whole name — "Report delivery job", not "Report" (Jeff, 16 Sep)', () => {
+    const av = read('src/Tabs/AdminView.jsx');
+    assert.ok(av.includes("who:  e.userName || e.userId || 'System',") && av.includes('system: !e.userId,'), 'the row remembers whether a user stood behind it');
+    assert.ok(av.includes("<strong>{r.system ? (r.who || '') : (r.who || '').split(' ')[0]}</strong> {r.what.toLowerCase()}</div>"), 'a system actor keeps its whole name');
+});
+
+test('the Settings feed and live counts key on the active org — an org switch clears the last org’s rows and counts and loads this org’s (§0.125’s rule; Jeff saw one org’s feed above another’s cards, 16 Sep)', () => {
+    const av = read('src/Tabs/AdminView.jsx');
+    assert.ok(av.includes('export const AdminView = ({ activeOrgId = null, settings,'), 'the view takes the org id');
+    assert.equal((av.match(/\}, \[activeOrgId\]\);/g) || []).length, 2, 'both mount-time loads re-run on a switch');
+    assert.doesNotMatch(av, /return \(\) => \{ cancelled = true; \};\n\s+\}, \[\]\);/, 'neither load is mount-only any more');
+    assert.ok(av.includes('setLiveCounts({});') && av.includes('setRecentFeed([]);'), 'the last org’s state is cleared before the load');
+    assert.ok(read('src/Tabs/SettingsTab.jsx').includes('<AdminView activeOrgId={activeOrgId} settings={settings}'), 'the tab hands the id down');
+    assert.ok(read('src/App.jsx').includes('        activeOrgId,   // the signed-in org, or null'), 'the id is in the app context');
+});

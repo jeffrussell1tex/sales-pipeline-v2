@@ -133,7 +133,7 @@ const LeaveGuardModal = ({ saving, canSave, failed, onStay, onSave, onDiscard })
     </div>
 );
 
-export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, settingsDirty, setSettingsDirty, settingsSaveRef, openPanelId = null, onOpenedPanel }) => {
+export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, settingsDirty, setSettingsDirty, settingsSaveRef, openPanelId = null, onOpenedPanel }) => {
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
     const [activeItem, setActiveItem] = useState(null); // detail panel state
@@ -308,8 +308,12 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
 
     // ── Live card badge counts — fetched once on mount ────────────────────────
     const [liveCounts, setLiveCounts] = React.useState({});
+    // Keyed on the active org (§0.125's rule; §0.148): an org switch clears the
+    // last org's counts and loads this one's — Jeff saw one org's health and
+    // feed above another org's cards (16 Sep).
     React.useEffect(() => {
         let cancelled = false;
+        setLiveCounts({});
         const fetchCounts = async () => {
             try {
                 const [keysRes, webhooksRes, autosRes, auditRes, backupRes, mfaRes, jobsRes] = await Promise.allSettled([
@@ -374,12 +378,13 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
         };
         fetchCounts();
         return () => { cancelled = true; };
-    }, []);
+    }, [activeOrgId]);
 
     // Recently changed feed — loaded from audit log (must be before early return)
     const [recentFeed, setRecentFeed] = React.useState([]);
     React.useEffect(() => {
         let cancelled = false;
+        setRecentFeed([]);   // the last org's rows never show under this org's name
         dbFetch('/.netlify/functions/audit-log')
             .then(r => r.json())
             .then(data => {
@@ -398,6 +403,9 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
                 };
                 const mapped = entries.slice(0, 4).map(e => ({
                     who:  e.userName || e.userId || 'System',
+                    // A job or a form is the actor (no signed-in user) — its whole name
+                    // prints; "Report delivery job" read as "Report" (Jeff, 16 Sep).
+                    system: !e.userId,
                     what: (e.action || '').replace(/[._]/g, ' '),
                     when: fmtAge(e.timestamp),
                 }));
@@ -405,7 +413,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
             })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, []);
+    }, [activeOrgId]);
 
         if (activeItem) {
         // The panel is produced by an IIFE rather than returned directly, so the
@@ -769,7 +777,7 @@ export const AdminView = ({ settings, setSettings, currentUser, setActiveTab, se
                             <div key={i} style={{ padding:'6px 0', borderBottom: i < 3 ? `1px dashed ${T.border}` : 'none', display:'flex', alignItems:'center', gap:10 }}>
                                 <Avatar name={r.who} size={22}/>
                                 <div style={{ flex:1, minWidth:0 }}>
-                                    <div style={{ fontSize:12, color:T.ink, lineHeight:1.3, fontFamily:T.sans }}><strong>{(r.who||'').split(' ')[0]}</strong> {r.what.toLowerCase()}</div>
+                                    <div style={{ fontSize:12, color:T.ink, lineHeight:1.3, fontFamily:T.sans }}><strong>{r.system ? (r.who || '') : (r.who || '').split(' ')[0]}</strong> {r.what.toLowerCase()}</div>
                                     <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{r.when}</div>
                                 </div>
                             </div>

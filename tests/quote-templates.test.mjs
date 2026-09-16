@@ -71,6 +71,15 @@ test('QuotesTab: money is set in the app’s face — no dollar amount in monosp
     assert.ok(lines.some(l => l.includes('{quote.quoteNumber}') && l.includes('monospace')), 'an identifier (the quote number) keeps the monospace face');
 });
 
+test('PriceBookDetail: money in the app’s face too — every fmt$ and every $ sign free of monospace; SKUs and units keep it (Jeff, 16 Sep: "change it in price book")', () => {
+    const lines = read('src/Tabs/settings/quoting/PriceBookDetail.jsx').split(/\r?\n/);
+    const money = lines.map((l, i) => [i + 1, (lines[i - 1] || '') + '\n' + l]).filter(([, ctx]) => /fmt\$\(|>\$<\/span>/.test(ctx.split('\n')[1]));
+    assert.ok(money.length >= 7, `expected the seven money sites, found ${money.length}`);
+    for (const [n, ctx] of money) assert.ok(!/monospace/.test(ctx), `PriceBookDetail.jsx:${n} sets money in monospace: ${ctx.trim().slice(0, 160)}`);
+    assert.ok(lines.some(l => l.includes('{product.sku}') && l.includes('monospace')), 'the SKU keeps the monospace face');
+    assert.ok(lines.some(l => l.includes('{product.unit}') && l.includes('monospace')), 'the unit keeps the monospace face');
+});
+
 test('QuotesTab: the builder’s notes reach the customer on every surface — the preview, the print fallback (escaped), and the PDF function already had them; Edit in builder is a sand bar (Jeff, 16 Sep)', () => {
     const s = read('src/Tabs/QuotesTab.jsx');
     assert.ok(s.includes("{quote.notes?.trim() && (") && s.includes(">{quote.notes.trim()}</div>"), 'the customer preview prints the notes');

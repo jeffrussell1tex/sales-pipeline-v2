@@ -260,7 +260,7 @@ const PBProductModal = ({ mode, product, onClose, onSave }) => {
                         <div style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 18px' }}>
                             <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans, marginBottom:8 }}>List price</div>
                             <div style={{ display:'flex', alignItems:'baseline', gap:4 }}>
-                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>$</span>
+                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>$</span>
                                 <input value={draft.listPrice} onChange={e => set('listPrice', e.target.value)}
                                     style={{ fontSize:26, fontWeight:700, color:T.ink, fontFamily:T.serif, fontStyle:'italic', border:'none', background:'transparent', outline:'none', width:'100%', padding:0 }}
                                     placeholder="0"/>
@@ -271,9 +271,9 @@ const PBProductModal = ({ mode, product, onClose, onSave }) => {
                         <div style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 18px' }}>
                             <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans, marginBottom:8 }}>Cost</div>
                             <div style={{ display:'flex', alignItems:'baseline', gap:4 }}>
-                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>$</span>
+                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>$</span>
                                 <input value={draft.cost} onChange={e => set('cost', e.target.value)}
-                                    style={{ fontSize:26, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', border:'none', background:'transparent', outline:'none', width:'100%', padding:0 }}
+                                    style={{ fontSize:26, fontWeight:700, color:T.ink, fontFamily:T.sans, border:'none', background:'transparent', outline:'none', width:'100%', padding:0 }}
                                     placeholder="0"/>
                             </div>
                         </div>
@@ -324,7 +324,7 @@ const PBProductModal = ({ mode, product, onClose, onSave }) => {
                                                 placeholder="e.g. 1–24 seats"
                                                 style={{ padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface }}/>
                                             {/* Price display */}
-                                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>
+                                            <div style={{ fontFamily:T.sans, fontSize:13, color:T.ink }}>
                                                 {tierPrice > 0 ? fmt$(tierPrice) : '—'}
                                             </div>
                                             {/* vs List pct */}
@@ -490,10 +490,10 @@ const MatrixCell = ({ value, listPrice, devPct, onChange }) => {
                 <input autoFocus value={local} onChange={e => setLocal(e.target.value)}
                     onBlur={commit}
                     onKeyDown={e => { if (e.key==='Enter') commit(); if (e.key==='Escape') setEditing(false); }}
-                    style={{ width:'80px', padding:'3px 6px', border:`1.5px solid ${T.goldInk}`, borderRadius:T.r, fontSize:13, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', textAlign:'center', background:T.surface, color:T.ink }}/>
+                    style={{ width:'80px', padding:'3px 6px', border:`1.5px solid ${T.goldInk}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', textAlign:'center', background:T.surface, color:T.ink }}/>
             ) : hasOverride ? (
                 <div>
-                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>{fmt$(value)}</div>
+                    <div style={{ fontFamily:T.sans, fontSize:13, color:T.ink }}>{fmt$(value)}</div>
                     {devPct !== null && devPct !== 0 && (
                         <div style={{ fontSize:10, fontWeight:700, color: devPct > 0 ? T.danger : T.ok, marginTop:2 }}>
                             {devPct > 0 ? '+' : ''}{devPct}%
@@ -788,9 +788,10 @@ export const PriceBookDetail = ({ settings, setSettings, onBack }) => {
                                     {/* Unit */}
                                     <div style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{product.unit}</div>
                                     {/* List price */}
-                                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, fontWeight:600, color:T.ink }}>{fmt$(product.listPrice)}</div>
+                                    {/* Money in the app's face; SKUs and units keep the typewriter face (Jeff, 16 Sep: "change it in price book"). */}
+                                    <div style={{ fontFamily:T.sans, fontSize:13, fontWeight:600, color:T.ink }}>{fmt$(product.listPrice)}</div>
                                     {/* Cost */}
-                                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMuted }}>{fmt$(product.cost)}</div>
+                                    <div style={{ fontFamily:T.sans, fontSize:12, color:T.inkMuted }}>{fmt$(product.cost)}</div>
                                     {/* Margin chip */}
                                     <div style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:10,
                                         background: mg >= 60 ? 'rgba(77,107,61,0.10)' : 'rgba(184,115,51,0.12)',
@@ -852,7 +853,7 @@ export const PriceBookDetail = ({ settings, setSettings, onBack }) => {
                                     <div style={{ display:'flex', alignItems:'baseline', gap:6 }}>
                                         <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>List: {fmt$(b.listTotal)}</span>
                                         <span style={{ fontSize:11, color:T.inkMuted }}>·</span>
-                                        <span style={{ fontSize:13, fontWeight:700, color:T.goldInk, fontFamily:'ui-monospace,Menlo,monospace' }}>Bundle {fmt$(b.bundlePrice)}</span>
+                                        <span style={{ fontSize:13, fontWeight:700, color:T.goldInk, fontFamily:T.sans }}>Bundle {fmt$(b.bundlePrice)}</span>
                                     </div>
                                 </div>
                             ))}
