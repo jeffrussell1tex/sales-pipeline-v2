@@ -647,6 +647,54 @@ export const quotes = pgTable('quotes', {
     uniqueIndex('quotes_org_number_version_uq').on(t.orgId, t.quoteNumber, t.version),
 ]);
 
+// ── INVOICES (state §0.149) ───────────────────────────────────────────────────
+// The financial record a job produces: quote → job → invoice. One row per
+// invoice, org-scoped, with the line items SNAPSHOTTED as jsonb at the moment
+// of issue (a job's parts list can change afterwards; the invoice cannot).
+// status: 'draft' | 'issued' | 'paid' | 'void' — src/utils/invoices.js holds
+// the transitions. The three invoice_* columns on dispatch_jobs are a MIRROR of
+// this row (amount, status, paid date) written by invoices.mjs alone, so the
+// board's job value and the invoice never disagree.
+// The quickbooks_* columns are reserved for the export (Jeff's Intuit app):
+// the QuickBooks Invoice id, the company (realm) it was written to, when, and
+// the last error — nullable, unread until that ships.
+export const invoices = pgTable('invoices', {
+    id:                   text('id').primaryKey(),
+    orgId:                text('org_id').notNull(),
+    invoiceNumber:        varchar('invoice_number', { length: 50 }).notNull(),   // INV-2026-0001, server-issued
+    jobId:                text('job_id'),                                        // FK → dispatch_jobs.id
+    quoteId:              text('quote_id'),                                      // FK → quotes.id (through the job)
+    customerId:           text('customer_id'),                                   // FK → dispatch_customers.id
+    accountId:            text('account_id'),                                    // FK → accounts.id
+    opportunityId:        text('opportunity_id'),                                // FK → opportunities.id
+    status:               varchar('status', { length: 20 }).notNull().default('draft'),
+    issueDate:            varchar('issue_date', { length: 20 }),
+    dueDate:              varchar('due_date', { length: 20 }),
+    paymentTerms:         varchar('payment_terms', { length: 100 }),
+    customerPoNumber:     varchar('customer_po_number', { length: 100 }),
+    lineItems:            jsonb('line_items').notNull().default('[]'),           // [{ id, itemType, description, partNumber, quantity, unitPrice, totalPrice, taxable }]
+    subtotal:             decimal('subtotal', { precision: 12, scale: 2 }),
+    taxRate:              decimal('tax_rate', { precision: 5, scale: 2 }),
+    taxAmount:            decimal('tax_amount', { precision: 12, scale: 2 }),
+    total:                decimal('total', { precision: 12, scale: 2 }),
+    amountPaid:           decimal('amount_paid', { precision: 12, scale: 2 }),
+    paidAt:               varchar('paid_at', { length: 20 }),
+    issuedAt:             timestamp('issued_at'),
+    voidedAt:             timestamp('voided_at'),
+    notes:                text('notes'),
+    quickbooksId:         text('quickbooks_id'),
+    quickbooksRealmId:    text('quickbooks_realm_id'),
+    quickbooksSyncedAt:   timestamp('quickbooks_synced_at'),
+    quickbooksSyncError:  text('quickbooks_sync_error'),
+    createdBy:            varchar('created_by', { length: 255 }),
+    createdAt:            timestamp('created_at').notNull().defaultNow(),
+    updatedAt:            timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+    index('invoices_org_id_idx').on(t.orgId),
+    index('invoices_org_job_idx').on(t.orgId, t.jobId),
+    uniqueIndex('invoices_org_number_uq').on(t.orgId, t.invoiceNumber),
+]);
+
 // ── BACKUPS ───────────────────────────────────────────────────────────────────
 // One row per snapshot. payload stores the full JSON export for download.
 export const backups = pgTable('backups', {
@@ -1094,6 +1142,10 @@ export const dispatchJobs = pgTable('dispatch_jobs', {
     locationId:         text('location_id'),                          // FK → dispatch_service_locations.id
     accountId:          text('account_id'),                           // FK → accounts.id (CRM link)
     opportunityId:      text('opportunity_id'),                       // FK → opportunities.id (if job closes a deal)
+    // The quote this job was made from (state §0.149). Written ONLY by
+    // quote-to-job.mjs; never by a client PUT and never by the POST upsert's
+    // update half. Nullable, additive (db/apply-invoices.mjs).
+    quoteId:            text('quote_id'),
     title:              varchar('title', { length: 500 }).notNull(),
     description:        text('description'),
     trade:              varchar('trade', { length: 50 }).notNull().default('hvac'),

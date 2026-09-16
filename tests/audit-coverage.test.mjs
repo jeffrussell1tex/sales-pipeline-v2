@@ -91,6 +91,9 @@ const ACTIONS = {
     'dispatch-service-plans.mjs':   ['dispatch_plan.created', 'dispatch_plan.updated', 'dispatch_plan.deleted'],
     'dispatch-schedule-blocks.mjs': ['dispatch_block.created', 'dispatch_block.updated', 'dispatch_block.deleted'],
     'dispatch-plan-visits.mjs':     ['dispatch_visit.logged', 'dispatch_visit.deleted'],
+    // §0.149 — quote → job → invoice
+    'quote-to-job.mjs':             ['dispatch_job.created_from_quote', 'dispatch_customer.created'],
+    'invoices.mjs':                 ['invoice.created', 'invoice.updated', 'invoice.issued', 'invoice.paid', 'invoice.voided', 'invoice.deleted'],
 };
 
 test('every action the batch adds is a literal in its file (the log carries these words; a template string would hide them from this pin)', () => {

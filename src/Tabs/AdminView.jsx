@@ -26,6 +26,7 @@ import { CompetitorsDetail, ReasonsWonDetail, ReasonsLostDetail } from './settin
 import { ApprovalTiersDetail } from './settings/quoting/ApprovalTiersDetail.jsx';
 import { QuoteTemplatesDetail } from './settings/quoting/QuoteTemplatesDetail.jsx';
 import { PriceBookDetail } from './settings/quoting/PriceBookDetail.jsx';
+import { ProductTypesDetail } from './settings/quoting/ProductTypesDetail.jsx';
 import { UsersDetail } from './settings/people/UsersDetail.jsx';
 import { TeamsDetail } from './settings/people/TeamsDetail.jsx';
 import { TerritoriesDetail } from './settings/people/TerritoriesDetail.jsx';
@@ -256,6 +257,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         'approval-tiers':       'approval-tiers',
         'quote-templates':      'quote-templates',
         'price-book':           'price-book',
+        'product-types':        'product-types',
         // Data
         'import':   'import',
         'export':   'export',
@@ -447,6 +449,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'price-book')      return <PriceBookDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'product-types')   return <ProductTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
 
         // Data detail pages
         if (id === 'import')   return <ImportDetail   onBack={onBack}/>;

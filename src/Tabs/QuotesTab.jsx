@@ -4,6 +4,8 @@ import { dbFetch } from '../utils/storage';
 import { T } from '../tokens.js';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
 import { esc } from '../utils/customerNotifications';
+// Quote → job (state §0.149): which quotes can be accepted, which become work.
+import { quoteCanBeAccepted, quoteCanBecomeJob, invoiceStatusLabel, fmtMoney, cleanProductTypes, productTypeLabel, DEFAULT_PRODUCT_TYPES } from '../utils/invoices.js';
 
 // ─── Design tokens ────────────────────────────────────────────
 
@@ -119,8 +121,12 @@ const TYPE_COLORS = {
     one_time:   { bg: `${T.warn}18`, color: T.warn, label: 'One-time' },
     service:    { bg: `${T.info}14`, color: T.info, label: 'Service' },
 };
+// The org's product & service types (§0.149), kept in step from settings by the
+// tab's effect — the same shape as APPROVAL_TIERS above — so a badge on a line
+// item deep in the preview names an Admin-defined type without a prop chain.
+let PRODUCT_TYPES_LIVE = DEFAULT_PRODUCT_TYPES;
 const TypeBadge = ({ type }) => {
-    const c = TYPE_COLORS[type] || { bg: T.surface2, color: T.inkMid, label: type || '—' };
+    const c = TYPE_COLORS[type] || { bg: T.surface2, color: T.inkMid, label: productTypeLabel(type, PRODUCT_TYPES_LIVE) };
     return <span style={{ background: c.bg, color: c.color, fontSize: '0.5625rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.15rem 0.5rem', borderRadius: 999 }}>{c.label}</span>;
 };
 
@@ -713,7 +719,8 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
         </div>
     );
 };
-const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving }) => {
+const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving,
+    onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, onCreateJob }) => {
     const { avgDisc, margin } = calcLineTotals(quote.lineItems || [], products || []);
     const tier = tierForDiscount(avgDisc);
     return (
@@ -751,6 +758,46 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
                 </div>
             )}
 
+            {/* The customer's decision (state §0.149): a sent or approved quote is marked
+                accepted here — the server stamps acceptedAt and pushes the value to the deal. */}
+            {quoteCanBeAccepted(quote) && onAccept && (
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '12px 16px' }}>
+                    <div style={{ ...eyebrow(T.inkMid), fontSize: 10.5, marginBottom: 8 }}>Customer decision</div>
+                    <button onClick={onAccept} disabled={saving} style={{ width: '100%', background: T.surface2, color: T.ink, border: `1px solid ${T.borderStrong}`, padding: '8px 12px', fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans }}>
+                        Customer accepted this quote →
+                    </button>
+                </div>
+            )}
+
+            {/* Quote → job (state §0.149). An accepted quote becomes ONE dispatch job,
+                made server-side with the quote's lines; once it exists the card names it. */}
+            {quoteCanBecomeJob(quote) && (
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '12px 16px' }}>
+                    <div style={{ ...eyebrow(T.inkMid), fontSize: 10.5, marginBottom: 8 }}>Dispatch job</div>
+                    {!dispatchEnabled ? (
+                        <div style={{ fontSize: 11.5, color: T.inkMid, lineHeight: 1.45, fontFamily: T.sans }}>
+                            Dispatch is off for this workspace. An Admin turns it on under Settings → Features &amp; AI; an accepted quote then becomes a job from here.
+                        </div>
+                    ) : jobLoading ? (
+                        <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>Looking for a job…</div>
+                    ) : job ? (
+                        <div style={{ fontSize: 11.5, color: T.inkMid, lineHeight: 1.55, fontFamily: T.sans }}>
+                            <div><span style={{ fontFamily: T.mono, color: T.ink }}>{job.jobNumber}</span> · {job.status || 'unscheduled'}{job.scheduledDate ? ` · ${job.scheduledDate}` : ''}</div>
+                            <div>{job.invoice
+                                ? <>Invoice <span style={{ fontFamily: T.mono, color: T.ink }}>{job.invoice.invoiceNumber}</span> · {invoiceStatusLabel(job.invoice.status)} · {fmtMoney(job.invoice.total)}</>
+                                : 'No invoice yet — it is raised from the job under Dispatch → Jobs.'}</div>
+                        </div>
+                    ) : onCreateJob ? (
+                        <button onClick={onCreateJob} disabled={jobBusy} style={{ width: '100%', background: T.ink, color: T.surface, border: 'none', padding: '8px 12px', fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: jobBusy ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: jobBusy ? 0.6 : 1 }}>
+                            {jobBusy ? 'Creating job…' : 'Create dispatch job →'}
+                        </button>
+                    ) : (
+                        <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>No job yet. A rep or dispatcher creates it from here.</div>
+                    )}
+                    {jobError && <div role="alert" style={{ marginTop: 6, fontSize: 11.5, color: T.danger, fontFamily: T.sans }}>{jobError}</div>}
+                </div>
+            )}
+
             <div style={{ background: T.ink, borderRadius: T.r, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <button onClick={tier.approver ? onSubmitApproval : onSendToCustomer} disabled={saving} style={{ background: T.gold, color: T.ink, border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
                     {saving ? 'Saving…' : tier.approver ? `Submit for ${tier.label}` : 'Send to customer'} →
@@ -785,7 +832,9 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
     const isAdmin   = userRole === 'Admin';
     const pbCfg     = settings?.priceBookConfig || {};
     const unitOpts  = pbCfg.units      || ['flat', 'month', 'year', 'user', 'hour', 'day'];
-    const typeOpts  = pbCfg.types      || ['recurring', 'one_time', 'service'];
+    // Product & service types are the Admin's (Settings → Quoting → Product &
+    // service types), never a fixed list (§0.149); the value is the type id.
+    const typeOpts  = cleanProductTypes(settings?.productTypes);
     const catOpts   = [...new Set([...(pbCfg.categories || ['Platform', 'Add-ons', 'Services', 'Hardware']), ...(products || []).map(p => p.category).filter(Boolean)])].sort();
 
     const [editing,   setEditing]   = useState(null);
@@ -796,7 +845,7 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
     const [filterCat, setFilterCat] = useState('');
     const [sortBy,    setSortBy]    = useState('name');
 
-    const EMPTY = { name: '', category: '', productType: typeOpts[0] || 'recurring', listPrice: '', unit: unitOpts[0] || 'flat', description: '', active: true, customPrice: false };
+    const EMPTY = { name: '', category: '', productType: typeOpts[0]?.id || 'recurring', listPrice: '', unit: unitOpts[0] || 'flat', description: '', active: true, customPrice: false };
 
     const intelligence = useMemo(() => calcProductIntelligence(products, quotes, opportunities), [products, quotes, opportunities]);
     const activeP   = (products || []).filter(p => p.active !== false);
@@ -820,7 +869,7 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
     const filtered = sorted;
 
     const openNew  = () => { setForm(EMPTY); setEditing('new'); setError(null); };
-    const openEdit = (p) => { setForm({ name: p.name || '', category: p.category || '', productType: p.productType || p.type || typeOpts[0] || 'recurring', listPrice: p.listPrice || p.price || '', unit: p.unit || unitOpts[0] || 'flat', description: p.description || '', active: p.active !== false, customPrice: p.customPrice === true }); setEditing(p.id); setError(null); };
+    const openEdit = (p) => { setForm({ name: p.name || '', category: p.category || '', productType: p.productType || p.type || typeOpts[0]?.id || 'recurring', listPrice: p.listPrice || p.price || '', unit: p.unit || unitOpts[0] || 'flat', description: p.description || '', active: p.active !== false, customPrice: p.customPrice === true }); setEditing(p.id); setError(null); };
     const cancel   = () => { setEditing(null); setError(null); };
 
     const handleSave = async () => {
@@ -933,7 +982,7 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                         <div><label style={lbl}>Product Name</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inp} placeholder="e.g. Enterprise Platform" /></div>
                         <div><label style={lbl}>Category</label><select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={inp}><option value="">— Select —</option>{catOpts.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                        <div><label style={lbl}>Type</label><select value={form.productType} onChange={e => setForm(f => ({ ...f, productType: e.target.value }))} style={inp}>{typeOpts.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                        <div><label style={lbl}>Type</label><select value={form.productType} onChange={e => setForm(f => ({ ...f, productType: e.target.value }))} style={inp}>{typeOpts.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}{!typeOpts.some(t => t.id === form.productType) && form.productType && <option value={form.productType}>{form.productType} (removed type)</option>}</select></div>
                         <div><label style={lbl}>Price ($)</label>{form.customPrice ? <div style={{ ...inp, color: T.inkMuted, fontStyle: 'italic', display: 'flex', alignItems: 'center', fontSize: '0.75rem' }}>Rep enters on quote</div> : <input type="number" min="0" value={form.listPrice} onChange={e => setForm(f => ({ ...f, listPrice: e.target.value }))} style={inp} placeholder="0" />}</div>
                         <div><label style={lbl}>Unit</label><select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} style={inp}>{unitOpts.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
                     </div>
@@ -1242,6 +1291,11 @@ export default function QuotesTab() {
     const [tplOpp,             setTplOpp]            = useState(null);
     const [saving,             setSaving]            = useState(false);
     const [error,              setError]             = useState(null);
+    // Quote → job (state §0.149): the job the active accepted quote became, if any.
+    const [linkedJob,          setLinkedJob]        = useState(null);
+    const [jobLoading,         setJobLoading]       = useState(false);
+    const [jobBusy,            setJobBusy]          = useState(false);
+    const [jobError,           setJobError]         = useState('');
 
     const setTab = (t) => { setSubTabRaw(t); localStorage.setItem('tab:quotes:subTab', t); };
 
@@ -1261,6 +1315,7 @@ export default function QuotesTab() {
     const approvalTiers = useMemo(() => buildApprovalTiers(settings?.approvalTiers), [settings?.approvalTiers]);
     // Keep module-level reference in sync for components that use APPROVAL_TIERS directly
     React.useEffect(() => { APPROVAL_TIERS = approvalTiers; }, [approvalTiers]);
+    React.useEffect(() => { PRODUCT_TYPES_LIVE = cleanProductTypes(settings?.productTypes); }, [settings?.productTypes]);
 
     const managedReps = useMemo(() => new Set((settings?.users || []).filter(u => u.managedBy === currentUser || u.manager === currentUser).map(u => u.name)), [settings, currentUser]);
 
@@ -1308,6 +1363,29 @@ export default function QuotesTab() {
     }, [activeQuote, configuratorQuotes]);
 
     const pendingCount = (quotes || []).filter(q => q.status === 'Pending Approval').length;
+
+    // The job an accepted quote became — read when the active quote is accepted
+    // and Dispatch is on; cleared on any other quote, status or org (§0.125's rule).
+    useEffect(() => {
+        let cancelled = false;
+        setLinkedJob(null); setJobError('');
+        if (!activeQuote || !quoteCanBecomeJob(activeQuote) || !settings?.dispatchEnabled) { setJobLoading(false); return; }
+        setJobLoading(true);
+        (async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/quote-to-job?quoteId=' + encodeURIComponent(activeQuote.id));
+                const data = await res.json().catch(() => ({}));
+                if (cancelled) return;
+                if (!res.ok) { setJobError(data.error || `Could not look up the job (HTTP ${res.status}).`); return; }
+                setLinkedJob(data.job || null);
+            } catch (e) {
+                if (!cancelled) setJobError('Could not look up the job — check your connection.');
+            } finally {
+                if (!cancelled) setJobLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [activeQuote?.id, activeQuote?.status, settings?.dispatchEnabled]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Navigation ────────────────────────────────────────────
     const openConfigurator = (oppId, quoteId = null) => {
@@ -1395,6 +1473,26 @@ export default function QuotesTab() {
     const handleSubmitApproval  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Pending Approval' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
     const handleSendToCustomer  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Sent to Customer' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
     const handleSaveDraft       = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+    // The customer's decision (state §0.149): the server stamps acceptedAt and syncs the deal.
+    const handleAccept          = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Accepted' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+    // Quote → job: written server-side first, the server's job adopted; a refusal
+    // is shown on the card, never logged (§18b32). A 409 means the job already
+    // exists — that job is adopted, which is what the user wanted to see.
+    const handleCreateJob = async () => {
+        if (!activeQuote) return;
+        setJobBusy(true); setJobError('');
+        try {
+            const res  = await dbFetch('/.netlify/functions/quote-to-job', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: activeQuote.id }) });
+            const data = await res.json().catch(() => ({}));
+            if (res.status === 409 && data.job) { setLinkedJob(data.job); return; }
+            if (!res.ok || !data.job) { setJobError(data.error || `The job was not created (HTTP ${res.status}).`); return; }
+            setLinkedJob(data.job);
+        } catch (e) {
+            setJobError('The job was not created — check your connection.');
+        } finally {
+            setJobBusy(false);
+        }
+    };
     // handleSaveQuote RETURNS NULL on a failed save rather than throwing, so the
     // editor's catch never fired: it closed on a rejected write and the quote came
     // back empty with no error anywhere. Convert the null into a throw so the
@@ -1748,7 +1846,9 @@ export default function QuotesTab() {
                                                 onEdit={() => setEditingQuoteId(activeQuote.id)}
                                             />
                                         )}
-                                        {activeQuote && <ConfiguratorPanel quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving} />}
+                                        {activeQuote && <ConfiguratorPanel quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving}
+                                            onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled}
+                                            job={linkedJob} jobLoading={jobLoading} jobBusy={jobBusy} jobError={jobError} onCreateJob={canEdit ? handleCreateJob : null} />}
                                     </div>
                                     {activeQuote && <div style={{ marginTop: 14 }}><QuoteActivityLog quote={activeQuote} /></div>}
                                 </>

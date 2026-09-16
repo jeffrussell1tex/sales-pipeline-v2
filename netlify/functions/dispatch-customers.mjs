@@ -30,7 +30,7 @@ const headers = {
 // ignored by the WHERE, exactly as the old regex ignored them. TRIM matches the
 // old code's .trim(): a hand-edited value stored with surrounding whitespace must
 // still COUNT, or its number gets reissued to somebody else.
-async function nextCustomerNumber(orgId) {
+export async function nextCustomerNumber(orgId) {
     const [row] = await db
         .select({ max: sql`MAX(CAST(SUBSTRING(TRIM(${dispatchCustomers.customerNumber}) FROM '^CUST-([0-9]+)$') AS INTEGER))` })
         .from(dispatchCustomers)

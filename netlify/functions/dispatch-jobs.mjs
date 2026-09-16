@@ -19,11 +19,14 @@ const headers = {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-function normaliseJob(row) {
+// Exported (state §0.149): quote-to-job.mjs and invoices.mjs answer with a job
+// in the same shape this file does.
+export function normaliseJob(row) {
     return {
         id:               row.id,
         orgId:            row.orgId             ?? row.org_id,
         jobNumber:        row.jobNumber         ?? row.job_number         ?? null,
+        quoteId:          row.quoteId           ?? row.quote_id           ?? null,
         publicToken:      row.publicToken       ?? row.public_token       ?? null,
         customerNotifications: Array.isArray(row.customerNotifications ?? row.customer_notifications) ? (row.customerNotifications ?? row.customer_notifications) : [],
         customerId:       row.customerId        ?? row.customer_id,
@@ -116,7 +119,7 @@ async function recordStatusChange(orgId, jobId, fromStatus, toStatus, changedBy,
 // See nextCustomerNumber for why the numeric part is extracted rather than taking
 // MAX() of the text. Here the year prefix also narrows the scan to the current
 // year's rows instead of the whole table.
-async function nextJobNumber(orgId) {
+export async function nextJobNumber(orgId) {
     const year   = new Date().getFullYear();
     const prefix = `JOB-${year}-`;
     const [row] = await db
@@ -345,8 +348,12 @@ export const handler = async (event) => {
             const row = await withNumberRetry(async () => {
                 const jobNumber = priorJob?.jobNumber || await nextJobNumber(orgId);
                 const r = buildRow(jobNumber);
+                // The three invoice_* columns mirror the job's live invoice and are
+                // written by invoices.mjs alone (§18b44); quote_id by quote-to-job.mjs.
+                // An upsert of an existing job must leave all four as they are.
                 await db.insert(dispatchJobs).values(r)
-                    .onConflictDoUpdate({ target: dispatchJobs.id, setWhere: eq(dispatchJobs.orgId, orgId), set: { ...r, createdAt: undefined } });
+                    .onConflictDoUpdate({ target: dispatchJobs.id, setWhere: eq(dispatchJobs.orgId, orgId),
+                        set: { ...r, createdAt: undefined, invoiceAmount: undefined, invoiceStatus: undefined, invoicePaidAt: undefined } });
                 return r;
             }, { label: 'job number' });
 
@@ -423,7 +430,9 @@ export const handler = async (event) => {
                 'scheduledDate','scheduledStart','scheduledEnd','timeSlot',
                 'durationMinutes','crewSize','minLicense','requiredVehicleType','servicePlanId','planDueDate','assignedTechId','assignedVehicleId',
                 'laborHours','laborCost','materialCost','totalCost',
-                'invoiceAmount','invoiceStatus','invoicePaidAt','customerPoNumber',
+                // invoiceAmount / invoiceStatus / invoicePaidAt deliberately absent:
+                // they mirror the job's invoice and only invoices.mjs writes them (§18b44).
+                'customerPoNumber',
                 'techNotes','completionNotes','customerSignature','photosCount',
                 'requiresFollowUp','followUpJobId','parentJobId','createdBy','dispatchedBy',
             ];

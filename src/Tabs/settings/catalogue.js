@@ -42,6 +42,7 @@ export const SETTINGS_ITEMS = [
     { id:'price-book',       scope:'workspace', category:'Quoting', name:'Price book',            desc:'Product catalog for quotes — edit in Quotes tab',             status:'linked',  statusDetail:null,   link:true },
     { id:'approval-tiers',   scope:'workspace', category:'Quoting', name:'Approval tiers',        desc:'Discount thresholds that trigger manager or VP approval',     status:'ok',      statusDetail:null },
     { id:'quote-templates',  scope:'workspace', category:'Quoting', name:'Quote templates & branding', desc:'Templates, PDF header, terms, signature blocks',         status:'ok',      statusDetail:null },
+    { id:'product-types',    scope:'workspace', category:'Quoting', name:'Product & service types', desc:'What a price-book item is, and the job line kind (labor, part, material, fee, discount) it becomes when an accepted quote turns into a job', status:'ok', statusDetail:null },
     // People & Teams
     { id:'users',            scope:'workspace', category:'People & Teams', name:'Users',           desc:'Invite, deactivate, and assign roles & permissions',         status:'ok',      statusDetail:null },
     { id:'teams',            scope:'workspace', category:'People & Teams', name:'Teams & managers', desc:'Team structure, managers, and reporting hierarchy',          status:'ok',      statusDetail:null },

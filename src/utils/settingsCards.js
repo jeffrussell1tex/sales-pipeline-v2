@@ -143,6 +143,7 @@ export function cardStateOf(item, settings, liveCounts = {}) {
     if (item.id === 'approval-tiers')  statusDetail = countOrNull(len(settings?.approvalTiers), 'tier');
     if (item.id === 'quote-templates') statusDetail = countOrNull(len(settings?.quoteTemplates), 'template');
     if (item.id === 'price-book')      statusDetail = countOrNull(len(settings?.priceBookProducts), 'product');
+    if (item.id === 'product-types')   statusDetail = countOrNull(len(settings?.productTypes), 'type');
 
     // ── Features & AI — count from featureFlags in settings ─────────────────
     if (item.id === 'features') {

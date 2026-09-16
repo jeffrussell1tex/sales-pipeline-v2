@@ -8,6 +8,9 @@ import { defaultWorkWeek, DEFAULT_SHIFT_HOURS } from '../utils/workWeek.js';
 import { to12h } from '../utils/customerNotifications.js';
 // The week board's drop planner — the crew after a drop, the gates, the partial PUT (state §0.134).
 import { planWeekDrop } from '../utils/weekDrop.js';
+// Quote → job → invoice (state §0.149): the vocabulary, the arithmetic and the transitions.
+import { INVOICE_STATUSES, invoiceStatusLabel, invoiceTotals, cleanInvoiceLines, isInvoiceEditable, isLiveInvoice,
+    JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney } from '../utils/invoices.js';
 import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 import { T as TOKENS } from '../tokens.js';
 
@@ -3666,7 +3669,340 @@ const JOB_STATUSES = ['unscheduled', 'scheduled', 'en_route', 'on_site', 'paused
 const typesForCategory = (allTypes, categoryId) =>
     (allTypes || []).filter(t => !t.categoryId || t.categoryId === categoryId);
 
-const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories, jobTypes, equipment = [], onSaved, openJobRequest }) => {
+// ── Invoice on a job (state §0.149) ───────────────────────────────────────────
+// The job's live invoice — draft → issued → paid, or void — raised from the
+// job's line items and editable only as a draft. Every write goes to
+// invoices.mjs FIRST and the panel adopts the server's row; the job's mirrored
+// value comes back on the same response and is handed up (onJobMirror) so the
+// board's figure follows. A refusal is shown in the panel, never logged
+// (§18b32). Module scope: a component defined inside JobsView would remount on
+// every keystroke there (CLAUDE.md).
+const invoiceTone = (s) => ({ draft: T.inkMuted, issued: T.info, paid: T.ok, void: T.inkMuted }[s] || T.inkMuted);
+
+const InvoiceStatusPill = ({ status }) => {
+    const c = invoiceTone(status);
+    return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 999, fontSize: 10.5, fontWeight: 700,
+            background: `${c}18`, color: c, fontFamily: T.sans, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: c }}/>{invoiceStatusLabel(status)}
+        </span>
+    );
+};
+
+const invoiceInput = { ...custInput, padding: '6px 8px', fontSize: 12.5 };
+
+// The draft's lines: description, kind, quantity, unit price, taxable, remove.
+// Strings while typing; cleanInvoiceLines coerces on save (and for the preview).
+const InvoiceLineEditor = ({ lines, onChange }) => {
+    const setLine = (i, k, v) => onChange(lines.map((l, j) => j === i ? { ...l, [k]: v } : l));
+    return (
+        <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 96px 64px 90px 56px 28px', gap: 6, marginBottom: 4, fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: T.sans }}>
+                <span>Description</span><span>Kind</span><span>Qty</span><span>Unit price</span><span>Taxable</span><span/>
+            </div>
+            {lines.map((l, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 96px 64px 90px 56px 28px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                    <input value={l.description ?? ''} onChange={e => setLine(i, 'description', e.target.value)} placeholder="What was done or supplied" style={invoiceInput} aria-label={`Line ${i + 1} description`}/>
+                    <select value={JOB_LINE_TYPES.includes(l.itemType) ? l.itemType : 'part'} onChange={e => setLine(i, 'itemType', e.target.value)} style={invoiceInput} aria-label={`Line ${i + 1} kind`}>
+                        {JOB_LINE_TYPES.map(t => <option key={t} value={t}>{labelise(t)}</option>)}
+                    </select>
+                    <input type="number" step="0.01" min="0" value={l.quantity ?? 1} onChange={e => setLine(i, 'quantity', e.target.value)} style={invoiceInput} aria-label={`Line ${i + 1} quantity`}/>
+                    <input type="number" step="0.01" value={l.unitPrice ?? 0} onChange={e => setLine(i, 'unitPrice', e.target.value)} style={invoiceInput} aria-label={`Line ${i + 1} unit price`}/>
+                    <input type="checkbox" checked={l.taxable !== false} onChange={e => setLine(i, 'taxable', e.target.checked)} aria-label={`Line ${i + 1} taxable`} style={{ justifySelf: 'center' }}/>
+                    <button onClick={() => onChange(lines.filter((_, j) => j !== i))} title="Remove line" aria-label={`Remove line ${i + 1}`}
+                        style={{ background: 'transparent', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 14, padding: 0, fontFamily: T.sans }}>×</button>
+                </div>
+            ))}
+            <button onClick={() => onChange([...lines, { description: '', itemType: 'part', quantity: 1, unitPrice: 0, taxable: true }])}
+                style={{ background: 'transparent', border: `1px dashed ${T.border}`, color: T.inkMid, padding: '5px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                + Add line
+            </button>
+        </div>
+    );
+};
+
+const InvoiceTotals = ({ lines, taxRate, invoice }) => {
+    const t = invoiceTotals(lines, taxRate);
+    const row = (label, value, bold) => (
+        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontSize: bold ? 13 : 12, fontWeight: bold ? 700 : 400, color: bold ? T.ink : T.inkMid, fontFamily: T.sans }}>
+            <span>{label}</span><span>{value}</span>
+        </div>
+    );
+    return (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.border}`, maxWidth: 280, marginLeft: 'auto' }}>
+            {row('Subtotal', fmtMoney(t.subtotal))}
+            {row(`Tax (${t.taxRate}%)`, fmtMoney(t.taxAmount))}
+            {row('Total', fmtMoney(t.total), true)}
+            {invoice?.status === 'paid' && row(`Paid ${invoice.paidAt || ''}`, fmtMoney(invoice.amountPaid ?? t.total))}
+        </div>
+    );
+};
+
+const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
+    const [invoice, setInvoice] = React.useState(null);   // the live invoice, else the latest
+    const [history, setHistory] = React.useState([]);     // every invoice on the job, newest first
+    const [loading, setLoading] = React.useState(false);
+    const [err,     setErr]     = React.useState('');
+    const [busy,    setBusy]    = React.useState(false);
+    const [draft,   setDraft]   = React.useState(null);   // the editing copy of a draft invoice
+    const [paying,  setPaying]  = React.useState(null);   // { paidAt, amountPaid } while marking paid
+
+    React.useEffect(() => {
+        let cancelled = false;
+        setInvoice(null); setHistory([]); setDraft(null); setPaying(null); setErr('');
+        if (!job?.id) return;
+        setLoading(true);
+        (async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/invoices?jobId=' + encodeURIComponent(job.id));
+                const data = await res.json().catch(() => ({}));
+                if (cancelled) return;
+                if (!res.ok) { setErr(data.error || `Invoices did not load (HTTP ${res.status}).`); return; }
+                const list = data.invoices || [];
+                setHistory(list);
+                setInvoice(list.find(isLiveInvoice) || list[0] || null);
+            } catch (e) {
+                if (!cancelled) setErr('Invoices did not load — check your connection.');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [job?.id]);
+
+    const adopt = (data) => {
+        if (data.invoice) {
+            setInvoice(data.invoice);
+            setHistory(prev => [data.invoice, ...prev.filter(i => i.id !== data.invoice.id)]);
+        }
+        if (data.job && onJobMirror) onJobMirror(data.job);
+    };
+    const write = async (url, options, failText) => {
+        setBusy(true); setErr('');
+        try {
+            const res  = await dbFetch(url, options);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { setErr(data.error || `${failText} (HTTP ${res.status}).`); return null; }
+            adopt(data);
+            return data;
+        } catch (e) {
+            setErr(`${failText} — check your connection.`);
+            return null;
+        } finally {
+            setBusy(false);
+        }
+    };
+    const post = (body) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const put  = (body) => ({ method: 'PUT',  headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const url  = (id) => '/.netlify/functions/invoices' + (id ? '?id=' + encodeURIComponent(id) : '');
+
+    const create = () => write(url(), post({ jobId: job.id, issueDate: invoiceToday() }), 'The invoice was not created');
+    const issue  = () => write(url(invoice.id), put({ status: 'issued' }), 'The invoice was not issued');
+    const voidIt = () => {
+        const go = () => write(url(invoice.id), put({ status: 'void' }), 'The invoice was not voided');
+        if (showConfirm) showConfirm(`Void ${invoice.invoiceNumber}? It stays on record as void, and a new invoice can be raised for this job.`, go, true);
+        else go();
+    };
+    const markPaid = async () => {
+        const r = await write(url(invoice.id), put({ status: 'paid', paidAt: paying?.paidAt || invoiceToday(), amountPaid: paying?.amountPaid === '' ? undefined : paying?.amountPaid }), 'The invoice was not marked paid');
+        if (r) setPaying(null);
+    };
+    const startEdit = () => setDraft({
+        lineItems: (invoice.lineItems || []).map(l => ({ ...l })),
+        taxRate: invoice.taxRate ?? 0, issueDate: invoice.issueDate || '', dueDate: invoice.dueDate || '',
+        paymentTerms: invoice.paymentTerms || '', customerPoNumber: invoice.customerPoNumber || '', notes: invoice.notes || '',
+    });
+    const saveDraft = async () => {
+        const r = await write(url(invoice.id), put({
+            lineItems: draft.lineItems, taxRate: draft.taxRate === '' ? 0 : draft.taxRate,
+            issueDate: draft.issueDate || null, dueDate: draft.dueDate || null,
+            paymentTerms: draft.paymentTerms, customerPoNumber: draft.customerPoNumber, notes: draft.notes,
+        }), 'The invoice was not saved');
+        if (r) setDraft(null);
+    };
+    const setD = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+
+    const btn = (primary) => ({ padding: '6px 12px', background: primary ? T.ink : 'transparent', color: primary ? T.surface : T.inkMid,
+        border: primary ? 'none' : `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: busy ? 0.6 : 1 });
+    const dangerBtn = { ...btn(false), color: T.danger, borderColor: `${T.danger}66` };
+    const earlier = history.filter(i => i.id !== invoice?.id);
+
+    return (
+        <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, padding: 12, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans }}>Invoice</div>
+                {invoice && <span style={{ fontSize: 12, color: T.ink, fontFamily: T.mono }}>{invoice.invoiceNumber}</span>}
+                {invoice && <InvoiceStatusPill status={invoice.status}/>}
+            </div>
+            {loading && <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>Loading…</div>}
+            {err && <div role="alert" style={{ fontSize: 12, color: T.danger, fontFamily: T.sans, marginBottom: 8 }}>{err}</div>}
+
+            {!loading && !invoice && (
+                <div>
+                    <div style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans, marginBottom: 8, lineHeight: 1.45 }}>
+                        No invoice on this job yet. One is raised from the job's line items (a job made from a quote carries the quote's), as a draft you can edit before issuing.
+                    </div>
+                    <button onClick={create} disabled={busy} style={btn(true)}>{busy ? 'Creating…' : 'Create invoice'}</button>
+                </div>
+            )}
+
+            {invoice && !draft && (
+                <div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 8, fontSize: 12, fontFamily: T.sans }}>
+                        {[['Issued', invoice.issueDate || '—'], ['Due', invoice.dueDate || '—'], ['Terms', invoice.paymentTerms || '—'], ['PO', invoice.customerPoNumber || '—']].map(([k, v]) => (
+                            <div key={k}><div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>{k}</div><div style={{ color: T.ink }}>{v}</div></div>
+                        ))}
+                    </div>
+                    {(invoice.lineItems || []).length === 0 ? (
+                        <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No lines yet{isInvoiceEditable(invoice.status) ? ' — Edit to add them.' : '.'}</div>
+                    ) : (
+                        <div>
+                            {(invoice.lineItems || []).map((l, i) => (
+                                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 56px 90px 90px', gap: 6, padding: '4px 0', borderBottom: `1px solid ${T.border}`, fontSize: 12, fontFamily: T.sans, color: T.inkMid }}>
+                                    <span style={{ color: T.ink }}>{l.description}{l.partNumber ? <span style={{ fontFamily: T.mono, fontSize: 10.5, color: T.inkMuted }}> · {l.partNumber}</span> : null}</span>
+                                    <span>{labelise(l.itemType || 'part')}</span>
+                                    <span style={{ textAlign: 'right' }}>{l.quantity}</span>
+                                    <span style={{ textAlign: 'right' }}>{fmtMoney(l.unitPrice)}</span>
+                                    <span style={{ textAlign: 'right', color: T.ink, fontWeight: 600 }}>{fmtMoney(l.totalPrice)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <InvoiceTotals lines={invoice.lineItems || []} taxRate={invoice.taxRate ?? 0} invoice={invoice}/>
+                    {invoice.notes && <div style={{ marginTop: 6, fontSize: 12, color: T.inkMid, fontFamily: T.sans, whiteSpace: 'pre-wrap' }}>{invoice.notes}</div>}
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {invoice.status === 'draft' && <>
+                            <button onClick={issue} disabled={busy} style={btn(true)}>Issue invoice</button>
+                            <button onClick={startEdit} disabled={busy} style={btn(false)}>Edit</button>
+                            <button onClick={voidIt} disabled={busy} style={dangerBtn}>Void</button>
+                        </>}
+                        {invoice.status === 'issued' && !paying && <>
+                            <button onClick={() => setPaying({ paidAt: invoiceToday(), amountPaid: invoice.total ?? 0 })} disabled={busy} style={btn(true)}>Mark paid</button>
+                            <button onClick={voidIt} disabled={busy} style={dangerBtn}>Void</button>
+                        </>}
+                        {invoice.status === 'issued' && paying && <>
+                            <input type="date" value={paying.paidAt} onChange={e => setPaying(p => ({ ...p, paidAt: e.target.value }))} style={{ ...invoiceInput, width: 150 }} aria-label="Paid on"/>
+                            <input type="number" step="0.01" min="0" value={paying.amountPaid} onChange={e => setPaying(p => ({ ...p, amountPaid: e.target.value }))} style={{ ...invoiceInput, width: 120 }} aria-label="Amount paid"/>
+                            <button onClick={markPaid} disabled={busy} style={btn(true)}>{busy ? 'Saving…' : 'Confirm payment'}</button>
+                            <button onClick={() => setPaying(null)} disabled={busy} style={btn(false)}>Cancel</button>
+                        </>}
+                        {invoice.status === 'paid' && <span style={{ fontSize: 12, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>Paid {invoice.paidAt} · {fmtMoney(invoice.amountPaid ?? invoice.total)}</span>}
+                        {invoice.status === 'void' && <>
+                            <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>Voided.</span>
+                            <button onClick={create} disabled={busy} style={btn(true)}>Raise a new invoice</button>
+                        </>}
+                    </div>
+                </div>
+            )}
+
+            {invoice && draft && (
+                <div>
+                    <InvoiceLineEditor lines={draft.lineItems} onChange={ls => setD('lineItems', ls)}/>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginTop: 10 }}>
+                        <CustFieldRow label="Tax rate %"><input type="number" step="0.01" min="0" max="100" value={draft.taxRate} onChange={e => setD('taxRate', e.target.value)} style={invoiceInput}/></CustFieldRow>
+                        <CustFieldRow label="Issue date"><input type="date" value={draft.issueDate} onChange={e => setD('issueDate', e.target.value)} style={invoiceInput}/></CustFieldRow>
+                        <CustFieldRow label="Due date"><input type="date" value={draft.dueDate} onChange={e => setD('dueDate', e.target.value)} style={invoiceInput}/></CustFieldRow>
+                        <CustFieldRow label="Terms"><input value={draft.paymentTerms} onChange={e => setD('paymentTerms', e.target.value)} placeholder="Net 30" style={invoiceInput}/></CustFieldRow>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
+                        <CustFieldRow label="Customer PO"><input value={draft.customerPoNumber} onChange={e => setD('customerPoNumber', e.target.value)} style={invoiceInput}/></CustFieldRow>
+                        <CustFieldRow label="Notes"><input value={draft.notes} onChange={e => setD('notes', e.target.value)} placeholder="Printed on the invoice" style={invoiceInput}/></CustFieldRow>
+                    </div>
+                    <InvoiceTotals lines={cleanInvoiceLines(draft.lineItems)} taxRate={draft.taxRate}/>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <button onClick={saveDraft} disabled={busy} style={btn(true)}>{busy ? 'Saving…' : 'Save invoice'}</button>
+                        <button onClick={() => setDraft(null)} disabled={busy} style={btn(false)}>Cancel</button>
+                    </div>
+                </div>
+            )}
+
+            {earlier.length > 0 && (
+                <div style={{ marginTop: 10, fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                    Earlier on this job: {earlier.map(i => `${i.invoiceNumber} (${invoiceStatusLabel(i.status)})`).join(', ')}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ── Invoices view (state §0.149) ──────────────────────────────────────────────
+// Every invoice in the org, newest first, with what is outstanding and what was
+// paid. Read-only here: the actions live on the job, so a row opens its job.
+const InvoicesView = ({ customers, jobsRaw, onOpenJob }) => {
+    const [list,    setList]    = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    const [err,     setErr]     = React.useState('');
+    const [filter,  setFilter]  = React.useState('all');
+
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/invoices');
+                const data = await res.json().catch(() => ({}));
+                if (cancelled) return;
+                if (!res.ok) { setErr(data.error || `Invoices did not load (HTTP ${res.status}).`); return; }
+                setList(data.invoices || []);
+            } catch (e) {
+                if (!cancelled) setErr('Invoices did not load — check your connection.');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const customerName = (id) => (customers || []).find(c => c.id === id)?.name || '—';
+    const jobNumber    = (id) => (jobsRaw || []).find(j => j.id === id)?.jobNumber || '—';
+    const rows = list.filter(i => filter === 'all' || i.status === filter);
+    const sum = (status) => list.filter(i => i.status === status).reduce((s, i) => s + (Number(i.total) || 0), 0);
+
+    return (
+        <div style={{ height: '100%', overflowY: 'auto', padding: '4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
+                <select value={filter} onChange={e => setFilter(e.target.value)} style={{ ...custInput, width: 'auto', padding: '6px 9px', fontSize: 12 }} aria-label="Invoice status">
+                    <option value="all">All statuses</option>
+                    {INVOICE_STATUSES.map(s => <option key={s} value={s}>{invoiceStatusLabel(s)}</option>)}
+                </select>
+                <span style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans }}>
+                    <b style={{ color: T.ink }}>{fmtMoney(sum('issued'))}</b> outstanding · <b style={{ color: T.ink }}>{fmtMoney(sum('paid'))}</b> paid · {list.filter(i => i.status === 'draft').length} draft
+                </span>
+            </div>
+            {loading && <div style={{ fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans }}>Loading invoices…</div>}
+            {err && <div role="alert" style={{ fontSize: 12.5, color: T.danger, fontFamily: T.sans }}>{err}</div>}
+            {!loading && !err && rows.length === 0 && (
+                <div style={{ padding: 16, fontSize: 12.5, color: T.inkMuted, fontFamily: T.sans }}>
+                    {list.length === 0 ? 'No invoices yet — raise one from a job under Jobs.' : 'No invoices match.'}
+                </div>
+            )}
+            {rows.length > 0 && (
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 130px 100px 100px 110px 90px', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: T.sans }}>
+                        <span>Invoice</span><span>Customer</span><span>Job</span><span>Issued</span><span>Due</span><span style={{ textAlign: 'right' }}>Total</span><span>Status</span>
+                    </div>
+                    {rows.map(inv => (
+                        <div key={inv.id} onClick={() => inv.jobId && onOpenJob(inv.jobId)} role="button" tabIndex={0}
+                            onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && inv.jobId) { e.preventDefault(); onOpenJob(inv.jobId); } }}
+                            style={{ display: 'grid', gridTemplateColumns: '130px 1fr 130px 100px 100px 110px 90px', gap: 8, padding: '9px 12px', borderBottom: `1px solid ${T.border}`, fontSize: 12.5, fontFamily: T.sans, color: T.inkMid, cursor: inv.jobId ? 'pointer' : 'default', alignItems: 'center' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = T.surface2; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                            <span style={{ fontFamily: T.mono, color: T.ink }}>{inv.invoiceNumber}</span>
+                            <span style={{ color: T.ink }}>{customerName(inv.customerId)}</span>
+                            <span style={{ fontFamily: T.mono }}>{jobNumber(inv.jobId)}</span>
+                            <span>{inv.issueDate || '—'}</span>
+                            <span>{inv.dueDate || '—'}</span>
+                            <span style={{ textAlign: 'right', color: T.ink, fontWeight: 600 }}>{fmtMoney(inv.total)}</span>
+                            <span><InvoiceStatusPill status={inv.status}/></span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories, jobTypes, equipment = [], onSaved, openJobRequest, showConfirm }) => {
     const [query,      setQuery]      = React.useState('');
     const [statusFilt, setStatusFilt] = React.useState('all');
     const [selectedId, setSelectedId] = React.useState(null);
@@ -4024,6 +4360,10 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                             <textarea value={draft.description || ''} onChange={e => set('description', e.target.value)} rows={3}
                                 style={{ ...custInput, resize: 'vertical' }}/>
                         </CustFieldRow>
+
+                        {/* The job's invoice (state §0.149). Its writes adopt the server's job
+                            row through onSaved, so the mirrored value reaches the board. */}
+                        {selected && <JobInvoicePanel job={selected} showConfirm={showConfirm} onJobMirror={onSaved}/>}
 
                         {loc && (
                             <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, padding: 12, marginBottom: 14 }}>
@@ -5854,7 +6194,7 @@ export default function DispatchTab() {
                     <div style={{ fontSize: 12, color: T.inkMuted, display: 'flex', gap: 10, alignItems: 'center' }}>
                         <span>
                             <span style={{ fontWeight: 600, color: T.ink }}>
-                                {view === 'board' ? boardRangeLabel : view === 'queue' ? 'Jobs to schedule' : view === 'techs' ? `${techsRaw.length} technician${techsRaw.length === 1 ? '' : 's'}` : `${customers.length} dispatch customer${customers.length === 1 ? '' : 's'}`}
+                                {view === 'board' ? boardRangeLabel : view === 'queue' ? 'Jobs to schedule' : view === 'invoices' ? 'Invoices' : view === 'techs' ? `${techsRaw.length} technician${techsRaw.length === 1 ? '' : 's'}` : `${customers.length} dispatch customer${customers.length === 1 ? '' : 's'}`}
                             </span>
                             <span style={{ margin: '0 7px', color: T.border }}>·</span>
                             {techs.length} techs available · {jobs.length} jobs
@@ -5894,6 +6234,7 @@ export default function DispatchTab() {
                     { id: 'board',     label: 'Job Board' },
                     { id: 'queue',     label: 'Queue' },
                     { id: 'jobs',      label: 'Jobs' },
+                    { id: 'invoices',  label: 'Invoices' },
                     { id: 'due',       label: 'Service Due', count: visitsActionable },
                     { id: 'customers', label: 'Customers' },
                     { id: 'techs',     label: 'Technicians' },
@@ -6072,7 +6413,7 @@ export default function DispatchTab() {
                     </div>
                 ) : view === 'jobs' ? (
                     <JobsView jobsRaw={jobsRaw} customers={customers} techs={techs} skills={skills} equipment={equipment}
-                        openJobRequest={openJobRequest}
+                        openJobRequest={openJobRequest} showConfirm={showConfirm}
                         licenseLevels={licLevels}
                         categories={settings?.dispatchTrades || []}
                         jobTypes={settings?.dispatchJobTypes || []}
@@ -6090,9 +6431,13 @@ export default function DispatchTab() {
                                     durationHrs: (saved.durationMinutes || 120) / 60,
                                     crewSize: saved.crewSize || j.crewSize,
                                     minLicense: saved.minLicense || null,
+                                    // The invoice mirror (§0.149): invoices.mjs writes it, the board reads it.
+                                    value: parseFloat(saved.invoiceAmount || 0),
                                     needSkills: saved.needSkills || [] }
                                 : j));
                         }}/>
+                ) : view === 'invoices' ? (
+                    <InvoicesView customers={customers} jobsRaw={jobsRaw} onOpenJob={openJobRecord}/>
                 ) : view === 'schedule' ? (
                     <ScheduleView techsRaw={techsRaw} jobs={jobsWithBridge} blocks={blocks}
                         blockTypes={settings?.dispatchBlockTypes || []}

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** September 15, 2026 · rules current through **§18b43** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** September 16, 2026 · rules current through **§18b44** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3545,3 +3545,13 @@ through `dbFetch`.
 2. **A scan, not a convention.** `tests/itest-targets-test-db.test.mjs` reads every suite and fails by name on a missing refusal, a redirect out of order, or a redirect after the first import; it also checks the `test:int` script names every suite in the directory. A convention held for eighteen files and failed silently on the nineteenth.
 3. **"It passed locally" is not evidence the suite touched the test database.** A green local run proves the queries ran somewhere with the columns. When a suite is new, read its target once: the test database should show its rows (or their absence after cleanup) and the app database should show nothing of its names — read-only, both.
 4. **The hard rule applies to tests.** A `DELETE` in a `before` hook is a delete; the CLAUDE.md rule against destructive commands on live data does not exempt code that meant to hit a different database.
+
+## 18b44. A Mirror Column Has One Writer — The Endpoint That Owns The Truth It Mirrors (hard rule)
+
+**Origin (§0.149, 16 Sep 2026).** `dispatch_jobs` carried `invoice_amount`, `invoice_status` and `invoice_paid_at` from the day the table was made. Nothing wrote them, the board read the amount as the job’s value, and the dispatcher PUT accepted all three from any client — so the day an invoice record arrived, a job’s figure could have come from two places: the invoice, and whatever a form sent. A number that can be written from two places is two numbers, and the board would have shown whichever wrote last.
+
+1. **Name the truth and the mirror, in the schema comment.** The invoice row is the truth; the three job columns are a convenience for the board. A reader of `schema.ts` learns which is which without opening an endpoint.
+2. **The truth’s endpoint is the mirror’s only writer.** `invoices.mjs` re-mirrors the job after EVERY write — create, edit, issue, pay, void, delete. `dispatch-jobs.mjs` drops the three names from its PUT allowlist and leaves them out of its upsert’s `set` (`invoiceAmount: undefined …`), so an existing job re-POSTed keeps them. The same shape as `jobNumber` and `publicToken`: server-owned, client-read.
+3. **Mirror from a query, never from the row in hand.** The mirror follows the job’s LIVE invoice (not void), newest first. A void invoice clears the mirror to none; a new invoice fills it; a deleted draft leaves whatever live row remains. Writing "the invoice I just saved" onto the job would have stamped a voided one’s figure as the job’s value.
+4. **Return the mirrored row on the same response.** The client adopts the server’s job alongside the invoice. A second fetch "to refresh the value" is a race with the next write.
+5. **Pin it, both ways.** A scan that the three names are absent from the allowlist and present as `undefined` in the upsert; a mutant that puts them back; an integration test that reads the job row after each invoice write. tests/invoices.test.mjs and tests/integration/invoices.itest.mjs are the pins.

@@ -7,6 +7,7 @@ import { cleanSlackAlerts } from '../../src/utils/slackAlerts.js';
 import { cleanCustomerNotifications } from '../../src/utils/customerNotifications.js';
 import { cleanWebToLead } from '../../src/utils/webToLead.js';
 import { cleanEmailTemplates } from '../../src/utils/emailTemplates.js';
+import { cleanProductTypes } from '../../src/utils/invoices.js';
 import { randomBytes } from 'crypto';
 import { encrypt, decrypt } from './crypto.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
@@ -159,6 +160,8 @@ export const handler = async (event) => {
                 approvalTiers:        row.extra?.approvalTiers        || null,
                 approvalTriggers:     row.extra?.approvalTriggers     || null,
                 priceBookProducts:    row.extra?.priceBookProducts    || [],
+                // Product & service types (§0.149): the built-ins always, then the org's own.
+                productTypes:         cleanProductTypes(row.extra?.productTypes),
                 quoteTemplates:       row.extra?.quoteTemplates       || null,
                 quoteBrand:       row.extra?.quoteBrand       || null,
                 quoteDefaults:        row.extra?.quoteDefaults        || null,
@@ -306,6 +309,7 @@ export const handler = async (event) => {
                 approvalTiers:        'approvalTiers'        in data ? (data.approvalTiers        || null) : existingExtra.approvalTiers        || null,
                 approvalTriggers:     'approvalTriggers'     in data ? (data.approvalTriggers     || null) : existingExtra.approvalTriggers     || null,
                 priceBookProducts:    'priceBookProducts'    in data ? (data.priceBookProducts    || [])   : existingExtra.priceBookProducts    || [],
+                productTypes:         'productTypes'         in data ? cleanProductTypes(data.productTypes)    : existingExtra.productTypes         || null,
                 quoteTemplates:       'quoteTemplates'       in data ? (data.quoteTemplates       || null) : existingExtra.quoteTemplates       || null,
                 quoteBrand:       'quoteBrand'       in data ? (data.quoteBrand       || null) : existingExtra.quoteBrand       || null,
                 quoteDefaults:        'quoteDefaults'        in data ? (data.quoteDefaults        || null) : existingExtra.quoteDefaults        || null,
