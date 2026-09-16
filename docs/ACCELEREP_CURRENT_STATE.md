@@ -6014,7 +6014,7 @@ The log’s UI (`AuditDetail.jsx`, `mapEntityTypeToCat`) knows every new entity 
 
 **Tests.** `tests/quote-templates.test.mjs` +1 (5): the preview prints the notes; the fallback escapes and carries notes and payment terms; the PDF function’s notes line is pinned; the bar’s style; the money regex extended to `{r.value}` and the count to seven. **2 mutants** (the preview dropping the notes; the totals back to monospace). A JSX comment placed inside the bar’s parenthesised expression broke the parse — every gate and the build said so at once; moved.
 
-**Verified:** six gates (171 files; 96 function files), **858/858 unit** (857 + the fixture skip), **170/170 integration** (unchanged — no server change), **556/556 mutations after a printed green baseline**, build guard OK 2,551 kB `index-BZQXq9Av.js`, `dist/` cleared. Bundle only; NOT shipped.
+**Verified:** six gates (171 files; 96 function files), **858/858 unit** (857 + the fixture skip), **170/170 integration** (unchanged — no server change), **556/556 mutations after a printed green baseline**, build guard OK 2,551 kB `index-BZQXq9Av.js`, `dist/` cleared. **OBSERVED by Jeff on dev (16 Sep, two screenshots, Pacific Rim Logistics v3: the compare cards’ List total / Discount / Net in the app’s face, Edit in builder the sand bar, the customer preview with NOTES "These are test notes." above the signatures — "Test out perfectly").** Bundle only; NOT shipped.
 
 ## 0P0. Prior Batch — One Role Vocabulary, And A Gate That Allows Instead Of Denies
 
