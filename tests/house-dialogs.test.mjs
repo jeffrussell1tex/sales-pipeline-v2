@@ -46,9 +46,8 @@ test('every replaced site goes through showConfirm / showPrompt', () => {
     assert.ok(read('src/components/documents/DocumentRail.jsx').includes('showConfirm(`Delete "${doc.name}"? This removes the file and all its versions.`, () => {'));
     assert.ok(read('src/Tabs/DocumentsTab.jsx').includes('showConfirm(`Delete "${doc.name}"? This removes the file and all its versions.`, () => {'));
     assert.ok(read('src/Tabs/settings/quoting/EditBrandModal.jsx').includes("showConfirm('Discard unsaved brand changes?', onClose, false)"));
-    const pb = read('src/Tabs/settings/quoting/PriceBookDetail.jsx');
-    assert.ok(pb.includes("showConfirm('Discard unsaved changes?', onClose, false)"));
-    assert.ok(pb.includes('showConfirm(`Archive "${product.name}"? It will no longer appear in new quotes.`, () => {'));
+    // PriceBookDetail.jsx (two showConfirm sites) was deleted in §0.149 — the
+    // Settings card now opens Quotes → Price Book, the catalog quotes draw from.
     assert.ok(read('src/Tabs/settings/people/RolesDetail.jsx').includes("showPrompt({ title:'Rename role'"));
     // The coaching note moved from the house prompt to its own dialog with a
     // picker (state §0.82; tests/coaching-notes.test.mjs pins that wiring).

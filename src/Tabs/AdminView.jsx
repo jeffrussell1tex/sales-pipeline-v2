@@ -25,7 +25,6 @@ import { IndustriesDetail } from './settings/salesProcess/IndustriesDetail.jsx';
 import { CompetitorsDetail, ReasonsWonDetail, ReasonsLostDetail } from './settings/salesProcess/FlatListDetail.jsx';
 import { ApprovalTiersDetail } from './settings/quoting/ApprovalTiersDetail.jsx';
 import { QuoteTemplatesDetail } from './settings/quoting/QuoteTemplatesDetail.jsx';
-import { PriceBookDetail } from './settings/quoting/PriceBookDetail.jsx';
 import { ProductTypesDetail } from './settings/quoting/ProductTypesDetail.jsx';
 import { UsersDetail } from './settings/people/UsersDetail.jsx';
 import { TeamsDetail } from './settings/people/TeamsDetail.jsx';
@@ -155,6 +154,15 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
     const [guardSaving, setGuardSaving] = useState(false);
     const [guardFailed, setGuardFailed] = useState(false);
 
+    // The Price book card opens the price book itself — Quotes → Price Book, the
+    // catalog quotes draw from (state §0.149; Jeff: "the catalog … that feed the
+    // quotes should stay"). The Settings panel that edited a demo list nothing
+    // read is gone. Same leave guard as a panel.
+    const openQuotesPriceBook = () => {
+        const go = () => { localStorage.setItem('tab:quotes:subTab', 'catalog'); if (setActiveTab) setActiveTab('quotes'); };
+        if (settingsDirty) { setLeaveGuard({ go: () => { setSettingsDirty(false); go(); } }); return; }
+        go();
+    };
     const openItem = (it) => {
         if (settingsDirty) { setLeaveGuard({ go: () => { setSettingsDirty(false); setActiveItem(it); } }); return; }
         setActiveItem(it);
@@ -256,7 +264,6 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         // Quoting
         'approval-tiers':       'approval-tiers',
         'quote-templates':      'quote-templates',
-        'price-book':           'price-book',
         'product-types':        'product-types',
         // Data
         'import':   'import',
@@ -448,7 +455,6 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         // Quoting detail pages
         if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'price-book')      return <PriceBookDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'product-types')   return <ProductTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
 
         // Data detail pages
@@ -816,7 +822,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
                                     </div>
                                 )}
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-                                    {list.map(it => <V2Card key={it.id} item={it} settings={settings} liveCounts={liveCounts} onOpen={DETAIL_PANELS[it.id] ? () => openItem(it) : undefined}/>)}
+                                    {list.map(it => <V2Card key={it.id} item={it} settings={settings} liveCounts={liveCounts} onOpen={it.id === 'price-book' ? openQuotesPriceBook : DETAIL_PANELS[it.id] ? () => openItem(it) : undefined}/>)}
                                 </div>
                             </div>
                         ))}

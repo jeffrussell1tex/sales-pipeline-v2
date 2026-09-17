@@ -2718,11 +2718,13 @@ const mutations = [
         "            .catch(() => {});\n        return () => { cancelled = true; };\n    }, [activeOrgId]);",
         "            .catch(() => {});\n        return () => { cancelled = true; };\n    }, []);"],
 
-    // ── §0.148 the price book's money in the app's face ───────────────────────
-    ["price book font: the list price goes back to monospace",
-        "src/Tabs/settings/quoting/PriceBookDetail.jsx",
-        "<div style={{ fontFamily:T.sans, fontSize:13, fontWeight:600, color:T.ink }}>{fmt$(product.listPrice)}</div>",
-        "<div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, fontWeight:600, color:T.ink }}>{fmt$(product.listPrice)}</div>"],
+    // (§0.148's price-book font mutant went with PriceBookDetail.jsx in §0.149.)
+
+    // ── §0.149 the price book is Quotes → Price Book ─────────────────────────
+    ['price book: the Settings card opens a panel again instead of Quotes',
+        'src/Tabs/AdminView.jsx',
+        "onOpen={it.id === 'price-book' ? openQuotesPriceBook : DETAIL_PANELS[it.id] ? () => openItem(it) : undefined}/>)}",
+        "onOpen={DETAIL_PANELS[it.id] ? () => openItem(it) : undefined}/>)}"],
 
     // ── §0.147 the builder's notes reach the customer; the saved card's totals in the app's face ──
     ["quotes notes: the customer preview drops the notes again (the original defect)",

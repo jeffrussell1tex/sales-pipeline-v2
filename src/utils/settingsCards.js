@@ -142,7 +142,8 @@ export function cardStateOf(item, settings, liveCounts = {}) {
     // ── Quoting ───────────────────────────────────────────────────────────────
     if (item.id === 'approval-tiers')  statusDetail = countOrNull(len(settings?.approvalTiers), 'tier');
     if (item.id === 'quote-templates') statusDetail = countOrNull(len(settings?.quoteTemplates), 'template');
-    if (item.id === 'price-book')      statusDetail = countOrNull(len(settings?.priceBookProducts), 'product');
+    // 'price-book' claims no count: the card opens Quotes → Price Book (the products
+    // table, loaded there); the stored priceBookProducts demo list is read by nothing (§0.149).
     if (item.id === 'product-types')   statusDetail = countOrNull(len(settings?.productTypes), 'type');
 
     // ── Features & AI — count from featureFlags in settings ─────────────────

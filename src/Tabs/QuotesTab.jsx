@@ -570,7 +570,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                 {/* LEFT: Product catalog */}
                 <div style={{ width: 240, flexShrink: 0, background: '#1c1917', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
                     <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(245,241,235,0.1)' }}>
-                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: T.gold, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Product Catalog</div>
+                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: T.gold, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Price Book</div>
                         <input
                             value={catalogSearch}
                             onChange={e => setCatalogSearch(e.target.value)}
@@ -581,7 +581,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                     <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
                         {Object.keys(catalogGroups).length === 0 && (
                             <div style={{ padding: '1rem', fontSize: 12, color: T.inkMuted, textAlign: 'center', fontFamily: T.sans }}>
-                                {(products || []).length === 0 ? 'No products in catalog yet.' : 'No products match.'}
+                                {(products || []).length === 0 ? 'No products in the price book yet.' : 'No products match.'}
                             </div>
                         )}
                         {Object.entries(catalogGroups).map(([cat, prods]) => (
@@ -647,7 +647,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                         </div>
                         {lines.length === 0 ? (
                             <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 12.5, fontStyle: 'italic', fontFamily: T.sans }}>
-                                ← Add products from the catalog on the left
+                                ← Add products from the price book on the left
                             </div>
                         ) : (
                             lines.map((item) => (
@@ -1006,7 +1006,7 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
             {/* Products table — grouped by category */}
             {filtered.length === 0 ? (
                 <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: '0.875rem', fontStyle: 'italic', fontFamily: T.sans }}>
-                    {search ? <>No products match <strong>"{search}"</strong>.</> : isAdmin ? 'No products yet. Click "+ Add product" to build your catalog.' : 'Contact your admin to add products.'}
+                    {search ? <>No products match <strong>"{search}"</strong>.</> : isAdmin ? 'No products yet. Click "+ Add product" to build your price book.' : 'Contact your admin to add products.'}
                 </div>
             ) : (() => {
                 // Group filtered products by category, preserving category order
@@ -1556,7 +1556,10 @@ export default function QuotesTab() {
                 {[
                     { id: 'deals',        label: 'Deals' },
                     { id: 'configurator', label: 'Configurator' },
-                    { id: 'catalog',      label: 'Catalog' },
+                    // The product catalog quotes draw from IS the price book (Jeff, 16 Sep:
+                    // "the catalog (change the name to Price Book) that feed the quotes should
+                    // stay"). The id keeps the stored sub-tab preference.
+                    { id: 'catalog',      label: 'Price Book' },
                     { id: 'approvals',    label: 'Approvals', badge: pendingCount > 0 ? pendingCount : null },
                 ].map(v => {
                     const active = subTab === v.id;

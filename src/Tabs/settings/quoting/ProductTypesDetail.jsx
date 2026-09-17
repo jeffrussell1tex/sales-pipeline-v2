@@ -5,7 +5,7 @@
 // line items in the price book"). The org's own vocabulary for what a price-book
 // item IS, and the job line kind — labor, part, material, fee or discount — each
 // becomes when an accepted quote turns into a dispatch job. Stored in
-// settings.extra.productTypes; read by the Quotes → Catalog Type select and by
+// settings.extra.productTypes; read by the Quotes → Price Book Type select and by
 // quote-to-job.mjs. The three built-ins stay (the quote maths and the PDF branch
 // on their ids); their kinds are the Admin's to change.
 import React, { useState } from 'react';
@@ -124,7 +124,7 @@ export const ProductTypesDetail = ({ settings, setSettings, onBack, setSettingsD
                 </div>
 
                 <div style={{ marginTop: 10, fontSize: 11, color: T.inkMuted, fontFamily: T.sans, lineHeight: 1.5 }}>
-                    Each product in Quotes → Catalog carries one of these types. When a quote is accepted and becomes a job, every line takes its
+                    Each product in Quotes → Price Book carries one of these types. When a quote is accepted and becomes a job, every line takes its
                     type's kind. Recurring, One-time and Service are built in — a recurring product's monthly price is annualised on the quote — and
                     stay; their kinds are yours to change. Removing a type leaves existing products as they are; their lines become parts until retyped.
                 </div>

@@ -392,6 +392,25 @@ test('DispatchTab: the invoice panel and the Invoices view at module scope; the 
     assert.ok(panel.length > 1000 && !panel.includes('type="time"'), 'no native time picker in the invoice panel or the Invoices view');
 });
 
+test('the price book is ONE: Quotes → Price Book (the products table) — the sub-tab renamed, the Settings card opens it, the demo panel gone', () => {
+    const q = code(read('src/Tabs/QuotesTab.jsx'));
+    assert.ok(q.includes("                    { id: 'catalog',      label: 'Price Book' },"), 'the sub-tab reads Price Book; the id keeps the stored preference');
+    assert.ok(q.includes(">Price Book</div>"), 'the builder rail');
+    assert.ok(!/label: 'Catalog'|Product Catalog|build your catalog|from the catalog on the left|No products in catalog yet/.test(q), 'no "catalog" left in the tab’s copy');
+    const av = code(read('src/Tabs/AdminView.jsx'));
+    assert.ok(!av.includes('PriceBookDetail'), 'the panel is not imported or rendered');
+    assert.ok(av.includes("onOpen={it.id === 'price-book' ? openQuotesPriceBook : DETAIL_PANELS[it.id] ? () => openItem(it) : undefined}/>)}"), 'the card opens the price book');
+    assert.ok(av.includes("const go = () => { localStorage.setItem('tab:quotes:subTab', 'catalog'); if (setActiveTab) setActiveTab('quotes'); };"), 'Quotes, on its Price Book sub-tab');
+    assert.ok(av.includes("if (settingsDirty) { setLeaveGuard({ go: () => { setSettingsDirty(false); go(); } }); return; }"), 'behind the same leave guard as a panel');
+    assert.ok(!existsSync(new URL('../src/Tabs/settings/quoting/PriceBookDetail.jsx', import.meta.url)), 'the demo panel is deleted');
+    const cat = read('src/Tabs/settings/catalogue.js');
+    assert.ok(cat.includes("name:'Price book',            desc:'The products and services your quotes draw from — opens Quotes → Price Book', status:'linked',  statusDetail:null,   link:true },"));
+    const cards = code(read('src/utils/settingsCards.js'));
+    assert.ok(!cards.includes("item.id === 'price-book'"), 'no count from the unread demo list');
+    const p = code(read('src/Tabs/settings/quoting/ProductTypesDetail.jsx'));
+    assert.ok(p.includes('Each product in Quotes → Price Book carries one of these types.'));
+});
+
 test('the suites: the integration suite is in test:int and this file is in the harness', () => {
     const pkg = JSON.parse(read('package.json'));
     assert.ok(pkg.scripts['test:int'].includes('tests/integration/invoices.itest.mjs'));

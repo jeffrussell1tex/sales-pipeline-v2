@@ -65,7 +65,9 @@ test('sales process: pipelines, stages, KPIs, tiers, industries, sources, pain p
 });
 
 test('quoting, people, security, data: real keys or nothing', () => {
-    assert.equal(detail('price-book', { priceBookProducts: [1, 2] }), '2 products');
+    // §0.149: the card opens Quotes → Price Book (the products table); the stored
+    // priceBookProducts demo list is read by nothing, so the card claims no count.
+    assert.equal(detail('price-book', { priceBookProducts: [1, 2] }), null);
     assert.equal(detail('price-book', {}), null);
     assert.equal(detail('approval-tiers', {}), null);
     assert.equal(detail('quote-templates', { quoteTemplates: [1] }), '1 template');

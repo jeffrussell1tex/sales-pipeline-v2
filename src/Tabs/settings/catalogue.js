@@ -39,7 +39,7 @@ export const SETTINGS_ITEMS = [
     { id:'dsp-customer-notify', scope:'workspace', category:'Dispatch', name:'Customer notifications', desc:'What your service customers are told — appointment confirmations, "technician on the way", and a private job-status link. Off until you turn it on.', status:'ok', statusDetail:'Admin-defined' },
     { id:'dsp-templates', scope:'workspace', category:'Dispatch', name:'Job templates',   desc:'Per Customer Type defaults — crew size, duration, required skills, license, and auto-create rule.', status:'ok', statusDetail:'Admin-defined' },
     // Quoting
-    { id:'price-book',       scope:'workspace', category:'Quoting', name:'Price book',            desc:'Product catalog for quotes — edit in Quotes tab',             status:'linked',  statusDetail:null,   link:true },
+    { id:'price-book',       scope:'workspace', category:'Quoting', name:'Price book',            desc:'The products and services your quotes draw from — opens Quotes → Price Book', status:'linked',  statusDetail:null,   link:true },
     { id:'approval-tiers',   scope:'workspace', category:'Quoting', name:'Approval tiers',        desc:'Discount thresholds that trigger manager or VP approval',     status:'ok',      statusDetail:null },
     { id:'quote-templates',  scope:'workspace', category:'Quoting', name:'Quote templates & branding', desc:'Templates, PDF header, terms, signature blocks',         status:'ok',      statusDetail:null },
     { id:'product-types',    scope:'workspace', category:'Quoting', name:'Product & service types', desc:'What a price-book item is, and the job line kind (labor, part, material, fee, discount) it becomes when an accepted quote turns into a job', status:'ok', statusDetail:null },
