@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -561,18 +561,20 @@ const mutations = [
     // write access to ~28 endpoints. The first mutation is the one that matters --
     // it restores that, and the suite must notice.
 
+    // The gate moved to _roleGate.mjs (§0.151). The mutation is now the old
+    // blocklist itself: deny exactly ReadOnly and Technician, pass everything else.
     ['role: requireWrite reverts to a BLOCKLIST (any unknown role writes)',
-        'netlify/functions/auth.mjs',
-        '    if (WRITE_ROLES.includes(auth?.userRole)) return null;\n    if (isTechnician(auth?.userRole) && opts.allowTechnician) return null;',
-        '    if (isTechnician(auth?.userRole) && opts.allowTechnician) return null;'],
+        'netlify/functions/_roleGate.mjs',
+        '    if (CRM_WRITE_ROLES.includes(auth?.userRole)) return null;',
+        '    if (!isReadOnly(auth?.userRole) && !isTechnician(auth?.userRole)) return null;'],
 
     ['role: isAppRole accepts anything, so no writer validates',
-        'netlify/functions/auth.mjs',
+        'src/utils/roles.js',
         'export const isAppRole = (role) => APP_ROLES.includes(role);',
         'export const isAppRole = (role) => true;'],
 
     ['role: the unrecognised refusal reuses the read-only message (three problems, one report)',
-        'netlify/functions/auth.mjs',
+        'netlify/functions/_roleGate.mjs',
         "body: JSON.stringify({ error: 'Forbidden: unrecognised role. Ask an administrator to reset your role.' }),",
         "body: JSON.stringify({ error: 'Forbidden: read-only role' }),"],
 
@@ -2818,6 +2820,73 @@ const mutations = [
         'src/Tabs/DispatchTab.jsx',
         "    const rows = sortInvoicesForList(list.filter(i => filter === 'all' || i.status === filter));",
         "    const rows = list.filter(i => filter === 'all' || i.status === filter);"],
+
+    // ── the Dispatcher role and the one role module (§0.151) ─────────────────
+    ['roles: a Dispatcher reads only their own CRM rows again (crmReadScope loses them)',
+        'src/utils/roles.js',
+        "    if (role === 'Admin' || role === 'Manager' || role === 'Dispatcher') return 'all';",
+        "    if (role === 'Admin' || role === 'Manager') return 'all';"],
+
+    ['roles: a Technician reads the unassigned CRM rows again',
+        'src/utils/roles.js',
+        "    if (role === 'Technician') return 'none';",
+        "    if (false) return 'none';"],
+
+    ['roles: canSeeAll widens to the Dispatcher — a reader becomes a writer over every owner',
+        'src/utils/roles.js',
+        "export const canSeeAll = (role) => role === 'Admin' || role === 'Manager';",
+        "export const canSeeAll = (role) => role === 'Admin' || role === 'Manager' || role === 'Dispatcher';"],
+
+    ['roles: the CRM tabs offer a Dispatcher the edit controls',
+        'src/utils/roles.js',
+        "export const CRM_WRITE_ROLES = Object.freeze(['Admin', 'Manager', 'User']);",
+        "export const CRM_WRITE_ROLES = Object.freeze(['Admin', 'Manager', 'User', 'Dispatcher']);"],
+
+    ['role gate: a Dispatcher writes CRM records',
+        'netlify/functions/_roleGate.mjs',
+        "    if (CRM_WRITE_ROLES.includes(auth?.userRole)) return null;",
+        "    if (CRM_WRITE_ROLES.includes(auth?.userRole) || isDispatcher(auth?.userRole)) return null;"],
+
+    ['roles: a CRM GET ignores the none scope (accounts hands a Technician the unassigned rows)',
+        'netlify/functions/accounts.mjs',
+        "            if (readScope === 'none') {",
+        "            if (readScope === 'nothing') {"],
+
+    ['roles: the directory withholds role, team and territory from a Dispatcher (the rosters count Admins)',
+        'netlify/functions/users.mjs',
+        "    const wholeOrgReader = crmReadScope(userRole) === 'all';",
+        "    const wholeOrgReader = false;"],
+
+    ['roles: the report roster counts a Technician as a rep again',
+        'src/utils/reportScope.js',
+        "const ROSTER_EXCLUDED = new Set(NON_REP_ROLES);",
+        "const ROSTER_EXCLUDED = new Set(['Admin', 'Manager', 'ReadOnly']);"],
+
+    ['roles: Reports narrows a Dispatcher to their own (empty) data',
+        'src/Tabs/ReportsTab.jsx',
+        "    const readsWholeOrg = isAdmin || isDispatcher(userRole);",
+        "    const readsWholeOrg = isAdmin;"],
+
+    ['roles: a CRM tab keys canEdit on ReadOnly alone again (a Dispatcher sees edit buttons)',
+        'src/Tabs/AccountsTab.jsx',
+        "    const canEdit    = canEditCrm(userRole);",
+        "    const canEdit    = userRole !== 'ReadOnly';"],
+
+    // ── the deals visibility switch (§0.151) ─────────────────────────────────
+    ['deal visibility: an absent switch shows reps every unassigned deal again',
+        'netlify/functions/opportunities.mjs',
+        "    return row?.extra?.unassignedDealsVisibleToReps ?? false;",
+        "    return row?.extra?.unassignedDealsVisibleToReps ?? true;"],
+
+    ['deal visibility: the strict branch loses its owner guard (null === null hands a null caller the unassigned)',
+        'netlify/functions/opportunities.mjs',
+        "                    : results.filter(o => !!o.ownerId && o.ownerId === callerId);",
+        "                    : results.filter(o => o.ownerId === callerId);"],
+
+    ['deal visibility: the settings GET drops the key (the panel reads the default forever)',
+        'netlify/functions/settings.mjs',
+        "                unassignedDealsVisibleToReps: row.extra?.unassignedDealsVisibleToReps ?? false,",
+        "                // (dropped)"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

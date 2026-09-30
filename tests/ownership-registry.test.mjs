@@ -349,6 +349,22 @@ test('THE GUARD — unassignedLeadsVisibleToReps exists in BOTH settings.mjs hal
         'leads.mjs must read extra.unassignedLeadsVisibleToReps with `?? true` — the absent-key default is the standing policy');
 });
 
+test('THE GUARD — unassignedDealsVisibleToReps exists in BOTH settings.mjs halves and opportunities.mjs reads it, OFF when absent', () => {
+    // The deals twin (§0.151). Same 18b12 pairing; the OPPOSITE default — Jeff:
+    // "Reps should only see their own deals" — so an absent key must read false
+    // in all three places, and the strict branch must guard the owner side.
+    const settingsSrc = codeOnly(
+        readFileSync(new URL('../netlify/functions/settings.mjs', import.meta.url), 'utf8'));
+    const pairs = settingsSrc.match(/unassignedDealsVisibleToReps:[^\n]*\?\?\s*false,/g) || [];
+    assert.equal(pairs.length, 2,
+        `unassignedDealsVisibleToReps must appear in the GET projection AND the PUT whitelist of settings.mjs with \`?? false\` — found ${pairs.length} of 2`);
+    const oppSrc = codeOnly(endpointSrc('opportunities'));
+    assert.ok(/unassignedDealsVisibleToReps\s*\?\?\s*false/.test(oppSrc),
+        'opportunities.mjs must read extra.unassignedDealsVisibleToReps with `?? false` — absent means reps see only their own deals');
+    assert.ok(oppSrc.includes('results.filter(o => !!o.ownerId && o.ownerId === callerId)'),
+        'the strict branch must guard the owner side: a bare ownerId === callerId matches null === null (18b22)');
+});
+
 test('an unregistered entity throws rather than authorizing everyone', () => {
     assert.throws(() => ownerKeyFor('invoice'), /no ownership rule registered/);
 });
@@ -443,7 +459,9 @@ test('the two 403s stay distinguishable — ownership and role must not share a 
     // Both refusals are 403 and the BODY is the only way to tell which check
     // fired. The delete gate depends on that difference.
     const { OWNERSHIP_FORBIDDEN } = await import('../netlify/functions/_ownership.mjs');
-    const authSrc = readFileSync(new URL('../netlify/functions/auth.mjs', import.meta.url), 'utf8');
-    assert.ok(authSrc.includes('Forbidden: insufficient role'), 'the role gate message moved — update this test and the delete-gate manifest');
+    // requireRole moved from auth.mjs to _roleGate.mjs (§0.151, pure so a suite
+    // can run the real gate); auth.mjs re-exports it. The message did not change.
+    const gateSrc = readFileSync(new URL('../netlify/functions/_roleGate.mjs', import.meta.url), 'utf8');
+    assert.ok(gateSrc.includes('Forbidden: insufficient role'), 'the role gate message moved — update this test and the delete-gate manifest');
     assert.notEqual(OWNERSHIP_FORBIDDEN, 'Forbidden: insufficient role');
 });

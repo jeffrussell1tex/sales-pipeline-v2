@@ -90,10 +90,11 @@ export function cardStateOf(item, settings, liveCounts = {}) {
     if (item.id === 'roles')       statusDetail = countOrNull(len(settings?.roles), 'role');
     // Lead visibility — show the policy actually in force, not the static text.
     // An absent key reads as the default (visible), same as the server.
+    // Deals (§0.151) default the other way: an absent key reads as hidden.
     if (item.id === 'lead-visibility') {
-        statusDetail = settings?.unassignedLeadsVisibleToReps === false
-            ? 'Reps see assigned only'
-            : 'Unassigned visible to reps';
+        const leadsShown = settings?.unassignedLeadsVisibleToReps !== false;
+        const dealsShown = settings?.unassignedDealsVisibleToReps === true;
+        statusDetail = `Unassigned leads ${leadsShown ? 'visible' : 'hidden'} · deals ${dealsShown ? 'visible' : 'hidden'}`;
     }
 
     // ── Company ───────────────────────────────────────────────────────────────

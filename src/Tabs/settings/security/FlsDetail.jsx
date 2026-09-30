@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { SecCrumb, SecTitle, SecBtn } from './shared.jsx';
+import { APP_ROLES } from '../../../utils/roles.js';
 
 const flsCellStyle = (level) => {
     const m = {
@@ -90,7 +91,10 @@ export const FlsDetail = ({ onBack }) => {
     const [objFilter, setObjFilter] = React.useState(FLS_OBJECTS_LIST[0]);
     const [search,    setSearch]    = React.useState('');
     const [matrix,    setMatrix]    = React.useState({}); // { [fieldKey]: { [role]: level } }
-    const [roles,     setRoles]     = React.useState(['Admin','Manager','User','Technician','ReadOnly']);
+    // The one role list (src/utils/roles.js). The load below reads roles from
+    // `settings.users`, which the settings endpoint does not return, so this
+    // default is the list the panel actually shows.
+    const [roles,     setRoles]     = React.useState(() => [...APP_ROLES]);
     const [dirty,     setDirty]     = React.useState(false);
     const [loading,   setLoading]   = React.useState(true);
     const [saving,    setSaving]    = React.useState(false);

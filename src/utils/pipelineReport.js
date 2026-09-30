@@ -11,6 +11,7 @@
 // tab, separately, divided a full year's quota into one quarter's revenue.
 // Pure so tests/pipeline-report.test.mjs can pin each one.
 
+import { NON_REP_ROLES } from './roles.js';
 import { repsForSlice } from './reportScope.js';
 import { quarterOf, quarterStartDate, quarterEndDate } from './quarters.js';
 import { dayOf } from './reportPeriod.js';
@@ -41,7 +42,8 @@ export function userQuotaFor(u, period) {
         : (parseFloat(u.annualQuota) || 0);
 }
 
-const REP_EXCLUDED = new Set(['Admin', 'Manager', 'ReadOnly']);
+// Not reps (src/utils/roles.js) — the same list as reportScope's roster (§0.151).
+const REP_EXCLUDED = new Set(NON_REP_ROLES);
 
 /** The quota of the reps in scope: named users who are not Admin / Manager / ReadOnly, narrowed by the slice. 0 when none is set. */
 export function teamQuotaFor(users, period, slice) {

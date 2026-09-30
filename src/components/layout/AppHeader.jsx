@@ -3,6 +3,7 @@ import { OrganizationSwitcher, useOrganizationList, useAuth } from '@clerk/clerk
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
+import { isDispatcher } from '../../utils/roles.js';
 import { T } from '../../tokens.js';
 
 // ── Design tokens ────────────────────────────────────────────
@@ -315,9 +316,9 @@ export default function AppHeader({
                         </button>
                     );
                 })}
-                {isReadOnly && (
+                {(isReadOnly || isDispatcher(userRole)) && (
                     <div style={{ display: 'flex', alignItems: 'center', marginLeft: 8, fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontStyle: 'italic' }}>
-                        👁 View Only
+                        👁 {isReadOnly ? 'View Only' : 'CRM view only'}
                     </div>
                 )}
             </div>

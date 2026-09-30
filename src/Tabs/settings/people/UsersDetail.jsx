@@ -4,22 +4,16 @@ import { useApp } from '../../../AppContext';
 import { dbFetch, dbWrite } from '../../../utils/storage';
 import { T, eb } from '../shared/tokens.js';
 import { RToggle, RCheck, UserAvatar } from '../shared/ui.jsx';
-
-// THE ROLE VALUES. These five must match auth.mjs APP_ROLES exactly; the server
-// refuses anything else on every write path, so a value invented here now fails
-// loudly instead of quietly becoming a role no gate recognises.
+// THE ROLE VALUES come from the one list the server checks (src/utils/roles.js,
+// re-exported by auth.mjs as APP_ROLES). This file carried its own copy of five,
+// which is how a role added on the server went missing here; the server refuses
+// anything else on every write path, so a value invented here fails loudly.
 //
 // 'User' is the STORED value for a sales rep and "Sales Rep" is only its label.
 // Confusing the two is the recurring bug in this file: the invite rows below were
 // seeded with the label, so an untouched row invited someone as 'Sales Rep' —
 // which auth.mjs did not recognise, and used to wave through as a rep anyway.
-const ROLE_OPTIONS = [
-    { value: 'Admin',      label: 'Admin' },
-    { value: 'Manager',    label: 'Manager' },
-    { value: 'User',       label: 'Sales Rep' },
-    { value: 'Technician', label: 'Technician' },
-    { value: 'ReadOnly',   label: 'Read only' },
-];
+import { ROLE_OPTIONS } from '../../../utils/roles.js';
 const ROLE_LABEL = ROLE_OPTIONS.reduce((m, o) => { m[o.value] = o.label; return m; }, {});
 // A role we do not know is rendered AS ITSELF, never translated and never hidden.
 // Legacy rows still hold `member`, `admin` and `Sales Rep`; showing the raw string
@@ -55,6 +49,7 @@ const RolePill = ({ role }) => {
         'Manager':    { bg:'rgba(58,90,122,0.14)', fg:'#3a5a7a' },
         'User':       { bg:'rgba(77,107,61,0.12)', fg:'#4d6b3d' },
         'Technician': { bg:'rgba(94,78,122,0.12)', fg:'#5e4e7a' },
+        'Dispatcher': { bg:'rgba(122,106,72,0.14)',fg:'#7a6a48' },
         'ReadOnly':   { bg:'rgba(184,115,51,0.12)',fg:'#b87333' },
     };
     const known = map[role];
@@ -669,6 +664,7 @@ const UsersSeatPage = ({ settings, onBack, onUsers }) => {
         { role:'Admin',         count: countRole('Admin'),      color:'#6b2a22' },
         { role:'Manager',       count: countRole('Manager'),    color:'#b87333' },
         { role:'Sales Rep',     count: countRole('User'),       color:'#4d6b3d' },
+        { role:'Dispatcher',    count: countRole('Dispatcher'), color:'#7a6a48' },
         { role:'Technician',    count: countRole('Technician'), color:'#5e4e7a' },
         { role:'ReadOnly',      count: countRole('ReadOnly'),   color:'#3a5a7a' },
         { role:'Unrecognised',  count: activeUsers.filter(u => !isKnownRole(u.role)).length, color:'#9c3a2e' },
@@ -1039,6 +1035,9 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
         // Technician was missing entirely, so a Technician's summary silently
         // rendered the Sales Rep row — describing CRM write access they do not have.
         'Technician':{Leads:'No access',Accounts:'No access',Opportunities:'No access',Quotes:'No access',    Reports:'No access', Settings:'No access' },
+        // A Dispatcher reads the whole CRM and changes none of it (§0.151): the
+        // server's crmReadScope is 'all' for them and requireWrite refuses every write.
+        'Dispatcher':{Leads:'View all', Accounts:'View all', Opportunities:'View all', Quotes:'View all',     Reports:'View all', Settings:'No access' },
     };
     // An unknown role falls back to the rep row because that is what the SERVER
     // does with it (auth.mjs treats an absent role as 'User' and refuses an

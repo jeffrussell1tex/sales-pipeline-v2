@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
+import { canEditCrm } from '../utils/roles.js';
 import { dbFetch } from '../utils/storage';
 import { isoLocal } from '../utils/dateLocal';
 import { T } from '../tokens.js';
@@ -1103,8 +1104,9 @@ export default function TasksTab() {
         isMobile,
     } = useApp();
 
-    const isReadOnly = userRole === 'ReadOnly';
-    const canEdit    = !isReadOnly;
+    // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
+    // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.
+    const canEdit    = canEditCrm(userRole);
 
     // ── Persistent view ────────────────────────────────────────
     const [view, setView] = useState(() => localStorage.getItem('tab:tasks:subView') || 'list');

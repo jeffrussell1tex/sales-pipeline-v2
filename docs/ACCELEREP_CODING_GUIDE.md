@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** September 16, 2026 · rules current through **§18b44** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** September 30, 2026 · rules current through **§18b45** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -859,11 +859,16 @@ const isManager = userRole === 'Manager';
 const canSeeAll = isAdmin || isManager; // exposed on context
 ```
 
-**`APP_ROLES` in `auth.mjs` is the only list of role values.** Five strings,
-`Object.freeze`d, exported with `isAppRole()`. Every path that writes a role —
-invite, admin create, `user-role.mjs`, the Clerk sync — validates against it, and
-the client's `ROLE_OPTIONS` must mirror it exactly. There were **eight** lists
-before 26 Aug (§18b24); each one that is not this one will drift.
+**`APP_ROLES` in `src/utils/roles.js` is the only list of role values** (re-exported
+by `auth.mjs`, so every endpoint still imports it from there). Six strings,
+`Object.freeze`d, with `isAppRole()` and `ROLE_OPTIONS` — the picker words, where
+the stored value `'User'` reads "Sales Rep". Every path that writes a role — admin
+create and invite in `users.mjs`, `user-role.mjs`, the Clerk sync — validates
+against it; the pickers (`UsersDetail`, `UserModal`), field-level security and
+`scripts/check-clerk-roles.mjs` import it. There were **eight** lists before 26 Aug
+(§18b24) and **five** again by 30 Sep (§0.151); each one that is not this one will
+drift. (`invite-user.mjs` writes a role WITHOUT `isAppRole` and nothing in the app
+calls it — flagged for deletion, state §9.)
 
 **Clerk carries a second vocabulary and it is not this one.** `org:admin` /
 `org:member` are *organization membership* roles: they govern who administers the
@@ -875,16 +880,19 @@ instead of inventing a third answer, reporting the divergence as `roleDrift`.
 
 ### Server-side enforcement (shipped — client-side `canEdit` is UX only, never security)
 
-| Action | Admin | Manager | Sales Rep | ReadOnly |
-|---|---|---|---|---|
-| POST (create) | ✅ | ✅ | ✅ | ❌ 403 |
-| PUT (edit) | ✅ any | ✅ any | own + unassigned | ❌ 403 |
-| DELETE by id | ✅ any | ✅ any | own + unassigned | ❌ 403 |
-| DELETE `?clear=true` | ✅ | ❌ | ❌ | ❌ |
+| Action | Admin | Manager | Sales Rep | ReadOnly | Dispatcher |
+|---|---|---|---|---|---|
+| GET (read) | whole org | whole org | own + unassigned | own + unassigned | whole org |
+| POST (create) | ✅ | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| PUT (edit) | ✅ any | ✅ any | own + unassigned | ❌ 403 | ❌ 403 |
+| DELETE by id | ✅ any | ✅ any | own + unassigned | ❌ 403 | ❌ 403 |
+| DELETE `?clear=true` | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+The GET row is `crmReadScope(role)` (§18b45); a Technician reads nothing (`'none'`).
 
 ### Technician (fifth role)
 
-A **Technician** is a field/mobile user, not a general write role. Role values are `Admin | Manager | User | ReadOnly | Technician` — `'User'` is the stored value for a sales rep; "Sales Rep" is a display label only.
+A **Technician** is a field/mobile user, not a general write role, and reads no CRM row (`crmReadScope` `'none'`, §0.151 — they used to receive the unassigned ones). Role values are `Admin | Manager | User | ReadOnly | Technician | Dispatcher` — `'User'` is the stored value for a sales rep; "Sales Rep" is a display label only.
 
 - **`requireWrite` denies Technician by default.** Exactly one caller opts in:
   ```js
@@ -894,6 +902,16 @@ A **Technician** is a field/mobile user, not a general write role. Role values a
 - **Scope by the technician row, not the user.** `dispatch_jobs.assignedTechId` FKs `dispatch_technicians.id`, so resolve `userId → technicianId` first. A Technician with no linked technician row **fails closed** (403) — never fall back to showing everything.
 - **Per-field whitelist, not a role check:** `status`, `techNotes`, `completionNotes`, `photosCount`, `customerSignature`, on their own jobs only; status limited to `en_route | on_site | paused | completed`. Reject illegal fields **by name** rather than dropping them silently.
 - Return **404, not 403**, for a job they are not on, so job ids cannot be enumerated.
+
+### Dispatcher (sixth role)
+
+A **Dispatcher** runs field-service scheduling and reads the CRM to see what was sold; they change no CRM record (§0.151, Jeff: a read-only CRM).
+
+- **Reads the whole org** on the six CRM GETs through `crmReadScope(role)` — `'all'` for Admin, Manager and Dispatcher, `'none'` for a Technician, `'own'` for everyone else. **Never through `canSeeAll`**, which stays the write authority (§18b45).
+- **Writes no CRM record.** `requireWrite` (`_roleGate.mjs`) refuses a Dispatcher by name — "a Dispatcher can view CRM records but not change them" — and there is no opt-in; the Technician's `allowTechnician` does not open it. The CRM tabs' `canEdit` is `canEditCrm(role)`, the same list as the gate.
+- **The directory** (`GET /users` for anyone but Admin / Manager) carries `role`, `team` and `territory` for a whole-org reader — the Reports rosters count reps by role and slice by team and territory — and still no email, quota or profile. A rep's directory is names alone.
+- **Reports** covers the whole org for a Dispatcher (`readsWholeOrg`), with the rep / team / territory slices; the rosters (`NON_REP_ROLES`) never count a Dispatcher or a Technician as a rep.
+- **Dispatch access is its own gate** — the next batch (state §9). Until it lands, `requireWrite` refuses a Dispatcher on the `dispatch-*` endpoints too.
 
 ### Roles live in Clerk, not the database
 
@@ -920,9 +938,16 @@ Before this existed, the Settings role selector wrote only the mirror and change
 - **Dispatch:** any non-ReadOnly role (Admin/Manager/Sales Rep) has full write access to all `dispatch-*` records.
 - **Audit rows are server-derived, never client-supplied.** `audit-log.mjs` POST ignores the client's `userId` / `userName` / `timestamp` and derives them from `auth` + `getCallerName()`. Accepting them from the body let any member forge entries attributing actions to another user — which would make the audit trail worthless as evidence for every other control. GET is Admin/Manager only.
 - **Ownership keys on `ownerId`** — a `usr_<uuid>` app user id on all six Tier 1 tables (accounts, contacts, opportunities, tasks, leads, activities), stamped server-side on create from the caller's JWT and compared against `getCallerId(userId, orgId)` — which **fails closed** (null → the caller owns nothing assigned; unassigned records stay mutable by any writer). `orgId` is REQUIRED and throws when absent (§18b20.3). The display-name columns (`salesRep` / `accountOwner` / `assignedRep` / `assignedTo` / `author`) are retained for RENDERING AND RESOLUTION ONLY (`OWNER_NAME_COLUMNS` in `_ownership.mjs`); a name can no longer confer ownership, and there is deliberately no name-based policy function. **No endpoint performs object-level authorization directly** — writes go through `assertOwnership()` / `mayMutate()` (§18b21), which assert the identity space and refuse a wrong-space value loudly (§18b22).
-- **Read-side policy (GET scoping):** all six entity GETs are rep-scoped on `ownerId` — a rep receives their own rows plus unassigned ones (`!r.ownerId || r.ownerId === callerId`); Admin and Manager bypass via `canSeeAll` and receive the whole org. `opportunities.mjs` and `leads.mjs` filtered first; `accounts`, `contacts`, `tasks` and `activities` gained the identical predicate on 28 Aug — they previously returned EVERY row in the org to every caller, with only the client filter in `App.jsx` narrowing them, and a client filter is not a boundary. The manager `managedReps` branch exists only in `opportunities.mjs` and is still name-based (state doc §0.39) — deliberately not copied to the other five until that list moves to ids. The client passes reads through for reps (`isRepVisible`'s rep branch returns `true` since 28 Aug — a name-based re-filter could only hide rows the server granted); Manager narrowing to `managedReps` remains client-side and load-bearing.
+- **Read-side policy (GET scoping):** all six entity GETs are rep-scoped on `ownerId` — a rep receives their own rows plus unassigned ones (`!r.ownerId || r.ownerId === callerId`); Admin, Manager and a Dispatcher receive the whole org via `crmReadScope(role) === 'all'` — NOT `canSeeAll`, which stays the write authority (§18b45) — and a Technician receives nothing (`'none'`). `opportunities.mjs` and `leads.mjs` filtered first; `accounts`, `contacts`, `tasks` and `activities` gained the identical predicate on 28 Aug — they previously returned EVERY row in the org to every caller, with only the client filter in `App.jsx` narrowing them, and a client filter is not a boundary. The manager `managedReps` branch exists only in `opportunities.mjs` and is still name-based (state doc §0.39) — deliberately not copied to the other five until that list moves to ids. The client passes reads through for reps (`isRepVisible`'s rep branch returns `true` since 28 Aug — a name-based re-filter could only hide rows the server granted); Manager narrowing to `managedReps` remains client-side and load-bearing.
   Since 31 Aug the UNASSIGNED half of the rep predicate is an org policy on
-  `leads.mjs` (leads only — the other five keep the fixed predicate):
+  `leads.mjs`, and since 30 Sep on `opportunities.mjs` too — the other four keep
+  the fixed predicate. DEALS read `settings.extra.unassignedDealsVisibleToReps`
+  with the OPPOSITE default, `false` (§0.151, Jeff: "Reps should only see their
+  own deals"): absent, a rep receives only the deals she owns; the same `!!`
+  guard on the strict branch, the same throw-on-failed-read, the same
+  visibility-only scope; both halves of `settings.mjs` and the `?? false` read
+  are pinned in tests/ownership-registry.test.mjs. Admin UI: the one card,
+  Settings → Sales process → Lead & deal visibility. For LEADS:
   `settings.extra.unassignedLeadsVisibleToReps`, default `true`, where an
   absent key reproduces the standing policy so a deploy changes nothing for
   any unconfigured org. Off, the strict branch is
@@ -3555,3 +3580,13 @@ through `dbFetch`.
 3. **Mirror from a query, never from the row in hand.** The mirror follows the job’s LIVE invoice (not void), newest first. A void invoice clears the mirror to none; a new invoice fills it; a deleted draft leaves whatever live row remains. Writing "the invoice I just saved" onto the job would have stamped a voided one’s figure as the job’s value.
 4. **Return the mirrored row on the same response.** The client adopts the server’s job alongside the invoice. A second fetch "to refresh the value" is a race with the next write.
 5. **Pin it, both ways.** A scan that the three names are absent from the allowlist and present as `undefined` in the upsert; a mutant that puts them back; an integration test that reads the job row after each invoice write. tests/invoices.test.mjs and tests/integration/invoices.itest.mjs are the pins.
+
+## 18b45. A Read Scope Is Not A Write Authority — A Role That Reads Everything Gets A Read Predicate, Never The Ownership Bypass (hard rule)
+
+**Origin (§0.151, 30 Sep 2026).** Jeff: a Dispatcher reads the CRM to see what was sold and changes none of it. The six CRM GETs decided who reads the whole org with `canSeeAll(role)` — and `canSeeAll` is also what `mayMutate()` and `assertOwnership()` read to let a caller change a record someone ELSE owns. Adding the Dispatcher to `canSeeAll` would have handed them the reads AND the ownership bypass on every write, leaving `requireWrite` as the only thing between a reader and every record in the org — one gate where there had been two.
+
+1. **Two questions, two functions.** `crmReadScope(role)` answers "what does a GET return" (`'all' | 'own' | 'none'`); `canSeeAll(role)` answers "may this caller change a record another user owns". They sit side by side in `src/utils/roles.js` and neither is defined in terms of the other.
+2. **A GET reads the read scope; a write reads the write authority.** No GET branch tests `canSeeAll`; no write branch tests `crmReadScope`. A new whole-org reader (an auditor, a finance role) joins `crmReadScope` alone.
+3. **The client mirrors both, separately.** `canEditCrm(role)` — the tabs' `canEdit` — is the write list, the same array `requireWrite` allows; the Reports tab's `readsWholeOrg` is the read scope. A button shown to someone the server refuses is a bug report waiting to happen; rows hidden from someone the server granted are a silent one.
+4. **Each absence fails closed in its own direction.** An unrecognised role reads `'own'` (its own rows, and it owns none) and writes nothing (the allowlist). A Technician reads `'none'`: their tabs are My Jobs alone, and the CRM rows they used to receive were the unassigned ones, by accident.
+5. **Pin both, and pin them apart.** tests/roles.test.mjs runs the two functions and scans the six GETs for `crmReadScope` with no `canSeeAll` in the read; tests/role-vocabulary.test.mjs asserts `canSeeAll('Dispatcher') === false`; tests/integration/roles-crm.itest.mjs proves a Dispatcher reads all six and every write is refused with the row read back, through the REAL gate (the suite mocks sign-in only). The mutants widen `canSeeAll`, drop the Dispatcher from the read scope, and let the gate pass them.

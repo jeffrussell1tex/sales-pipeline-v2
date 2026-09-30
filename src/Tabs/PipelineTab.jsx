@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../AppContext';
+import { canEditCrm } from '../utils/roles.js';
 import { dbFetch } from '../utils/storage';
 import { isoLocal } from '../utils/dateLocal';
 import KanbanView from '../components/KanbanView';
@@ -345,8 +346,9 @@ export default function PipelineTab() {
 
     const isAdmin    = userRole === 'Admin';
     const isManager  = userRole === 'Manager';
-    const isReadOnly = userRole === 'ReadOnly';
-    const canEdit    = !isReadOnly;
+    // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
+    // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.
+    const canEdit    = canEditCrm(userRole);
 
     // ── Mine/All scope (§0.52) ─────────────────────────────
     // Persisted PREFERENCE only — never data. An unrecognised stored value
@@ -727,7 +729,7 @@ export default function PipelineTab() {
                             {exportingCSV === 'pipeline' ? 'Exporting…' : 'Export'}
                         </button>
                     )}
-                    {!isReadOnly && (
+                    {canEdit && (
                         <button onClick={handleAddNew} style={{
                             display: 'inline-flex', alignItems: 'center', gap: 6,
                             padding: '6px 12px', background: T.ink, border: 'none',
@@ -839,7 +841,8 @@ export default function PipelineTab() {
             <div className="spt-pipeline-mobile" style={{ padding: '0.75rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                     <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.inkMid, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{pipelineFilteredOpps.length} deal{pipelineFilteredOpps.length !== 1 ? 's' : ''}</span>
-                    <button onClick={handleAddNew} style={{ padding: '0.45rem 0.875rem', background: T.ink, color: T.surface, border: 'none', borderRadius: T.rSm, fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: T.sans }}>+ New Deal</button>
+                    {/* The mobile twin of the desktop button — the same canEdit gate (§0.151). */}
+                    {canEdit && <button onClick={handleAddNew} style={{ padding: '0.45rem 0.875rem', background: T.ink, color: T.surface, border: 'none', borderRadius: T.rSm, fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: T.sans }}>+ New Deal</button>}
                 </div>
                 {pipelineFilteredOpps.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '2rem 1rem', color: T.inkMuted, fontSize: '0.875rem' }}>No deals match the current filter.</div>

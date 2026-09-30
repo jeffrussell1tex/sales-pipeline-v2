@@ -10,6 +10,7 @@ import { randomUUID } from 'crypto';
 // arrangement): one validator decides the forecast-call shape on both sides.
 import { cleanForecastCalls } from '../../src/utils/forecastCall.js';
 import { streamAudit } from './_auditStream.mjs';
+import { crmReadScope } from '../../src/utils/roles.js';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
 
@@ -387,11 +388,20 @@ export const handler = async (event) => {
     //
     // Writes stay Admin/Manager-only: the gate below still guards POST, PUT and
     // DELETE, and this branch returns before reaching them.
-    const DIRECTORY_FIELDS = (row) => ({ id: row.id, name: row.name, active: row.active });
+    //
+    // A Dispatcher reads the whole CRM (crmReadScope 'all', §0.151) and the
+    // Reports tab over it, where the rosters count reps BY ROLE and the Team /
+    // Territory slices group by team and territory. Without the role every name
+    // in this directory counted as a rep — Admins included. So a whole-org reader
+    // also gets role, team and territory; still no email, quota or profile.
+    const wholeOrgReader = crmReadScope(userRole) === 'all';
+    const DIRECTORY_FIELDS = (row) => (wholeOrgReader
+        ? { id: row.id, name: row.name, active: row.active, role: row.role, userType: row.role, team: row.team, territory: row.territory }
+        : { id: row.id, name: row.name, active: row.active });
 
     if (event.httpMethod === 'GET' && !ADMIN_ROLES.includes(userRole)) {
         try {
-            const rows = await db.select({ id: users.id, name: users.name, active: users.active })
+            const rows = await db.select({ id: users.id, name: users.name, active: users.active, role: users.role, team: users.team, territory: users.territory })
                 .from(users).where(eq(users.orgId, orgId)).orderBy(asc(users.name));
             return {
                 statusCode: 200,

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
+import { canEditCrm } from '../utils/roles.js';
 import { useAuth } from '@clerk/clerk-react';
 import { quarterOf, quarterStartDate, quarterEndDate } from '../utils/quarters';
 import { isoLocal } from '../utils/dateLocal';
@@ -200,8 +201,9 @@ export default function HomeTab() {
         window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
     };
 
-    const isReadOnly = userRole === 'ReadOnly';
-    const canEdit    = !isReadOnly;
+    // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
+    // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.
+    const canEdit    = canEditCrm(userRole);
 
     // ── Date / greeting ──────────────────────────────────────
     const now        = new Date();

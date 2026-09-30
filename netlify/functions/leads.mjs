@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { leads } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isReadOnly, requireRole, requireWrite } from './auth.mjs';
+import { crmReadScope } from '../../src/utils/roles.js';
 import { dispatchWebhook } from './webhooks.mjs';
 import { dispatchAutomations } from './dispatch-automations.mjs';
 import { leadEventData } from '../../src/utils/automationEvents.js';
@@ -84,7 +85,13 @@ export const handler = async (event) => {
     try {
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(leads).where(eq(leads.orgId, orgId)).orderBy(asc(leads.createdAt));
-            if (!canSeeAll(userRole)) {
+            // What the caller may READ (src/utils/roles.js): 'all' for Admin, Manager
+            // and a Dispatcher, 'none' for a Technician, 'own' for everyone else. A
+            // READ scope only — canSeeAll stays the WRITE authority (guide §18b45).
+            const readScope = crmReadScope(userRole);
+            if (readScope === 'none') {
+                results = [];
+            } else if (readScope === 'own') {
                 // Visibility keys on the OWNER ID now. The display-name
                 // comparison this replaces was the same string equality the
                 // write path used, so a renamed user disappeared from their own

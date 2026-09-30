@@ -13,6 +13,7 @@ import { productsListOf, contactNamesText } from '../utils/oppText';
 import { userQuotaFor, teamQuotaFor, pipelineMovement, closedWonByQuarter, openPipelineByRep, closeDayOf, cycleDaysOf, medianOf, closeDayInRange, lastQuarters } from '../utils/pipelineReport';
 import { openStagesOf, stagePalette, commitFallbackStages, bestCaseFallbackStages } from '../utils/stageOrder';
 import { repDeals } from '../utils/repDeals';
+import { isDispatcher, NON_REP_ROLES } from '../utils/roles.js';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import TimeDropdown from '../components/ui/TimeDropdown';
 import { dbFetch, dbWrite } from '../utils/storage';
@@ -61,7 +62,11 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
     const isAdmin = userRole === 'Admin';
     const isManager = userRole === 'Manager';
-    const canSeeAll = isAdmin || isManager;
+    // A Dispatcher reads the whole org's CRM (§0.151): their reports cover every
+    // rep, like an Admin's, and the rep / team / territory slices — read-only
+    // filters — are theirs too. Nothing in this tab writes on that basis.
+    const readsWholeOrg = isAdmin || isDispatcher(userRole);
+    const canSeeAll = readsWholeOrg || isManager;
 
     // Local report filter state — persisted so navigation away and back restores last view
     const [reportSubTab, setReportSubTab] = useState(
@@ -110,7 +115,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                     return me?.team || null;
                 })();
                 const myTeamMembers = (() => {
-                    if (isAdmin) return null; // null = no filter needed, admin sees all
+                    if (readsWholeOrg) return null; // null = no filter: an Admin or a Dispatcher sees all
                     if (isManager && myTeamName) {
                         return new Set(
                             (settings.users || [])
@@ -163,15 +168,15 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const roleFilteredTasks      = (tasks || []).filter(taskInScope);
 
                 // Build slice options (only for managers/admins)
-                const excludedRoles = new Set(['Admin', 'Manager']);
+                const excludedRoles = new Set(NON_REP_ROLES);
                 const rAllReps = canSeeAll ? [...new Set([
                     ...(settings.users || []).filter(u => u.name && !excludedRoles.has(u.userType)).map(u => u.name),
                     ...roleFilteredOpps.filter(o => o.salesRep).map(o => o.salesRep)
                 ])].sort() : [];
-                const rAllTeams = isAdmin
+                const rAllTeams = readsWholeOrg
                     ? [...new Set((settings.users || []).filter(u => u.team).map(u => u.team))].sort()
                     : (myTeamName ? [myTeamName] : []);
-                const rAllTerritories = isAdmin
+                const rAllTerritories = readsWholeOrg
                     ? [...new Set((settings.users || []).filter(u => u.territory).map(u => u.territory))].sort()
                     : [];
                 const hasReportsSlicing = canSeeAll && (rAllReps.length > 1 || rAllTeams.length > 0 || rAllTerritories.length > 0);
@@ -311,7 +316,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                         </div>
 
                         {/* ── Role scope banner — shown to non-admins so they understand what data they're seeing ── */}
-                        {!isAdmin && (
+                        {!readsWholeOrg && (
                             <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.875rem', marginTop:'0.5rem', background: isManager ? 'rgba(58,90,122,0.07)' : 'rgba(77,107,61,0.07)', border: `1px solid ${isManager ? 'rgba(58,90,122,0.25)' : 'rgba(77,107,61,0.25)'}`, borderRadius:'6px', fontSize:'0.75rem', color: isManager ? '#3a5a7a' : '#4d6b3d', fontWeight:'500' }}>
                                 <span style={{ fontSize:'0.875rem' }}>{isManager ? '👥' : '👤'}</span>
                                 {isManager
@@ -5009,6 +5014,8 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const currentUserName = currentUser?.name || currentUser || '';
     const isAdmin = userRole === 'Admin';
     const isManager = userRole === 'Manager';
+    // A Dispatcher reads every account and contact (§0.151), as an Admin does.
+    const seesAllRecords = isAdmin || isManager || isDispatcher(userRole);
 
     // ── Close dropdowns on outside click ──────────────────────
     React.useEffect(() => {
@@ -5038,7 +5045,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     // ── Access-controlled account list ────────────────────────
     const visibleAccounts = React.useMemo(() => {
         const all = accounts || [];
-        if (isAdmin || isManager) return all;
+        if (seesAllRecords) return all;
         // Rep: only accounts they own or are on the team for
         const myTeam = (() => {
             const me = (settings?.users || []).find(u => u.name === currentUserName);
@@ -5050,12 +5057,12 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             const owner = a.accountOwner || a.assignedRep || '';
             return myTeam.has(owner);
         });
-    }, [accounts, isAdmin, isManager, currentUserName, settings]);
+    }, [accounts, seesAllRecords, currentUserName, settings]);
 
     // ── Access-controlled contact list ────────────────────────
     const visibleContacts = React.useMemo(() => {
         const all = contacts || [];
-        if (isAdmin || isManager) return all;
+        if (seesAllRecords) return all;
         const myTeam = (() => {
             const me = (settings?.users || []).find(u => u.name === currentUserName);
             if (!me?.team) return new Set([currentUserName]);
@@ -5066,7 +5073,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             const owner = c.assignedRep || c.accountOwner || '';
             return myTeam.has(owner) || !owner;
         });
-    }, [contacts, isAdmin, isManager, currentUserName, settings]);
+    }, [contacts, seesAllRecords, currentUserName, settings]);
 
     // No auto-select — user must choose an account/contact
 

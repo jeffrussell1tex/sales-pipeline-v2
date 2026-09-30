@@ -25,8 +25,9 @@
 // NOTE: `set -a; source .env` is not an alternative — it executes the values as
 // commands and echoes credentials. Use --env-file.
 import { createClerkClient } from '@clerk/backend';
-
-const APP_ROLES = ['Admin', 'Manager', 'User', 'ReadOnly', 'Technician'];
+// The one list (src/utils/roles.js). This file carried its own copy, which would
+// have named every Dispatcher as a broken role (§0.151).
+import { APP_ROLES } from '../src/utils/roles.js';
 
 const secret = process.env.CLERK_SECRET_KEY;
 if (!secret) {

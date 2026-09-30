@@ -150,19 +150,25 @@ test('ReportsTab: no $175,000, no att: 1.0, no Lost: 0; the helpers are what ren
 
 // ── Batch 4b: the reps in scope, open pipeline by owner, and the last constants ─
 
-test('repsInScopeOf: the roster minus Admin / Manager / ReadOnly, narrowed by slice and scope, sorted', () => {
+test('repsInScopeOf: the roster minus every non-rep role, narrowed by slice and scope, sorted', () => {
+    // Technician counted as a rep here until 30 Sep (§0.151): the set was Admin /
+    // Manager / ReadOnly, so a field tech sat in "per rep" and the rhythm grid.
+    // The non-rep roles are one list now (src/utils/roles.js NON_REP_ROLES).
     const users = [
         { name: 'Savannah Miller', userType: 'User', team: 'West' },
         { name: 'Karen Russell',   userType: 'User', team: 'West' },
         { name: 'Ryan Algie',      userType: 'Technician', team: 'Field' },
+        { name: 'Dana Dispatch',   userType: 'Dispatcher', team: 'Field' },
         { name: 'Jeff Russell',    userType: 'Admin' },
         { name: 'Boss',            userType: 'Manager' },
         { name: 'Viewer',          userType: 'ReadOnly' },
+        { name: 'Legacy',          userType: undefined },
         { userType: 'User' },
     ];
-    assert.deepEqual(repsInScopeOf(users, {}, null), ['Karen Russell', 'Ryan Algie', 'Savannah Miller']);
+    assert.deepEqual(repsInScopeOf(users, {}, null), ['Karen Russell', 'Legacy', 'Savannah Miller'], 'a row with no role still counts, as it always has');
     assert.deepEqual(repsInScopeOf(users, { team: 'West' }, null), ['Karen Russell', 'Savannah Miller']);
-    assert.deepEqual(repsInScopeOf(users, {}, ['Ryan Algie']), ['Ryan Algie']);
+    assert.deepEqual(repsInScopeOf(users, { team: 'Field' }, null), [], 'the technician and the dispatcher are not reps, whatever their team');
+    assert.deepEqual(repsInScopeOf(users, {}, ['Ryan Algie']), [], 'a technician in scope is still not a rep');
     assert.deepEqual(repsInScopeOf(users, { team: 'West' }, ['Ryan Algie']), [], 'slice and scope both apply');
     assert.deepEqual(repsInScopeOf(undefined, {}, null), []);
 });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../AppContext';
+import { canEditCrm, isDispatcher } from '../utils/roles.js';
 import { dbFetch } from '../utils/storage';
 import { T } from '../tokens.js';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
@@ -1279,8 +1280,9 @@ export default function QuotesTab() {
 
     const isAdmin   = userRole === 'Admin';
     const isManager = userRole === 'Manager';
-    const isReadOnly= userRole === 'ReadOnly';
-    const canEdit   = !isReadOnly;
+    // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
+    // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.
+    const canEdit   = canEditCrm(userRole);
 
     // ── Tab state ─────────────────────────────────────────────
     const [subTab,             setSubTabRaw]        = useState(() => localStorage.getItem('tab:quotes:subTab') || 'deals');
@@ -1320,7 +1322,8 @@ export default function QuotesTab() {
     const managedReps = useMemo(() => new Set((settings?.users || []).filter(u => u.managedBy === currentUser || u.manager === currentUser).map(u => u.name)), [settings, currentUser]);
 
     const visibleQuotes = useMemo(() => (quotes || []).filter(q => {
-        if (isAdmin) return true;
+        // A Dispatcher reads every quote — "what was sold" — and changes none (§0.151).
+        if (isAdmin || isDispatcher(userRole)) return true;
         if (isManager) {
             const opp = (opportunities || []).find(o => o.id === q.opportunityId);
             if (!opp) return q.createdBy === currentUser;

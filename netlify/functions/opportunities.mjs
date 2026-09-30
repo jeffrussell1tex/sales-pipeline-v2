@@ -1,7 +1,8 @@
 import { db } from '../../db/index.js';
-import { opportunities, users } from '../../db/schema.js';
+import { opportunities, users, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and, inArray } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isManager, isReadOnly, requireRole, requireWrite } from './auth.mjs';
+import { crmReadScope } from '../../src/utils/roles.js';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { postDealEvents, postBulkStageMove } from './send-slack.mjs';
@@ -131,6 +132,16 @@ const sanitize = (data) => ({
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
+// Whether sales reps see UNASSIGNED deals (§0.151) — the deals twin of
+// leads.mjs's getUnassignedLeadsVisible, with the opposite default: OFF when the
+// key is absent (Jeff: "Reps should only see their own deals"). Like the leads
+// read, a failed read throws to the handler's 500 rather than picking a fail
+// direction — this decides what a rep is SHOWN.
+async function getUnassignedDealsVisible(orgId) {
+    const [row] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, orgId)).limit(1);
+    return row?.extra?.unassignedDealsVisibleToReps ?? false;
+}
+
 export const handler = async (event) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -162,7 +173,13 @@ export const handler = async (event) => {
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(opportunities).where(eq(opportunities.orgId, orgId)).orderBy(asc(opportunities.createdAt));
-            if (!canSeeAll(userRole)) {
+            // What the caller may READ (src/utils/roles.js): 'all' for Admin, Manager
+            // and a Dispatcher, 'none' for a Technician, 'own' for everyone else. A
+            // READ scope only — canSeeAll stays the WRITE authority (guide §18b45).
+            const readScope = crmReadScope(userRole);
+            if (readScope === 'none') {
+                results = [];
+            } else if (readScope === 'own') {
                 // salesRep stores a display name, so the caller's name is what
                 // this filters on.
                 //
@@ -189,7 +206,16 @@ export const handler = async (event) => {
                 // unassigned deals — the same fail-closed direction mayMutate()
                 // takes on writes.
                 const callerId = await getCallerId(userId, orgId);
-                results = results.filter(o => !o.ownerId || o.ownerId === callerId);
+                // Whether unassigned deals reach a rep at all is an Admin policy
+                // (settings.extra.unassignedDealsVisibleToReps), OFF when absent. The
+                // strict branch guards the OWNER side with `!!o.ownerId`: a bare
+                // `o.ownerId === callerId` matches null === null and would hand an
+                // unresolvable caller every unassigned deal (18b22). Visibility only —
+                // an unassigned deal stays mutable by any writer, as a lead does.
+                const unassignedVisible = await getUnassignedDealsVisible(orgId);
+                results = unassignedVisible
+                    ? results.filter(o => !o.ownerId || o.ownerId === callerId)
+                    : results.filter(o => !!o.ownerId && o.ownerId === callerId);
             } else if (isManager(userRole) && managedReps.length > 0) {
                 // STILL NAME-BASED, and deliberately so for now: managedReps lives
                 // in Clerk publicMetadata as an array of DISPLAY NAMES, so this

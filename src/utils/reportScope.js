@@ -13,6 +13,8 @@
 // (the same resolution the Performance leaderboard already does for its rows).
 // Pure so tests/report-scope.test.mjs and the mutation harness can reach it.
 
+import { NON_REP_ROLES } from './roles.js';
+
 /** The rep an activity belongs to, by the field chain the reports already use. */
 export const activityRepOf = (a) => a?.rep || a?.salesRep || a?.assignedTo || a?.author || '';
 
@@ -75,7 +77,10 @@ export function visibleReps(names, scoped) {
 // rhythm grid listed only those reps, so a rep who logged nothing was not a
 // row and could never be flagged. The roster is the denominator.
 
-const ROSTER_EXCLUDED = new Set(['Admin', 'Manager', 'ReadOnly']);
+// Not reps (src/utils/roles.js): Admin, Manager, ReadOnly, Technician, Dispatcher.
+// Technician was missing from this set, so a field tech counted as a rep in
+// "per rep" and the rhythm grid (state §9, 30 Sep; §0.151).
+const ROSTER_EXCLUDED = new Set(NON_REP_ROLES);
 
 /** Rep names from the roster (named, not Admin / Manager / ReadOnly), narrowed by the slice and the viewer's scope, sorted. */
 export function repsInScopeOf(users, slice, scoped) {

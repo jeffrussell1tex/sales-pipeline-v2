@@ -5,6 +5,7 @@ import { safeStorage, dbFetch, waitForToken } from './utils/storage';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { isoLocal } from './utils/dateLocal';
+import { isDispatcher } from './utils/roles.js';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import { useSettings } from './hooks/useSettings';
 import { useOpportunities } from './hooks/useOpportunities';
@@ -1860,9 +1861,9 @@ dbFetch('/.netlify/functions/users?me=true')
                         SETTINGS
                     </button>
                 )}
-                {isReadOnly && (
+                {(isReadOnly || isDispatcher(userRole)) && (
                     <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', padding: '0 0.75rem', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.6)', fontWeight: '600', fontStyle: 'italic' }}>
-                        👁 View Only Mode
+                        👁 {isReadOnly ? 'View Only Mode' : 'CRM view only'}
                     </div>
                 )}
             </nav>

@@ -108,6 +108,9 @@ export const handler = async (event) => {
                 // exists in BOTH halves — GET here, PUT whitelist below — and
                 // tests/ownership-registry.test.mjs asserts the pair.
                 unassignedLeadsVisibleToReps: row.extra?.unassignedLeadsVisibleToReps ?? true,
+                // The deals twin (§0.151), OFF when absent — Jeff: "Reps should only see
+                // their own deals". Both halves, like the leads key (tests/ownership-registry).
+                unassignedDealsVisibleToReps: row.extra?.unassignedDealsVisibleToReps ?? false,
                 customerTypes:    row.extra?.customerTypes    || [],
                 companyProfile:   row.extra?.companyProfile   || null,
                 leadConvBenchmarks: row.extra?.leadConvBenchmarks || null,
@@ -279,6 +282,7 @@ export const handler = async (event) => {
                 aiReportPromptsEnabled: 'aiReportPromptsEnabled' in data ? !!data.aiReportPromptsEnabled : existingExtra.aiReportPromptsEnabled ?? false,
                 leadsEnabled:     'leadsEnabled'     in data ? !!data.leadsEnabled     : existingExtra.leadsEnabled     ?? true,
                 unassignedLeadsVisibleToReps: 'unassignedLeadsVisibleToReps' in data ? !!data.unassignedLeadsVisibleToReps : existingExtra.unassignedLeadsVisibleToReps ?? true,
+                unassignedDealsVisibleToReps: 'unassignedDealsVisibleToReps' in data ? !!data.unassignedDealsVisibleToReps : existingExtra.unassignedDealsVisibleToReps ?? false,
                 customerTypes:    'customerTypes'    in data ? (data.customerTypes    || [])   : existingExtra.customerTypes    || [],
                 companyProfile:   'companyProfile'   in data ? (data.companyProfile   || null) : existingExtra.companyProfile   || null,
                 leadConvBenchmarks:   'leadConvBenchmarks'   in data ? (data.leadConvBenchmarks   || null) : existingExtra.leadConvBenchmarks   || null,

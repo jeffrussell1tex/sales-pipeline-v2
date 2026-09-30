@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useApp } from '../AppContext';
+import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, dbWrite } from '../utils/storage';
 import { T } from '../tokens.js';
 
@@ -577,8 +578,9 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
         isMobile,
     } = useApp();
 
-    const isReadOnly = userRole === 'ReadOnly';
-    const canEdit    = !isReadOnly;
+    // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
+    // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.
+    const canEdit    = canEditCrm(userRole);
 
     // ── Mine/All scope (§0.52) ─────────────────────────────
     // Persisted PREFERENCE only — never data. An unrecognised stored value

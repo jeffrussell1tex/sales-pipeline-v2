@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { accounts, settings as settingsTable, opportunities, contacts } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './auth.mjs';
+import { crmReadScope } from '../../src/utils/roles.js';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
     stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
@@ -120,7 +121,13 @@ export const handler = async (event) => {
     try {
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(accounts).where(eq(accounts.orgId, orgId)).orderBy(asc(accounts.name));
-            if (!canSeeAll(userRole)) {
+            // What the caller may READ (src/utils/roles.js): 'all' for Admin, Manager
+            // and a Dispatcher, 'none' for a Technician, 'own' for everyone else. A
+            // READ scope only — canSeeAll stays the WRITE authority (guide §18b45).
+            const readScope = crmReadScope(userRole);
+            if (readScope === 'none') {
+                results = [];
+            } else if (readScope === 'own') {
                 // Rep scoping. This endpoint returned every row in the org to
                 // every caller until now — the client filter in App.jsx was the
                 // only thing narrowing it, and a client filter is not a boundary.

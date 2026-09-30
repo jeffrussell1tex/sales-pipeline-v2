@@ -65,7 +65,7 @@ mock.module(new URL('../../netlify/functions/dispatch-automations.mjs', import.m
 
 const { handler } = await import('../../netlify/functions/opportunities.mjs');
 const { db } = await import('../../db/index.js');
-const { opportunities, users } = await import('../../db/schema.js');
+const { opportunities, users, settings: settingsTable } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 
@@ -90,6 +90,7 @@ const cleanup = async () => {
     for (const o of [A, B]) {
         await db.delete(opportunities).where(eq(opportunities.orgId, o));
         await db.delete(users).where(eq(users.orgId, o));
+        await db.delete(settingsTable).where(eq(settingsTable.orgId, o));
     }
 };
 
@@ -168,6 +169,9 @@ test('a PUT for an unknown id is a 404, not an insert', async () => {
 });
 
 // ── Rep-role GET scoping — the §0.48 read-side debt, closed (2 Sep) ──────────
+// Since §0.151 (30 Sep) whether a rep sees UNASSIGNED deals at all is an org
+// switch, settings.extra.unassignedDealsVisibleToReps, OFF when absent. The two
+// permissive tests below turn it ON first; the default is pinned after them.
 // Permissive policy, ownerId-keyed (18b22): unassigned visible to everyone,
 // owned rows only to their owner, a null caller fails closed to
 // unassigned-only. The Manager managedReps branch is name-based by documented
@@ -177,8 +181,13 @@ test('a PUT for an unknown id is a 404, not an insert', async () => {
 // test's input.
 
 const asRepRole = (e) => ({ ...e, headers: { ...e.headers, 'x-test-role': 'User' } });
+const setDealVisibility = async (org, value) => {
+    await db.delete(settingsTable).where(eq(settingsTable.orgId, org));
+    if (value !== undefined) await db.insert(settingsTable).values({ id: org, orgId: org, extra: { unassignedDealsVisibleToReps: value } });
+};
 
-test('rep GET — own + unassigned arrive; another rep\'s deal never does', async () => {
+test('rep GET, switch ON — own + unassigned arrive; another rep\'s deal never does', async () => {
+    await setDealVisibility(A, true);
     await db.insert(opportunities).values([
         { id: 'opp_repget_mine',  opportunityName: 'Repget Mine',  pipelineId: 'default', stage: 'Discovery', ownerId: REP_A,                    orgId: A },
         { id: 'opp_repget_other', opportunityName: 'Repget Other', pipelineId: 'default', stage: 'Discovery', ownerId: 'usr_itest-opps-other-1', orgId: A },
@@ -197,8 +206,9 @@ test('Admin GET — all three scoping rows arrive (canSeeAll bypasses the filter
     }
 });
 
-test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 direction)', async () => {
+test('unresolvable caller GET, switch ON — only unassigned arrives (fail closed, 18b22 direction)', async () => {
     // Org B has no roster rows, so the stub caller resolves null.
+    await setDealVisibility(B, true);
     await db.insert(opportunities).values([
         { id: 'opp_repget_b_none',  opportunityName: 'Repget B None',  pipelineId: 'default', stage: 'Discovery', ownerId: null,                     orgId: B },
         { id: 'opp_repget_b_owned', opportunityName: 'Repget B Owned', pipelineId: 'default', stage: 'Discovery', ownerId: 'usr_itest-opps-other-1', orgId: B },
@@ -206,4 +216,31 @@ test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 di
     const ids = JSON.parse((await handler(asRepRole(ev(B, 'GET')))).body).opportunities.map(o => o.id);
     assert.ok(ids.includes('opp_repget_b_none'),   'unassigned stays visible to a null caller under the permissive policy');
     assert.ok(!ids.includes('opp_repget_b_owned'), 'an owned row must be refused to a null caller — null === null must not match');
+});
+test('rep GET, switch ABSENT — the default: a rep receives ONLY her own deals; unassigned is hidden (§0.151)', async () => {
+    await setDealVisibility(A, undefined);   // no settings row at all = never configured
+    const ids = JSON.parse((await handler(asRepRole(ev(A, 'GET')))).body).opportunities.map(o => o.id);
+    assert.ok(ids.includes('opp_repget_mine'),   'a rep must receive their own deal');
+    assert.ok(!ids.includes('opp_repget_none'),  'absent switch: an unassigned deal is hidden from a rep');
+    assert.ok(!ids.includes('opp_repget_other'), 'another rep\'s deal stays hidden');
+});
+
+test('rep GET, switch OFF — the same as absent', async () => {
+    await setDealVisibility(A, false);
+    const ids = JSON.parse((await handler(asRepRole(ev(A, 'GET')))).body).opportunities.map(o => o.id);
+    assert.ok(ids.includes('opp_repget_mine') && !ids.includes('opp_repget_none') && !ids.includes('opp_repget_other'));
+});
+
+test('switch OFF — Admin is untouched (the read scope is all before the filter)', async () => {
+    const ids = (await get(A)).map(o => o.id);
+    for (const id of ['opp_repget_mine', 'opp_repget_other', 'opp_repget_none']) assert.ok(ids.includes(id), `Admin must still receive ${id}`);
+});
+
+test('switch OFF + unresolvable caller — NOTHING arrives, not the unassigned rows (18b22)', async () => {
+    // A bare ownerId === callerId would match null === null and hand this caller
+    // exactly the unassigned deals the switch hides; the `!!o.ownerId` guard stops it.
+    await setDealVisibility(B, false);
+    const ids = JSON.parse((await handler(asRepRole(ev(B, 'GET')))).body).opportunities.map(o => o.id);
+    assert.ok(!ids.includes('opp_repget_b_none'),  'an unassigned deal must not reach a null caller under the strict policy');
+    assert.ok(!ids.includes('opp_repget_b_owned'), 'an owned deal must not reach a null caller');
 });

@@ -4,16 +4,13 @@ import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
 
-// Must match auth.mjs APP_ROLES. Technician was missing from this list, so any
-// Technician opened in this modal displayed as "Admin" — a <select> whose value
-// matches no option falls back to the first one.
-const ROLE_OPTIONS = [
-    { value: 'Admin',      label: 'Admin \u2014 Full access, manage settings & users' },
-    { value: 'Manager',    label: 'Manager \u2014 View all data, edit & delete' },
-    { value: 'User',       label: 'Sales Rep \u2014 Own data only, create & edit' },
-    { value: 'Technician', label: 'Technician \u2014 Field jobs assigned to them only' },
-    { value: 'ReadOnly',   label: 'Read-Only \u2014 View only, no changes' },
-];
+import { ROLE_OPTIONS as ROLES } from '../../utils/roles.js';
+
+// The one list the server checks (src/utils/roles.js). This modal carried its own
+// copy, and Technician was once missing from it, so any Technician opened here
+// displayed as "Admin" — a <select> whose value matches no option falls back to
+// the first one.
+const ROLE_OPTIONS = ROLES.map(o => ({ value: o.value, label: `${o.label} — ${o.desc}` }));
 const KNOWN_ROLES = ROLE_OPTIONS.map(o => o.value);
 
 export default function UserModal({ user, settings: settingsProp, onClose, onSave, errorMessage, onDismissError, saving }) {

@@ -24,18 +24,18 @@ const errorOf = (res) => JSON.parse(res.body).error;
 
 // ── The list ────────────────────────────────────────────────────────────────
 
-test('APP_ROLES is the five roles auth.mjs actually checks, and is frozen', () => {
-    assert.deepEqual([...APP_ROLES], ['Admin', 'Manager', 'User', 'ReadOnly', 'Technician']);
+test('APP_ROLES is the six roles auth.mjs actually checks, and is frozen', () => {
+    assert.deepEqual([...APP_ROLES], ['Admin', 'Manager', 'User', 'ReadOnly', 'Technician', 'Dispatcher']);
     assert.ok(Object.isFrozen(APP_ROLES));
 });
 
-test('isAppRole accepts the five and refuses everything else', () => {
+test('isAppRole accepts the six and refuses everything else', () => {
     for (const r of APP_ROLES) assert.equal(isAppRole(r), true, r);
     // Each of these has been in this codebase, in a role field, in the last week:
     //   'member'/'admin'  Clerk ORG membership roles, via users-sync's old fallback
     //   'Sales Rep'       the display LABEL, seeded into the invite rows as a value
     for (const r of ['member', 'admin', 'Admin ', 'ADMIN', 'Sales Rep', 'readonly', 'Read Only',
-                     'technician', 'user', '', null, undefined, 0, {}]) {
+                     'technician', 'user', 'dispatcher', 'Dispatch', '', null, undefined, 0, {}]) {
         assert.equal(isAppRole(r), false, JSON.stringify(r));
     }
 });
@@ -70,14 +70,27 @@ test('an UNRECOGNISED role is refused — this is what the blocklist allowed', (
     }
 });
 
-test('the three refusals stay distinguishable', () => {
+test('the four refusals stay distinguishable', () => {
     // §0.38 verified the rep path by checking an ownership 403 could be told apart
-    // from a role 403. Same requirement one layer up: "read-only", "technician" and
-    // "unrecognised" are three different problems with three different fixes, and a
-    // single generic message would make them one unactionable report.
-    const msgs = [write('ReadOnly'), write('Technician'), write('member')].map(errorOf);
-    assert.equal(new Set(msgs).size, 3, msgs.join(' | '));
+    // from a role 403. Same requirement one layer up: "read-only", "technician",
+    // "dispatcher" and "unrecognised" are four different problems with four
+    // different fixes, and a single generic message would make them one
+    // unactionable report.
+    const msgs = [write('ReadOnly'), write('Technician'), write('Dispatcher'), write('member')].map(errorOf);
+    assert.equal(new Set(msgs).size, 4, msgs.join(' | '));
     assert.match(errorOf(write('member')), /unrecognised/i);
+    assert.match(errorOf(write('Dispatcher')), /dispatcher/i);
+});
+
+test('a Dispatcher writes no CRM record — there is no opt-in for them (§0.151)', () => {
+    // They read the whole CRM (crmReadScope) and run Dispatch, whose endpoints
+    // gate on their own. The Technician's opt-in must not open the gate for them.
+    for (const m of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+        const res = requireWrite({ userRole: 'Dispatcher', userId: 'user_test' }, ev(m), H);
+        assert.equal(res?.statusCode, 403, m);
+    }
+    assert.equal(write('Dispatcher', { allowTechnician: true })?.statusCode, 403, 'the technician opt-in is not a dispatcher opt-in');
+    assert.equal(requireWrite({ userRole: 'Dispatcher' }, ev('GET'), H), null, 'reads pass the write gate');
 });
 
 test('a non-mutating method passes through whatever the role says', () => {
@@ -93,6 +106,9 @@ test('canSeeAll and isAdmin do not widen for a lookalike', () => {
         assert.equal(canSeeAll(r), false, r);
         assert.equal(isAdmin(r), false, r);
     }
+    // The Dispatcher reads the whole org through crmReadScope, NOT through
+    // canSeeAll — canSeeAll is the write authority over other people's records.
+    assert.equal(canSeeAll('Dispatcher'), false, 'a whole-org READER is not a whole-org WRITER (§18b45)');
 });
 
 // ── Source guards: the SHAPE, not the four instances that were found ─────────
@@ -104,13 +120,31 @@ test('canSeeAll and isAdmin do not widen for a lookalike', () => {
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
-test('no second role list — only auth.mjs enumerates the roles', () => {
+test('no second role list — only src/utils/roles.js enumerates the roles', () => {
     // A copy that agrees today is edited by someone else tomorrow. user-role.mjs
-    // carried VALID_ROLES; UsersDetail and UserModal each carried their own options.
+    // carried VALID_ROLES; UsersDetail, UserModal, FlsDetail and the Clerk check
+    // script each carried their own — five copies, and a role added to one went
+    // missing from the next (§0.151).
     for (const f of ['netlify/functions/user-role.mjs', 'netlify/functions/users.mjs',
                      'netlify/functions/users-sync.mjs']) {
         assert.ok(!/VALID_ROLES|ROLE_VALUES/.test(read(f)), `${f} declares its own role list`);
         assert.match(read(f), /from '\.\/auth\.mjs'/, `${f} must take the vocabulary from auth.mjs`);
+    }
+    const roleList = /\[\s*['"]Admin['"]\s*,\s*['"]Manager['"]/;
+    assert.match(read('src/utils/roles.js'), /export const APP_ROLES = Object\.freeze\(\[/, 'the one list lives in roles.js');
+    const auth = read('netlify/functions/auth.mjs');
+    assert.ok(!roleList.test(auth) && !/APP_ROLES\s*=/.test(auth), 'auth.mjs declares a role list again — it re-exports roles.js');
+    assert.match(auth, /from '\.\.\/\.\.\/src\/utils\/roles\.js'/);
+    for (const [f, from] of [
+        ['src/Tabs/settings/people/UsersDetail.jsx', "'../../../utils/roles.js'"],
+        ['src/components/modals/UserModal.jsx', "'../../utils/roles.js'"],
+        ['src/Tabs/settings/security/FlsDetail.jsx', "'../../../utils/roles.js'"],
+        ['scripts/check-clerk-roles.mjs', "'../src/utils/roles.js'"],
+    ]) {
+        const src = read(f);
+        assert.ok(!roleList.test(src), `${f} declares its own role list again`);
+        assert.ok(!/value:\s*'Technician'/.test(src), `${f} declares its own role options again`);
+        assert.ok(src.includes(`from ${from}`), `${f} must take the roles from src/utils/roles.js`);
     }
 });
 
