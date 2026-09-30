@@ -37,6 +37,26 @@ export const isLiveInvoice = (inv) => !!inv && inv.status !== 'void';
 export const INVOICE_STATUS_LABELS = Object.freeze({ draft: 'Draft', issued: 'Issued', paid: 'Paid', void: 'Void' });
 export const invoiceStatusLabel = (s) => INVOICE_STATUS_LABELS[s] || String(s || '');
 
+// The Invoices list's order: money owed first (the soonest due leads, so an
+// overdue one is on top), then drafts still to send, then paid (the latest
+// payment first), and void last — kept for the record, never in the way.
+// Within a group with no date to go by, the newest number first.
+const LIST_RANK = Object.freeze({ issued: 0, draft: 1, paid: 2, void: 3 });
+export function sortInvoicesForList(list) {
+    const rank = (inv) => LIST_RANK[inv?.status] ?? 4;
+    const str  = (v) => (v == null ? '' : String(v));
+    return [...(Array.isArray(list) ? list : [])].sort((a, b) => {
+        if (rank(a) !== rank(b)) return rank(a) - rank(b);
+        if (a.status === 'issued') {
+            const da = isYmd(a.dueDate) ? a.dueDate : '9999-12-31';
+            const db = isYmd(b.dueDate) ? b.dueDate : '9999-12-31';
+            if (da !== db) return da < db ? -1 : 1;
+        }
+        if (a.status === 'paid' && str(a.paidAt) !== str(b.paidAt)) return str(a.paidAt) > str(b.paidAt) ? -1 : 1;
+        return str(b.invoiceNumber).localeCompare(str(a.invoiceNumber), 'en', { numeric: true });
+    });
+}
+
 // dispatch_job_line_items.item_type, and the invoice line's kind.
 export const JOB_LINE_TYPES = Object.freeze(['labor', 'part', 'material', 'fee', 'discount']);
 

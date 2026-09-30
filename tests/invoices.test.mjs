@@ -17,6 +17,7 @@ import {
     isYmd, todayYmd, addDaysYmd, cleanInvoiceLines, linesFromJobItems, invoiceTotals, dueDateFromTerms,
     cleanInvoicePatch, mirrorForJob, quoteLineToJobItem, jobFromQuote, resolveCustomerForOpp, fmtMoney,
     BUILTIN_PRODUCT_TYPES, DEFAULT_PRODUCT_TYPES, cleanProductTypes, lineKindFor, productTypeLabel,
+    sortInvoicesForList,
 } from '../src/utils/invoices.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -44,6 +45,30 @@ test('four statuses; draft goes to issued or void, issued to paid or void, and n
     assert.equal(invoiceStatusLabel('nope'), 'nope');
     assert.deepEqual([...JOB_LINE_TYPES], ['labor', 'part', 'material', 'fee', 'discount']);
     assert.equal(DEFAULT_PAYMENT_TERMS, 'Net 30');
+});
+
+test('the Invoices list order: issued (soonest due first) → draft → paid (latest payment first) → void last; newest number breaks a tie; the input is not mutated', () => {
+    const list = [
+        { invoiceNumber: 'INV-2026-0001', status: 'void' },
+        { invoiceNumber: 'INV-2026-0002', status: 'paid',   paidAt: '2026-09-01' },
+        { invoiceNumber: 'INV-2026-0003', status: 'issued', dueDate: '2026-11-01' },
+        { invoiceNumber: 'INV-2026-0004', status: 'draft' },
+        { invoiceNumber: 'INV-2026-0005', status: 'issued', dueDate: '2026-10-01' },
+        { invoiceNumber: 'INV-2026-0006', status: 'paid',   paidAt: '2026-09-20' },
+        { invoiceNumber: 'INV-2026-0007', status: 'void' },
+        { invoiceNumber: 'INV-2026-0008', status: 'issued' },
+        { invoiceNumber: 'INV-2026-0009', status: 'draft' },
+        { invoiceNumber: 'INV-2026-10000', status: 'draft' },
+    ];
+    const before = list.map(i => i.invoiceNumber);
+    assert.deepEqual(sortInvoicesForList(list).map(i => i.invoiceNumber), [
+        'INV-2026-0005', 'INV-2026-0003', 'INV-2026-0008',   // owed: the soonest due leads; no due date last
+        'INV-2026-10000', 'INV-2026-0009', 'INV-2026-0004',  // drafts: newest number first, numerically
+        'INV-2026-0006', 'INV-2026-0002',                    // paid: the latest payment first
+        'INV-2026-0007', 'INV-2026-0001',                    // void: the bottom
+    ]);
+    assert.deepEqual(list.map(i => i.invoiceNumber), before, 'a copy is sorted');
+    assert.deepEqual(sortInvoicesForList(null), []);
 });
 
 test('a quote is accepted from Approved, Sent, Sent to Customer or Negotiating; only an Accepted quote becomes a job', () => {
@@ -372,7 +397,10 @@ test('QuotesTab: Customer accepted for an acceptable quote (editors only); the j
 
 test('DispatchTab: the invoice panel and the Invoices view at module scope; the sub-tab, the caption and the mount; the panel under the job editor adopting the mirrored job; a void through the app-wide confirm; the board reads the mirror', () => {
     const s = code(read('src/Tabs/DispatchTab.jsx'));
-    assert.ok(s.includes("    JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney } from '../utils/invoices.js';"));
+    assert.ok(s.includes("    JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney, sortInvoicesForList } from '../utils/invoices.js';"));
+    assert.ok(s.includes("const rows = sortInvoicesForList(list.filter(i => filter === 'all' || i.status === filter));"), 'the Invoices view runs the list order');
+    assert.ok(s.includes("opacity: inv.status === 'void' ? 0.55 : 1"), 'a void row is dimmed');
+    assert.ok(s.includes("style={{ width: '100%', marginTop: 2, background: T.surface2, border: `1px solid ${T.borderStrong}`, color: T.ink, padding: '8px 12px', fontSize: 12.5, fontWeight: 600,"), '+ Add line is a full-width button, not a faint dashed chip');
     for (const c of ['InvoiceStatusPill', 'InvoiceLineEditor', 'InvoiceTotals', 'JobInvoicePanel', 'InvoicesView']) {
         assert.ok(new RegExp(`^const ${c} = \\(`, 'm').test(s), `${c} is declared at module scope`);
     }

@@ -2803,6 +2803,21 @@ const mutations = [
         'netlify/functions/quote-to-job.mjs',
         '                ...quoteLineToJobItem(li, i, byId.get(li?.productId) || null, types),',
         '                ...quoteLineToJobItem(li, i, byId.get(li?.productId) || null),'],
+
+    ['invoice list: void no longer sinks to the bottom',
+        'src/utils/invoices.js',
+        'const LIST_RANK = Object.freeze({ issued: 0, draft: 1, paid: 2, void: 3 });',
+        'const LIST_RANK = Object.freeze({ issued: 0, draft: 1, paid: 2, void: 0 });'],
+
+    ['invoice list: owed invoices stop leading with the soonest due',
+        'src/utils/invoices.js',
+        '            if (da !== db) return da < db ? -1 : 1;',
+        '            if (da !== db) return da < db ? 1 : -1;'],
+
+    ['invoice list: the Invoices view shows the unsorted list',
+        'src/Tabs/DispatchTab.jsx',
+        "    const rows = sortInvoicesForList(list.filter(i => filter === 'all' || i.status === filter));",
+        "    const rows = list.filter(i => filter === 'all' || i.status === filter);"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ import { to12h } from '../utils/customerNotifications.js';
 import { planWeekDrop } from '../utils/weekDrop.js';
 // Quote → job → invoice (state §0.149): the vocabulary, the arithmetic and the transitions.
 import { INVOICE_STATUSES, invoiceStatusLabel, invoiceTotals, cleanInvoiceLines, isInvoiceEditable, isLiveInvoice,
-    JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney } from '../utils/invoices.js';
+    JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney, sortInvoicesForList } from '../utils/invoices.js';
 import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 import { T as TOKENS } from '../tokens.js';
 
@@ -3714,7 +3714,7 @@ const InvoiceLineEditor = ({ lines, onChange }) => {
                 </div>
             ))}
             <button onClick={() => onChange([...lines, { description: '', itemType: 'part', quantity: 1, unitPrice: 0, taxable: true }])}
-                style={{ background: 'transparent', border: `1px dashed ${T.border}`, color: T.inkMid, padding: '5px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                style={{ width: '100%', marginTop: 2, background: T.surface2, border: `1px solid ${T.borderStrong}`, color: T.ink, padding: '8px 12px', fontSize: 12.5, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
                 + Add line
             </button>
         </div>
@@ -3927,8 +3927,9 @@ const JobInvoicePanel = ({ job, showConfirm, onJobMirror }) => {
 };
 
 // ── Invoices view (state §0.149) ──────────────────────────────────────────────
-// Every invoice in the org, newest first, with what is outstanding and what was
-// paid. Read-only here: the actions live on the job, so a row opens its job.
+// Every invoice in the org — owed first (soonest due on top), then drafts, paid,
+// and void last and dimmed (sortInvoicesForList) — with what is outstanding and
+// what was paid. Read-only here: the actions live on the job, so a row opens its job.
 const InvoicesView = ({ customers, jobsRaw, onOpenJob }) => {
     const [list,    setList]    = React.useState([]);
     const [loading, setLoading] = React.useState(true);
@@ -3955,7 +3956,7 @@ const InvoicesView = ({ customers, jobsRaw, onOpenJob }) => {
 
     const customerName = (id) => (customers || []).find(c => c.id === id)?.name || '—';
     const jobNumber    = (id) => (jobsRaw || []).find(j => j.id === id)?.jobNumber || '—';
-    const rows = list.filter(i => filter === 'all' || i.status === filter);
+    const rows = sortInvoicesForList(list.filter(i => filter === 'all' || i.status === filter));
     const sum = (status) => list.filter(i => i.status === status).reduce((s, i) => s + (Number(i.total) || 0), 0);
 
     return (
@@ -3984,7 +3985,7 @@ const InvoicesView = ({ customers, jobsRaw, onOpenJob }) => {
                     {rows.map(inv => (
                         <div key={inv.id} onClick={() => inv.jobId && onOpenJob(inv.jobId)} role="button" tabIndex={0}
                             onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && inv.jobId) { e.preventDefault(); onOpenJob(inv.jobId); } }}
-                            style={{ display: 'grid', gridTemplateColumns: '130px 1fr 130px 100px 100px 110px 90px', gap: 8, padding: '9px 12px', borderBottom: `1px solid ${T.border}`, fontSize: 12.5, fontFamily: T.sans, color: T.inkMid, cursor: inv.jobId ? 'pointer' : 'default', alignItems: 'center' }}
+                            style={{ display: 'grid', gridTemplateColumns: '130px 1fr 130px 100px 100px 110px 90px', gap: 8, padding: '9px 12px', borderBottom: `1px solid ${T.border}`, fontSize: 12.5, fontFamily: T.sans, color: T.inkMid, cursor: inv.jobId ? 'pointer' : 'default', alignItems: 'center', opacity: inv.status === 'void' ? 0.55 : 1 }}
                             onMouseEnter={e => { e.currentTarget.style.background = T.surface2; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                             <span style={{ fontFamily: T.mono, color: T.ink }}>{inv.invoiceNumber}</span>
