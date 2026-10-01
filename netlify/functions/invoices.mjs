@@ -15,12 +15,15 @@
 //
 // Every write re-mirrors the job's three invoice_* columns from the job's live
 // invoice (guide §18b44) and returns the job row so the client adopts it.
-// Technicians see none of this (403 on every method); ReadOnly reads.
+// Technicians see none of this (403 on every method); ReadOnly reads. Behind the
+// ONE Dispatch gate (§0.152): the module on, and Admin, Manager, Dispatcher — a
+// sales rep only where the org lets reps use Dispatch.
 import { db } from '../../db/index.js';
 import { invoices, quotes, dispatchJobs, dispatchJobLineItems } from '../../db/schema.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { verifyAuth, requireWrite, isTechnician, isAdmin } from './auth.mjs';
+import { verifyAuth, isTechnician, isAdmin } from './auth.mjs';
+import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 import { normaliseJob } from './dispatch-jobs.mjs';
 import {
@@ -96,8 +99,8 @@ export const handler = async (event) => {
     if (auth.error) return reply(auth.status || 401, { error: auth.error });
     const { orgId, userId } = auth;
     if (isTechnician(auth.userRole)) return reply(403, { error: 'Technicians cannot view invoices.' });
-    const forbidden = requireWrite(auth, event, headers);
-    if (forbidden) return forbidden;
+    const gate = await dispatchGate(auth, event, headers);
+    if (gate.response) return gate.response;
 
     const params = event.queryStringParameters || {};
 

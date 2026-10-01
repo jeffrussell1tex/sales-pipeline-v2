@@ -59,6 +59,28 @@ export function crmReadScope(role) {
     return 'own';
 }
 
+// What a role may do in Dispatch (§0.152 — Jeff: sales reps "should not have
+// dispatch power"). ONE rule for the server gate (_dispatchGate.mjs, every
+// dispatch-* endpoint, invoices, quote → job) and the client (the tab, the nav,
+// the redirect, the quote card's Create button). `extra` is the org's settings
+// (the server's settings.extra, the client's settings — the same two keys):
+//   'none'  the Dispatch module is off, or a sales rep in an org whose reps do
+//           not use Dispatch (repsCanUseDispatch, OFF when absent), or a value
+//           that is not a role
+//   'full'  Admin, Manager, Dispatcher — and a rep where the org switch is on
+//   'tech'  a Technician: reads, and writes only through the one opt-in
+//           (dispatch-jobs, their own jobs' progress)
+//   'read'  ReadOnly: reads, writes nothing
+export function dispatchAccessOf(role, extra) {
+    if (!extra?.dispatchEnabled) return 'none';
+    if (role === 'Admin' || role === 'Manager' || role === 'Dispatcher') return 'full';
+    if (role === 'Technician') return 'tech';
+    if (role === 'ReadOnly') return 'read';
+    if (role === 'User') return extra?.repsCanUseDispatch === true ? 'full' : 'none';
+    return 'none';
+}
+export const canUseDispatch = (role, extra) => dispatchAccessOf(role, extra) !== 'none';
+
 // Not sales reps: the report rosters that count reps (per-rep averages, the
 // activity rhythm grid, the team quota, the Rep slicer) leave these out. A
 // value that is not here — 'User', an absent role, a legacy string — counts,

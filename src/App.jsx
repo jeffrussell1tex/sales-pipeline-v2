@@ -5,7 +5,7 @@ import { safeStorage, dbFetch, waitForToken } from './utils/storage';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { isoLocal } from './utils/dateLocal';
-import { isDispatcher } from './utils/roles.js';
+import { isDispatcher, canUseDispatch } from './utils/roles.js';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import { useSettings } from './hooks/useSettings';
 import { useOpportunities } from './hooks/useOpportunities';
@@ -1385,11 +1385,28 @@ dbFetch('/.netlify/functions/users?me=true')
         }
     }, [settings.quotesEnabled]);
 
+    // Who may see Dispatch is ONE rule (canUseDispatch, §0.152): the module on, and
+    // a role that runs it — a sales rep only where the org lets reps use Dispatch.
+    // It runs when the switches or the role change; nobody is on the tab before the
+    // settings load, because the tab is not offered until the rule says yes.
     useEffect(() => {
-        if (settings.dispatchEnabled === false && activeTab === 'dispatch') {
+        if (activeTab === 'dispatch' && !canUseDispatch(userRole, settings)) {
             setActiveTab('home');
         }
-    }, [settings.dispatchEnabled]);
+    }, [settings.dispatchEnabled, settings.repsCanUseDispatch, userRole]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+    // A Dispatcher lands on Dispatch — the FIRST time the rule says they may use it
+    // (the role from Clerk AND the org's settings loaded with the module on), and
+    // only from Home; after that the tabs are theirs to choose (the CRM is theirs to
+    // read). Not keyed on settingsReady: that is a ref, always truthy, flipped after a
+    // timeout, and never re-runs an effect — the first cut landed against the default
+    // settings (module off), marked itself done and never tried again.
+    const dispatcherLandedRef = useRef(false);
+    useEffect(() => {
+        if (dispatcherLandedRef.current || !isDispatcher(userRole) || !canUseDispatch(userRole, settings)) return;
+        dispatcherLandedRef.current = true;
+        if (activeTab === 'home') setActiveTab('dispatch');
+    }, [userRole, settings.dispatchEnabled]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     // Redirect any user who had 'opportunities' stored in localStorage to 'pipeline'
     useEffect(() => {
@@ -1829,7 +1846,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 <button
                     className={`nav-tab ${activeTab === 'dispatch' ? 'active' : ''}`}
                     onClick={() => setActiveTab('dispatch')}
-                    style={{ display: settings.dispatchEnabled ? '' : 'none' }}
+                    style={{ display: canUseDispatch(userRole, settings) ? '' : 'none' }}
                 >
                     DISPATCH
                 </button>
@@ -1910,7 +1927,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 </ErrorBoundary>
             )}
 
-            {activeTab === 'dispatch' && settings.dispatchEnabled !== false && (
+            {activeTab === 'dispatch' && canUseDispatch(userRole, settings) && (
                 <ErrorBoundary tabName="Dispatch">
                     <DispatchTab />
                 </ErrorBoundary>

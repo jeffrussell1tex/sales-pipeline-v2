@@ -25,7 +25,7 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
         verifyAuth: async (event) => {
             const orgId = event.headers?.['x-test-org'];
             if (!orgId) return { error: 'no test org', status: 401 };
-            const userRole = event.headers?.['x-test-role'] || 'User';
+            const userRole = event.headers?.['x-test-role'] || 'Dispatcher';   // the role that runs Dispatch (§0.152)
             return { userId: 'clerk_' + orgId, orgId, userRole, managedReps: [], error: null };
         },
         isAppRole:    (r) => ['Admin', 'Manager', 'User', 'ReadOnly', 'Technician'].includes(r),
@@ -114,8 +114,9 @@ before(async () => {
     await assertTestSchema(db);
     await cleanup();
     await db.insert(settings).values([
-        { id: 'settings_' + ORG_A, orgId: ORG_A, companyName: 'Acme <HVAC> & Sons', extra: { customerNotifications: { enabled: true } } },
-        { id: 'settings_' + ORG_B, orgId: ORG_B, companyName: 'Beta Plumbing', extra: { customerNotifications: { enabled: false } } },
+        // Both run Dispatch — the one gate refuses a workspace with the module off (§0.152).
+        { id: 'settings_' + ORG_A, orgId: ORG_A, companyName: 'Acme <HVAC> & Sons', extra: { dispatchEnabled: true, customerNotifications: { enabled: true } } },
+        { id: 'settings_' + ORG_B, orgId: ORG_B, companyName: 'Beta Plumbing', extra: { dispatchEnabled: true, customerNotifications: { enabled: false } } },
     ]);
     await db.insert(dispatchCustomers).values([
         { id: CUST_A, orgId: ORG_A, name: 'Itest Customer A', contactName: 'Pat', contactEmail: 'pat@itest-notify.local', contactPhone: '+15551234567', customerType: 'commercial', serviceAddress: '1 Main St', serviceCity: 'Austin', serviceState: 'TX' },

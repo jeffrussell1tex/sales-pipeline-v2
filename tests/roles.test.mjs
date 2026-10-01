@@ -104,7 +104,7 @@ test('the directory: a whole-org reader gets role, team and territory; a rep sti
 test('the CRM tabs: canEdit is canEditCrm — a Dispatcher and ReadOnly see no edit controls', () => {
     for (const tab of ['AccountsTab', 'ContactsTab', 'HomeTab', 'PipelineTab', 'QuotesTab', 'TasksTab']) {
         const s = code(read(`src/Tabs/${tab}.jsx`));
-        assert.ok(/import \{ canEditCrm(, isDispatcher)? \} from '\.\.\/utils\/roles\.js';/.test(s), tab);
+        assert.ok(/import \{ canEditCrm[^}]*\} from '\.\.\/utils\/roles\.js';/.test(s), tab);
         assert.ok(/const canEdit +=\s*canEditCrm\(userRole\);/.test(s), tab);
         assert.ok(!/userRole === 'ReadOnly'|\bisReadOnly\b/.test(s), `${tab}: no second read-only test`);
     }

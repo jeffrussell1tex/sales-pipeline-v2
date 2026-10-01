@@ -27,11 +27,11 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
         verifyAuth: async (event) => {
             const orgId = event.headers?.['x-test-org'];
             if (!orgId) return { error: 'no test org', status: 401 };
-            const userRole = event.headers?.['x-test-role'] || 'User';
+            const userRole = event.headers?.['x-test-role'] || 'Dispatcher';   // the role that runs Dispatch (§0.152)
             const userId = event.headers?.['x-test-user'] || 'clerk_' + orgId;
             return { userId, orgId, userRole, managedReps: [], error: null };
         },
-        isAppRole:    (r) => ['Admin', 'Manager', 'User', 'ReadOnly', 'Technician'].includes(r),
+        isAppRole:    (r) => ['Admin', 'Manager', 'User', 'ReadOnly', 'Technician', 'Dispatcher'].includes(r),
         isAdmin:      (role) => role === 'Admin',
         isManager:    (role) => role === 'Manager',
         canSeeAll:    (role) => role === 'Admin' || role === 'Manager',
@@ -113,10 +113,11 @@ before(async () => {
         // Org A's Admin defined a custom type (Equipment → material) and left the built-ins alone.
         { id: 'settings_' + ORG_A, orgId: ORG_A, companyName: 'Itest Invoicing A', extra: { dispatchEnabled: true, productTypes: [{ id: 'pt_equip', name: 'Equipment', lineKind: 'material' }] } },
         { id: 'settings_' + ORG_B, orgId: ORG_B, companyName: 'Itest CRM-only B', extra: { dispatchEnabled: false } },
-        { id: 'settings_' + ORG_C, orgId: ORG_C, companyName: 'Itest Dispatch C', extra: { dispatchEnabled: true } },
+        // Org C opens Dispatch to its sales reps (§0.152) — the one org where a rep gets past the gate.
+        { id: 'settings_' + ORG_C, orgId: ORG_C, companyName: 'Itest Dispatch C', extra: { dispatchEnabled: true, repsCanUseDispatch: true } },
     ]);
     await db.insert(users).values([
-        { id: 'usr_itest_inv_a', clerkUserId: DISPATCHER, name: 'Itest Dispatcher', email: 'inv-dispatcher@itest.local', role: 'User', orgId: ORG_A },
+        { id: 'usr_itest_inv_a', clerkUserId: DISPATCHER, name: 'Itest Dispatcher', email: 'inv-dispatcher@itest.local', role: 'Dispatcher', orgId: ORG_A },
     ]);
     invalidateRoster();
     await db.insert(products).values([
@@ -206,7 +207,7 @@ test('a Draft quote is refused; an org with Dispatch off is refused before its q
     assert.match(draft.body.error, /Only an accepted quote becomes a job — this one is Draft/);
 
     const off = parse(await call(toJob, 'POST', ORG_B, { body: { quoteId: Q_B } }));
-    assert.equal(off.status, 422);
+    assert.equal(off.status, 403, 'the one Dispatch gate answers (§0.152) — it was a local 422');
     assert.match(off.body.error, /Dispatch is not enabled/);
     assert.equal((await db.select().from(dispatchJobs).where(eq(dispatchJobs.orgId, ORG_B))).length, 0, 'a CRM-only org grew no dispatch rows');
 
@@ -219,6 +220,16 @@ test('a Draft quote is refused; an org with Dispatch off is refused before its q
     assert.equal(parse(await call(toJob, 'POST', ORG_A, { body: { quoteId: Q_A2 }, role: 'Technician' })).status, 403);
     assert.equal(parse(await call(toJob, 'GET', ORG_A, { params: { quoteId: Q_ACCEPTED }, role: 'Technician' })).status, 403);
     assert.equal(parse(await call(toJob, 'POST', ORG_A, { body: { quoteId: Q_A2 }, role: 'ReadOnly' })).status, 403);
+    // A sales rep (§0.152, Jeff: reps "should not have dispatch power"): org A keeps reps out, so
+    // creating the job is refused by name — and her quote card still reads the job's status.
+    const repPost = parse(await call(toJob, 'POST', ORG_A, { body: { quoteId: Q_A2 }, role: 'User' }));
+    assert.equal(repPost.status, 403);
+    assert.match(repPost.body.error, /not open to sales reps/);
+    const repGet = parse(await call(toJob, 'GET', ORG_A, { params: { quoteId: Q_ACCEPTED }, role: 'User' }));
+    assert.equal(repGet.status, 200, 'the card’s read-only status');
+    assert.ok(repGet.body.job?.jobNumber, 'the job she handed off');
+    // Org C opens Dispatch to reps: the gate lets her through, and org A's quote is a 404 there.
+    assert.equal(parse(await call(toJob, 'POST', ORG_C, { body: { quoteId: Q_ACCEPTED }, role: 'User' })).status, 404);
     assert.equal(parse(await call(toJob, 'POST', ORG_A, { body: {} })).status, 400);
 });
 
@@ -355,15 +366,16 @@ test('void then a fresh invoice on the same job; delete is Admin-only and draft-
     assert.equal((await auditRows(ORG_A, 'invoice.deleted')).length, 1);
 });
 
-test('org B lists nothing of org A’s and cannot read, edit or delete its rows; a Technician sees no invoice at all; a ReadOnly user reads and cannot write', async () => {
-    const list = parse(await call(invoicesFn, 'GET', ORG_B));
+test('org C lists nothing of org A’s and cannot read, edit or delete its rows; org B (Dispatch off) is refused outright; a Technician sees no invoice at all; a ReadOnly user reads and cannot write; a rep reads only where the org opens Dispatch to reps', async () => {
+    assert.equal(parse(await call(invoicesFn, 'GET', ORG_B)).status, 403, 'a CRM-only org has no invoices — the gate refuses (§0.152)');
+    const list = parse(await call(invoicesFn, 'GET', ORG_C));
     assert.equal(list.status, 200);
     assert.deepEqual(list.body.invoices, []);
-    assert.equal(parse(await call(invoicesFn, 'GET', ORG_B, { params: { id: invA.id } })).status, 404);
-    assert.equal(parse(await call(invoicesFn, 'GET', ORG_B, { params: { jobId: jobA.id } })).body.invoices.length, 0);
-    assert.equal(parse(await call(invoicesFn, 'PUT', ORG_B, { params: { id: invA.id }, body: { notes: 'x' } })).status, 404);
-    assert.equal(parse(await call(invoicesFn, 'DELETE', ORG_B, { params: { id: invA.id }, role: 'Admin' })).status, 404);
-    assert.equal(parse(await call(invoicesFn, 'POST', ORG_B, { body: { jobId: jobA.id } })).status, 404, 'org A’s job is not org B’s to invoice');
+    assert.equal(parse(await call(invoicesFn, 'GET', ORG_C, { params: { id: invA.id } })).status, 404);
+    assert.equal(parse(await call(invoicesFn, 'GET', ORG_C, { params: { jobId: jobA.id } })).body.invoices.length, 0);
+    assert.equal(parse(await call(invoicesFn, 'PUT', ORG_C, { params: { id: invA.id }, body: { notes: 'x' } })).status, 404);
+    assert.equal(parse(await call(invoicesFn, 'DELETE', ORG_C, { params: { id: invA.id }, role: 'Admin' })).status, 404);
+    assert.equal(parse(await call(invoicesFn, 'POST', ORG_C, { body: { jobId: jobA.id } })).status, 404, 'org A’s job is not org C’s to invoice');
     assert.equal((await db.select().from(invoices).where(eq(invoices.id, invA.id)))[0].notes, 'Thank you', 'untouched');
 
     assert.equal(parse(await call(invoicesFn, 'GET', ORG_A, { role: 'Technician' })).status, 403);
@@ -371,4 +383,6 @@ test('org B lists nothing of org A’s and cannot read, edit or delete its rows;
     assert.equal(ro.status, 200);
     assert.equal(ro.body.invoices.length, 2, 'the paid one and the void one');
     assert.equal(parse(await call(invoicesFn, 'POST', ORG_A, { body: { jobId: jobA2.id }, role: 'ReadOnly' })).status, 403);
+    assert.equal(parse(await call(invoicesFn, 'GET', ORG_A, { role: 'User' })).status, 403, 'a rep in org A, which keeps reps out of Dispatch');
+    assert.equal(parse(await call(invoicesFn, 'GET', ORG_C, { role: 'User' })).status, 200, 'a rep in org C, which opens it');
 });

@@ -21,7 +21,7 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
         verifyAuth: async (event) => {
             const orgId = event.headers?.['x-test-org'];
             if (!orgId) return { error: 'no test org', status: 401 };
-            const userRole = event.headers?.['x-test-role'] || 'User';
+            const userRole = event.headers?.['x-test-role'] || 'Dispatcher';   // the role that runs Dispatch (§0.152)
             const userId = event.headers?.['x-test-user'] || 'clerk_' + orgId;
             return { userId, orgId, userRole, managedReps: [], error: null };
         },
@@ -43,7 +43,7 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
 
 const { handler } = await import('../../netlify/functions/dispatch-plan-visits.mjs');
 const { db } = await import('../../db/index.js');
-const { dispatchPlanVisits, dispatchCustomers, users } = await import('../../db/schema.js');
+const { dispatchPlanVisits, dispatchCustomers, users, settings } = await import('../../db/schema.js');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 const { eq } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
@@ -67,6 +67,7 @@ const cleanup = async () => {
         await db.delete(dispatchPlanVisits).where(eq(dispatchPlanVisits.orgId, o));
         await db.delete(dispatchCustomers).where(eq(dispatchCustomers.orgId, o));
         await db.delete(users).where(eq(users.orgId, o));
+        await db.delete(settings).where(eq(settings.orgId, o));
     }
 };
 
@@ -78,7 +79,12 @@ before(async () => {
         { id: CUST_B, orgId: ORG_B, name: 'Itest Plant B', customerType: 'commercial', servicePlanId: PLAN, planStartDate: '2026-01-01' },
     ]);
     await db.insert(users).values([
-        { id: 'usr_itest_pv_dispatcher', orgId: ORG_A, clerkUserId: DISPATCHER, name: 'Itest Dispatcher', email: 'dispatcher@itest-pv.local', role: 'User' },
+        { id: 'usr_itest_pv_dispatcher', orgId: ORG_A, clerkUserId: DISPATCHER, name: 'Itest Dispatcher', email: 'dispatcher@itest-pv.local', role: 'Dispatcher' },
+    ]);
+    // Both orgs run Dispatch (the one gate refuses a workspace with the module off — §0.152).
+    await db.insert(settings).values([
+        { id: 'settings_' + ORG_A, orgId: ORG_A, extra: { dispatchEnabled: true } },
+        { id: 'settings_' + ORG_B, orgId: ORG_B, extra: { dispatchEnabled: true } },
     ]);
     invalidateRoster();
 });
@@ -136,6 +142,14 @@ test('another org\'s customer is a 404 and writes nothing; org B lists nothing o
     const listB = parse(await call('GET', ORG_B));
     assert.equal(listB.status, 200);
     assert.deepEqual(listB.body.visits, []);
+});
+
+test('a sales rep is refused Dispatch by name while the org keeps reps out (§0.152)', async () => {
+    const r = parse(await call('GET', ORG_A, { role: 'User' }));
+    assert.equal(r.status, 403);
+    assert.match(r.body.error, /not open to sales reps/);
+    assert.equal(parse(await call('POST', ORG_A, { role: 'User', body: { customerId: CUST_A, planId: PLAN, dueDate: '2026-10-01', action: 'skipped' } })).status, 403);
+    assert.equal((await rowsOf(ORG_A)).length, 2, 'nothing was written');
 });
 
 test('a Technician may read the exceptions but not record one', async () => {

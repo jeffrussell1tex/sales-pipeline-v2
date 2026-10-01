@@ -6,7 +6,8 @@ import {
     dispatchTechnicians,
 } from '../../db/schema.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
+import { verifyAuth, isTechnician } from './auth.mjs';
+import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, withNumberRetry, getCallerName, auditAs } from './_lib.mjs';
 // Customer-facing notifications (state §0.111): decided and sent AFTER the row
 // is written, from the stored before/after rows; never changes the response.
@@ -168,12 +169,12 @@ export const handler = async (event) => {
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { orgId, userId } = auth;
 
-    // Technicians are the one role allowed past requireWrite here, and only so
+    // Technicians are the one role allowed past the gate's write check here, and only so
     // that the narrow per-field path below can run. Every other endpoint denies
     // them by default.
     const tech = isTechnician(auth.userRole);
-    const forbidden = requireWrite(auth, event, headers, { allowTechnician: true });
-    if (forbidden) return forbidden;
+    const gate = await dispatchGate(auth, event, headers, { allowTechnician: true });
+    if (gate.response) return gate.response;
 
     const myTechId = tech ? await resolveTechnicianId(orgId, userId) : null;
     if (tech && !myTechId) {

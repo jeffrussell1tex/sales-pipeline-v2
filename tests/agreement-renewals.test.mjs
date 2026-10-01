@@ -97,10 +97,10 @@ test('service plans: renewalLeadDays is read, created and updated; the panel off
     assert.ok(schema.includes("uniqueIndex('dispatch_plan_visits_occurrence_uq').on(t.orgId, t.customerId, t.planId, t.dueDate),"));
 });
 
-test('dispatch-plan-visits: one row per occurrence, the customer must be this org\'s, dates are validated, writes are role-gated', () => {
+test('dispatch-plan-visits: one row per occurrence, the customer must be this org\'s, dates are validated, behind the one Dispatch gate', () => {
     const s = code(read('netlify/functions/dispatch-plan-visits.mjs'));
-    assert.ok(s.includes("import { verifyAuth, requireWrite } from './auth.mjs';"));
-    assert.ok(s.includes('const forbidden = requireWrite(auth, event, headers);'));
+    assert.ok(s.includes("import { dispatchGate } from './_dispatchGate.mjs';"));
+    assert.ok(s.includes('const gate = await dispatchGate(auth, event, headers);') && s.includes('if (gate.response) return gate.response;'), 'the one Dispatch gate (§0.152)');
     assert.ok(s.includes("if (!cust) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Customer not found' }) };"), 'another org\'s customer is a 404, never a row');
     assert.ok(s.includes('.where(and(eq(dispatchCustomers.id, data.customerId), eq(dispatchCustomers.orgId, orgId)));'), 'the customer lookup is org-scoped');
     assert.ok(s.includes('target: [dispatchPlanVisits.orgId, dispatchPlanVisits.customerId, dispatchPlanVisits.planId, dispatchPlanVisits.dueDate],'), 'a second decision about the same occurrence replaces the first');

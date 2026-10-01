@@ -3,7 +3,7 @@ import { OrganizationSwitcher, useOrganizationList, useAuth } from '@clerk/clerk
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
-import { isDispatcher } from '../../utils/roles.js';
+import { isDispatcher, canUseDispatch } from '../../utils/roles.js';
 import { T } from '../../tokens.js';
 
 // ── Design tokens ────────────────────────────────────────────
@@ -101,7 +101,9 @@ export default function AppHeader({
         { id: 'contacts',     label: 'Contacts'     },
         ...(settings.leadsEnabled  !== false ? [{ id: 'leads',        label: 'Leads'        }] : []),
         ...(settings.quotesEnabled !== false ? [{ id: 'quotes',       label: 'Quotes'       }] : []),
-        ...(settings.dispatchEnabled       ? [{ id: 'dispatch',     label: 'Dispatch'     }] : []),
+        // The module on AND a role that runs it (canUseDispatch, §0.152) — not every
+        // role whenever the module is on: a sales rep only where the org opens it.
+        ...(canUseDispatch(userRole, settings) ? [{ id: 'dispatch',     label: 'Dispatch'     }] : []),
         { id: 'documents',    label: 'Documents'    },
         { id: 'reports',      label: 'Reports'      },
         ...((isAdmin || isManager) ? [{ id: 'salesManager', label: 'Sales Manager' }] : []),

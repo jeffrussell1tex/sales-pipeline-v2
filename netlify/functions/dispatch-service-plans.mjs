@@ -1,7 +1,8 @@
 import { db } from '../../db/index.js';
 import { dispatchServicePlans, dispatchCustomers } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { verifyAuth, requireWrite } from './auth.mjs';
+import { verifyAuth } from './auth.mjs';
+import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
 
 const headers = {
@@ -87,8 +88,11 @@ export const handler = async (event) => {
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { orgId } = auth;
 
-    const forbidden = requireWrite(auth, event, headers);
-    if (forbidden) return forbidden;
+    // The one Dispatch gate (§0.152, guide §18b46): the module switch, then the
+    // role — a sales rep only where the org lets reps use Dispatch; ReadOnly and a
+    // Technician read. It replaces the write-only role gate (which let any rep write).
+    const gate = await dispatchGate(auth, event, headers);
+    if (gate.response) return gate.response;
 
     const params = event.queryStringParameters || {};
 

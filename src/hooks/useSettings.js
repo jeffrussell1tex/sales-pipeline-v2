@@ -87,6 +87,7 @@ const DEFAULT_SETTINGS = {
     aiReportPromptsEnabled: false,   // §0.141 — Claude reads report prompts only when an Admin turns it on
     leadsEnabled: true,
     dispatchEnabled: false,
+    repsCanUseDispatch: false,     // §0.152 — sales reps use Dispatch only when an Admin turns this on
     dispatchSkills: [],
     dispatchCerts: [],
     dispatchLicenses: ['Apprentice','Journeyman','Master','Lead'],

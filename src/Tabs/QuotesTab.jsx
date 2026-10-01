@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../AppContext';
-import { canEditCrm, isDispatcher } from '../utils/roles.js';
+import { canEditCrm, isDispatcher, dispatchAccessOf } from '../utils/roles.js';
 import { dbFetch } from '../utils/storage';
 import { T } from '../tokens.js';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
@@ -793,7 +793,7 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
                             {jobBusy ? 'Creating job…' : 'Create dispatch job →'}
                         </button>
                     ) : (
-                        <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>No job yet. A rep or dispatcher creates it from here.</div>
+                        <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>No job yet — whoever runs Dispatch creates it from here.</div>
                     )}
                     {jobError && <div role="alert" style={{ marginTop: 6, fontSize: 11.5, color: T.danger, fontFamily: T.sans }}>{jobError}</div>}
                 </div>
@@ -1283,6 +1283,10 @@ export default function QuotesTab() {
     // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
     // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.
     const canEdit   = canEditCrm(userRole);
+    // Creating the job is Dispatch work (§0.152): whoever runs Dispatch — Admin,
+    // Manager, a Dispatcher, a rep only where the org opens Dispatch to reps. A rep
+    // without it still sees her quote's job and invoice status (the card's GET).
+    const canCreateJob = dispatchAccessOf(userRole, settings) === 'full';
 
     // ── Tab state ─────────────────────────────────────────────
     const [subTab,             setSubTabRaw]        = useState(() => localStorage.getItem('tab:quotes:subTab') || 'deals');
@@ -1854,7 +1858,7 @@ export default function QuotesTab() {
                                         )}
                                         {activeQuote && <ConfiguratorPanel quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving}
                                             onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled}
-                                            job={linkedJob} jobLoading={jobLoading} jobBusy={jobBusy} jobError={jobError} onCreateJob={canEdit ? handleCreateJob : null} />}
+                                            job={linkedJob} jobLoading={jobLoading} jobBusy={jobBusy} jobError={jobError} onCreateJob={canCreateJob ? handleCreateJob : null} />}
                                     </div>
                                     {activeQuote && <div style={{ marginTop: 14 }}><QuoteActivityLog quote={activeQuote} /></div>}
                                 </>

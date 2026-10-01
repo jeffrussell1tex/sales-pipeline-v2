@@ -1027,17 +1027,19 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     const lbl = { display:'block', fontSize:11, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:5, fontFamily:T.sans };
 
     // Derive effective permissions from role
+    // A rep's Dispatch cell is the org's switch (§0.152), not a fixed word.
+    const repDispatch = !settings?.dispatchEnabled ? 'No access' : settings?.repsCanUseDispatch ? 'Full' : 'No access';
     const permMap = {
-        'Admin':    { Leads:'All',      Accounts:'All',      Opportunities:'All',      Quotes:'All + approve', Reports:'All',  Settings:'Full access' },
-        'Manager':  { Leads:'Team',     Accounts:'Team',     Opportunities:'Team',     Quotes:'Own + approve', Reports:'Team', Settings:'No access' },
-        'User':     { Leads:'Own only', Accounts:'Own only', Opportunities:'Own only', Quotes:'Own + create',  Reports:'Own',  Settings:'No access' },
-        'ReadOnly': { Leads:'View only',Accounts:'View only',Opportunities:'View only',Quotes:'View only',     Reports:'View', Settings:'No access' },
+        'Admin':    { Leads:'All',      Accounts:'All',      Opportunities:'All',      Quotes:'All + approve', Reports:'All',  Settings:'Full access', Dispatch:'Full' },
+        'Manager':  { Leads:'Team',     Accounts:'Team',     Opportunities:'Team',     Quotes:'Own + approve', Reports:'Team', Settings:'No access', Dispatch:'Full' },
+        'User':     { Leads:'Own only', Accounts:'Own only', Opportunities:'Own only', Quotes:'Own + create',  Reports:'Own',  Settings:'No access', Dispatch: repDispatch },
+        'ReadOnly': { Leads:'View only',Accounts:'View only',Opportunities:'View only',Quotes:'View only',     Reports:'View', Settings:'No access', Dispatch:'View' },
         // Technician was missing entirely, so a Technician's summary silently
         // rendered the Sales Rep row — describing CRM write access they do not have.
-        'Technician':{Leads:'No access',Accounts:'No access',Opportunities:'No access',Quotes:'No access',    Reports:'No access', Settings:'No access' },
+        'Technician':{Leads:'No access',Accounts:'No access',Opportunities:'No access',Quotes:'No access',    Reports:'No access', Settings:'No access', Dispatch:'Own jobs' },
         // A Dispatcher reads the whole CRM and changes none of it (§0.151): the
         // server's crmReadScope is 'all' for them and requireWrite refuses every write.
-        'Dispatcher':{Leads:'View all', Accounts:'View all', Opportunities:'View all', Quotes:'View all',     Reports:'View all', Settings:'No access' },
+        'Dispatcher':{Leads:'View all', Accounts:'View all', Opportunities:'View all', Quotes:'View all',     Reports:'View all', Settings:'No access', Dispatch:'Full' },
     };
     // An unknown role falls back to the rep row because that is what the SERVER
     // does with it (auth.mjs treats an absent role as 'User' and refuses an
@@ -1046,7 +1048,7 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     const perms = permMap[form.role] || permMap['User'];
 
     const statusColor = (role) => {
-        const ok = ['All','Team','Own only','Own + approve','Own + create'];
+        const ok = ['All','Team','Own only','Own + approve','Own + create','Full'];
         if (ok.some(s => role?.startsWith(s.split(' ')[0]))) return T.ok;
         if (role === 'No access') return T.danger;
         return T.warn;

@@ -174,6 +174,9 @@ export const handler = async (event) => {
                 // Sales Manager coaching notes — Manager-writable (see the PUT gate).
                 quotesEnabled:        row.extra?.quotesEnabled         ?? true,
                 dispatchEnabled:      row.extra?.dispatchEnabled       ?? false,
+                // May sales reps use Dispatch (§0.152)? OFF when absent — Jeff: reps "should
+                // not have dispatch power". Both halves; dispatchAccessOf reads it.
+                repsCanUseDispatch:   row.extra?.repsCanUseDispatch    ?? false,
                 dispatchSkills:       row.extra?.dispatchSkills        || [],
                 // Dispatch premises segment for a service customer. Distinct from
                 // `customerTypes` above, which is the CRM account-tier vocabulary.
@@ -333,6 +336,7 @@ export const handler = async (event) => {
                 buyerPersonas:        'buyerPersonas'        in data ? (data.buyerPersonas        || [])   : existingExtra.buyerPersonas        || [],
                 quotesEnabled:        'quotesEnabled'        in data ? !!data.quotesEnabled                : existingExtra.quotesEnabled        ?? true,
                 dispatchEnabled:      'dispatchEnabled'      in data ? !!data.dispatchEnabled               : existingExtra.dispatchEnabled       ?? false,
+                repsCanUseDispatch:   'repsCanUseDispatch'   in data ? !!data.repsCanUseDispatch            : existingExtra.repsCanUseDispatch    ?? false,
                 dispatchSkills:       'dispatchSkills'       in data ? (data.dispatchSkills       || [])   : existingExtra.dispatchSkills        || [],
                 dispatchPropertyTypes: 'dispatchPropertyTypes' in data ? (data.dispatchPropertyTypes || []) : existingExtra.dispatchPropertyTypes || [],
                 dispatchCerts:        'dispatchCerts'        in data ? (data.dispatchCerts        || [])   : existingExtra.dispatchCerts         || [],

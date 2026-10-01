@@ -304,14 +304,15 @@ test('dispatch-jobs.mjs: quoteId is read, never accepted on PUT; the three invoi
 
 // ── quote-to-job.mjs ─────────────────────────────────────────────────────────
 
-test('quote-to-job.mjs: technician 403, the org’s Dispatch switch before any read, the quote read BY ORG, Accepted only, one job per quote, the link written on insert, the audit word', () => {
+test('quote-to-job.mjs: technician 403, the one Dispatch gate (the switch and the role) before any read, the quote read BY ORG, Accepted only, one job per quote, the link written on insert, the audit word', () => {
     const f = code(read('netlify/functions/quote-to-job.mjs'));
     assert.ok(f.includes("import { quoteCanBecomeJob, jobFromQuote, quoteLineToJobItem, resolveCustomerForOpp, cleanProductTypes } from '../../src/utils/invoices.js';"));
     assert.ok(f.includes("if (isTechnician(auth.userRole)) return reply(403, { error: 'Technicians cannot convert quotes.' });"));
-    assert.ok(f.includes('const forbidden = requireWrite(auth, event, headers);'));
-    const gate = f.indexOf('if (!dispatchEnabledFor(extra)) {');
+    assert.ok(!f.includes('requireWrite') && !f.includes('dispatchEnabledFor'), 'one gate, not a local copy of it');
+    const gate = f.indexOf('const gate = await dispatchGate(auth, event, headers);');
     const quoteRead = f.indexOf('await db.select().from(quotes).where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId))).limit(1);');
-    assert.ok(gate !== -1 && quoteRead !== -1 && gate < quoteRead, 'the switch is checked before the quote is read');
+    assert.ok(gate !== -1 && quoteRead !== -1 && gate < quoteRead, 'the gate answers before the quote is read');
+    assert.ok(f.includes('const extra = gate.extra;'), 'the product types come from the gate’s one settings read');
     assert.ok(f.includes("if (!quote) return reply(404, { error: 'Quote not found' });"), 'another org’s quote is a 404, never a probe');
     assert.ok(f.includes('if (!quoteCanBecomeJob(quote)) {'));
     assert.ok(f.includes("if (existing) return reply(409, { error: `${existing.jobNumber || 'A job'} already exists for this quote.`, job: existing });"));
@@ -384,7 +385,8 @@ test('QuotesTab: Customer accepted for an acceptable quote (editors only); the j
     assert.ok(s.includes('Dispatch is off for this workspace.'));
     assert.ok(s.includes("{jobBusy ? 'Creating job…' : 'Create dispatch job →'}"));
     assert.ok(s.includes("onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled}"));
-    assert.ok(s.includes('onCreateJob={canEdit ? handleCreateJob : null} />}'), 'a ReadOnly user is offered no button');
+    assert.ok(s.includes('onCreateJob={canCreateJob ? handleCreateJob : null} />}'), 'only whoever runs Dispatch is offered the button (§0.152)');
+    assert.ok(s.includes("const canCreateJob = dispatchAccessOf(userRole, settings) === 'full';"));
     assert.ok(s.includes("await handleSaveQuote({ ...activeQuote, status: 'Accepted' }, activeQuote);"));
     assert.ok(s.includes("if (res.status === 409 && data.job) { setLinkedJob(data.job); return; }"), 'an existing job is adopted');
     assert.ok(s.includes("if (!res.ok || !data.job) { setJobError(data.error || `The job was not created (HTTP ${res.status}).`); return; }"), 'a refusal is shown, never logged');

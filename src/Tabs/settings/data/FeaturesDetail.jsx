@@ -81,7 +81,7 @@ const FL = ({ label, children }) => (<div><label style={{ display:'block', fontS
 
 export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
-    const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true, dispatchEnabled: false });
+    const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true, dispatchEnabled: false, repsCanUseDispatch: false });
     const [aiSettings, setAiSettings] = React.useState({});
     const [loading,    setLoading]    = React.useState(true);
     const [saving,     setSaving]     = React.useState(false);
@@ -126,6 +126,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 leadsEnabled:   settings.leadsEnabled  !== false,
                 quotesEnabled:  settings.quotesEnabled !== false,
                 dispatchEnabled: settings.dispatchEnabled === true,
+                repsCanUseDispatch: settings.repsCanUseDispatch === true,
             });
             setAiSettings(settings.aiSettings || AI_DEFAULTS);
             setAiPrompts(settings.aiReportPromptsEnabled === true);
@@ -160,6 +161,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 leadsEnabled:   tabViz.leadsEnabled,
                 quotesEnabled:  tabViz.quotesEnabled,
                 dispatchEnabled: tabViz.dispatchEnabled,
+                repsCanUseDispatch: tabViz.repsCanUseDispatch,
                 aiReportPromptsEnabled: aiPrompts,
             };
             if (keyAction === 'set' && apiKeyInput.trim()) payload.anthropicApiKey = apiKeyInput.trim();
@@ -184,6 +186,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 leadsEnabled:   tabViz.leadsEnabled,
                 quotesEnabled:  tabViz.quotesEnabled,
                 dispatchEnabled: tabViz.dispatchEnabled,
+                repsCanUseDispatch: tabViz.repsCanUseDispatch,
                 aiReportPromptsEnabled: aiPrompts,
                 // Reflect the new key state locally. The plaintext is never held
                 // in app state, so the last-4 hint is dropped until the next load.
@@ -288,7 +291,10 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                     { key: 'leadsEnabled',   name: 'Leads tab',     desc: 'Show the Leads tab in the top navigation bar.' },
                     { key: 'quotesEnabled',  name: 'Quotes tab',    desc: 'Show the Quotes tab in the top navigation bar.' },
                     { key: 'dispatchEnabled', name: 'Dispatch tab',  desc: 'Show the Dispatch scheduling tab. For field-service businesses that dispatch technicians to jobs.' },
-                ].map((item, i, arr) => {
+                    // Who runs Dispatch (§0.152): Admins, Managers and Dispatchers always;
+                    // sales reps only when this is on. Shown only while the module is on.
+                    { key: 'repsCanUseDispatch', name: 'Sales reps can use Dispatch', desc: 'Off: Admins, Managers and Dispatchers run Dispatch, and a rep sees only her quote’s job status. On: sales reps also schedule jobs and raise invoices.', onText: 'Allowed', offText: 'Not allowed' },
+                ].filter(item => item.key !== 'repsCanUseDispatch' || tabViz.dispatchEnabled).map((item, i, arr) => {
                     const on = tabViz[item.key];
                     return (
                         <div key={item.key} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 0', borderBottom: i < arr.length-1 ? `1px solid ${T.border}` : 'none' }}>
@@ -304,7 +310,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                                 <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{item.desc}</div>
                             </div>
                             <div style={{ fontSize:11, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right', minWidth:80 }}>
-                                {on ? 'Visible' : 'Hidden'}
+                                {on ? (item.onText || 'Visible') : (item.offText || 'Hidden')}
                             </div>
                         </div>
                     );

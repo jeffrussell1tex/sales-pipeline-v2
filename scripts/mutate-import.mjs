@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -2781,14 +2781,15 @@ const mutations = [
         '                        set: { ...r, createdAt: undefined, invoiceAmount: undefined, invoiceStatus: undefined, invoicePaidAt: undefined } });',
         '                        set: { ...r, createdAt: undefined } });'],
 
-    ['invoices: the endpoint skips the org’s Dispatch switch',
-        'netlify/functions/quote-to-job.mjs',
-        '        if (!dispatchEnabledFor(extra)) {',
-        '        if (false) {'],
+    // The switch moved from quote-to-job into the one Dispatch gate (§0.152).
+    ['invoices: the Dispatch gate skips the org’s Dispatch switch',
+        'netlify/functions/_dispatchDecision.mjs',
+        '    if (!ex.dispatchEnabled) return { response: refuse(headers, DISPATCH_OFF_MESSAGE) };',
+        '    if (false) return { response: refuse(headers, DISPATCH_OFF_MESSAGE) };'],
 
-    ['invoices: the Quotes card offers the job button to a ReadOnly user',
+    ['invoices: the Quotes card offers the job button to anyone (a rep, ReadOnly) again',
         'src/Tabs/QuotesTab.jsx',
-        'onCreateJob={canEdit ? handleCreateJob : null} />}',
+        'onCreateJob={canCreateJob ? handleCreateJob : null} />}',
         'onCreateJob={handleCreateJob} />}'],
 
     ['product types: the Admin’s kind is ignored — every quote line becomes a part',
@@ -2887,6 +2888,47 @@ const mutations = [
         'netlify/functions/settings.mjs',
         "                unassignedDealsVisibleToReps: row.extra?.unassignedDealsVisibleToReps ?? false,",
         "                // (dropped)"],
+
+    // ── the one Dispatch gate (§0.152) ─────────────────────────────────────
+    ['dispatch: a sales rep runs Dispatch again, whatever the org says',
+        'src/utils/roles.js',
+        "    if (role === 'User') return extra?.repsCanUseDispatch === true ? 'full' : 'none';",
+        "    if (role === 'User') return 'full';"],
+
+    ['dispatch: the Dispatcher loses Dispatch (the role that exists to run it)',
+        'src/utils/roles.js',
+        "    if (role === 'Admin' || role === 'Manager' || role === 'Dispatcher') return 'full';",
+        "    if (role === 'Admin' || role === 'Manager') return 'full';"],
+
+    ['dispatch: the rule ignores the module switch',
+        'src/utils/roles.js',
+        "    if (!extra?.dispatchEnabled) return 'none';",
+        "    if (false) return 'none';"],
+
+    ['dispatch: ReadOnly writes through the gate',
+        'netlify/functions/_dispatchDecision.mjs',
+        '        if (mutating) return { response: refuse(headers, DISPATCH_READ_MESSAGE) };',
+        '        if (false) return { response: refuse(headers, DISPATCH_READ_MESSAGE) };'],
+
+    ['dispatch: a Technician writes without the opt-in',
+        'netlify/functions/_dispatchDecision.mjs',
+        '        if (mutating && !allowTechnician) {',
+        '        if (false) {'],
+
+    ['dispatch: an endpoint skips the gate (customers answers any role)',
+        'netlify/functions/dispatch-customers.mjs',
+        '    const gate = await dispatchGate(auth, event, headers);',
+        '    const gate = {};'],
+
+    ['dispatch: the header offers the tab whenever the module is on (a rep sees Dispatch again)',
+        'src/components/layout/AppHeader.jsx',
+        "        ...(canUseDispatch(userRole, settings) ? [{ id: 'dispatch',     label: 'Dispatch'     }] : []),",
+        "        ...(settings.dispatchEnabled ? [{ id: 'dispatch',     label: 'Dispatch'     }] : []),"],
+
+    ['dispatch: the settings GET drops repsCanUseDispatch (the switch reads off forever)',
+        'netlify/functions/settings.mjs',
+        '                repsCanUseDispatch:   row.extra?.repsCanUseDispatch    ?? false,',
+        '                // (dropped)'],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

@@ -2,9 +2,11 @@
 // (state §0.149). The first link in quote → job → invoice → QuickBooks.
 //
 // POST { quoteId }  → 201 { job, customerCreated }
-//   Gates, in order: Clerk auth; a dispatcher's write (requireWrite — no
-//   Technician); the org has Dispatch ON (a CRM-only workspace never grows
-//   dispatch rows); the quote is THIS org's (404 otherwise — never a probe);
+//   Gates, in order: Clerk auth; no Technician; the ONE Dispatch gate
+//   (_dispatchGate.mjs, §0.152) — the org has Dispatch ON (a CRM-only
+//   workspace never grows dispatch rows) and the caller runs Dispatch: Admin,
+//   Manager, Dispatcher, a sales rep only where the org lets reps use it;
+//   the quote is THIS org's (404 otherwise — never a probe);
 //   the quote is Accepted (422); no job already carries this quote (409, with
 //   the job). Then, server-side and org-scoped: the dispatch customer is
 //   resolved from the opportunity (its account, else its account's name) or
@@ -12,7 +14,9 @@
 //   the quote's lines as its line items (net price each), a status-history
 //   row, and an audit row that names the quote.
 // GET ?quoteId=   → 200 { job: { …, invoice } | null } — the linked job and its
-//   live invoice, for the quote card.
+//   live invoice, for the quote card: READ-ONLY status for any reader of quotes
+//   but a Technician — a rep keeps it on her quote with Dispatch closed to reps
+//   (Jeff, §0.152). Creating the job is Dispatch work; the GET is not behind the gate.
 //
 // The job is created UNSCHEDULED, so no customer notification is due (§0.111
 // confirms on a date); scheduling it later goes through dispatch-jobs.mjs as
@@ -21,11 +25,11 @@ import { db } from '../../db/index.js';
 import {
     quotes, opportunities, products, invoices,
     dispatchJobs, dispatchJobLineItems, dispatchJobStatusHistory, dispatchCustomers,
-    settings as settingsTable,
 } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { verifyAuth, requireWrite, isTechnician } from './auth.mjs';
+import { verifyAuth, isTechnician } from './auth.mjs';
+import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 import { nextJobNumber, normaliseJob } from './dispatch-jobs.mjs';
 import { nextCustomerNumber } from './dispatch-customers.mjs';
@@ -39,13 +43,6 @@ const headers = {
 };
 const reply = (statusCode, body) => ({ statusCode, headers, body: JSON.stringify(body) });
 
-// The org's settings.extra, read once: the Dispatch switch and the Admin's
-// product & service types (the job line kind each quote line becomes).
-async function orgExtra(orgId) {
-    const [row] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, orgId)).limit(1);
-    return row?.extra && typeof row.extra === 'object' ? row.extra : {};
-}
-const dispatchEnabledFor = (extra) => !!extra?.dispatchEnabled;
 
 async function linkedJob(orgId, quoteId) {
     const [row] = await db.select().from(dispatchJobs)
@@ -67,8 +64,6 @@ export const handler = async (event) => {
     const { orgId, userId } = auth;
     // A technician neither reads quotes nor makes jobs.
     if (isTechnician(auth.userRole)) return reply(403, { error: 'Technicians cannot convert quotes.' });
-    const forbidden = requireWrite(auth, event, headers);
-    if (forbidden) return forbidden;
 
     try {
         if (event.httpMethod === 'GET') {
@@ -79,15 +74,17 @@ export const handler = async (event) => {
 
         if (event.httpMethod !== 'POST') return reply(405, { error: 'Method not allowed' });
 
+        // Creating the job is Dispatch work — the one gate (§0.152), before the
+        // body is read. Its settings read carries the Admin's product types too.
+        const gate = await dispatchGate(auth, event, headers);
+        if (gate.response) return gate.response;
+        const extra = gate.extra;
+
         let data;
         try { data = JSON.parse(event.body || '{}'); } catch { return reply(400, { error: 'Invalid JSON' }); }
         const quoteId = String(data.quoteId || '').trim();
         if (!quoteId) return reply(400, { error: 'quoteId is required' });
 
-        const extra = await orgExtra(orgId);
-        if (!dispatchEnabledFor(extra)) {
-            return reply(422, { error: 'Dispatch is not enabled for this workspace. Turn it on under Settings → Features & AI first.' });
-        }
 
         const [quote] = await db.select().from(quotes).where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId))).limit(1);
         if (!quote) return reply(404, { error: 'Quote not found' });
