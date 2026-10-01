@@ -8,6 +8,7 @@ import RecordDocuments from '../documents/RecordDocuments';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
+import { contactsToAdd } from '../../utils/buyingCommittee.js';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (inline — no build-time import needed)
@@ -501,7 +502,6 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
     selectedContacts, selectedContactIds, setSelectedContacts, setSelectedContactIds, handleChange }) {
     const fmtDate = (d) => parseLocalDate(d)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '—';
     const [ctSearch, setCtSearch] = useState('');
-    const [showCtSuggestions, setShowCtSuggestions] = useState(false);
 
     const contactEngagement = {};
     oppActivities.forEach(a => {
@@ -526,15 +526,9 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
         <div style={{ paddingBottom: '1rem' }}>
             {/* Add contact to buying committee */}
             {selectedContacts !== undefined && (() => {
-                const filtered = (contacts || []).filter(c => {
-                    const fullName = `${c.firstName} ${c.lastName}`;
-                    const searchLower = ctSearch.toLowerCase();
-                    const matchesSearch = !ctSearch
-                        || fullName.toLowerCase().includes(searchLower)
-                        || (c.company || '').toLowerCase().includes(searchLower);
-                    const notAlreadyAdded = !(selectedContacts || []).some(s => s.startsWith(fullName));
-                    return matchesSearch && notAlreadyAdded;
-                });
+                // A search, not a list: nothing is offered until the rep types, and a
+                // contact already on the deal is not offered again (§0.154).
+                const filtered = contactsToAdd(contacts, ctSearch, selectedContacts);
                 return (
                     <div style={{ marginBottom: 16 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8, fontFamily: T.sans }}>Add to buying committee</div>
@@ -576,7 +570,7 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
                                 ))}
                             </div>
                         )}
-                        {ctSearch && filtered.length === 0 && (
+                        {ctSearch.trim() && filtered.length === 0 && (
                             <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No contacts found</div>
                         )}
                     </div>

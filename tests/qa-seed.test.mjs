@@ -79,6 +79,22 @@ test('every reference resolves — the Test org\'s failure, made impossible here
     for (const inv of R.invoices) assert.ok(jobs.has(inv.jobId), inv.id);
 });
 
+test('every deal carries its contacts\' names beside their ids, as the app stores them; no two contacts share a name', () => {
+    // The Contacts tab and the buying committee read the deal's `contacts` TEXT; the
+    // first cut wrote the ids alone and every deal read "No contacts linked yet." The
+    // app links by name, so a name used twice is one contact to it (§0.154).
+    const contacts = byId(R.contacts);
+    for (const o of R.opportunities) {
+        assert.ok(o.contactIds.length > 0, `${o.id}: a buying committee to show`);
+        const want = o.contactIds.map(id => { const c = contacts.get(id); return `${c.firstName} ${c.lastName}${c.title ? ` (${c.title})` : ''}`; }).join(', ');
+        assert.equal(o.contacts, want, `${o.id}: OpportunityModal's "First Last (Title)" form, in the ids' order`);
+    }
+    const names = R.contacts.map(c => `${c.firstName} ${c.lastName}`.toLowerCase());
+    assert.equal(new Set(names).size, names.length, 'no contact name twice');
+    const leadNames = new Set(R.leads.map(l => `${l.firstName} ${l.lastName}`.toLowerCase()));
+    assert.ok(names.every(n => !leadNames.has(n)), 'no contact shares a lead\'s name');
+});
+
 test('the money adds up the way the app adds it', () => {
     for (const q of R.quotes) assert.deepEqual({ subtotal: q.subtotal, totalValue: q.totalValue, recurringValue: q.recurringValue, oneTimeValue: q.oneTimeValue }, quoteTotals(q.lineItems, 0), q.id);
     for (const q of R.quotes.filter(x => x.status === 'Accepted')) {

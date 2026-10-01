@@ -19,6 +19,7 @@ import {
     addDaysYmd, quoteLineToJobItem, linesFromJobItems, invoiceTotals, dueDateFromTerms,
     mirrorForJob, jobFromQuote, DEFAULT_PRODUCT_TYPES,
 } from '../src/utils/invoices.js';
+import { contactNamesText } from '../src/utils/oppText.js';
 
 export const QA_ID_MARK = '_qa_';
 const pad = (n, w) => String(n).padStart(w, '0');
@@ -133,10 +134,18 @@ export function buildQaSeed({ orgId, today, roster }) {
             accountOwner: o.name, assignedRep: o.name, ownerId: o.ownerId, accountTier: 'account',
         };
     });
+    // Sixteen people for sixteen contacts — two per account, no name twice, none a
+    // lead's. The first cut cycled eight, so every name sat at two companies, and
+    // the app links a deal's contacts BY NAME: two Omar Haddads are one to the
+    // Contacts tab (§0.154).
     const people = [['Dana', 'Whitaker', 'Facilities Director'], ['Luis', 'Ortega', 'Operations Manager'],
                     ['Priya', 'Shah', 'Procurement Lead'], ['Tom', 'Becker', 'Plant Manager'],
                     ['Grace', 'Kim', 'VP Operations'], ['Omar', 'Haddad', 'IT Director'],
-                    ['Elena', 'Novak', 'Controller'], ['Sam', 'Reyes', 'Maintenance Supervisor']];
+                    ['Elena', 'Novak', 'Controller'], ['Sam', 'Reyes', 'Maintenance Supervisor'],
+                    ['Kenji', 'Watanabe', 'Logistics Manager'], ['Maya', 'Patel', 'General Manager'],
+                    ['Rachel', 'Moore', 'Clinic Administrator'], ['Andre', 'Wilson', 'CFO'],
+                    ['Victor', 'Alvarez', 'Facilities Manager'], ['Sofia', 'Rossi', 'Purchasing Manager'],
+                    ['Nora', 'Quinn', 'Superintendent'], ['Paul', 'Mendez', 'Director of Operations']];
     const contacts = [];
     accounts.forEach((a, i) => {
         for (let k = 0; k < 2; k++) {
@@ -149,7 +158,12 @@ export function buildQaSeed({ orgId, today, roster }) {
             });
         }
     });
-    const contactsOf = (acctId) => contacts.filter(c => c.accountId === acctId).map(c => c.id);
+    const contactsOf = (acctId) => contacts.filter(c => c.accountId === acctId);
+    // A deal's contacts the way the app stores them: the ids AND the names beside
+    // them, in OpportunityModal's "First Last (Title)" form — the Contacts tab and
+    // the buying committee read the names. The first cut wrote the ids alone, so
+    // every seeded deal read "No contacts linked yet." (§0.154).
+    const contactLabel = (c) => `${c.firstName} ${c.lastName}${c.title ? ` (${c.title})` : ''}`;
 
     // ── deals ────────────────────────────────────────────────────────────────
     // [account#, name, stage, arr, closeIn, probability, products]
@@ -172,6 +186,7 @@ export function buildQaSeed({ orgId, today, roster }) {
     ];
     const opportunities = dealSpec.map(([acctNo, title, stage, arr, closeIn], i) => {
         const a = accounts[acctNo - 1];
+        const acctContacts = contactsOf(a.id);
         const closed = stage === 'Closed Won' || stage === 'Closed Lost';
         const close = d(closeIn);
         return {
@@ -179,7 +194,7 @@ export function buildQaSeed({ orgId, today, roster }) {
             opportunityName: `${a.name} — ${title}`, account: a.name, accountId: a.id,
             salesRep: a.accountOwner, ownerId: a.ownerId, stage, arr: arr.toFixed(2),
             forecastedCloseDate: close, probability: PROB[stage], products: 'Field Service Platform',
-            contactIds: contactsOf(a.id), vertical: a.industry,
+            contactIds: acctContacts.map(c => c.id), contacts: contactNamesText(acctContacts.map(contactLabel)), vertical: a.industry,
             createdDate: d(-60 + i), stageChangedDate: closed ? close : d(-10 + (i % 7)),
             wonDate: stage === 'Closed Won' ? close : null,
             lostDate: stage === 'Closed Lost' ? close : null,
