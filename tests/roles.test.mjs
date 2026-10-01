@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
     APP_ROLES, isAppRole, ROLE_OPTIONS, canSeeAll, canEditCrm, CRM_WRITE_ROLES, crmReadScope,
-    NON_REP_ROLES, isDispatcher, isTechnician,
+    NON_REP_ROLES, isDispatcher, isTechnician, mirrorRoleOf,
 } from '../src/utils/roles.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -59,6 +59,29 @@ test('NON_REP_ROLES: every role but a sales rep, frozen — the rosters count a 
     assert.equal(isTechnician('Technician'), true);
 });
 
+// ── the roster mirror: what "Sync from Clerk" writes (§0.153) ───────────────
+
+test('mirrorRoleOf: a role we know comes from Clerk; no role is a rep; a role newer than this code is kept; anything else is a rep', () => {
+    for (const r of APP_ROLES) for (const stored of ['User', 'Admin', 'Dispatcher', undefined]) {
+        assert.equal(mirrorRoleOf(r, stored), r, `${r} in Clerk is mirrored over ${String(stored)}`);
+    }
+    for (const none of [undefined, null, '']) {
+        assert.equal(mirrorRoleOf(none, 'Dispatcher'), 'User', 'no role in Clerk is a Sales Rep: what verifyAuth decides');
+        assert.equal(mirrorRoleOf(none, none), 'User', 'nothing in either place is a rep, never an empty role');
+    }
+    // 1 Oct 2026: the dev site, older than the Dispatcher role, synced and the
+    // Dispatcher became a "Sales Rep". A value this code does not know that the
+    // row ALREADY holds was written by a version that did know it, so it stays.
+    assert.equal(isAppRole('Estimator'), false, 'the fixture is not a role this code knows');
+    assert.equal(mirrorRoleOf('Estimator', 'Estimator'), 'Estimator', 'a role newer than the running code is left alone');
+    // A value the row does NOT hold is a typo, a legacy string or a new member: a
+    // rep, as before. Never a kept Admin: the Monday team digest and the renewal
+    // alerts pick their recipients from this column.
+    assert.equal(mirrorRoleOf('admin', 'Admin'), 'User', 'a mistyped demotion does not keep the Admin row (the team digest reads it)');
+    assert.equal(mirrorRoleOf('Read Only', 'Manager'), 'User');
+    assert.equal(mirrorRoleOf('Estimator', undefined), 'User', 'a NEW row: a rep, so an Admin can open it and set a real role');
+});
+
 // ── the server wiring ────────────────────────────────────────────────────────
 
 const CRM = [['accounts', 'accounts'], ['contacts', 'contacts'], ['tasks', 'tasks'],
@@ -97,6 +120,28 @@ test('the directory: a whole-org reader gets role, team and territory; a rep sti
     assert.ok(s.includes("const wholeOrgReader = crmReadScope(userRole) === 'all';"));
     assert.ok(s.includes('? { id: row.id, name: row.name, active: row.active, role: row.role, userType: row.role, team: row.team, territory: row.territory }\n        : { id: row.id, name: row.name, active: row.active });'));
     assert.ok(!/email|quota|profile/.test(s.slice(s.indexOf('const DIRECTORY_FIELDS'), s.indexOf('const DIRECTORY_FIELDS') + 400)), 'no email, quota or profile in the directory');
+});
+
+// ── no copy of the list anywhere in the client ─────────────────────────────
+
+test('no file but roles.js spells out a role list — not as <option>s, not as a Set or an array of role names', async () => {
+    // Commit A (§0.151) moved five copies onto src/utils/roles.js; Jeff's "dispatcher
+    // is not showing" (1 Oct) turned up four more it missed — the Users Export filter
+    // (<option>Admin…</option>), the Pipeline Rep slicer, the Viewing bar and
+    // activityView's write lists. The shape is what is pinned, not the instances.
+    const { readdirSync, statSync } = await import('node:fs');
+    const files = [];
+    const walk = (dir) => { for (const n of readdirSync(new URL('../' + dir, import.meta.url))) { const p = `${dir}/${n}`; if (statSync(new URL('../' + p, import.meta.url)).isDirectory()) walk(p); else if (/\.(jsx?|mjs)$/.test(n)) files.push(p); } };
+    walk('src');
+    const offenders = [];
+    for (const f of files) {
+        if (f === 'src/utils/roles.js') continue;
+        const s = code(read(f));
+        if (/<option(\s+value="[A-Za-z]+")?>\s*(Admin|Manager|User|ReadOnly|Technician|Dispatcher)\s*<\/option>/.test(s)) offenders.push(`${f}: a hard-coded role <option>`);
+        if (/(new Set\(|=\s*)\[\s*'(Admin|Manager|User|ReadOnly|Technician|Dispatcher)'\s*,\s*'(Admin|Manager|User|ReadOnly|Technician|Dispatcher)'/.test(s)) offenders.push(`${f}: a role list literal`);
+        if (/userType !== 'Manager' && u\.userType !== 'Admin'/.test(s)) offenders.push(`${f}: a hand-rolled non-rep test`);
+    }
+    assert.deepEqual(offenders, [], 'take the roles from src/utils/roles.js');
 });
 
 // ── the client wiring ────────────────────────────────────────────────────────

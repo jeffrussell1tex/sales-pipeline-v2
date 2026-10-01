@@ -871,7 +871,7 @@ export const automationRuns = pgTable('automation_runs', {
 export const dispatchTechnicians = pgTable('dispatch_technicians', {
     id:              text('id').primaryKey(),
     orgId:           text('org_id').notNull(),
-    userId:          text('user_id'),                                 // FK → users.id (nullable for subs)
+    userId:          text('user_id'),                                 // the technician's CLERK user id (auth.userId, what dispatch-jobs resolves) — NOT users.id; null for subs
     firstName:       varchar('first_name', { length: 255 }).notNull(),
     lastName:        varchar('last_name', { length: 255 }).notNull(),
     email:           varchar('email', { length: 255 }),

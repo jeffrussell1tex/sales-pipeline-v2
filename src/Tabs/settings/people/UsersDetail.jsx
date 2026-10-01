@@ -459,11 +459,9 @@ const UsersExportPage = ({ settings, onBack, onUsers, mfaByEmail }) => {
                                 <div style={{ ...eb(T.inkMuted), marginBottom:5 }}>Status filter</div>
                                 <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}
                                     style={{ width:'100%', padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontFamily:T.sans, background:T.surface, color:T.ink, outline:'none' }}>
-                                    <option>All</option>
-                                    <option>Admin</option>
-                                    <option>Manager</option>
-                                    <option>User</option>
-                                    <option>ReadOnly</option>
+                                    <option value="All">All</option>
+                                    {/* The one role list (src/utils/roles.js) — this filter carried its own four. */}
+                                    {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                 </select>
                             </div>
                             <div>
@@ -1339,6 +1337,9 @@ export const UsersDetail = ({ settings, onBack }) => {
             const c = data.counts || {};
             let msg = `Synced: ${c.created} added, ${c.updated} updated, ${c.unchanged} unchanged`;
             if (c.dbOnly > 0) msg += ` · ${c.dbOnly} in Accelerep not in Clerk (review)`;
+            // Members whose Clerk role is missing or one this version does not know
+            // (users-sync.mjs roleDrift, §0.153). Said here, or the report reaches no one.
+            if (c.roleDrift > 0) msg += ` · ${c.roleDrift} without a recognised role in Clerk`;
             setSyncMsg(msg);
             setDrift(null);   // reconciled
             // Refresh the roster from the DB so new/updated rows appear immediately.

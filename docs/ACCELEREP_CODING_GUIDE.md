@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 1, 2026 · rules current through **§18b46** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 1, 2026 · rules current through **§18b47** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3603,3 +3603,14 @@ through `dbFetch`.
 5. **Each refusal names its rule** — module off, rep, technician, read-only, unrecognised — five sentences; the body is the only way to tell them apart.
 6. **Pin the decision by running it, and the wiring by scan and at run time.** tests/dispatch-gate.test.mjs RUNS the rule and the decision for every role and switch (the gate itself imports db/index.js, so the decision lives apart where `npm test` can load it) and scans the ten endpoints and the four client places; tests/integration/dispatch-access.itest.mjs hits every endpoint as each role in an org with the module on, one with reps allowed, and one with no settings row at all.
 7. **A one-time client effect keys on state, never on the `settingsReady` ref.** `useSettings`'s `settingsReady` is a REF — always truthy as an object, flipped inside a `setTimeout`, and it re-runs nothing. The first cut of the Dispatcher's landing waited on it, ran against the client's DEFAULT settings (module off), marked itself done and never landed — caught in the pane. Key such an effect on the condition itself (`canUseDispatch(...)` becoming true) and mark it done only when it acts.
+
+## 18b47. A Mirror Keeps What A Newer Version Wrote — An Unknown Value It Already Holds Is Left Alone; Any Other Unknown Takes The Default That Discloses Least (hard rule)
+
+**Origin (§0.153, 1 Oct 2026).** The dev site — a deploy older than the Dispatcher role, on the same database and the same Clerk as localhost — ran "Sync from Clerk" in Accelerep QA. `users-sync` mirrored Clerk's role through `isAppRole(rawRole) ? rawRole : 'User'`; its list had no Dispatcher, so it wrote `'User'` over Ryan's row. The badge read "Sales Rep", the dev site's picker offered no Dispatcher, and the role was "corrected" to Read only — in Clerk, which holds one role per person: three orgs changed because one stale deploy synced one.
+
+1. **Two versions share one database whenever a change is ahead of a push** — localhost and the dev site every batch, dev and prod between a ship and the next. Code that rewrites a stored value from an authoritative source must expect the source to hold a value a NEWER version introduced.
+2. **An unknown value the mirror already holds is left alone.** The mirror is written only by code that validated the value, so a row holding the same unknown value as the source was written by a version that knew it. `mirrorRoleOf` keeps it.
+3. **Any other unknown value takes the default that discloses least — chosen by reading who consumes the column.** The roster's role picks the Monday team digest's and the renewal alerts' recipients (`digest.mjs`, `pipeline-alerts.mjs`); keeping an Admin row behind a mistyped demotion would keep emailing the team's numbers, so a typo still mirrors as a rep. "Keep the old value" is not automatically the safe default; read the consumers first.
+4. **Never copy the unknown value in.** The vocabulary stays closed (users.mjs: "validated, not copied"); the divergence is reported (`roleDrift`) and shown (the Users screen's sync message).
+5. **Do not administer from a deploy behind the code under test.** Until the push, user and role changes and "Sync from Clerk" happen on localhost only.
+6. **Pin the rule by running it.** tests/roles.test.mjs RUNS `mirrorRoleOf` for every case (a known role, none, the kept newer value, a typo against an Admin row, a new row); tests/role-vocabulary.test.mjs scans the sync for the call, the row found first and the old coercion gone; four mutants break one case each.

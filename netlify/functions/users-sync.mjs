@@ -4,10 +4,13 @@
 // full org membership list and:
 //   • CREATES a users row for any Clerk member missing from the DB
 //   • UPDATES existing rows conservatively (safe defaults):
-//       - role: Clerk publicMetadata wins (it drives permissions). Clerk's
-//         ORGANIZATION MEMBERSHIP role (org:admin / org:member) is NOT a
-//         fallback for it — see the note at the role resolution below.
-//       - name: refreshed from Clerk when Clerk has one
+//       - role: Clerk publicMetadata wins (it drives permissions) when it is a
+//         role this code knows; mirrorRoleOf (src/utils/roles.js) is the rule
+//         for one it does not. Clerk's ORGANIZATION MEMBERSHIP role
+//         (org:admin / org:member) is NOT a fallback for it — see the note at
+//         the role resolution below.
+//       - name: NOT synced — a Clerk name change is reported as nameDrift, for
+//         the reason in the note at the update below
 //       - team / territory: fill blanks only — never overwrite an in-app edit
 //       - quota, profile prefs, and all other DB-only fields: left untouched
 //   • REPORTS db rows whose email is not in Clerk (departed/stale) — never
@@ -20,6 +23,7 @@ import { db } from '../../db/index.js';
 import { users, auditLog } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAppRole } from './auth.mjs';
+import { mirrorRoleOf } from '../../src/utils/roles.js';
 import { serverErrorBody, invalidateRoster } from './_lib.mjs';
 import { streamAudit } from './_auditStream.mjs';
 import { randomUUID } from 'crypto';
@@ -108,7 +112,7 @@ export const handler = async (event) => {
             // ROLE. Clerk carries TWO different things called a role and this line
             // used to fall through from one to the other:
             //
-            //   publicMetadata.role   Accelerep's role   Admin | Manager | User | ReadOnly | Technician
+            //   publicMetadata.role   Accelerep's role   APP_ROLES, src/utils/roles.js
             //   member.role           Clerk ORG role     org:admin | org:member
             //
             // The second governs who may administer the Clerk organization. It says
@@ -124,8 +128,17 @@ export const handler = async (event) => {
             // divergence is REPORTED — same treatment as nameDrift below — so an
             // Admin can see who needs a role set rather than discovering it from a
             // badge that was never true.
+            //
+            // A value this code does NOT know, that the row already holds, is kept
+            // (mirrorRoleOf): only a version that knew the role could have put it
+            // there. Writing 'User' over it is how, on 1 Oct 2026, a deploy older
+            // than the Dispatcher role (the dev site, on the same database and the
+            // same Clerk) turned a Dispatcher into a "Sales Rep", and the role was
+            // then "corrected" in Clerk for every org he is in (state §0.153). Any
+            // OTHER unknown value is still a rep; roles.js says why.
             const rawRole = cu.publicMetadata?.role;
-            const role = isAppRole(rawRole) ? rawRole : 'User';
+            const existing = dbByClerkId.get(clerkUserId) || dbByEmail.get(email);
+            const role = mirrorRoleOf(rawRole, existing?.role);
             if (!isAppRole(rawRole)) {
                 summary.roleDrift.push({
                     email,
@@ -137,8 +150,6 @@ export const handler = async (event) => {
             }
             const team = cu.publicMetadata?.team ?? null;
             const territory = cu.publicMetadata?.territory ?? null;
-
-            const existing = dbByClerkId.get(clerkUserId) || dbByEmail.get(email);
 
             if (!existing) {
                 // CREATE — new roster row from Clerk. The id is ours; the Clerk
@@ -164,7 +175,7 @@ export const handler = async (event) => {
 
             // UPDATE — safe-default reconciliation on an existing row.
             const patch = {};
-            // role: Clerk is authoritative (permissions).
+            // role: Clerk is authoritative (permissions), through mirrorRoleOf above.
             if (existing.role !== role) patch.role = role;
             // email: follow Clerk once the row is linked by identity rather than
             // by address, so an address change is an update and not a departure.
@@ -257,7 +268,7 @@ export const handler = async (event) => {
                 updated:   summary.updated,
                 skipped:   summary.skipped,
                 nameDrift: summary.nameDrift,  // reported, never applied — see the note above
-                roleDrift: summary.roleDrift,  // members with no (or an unknown) Accelerep role — treated as Sales Rep
+                roleDrift: summary.roleDrift,  // no (or an unknown) Accelerep role in Clerk — mirrored as Sales Rep, or kept where the row already holds it
                 dbOnly,    // rows in Accelerep not found in Clerk — review manually
             }),
         };

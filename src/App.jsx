@@ -5,7 +5,7 @@ import { safeStorage, dbFetch, waitForToken } from './utils/storage';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { isoLocal } from './utils/dateLocal';
-import { isDispatcher, canUseDispatch } from './utils/roles.js';
+import { isDispatcher, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import { useSettings } from './hooks/useSettings';
 import { useOpportunities } from './hooks/useOpportunities';
@@ -707,7 +707,8 @@ dbFetch('/.netlify/functions/users?me=true')
     const activePipeline = allPipelines.find(p => p.id === activePipelineId) || allPipelines[0];
 
     // Shared Viewing bar helpers — build option lists for Rep/Team/Territory
-    const allRepNames = [...new Set((settings.users || []).filter(u => u.userType !== 'Manager' && u.userType !== 'Admin').map(u => u.name).filter(Boolean))].sort();
+    // The Viewing bar's rep list: reps only — the one non-rep list (src/utils/roles.js).
+    const allRepNames = [...new Set((settings.users || []).filter(u => !NON_REP_ROLES.includes(u.userType)).map(u => u.name).filter(Boolean))].sort();
     const allTeamNames = [...new Set((settings.users || []).filter(u => u.team).map(u => u.team))].sort();
     const allTerritoryNames = [...new Set((settings.users || []).filter(u => u.territory).map(u => u.territory))].sort();
     const hasViewingSlicing = canSeeAll && (allRepNames.length > 1 || allTeamNames.length > 0 || allTerritoryNames.length > 0 || allPipelines.length > 1);

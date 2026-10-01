@@ -157,6 +157,23 @@ test("Clerk's ORG membership role is not a source for the app role", () => {
     assert.match(sync, /isAppRole\(rawRole\)/, 'users-sync must validate the role it mirrors');
 });
 
+test('users-sync mirrors the role through mirrorRoleOf, with the row found first (§0.153)', () => {
+    // The line this replaced wrote 'User' over every value the running code did
+    // not know. On a deploy older than a role, that is every holder of the role:
+    // the dev site turned the Dispatcher into a "Sales Rep" on 1 Oct 2026.
+    const sync = read('netlify/functions/users-sync.mjs');
+    assert.ok(sync.includes("import { mirrorRoleOf } from '../../src/utils/roles.js';"), 'the real rule, imported directly');
+    const lookup = sync.indexOf('const existing = dbByClerkId.get(clerkUserId) || dbByEmail.get(email);');
+    const role = sync.indexOf('const role = mirrorRoleOf(rawRole, existing?.role);');
+    assert.ok(lookup > -1 && role > lookup, 'the row is found first, then its role is read');
+    assert.equal((sync.match(/const existing = /g) || []).length, 1, 'one lookup, not a second one after the role');
+    assert.ok(!/const role = isAppRole\(rawRole\) \? rawRole : 'User'/.test(sync), 'the coercion is gone');
+    assert.ok(sync.includes('if (existing.role !== role) patch.role = role;'), 'an update still writes only a change');
+    const usersScreen = read('src/Tabs/settings/people/UsersDetail.jsx');
+    assert.ok(usersScreen.includes('if (c.roleDrift > 0) msg += ` · ${c.roleDrift} without a recognised role in Clerk`;'),
+        'the Users screen says it: a report no one sees is not a report');
+});
+
 test('flatten() lets the column win over the profile blob', () => {
     // profile.userType is a copy of the role frozen at row creation. Spread AFTER
     // the scalars it silently overrides users.role on every response, which is the

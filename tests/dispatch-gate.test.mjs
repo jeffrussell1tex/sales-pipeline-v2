@@ -135,7 +135,8 @@ test('settings.mjs carries repsCanUseDispatch in BOTH halves, OFF when absent (1
 
 test('the client asks ONE question in all four places Dispatch appears; a Dispatcher lands on it once', () => {
     const app = code(read('src/App.jsx'));
-    assert.ok(app.includes("import { isDispatcher, canUseDispatch } from './utils/roles.js';"));
+    // Both names from the one role module; App.jsx may take more from it (NON_REP_ROLES, §0.153).
+    assert.ok(/import \{ isDispatcher, canUseDispatch\b[^}]*\} from '\.\/utils\/roles\.js';/.test(app));
     assert.ok(app.includes("style={{ display: canUseDispatch(userRole, settings) ? '' : 'none' }}"), 'the mobile nav');
     assert.ok(app.includes("if (activeTab === 'dispatch' && !canUseDispatch(userRole, settings)) {"), 'the redirect');
     assert.ok(app.includes("{activeTab === 'dispatch' && canUseDispatch(userRole, settings) && ("), 'the mount');

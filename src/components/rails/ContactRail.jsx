@@ -6,6 +6,7 @@ import RecordDocuments from '../documents/RecordDocuments';
 import AccountPicker from './AccountPicker';
 import { cleanEmailTemplates, mergeContext, renderForContact, mailtoHref } from '../../utils/emailTemplates.js';
 import { T } from '../../tokens.js';
+import { NON_REP_ROLES } from '../../utils/roles.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -240,7 +241,7 @@ export default function ContactRail() {
 
     // ── Derived lists ─────────────────────────────────────────────────────────
     const allRepNames = [...new Set(
-        (settings?.users || []).filter(u => u.name && u.userType !== 'Manager' && u.userType !== 'Admin').map(u => u.name)
+        (settings?.users || []).filter(u => u.name && !NON_REP_ROLES.includes(u.userType)).map(u => u.name)
     )].sort();
 
 

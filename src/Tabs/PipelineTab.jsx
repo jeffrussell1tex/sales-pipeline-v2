@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../AppContext';
-import { canEditCrm } from '../utils/roles.js';
+import { canEditCrm, NON_REP_ROLES } from '../utils/roles.js';
 import { dbFetch } from '../utils/storage';
 import { isoLocal } from '../utils/dateLocal';
 import KanbanView from '../components/KanbanView';
@@ -481,7 +481,8 @@ export default function PipelineTab() {
     ];
     window.__pipelineFilterOptions = timeFilterOpts;
 
-    const excludedRoles = new Set(['Admin', 'Manager']);
+    // The Rep slicer lists reps only — the one non-rep list (src/utils/roles.js), as Reports does.
+    const excludedRoles = new Set(NON_REP_ROLES);
     const allReps2 = canSeeAll ? [...new Set([
         ...(settings.users||[]).filter(u => u.name && !excludedRoles.has(u.userType)).map(u => u.name),
         ...visibleOpportunities.filter(o => o.salesRep).map(o => o.salesRep),

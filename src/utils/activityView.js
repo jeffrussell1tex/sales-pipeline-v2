@@ -9,6 +9,8 @@
 // open the editor from the viewer — mirroring the server's rule, never
 // replacing it (activities.mjs → assertOwnership → mayMutate).
 
+import { canEditCrm, canSeeAll } from './roles.js';
+
 const SEP = ' — ';   // the em-dash join email-inbound.mjs writes
 
 /** { subject, body } — the notes with a leading "<subject> — " removed when the subject is known. */
@@ -44,13 +46,13 @@ export function previewOf(activity) {
 // and it says no wherever the server would: read roles, a caller that cannot
 // be resolved, an owner id that is not an app user id (18b22). Unassigned rows
 // are open to any writing role, as on the server.
-const WRITE_ROLES = new Set(['Admin', 'Manager', 'User']);
-const SEE_ALL_ROLES = new Set(['Admin', 'Manager']);
+// The two lists come from the one role module (src/utils/roles.js): canEditCrm is
+// the write list requireWrite allows, canSeeAll the ownership bypass.
 const isAppUserId = (v) => typeof v === 'string' && v.startsWith('usr_') && v.length > 4;
 
 export function canEditActivity(activity, { userRole, currentUserId } = {}) {
-    if (!activity || !WRITE_ROLES.has(userRole)) return false;
-    if (SEE_ALL_ROLES.has(userRole)) return true;
+    if (!activity || !canEditCrm(userRole)) return false;
+    if (canSeeAll(userRole)) return true;
     const owner = typeof activity.ownerId === 'string' ? activity.ownerId.trim() : activity.ownerId;
     if (owner === null || owner === undefined || owner === '') return true;   // unassigned
     if (!isAppUserId(owner) || !isAppUserId(currentUserId)) return false;
