@@ -7,6 +7,9 @@ import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../u
 import { esc } from '../utils/customerNotifications';
 // Quote → job (state §0.149): which quotes can be accepted, which become work.
 import { quoteCanBeAccepted, quoteCanBecomeJob, invoiceStatusLabel, fmtMoney, cleanProductTypes, productTypeLabel, DEFAULT_PRODUCT_TYPES } from '../utils/invoices.js';
+// What may happen to a quote (§0.155): the server's one rule — the buttons, the gauge
+// and the "needs approval" words read it, so a click is never one the server refuses.
+import { quoteDiscountPct, approvalTierFor, tierNeedsApproval, quoteNeedsApproval, quoteIsLocked, quoteMoveAllowed, canApproveQuotes } from '../utils/quoteRules.js';
 
 // ─── Design tokens ────────────────────────────────────────────
 
@@ -374,7 +377,8 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
     const otherResult = otherQuote ? calcLineTotals(otherQuote.lineItems || [], products || []) : null;
     const otherIds    = new Set((otherQuote?.lineItems || []).map(li => li.productId));
     const myIds       = new Set((quote.lineItems || []).map(li => li.productId));
-    const tier        = tierForDiscount(avgDisc);
+    // The tier as the server decides it (quoteRules.js) — the chip agrees with a save.
+    const tier        = approvalTierFor(quoteDiscountPct(quote.lineItems, quote.dealDiscount), APPROVAL_TIERS);
 
     return (
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, display: 'flex', flexDirection: 'column', opacity: readOnly ? 0.85 : 1 }}>
@@ -385,11 +389,11 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
                         <span style={{ ...eyebrow(T.inkMid), fontSize: 10.5 }}>{label} · v{quote.version || 1}</span>
                         <QStatus status={quote.status} />
                         {editable && (() => {
-                            const color = tier.approver ? tier.color : T.ok;
-                            const labelText = tier.approver ? `Needs ${tier.label}` : 'Within rep authority';
+                            const color = tierNeedsApproval(tier) ? tier.color : T.ok;
+                            const labelText = tierNeedsApproval(tier) ? `Needs ${tier.label}` : 'Within rep authority';
                             return (
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 10, fontSize: 9.5, fontWeight: 700, background: `${color}18`, color, border: `1px solid ${color}40`, fontFamily: T.sans }}>
-                                    {tier.approver ? '⚠' : '✓'} {labelText}
+                                    {tierNeedsApproval(tier) ? '⚠' : '✓'} {labelText}
                                 </span>
                             );
                         })()}
@@ -501,8 +505,10 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
     const [notes,         setNotes]         = useState(quote.notes || '');
     const [error,         setError]         = useState(null);
 
-    const { lines, listTotal, totalValue, avgDisc, avgDiscPct } = calcLineTotals(lineItems, products || []);
-    const tier = tierForDiscount(avgDisc);
+    const { lines, listTotal, totalValue } = calcLineTotals(lineItems, products || []);
+    // The discount and its tier as the server reads them (quoteRules.js, §0.155).
+    const avgDiscPct = quoteDiscountPct(lineItems, quote.dealDiscount);
+    const tier = approvalTierFor(avgDiscPct, APPROVAL_TIERS);
 
     // Catalog — grouped by category, filtered
     const catalogGroups = useMemo(() => {
@@ -559,7 +565,7 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
                     Line items — {quote.name || quote.quoteNumber}
                 </div>
                 <div style={{ flex: 1 }} />
-                {tier.approver && (
+                {tierNeedsApproval(tier) && (
                     <span style={{ fontSize: 10, fontWeight: 700, color: T.warn, background: `${T.warn}25`, border: `1px solid ${T.warn}50`, padding: '2px 8px', borderRadius: 10, fontFamily: T.sans }}>
                         ⚠ {tier.label} — {Math.round(avgDiscPct)}% avg disc
                     </span>
@@ -721,19 +727,34 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
     );
 };
 const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving,
-    onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, onCreateJob }) => {
-    const { avgDisc, margin } = calcLineTotals(quote.lineItems || [], products || []);
-    const tier = tierForDiscount(avgDisc);
+    onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, onCreateJob, canEdit, userRole, tiers }) => {
+    const { margin } = calcLineTotals(quote.lineItems || [], products || []);
+    // The quote's discount, its tier and what it may do next, by the rules the
+    // server applies (quoteRules.js, §0.155) — so a button is never refused.
+    const discPct = quoteDiscountPct(quote.lineItems, quote.dealDiscount);
+    const avgDisc = discPct / 100;
+    const tier = approvalTierFor(discPct, tiers);
+    const needsApproval = tierNeedsApproval(tier);
+    const status = quote.status || 'Draft';
+    // A real move the rule allows — not "Submit" on a quote already submitted, nor
+    // "Send" on one already sent (quoteMoveAllowed).
+    const canSend   = !!canEdit && quoteMoveAllowed({ from: status, to: 'Sent to Customer', role: userRole, needsApproval });
+    const canSubmit = !!canEdit && needsApproval && quoteMoveAllowed({ from: status, to: 'Pending Approval', role: userRole, needsApproval });
+    const canSave   = !!canEdit && !quoteIsLocked(status);
+    // An approval stamped before §0.155 holds a Clerk id, not a name — not shown.
+    const approver  = quote.approvedBy && !/^user_/.test(quote.approvedBy) ? quote.approvedBy : null;
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 16px' }}>
                 <div style={{ ...eyebrow(T.inkMid), fontSize: 10.5, marginBottom: 10 }}>Approval threshold</div>
                 <ApprovalGauge discount={avgDisc} />
                 <div style={{ fontSize: 11.5, color: T.inkMid, lineHeight: 1.45, marginTop: 10, fontFamily: T.sans }}>
-                    <b style={{ color: T.ink }}>{Math.round(avgDisc * 100)}% avg discount.</b>{' '}
-                    {tier.approver
-                        ? <><b style={{ color: tier.color }}>{tier.approver}</b> sign-off required before send.</>
-                        : <>Within your discretion — no approval needed.</>}
+                    <b style={{ color: T.ink }}>{Math.round(discPct)}% avg discount.</b>{' '}
+                    {!needsApproval
+                        ? <>Within your discretion — no approval needed.</>
+                        : quote.approvedAt || status === 'Approved'
+                            ? <><b style={{ color: tier.color }}>{tier.label}</b> — approved{approver ? <> by {approver}</> : null}.</>
+                            : <><b style={{ color: tier.color }}>{tier.approver}</b> sign-off required before send.</>}
                 </div>
             </div>
 
@@ -800,11 +821,25 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
             )}
 
             <div style={{ background: T.ink, borderRadius: T.r, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <button onClick={tier.approver ? onSubmitApproval : onSendToCustomer} disabled={saving} style={{ background: T.gold, color: T.ink, border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
-                    {saving ? 'Saving…' : tier.approver ? `Submit for ${tier.label}` : 'Send to customer'} →
-                </button>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                    <button onClick={onSaveDraft} disabled={saving} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Save draft</button>
+                {/* The next step the rules allow (quoteRules.js, §0.155): send a quote
+                    that is approved or within the rep's discretion, submit one that needs
+                    approval, wait on one that is pending. An accepted, sent or closed
+                    quote offers none — "+ New version" changes it. */}
+                {(canSend || canSubmit) && (
+                    <button onClick={canSend ? onSendToCustomer : onSubmitApproval} disabled={saving} style={{ background: T.gold, color: T.ink, border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
+                        {saving ? 'Saving…' : canSend ? 'Send to customer' : 'Submit for Approval'} →
+                    </button>
+                )}
+                {status === 'Pending Approval' && (
+                    <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, textAlign: 'center', padding: '6px 0', fontFamily: T.sans }}>Waiting for Approval.</div>
+                )}
+                {canEdit && quoteIsLocked(status) && (
+                    <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11.5, lineHeight: 1.45, padding: '4px 0', fontFamily: T.sans }}>
+                        {status === 'Accepted' ? 'Accepted — this quote is final.' : `${status} — its lines and terms are final.`} Use “+ New version” to change it.
+                    </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: canSave ? '1fr 1fr' : '1fr', gap: 6 }}>
+                    {canSave && <button onClick={onSaveDraft} disabled={saving} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Save draft</button>}
                     <button onClick={onPreviewPDF} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Preview PDF</button>
                 </div>
             </div>
@@ -1096,7 +1131,8 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
 
 // ─── Approvals tab ────────────────────────────────────────────
 function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, onApprove, onReject, onEdit }) {
-    const isManager = userRole === 'Manager' || userRole === 'Admin';
+    // Who approves — the server's rule (quoteRules.js): an Admin or a Manager.
+    const isManager = canApproveQuotes(userRole);
     const pending   = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
     const [notice,  setNotice] = useState(null);
 
@@ -1174,8 +1210,9 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {pending.map(q => {
                             const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                            const { avgDisc, avgDiscPct, totalValue: tv } = calcLineTotals(q.lineItems || [], []);
-                            const tier = tierForDiscount(avgDisc);
+                            const { totalValue: tv } = calcLineTotals(q.lineItems || [], []);
+                            const avgDiscPct = quoteDiscountPct(q.lineItems, q.dealDiscount);
+                            const tier = approvalTierFor(avgDiscPct, APPROVAL_TIERS);
                             const reason = q.approvalReason || `Avg discount ${Math.round(avgDiscPct)}% — exceeds ${tier.approver ? Math.round((APPROVAL_TIERS[APPROVAL_TIERS.indexOf(tier) - 1]?.maxDiscount || 0) * 100) : 10}% rep tier`;
                             return (
                                 <div key={q.id} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
@@ -1256,7 +1293,7 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
                                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                         <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>{fmt(q.totalValue || 0)}</div>
                                         <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 1 }}>
-                                            {q.approvedBy || (isManager ? 'Sales Manager' : 'Rep')} · {(q.updatedAt || q.createdAt || '').slice(0, 10) || '—'}
+                                            {(q.approvedBy && !/^user_/.test(q.approvedBy) ? q.approvedBy : null) || (isManager ? 'Sales Manager' : 'Rep')} · {(q.updatedAt || q.createdAt || '').slice(0, 10) || '—'}
                                         </div>
                                     </div>
                                 </div>
@@ -1274,7 +1311,7 @@ export default function QuotesTab() {
     const {
         quotes, setQuotes, products, opportunities, settings, currentUser, userRole,
         handleSaveQuote, handleDeleteQuote, handleSaveProduct, handleDeleteProduct,
-        loadQuotes, showConfirm,
+        loadQuotes, showConfirm, quoteModalError,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useApp();
 
@@ -1333,7 +1370,10 @@ export default function QuotesTab() {
             if (!opp) return q.createdBy === currentUser;
             return managedReps.has(opp.salesRep) || opp.salesRep === currentUser || q.createdBy === currentUser;
         }
-        return q.createdBy === currentUser;
+        // A rep (and ReadOnly): the server sends only the quotes on deals they can see
+        // (quotes.mjs, §0.155) — that IS the list. This filtered by the creator's NAME,
+        // which hid a quote an Admin wrote on the rep's own deal.
+        return true;
     }), [quotes, opportunities, userRole, currentUser, managedReps]);
 
     // ── Deal summaries ────────────────────────────────────────
@@ -1369,7 +1409,12 @@ export default function QuotesTab() {
         return idx > 0 ? configuratorQuotes[idx - 1] : null;
     }, [activeQuote, configuratorQuotes]);
 
-    const pendingCount = (quotes || []).filter(q => q.status === 'Pending Approval').length;
+    const pendingCount = visibleQuotes.filter(q => q.status === 'Pending Approval').length;
+    // What the active quote may do next, by the rules the server applies (§0.155).
+    const activeCanSend = !!activeQuote && canEdit && quoteMoveAllowed({
+        from: activeQuote.status || 'Draft', to: 'Sent to Customer', role: userRole,
+        needsApproval: quoteNeedsApproval(activeQuote, approvalTiers),
+    });
 
     // The job an accepted quote became — read when the active quote is accepted
     // and Dispatch is on; cleared on any other quote, status or org (§0.125's rule).
@@ -1582,7 +1627,9 @@ export default function QuotesTab() {
                 })}
             </div>
 
-            {error && <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}33`, borderRadius: 8, padding: '0.625rem 0.875rem', fontSize: '0.8125rem', color: T.danger, marginBottom: 12, fontFamily: T.sans }}>{error}</div>}
+            {/* A save the server refused says why — handleSaveQuote keeps the reason in
+                quoteModalError, and a refused Send used to do nothing on screen (§0.155). */}
+            {(error || quoteModalError) && <div style={{ background: `${T.danger}14`, border: `1px solid ${T.danger}33`, borderRadius: 8, padding: '0.625rem 0.875rem', fontSize: '0.8125rem', color: T.danger, marginBottom: 12, fontFamily: T.sans }}>{error || quoteModalError}</div>}
 
             {/* ── DEALS ──────────────────────────────────────── */}
             {subTab === 'deals' && (
@@ -1851,13 +1898,13 @@ export default function QuotesTab() {
                                                 quote={activeQuote}
                                                 otherQuote={prevQuote}
                                                 label={prevQuote ? 'Current' : 'Active'}
-                                                editable
+                                                editable={canEdit && !quoteIsLocked(activeQuote.status)}
                                                 products={products || []}
                                                 onEdit={() => setEditingQuoteId(activeQuote.id)}
                                             />
                                         )}
                                         {activeQuote && <ConfiguratorPanel quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving}
-                                            onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled}
+                                            onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled} canEdit={canEdit} userRole={userRole} tiers={approvalTiers}
                                             job={linkedJob} jobLoading={jobLoading} jobBusy={jobBusy} jobError={jobError} onCreateJob={canCreateJob ? handleCreateJob : null} />}
                                     </div>
                                     {activeQuote && <div style={{ marginTop: 14 }}><QuoteActivityLog quote={activeQuote} /></div>}
@@ -1875,15 +1922,15 @@ export default function QuotesTab() {
                                                 This is what the customer sees when you send v{activeQuote.version || 1}. No internal margin or approval details.
                                             </div>
                                             {(() => {
-                                                const { avgDisc } = calcLineTotals(activeQuote.lineItems || [], products || []);
-                                                const tier = tierForDiscount(avgDisc);
-                                                return tier.approver
+                                                // The server's rule (quoteRules.js): approved, or within the rep's discretion.
+                                                const tier = approvalTierFor(quoteDiscountPct(activeQuote.lineItems, activeQuote.dealDiscount), approvalTiers);
+                                                return tierNeedsApproval(tier) && !activeQuote.approvedAt && activeQuote.status !== 'Approved'
                                                     ? <div style={{ fontSize: 11, color: tier.color, fontWeight: 600, fontFamily: T.sans }}>⚠ Needs {tier.approver} approval before send.</div>
                                                     : <div style={{ fontSize: 11, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>✓ Good to send — within rep authority.</div>;
                                             })()}
                                         </div>
                                         <div style={{ background: T.ink, borderRadius: T.r, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                            <button onClick={handleSendToCustomer} disabled={saving} style={{ background: T.gold, color: T.ink, border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>Send to customer →</button>
+                                            {activeCanSend && <button onClick={handleSendToCustomer} disabled={saving} style={{ background: T.gold, color: T.ink, border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>Send to customer →</button>}
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                                                 <button onClick={handleExportPDF} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Download PDF</button>
                                                 <button onClick={() => setViewMode('build')} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>← Back to build</button>
@@ -1915,7 +1962,7 @@ export default function QuotesTab() {
             {/* ── APPROVALS ──────────────────────────────────── */}
             {subTab === 'approvals' && (
                 <ApprovalsTab
-                    quotes={quotes}
+                    quotes={visibleQuotes}
                     opportunities={opportunities}
                     currentUser={currentUser}
                     userRole={userRole}

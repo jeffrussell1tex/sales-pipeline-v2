@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 1, 2026 · rules current through **§18b47** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 2, 2026 · rules current through **§18b48** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3614,3 +3614,13 @@ through `dbFetch`.
 4. **Never copy the unknown value in.** The vocabulary stays closed (users.mjs: "validated, not copied"); the divergence is reported (`roleDrift`) and shown (the Users screen's sync message).
 5. **Do not administer from a deploy behind the code under test.** Until the push, user and role changes and "Sync from Clerk" happen on localhost only.
 6. **Pin the rule by running it.** tests/roles.test.mjs RUNS `mirrorRoleOf` for every case (a known role, none, the kept newer value, a typo against an Admin row, a new row); tests/role-vocabulary.test.mjs scans the sync for the call, the row found first and the old coercion gone; four mutants break one case each.
+
+## 18b48. A Record's Children Follow Its Access — A Quote Is Seen And Changed Where Its Deal Is, By The Stored Link (hard rule)
+
+**Origin (§0.155, 2 Oct 2026).** Deals were scoped on the server (§0.151); their quotes were not. `quotes.mjs` sent every member every quote — the Quotes tab filtered a rep's by the creator's NAME — and its PUT checked no owner, so another rep's quotes reached a rep's browser and she could change them. An accept pushed the quote's value to the deal named in the BODY.
+
+1. **A child record's read and write are its parent's.** A quote, the email that sends it and the job it became ask `dealAccess` (`_dealAccess.mjs`): read = `dealVisibleTo`, the deals list's own rule (src/utils/roles.js); write = read AND the write authority or the owner (`mayMutate`). No parallel rule for the child — the deals list and its quotes cannot disagree.
+2. **The STORED link decides, never the body's.** A PUT's `opportunityId` is ignored; the access check and every side effect (the accepted value) use the row's own deal. A child cannot be moved to a parent the caller may change by naming it.
+3. **What the caller cannot see answers like what does not exist** — 404, for a read, a write, an email and a job card alike. "It exists, but not yours" is a probe's answer.
+4. **One rule for the server and the screen needs a "real move" for buttons.** The server must allow a save that keeps a status; a button that reuses that answer offers "Submit" on a quote already submitted (caught in the pane). Buttons ask `quoteMoveAllowed`, the server `quoteTransitionRefusal` — the same rule, asked two questions.
+5. **Pin it by running it and by acting as every role.** tests/roles.test.mjs and tests/quote-rules.test.mjs RUN the rules; tests/integration/quotes-access.itest.mjs reads, writes, approves, sends and emails as each role with a second org that must see nothing.

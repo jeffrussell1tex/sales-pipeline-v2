@@ -78,6 +78,9 @@ const OPP_A = 'opp_itest_inv_a', OPP_A2 = 'opp_itest_inv_a2', OPP_B = 'opp_itest
 const Q_ACCEPTED = 'q_itest_inv_accepted', Q_DRAFT = 'q_itest_inv_draft', Q_A2 = 'q_itest_inv_a2', Q_B = 'q_itest_inv_b';
 const PROD = 'prod_itest_inv', PROD_EQUIP = 'prod_itest_inv_equip';
 const DISPATCHER = 'clerk_itest_inv_dispatcher';
+// Two sales reps in A (§0.155): REP owns OPP_A, the deal Q_ACCEPTED sits on; REP2
+// owns nothing. A quote's deal decides who may see the job it became.
+const REP = 'clerk_itest_inv_rep', REP2 = 'clerk_itest_inv_rep2';
 const YEAR = new Date().getFullYear();
 
 const call = (fn, method, org, { body, params, role, user } = {}) => fn({
@@ -118,6 +121,8 @@ before(async () => {
     ]);
     await db.insert(users).values([
         { id: 'usr_itest_inv_a', clerkUserId: DISPATCHER, name: 'Itest Dispatcher', email: 'inv-dispatcher@itest.local', role: 'Dispatcher', orgId: ORG_A },
+        { id: 'usr_itest_inv_rep', clerkUserId: REP, name: 'Itest Rep', email: 'inv-rep@itest.local', role: 'User', orgId: ORG_A },
+        { id: 'usr_itest_inv_rep2', clerkUserId: REP2, name: 'Itest Rep Two', email: 'inv-rep2@itest.local', role: 'User', orgId: ORG_A },
     ]);
     invalidateRoster();
     await db.insert(products).values([
@@ -128,7 +133,7 @@ before(async () => {
         { id: CUST_A, orgId: ORG_A, name: 'Itest Customer A', accountId: ACCT_A, customerType: 'commercial', customerNumber: 'CUST-0001' },
     ]);
     await db.insert(opportunities).values([
-        { id: OPP_A,  orgId: ORG_A, pipelineId: 'pipe_itest', stage: 'Closed Won', opportunityName: 'Itest rooftop units', account: 'Itest Customer A', accountId: ACCT_A },
+        { id: OPP_A,  orgId: ORG_A, pipelineId: 'pipe_itest', stage: 'Closed Won', opportunityName: 'Itest rooftop units', account: 'Itest Customer A', accountId: ACCT_A, ownerId: 'usr_itest_inv_rep', salesRep: 'Itest Rep' },
         { id: OPP_A2, orgId: ORG_A, pipelineId: 'pipe_itest', stage: 'Closed Won', opportunityName: 'Brand new deal', account: 'Brand New Co', accountId: null },
         { id: OPP_B,  orgId: ORG_B, pipelineId: 'pipe_itest', stage: 'Closed Won', opportunityName: 'B deal', account: 'B Co' },
     ]);
@@ -215,7 +220,7 @@ test('a Draft quote is refused; an org with Dispatch off is refused before its q
     assert.equal(cross.status, 404, 'org C (Dispatch on) cannot see org A’s quote');
     assert.equal((await db.select().from(dispatchJobs).where(eq(dispatchJobs.orgId, ORG_C))).length, 0);
     const crossGet = parse(await call(toJob, 'GET', ORG_C, { params: { quoteId: Q_ACCEPTED } }));
-    assert.equal(crossGet.body.job, null, 'nor its job');
+    assert.equal(crossGet.status, 404, 'nor its job — a 404, as for any quote the caller cannot see (§0.155)');
 
     assert.equal(parse(await call(toJob, 'POST', ORG_A, { body: { quoteId: Q_A2 }, role: 'Technician' })).status, 403);
     assert.equal(parse(await call(toJob, 'GET', ORG_A, { params: { quoteId: Q_ACCEPTED }, role: 'Technician' })).status, 403);
@@ -225,9 +230,11 @@ test('a Draft quote is refused; an org with Dispatch off is refused before its q
     const repPost = parse(await call(toJob, 'POST', ORG_A, { body: { quoteId: Q_A2 }, role: 'User' }));
     assert.equal(repPost.status, 403);
     assert.match(repPost.body.error, /not open to sales reps/);
-    const repGet = parse(await call(toJob, 'GET', ORG_A, { params: { quoteId: Q_ACCEPTED }, role: 'User' }));
-    assert.equal(repGet.status, 200, 'the card’s read-only status');
+    const repGet = parse(await call(toJob, 'GET', ORG_A, { params: { quoteId: Q_ACCEPTED }, role: 'User', user: REP }));
+    assert.equal(repGet.status, 200, 'the card’s read-only status — her own deal’s quote');
     assert.ok(repGet.body.job?.jobNumber, 'the job she handed off');
+    // Another rep in the same org: the quote's deal is not hers, so neither is its job (§0.155).
+    assert.equal(parse(await call(toJob, 'GET', ORG_A, { params: { quoteId: Q_ACCEPTED }, role: 'User', user: REP2 })).status, 404);
     // Org C opens Dispatch to reps: the gate lets her through, and org A's quote is a 404 there.
     assert.equal(parse(await call(toJob, 'POST', ORG_C, { body: { quoteId: Q_ACCEPTED }, role: 'User' })).status, 404);
     assert.equal(parse(await call(toJob, 'POST', ORG_A, { body: {} })).status, 400);

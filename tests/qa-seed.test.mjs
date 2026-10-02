@@ -110,7 +110,7 @@ test('the money adds up the way the app adds it', () => {
     const pending = R.quotes.find(q => q.status === 'Pending Approval');
     assert.deepEqual(approvalFor(pending.lineItems), { approvalTier: pending.approvalTier, approvalReason: pending.approvalReason });
     assert.equal(pending.approvalTier, 'VP approval', '25% is over the manager tier');
-    assert.equal(R.quotes.find(q => q.status === 'Approved').approvedBy, 'user_mgr', 'approved by the Manager');
+    assert.equal(R.quotes.find(q => q.status === 'Approved').approvedBy, 'Bob Russell', 'approved by the Manager — by name, as quotes.mjs stamps it (§0.155)');
 });
 
 test('every status the next commit (quotes) needs is present, and the numbers are the app\'s formats', () => {

@@ -349,20 +349,26 @@ test('THE GUARD — unassignedLeadsVisibleToReps exists in BOTH settings.mjs hal
         'leads.mjs must read extra.unassignedLeadsVisibleToReps with `?? true` — the absent-key default is the standing policy');
 });
 
-test('THE GUARD — unassignedDealsVisibleToReps exists in BOTH settings.mjs halves and opportunities.mjs reads it, OFF when absent', () => {
+test('THE GUARD — unassignedDealsVisibleToReps exists in BOTH settings.mjs halves and the deal read (_dealAccess.mjs) reads it, OFF when absent', () => {
     // The deals twin (§0.151). Same 18b12 pairing; the OPPOSITE default — Jeff:
     // "Reps should only see their own deals" — so an absent key must read false
-    // in all three places, and the strict branch must guard the owner side.
+    // in all three places, and an unassigned deal is decided BEFORE the owner
+    // comparison. Since §0.155 the read lives in _dealAccess.mjs and the rule in
+    // src/utils/roles.js (dealVisibleTo), shared by the deals list and the quotes.
     const settingsSrc = codeOnly(
         readFileSync(new URL('../netlify/functions/settings.mjs', import.meta.url), 'utf8'));
     const pairs = settingsSrc.match(/unassignedDealsVisibleToReps:[^\n]*\?\?\s*false,/g) || [];
     assert.equal(pairs.length, 2,
         `unassignedDealsVisibleToReps must appear in the GET projection AND the PUT whitelist of settings.mjs with \`?? false\` — found ${pairs.length} of 2`);
+    const accessSrc = codeOnly(readFileSync(new URL('../netlify/functions/_dealAccess.mjs', import.meta.url), 'utf8'));
+    assert.ok(/unassignedDealsVisibleToReps\s*\?\?\s*false/.test(accessSrc),
+        '_dealAccess.mjs must read extra.unassignedDealsVisibleToReps with `?? false` — absent means reps see only their own deals');
+    const rolesSrc = codeOnly(readFileSync(new URL('../src/utils/roles.js', import.meta.url), 'utf8'));
+    assert.ok(rolesSrc.includes('if (!deal.ownerId) return ctx.unassignedVisible === true;')
+        && rolesSrc.includes('return !!ctx.callerId && deal.ownerId === ctx.callerId;'),
+        'an unassigned deal is the switch\'s call and an owned one needs a resolved caller: a bare ownerId === callerId matches null === null (18b22)');
     const oppSrc = codeOnly(endpointSrc('opportunities'));
-    assert.ok(/unassignedDealsVisibleToReps\s*\?\?\s*false/.test(oppSrc),
-        'opportunities.mjs must read extra.unassignedDealsVisibleToReps with `?? false` — absent means reps see only their own deals');
-    assert.ok(oppSrc.includes('results.filter(o => !!o.ownerId && o.ownerId === callerId)'),
-        'the strict branch must guard the owner side: a bare ownerId === callerId matches null === null (18b22)');
+    assert.ok(oppSrc.includes('results = results.filter(o => dealVisibleTo(o, ctx));'), 'the deals list reads through the one rule');
 });
 
 test('an unregistered entity throws rather than authorizing everyone', () => {

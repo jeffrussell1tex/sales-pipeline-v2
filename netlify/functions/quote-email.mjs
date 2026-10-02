@@ -1,21 +1,34 @@
 /**
  * quote-email.mjs
  *
- * Sends an approved quote to the customer via Resend.
+ * Sends a quote to the customer via Resend.
  * Looks up the quote + linked opportunity + billing contact,
  * sends a branded email, updates quote status to "Sent to Customer",
  * and returns customer name/email to the frontend for the success modal.
  *
  * POST /.netlify/functions/quote-email
  * Body: { quoteId }
+ *
+ * Who and when (state §0.155): the CRM's writers only (requireWrite — ReadOnly, a
+ * Technician and a Dispatcher are refused), and only on a deal the caller may
+ * change (_dealAccess.mjs — a rep her own); the quote must be one the rules let be
+ * sent (src/utils/quoteRules.js — approved, or a draft whose discount needs no
+ * approval; never an accepted or a closed one). Before this, any signed-in member
+ * could email any approved quote to its customer and flip it to Sent.
  */
 
 import { db } from '../../db/index.js';
 import { quotes, opportunities, contacts, accounts, users } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireWrite } from './auth.mjs';
 import { sendEmail } from './send-email.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
+import { dealAccess } from './_dealAccess.mjs';
+import { getApprovalTiers } from './quotes.mjs';
+import { quoteTransitionRefusal, quoteNeedsApproval } from '../../src/utils/quoteRules.js';
+// Every value placed in the customer's email is escaped: notes, product names,
+// terms and names are typed by people, and markup in them would reach the inbox.
+import { esc } from '../../src/utils/customerNotifications.js';
 
 const APP_URL = process.env.APP_URL || 'https://accelerep.netlify.app';
 
@@ -38,6 +51,10 @@ export const handler = async (event) => {
     if (auth.error) {
         return { statusCode: auth.status || 401, headers: responseHeaders, body: JSON.stringify({ error: auth.error }) };
     }
+    // Sending a quote changes it (status, sentAt) and writes to a customer: the
+    // CRM's writers only.
+    const forbidden = requireWrite(auth, event, responseHeaders);
+    if (forbidden) return forbidden;
 
     const { orgId, userId } = auth;
 
@@ -61,8 +78,20 @@ export const handler = async (event) => {
         if (!quote) {
             return { statusCode: 404, headers: responseHeaders, body: JSON.stringify({ error: 'Quote not found' }) };
         }
-        if (quote.status !== 'Approved') {
-            return { statusCode: 422, headers: responseHeaders, body: JSON.stringify({ error: 'Only approved quotes can be sent to customers.' }) };
+        // Its deal decides who may send it — as it decides who may change it.
+        const access = await dealAccess(auth, quote.opportunityId);
+        if (!access.canRead) {
+            return { statusCode: 404, headers: responseHeaders, body: JSON.stringify({ error: 'Quote not found' }) };
+        }
+        if (!access.canWrite) {
+            return { statusCode: 403, headers: responseHeaders, body: JSON.stringify({ error: 'Forbidden: you can only send quotes on your own or unassigned deals' }) };
+        }
+        const refusal = quoteTransitionRefusal({
+            from: quote.status, to: 'Sent to Customer', role: auth.userRole,
+            needsApproval: quoteNeedsApproval(quote, await getApprovalTiers(orgId)),
+        });
+        if (refusal) {
+            return { statusCode: 422, headers: responseHeaders, body: JSON.stringify({ error: refusal }) };
         }
 
         // ── 2. Load linked opportunity ────────────────────────────────────────
@@ -92,9 +121,6 @@ export const handler = async (event) => {
             const contactNames = (opp.contacts || '').split(', ').filter(Boolean);
             if (contactNames.length > 0) {
                 const primaryName = contactNames[0].split(' (')[0].trim();
-                const [contact] = await db.select().from(contacts)
-                    .where(and(eq(contacts.orgId, orgId)))
-                    .limit(50); // fetch a batch to match by name
                 // Find by matching full name
                 const allContacts = await db.select().from(contacts).where(eq(contacts.orgId, orgId));
                 const match = allContacts.find(c =>
@@ -127,10 +153,10 @@ export const handler = async (event) => {
         const lineItems = Array.isArray(quote.lineItems) ? quote.lineItems : [];
         const lineRows = lineItems.map(li => `
             <tr>
-                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; border-bottom: 1px solid #f0ece4;">${li.name || li.productName || '—'}</td>
-                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; text-align: center; border-bottom: 1px solid #f0ece4;">${li.qty || 1}</td>
-                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; text-align: right; border-bottom: 1px solid #f0ece4;">${fmt(li.unitPrice ?? li.listPrice)}</td>
-                <td style="padding: 8px 12px; font-size: 13px; font-weight: 600; color: #1c1917; text-align: right; border-bottom: 1px solid #f0ece4;">${fmt((li.qty || 1) * (li.unitPrice ?? li.listPrice ?? 0))}</td>
+                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; border-bottom: 1px solid #f0ece4;">${esc(li.name || li.productName || '—')}</td>
+                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; text-align: center; border-bottom: 1px solid #f0ece4;">${esc(li.qty || 1)}</td>
+                <td style="padding: 8px 12px; font-size: 13px; color: #44403c; text-align: right; border-bottom: 1px solid #f0ece4;">${esc(fmt(li.unitPrice ?? li.listPrice))}</td>
+                <td style="padding: 8px 12px; font-size: 13px; font-weight: 600; color: #1c1917; text-align: right; border-bottom: 1px solid #f0ece4;">${esc(fmt((li.qty || 1) * (li.unitPrice ?? li.listPrice ?? 0)))}</td>
             </tr>
         `).join('');
 
@@ -142,18 +168,17 @@ export const handler = async (event) => {
         // Read server-side from the sender's own profile rather than accepted from
         // the client: a signature is attacker-controlled text going into a
         // customer's inbox, so the client must not be able to choose it for
-        // somebody else, or inject markup.
+        // somebody else, or inject markup. Looked up by the CLERK id — `userId` is
+        // the Clerk id, and comparing it to users.id (usr_…) never matched, so no
+        // signature ever went out (§0.155).
         let signatureHtml = '';
         try {
             const [senderRow] = await db.select({ profile: users.profile })
-                .from(users).where(and(eq(users.id, userId), eq(users.orgId, orgId))).limit(1);
+                .from(users).where(and(eq(users.clerkUserId, userId), eq(users.orgId, orgId))).limit(1);
             const raw = (senderRow?.profile || {}).emailSignature;
             if (raw && String(raw).trim()) {
-                const esc = String(raw)
-                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;');
                 signatureHtml = `
-      <div style="margin-top:28px;padding-top:18px;border-top:1px solid #e8e3da;font-size:13px;color:#57534e;line-height:1.6;white-space:pre-line;">${esc}</div>`;
+      <div style="margin-top:28px;padding-top:18px;border-top:1px solid #e8e3da;font-size:13px;color:#57534e;line-height:1.6;white-space:pre-line;">${esc(raw)}</div>`;
             }
         } catch (e) {
             // A missing signature must never block the quote going out.
@@ -165,7 +190,7 @@ export const handler = async (event) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Quote ${quoteNum}</title>
+  <title>Quote ${esc(quoteNum)}</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1c1917;">
   <div style="max-width:600px;margin:40px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
@@ -174,18 +199,18 @@ export const handler = async (event) => {
       <p style="color:#a8a29e;font-size:12px;margin:4px 0 0;">Quote for your review</p>
     </div>
     <div style="padding:36px;">
-      <h2 style="font-size:22px;font-weight:700;margin:0 0 8px;color:#1c1917;">Hi ${customerName},</h2>
+      <h2 style="font-size:22px;font-weight:700;margin:0 0 8px;color:#1c1917;">Hi ${esc(customerName)},</h2>
       <p style="font-size:14px;line-height:1.7;color:#57534e;margin:0 0 24px;">
         Please find your quote below. If you have any questions, don't hesitate to reach out.
       </p>
 
       <div style="background:#f8f6f3;border:1px solid #e8e3da;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
         <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#57534e;">
-          <span style="font-weight:600;color:#1c1917;">Quote Number</span><span>${quoteNum}</span>
+          <span style="font-weight:600;color:#1c1917;">Quote Number</span><span>${esc(quoteNum)}</span>
         </div>
-        ${opp ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#57534e;"><span style="font-weight:600;color:#1c1917;">Company</span><span>${accountName}</span></div>` : ''}
-        ${validUntil ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#57534e;"><span style="font-weight:600;color:#1c1917;">Valid Until</span><span>${validUntil}</span></div>` : ''}
-        ${quote.paymentTerms ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#57534e;"><span style="font-weight:600;color:#1c1917;">Payment Terms</span><span>${quote.paymentTerms}</span></div>` : ''}
+        ${opp ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#57534e;"><span style="font-weight:600;color:#1c1917;">Company</span><span>${esc(accountName)}</span></div>` : ''}
+        ${validUntil ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#57534e;"><span style="font-weight:600;color:#1c1917;">Valid Until</span><span>${esc(validUntil)}</span></div>` : ''}
+        ${quote.paymentTerms ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#57534e;"><span style="font-weight:600;color:#1c1917;">Payment Terms</span><span>${esc(quote.paymentTerms)}</span></div>` : ''}
       </div>
 
       ${lineRows ? `
@@ -201,10 +226,10 @@ export const handler = async (event) => {
         <tbody>${lineRows}</tbody>
       </table>
       <div style="text-align:right;font-size:16px;font-weight:700;color:#1c1917;padding:8px 12px;border-top:2px solid #1c1917;">
-        Total: ${total}
+        Total: ${esc(total)}
       </div>` : ''}
 
-      ${quote.notes ? `<div style="margin-top:20px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 18px;font-size:13px;color:#92400e;line-height:1.6;"><strong>Notes:</strong> ${quote.notes}</div>` : ''}
+      ${quote.notes ? `<div style="margin-top:20px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 18px;font-size:13px;color:#92400e;line-height:1.6;"><strong>Notes:</strong> ${esc(quote.notes)}</div>` : ''}
 
       ${signatureHtml || `
       <p style="margin-top:28px;font-size:13px;color:#a8a29e;">
@@ -212,7 +237,7 @@ export const handler = async (event) => {
       </p>`}
     </div>
     <div style="background:#f8f6f3;padding:18px 36px;border-top:1px solid #e8e3da;font-size:11px;color:#a8a29e;text-align:center;">
-      <p style="margin:0;">Accelerep · <a href="${APP_URL}" style="color:#78716c;text-decoration:none;">${APP_URL}</a></p>
+      <p style="margin:0;">Accelerep · <a href="${esc(APP_URL)}" style="color:#78716c;text-decoration:none;">${esc(APP_URL)}</a></p>
     </div>
   </div>
 </body>
@@ -227,7 +252,7 @@ export const handler = async (event) => {
 
         // ── 6. Update quote status to "Sent to Customer" ──────────────────────
         await db.update(quotes)
-            .set({ status: 'Sent to Customer', updatedAt: new Date() })
+            .set({ status: 'Sent to Customer', sentAt: new Date(), updatedAt: new Date() })
             .where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId)));
         // A quote left the app for a customer's inbox (§0.143).
         await auditAs(orgId, userId, { action: 'quote.emailed', entityType: 'quote', entityId: quoteId, entityName: quoteNum, detail: `To ${customerEmail} · ${accountName}` });

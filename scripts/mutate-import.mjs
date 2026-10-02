@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -2874,15 +2874,17 @@ const mutations = [
         "    const canEdit    = userRole !== 'ReadOnly';"],
 
     // ── the deals visibility switch (§0.151) ─────────────────────────────────
+    // Repointed (§0.155): the switch is read in _dealAccess.mjs and the rule lives in
+    // roles.js (dealVisibleTo), shared by the deals list and the quotes.
     ['deal visibility: an absent switch shows reps every unassigned deal again',
-        'netlify/functions/opportunities.mjs',
+        'netlify/functions/_dealAccess.mjs',
         "    return row?.extra?.unassignedDealsVisibleToReps ?? false;",
         "    return row?.extra?.unassignedDealsVisibleToReps ?? true;"],
 
-    ['deal visibility: the strict branch loses its owner guard (null === null hands a null caller the unassigned)',
-        'netlify/functions/opportunities.mjs',
-        "                    : results.filter(o => !!o.ownerId && o.ownerId === callerId);",
-        "                    : results.filter(o => o.ownerId === callerId);"],
+    ['deal visibility: the owner guard goes (null === null hands a null caller the unassigned)',
+        'src/utils/roles.js',
+        "        if (!deal.ownerId) return ctx.unassignedVisible === true;",
+        "        if (!deal.ownerId) return deal.ownerId === ctx.callerId;"],
 
     ['deal visibility: the settings GET drops the key (the panel reads the default forever)',
         'netlify/functions/settings.mjs',
@@ -3022,6 +3024,107 @@ const mutations = [
         'scripts/qa-seed-plan.mjs',
         "const [first, last, title] = people[(i * 2 + k) % people.length];",
         "const [first, last, title] = people[(i * 2 + k) % 8];"],
+
+    // ── (C): a quote belongs to its deal; the rules hold on the server (§0.155) ──
+    ['deal rule: an owned deal reaches a caller who cannot be resolved',
+        'src/utils/roles.js',
+        "        return !!ctx.callerId && deal.ownerId === ctx.callerId;",
+        "        return deal.ownerId === ctx.callerId || !ctx.callerId;"],
+
+    ['deal rule: a Manager is no longer narrowed to the reps named in Clerk',
+        'src/utils/roles.js',
+        "    if (ctx.role === 'Manager' && reps.length > 0) return !deal.salesRep || reps.includes(deal.salesRep);",
+        "    // (narrowing dropped)"],
+
+    ['deal rule: a Technician reads deals again',
+        'src/utils/roles.js',
+        "    if (scope === 'none') return false;",
+        "    if (false) return false;"],
+
+    ['quotes: the GET sends every quote in the org again',
+        'netlify/functions/quotes.mjs',
+        "                    .filter(q => visible.has(q.opportunityId));",
+        "                    ;"],
+
+    ['quotes: a POST on any deal in the org (the deal\'s write unchecked)',
+        'netlify/functions/quotes.mjs',
+        "            if (!access.canWrite) return refuse(403, 'Forbidden: you can only quote your own or unassigned deals');",
+        "            // (unchecked)"],
+
+    ['quotes: a PUT that misses goes on (the upsert that created any quote)',
+        'netlify/functions/quotes.mjs',
+        "            if (!existing) return refuse(404, NOT_FOUND);",
+        "            if (!existing && false) return refuse(404, NOT_FOUND);"],
+
+    ['quotes: the body\'s deal moves the quote',
+        'netlify/functions/quotes.mjs',
+        "id: existing.id, opportunityId: existing.opportunityId, version: existing.version, createdBy: existing.createdBy,",
+        "id: existing.id, version: existing.version, createdBy: existing.createdBy,"],
+
+    ['quote rules: a button offers a move to the status the quote already has (Submit on a submitted quote)',
+        'src/utils/quoteRules.js',
+        "export const quoteMoveAllowed = (args) => (args?.from || 'Draft') !== args?.to && quoteTransitionRefusal(args) === null;",
+        "export const quoteMoveAllowed = (args) => quoteTransitionRefusal(args) === null;"],
+
+    ['quote rules: a rep approves her own quote',
+        'src/utils/quoteRules.js',
+        "            if (!canApproveQuotes(role)) return 'Only an Admin or a Manager approves a quote.';",
+        "            // (anyone approves)"],
+
+    ['quote rules: a quote that needs approval is sent without it',
+        'src/utils/quoteRules.js',
+        "            if (f === 'Draft') return needsApproval ? 'This discount needs approval before the quote is sent.' : null;",
+        "            if (f === 'Draft') return null;"],
+
+    ['quote rules: an accepted quote moves again',
+        'src/utils/quoteRules.js',
+        "    if (f === 'Accepted') return 'An accepted quote is final — start a new version to change it.';",
+        "    // (accepted is not final)"],
+
+    ['quote rules: an approved quote keeps its approval through an edit',
+        'src/utils/quoteRules.js',
+        "    if (status === 'Approved') return { status: 'Draft', refusal: null, approvalCleared: true };",
+        "    // (the approval survives an edit)"],
+
+    ['quote rules: a sent quote\'s lines change again',
+        'src/utils/quoteRules.js',
+        "    if (quoteIsLocked(status)) return { status, refusal: 'This quote was sent — its lines and terms are final. Start a new version to change them.', approvalCleared: false };",
+        "    // (unlocked)"],
+
+    ['quote-email: any member sends a quote again (the writers\' gate gone)',
+        'netlify/functions/quote-email.mjs',
+        "    const forbidden = requireWrite(auth, event, responseHeaders);",
+        "    const forbidden = null;"],
+
+    ['quote-email: the notes reach the customer\'s inbox raw',
+        'netlify/functions/quote-email.mjs',
+        "<strong>Notes:</strong> ${esc(quote.notes)}</div>",
+        "<strong>Notes:</strong> ${quote.notes}</div>"],
+
+    ['quote-email: the signature is looked up by the Clerk id against app ids again',
+        'netlify/functions/quote-email.mjs',
+        "eq(users.clerkUserId, userId)",
+        "eq(users.id, userId)"],
+
+    ['quote-to-job: the quote card answers for any quote id again',
+        'netlify/functions/quote-to-job.mjs',
+        "            if (!q || !(await dealAccess(auth, q.opportunityId)).canRead) return reply(404, { error: 'Quote not found' });",
+        "            if (!q) return reply(404, { error: 'Quote not found' });"],
+
+    ['quotes tab: Send / Submit show whatever the status (Send on an accepted quote)',
+        'src/Tabs/QuotesTab.jsx',
+        "                {(canSend || canSubmit) && (",
+        "                {true && ("],
+
+    ['quotes tab: a rep\'s list filtered by the creator\'s name again',
+        'src/Tabs/QuotesTab.jsx',
+        "        // which hid a quote an Admin wrote on the rep's own deal.\n        return true;",
+        "        // which hid a quote an Admin wrote on the rep's own deal.\n        return q.createdBy === currentUser;"],
+
+    ['qa seed: the Approved quote is stamped with the Clerk id again',
+        'scripts/qa-seed-plan.mjs',
+        "approvedBy: manager?.name || admin?.name || null,",
+        "approvedBy: manager?.clerkUserId || admin?.clerkUserId || null,"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

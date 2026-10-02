@@ -2,14 +2,27 @@ import { db } from '../../db/index.js';
 import { quotes, opportunities, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and, desc, sql } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry, auditAs, getCallerName } from './_lib.mjs';
+// A quote belongs to its DEAL (state §0.155, guide §18b48): who may read or change a
+// quote is who may read or change the deal — the deals list's own rule, imported
+// directly so a suite that mocks auth.mjs still runs the real one. What may HAPPEN
+// to a quote is one rule too; QuotesTab's buttons read the same module.
+import { dealVisibleTo } from '../../src/utils/roles.js';
+import { dealReadContext, dealAccess } from './_dealAccess.mjs';
+import {
+    DEFAULT_QUOTE_APPROVAL_TIERS, approvalTierFor, quoteDiscountPct, quoteNeedsApproval,
+    quoteTransitionRefusal, quoteEditOutcome, quoteTermsChanged, canApproveQuotes,
+} from '../../src/utils/quoteRules.js';
 
-// A status the client sets on PUT names the event (§0.143); anything else is an update.
+// A status a save MOVES the quote to names the event (§0.143); anything else is an
+// update. The words are the ones the app stores: this map listed 'Sent' and
+// 'Rejected', which nothing sends, so a send or a reject was audited as a plain
+// update and sentAt was never stamped (§0.155).
 const QUOTE_STATUS_ACTIONS = Object.freeze({
     'Pending Approval': 'quote.submitted',
     Approved:           'quote.approved',
-    Rejected:           'quote.rejected',
-    Sent:               'quote.sent',
+    'Rejected / Lost':  'quote.rejected',
+    'Sent to Customer': 'quote.sent',
     Accepted:           'quote.accepted',
 });
 
@@ -117,33 +130,29 @@ function calcTotals(lineItems = [], dealDiscountPct = 0) {
     };
 }
 
-// When a quote is accepted, push its totalValue to the linked opportunity's arr field
-// ── Compute which approval tier applies ──────────────────────────────────────
-const DEFAULT_APPROVAL_TIERS = [
-    { maxDiscount: 0.10, label: 'Rep',          approver: null           },
-    { maxDiscount: 0.20, label: 'Mgr approval', approver: 'Sales Manager'},
-    { maxDiscount: 0.30, label: 'VP approval',  approver: 'VP Sales'     },
-    { maxDiscount: 1.00, label: 'CFO approval', approver: 'CFO'          },
-];
-
-async function getApprovalTiers(orgId) {
+// ── Approval tiers: the org's (Settings → Quoting → Approval tiers), else the
+// defaults the rules module carries. Exported for quote-email.mjs, which applies
+// the same "needs approval before it is sent" rule.
+export async function getApprovalTiers(orgId) {
     try {
         const rows = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
         const extra = rows[0]?.extra;
         if (extra?.approvalTiers?.length) return extra.approvalTiers;
     } catch(e) { /* fallback */ }
-    return DEFAULT_APPROVAL_TIERS;
+    return DEFAULT_QUOTE_APPROVAL_TIERS;
 }
 
-function computeApprovalTier(avgDiscountPct, tiers) {
-    // avgDiscountPct is 0-100 (e.g. 22 means 22%)
-    const ratio = avgDiscountPct / 100;
-    for (const tier of tiers) {
-        if (ratio <= tier.maxDiscount) return tier;
-    }
-    return tiers[tiers.length - 1];
+// What a quote submitted for approval is stamped with: the tier its discount falls
+// in, and why — "Avg discount 25% > 20% Mgr approval tier".
+function approvalStamp(quote, tiers) {
+    const disc = quoteDiscountPct(quote.lineItems, quote.dealDiscount);
+    const tier = approvalTierFor(disc, tiers);
+    const prevTier = tiers[tiers.indexOf(tier) - 1];
+    const threshold = prevTier ? Math.round(prevTier.maxDiscount * 100) : 0;
+    return { approvalTier: tier.label, approvalReason: `Avg discount ${Math.round(disc)}% > ${threshold}% ${prevTier?.label || 'rep'} tier` };
 }
 
+// When a quote is accepted, push its totalValue to the linked opportunity's arr field
 async function syncToOpportunity(orgId, opportunityId, totalValue) {
     if (!opportunityId) return;
     await db.update(opportunities)
@@ -151,9 +160,10 @@ async function syncToOpportunity(orgId, opportunityId, totalValue) {
         .where(and(eq(opportunities.id, opportunityId), eq(opportunities.orgId, orgId)));
 }
 
-// ── Approval stats helper (used by Settings → Approval tiers) ───────────────
-// GET /.netlify/functions/quotes?approvalStats=true
-// Returns counts grouped by approvalTier for the last 90 days
+const refuse = (statusCode, error) => ({ statusCode, headers, body: JSON.stringify({ error }) });
+// A quote on a deal the caller may not see answers as missing — never "it exists,
+// but it is not yours".
+const NOT_FOUND = 'Quote not found';
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
@@ -163,31 +173,19 @@ export const handler = async (event) => {
 
     const { orgId, userRole } = auth;
     const isAdmin = userRole === 'Admin';
-    const isManager = userRole === 'Manager';
     // Shared write gate rather than a local ReadOnly-only const: that const
     // shadowed the imported helper and would have let a Technician write quotes.
     const forbiddenWrite = requireWrite(auth, event, headers);
     if (forbiddenWrite) return forbiddenWrite;
 
     try {
-        // ── GET — list quotes ─────────────────────────────────────────────────
+        // ── GET — the quotes on the deals the caller can see ─────────────────
         if (event.httpMethod === 'GET') {
-            const oppId = event.queryStringParameters?.opportunityId;
-            let rows;
-            if (oppId) {
-                // All versions for a specific opportunity
-                rows = await db.select().from(quotes)
-                    .where(and(eq(quotes.orgId, orgId), eq(quotes.opportunityId, oppId)))
-                    .orderBy(asc(quotes.quoteNumber), asc(quotes.version));
-            } else {
-                // All quotes for the org (for the global Quotes tab)
-                rows = await db.select().from(quotes)
-                    .where(eq(quotes.orgId, orgId))
-                    .orderBy(desc(quotes.createdAt));
-            }
-
-            // Approval stats — grouped by tier for the last 90 days
+            // Approval stats — grouped by tier for the last 90 days. Settings →
+            // Approval tiers reads them; they count every rep's quotes, so they are
+            // for the roles that approve.
             if (event.queryStringParameters?.approvalStats === 'true') {
+                if (!canApproveQuotes(userRole)) return refuse(403, 'Forbidden: approval statistics are for an Admin or a Manager');
                 const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
                 const allQuotes = await db.select().from(quotes).where(eq(quotes.orgId, orgId));
                 const recent = allQuotes.filter(q => new Date(q.updatedAt) >= ninetyDaysAgo);
@@ -205,19 +203,48 @@ export const handler = async (event) => {
                     const avgHours = times.length > 0 ? Math.round(times.reduce((a,b) => a+b,0) / times.length) : 0;
                     return { tier: tier.label, quotes: tierQuotes.length, approved, declined, pending, avgHours };
                 });
-                // Also count Rep tier (no approval needed — all non-pending quotes)
                 return { statusCode: 200, headers, body: JSON.stringify({ approvalStats: stats }) };
             }
 
+            // A quote reaches the caller where its DEAL does (dealVisibleTo): a rep
+            // her own deals' quotes — and an unassigned deal's where the Admin's
+            // switch shows it to her — a Technician none, Admin, Manager and a
+            // Dispatcher the org's. Every member used to receive every quote; the
+            // Quotes tab then filtered by the creator's NAME (§0.155).
+            const ctx = await dealReadContext(auth);
+            const deals = await db.select({ id: opportunities.id, ownerId: opportunities.ownerId, salesRep: opportunities.salesRep })
+                .from(opportunities).where(eq(opportunities.orgId, orgId));
+            const visible = new Set(deals.filter(d => dealVisibleTo(d, ctx)).map(d => d.id));
+            const oppId = event.queryStringParameters?.opportunityId;
+            let rows;
+            if (oppId) {
+                // All versions for a specific opportunity
+                rows = visible.has(oppId)
+                    ? await db.select().from(quotes)
+                        .where(and(eq(quotes.orgId, orgId), eq(quotes.opportunityId, oppId)))
+                        .orderBy(asc(quotes.quoteNumber), asc(quotes.version))
+                    : [];
+            } else {
+                rows = (await db.select().from(quotes)
+                    .where(eq(quotes.orgId, orgId))
+                    .orderBy(desc(quotes.createdAt)))
+                    .filter(q => visible.has(q.opportunityId));
+            }
             return { statusCode: 200, headers, body: JSON.stringify({ quotes: rows }) };
         }
 
-        // ── POST — create quote ───────────────────────────────────────────────
+        // ── POST — create a quote, on a deal the caller may change ───────────
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body || '{}');
-            if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            if (!data.opportunityId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'opportunityId is required' }) };
+            if (!data.id) return refuse(400, 'id is required');
+            if (!data.opportunityId) return refuse(400, 'opportunityId is required');
             // quoteNumber is no longer required from the client — it is issued here.
+
+            // The deal decides: one this org holds, that the caller sees and may
+            // change — a rep her own, or an unassigned one the switch shows her.
+            const access = await dealAccess(auth, data.opportunityId);
+            if (!access.canRead) return refuse(404, 'Deal not found');
+            if (!access.canWrite) return refuse(403, 'Forbidden: you can only quote your own or unassigned deals');
 
             const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];
             const totals = calcTotals(lineItems, data.dealDiscount || 0);
@@ -225,11 +252,17 @@ export const handler = async (event) => {
             const basePayload = {
                 ...sanitize(data),
                 orgId,
+                opportunityId: access.deal.id,
                 lineItems,
                 ...totals,
                 version: Number(data.version) || 1,
                 dealDiscount: String(data.dealDiscount || 0),
                 status: 'Draft',
+                // A new draft carries no approval stamp — the server writes one when
+                // the quote is submitted.
+                approvalTier: null, approvalReason: null,
+                // Who wrote it, from the roster — not the body's word for it.
+                createdBy: (await getCallerName(auth.userId, orgId)) || data.createdBy || null,
             };
 
             // Resolved inside the retry so a collision re-reads the maximum. Note a
@@ -246,80 +279,92 @@ export const handler = async (event) => {
             return { statusCode: 201, headers, body: JSON.stringify({ quote: inserted }) };
         }
 
-        // ── PUT — update quote ────────────────────────────────────────────────
+        // ── PUT — change a quote the caller may change, by the rules ─────────
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body || '{}');
-            if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            if (!data.id) return refuse(400, 'id is required');
 
-            const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];
-            const totals = calcTotals(lineItems, data.dealDiscount || 0);
+            // The stored quote, in this org. A PUT no longer CREATES one: it was an
+            // upsert, so a PUT could make a quote in any status and skip the POST's
+            // forced Draft. New quotes are POSTed (useQuotes does).
+            const [existing] = await db.select().from(quotes)
+                .where(and(eq(quotes.id, String(data.id)), eq(quotes.orgId, orgId))).limit(1);
+            if (!existing) return refuse(404, NOT_FOUND);
+            // Its DEAL decides who may change it — the stored deal, never the body's.
+            const access = await dealAccess(auth, existing.opportunityId);
+            if (!access.canRead) return refuse(404, NOT_FOUND);
+            if (!access.canWrite) return refuse(403, 'Forbidden: you can only change quotes on your own or unassigned deals');
 
-            // Approval / acceptance logic
-            const statusUpdates = {};
-            if (data.status === 'Pending Approval') {
-                // Calculate which approval tier applies based on avg discount across line items
-                const tiers = await getApprovalTiers(orgId);
-                const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];
-                let avgDisc = 0;
-                if (lineItems.length > 0) {
-                    avgDisc = lineItems.reduce((s, item) => s + (Number(item.discountPct) || 0), 0) / lineItems.length;
-                }
-                // Also check deal-level discount
-                const dealDisc = Number(data.dealDiscount) || 0;
-                const effectiveDisc = Math.max(avgDisc, dealDisc);
-                const matchedTier = computeApprovalTier(effectiveDisc, tiers);
-                const prevTier = tiers[tiers.indexOf(matchedTier) - 1];
-                const threshold = prevTier ? Math.round(prevTier.maxDiscount * 100) : 0;
-                statusUpdates.approvalTier   = matchedTier.label;
-                statusUpdates.approvalReason = `Avg discount ${Math.round(effectiveDisc)}% > ${threshold}% ${prevTier?.label || 'rep'} tier`;
-            }
-            if (data.status === 'Approved' && (isAdmin || isManager)) {
-                statusUpdates.approvedBy = auth.userId;
-                statusUpdates.approvedAt = new Date();
-            }
-            if (data.status === 'Sent') {
-                statusUpdates.sentAt = new Date();
-            }
-            if (data.status === 'Accepted') {
-                statusUpdates.acceptedAt = new Date();
-                statusUpdates.syncedToOpp = true;
-                // Push revenue to opportunity
-                await syncToOpportunity(orgId, data.opportunityId, totals.totalValue);
+            // Merged over the stored row: a save names what it changes, and a field it
+            // leaves out keeps its value — a PUT without lineItems used to write [] and
+            // zero totals. The deal, the version and the author are the stored ones.
+            // The approval tier and its reason are the server's stamp — what an
+            // approver reads — so a save cannot rewrite them either.
+            const merged = {
+                ...existing, ...sanitize(data),
+                id: existing.id, opportunityId: existing.opportunityId, version: existing.version, createdBy: existing.createdBy,
+                approvalTier: existing.approvalTier, approvalReason: existing.approvalReason,
+            };
+            const lineItems = Array.isArray(merged.lineItems) ? merged.lineItems : [];
+            const totals = calcTotals(lineItems, merged.dealDiscount || 0);
+            const tiers = await getApprovalTiers(orgId);
+
+            // The rules (src/utils/quoteRules.js — the client's buttons read the same):
+            // an edit to a sent or accepted quote's lines or terms is refused, an edit
+            // to an approved one returns it to Draft; then the status move, if any.
+            const from = existing.status || 'Draft';
+            const termsChanged = quoteTermsChanged(existing, merged);
+            const edit = quoteEditOutcome({ status: from, termsChanged });
+            if (edit.refusal) return refuse(409, edit.refusal);
+            const requested = data.status ?? from;
+            const to = requested === from ? edit.status : requested;
+            const moveRefusal = quoteTransitionRefusal({
+                from: edit.status, to, role: userRole,
+                needsApproval: quoteNeedsApproval({ lineItems, dealDiscount: merged.dealDiscount }, tiers),
+            });
+            if (moveRefusal) {
+                // A move only an approver makes is a 403; any other refusal is the
+                // quote's state (409).
+                const approverMove = to === 'Approved' || (to === 'Rejected / Lost' && edit.status === 'Pending Approval');
+                return refuse(approverMove && !canApproveQuotes(userRole) ? 403 : 409, moveRefusal);
             }
 
+            const moved = to !== from;
+            const stamps = {};
+            if (edit.approvalCleared) { stamps.approvedBy = null; stamps.approvedAt = null; }
+            if (to === 'Pending Approval' && (moved || termsChanged)) {
+                Object.assign(stamps, approvalStamp({ lineItems, dealDiscount: merged.dealDiscount }, tiers));
+            }
+            if (moved && to === 'Approved') {
+                // The approver's NAME — it is what "Recent decisions" shows; the audit
+                // row records who, by id. It used to hold the Clerk id.
+                stamps.approvedBy = (await getCallerName(auth.userId, orgId)) || 'Approver';
+                stamps.approvedAt = new Date();
+            }
+            if (moved && to === 'Sent to Customer') stamps.sentAt = new Date();
+            if (moved && to === 'Accepted') {
+                stamps.acceptedAt = new Date();
+                stamps.syncedToOpp = true;
+                // The accepted value is the deal's — the STORED deal, never the body's.
+                await syncToOpportunity(orgId, existing.opportunityId, totals.totalValue);
+            }
+
+            const { id: _id, ...fields } = sanitize(merged);
             const payload = {
-                ...sanitize(data),
-                orgId,
+                ...fields,
                 lineItems,
                 ...totals,
-                dealDiscount: String(data.dealDiscount || 0),
-                ...statusUpdates,
+                dealDiscount: String(merged.dealDiscount || 0),
+                status: to,
+                ...stamps,
                 updatedAt: new Date(),
             };
-
-            // quote_number is NOT NULL and `sanitize` no longer lets it through, so
-            // the INSERT half of this upsert must supply it explicitly. Postgres
-            // validates NOT NULL while building the tuple — BEFORE ON CONFLICT can
-            // divert to the update — so omitting it fails the whole statement even
-            // when the row already exists. That broke every quote save, including
-            // line-item edits, which is how a quote could look saved and come back
-            // empty.
-            const [existing] = await db.select({ n: quotes.quoteNumber })
-                .from(quotes).where(and(eq(quotes.id, data.id), eq(quotes.orgId, orgId))).limit(1);
-
-            const [updated] = await withNumberRetry(async () => {
-                // An existing row keeps its number, so the retry only ever re-issues
-                // for the upsert-creates-a-row case.
-                const quoteNumber = existing?.n || await resolveQuoteNumber(orgId, data);
-                return db
-                    .insert(quotes).values({ ...payload, quoteNumber, createdAt: new Date() })
-                    // `set` excludes quoteNumber: assigned once, never changed.
-                    .onConflictDoUpdate({ target: quotes.id, setWhere: eq(quotes.orgId, orgId), set: payload })
-                    .returning();
-            }, { label: 'quote number' });
+            const [updated] = await db.update(quotes).set(payload)
+                .where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId)))
+                .returning();
             await auditAs(orgId, auth.userId, {
-                action: QUOTE_STATUS_ACTIONS[data.status] || 'quote.updated', entityType: 'quote', entityId: updated.id, entityName: updated.name || updated.quoteNumber,
-                detail: `${updated.quoteNumber} v${updated.version} · ${updated.status || 'Draft'}${statusUpdates.approvalTier ? ' · ' + statusUpdates.approvalTier : ''}`,
+                action: (moved && QUOTE_STATUS_ACTIONS[to]) || 'quote.updated', entityType: 'quote', entityId: updated.id, entityName: updated.name || updated.quoteNumber,
+                detail: `${updated.quoteNumber} v${updated.version} · ${moved ? `${from} → ${to}` : (updated.status || 'Draft')}${edit.approvalCleared ? ' · an edit cleared the approval' : ''}${stamps.approvalTier ? ' · ' + stamps.approvalTier : ''}`,
             });
             return { statusCode: 200, headers, body: JSON.stringify({ quote: updated }) };
         }

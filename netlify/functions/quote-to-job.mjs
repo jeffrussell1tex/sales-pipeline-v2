@@ -14,9 +14,12 @@
 //   the quote's lines as its line items (net price each), a status-history
 //   row, and an audit row that names the quote.
 // GET ?quoteId=   → 200 { job: { …, invoice } | null } — the linked job and its
-//   live invoice, for the quote card: READ-ONLY status for any reader of quotes
-//   but a Technician — a rep keeps it on her quote with Dispatch closed to reps
-//   (Jeff, §0.152). Creating the job is Dispatch work; the GET is not behind the gate.
+//   live invoice, for the quote card: READ-ONLY status for a quote the caller can
+//   SEE — its deal decides (_dealAccess.mjs, §0.155) — but never a Technician; a rep
+//   keeps it on HER quotes with Dispatch closed to reps (Jeff, §0.152), and any
+//   other quote is a 404. Creating the job is Dispatch work; the GET is not behind
+//   the gate. The POST, past the gate, also needs the quote's deal to be one the
+//   caller can see.
 //
 // The job is created UNSCHEDULED, so no customer notification is due (§0.111
 // confirms on a date); scheduling it later goes through dispatch-jobs.mjs as
@@ -30,6 +33,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { verifyAuth, isTechnician } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
+import { dealAccess } from './_dealAccess.mjs';
 import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
 import { nextJobNumber, normaliseJob } from './dispatch-jobs.mjs';
 import { nextCustomerNumber } from './dispatch-customers.mjs';
@@ -69,6 +73,11 @@ export const handler = async (event) => {
         if (event.httpMethod === 'GET') {
             const quoteId = event.queryStringParameters?.quoteId;
             if (!quoteId) return reply(400, { error: 'quoteId is required' });
+            // Only for a quote the caller can see (its deal decides) — any quote id
+            // used to answer for any member.
+            const [q] = await db.select({ opportunityId: quotes.opportunityId }).from(quotes)
+                .where(and(eq(quotes.id, String(quoteId)), eq(quotes.orgId, orgId))).limit(1);
+            if (!q || !(await dealAccess(auth, q.opportunityId)).canRead) return reply(404, { error: 'Quote not found' });
             return reply(200, { job: await linkedJob(orgId, quoteId) });
         }
 
@@ -88,6 +97,9 @@ export const handler = async (event) => {
 
         const [quote] = await db.select().from(quotes).where(and(eq(quotes.id, quoteId), eq(quotes.orgId, orgId))).limit(1);
         if (!quote) return reply(404, { error: 'Quote not found' });
+        // A quote on a deal the caller can see — a rep (where the org opens Dispatch
+        // to reps) her own deals'; the Dispatch roles the org's (§0.155).
+        if (!(await dealAccess(auth, quote.opportunityId)).canRead) return reply(404, { error: 'Quote not found' });
         if (!quoteCanBecomeJob(quote)) {
             return reply(422, { error: `Only an accepted quote becomes a job — this one is ${quote.status || 'Draft'}.` });
         }

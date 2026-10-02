@@ -59,6 +59,33 @@ export function crmReadScope(role) {
     return 'own';
 }
 
+// Whether a DEAL reaches a caller — the deals list's rule (opportunities.mjs GET),
+// and everything that belongs to a deal follows it: its quotes, a quote's email,
+// the job a quote became (§0.155, guide §18b48). One rule, so a quote can never be
+// visible where its deal is not. `ctx` (netlify/functions/_dealAccess.mjs builds it):
+//   role               the caller's
+//   callerId           their users.id (usr_…), or null when they have no roster row
+//   unassignedVisible  the org's switch (settings.extra.unassignedDealsVisibleToReps)
+//   managedReps        a Manager's reps, as DISPLAY NAMES from Clerk
+// 'own' keys on the OWNER ID — a display name is not an identity (a renamed rep
+// vanished from her own pipeline; two reps sharing a name saw each other's). An
+// unassigned deal is the switch's call, decided BEFORE the owner comparison: a
+// caller who cannot be resolved (null) must not meet an unassigned deal (null) in
+// `null === null` (18b22). A Manager whose reps are named in Clerk is narrowed to
+// their deals and the unassigned ones — still by NAME, until managedReps holds ids.
+export function dealVisibleTo(deal, ctx = {}) {
+    if (!deal) return false;
+    const scope = crmReadScope(ctx.role);
+    if (scope === 'none') return false;
+    if (scope === 'own') {
+        if (!deal.ownerId) return ctx.unassignedVisible === true;
+        return !!ctx.callerId && deal.ownerId === ctx.callerId;
+    }
+    const reps = Array.isArray(ctx.managedReps) ? ctx.managedReps : [];
+    if (ctx.role === 'Manager' && reps.length > 0) return !deal.salesRep || reps.includes(deal.salesRep);
+    return true;
+}
+
 // What a role may do in Dispatch (§0.152 — Jeff: sales reps "should not have
 // dispatch power"). ONE rule for the server gate (_dispatchGate.mjs, every
 // dispatch-* endpoint, invoices, quote → job) and the client (the tab, the nav,

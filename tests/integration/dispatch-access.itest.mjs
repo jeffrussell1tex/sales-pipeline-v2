@@ -7,8 +7,9 @@
 // Dispatch to reps; ReadOnly reads; an Admin is refused in a workspace with the
 // module OFF (no settings row at all). And the writes: a Dispatcher creates, a
 // rep, ReadOnly and a Technician are refused with the row never written. And
-// the quote card's read: a rep's GET on quote-to-job answers even while
-// Dispatch is closed to reps.
+// the quote card's read: a rep's GET on quote-to-job answers for HER quote even
+// while Dispatch is closed to reps — and, since §0.155, for no one else's (a
+// quote's deal decides who may see it).
 //
 // The auth mock fakes the SIGN-IN only; the gate is the real one (it does not
 // import auth.mjs), and requireWrite / requireRole are the real ones too.
@@ -53,8 +54,9 @@ const ENDPOINTS = ['dispatch-customers', 'dispatch-equipment', 'dispatch-jobs', 
 const FN = {};
 for (const name of [...ENDPOINTS, 'quote-to-job']) FN[name] = (await import(`../../netlify/functions/${name}.mjs`)).handler;
 const { db } = await import('../../db/index.js');
-const { settings, dispatchEquipment } = await import('../../db/schema.js');
+const { settings, dispatchEquipment, users, opportunities, quotes } = await import('../../db/schema.js');
 const { eq } = await import('drizzle-orm');
+const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 
 // ORG NAMESPACE: this file owns 'itest_dacc_*'.
 const ON = 'itest_dacc_on', REPS = 'itest_dacc_reps', OFF = 'itest_dacc_off';
@@ -72,6 +74,9 @@ const hit = async (name, org, role, method, body, qs) => {
 const cleanup = async () => {
     for (const o of [ON, REPS, OFF]) {
         await db.delete(dispatchEquipment).where(eq(dispatchEquipment.orgId, o));
+        await db.delete(quotes).where(eq(quotes.orgId, o));
+        await db.delete(opportunities).where(eq(opportunities.orgId, o));
+        await db.delete(users).where(eq(users.orgId, o));
         await db.delete(settings).where(eq(settings.orgId, o));
     }
 };
@@ -81,6 +86,21 @@ before(async () => {
         { id: 'settings_' + ON,   orgId: ON,   extra: { dispatchEnabled: true } },
         { id: 'settings_' + REPS, orgId: REPS, extra: { dispatchEnabled: true, repsCanUseDispatch: true } },
         // OFF has no settings row at all: never configured = the module off.
+    ]);
+    // In ON: the rep (the mock signs her in as clerk_itest_dacc_User) owns one deal
+    // with an accepted quote; an unassigned deal holds another. The org keeps its
+    // unassigned deals from reps (no switch: OFF).
+    await db.insert(users).values([
+        { id: 'usr_itest-dacc-rep', clerkUserId: 'clerk_itest_dacc_User', orgId: ON, name: 'Itest Dacc Rep', email: 'dacc-rep@itest.local', role: 'User' },
+    ]);
+    invalidateRoster(ON);
+    await db.insert(opportunities).values([
+        { id: 'opp_itest_dacc_mine', orgId: ON, ownerId: 'usr_itest-dacc-rep', salesRep: 'Itest Dacc Rep', opportunityName: 'Itest rep deal', account: 'Itest Co', pipelineId: 'default', stage: 'Closed Won' },
+        { id: 'opp_itest_dacc_none', orgId: ON, ownerId: null, opportunityName: 'Itest unassigned deal', account: 'Itest Co', pipelineId: 'default', stage: 'Closed Won' },
+    ]);
+    await db.insert(quotes).values([
+        { id: 'q_itest_dacc_mine', orgId: ON, opportunityId: 'opp_itest_dacc_mine', quoteNumber: 'Q-2026-951', version: 1, status: 'Accepted', lineItems: [] },
+        { id: 'q_itest_dacc_none', orgId: ON, opportunityId: 'opp_itest_dacc_none', quoteNumber: 'Q-2026-952', version: 1, status: 'Accepted', lineItems: [] },
     ]);
 });
 after(cleanup);
@@ -122,11 +142,18 @@ test('writes: a Dispatcher creates; a rep, ReadOnly and a Technician are refused
     assert.equal(mails.length, 0);
 });
 
-test('the quote card: a rep\'s GET on quote-to-job answers while Dispatch is closed to reps; her POST does not', async () => {
-    const get = await FN['quote-to-job'](ev(ON, 'User', 'GET', undefined, { quoteId: 'q_itest_dacc_none' }));
-    assert.equal(get.statusCode, 200);
+test('the quote card: a rep\'s GET on quote-to-job answers for HER quote while Dispatch is closed to reps — and for no one else\'s; her POST does not', async () => {
+    const get = await FN['quote-to-job'](ev(ON, 'User', 'GET', undefined, { quoteId: 'q_itest_dacc_mine' }));
+    assert.equal(get.statusCode, 200, get.body);
     assert.deepEqual(JSON.parse(get.body), { job: null });
-    const post = await hit('quote-to-job', ON, 'User', 'POST', { quoteId: 'q_itest_dacc_none' });
+    // A quote on a deal she cannot see — unassigned, the org's switch off — is a
+    // 404, as a quote that does not exist is (§0.155).
+    for (const quoteId of ['q_itest_dacc_none', 'q_itest_dacc_never_existed']) {
+        const other = await FN['quote-to-job'](ev(ON, 'User', 'GET', undefined, { quoteId }));
+        assert.equal(other.statusCode, 404, quoteId);
+    }
+    assert.equal((await FN['quote-to-job'](ev(ON, 'Dispatcher', 'GET', undefined, { quoteId: 'q_itest_dacc_none' }))).statusCode, 200, 'the Dispatch roles read the org\'s');
+    const post = await hit('quote-to-job', ON, 'User', 'POST', { quoteId: 'q_itest_dacc_mine' });
     assert.equal(post.status, 403);
     assert.match(post.error, /not open to sales reps/);
 });

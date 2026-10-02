@@ -20,6 +20,7 @@ import {
     mirrorForJob, jobFromQuote, DEFAULT_PRODUCT_TYPES,
 } from '../src/utils/invoices.js';
 import { contactNamesText } from '../src/utils/oppText.js';
+import { quoteDiscountPct, approvalTierFor, DEFAULT_QUOTE_APPROVAL_TIERS } from '../src/utils/quoteRules.js';
 
 export const QA_ID_MARK = '_qa_';
 const pad = (n, w) => String(n).padStart(w, '0');
@@ -46,19 +47,17 @@ export function quoteTotals(lineItems = [], dealDiscountPct = 0) {
     };
 }
 
-// quotes.mjs's DEFAULT_APPROVAL_TIERS and its Pending Approval wording.
-const TIERS = [
-    { maxDiscount: 0.10, label: 'Rep' }, { maxDiscount: 0.20, label: 'Mgr approval' },
-    { maxDiscount: 0.30, label: 'VP approval' }, { maxDiscount: 1.00, label: 'CFO approval' },
-];
-export function approvalFor(lineItems) {
-    const avg = lineItems.length ? lineItems.reduce((s, li) => s + (Number(li.discountPct) || 0), 0) / lineItems.length : 0;
-    const idx = TIERS.findIndex(t => avg / 100 <= t.maxDiscount);
-    const tier = TIERS[idx < 0 ? TIERS.length - 1 : idx];
-    const prev = TIERS[TIERS.indexOf(tier) - 1];
+// The stamp quotes.mjs writes on "Pending Approval" — the shared rule's arithmetic
+// and tiers (src/utils/quoteRules.js, §0.155), so a seeded stamp is the one a save
+// would write.
+export function approvalFor(lineItems, dealDiscount = 0) {
+    const disc = quoteDiscountPct(lineItems, dealDiscount);
+    const tiers = DEFAULT_QUOTE_APPROVAL_TIERS;
+    const tier = approvalTierFor(disc, tiers);
+    const prev = tiers[tiers.indexOf(tier) - 1];
     return {
         approvalTier: tier.label,
-        approvalReason: `Avg discount ${Math.round(avg)}% > ${prev ? Math.round(prev.maxDiscount * 100) : 0}% ${prev?.label || 'rep'} tier`,
+        approvalReason: `Avg discount ${Math.round(disc)}% > ${prev ? Math.round(prev.maxDiscount * 100) : 0}% ${prev?.label || 'rep'} tier`,
     };
 }
 
@@ -282,7 +281,8 @@ export function buildQaSeed({ orgId, today, roster }) {
         const o = O(oppNo);
         const totals = quoteTotals(lineItems, 0);
         const pending = status === 'Pending Approval' ? approvalFor(lineItems) : {};
-        const approved = status === 'Approved' ? { ...approvalFor(lineItems), approvedBy: manager?.clerkUserId || admin?.clerkUserId || null, approvedAt: at(d(-1)) } : {};
+        // The approver's NAME, as quotes.mjs stamps it since §0.155 (it held the Clerk id).
+        const approved = status === 'Approved' ? { ...approvalFor(lineItems), approvedBy: manager?.name || admin?.name || null, approvedAt: at(d(-1)) } : {};
         return {
             id: `q${QA_ID_MARK}${pad(i + 1, 2)}`, orgId, opportunityId: o.id, quoteNumber: `Q-${year}-${pad(i + 1, 3)}`, version: 1,
             name: `${o.opportunityName} v1`, status, validUntil: d(30), paymentTerms: 'Net 30', billingContact: null,

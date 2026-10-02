@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
     APP_ROLES, isAppRole, ROLE_OPTIONS, canSeeAll, canEditCrm, CRM_WRITE_ROLES, crmReadScope,
-    NON_REP_ROLES, isDispatcher, isTechnician, mirrorRoleOf,
+    NON_REP_ROLES, isDispatcher, isTechnician, mirrorRoleOf, dealVisibleTo,
 } from '../src/utils/roles.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -84,10 +84,33 @@ test('mirrorRoleOf: a role we know comes from Clerk; no role is a rep; a role ne
 
 // ── the server wiring ────────────────────────────────────────────────────────
 
+// Five read through crmReadScope in place; the deals list reads through
+// dealVisibleTo, which carries crmReadScope and is shared with the quotes (§0.155).
 const CRM = [['accounts', 'accounts'], ['contacts', 'contacts'], ['tasks', 'tasks'],
-             ['activities', 'activities'], ['leads', 'leads'], ['opportunities', 'opportunities']];
+             ['activities', 'activities'], ['leads', 'leads']];
 
-test('the six CRM GETs read through crmReadScope — none → nothing, own → the rep filter, all → the org', () => {
+test('dealVisibleTo: a Technician none; a rep her own by owner id, the unassigned only with the switch, never through null === null; a Manager narrowed by name; the org for the rest (§0.155)', () => {
+    const mine = { ownerId: 'usr_me', salesRep: 'Me' }, theirs = { ownerId: 'usr_them', salesRep: 'Them' }, none = { ownerId: null, salesRep: '' };
+    const rep = (o) => ({ role: 'User', callerId: 'usr_me', unassignedVisible: false, ...o });
+    assert.equal(dealVisibleTo(mine, rep()), true);
+    assert.equal(dealVisibleTo(theirs, rep()), false);
+    assert.equal(dealVisibleTo(none, rep()), false, 'the switch OFF (absent): no unassigned deals');
+    assert.equal(dealVisibleTo(none, rep({ unassignedVisible: true })), true, 'the switch ON');
+    assert.equal(dealVisibleTo(none, rep({ callerId: null })), false, 'an unresolvable caller does not meet an unassigned deal through null === null');
+    assert.equal(dealVisibleTo(mine, rep({ callerId: null })), false, 'and owns nothing');
+    assert.equal(dealVisibleTo(mine, { role: 'ReadOnly', callerId: 'usr_me' }), true, 'ReadOnly reads like a rep');
+    for (const d of [mine, theirs, none]) assert.equal(dealVisibleTo(d, { role: 'Technician', callerId: 'usr_me', unassignedVisible: true }), false);
+    for (const role of ['Admin', 'Dispatcher', 'Manager']) for (const d of [mine, theirs, none]) assert.equal(dealVisibleTo(d, { role }), true, role);
+    const mgr = { role: 'Manager', managedReps: ['Me'] };
+    assert.equal(dealVisibleTo(mine, mgr), true);
+    assert.equal(dealVisibleTo(theirs, mgr), false, 'a Manager narrowed to the reps named in Clerk');
+    assert.equal(dealVisibleTo(none, mgr), true, 'and the unassigned');
+    assert.equal(dealVisibleTo(theirs, { role: 'Admin', managedReps: ['Me'] }), true, 'only a Manager is narrowed');
+    assert.equal(dealVisibleTo(null, { role: 'Admin' }), false);
+    assert.equal(dealVisibleTo(mine, { role: 'member', callerId: 'usr_me' }), true, 'a value that is not a role reads its own (and writes nothing — requireWrite)');
+});
+
+test('the six CRM GETs read through the read scope — none → nothing, own → the rep filter, all → the org', () => {
     for (const [file, key] of CRM) {
         const s = code(read(`netlify/functions/${file}.mjs`));
         assert.ok(s.includes("import { crmReadScope } from '../../src/utils/roles.js';"), `${file}: imports the rule directly (a suite that mocks auth.mjs still runs it)`);
@@ -98,7 +121,11 @@ test('the six CRM GETs read through crmReadScope — none → nothing, own → t
         assert.ok(!get.includes('if (!canSeeAll(userRole)) {'), `${file}: the read no longer keys on the write authority`);
     }
     const opp = code(read('netlify/functions/opportunities.mjs'));
-    assert.ok(opp.includes("} else if (isManager(userRole) && managedReps.length > 0) {"), 'the Manager narrowing still follows the rep branch');
+    assert.ok(opp.includes("import { dealVisibleTo } from '../../src/utils/roles.js';"), 'the deals list imports the rule directly (a suite that mocks auth.mjs still runs it)');
+    const oppGet = opp.slice(opp.indexOf("if (event.httpMethod === 'GET') {"), opp.indexOf('JSON.stringify({ opportunities: results })'));
+    assert.ok(oppGet.includes('const ctx = await dealReadContext(auth);') && oppGet.includes('results = results.filter(o => dealVisibleTo(o, ctx));'), 'the deals list reads through dealVisibleTo');
+    assert.ok(!oppGet.includes('crmReadScope(') && !oppGet.includes('if (!canSeeAll(userRole)) {'), 'no second copy of the rule in the endpoint');
+    assert.ok(code(read('src/utils/roles.js')).includes("if (ctx.role === 'Manager' && reps.length > 0) return !deal.salesRep || reps.includes(deal.salesRep);"), 'the Manager narrowing lives in the rule');
     const leads = code(read('netlify/functions/leads.mjs'));
     assert.ok(leads.includes('const unassignedVisible = await getUnassignedLeadsVisible(orgId);'), 'the leads policy stays inside the own branch');
 });

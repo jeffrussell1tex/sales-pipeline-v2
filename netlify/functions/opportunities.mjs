@@ -1,8 +1,10 @@
 import { db } from '../../db/index.js';
-import { opportunities, users, settings as settingsTable } from '../../db/schema.js';
+import { opportunities, users } from '../../db/schema.js';
 import { eq, asc, and, inArray } from 'drizzle-orm';
-import { verifyAuth, canSeeAll, isManager, isReadOnly, requireRole, requireWrite } from './auth.mjs';
-import { crmReadScope } from '../../src/utils/roles.js';
+import { verifyAuth, canSeeAll, isReadOnly, requireRole, requireWrite } from './auth.mjs';
+// The read rule, imported directly so a suite that mocks auth.mjs still runs it.
+import { dealVisibleTo } from '../../src/utils/roles.js';
+import { dealReadContext } from './_dealAccess.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
 import { postDealEvents, postBulkStageMove } from './send-slack.mjs';
@@ -132,15 +134,8 @@ const sanitize = (data) => ({
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
-// Whether sales reps see UNASSIGNED deals (§0.151) — the deals twin of
-// leads.mjs's getUnassignedLeadsVisible, with the opposite default: OFF when the
-// key is absent (Jeff: "Reps should only see their own deals"). Like the leads
-// read, a failed read throws to the handler's 500 rather than picking a fail
-// direction — this decides what a rep is SHOWN.
-async function getUnassignedDealsVisible(orgId) {
-    const [row] = await db.select({ extra: settingsTable.extra }).from(settingsTable).where(eq(settingsTable.orgId, orgId)).limit(1);
-    return row?.extra?.unassignedDealsVisibleToReps ?? false;
-}
+// Whether sales reps see UNASSIGNED deals (§0.151) is read in _dealAccess.mjs now,
+// beside the rest of "may this caller see this deal" — the quotes ask it too (§0.155).
 
 export const handler = async (event) => {
     const headers = {
@@ -158,7 +153,7 @@ export const handler = async (event) => {
     if (auth.error) {
         return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     }
-    const { userId, orgId, userRole, managedReps } = auth;
+    const { userId, orgId, userRole } = auth;
 
     // Server-side role enforcement: ReadOnly can never mutate, regardless of
     // what the client UI allows. Runs before any handler logic.
@@ -173,58 +168,21 @@ export const handler = async (event) => {
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(opportunities).where(eq(opportunities.orgId, orgId)).orderBy(asc(opportunities.createdAt));
-            // What the caller may READ (src/utils/roles.js): 'all' for Admin, Manager
-            // and a Dispatcher, 'none' for a Technician, 'own' for everyone else. A
-            // READ scope only — canSeeAll stays the WRITE authority (guide §18b45).
-            const readScope = crmReadScope(userRole);
-            if (readScope === 'none') {
-                results = [];
-            } else if (readScope === 'own') {
-                // salesRep stores a display name, so the caller's name is what
-                // this filters on.
-                //
-                // THIS WAS BROKEN BY THE IDENTITY SPLIT. It read
-                //     .where(eq(users.id, userId))
-                // where userId is the CLERK id and users.id is now usr_<uuid>.
-                // The match found nothing, repDisplayName fell to null, and the
-                // predicate collapsed to `!o.salesRep || o.salesRep === null`:
-                // every rep saw ONLY unassigned deals and none of their own. No
-                // error, because the query succeeded and simply returned no row --
-                // the catch below never fired. It was also unscoped, so it could
-                // resolve a name from another tenant.
-                //
-                // getCallerName is the one lookup that knows both facts: match on
-                // clerkUserId, scope to orgId. A caller it cannot resolve stays
-                // null and sees only unassigned work, which is the same fail-
-                // closed direction mayMutate() takes for writes.
-                // Visibility keys on the OWNER ID now, matching the write path.
-                // The display-name comparison this replaces meant a renamed user
-                // vanished from their own pipeline and two users sharing a name
-                // saw each other's deals.
-                //
-                // A caller who cannot be resolved stays null and sees only
-                // unassigned deals — the same fail-closed direction mayMutate()
-                // takes on writes.
-                const callerId = await getCallerId(userId, orgId);
-                // Whether unassigned deals reach a rep at all is an Admin policy
-                // (settings.extra.unassignedDealsVisibleToReps), OFF when absent. The
-                // strict branch guards the OWNER side with `!!o.ownerId`: a bare
-                // `o.ownerId === callerId` matches null === null and would hand an
-                // unresolvable caller every unassigned deal (18b22). Visibility only —
-                // an unassigned deal stays mutable by any writer, as a lead does.
-                const unassignedVisible = await getUnassignedDealsVisible(orgId);
-                results = unassignedVisible
-                    ? results.filter(o => !o.ownerId || o.ownerId === callerId)
-                    : results.filter(o => !!o.ownerId && o.ownerId === callerId);
-            } else if (isManager(userRole) && managedReps.length > 0) {
-                // STILL NAME-BASED, and deliberately so for now: managedReps lives
-                // in Clerk publicMetadata as an array of DISPLAY NAMES, so this
-                // cannot move to ids until that list does. It carries the Phase 2
-                // hazards in full — rename a managed rep and they drop out of
-                // their manager's view silently. Tracked for Commit 3; it is a
-                // visibility filter, not an authorization gate.
-                results = results.filter(o => !o.salesRep || managedReps.includes(o.salesRep));
-            }
+            // What reaches the caller is dealVisibleTo (src/utils/roles.js) — ONE rule
+            // for deals and everything that belongs to one: a quote, its email, the job
+            // it became (§0.155, guide §18b48). A Technician reads none; a rep (and
+            // ReadOnly) her own deals by OWNER ID, the unassigned ones only where the
+            // Admin's switch allows (OFF when absent, §0.151); Admin, Manager and a
+            // Dispatcher the org, a Manager narrowed to the reps named in Clerk (still
+            // by NAME). A READ scope only — canSeeAll stays the WRITE authority (§18b45).
+            //
+            // What the rule carries (roles.js): visibility once compared DISPLAY NAMES;
+            // the identity split broke that lookup and every rep saw only the
+            // unassigned deals; then a renamed rep vanished from her own pipeline and
+            // two reps sharing a name saw each other's. It keys on ids, and a caller
+            // who cannot be resolved owns nothing.
+            const ctx = await dealReadContext(auth);
+            results = results.filter(o => dealVisibleTo(o, ctx));
             return { statusCode: 200, headers, body: JSON.stringify({ opportunities: results }) };
         }
 
