@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -3274,7 +3274,7 @@ const mutations = [
 
     ['quotes tab: a rep decides her own quote in the configurator',
         'src/Tabs/QuotesTab.jsx',
-        "    const decides   = status === 'Pending Approval' && !!canEdit && canApproveQuotes(userRole) && !!onApprove && !!onSendBack;",
+        "    const decides   = status === 'Pending Approval' && !!canEdit && mayDecideQuote({ tier, role: userRole, userId }) && !!onApprove && !!onSendBack;",
         "    const decides   = status === 'Pending Approval' && !!canEdit && !!onApprove && !!onSendBack;"],
 
     ['qa seed: a reset leaves a test send-back note on a quote (the plan stops naming it)',
@@ -3286,6 +3286,107 @@ const mutations = [
         'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
         "{u.sentBack > 0 && <span style={{ color:T.warn }}>↩ {u.sentBack} sent back</span>}",
         "{u.declined > 0 && <span style={{ color:T.warn }}>↩ {u.declined} sent back</span>}"],
+
+    // ── §0.157 — who approves: the Admin's choice, by role or by person ──
+    ['approval routing: any approving role decides a tier routed to someone else',
+        'src/utils/quoteRules.js',
+        "    return roles.includes(role) || (!!userId && people.includes(userId));",
+        "    return true;"],
+
+    ['approval routing: an Admin no longer always decides',
+        'src/utils/quoteRules.js',
+        "    if (role === 'Admin') return true;",
+        "    if (false) return true;"],
+
+    ['approval routing: a rep holding a named id decides',
+        'src/utils/quoteRules.js',
+        "    if (!canApproveQuotes(role)) return false;",
+        "    if (false) return false;"],
+
+    ['approval routing: a tier no one is named for refuses every Manager',
+        'src/utils/quoteRules.js',
+        "    if (!roles.length && !people.length) return true;",
+        "    if (!roles.length && !people.length) return false;"],
+
+    ['approval words: a person the roster cannot name reads as a raw id',
+        'src/utils/quoteRules.js',
+        "    const person = (id) => (id ? (nameOf(id) || 'a former approver') : null);",
+        "    const person = (id) => (id ? (nameOf(id) || id) : null);"],
+
+    ['approval words: the Admin who always may is named twice',
+        'src/utils/quoteRules.js',
+        "    return /\\ban Admin\\b/.test(words) ? words : `${words}, or an Admin`;",
+        "    return `${words}, or an Admin`;"],
+
+    ['clean tiers: a backup equal to the approver is kept',
+        'src/utils/quoteRules.js',
+        "            if (tier.backupRole === tier.approverRole) tier.backupRole = null;",
+        ""],
+
+    ['clean tiers: a Clerk id is taken for a person',
+        'src/utils/quoteRules.js',
+        "    const person = (v) => (typeof v === 'string' && /^usr_[A-Za-z0-9-]{1,64}$/.test(v) ? v : null);",
+        "    const person = (v) => (typeof v === 'string' && /^(usr|user)_[A-Za-z0-9-]{1,64}$/.test(v) ? v : null);"],
+
+    ['clean tiers: the last band keeps a cap — discounts above it fall in no tier',
+        'src/utils/quoteRules.js',
+        "    out[out.length - 1].maxDiscount = 1;",
+        "    out[out.length - 1].maxDiscount = out[out.length - 1].maxDiscount;"],
+
+    ['clean tiers: the other mode\'s person survives a save by role',
+        'src/utils/quoteRules.js',
+        "            approverRole: null, backupRole: null, approverUserId: null, backupUserId: null, approver: null,",
+        "            approverRole: null, backupRole: null, approverUserId: t?.approverUserId || null, backupUserId: null, approver: null,"],
+
+    ['settings: a person from any org is accepted as an approver',
+        'netlify/functions/settings.mjs',
+        ".where(and(eq(users.orgId, orgId), inArray(users.id, named)));",
+        ".where(inArray(users.id, named));"],
+
+    ['settings: a rep or a deactivated user is accepted as an approver',
+        'netlify/functions/settings.mjs',
+        "const eligible = new Set(rows.filter(r => r.active !== false && canApproveQuotes(r.role)).map(r => r.id));",
+        "const eligible = new Set(rows.map(r => r.id));"],
+
+    ['quotes: any approving role decides any tier again',
+        'netlify/functions/quotes.mjs',
+        "if (!mayDecideQuote({ tier, role: userRole, userId: await getCallerId(auth.userId, orgId) })) {",
+        "if (false) {"],
+
+    ['quotes: the Clerk id is compared with the app ids a tier names',
+        'netlify/functions/quotes.mjs',
+        "mayDecideQuote({ tier, role: userRole, userId: await getCallerId(auth.userId, orgId) })",
+        "mayDecideQuote({ tier, role: userRole, userId: auth.userId })"],
+
+    ['quotes tab: a Manager is offered decisions on tiers routed to others',
+        'src/Tabs/QuotesTab.jsx',
+        "    const mineToDecide = (q) => mayDecideQuote({ tier: tierOf(q), role: userRole, userId });",
+        "    const mineToDecide = (q) => isApprover;"],
+
+    ['quotes tab: the configurator ignores who the tier names',
+        'src/Tabs/QuotesTab.jsx',
+        "    const decides   = status === 'Pending Approval' && !!canEdit && mayDecideQuote({ tier, role: userRole, userId }) && !!onApprove && !!onSendBack;",
+        "    const decides   = status === 'Pending Approval' && !!canEdit && canApproveQuotes(userRole) && !!onApprove && !!onSendBack;"],
+
+    ['quotes tab: the gauge draws the built-in bands, not the org\'s',
+        'src/Tabs/QuotesTab.jsx',
+        "    const tiers = APPROVAL_TIERS;",
+        "    const tiers = DEFAULT_APPROVAL_TIERS;"],
+
+    ['quotes tab: the tiers lose the person who approves',
+        'src/Tabs/QuotesTab.jsx',
+        "        approverUserId: t.approverUserId || null,",
+        "        approverUserId: null,"],
+
+    ['tiers page: a switch to by-person saves with no one chosen',
+        'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
+        "if (mode === 'person' && tiers.some(t => needsChoice.has(t.id) && !t.approverUserId)) {",
+        "if (false) {"],
+
+    ['tiers page: a switch to by-role drops every approval',
+        'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
+        "if (m === 'role') return { ...base, approverRole: 'Manager' };",
+        "if (m === 'role') return base;"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

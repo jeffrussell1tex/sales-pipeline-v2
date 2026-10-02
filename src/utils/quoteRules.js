@@ -72,11 +72,95 @@ export function approvalTierFor(discountPct, tiers) {
 }
 
 // A tier that names an approver routes the quote to them before it is sent; the
-// rep tier — and any tier saved without an approver — does not.
-export const tierNeedsApproval = (tier) => !!String(tier?.approver ?? '').trim();
+// rep tier — and any tier saved without an approver — does not. The approver is a
+// ROLE or a PERSON the Admin chose (§0.157), or, in an org that has not chosen, the
+// old free-text name — a band that needs approval from any Admin or Manager.
+export const tierNeedsApproval = (tier) => !!(tier?.approverRole || tier?.approverUserId || String(tier?.approver ?? '').trim());
 
 export function quoteNeedsApproval(quote, tiers) {
     return tierNeedsApproval(approvalTierFor(quoteDiscountPct(quote?.lineItems, quote?.dealDiscount), tiers));
+}
+
+// ── Who approves a tier (Jeff, 2 Oct — state §0.157) ─────────────────────────
+// "An admin setting for approvals. They can choose by role or by person. If by
+// role they define the approver and backup, and if by person the admin sets the
+// person and the backup." Per tier; the backup may act at any time; an Admin
+// always may (a quote is never stuck behind an approver who left); only Admins and
+// Managers approve (a rep cannot read another rep's deal). Settings → Quoting →
+// Approval tiers stores the choice (`approvalRouting`) and each tier's approver and
+// backup; the server enforces it on every approval and send-back (quotes.mjs).
+export const APPROVAL_ROUTING_MODES = Object.freeze(['role', 'person']);
+export const APPROVER_ROLES = Object.freeze(['Manager', 'Admin']);
+export const cleanApprovalRouting = (v) => (APPROVAL_ROUTING_MODES.includes(v) ? v : null);
+
+// May this caller approve — or send back — a quote at this tier? `userId` is the
+// caller's app id (users.id), never the Clerk id. A tier that names no one (an org
+// that has not chosen) is any approving role's, as before §0.157.
+export function mayDecideQuote({ tier, role, userId }) {
+    if (role === 'Admin') return true;
+    if (!canApproveQuotes(role)) return false;
+    const roles = [tier?.approverRole, tier?.backupRole].filter(Boolean);
+    const people = [tier?.approverUserId, tier?.backupUserId].filter(Boolean);
+    if (!roles.length && !people.length) return true;
+    return roles.includes(role) || (!!userId && people.includes(userId));
+}
+
+// Who decides this tier, in words a screen or a refusal can show — "Bob Russell
+// (backup: Jeff Russell)", "a Manager (backup: an Admin)", "a Manager or an Admin".
+// `nameOf(id)` turns an app id into a name; an id it cannot name reads as "a
+// former approver" — never the raw id.
+const roleWords = (r) => (r === 'Admin' ? 'an Admin' : r === 'Manager' ? 'a Manager' : null);
+export function tierApproverWords(tier, nameOf = () => null) {
+    const person = (id) => (id ? (nameOf(id) || 'a former approver') : null);
+    const who = roleWords(tier?.approverRole) || person(tier?.approverUserId);
+    if (!who) return tierNeedsApproval(tier) ? 'a Manager or an Admin' : null;
+    const backup = roleWords(tier?.backupRole) || person(tier?.backupUserId);
+    return backup ? `${who} (backup: ${backup})` : who;
+}
+
+// The same, with the Admin who always may — once: "Bob Russell (backup: Jane Doe),
+// or an Admin"; "an Admin" alone when the tier is an Admin's already.
+export function decidedByWords(tier, nameOf) {
+    const words = tierApproverWords(tier, nameOf);
+    if (!words) return null;
+    return /\ban Admin\b/.test(words) ? words : `${words}, or an Admin`;
+}
+
+// The tiers an Admin saves, cleaned for the mode chosen — what the settings PUT
+// stores and the page sends. The bands ascend and the last is open-ended; each
+// keeps only its own mode's approver and backup (a backup needs an approver, and
+// is not the approver); an org with no mode keeps the old free-text name. Whether
+// a named PERSON is an active Admin or Manager of this org is the server's check
+// (settings.mjs) — a pure cleaner cannot read the roster.
+export function cleanApprovalTiers(tiers, mode) {
+    if (!Array.isArray(tiers) || tiers.length === 0) return null;
+    const role = (v) => (APPROVER_ROLES.includes(v) ? v : null);
+    const person = (v) => (typeof v === 'string' && /^usr_[A-Za-z0-9-]{1,64}$/.test(v) ? v : null);
+    const out = tiers.slice(0, 12).map((t, i) => {
+        const cap = Number(t?.maxDiscount);
+        const tier = {
+            id: String(t?.id || `tier_${i + 1}`).slice(0, 64),
+            label: String(t?.label ?? '').trim().slice(0, 60) || `Tier ${i + 1}`,
+            color: /^#[0-9a-fA-F]{6}$/.test(String(t?.color)) ? t.color : null,
+            maxDiscount: Number.isFinite(cap) ? Math.min(1, Math.max(0.01, cap)) : 1,
+            sla: t?.sla ? String(t.sla).trim().slice(0, 12) : null,
+            approverRole: null, backupRole: null, approverUserId: null, backupUserId: null, approver: null,
+        };
+        if (mode === 'role') {
+            tier.approverRole = role(t?.approverRole);
+            tier.backupRole = tier.approverRole ? role(t?.backupRole) : null;
+            if (tier.backupRole === tier.approverRole) tier.backupRole = null;
+        } else if (mode === 'person') {
+            tier.approverUserId = person(t?.approverUserId);
+            tier.backupUserId = tier.approverUserId ? person(t?.backupUserId) : null;
+            if (tier.backupUserId === tier.approverUserId) tier.backupUserId = null;
+        } else {
+            tier.approver = String(t?.approver ?? '').trim().slice(0, 60) || null;
+        }
+        return tier;
+    }).sort((a, b) => a.maxDiscount - b.maxDiscount);
+    out[out.length - 1].maxDiscount = 1;
+    return out;
 }
 
 // The words "this {status} quote", for a refusal.

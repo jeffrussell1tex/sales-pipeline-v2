@@ -9,7 +9,7 @@ import { esc } from '../utils/customerNotifications';
 import { quoteCanBeAccepted, quoteCanBecomeJob, invoiceStatusLabel, fmtMoney, cleanProductTypes, productTypeLabel, DEFAULT_PRODUCT_TYPES } from '../utils/invoices.js';
 // What may happen to a quote (§0.155): the server's one rule — the buttons, the gauge
 // and the "needs approval" words read it, so a click is never one the server refuses.
-import { quoteDiscountPct, approvalTierFor, tierNeedsApproval, quoteNeedsApproval, quoteIsLocked, quoteTermsEditable, quoteMoveAllowed, canApproveQuotes, SEND_BACK_NOTE_MAX } from '../utils/quoteRules.js';
+import { quoteDiscountPct, approvalTierFor, tierNeedsApproval, quoteNeedsApproval, quoteIsLocked, quoteTermsEditable, quoteMoveAllowed, canApproveQuotes, SEND_BACK_NOTE_MAX, mayDecideQuote, tierApproverWords } from '../utils/quoteRules.js';
 // What the approvals DID (§0.156): the server's record of each submission and
 // decision — the Approvals cards, the decisions and a quote's history read it.
 import { approvalSummary, formatHours, sendBackNoteOf } from '../utils/approvalStats.js';
@@ -67,8 +67,19 @@ function buildApprovalTiers(settingsApprovalTiers) {
         approver:    t.approver || null,
         label:       t.label || `Tier ${i+1}`,
         color:       t.color || colorFallbacks[i] || T.inkMid,
+        // Who decides the tier (§0.157) — the Admin's choice, by role or by person.
+        approverRole:   t.approverRole   || null,
+        backupRole:     t.backupRole     || null,
+        approverUserId: t.approverUserId || null,
+        backupUserId:   t.backupUserId   || null,
     }));
 }
+
+// The roster's names by app id, kept in step from settings.users by the tab's
+// effect (as APPROVAL_TIERS is) — so a tier's approver reads as a name anywhere in
+// this file. An id it cannot name reads as "a former approver" (tierApproverWords).
+let APPROVER_NAMES_LIVE = new Map();
+const approverWordsLive = (tier) => tierApproverWords(tier, (id) => APPROVER_NAMES_LIVE.get(id) || null);
 
 // ─── Quote math ───────────────────────────────────────────────
 function calcLineTotals(lineItems = [], products = []) {
@@ -138,20 +149,29 @@ const TypeBadge = ({ type }) => {
 };
 
 // ─── Approval gauge ───────────────────────────────────────────
+// The org's own bands (§0.157): a mark at each tier's cap, the bar in the colour of
+// the tier the discount falls in. It drew 10%, 20% and 30% marks labelled "Rep",
+// "Mgr" and "VP" whatever tiers the org had saved.
 const ApprovalGauge = ({ discount }) => {
-    const pctVal = Math.min(1, discount / 0.4);
-    const color  = discount <= 0.10 ? T.ok : discount <= 0.20 ? T.warn : discount <= 0.30 ? '#b55634' : T.danger;
+    const tiers = APPROVAL_TIERS;
+    const caps = tiers.map(t => Number(t.maxDiscount)).filter(c => c > 0 && c < 1);
+    const span = Math.min(1, (caps.length ? Math.max(...caps) : 0.3) + 0.1);
+    const pctVal = Math.min(1, discount / span);
+    const tier = approvalTierFor(discount * 100, tiers);
+    const color = tier?.color || T.inkMid;
     return (
         <div>
             <div style={{ position: 'relative', height: 10, background: T.surface2, borderRadius: 5, overflow: 'hidden' }}>
-                {[0.10, 0.20, 0.30].map(t => (
-                    <div key={t} style={{ position: 'absolute', left: `${t / 0.4 * 100}%`, top: 0, bottom: 0, width: 1, background: 'rgba(0,0,0,0.15)' }} />
+                {caps.map(c => (
+                    <div key={c} title={`${Math.round(c * 100)}% — ${tiers.find(t => Number(t.maxDiscount) === c)?.label || ''}`} style={{ position: 'absolute', left: `${c / span * 100}%`, top: 0, bottom: 0, width: 1, background: 'rgba(0,0,0,0.15)' }} />
                 ))}
                 <div style={{ width: `${pctVal * 100}%`, height: '100%', background: color, transition: 'width 240ms ease-out' }} />
                 <div style={{ position: 'absolute', left: `${pctVal * 100}%`, top: -2, bottom: -2, width: 2, background: T.ink, transform: 'translateX(-1px)' }} />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 9, color: T.inkMuted, letterSpacing: 0.3, fontFamily: T.sans }}>
-                <span>0%</span><span>10% Rep</span><span>20% Mgr</span><span>30% VP</span><span>40%+</span>
+            <div style={{ position: 'relative', height: 12, marginTop: 5, fontSize: 9, color: T.inkMuted, letterSpacing: 0.3, fontFamily: T.sans }}>
+                <span style={{ position: 'absolute', left: 0 }}>0%</span>
+                {caps.map(c => <span key={c} style={{ position: 'absolute', left: `${c / span * 100}%`, transform: 'translateX(-50%)' }}>{Math.round(c * 100)}%</span>)}
+                <span style={{ position: 'absolute', right: 0 }}>{Math.round(span * 100)}%+</span>
             </div>
         </div>
     );
@@ -513,7 +533,7 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
                 <div style={{ marginTop: 8, padding: '6px 8px', background: `${tier.color}12`, border: `1px solid ${tier.color}40`, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: tier.color }} />
                     <span style={{ fontSize: 10.5, color: tier.color, fontWeight: 600, fontFamily: T.sans }}>{tier.label}</span>
-                    {tier.approver && <span style={{ fontSize: 10.5, color: T.inkMid, marginLeft: 'auto', fontFamily: T.sans }}>{tier.approver}</span>}
+                    {tierNeedsApproval(tier) && <span style={{ fontSize: 10.5, color: T.inkMid, marginLeft: 'auto', fontFamily: T.sans }}>{approverWordsLive(tier)}</span>}
                 </div>
             </div>
         </div>
@@ -781,7 +801,7 @@ const SendBackForm = ({ onSend, onCancel, saving, tone = 'light' }) => {
 
 const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving,
     onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, onCreateJob, canEdit, userRole, tiers,
-    onApprove, onSendBack, onWithdraw, sentBackBy }) => {
+    onApprove, onSendBack, onWithdraw, sentBackBy, userId }) => {
     const { margin } = calcLineTotals(quote.lineItems || [], products || []);
     // The quote's discount, its tier and what it may do next, by the rules the
     // server applies (quoteRules.js, §0.155) — so a button is never refused.
@@ -801,7 +821,9 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
     const approver  = quote.approvedBy && !/^user_/.test(quote.approvedBy) ? quote.approvedBy : null;
     // A quote waiting for approval (§0.156): an approver decides it here — approve, or
     // send it back with a note; anyone else waits, and its writer may withdraw it.
-    const decides   = status === 'Pending Approval' && !!canEdit && canApproveQuotes(userRole) && !!onApprove && !!onSendBack;
+    // Who decides is the tier's approver or backup, or an Admin (§0.157) — the rule
+    // the server applies (mayDecideQuote); anyone else reads who it waits for.
+    const decides   = status === 'Pending Approval' && !!canEdit && mayDecideQuote({ tier, role: userRole, userId }) && !!onApprove && !!onSendBack;
     const [sendingBack, setSendingBack] = useState(false);
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -917,7 +939,8 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
                         )
                 ) : (
                     <>
-                        <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, textAlign: 'center', padding: '6px 0', fontFamily: T.sans }}>Waiting for Approval.</div>
+                        <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, textAlign: 'center', padding: '6px 0 0', fontFamily: T.sans }}>Waiting for Approval.</div>
+                        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center', padding: '0 0 6px', fontFamily: T.sans }}>Approver: {approverWordsLive(tier)}</div>
                         {canEdit && onWithdraw && (
                             <button onClick={() => onWithdraw(quote)} disabled={saving} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans }}>Withdraw to make changes</button>
                         )}
@@ -1229,8 +1252,12 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
 // count a quote SENT TO THE CUSTOMER as approved, name the VIEWER's role as a
 // decision's approver and tell a rep "Pending your approval"; its "Sendback" only
 // opened the quote — the send-back handler was passed in and never called.
-function ApprovalsTab({ quotes, opportunities, userRole, events, eventsError, saving, onApprove, onSendBack, onOpen }) {
+function ApprovalsTab({ quotes, opportunities, userRole, userId, events, eventsError, saving, onApprove, onSendBack, onOpen }) {
     const isApprover = canApproveQuotes(userRole);
+    // Which waiting quotes are THIS approver's to decide — the tier's approver or
+    // backup, or an Admin (§0.157, the server's mayDecideQuote).
+    const tierOf   = (q) => approvalTierFor(quoteDiscountPct(q.lineItems, q.dealDiscount), APPROVAL_TIERS);
+    const mineToDecide = (q) => mayDecideQuote({ tier: tierOf(q), role: userRole, userId });
     const [sendingBackId, setSendingBackId] = useState(null);
     const pending  = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
     const sentBack = useMemo(() => (quotes || []).filter(q => q.status === 'Draft' && q.approvalNote), [quotes]);
@@ -1250,7 +1277,7 @@ function ApprovalsTab({ quotes, opportunities, userRole, events, eventsError, sa
         { label: 'Approval rate', value: read && summary.rate !== null ? `${summary.rate}%` : '—',
           sub: recordSub(summary.total ? `${summary.approved} of ${count(summary.total, 'decision', 'decisions')} approved · 30 days` : 'no decisions in 30 days') },
         isApprover
-            ? { label: 'Waiting for you', value: pending.length, sub: pending.length ? 'approve or send back' : 'nothing to decide' }
+            ? { label: 'Waiting for you', value: pending.filter(mineToDecide).length, sub: pending.some(mineToDecide) ? 'approve or send back' : 'nothing to decide' }
             : { label: 'Sent back to you', value: sentBack.length, sub: sentBack.length ? 'change and submit again' : 'nothing sent back' },
     ];
 
@@ -1271,7 +1298,7 @@ function ApprovalsTab({ quotes, opportunities, userRole, events, eventsError, sa
             {/* Waiting for approval */}
             <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{isApprover ? 'Waiting for your approval' : 'Your quotes waiting for approval'}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{isApprover ? 'Waiting for approval' : 'Your quotes waiting for approval'}</div>
                     {pending.length > 0 && (
                         <span style={{ fontSize: 10, fontWeight: 700, color: T.warn, background: `${T.warn}15`, border: `1px solid ${T.warn}40`, padding: '2px 8px', borderRadius: 10, fontFamily: T.sans }}>
                             {pending.length} waiting
@@ -1290,8 +1317,9 @@ function ApprovalsTab({ quotes, opportunities, userRole, events, eventsError, sa
                             const { totalValue: tv } = calcLineTotals(q.lineItems || [], []);
                             const avgDiscPct = quoteDiscountPct(q.lineItems, q.dealDiscount);
                             const tier = approvalTierFor(avgDiscPct, APPROVAL_TIERS);
-                            const reason = q.approvalReason || `Avg discount ${Math.round(avgDiscPct)}% — exceeds ${tier.approver ? Math.round((APPROVAL_TIERS[APPROVAL_TIERS.indexOf(tier) - 1]?.maxDiscount || 0) * 100) : 10}% rep tier`;
+                            const reason = q.approvalReason || `Avg discount ${Math.round(avgDiscPct)}% — exceeds ${tierNeedsApproval(tier) ? Math.round((APPROVAL_TIERS[APPROVAL_TIERS.indexOf(tier) - 1]?.maxDiscount || 0) * 100) : 10}% rep tier`;
                             const open = sendingBackId === q.id;
+                            const decides = mineToDecide(q);
                             return (
                                 <div key={q.id} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
                                     {/* Card header strip */}
@@ -1307,6 +1335,7 @@ function ApprovalsTab({ quotes, opportunities, userRole, events, eventsError, sa
                                             <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, lineHeight: 1.2, marginBottom: 2, fontFamily: T.sans }}>{opp?.account || '—'}</div>
                                             <div style={{ fontSize: 12, color: T.inkMid, marginBottom: 6, fontFamily: T.sans }}>{opp?.opportunityName || opp?.account || '—'} — {q.name || q.quoteNumber}</div>
                                             <div style={{ fontSize: 11, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>Reason: {reason}</div>
+                                            <div style={{ fontSize: 11, color: T.inkMid, marginTop: 2, fontFamily: T.sans }}>{decides ? 'Yours to decide' : <>Waiting for {approverWordsLive(tier)}</>}</div>
                                             {q.approvalNote && <div style={{ fontSize: 11, color: T.inkMid, marginTop: 4, fontFamily: T.sans }}>Sent back before: “{q.approvalNote}”</div>}
                                         </div>
                                         {/* Right: value + actions */}
@@ -1318,13 +1347,13 @@ function ApprovalsTab({ quotes, opportunities, userRole, events, eventsError, sa
                                                     style={{ background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '6px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>
                                                     Open
                                                 </button>
-                                                {isApprover && (
+                                                {decides && (
                                                     <button onClick={() => setSendingBackId(open ? null : q.id)} disabled={saving}
                                                         style={{ background: open ? T.surface2 : 'transparent', color: T.ink, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, padding: '6px 12px', fontSize: 12, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans }}>
                                                         Send back…
                                                     </button>
                                                 )}
-                                                {isApprover && (
+                                                {decides && (
                                                     <button onClick={() => onApprove(q)} disabled={saving}
                                                         style={{ background: T.ok, color: '#fff', border: 'none', borderRadius: T.r, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: saving ? 0.6 : 1 }}>
                                                         Approve
@@ -1392,7 +1421,7 @@ function ApprovalsTab({ quotes, opportunities, userRole, events, eventsError, sa
 // ─── Main QuotesTab ───────────────────────────────────────────
 export default function QuotesTab() {
     const {
-        quotes, setQuotes, products, opportunities, settings, currentUser, userRole,
+        quotes, setQuotes, products, opportunities, settings, currentUser, currentUserId, userRole,
         handleSaveQuote, handleDeleteQuote, handleSaveProduct, handleDeleteProduct,
         loadQuotes, showConfirm, quoteModalError,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
@@ -1439,6 +1468,9 @@ export default function QuotesTab() {
     const approvalTiers = useMemo(() => buildApprovalTiers(settings?.approvalTiers), [settings?.approvalTiers]);
     // Keep module-level reference in sync for components that use APPROVAL_TIERS directly
     React.useEffect(() => { APPROVAL_TIERS = approvalTiers; }, [approvalTiers]);
+    // The approvers' names, for a tier routed to a person (§0.157).
+    const approverNames = useMemo(() => new Map((settings?.users || []).map(u => [u.id, u.name])), [settings?.users]);
+    React.useEffect(() => { APPROVER_NAMES_LIVE = approverNames; }, [approverNames]);
     React.useEffect(() => { PRODUCT_TYPES_LIVE = cleanProductTypes(settings?.productTypes); }, [settings?.productTypes]);
 
     // The quotes are what the server sends, for EVERY role: quotes.mjs applies the
@@ -2042,7 +2074,7 @@ export default function QuotesTab() {
                                         )}
                                         {activeQuote && <ConfiguratorPanel key={activeQuote.id} quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving}
                                             onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled} canEdit={canEdit} userRole={userRole} tiers={approvalTiers}
-                                            onApprove={handleApprove} onSendBack={handleSendBack} onWithdraw={canEdit ? handleWithdraw : null} sentBackBy={sentBackBy}
+                                            onApprove={handleApprove} onSendBack={handleSendBack} onWithdraw={canEdit ? handleWithdraw : null} sentBackBy={sentBackBy} userId={currentUserId}
                                             job={linkedJob} jobLoading={jobLoading} jobBusy={jobBusy} jobError={jobError} onCreateJob={canCreateJob ? handleCreateJob : null} />}
                                     </div>
                                     {activeQuote && <div style={{ marginTop: 14 }}><QuoteActivityLog quote={activeQuote} events={quoteHistory.events} error={quoteHistory.error} /></div>}
@@ -2103,6 +2135,7 @@ export default function QuotesTab() {
                     quotes={visibleQuotes}
                     opportunities={opportunities}
                     userRole={userRole}
+                    userId={currentUserId}
                     events={approvalEvents}
                     eventsError={approvalEventsError}
                     saving={saving}

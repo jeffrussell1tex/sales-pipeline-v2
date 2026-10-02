@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 2, 2026 · rules current through **§18b49** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 2, 2026 · rules current through **§18b50** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3635,3 +3635,13 @@ through `dbFetch`.
 4. **A window has a start and no end.** The log's time is `timestamp without time zone`, which a machine off UTC reads as its local time — five hours LATE on a Chicago laptop — so a recent event reads as the future, and an end at "now" drops it (the integration suite caught it). Durations are safe: both ends read alike.
 5. **A decision names only its status.** A PUT that moves a record carries none of its content: the server merges over the stored row, and a screen's older copy would be written back (an approver's screen loaded before the rep's last change).
 6. **The list the server sends is the list.** A screen that re-filters it by a second list hides what the rule grants — the Quotes tab filtered a Manager by settings.users' managedBy, and with none set he had nothing to approve (caught in the pane as Bob). The Manager's narrowing is the deals rule's, applied by the server.
+
+## 18b50. A Setting Is Offered Only Where It Is Enforced — Cleaned Where It Is Saved, Checked Against The Org, Applied Where It Is Read (hard rule)
+
+**Origin (§0.157, 2 Oct 2026).** Settings → Approval tiers named approvers the app routed to none of, and offered an SLA, a fallback, six triggers, "advanced rules", a co-approver and two "view" links that nothing read. An Admin who set them got nothing — and believed otherwise. Jeff: "an admin setting for approvals … by role or by person … the approver and backup".
+
+1. **A control nothing reads is removed, not left.** A setting is offered only once the code that enforces it exists; until then the page does not show it (the triggers went; the SLA stays visibly what it is until (E2) reads it).
+2. **One rule cleans it, enforces it and draws it.** `cleanApprovalTiers` (what settings.mjs stores and the page sends), `mayDecideQuote` (what quotes.mjs enforces and the buttons offer) and `tierApproverWords` (what every screen says) live in src/utils/quoteRules.js — a screen never offers a decision the server refuses.
+3. **A setting that names people names them by app id, and is checked against THIS org's roster when it is saved.** settings.mjs refuses an id from another org, a user who does not hold the role, a deactivated one (400) — the cleaner cannot read the roster, the save can.
+4. **A change of mode never quietly lowers a control.** A save that would stop a tier needing approval is the Admin's explicit choice: by role prefills a Manager; by person refuses the save until each tier names someone or says "No approval needed".
+5. **The reader survives the named person's departure.** An Admin always decides; a name the roster cannot resolve reads "a former approver", never a raw id; a refusal names who decides.

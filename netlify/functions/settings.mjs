@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
-import { settings } from '../../db/schema.js';
-import { eq, desc } from 'drizzle-orm';
+import { settings, users } from '../../db/schema.js';
+import { eq, desc, and, inArray } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAdmin } from './auth.mjs';
 import { validateSlackWebhookUrl } from './_slackWebhook.mjs';
 import { cleanSlackAlerts } from '../../src/utils/slackAlerts.js';
@@ -8,6 +8,9 @@ import { cleanCustomerNotifications } from '../../src/utils/customerNotification
 import { cleanWebToLead } from '../../src/utils/webToLead.js';
 import { cleanEmailTemplates } from '../../src/utils/emailTemplates.js';
 import { cleanProductTypes } from '../../src/utils/invoices.js';
+// Who approves each discount tier (§0.157): the mode and the tiers, cleaned by the
+// quote rule's own cleaner; quotes.mjs enforces them.
+import { cleanApprovalRouting, cleanApprovalTiers, canApproveQuotes } from '../../src/utils/quoteRules.js';
 import { randomBytes } from 'crypto';
 import { encrypt, decrypt } from './crypto.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
@@ -161,7 +164,11 @@ export const handler = async (event) => {
                 roles:      row.extra?.roles      || null,
                 // Quoting (persisted via quoting settings panels)
                 approvalTiers:        row.extra?.approvalTiers        || null,
-                approvalTriggers:     row.extra?.approvalTriggers     || null,
+                // Who approves (§0.157): 'role' | 'person', null until an Admin
+                // chooses (any Admin or Manager approves meanwhile). Both halves (18b12).
+                // The six approval "triggers" this blob carried were read by nothing
+                // and are gone — the average discount is the rule (Jeff, 2 Oct).
+                approvalRouting:      cleanApprovalRouting(row.extra?.approvalRouting),
                 priceBookProducts:    row.extra?.priceBookProducts    || [],
                 // Product & service types (§0.149): the built-ins always, then the org's own.
                 productTypes:         cleanProductTypes(row.extra?.productTypes),
@@ -232,6 +239,30 @@ export const handler = async (event) => {
             const existing = await db.select().from(settings).where(eq(settings.orgId, orgId))
                 .orderBy(desc(settings.updatedAt));
             const existingExtra = existing.length > 0 ? (existing[0].extra || {}) : {};
+
+            // Who approves each discount tier (state §0.157): the tiers cleaned for
+            // the mode the Admin chose — and every named PERSON must be an active
+            // Admin or Manager of THIS org. An id from another org, a rep, or a user
+            // since deactivated is refused (400), never stored. Mode and tiers are
+            // cleaned together, so changing the mode drops the other mode's names.
+            if ('approvalTiers' in data || 'approvalRouting' in data) {
+                const mode = 'approvalRouting' in data ? cleanApprovalRouting(data.approvalRouting) : cleanApprovalRouting(existingExtra.approvalRouting);
+                if ('approvalRouting' in data && data.approvalRouting != null && !mode) {
+                    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Choose who approves: by role or by person.' }) };
+                }
+                const tiers = cleanApprovalTiers('approvalTiers' in data ? data.approvalTiers : existingExtra.approvalTiers, mode);
+                const named = [...new Set((tiers || []).flatMap(t => [t.approverUserId, t.backupUserId]).filter(Boolean))];
+                if (named.length) {
+                    const rows = await db.select({ id: users.id, role: users.role, active: users.active }).from(users)
+                        .where(and(eq(users.orgId, orgId), inArray(users.id, named)));
+                    const eligible = new Set(rows.filter(r => r.active !== false && canApproveQuotes(r.role)).map(r => r.id));
+                    if (named.some(id => !eligible.has(id))) {
+                        return { statusCode: 400, headers, body: JSON.stringify({ error: 'An approver must be an active Admin or Manager in this workspace.' }) };
+                    }
+                }
+                data.approvalTiers = tiers;
+                data.approvalRouting = mode;
+            }
 
             // One-time migration: if a plaintext key is sitting in the aiSettings
             // blob (incoming or already stored), lift it into the encrypted field.
@@ -314,7 +345,7 @@ export const handler = async (event) => {
                 federalHolidays:      'federalHolidays'      in data ? (data.federalHolidays      || [])   : existingExtra.federalHolidays      || [],
                 // Quoting
                 approvalTiers:        'approvalTiers'        in data ? (data.approvalTiers        || null) : existingExtra.approvalTiers        || null,
-                approvalTriggers:     'approvalTriggers'     in data ? (data.approvalTriggers     || null) : existingExtra.approvalTriggers     || null,
+                approvalRouting:      'approvalRouting'      in data ? cleanApprovalRouting(data.approvalRouting) : cleanApprovalRouting(existingExtra.approvalRouting),
                 priceBookProducts:    'priceBookProducts'    in data ? (data.priceBookProducts    || [])   : existingExtra.priceBookProducts    || [],
                 productTypes:         'productTypes'         in data ? cleanProductTypes(data.productTypes)    : existingExtra.productTypes         || null,
                 quoteTemplates:       'quoteTemplates'       in data ? (data.quoteTemplates       || null) : existingExtra.quoteTemplates       || null,

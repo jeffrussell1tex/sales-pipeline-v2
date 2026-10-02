@@ -1,8 +1,8 @@
 import { db } from '../../db/index.js';
-import { quotes, opportunities, auditLog, settings as settingsTable } from '../../db/schema.js';
+import { quotes, opportunities, auditLog, users, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and, desc, sql, inArray, gte } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, withNumberRetry, auditAs, getCallerName } from './_lib.mjs';
+import { serverErrorBody, withNumberRetry, auditAs, getCallerName, getCallerId } from './_lib.mjs';
 // A quote belongs to its DEAL (state §0.155, guide §18b48): who may read or change a
 // quote is who may read or change the deal — the deals list's own rule, imported
 // directly so a suite that mocks auth.mjs still runs the real one. What may HAPPEN
@@ -12,6 +12,7 @@ import { dealReadContext, dealAccess } from './_dealAccess.mjs';
 import {
     DEFAULT_QUOTE_APPROVAL_TIERS, approvalTierFor, quoteDiscountPct, quoteNeedsApproval,
     quoteTransitionRefusal, quoteEditOutcome, quoteTermsChanged, canApproveQuotes, quoteSendBackRefusal,
+    mayDecideQuote, decidedByWords,
 } from '../../src/utils/quoteRules.js';
 // What the approvals DID is read from the record (state §0.156): the audit log's
 // quote events, which this function writes as it moves a quote.
@@ -376,6 +377,24 @@ export const handler = async (event) => {
             }
 
             const moved = to !== from;
+
+            // WHO decides (Jeff, 2 Oct — §0.157): an approval or a send-back is the
+            // tier's approver's or backup's — the role or the person the Admin chose
+            // in Settings → Approval tiers — or an Admin's. A tier that names no one
+            // is any approving role's, as before. The tier is the quote's discount's:
+            // a quote waiting for approval is held (§0.156), so it is the one submitted.
+            if (sendBack || (moved && to === 'Approved')) {
+                const tier = approvalTierFor(quoteDiscountPct(lineItems, merged.dealDiscount), tiers);
+                if (!mayDecideQuote({ tier, role: userRole, userId: await getCallerId(auth.userId, orgId) })) {
+                    const ids = [tier.approverUserId, tier.backupUserId].filter(Boolean);
+                    const named = ids.length
+                        ? await db.select({ id: users.id, name: users.name }).from(users).where(and(eq(users.orgId, orgId), inArray(users.id, ids)))
+                        : [];
+                    const nameOf = (id) => named.find(r => r.id === id)?.name || null;
+                    return refuse(403, `Forbidden: ${tier.label} is decided by ${decidedByWords(tier, nameOf)}.`);
+                }
+            }
+
             const stamps = {};
             if (edit.approvalCleared) { stamps.approvedBy = null; stamps.approvedAt = null; }
             if (to === 'Pending Approval' && (moved || termsChanged)) {

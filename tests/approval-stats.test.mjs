@@ -182,9 +182,12 @@ test('the Approvals tab and a quote\'s history read the record; the words say wh
     for (const gone of ['0.7× baseline', '5% error bars', 'Pending your approval', 'for my review', 'mailing id', "q.status === 'Sent to Customer'", "'Sales Manager' : 'Rep'", 'handleSend', 'onReject']) {
         assert.ok(!tab.includes(gone), `gone: ${gone}`);
     }
-    assert.ok(tab.split('{isApprover && (').length - 1 === 2 && tab.includes('onClick={() => onApprove(q)}'), 'Send back and Approve for an approver only');
+    // Send back and Approve on the quotes THIS approver decides (§0.157 — the tier's
+    // approver or backup, or an Admin), the rest reading whom they wait for.
+    assert.ok(tab.split('{decides && (').length - 1 === 2 && tab.includes('const decides = mineToDecide(q);') && tab.includes('onClick={() => onApprove(q)}'), 'Send back and Approve for the quote\'s approver only');
+    assert.ok(tab.includes('const mineToDecide = (q) => mayDecideQuote({ tier: tierOf(q), role: userRole, userId });'));
     assert.ok(tab.includes('<SendBackForm saving={saving} onCancel={() => setSendingBackId(null)}'));
-    assert.ok(tab.includes("{isApprover ? 'Waiting for your approval' : 'Your quotes waiting for approval'}"));
+    assert.ok(tab.includes("{isApprover ? 'Waiting for approval' : 'Your quotes waiting for approval'}"));
     assert.ok(s.includes("const handleSendBack        = async (q, note) => !!(await moveQuote(q, 'Draft', { sendBack: true, sendBackNote: note }));"));
     assert.ok(s.includes("const handleApprove         = (q) => moveQuote(q, 'Approved');") && s.includes("const handleWithdraw        = (q) => moveQuote(q, 'Draft');"));
     assert.ok(s.includes('try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }'));
@@ -193,7 +196,7 @@ test('the Approvals tab and a quote\'s history read the record; the words say wh
     assert.ok(s.includes("await dbFetch('/.netlify/functions/quotes?activity=true')") && s.includes("'/.netlify/functions/quotes?activity=true&quoteId=' + encodeURIComponent(activeQuote.id)"));
     assert.ok(s.includes("setApprovalEvents(null); setApprovalEventsError('');") && s.includes("setQuoteHistory({ events: null, error: '' });"), 'cleared before each read (§0.125)');
     const panel = between(s, 'const ConfiguratorPanel', 'function calcProductIntelligence');
-    assert.ok(panel.includes("const decides   = status === 'Pending Approval' && !!canEdit && canApproveQuotes(userRole) && !!onApprove && !!onSendBack;"));
+    assert.ok(panel.includes("const decides   = status === 'Pending Approval' && !!canEdit && mayDecideQuote({ tier, role: userRole, userId }) && !!onApprove && !!onSendBack;"));
     assert.ok(panel.includes('Waiting for Approval.') && panel.includes('Withdraw to make changes'));
     for (const gone of ['sign-off required before send', 'approval before send.', 'Quote delivered to customer.']) assert.ok(!s.includes(gone), `gone: ${gone}`);
     assert.ok(/\nconst SendBackForm = \(/.test(s), 'the form at module scope (the focus rule)');
