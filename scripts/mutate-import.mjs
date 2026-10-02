@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -115,6 +115,129 @@ const mutations = [
         'netlify/functions/leads.mjs',
         '? results.filter(l => !l.ownerId || l.ownerId === callerId)',
         '? results.filter(l => !l.assignedTo || l.assignedTo === callerId)'],
+
+    // ── The scheduled jobs find people inside the row's own org (§0.159) ────
+    // pipeline-alerts, digest and task-reminders matched people by DISPLAY NAME
+    // across every org. _jobRoster.mjs is the one rule now; each mutant puts one
+    // cross-org (or by-name) lookup back. Catchers: tests/job-roster.test.mjs
+    // (the helpers RUN, the jobs scanned, the §18b52 guard) and
+    // tests/digest-prefs.test.mjs; the behaviour is the integration suite's
+    // (scheduled-job-orgs), which this harness cannot run.
+
+    ['job roster: a roster keeps every org\'s people (the org filter dropped)',
+        'netlify/functions/_jobRoster.mjs',
+        '    const people = orgId ? (users || []).filter(u => u?.orgId === orgId) : [];',
+        '    const people = (users || []).filter(Boolean);'],
+
+    ['job roster: ownerOf trusts a roster of another org',
+        'netlify/functions/_jobRoster.mjs',
+        '    if (!record?.orgId || !roster || record.orgId !== roster.orgId) return null;',
+        '    if (!record || !roster) return null;'],
+
+    ['job roster: ownerOf falls back to the display name for an unassigned record',
+        'netlify/functions/_jobRoster.mjs',
+        '    return id ? roster.byId.get(id) || null : null;',
+        '    return id ? roster.byId.get(id) || null : roster.people.find(u => u.name === record.salesRep || u.name === record.assignedTo) || null;'],
+
+    ['job roster: a deactivated Manager still receives the org\'s deals',
+        'netlify/functions/_jobRoster.mjs',
+        "        if (u.role !== 'Manager' || !u.active || !u.email) continue;",
+        "        if (u.role !== 'Manager' || !u.email) continue;"],
+
+    ['job roster: any role whose profile carries managedReps becomes a manager',
+        'netlify/functions/_jobRoster.mjs',
+        "        if (u.role !== 'Manager' || !u.active || !u.email) continue;",
+        '        if (!u.active || !u.email) continue;'],
+
+    ['job roster: managerOf answers from another org\'s roster',
+        'netlify/functions/_jobRoster.mjs',
+        '    if (!rep?.orgId || !roster || rep.orgId !== roster.orgId) return null;',
+        '    if (!rep || !roster) return null;'],
+
+    ['job roster: activities are filed by deal id alone — another org\'s row on the deal counts',
+        'netlify/functions/_jobRoster.mjs',
+        'export const dealKey = (orgId, dealId) => `${orgId}\\u0000${dealId}`;',
+        'export const dealKey = (orgId, dealId) => String(dealId);'],
+
+    ['job roster: an Admin\'s team digest reads every org\'s reps',
+        'netlify/functions/_jobRoster.mjs',
+        "    const reps = (users || []).filter(u => u?.orgId === mgr.orgId && u.role === 'User');",
+        "    const reps = (users || []).filter(u => u?.role === 'User');"],
+
+    ['job roster: ownedBy drops the org — another org\'s row carrying the id counts',
+        'netlify/functions/_jobRoster.mjs',
+        '    return (rows || []).filter(r => r?.orgId === user.orgId && r.ownerId === user.id);',
+        '    return (rows || []).filter(r => r?.ownerId === user.id);'],
+
+    ['job roster: ownedBy counts a record that only carries the member\'s name',
+        'netlify/functions/_jobRoster.mjs',
+        '    return (rows || []).filter(r => r?.orgId === user.orgId && r.ownerId === user.id);',
+        '    return (rows || []).filter(r => r?.orgId === user.orgId && (r.ownerId === user.id || r.assignedTo === user.name));'],
+
+    ['job roster: byOrg files an org-less row under no org at all',
+        'netlify/functions/_jobRoster.mjs',
+        '        if (!r?.orgId) continue;',
+        '        if (!r) continue;'],
+
+    ['pipeline-alerts: the deal\'s rep is found by display name across every org again',
+        'netlify/functions/pipeline-alerts.mjs',
+        '            const repUser = ownerOf(opp, roster);',
+        '            const repUser = allUsers.find(u => u.name === repName);'],
+
+    ['pipeline-alerts: the cross-tenant check fails open again for a rep with no org',
+        'netlify/functions/pipeline-alerts.mjs',
+        '            if (repUser.orgId !== orgId) continue;',
+        '            if (repUser.orgId && repUser.orgId !== orgId) continue;'],
+
+    ['pipeline-alerts: the manager is taken from any org\'s team again',
+        'netlify/functions/pipeline-alerts.mjs',
+        '            const manager  = managerOf(repUser, roster);',
+        "            const manager  = allUsers.find(u => u.role === 'Manager' && u.team === repUser.team) || null;"],
+
+    ['pipeline-alerts: one stage average for every org again',
+        'netlify/functions/pipeline-alerts.mjs',
+        '            const avgForStage    = (avgDaysByOrg.get(orgId) || {})[opp.stage] || null;',
+        '            const avgForStage    = buildAvgDaysInStage(allOpps)[opp.stage] || null;'],
+
+    ['pipeline-alerts: a deal\'s activities come from every org again',
+        'netlify/functions/pipeline-alerts.mjs',
+        '            const oppActs = actsByDeal.get(dealKey(orgId, opp.id)) || [];',
+        "            const oppActs = allActs.filter(a => a.opportunityId === opp.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));"],
+
+    ['pipeline-alerts: an overdue task\'s assignee is found by name across orgs again',
+        'netlify/functions/pipeline-alerts.mjs',
+        '                    const assignee = ownerOf(task, rosters.get(task.orgId));',
+        '                    const assignee = task.assignedTo ? allUsers.find(u => u.name === task.assignedTo) : null;'],
+
+    ['digest: the Monday team digest lists every org\'s reps again',
+        'netlify/functions/digest.mjs',
+        '                    const visibleReps = teamRepsOf(mgr, allUsers);',
+        "                    const visibleReps = allUsers.filter(u => u.role === 'User');"],
+
+    ['digest: a member\'s task digest reads tasks by their name again',
+        'netlify/functions/digest.mjs',
+        '.where(and(eq(tasks.orgId, user.orgId), eq(tasks.ownerId, user.id)));',
+        '.where(and(eq(tasks.orgId, user.orgId), eq(tasks.assignedTo, user.name)));'],
+
+    ['digest: a member\'s deal digest reads deals by their name again',
+        'netlify/functions/digest.mjs',
+        '.where(and(eq(opportunities.orgId, user.orgId), eq(opportunities.ownerId, user.id)));',
+        '.where(and(eq(opportunities.orgId, user.orgId), eq(opportunities.salesRep, user.name)));'],
+
+    ['digest: a rep\'s team-digest deals are counted by name again',
+        'netlify/functions/digest.mjs',
+        '                        const allRepOpps = allOpps.filter(o => o.ownerId === rep.id);',
+        '                        const allRepOpps = allOpps.filter(o => o.salesRep === rep.name);'],
+
+    ['digest: the run ignores the instant it is handed — the Monday digest cannot be tested',
+        'netlify/functions/digest.mjs',
+        'export const runDigest = async ({ now = new Date() } = {}) => {',
+        'export const runDigest = async () => { const now = new Date();'],
+
+    ['task-reminders: a member is texted every task carrying their name, in any org, again',
+        'netlify/functions/task-reminders.mjs',
+        '            const userTasks = ownedBy(user, allTasks).filter(t =>',
+        '            const userTasks = allTasks.filter(t => t.assignedTo === user.name &&'],
 
     // ── Unassigned-lead visibility toggle ───────────────────────────────────
     // settings.extra.unassignedLeadsVisibleToReps gates whether a rep's GET

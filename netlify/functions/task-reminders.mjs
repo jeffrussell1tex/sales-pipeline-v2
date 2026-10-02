@@ -14,7 +14,7 @@
  * Requirements per task:
  *   - task.dueDate  set (YYYY-MM-DD)
  *   - task.dueTime  set (HH:MM, 24hr or 12hr — both handled)
- *   - task.assignedTo matches a user name in the DB
+ *   - task.ownerId is the user's app id, in the user's own org (state §0.159)
  *   - user.smsNotifications.enabled = true
  *   - user.smsNotifications.taskReminders = true
  *   - user.mobile or user.phone is set
@@ -27,6 +27,8 @@ import { tasks, users, recommendationLog } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
 import { withHeartbeat } from './_heartbeat.mjs';
+// A member's own tasks, inside their org (state §0.159).
+import { ownedBy } from './_jobRoster.mjs';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -69,9 +71,8 @@ function parseTime(timeStr) {
  * Get the current local time (hour + minute) in a given IANA timezone.
  * Returns { hour, minute } in 24-hour format.
  */
-function getCurrentLocalTime(timezone) {
+function getCurrentLocalTime(timezone, now) {
     try {
-        const now = new Date();
         const hourFormatter = new Intl.DateTimeFormat('en-US', {
             timeZone: timezone,
             hour: 'numeric',
@@ -87,7 +88,6 @@ function getCurrentLocalTime(timezone) {
         return { hour, minute };
     } catch {
         // Fallback to UTC
-        const now = new Date();
         return { hour: now.getUTCHours(), minute: now.getUTCMinutes() };
     }
 }
@@ -95,9 +95,8 @@ function getCurrentLocalTime(timezone) {
 /**
  * Get today's date string (YYYY-MM-DD) in a given IANA timezone.
  */
-function getTodayInTimezone(timezone) {
+function getTodayInTimezone(timezone, now) {
     try {
-        const now = new Date();
         const formatter = new Intl.DateTimeFormat('en-CA', { // en-CA gives YYYY-MM-DD
             timeZone: timezone,
             year: 'numeric',
@@ -106,7 +105,7 @@ function getTodayInTimezone(timezone) {
         });
         return formatter.format(now);
     } catch {
-        return new Date().toISOString().slice(0, 10);
+        return now.toISOString().slice(0, 10);
     }
 }
 
@@ -154,9 +153,10 @@ async function logReminderSent(orgId, repName, task) {
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
-// The run itself; `handler` (at the bottom) is this wrapped in a heartbeat stamp (state §0.98).
-const run = async () => {
-    const now = new Date();
+// One run at an instant (state §0.159): the schedule's is now (`run`, at the
+// bottom); the integration suite hands it the minute a task is due. Both clock
+// helpers read this instant.
+export const runTaskReminders = async ({ now = new Date() } = {}) => {
     console.log('task-reminders: running at', now.toISOString());
 
     try {
@@ -184,12 +184,14 @@ const run = async () => {
             if (!smsPhone)                       continue;
 
             // What time is it right now in this user's timezone?
-            const { hour: localHour, minute: localMinute } = getCurrentLocalTime(userTz);
-            const todayLocal = getTodayInTimezone(userTz);
+            const { hour: localHour, minute: localMinute } = getCurrentLocalTime(userTz, now);
+            const todayLocal = getTodayInTimezone(userTz, now);
 
-            // Find this user's tasks due today with a dueTime set
-            const userTasks = allTasks.filter(t =>
-                t.assignedTo === user.name &&
+            // This member's OWN tasks due today with a time set — their app id as the
+            // owner, in their own org (state §0.159). Matched by name with no org, a
+            // member of ANOTHER org called the same was texted these, and the dedup
+            // then kept the real assignee's reminder from ever going.
+            const userTasks = ownedBy(user, allTasks).filter(t =>
                 t.dueDate    === todayLocal &&
                 !t.completed  &&
                 t.status     !== 'Completed' &&
@@ -237,6 +239,11 @@ const run = async () => {
         console.error('task-reminders: fatal error:', err.message);
         return { statusCode: 500, body: err.message };
     }
+};
+
+// The schedule's run, wrapped in a heartbeat stamp (state §0.98).
+const run = async () => {
+    return runTaskReminders();
 };
 
 export const handler = withHeartbeat('task-reminders', run);

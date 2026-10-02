@@ -17,6 +17,8 @@ import { gte, eq, and } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
 import { withHeartbeat } from './_heartbeat.mjs';
+// Whose rows are whose, inside one org (state §0.159).
+import { teamRepsOf } from './_jobRoster.mjs';
 
 const DEFAULT_PREFS = {
     stageChanged:        { enabled: true,  mode: 'instant' },
@@ -108,9 +110,10 @@ function localHourToUtc(localHour, timezone) {
     }
 }
 
-// The run itself; `handler` (at the bottom) is this wrapped in a heartbeat stamp (state §0.98).
-const run = async () => {
-    const now       = new Date();
+// One run at an instant (state §0.159): the schedule's is now (`run`, at the
+// bottom); the integration suite hands it a Monday, so the weekly team digest
+// can be run at all.
+export const runDigest = async ({ now = new Date() } = {}) => {
     const nowHour   = now.getUTCHours();
     const nowMinute = now.getUTCMinutes();
     const since24h  = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -158,9 +161,12 @@ const run = async () => {
             console.log(`digest: processing user ${user.name} (${user.email}) — digestTime=${digestTime} tz=${userTz} → fires at UTC ${targetUtcHour}`);
 
             // ── Tasks due today ────────────────────────────────────────────────
+            // A member's digest reads what they OWN — their app id as the owner, in
+            // their org (state §0.159). By name, a second member called the same
+            // received these tasks and deals too.
             if (wantsDigest(resolvedProfile, 'taskDigest')) {
                 const todayTasks = await db.select().from(tasks)
-                    .where(and(eq(tasks.orgId, user.orgId), eq(tasks.assignedTo, user.name)));
+                    .where(and(eq(tasks.orgId, user.orgId), eq(tasks.ownerId, user.id)));
                 const dueTodayTasks = todayTasks.filter(t =>
                     t.dueDate === today && !t.completed
                 );
@@ -196,7 +202,7 @@ const run = async () => {
             // ── Overdue tasks ─────────────────────────────────────────────────
             if (wantsDigest(resolvedProfile, 'overdueTaskNudge')) {
                 const allTasks = await db.select().from(tasks)
-                    .where(and(eq(tasks.orgId, user.orgId), eq(tasks.assignedTo, user.name)));
+                    .where(and(eq(tasks.orgId, user.orgId), eq(tasks.ownerId, user.id)));
                 const overdueTasks = allTasks.filter(t =>
                     t.dueDate && t.dueDate < today && !t.completed
                 );
@@ -237,7 +243,7 @@ const run = async () => {
             // ── Opportunity updates digest ─────────────────────────────────────
             if (wantsDigest(resolvedProfile, 'opportunityUpdated') || wantsDigest(resolvedProfile, 'stageChanged') || wantsDigest(resolvedProfile, 'commentAdded')) {
                 const recentOpps = await db.select().from(opportunities)
-                    .where(and(eq(opportunities.orgId, user.orgId), eq(opportunities.salesRep, user.name)));
+                    .where(and(eq(opportunities.orgId, user.orgId), eq(opportunities.ownerId, user.id)));
 
                 const updatedRecently = recentOpps.filter(o =>
                     o.updatedAt && new Date(o.updatedAt) >= since24h
@@ -311,12 +317,14 @@ const run = async () => {
                 console.log(`managerTeamDigest: building for ${mgr.name} (${mgr.email})`);
 
                 try {
-                    // Identify reps this manager can see
-                    const allReps = allUsers.filter(u => u.role === 'User');
-                    const visibleReps = mgr.role === 'Admin' ? allReps : allReps.filter(u =>
-                        (mgr.teamId && u.teamId === mgr.teamId) ||
-                        (mgr.team   && u.team   === mgr.team)
-                    );
+                    // The reps this digest lists: the manager's OWN org's (state §0.159) —
+                    // every rep for an Admin, the team's for a Manager. It read every org's
+                    // reps, so each Admin's Monday email listed all of them, and a Manager's
+                    // took any org's reps on a team of the same name. (The old match's
+                    // `teamId` half read `mgr.teamId`, a key the row does not have — it lives
+                    // in profile.teamId — and never matched; TeamsDetail writes profile.teamId
+                    // and the team's name together, so inside one org the name is the match.)
+                    const visibleReps = teamRepsOf(mgr, allUsers);
                     if (visibleReps.length === 0) continue;
 
                     const allOpps = await db.select().from(opportunities).where(eq(opportunities.orgId, mgr.orgId));
@@ -328,19 +336,21 @@ const run = async () => {
                     const BENCHMARK_WIN_RATE = 45;
 
                     const repRows = visibleReps.map(rep => {
-                        const repOpps    = allOpps.filter(o => o.salesRep === rep.name && !['Closed Won','Closed Lost'].includes(o.stage));
-                        const allRepOpps = allOpps.filter(o => o.salesRep === rep.name);
+                        // A rep's own rows, by app id (state §0.159): by name, two reps
+                        // called the same each counted the other's deals, tasks and calls.
+                        const repOpps    = allOpps.filter(o => o.ownerId === rep.id && !['Closed Won','Closed Lost'].includes(o.stage));
+                        const allRepOpps = allOpps.filter(o => o.ownerId === rep.id);
                         const wonOpps    = allRepOpps.filter(o => o.stage === 'Closed Won');
                         const lostOpps   = allRepOpps.filter(o => o.stage === 'Closed Lost');
                         const closedTotal = wonOpps.length + lostOpps.length;
                         const winRate    = closedTotal > 0 ? Math.round((wonOpps.length / closedTotal) * 100) : null;
 
-                        const repActs    = allActs.filter(a => a.salesRep === rep.name || a.author === rep.name);
+                        const repActs    = allActs.filter(a => a.ownerId === rep.id);
                         const lastActDate = repActs.sort((a,b) => (b.date||'').localeCompare(a.date||''))[0]?.date || null;
                         const daysSinceAct = lastActDate
                             ? Math.floor((now - new Date(lastActDate + 'T12:00:00')) / 86400000) : null;
 
-                        const repTasks   = allTasks.filter(t => t.assignedTo === rep.name);
+                        const repTasks   = allTasks.filter(t => t.ownerId === rep.id);
                         const overdueCount = repTasks.filter(t => {
                             const due = t.dueDate || t.due;
                             return !t.completed && t.status !== 'Completed' && due && due < today;
@@ -383,7 +393,7 @@ const run = async () => {
                             : (score >= 40 ? (staleDeals > 0 ? `${staleDeals} stale deal${staleDeals>1?'s':''}` : 'Needs attention') : 'Needs coaching');
 
                         const weekActs = allActs.filter(a =>
-                            (a.salesRep === rep.name || a.author === rep.name) &&
+                            a.ownerId === rep.id &&
                             new Date(a.date) >= since7d
                         ).length;
 
@@ -502,6 +512,11 @@ const run = async () => {
         console.error('digest error:', err.message);
         return { statusCode: 500, body: err.message };
     }
+};
+
+// The schedule's run, wrapped in a heartbeat stamp (state §0.98).
+const run = async () => {
+    return runDigest();
 };
 
 export const handler = withHeartbeat('digest', run);

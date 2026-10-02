@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 2, 2026 · rules current through **§18b51** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 2, 2026 · rules current through **§18b52** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3656,3 +3656,14 @@ through `dbFetch`.
 3. **Only an id waits, checked to the shape of one — never data.** Whether anything opens is the server's list's to say: another org's or another rep's record is not in it, and nothing opens.
 4. **The tab, not the browser.** sessionStorage, not localStorage: a link belongs to the tab it was opened in, and must not reopen in another tab or after a restart.
 5. **Test it signed OUT.** A signed-in check proves nothing about sign-in: sign out, open the link, sign in, and read where the app lands (§0.158 did, as Karen). The older emails' `?deal=` links need a reader and all of this (state §9).
+
+## 18b52. A Job That Reads Every Org Finds A Person Inside The Row's Own Org — By App Id, Never By A Name (hard rule)
+
+**Origin (§0.159, 2 Oct 2026).** Found while verifying §0.158. The three jobs prod runs every hour or minute (`JOBS_ENABLED` is "true" there) read every org's users, deals, tasks and activities in one pass — a scheduled job is the one reader across tenants — and then found people across all of them by DISPLAY NAME. `pipeline-alerts` built `userByName[u.name] = u` (the last row of ANY org won, and the next line skipped the deal when that row was another org's, so the real rep's alerts silently stopped), took a rep's manager from every org's `managedReps` and team names (org B's Manager on a team called "Enterprise" was emailed org A's deal — reproduced in the test database) and pooled every org's stage history into the "stuck" threshold. `digest`'s Monday team digest listed every org's reps to every Admin (19 in the test database). `task-reminders` texted a member every task whose assignee carried their name, in any org (reproduced: org A's Karen Russell texted org B's task). The shared database holds the same names in several orgs — "Jeff Russell" in six. The org-scoping scan covers mutations only; a READ keyed across orgs went unseen.
+
+1. **Group by org first; build every lookup per org.** A job that reads across tenants partitions its rows by `orgId` before it builds one map, and every lookup goes through the row's own org (`rostersByOrg`, `perOrg`, `activitiesByDeal` in `netlify/functions/_jobRoster.mjs`). A row with no org belongs to none.
+2. **A record's person is its OWNER, by app user id, in its own org** (`ownerOf`, `ownedBy`). The display-name column (`salesRep`, `assignedTo`, `author`) is never a key — a name is unique in no org (18b20). An unassigned record has no one to notify; that is the ownership model, not a gap.
+3. **A manager is an active Manager of THAT org** — not another org's on a team of the same name, not a deactivated one, not another role whose profile carries `managedReps`.
+4. **Anything computed over many rows is computed per org** — an average, a threshold, a count. One org's history never moves another org's alert (CLAUDE.md: no org's data may affect another org's behaviour).
+5. **A job runs at an instant a test can hand it** — `export const run<Job> = async ({ now = new Date() } = {})`, the scheduled `run` calling it with nothing — and keeps no module-level clock (pipeline-alerts' `today` froze at a warm container's first run).
+6. **Pin it three ways.** `tests/job-roster.test.mjs` RUNS the helpers with two orgs that share every name and team (the second org's rows last, so a last-row-wins lookup fails), scans the jobs, and holds a guard over every job in `SCHEDULED_JOBS` for a lookup keyed by a display name — a new job meets it the day it is listed. `tests/integration/scheduled-job-orgs.itest.mjs` runs the three jobs against the test database at a Monday 14:00 UTC with every sender recording, and proves each message reaches the record's owner and that org's manager and that nothing crosses — 0/8 on the old lookups, 8/8 after. Twenty-three mutants each put one cross-org or by-name lookup back.

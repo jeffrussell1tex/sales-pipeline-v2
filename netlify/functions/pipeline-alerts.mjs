@@ -19,15 +19,21 @@
  *   scoreDrop   - AI score dropped below 40
  *   renewal     - a dispatch customer's maintenance agreement is inside its
  *                 plan's renewal window, or has expired (state §0.110)
+ *
+ * Every person is found inside the deal's (or task's) OWN org, by the app user
+ * id it carries (state §0.159, _jobRoster.mjs): the rep is the deal's owner, the
+ * manager a Manager of that org, the stage averages that org's own.
  */
 
 import { db } from '../../db/index.js';
 import { opportunities, activities, users, recommendationLog, dispatchCustomers, dispatchServicePlans, tasks, automations } from '../../db/schema.js';
-import { eq, and, gte } from 'drizzle-orm';
+import { eq, and, gte, inArray } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
 import { sendSlackToOrg, slackTemplates }             from './send-slack.mjs';
 import { withHeartbeat }                              from './_heartbeat.mjs';
+// Who a row belongs to, found inside the row's own org (state §0.159).
+import { rostersByOrg, ownerOf, managerOf, perOrg, activitiesByDeal, dealKey } from './_jobRoster.mjs';
 // The rules engine (state §0.124): the three stalled-deal signals — silent,
 // stuck, close date lapsed — fire a rule at the point they post to Slack, so
 // once per deal per signal per DEDUP_DAYS, at the rep's alert hour.
@@ -37,8 +43,6 @@ import { dealEventData, taskEventData }               from '../../src/utils/auto
 import { buildRenewalQueue }                          from '../../src/utils/planVisits.js';
 
 const DEDUP_DAYS = 7;
-const today = new Date();
-const todayStr = today.toISOString().split('T')[0];
 
 // ── Default prefs ─────────────────────────────────────────────────────────────
 const DEFAULT_PREFS = {
@@ -123,7 +127,9 @@ function localHourToUtc(localHour, timezone) {
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
-function daysSince(dateStr) {
+// `today` is the run's instant (state §0.159) — a module-level `new Date()` until
+// then, frozen at the first run of a warm container.
+function daysSince(dateStr, today) {
     if (!dateStr) return null;
     return Math.floor((today - new Date(dateStr + 'T12:00:00')) / 86400000);
 }
@@ -155,7 +161,8 @@ function buildAvgDaysInStage(allOpps) {
 
 // Check if this deal+signal was already alerted recently
 async function wasRecentlyAlerted(orgId, repName, opportunityId, actionType) {
-    const since = new Date(today.getTime() - DEDUP_DAYS * 86400000);
+    // The ledger's own clock: logAlert stamps dismissedAt at the write.
+    const since = new Date(Date.now() - DEDUP_DAYS * 86400000);
     try {
         const rows = await db.select({ id: recommendationLog.id })
             .from(recommendationLog)
@@ -195,11 +202,13 @@ async function logAlert(orgId, repName, actionType, opp, signal) {
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
-// The run itself; `handler` (at the bottom) is this wrapped in a heartbeat
-// stamp (state §0.98), so a run that throws or answers 500 is on record.
-const run = async () => {
-    const now     = new Date();
-    const nowHour = now.getUTCHours();
+// One run at an instant (state §0.159): the schedule's is now (`run`, at the
+// bottom); tests/integration/scheduled-job-orgs.itest.mjs hands it one. The day
+// arithmetic reads the same instant.
+export const runPipelineAlerts = async ({ now = new Date() } = {}) => {
+    const nowHour  = now.getUTCHours();
+    const today    = now;
+    const todayStr = today.toISOString().split('T')[0];
     console.log('pipeline-alerts: starting at', now.toISOString(), `(UTC hour ${nowHour})`);
 
     try {
@@ -207,19 +216,14 @@ const run = async () => {
         const allOpps  = await db.select().from(opportunities);
         const allActs  = await db.select().from(activities);
 
-        const avgDaysInStage = buildAvgDaysInStage(allOpps);
-
-        // Build lookup maps
-        const userByName = {};
-        allUsers.forEach(u => { userByName[u.name] = u; });
-
-        // Manager lookup: repName → manager (by managedReps array, then by team fallback)
-        const managerByRep  = {};
-        const managerByTeam = {};
-        allUsers.forEach(u => {
-            if (u.role === 'Manager' && u.team) managerByTeam[u.team] = u;
-            (u.profile?.managedReps || []).forEach(rep => { managerByRep[rep] = u; });
-        });
+        // Every org's rows arrive together — a scheduled job is the one reader
+        // across tenants — so every lookup below is keyed by org (state §0.159,
+        // guide §18b52). Until then a rep was `userByName[name]` (the last row of
+        // ANY org won), a manager came from every org's managedReps and team
+        // names, and one stage average pooled every org's history.
+        const rosters      = rostersByOrg(allUsers);                 // org → its people
+        const avgDaysByOrg = perOrg(allOpps, buildAvgDaysInStage);   // org → its own stage averages
+        const actsByDeal   = activitiesByDeal(allActs);              // org + deal → its activities, newest first
 
         const activeOpps = allOpps.filter(o =>
             o.stage !== 'Closed Won' && o.stage !== 'Closed Lost' && o.salesRep
@@ -231,12 +235,16 @@ const run = async () => {
 
         for (const opp of activeOpps) {
             const repName = opp.salesRep;
-            const repUser = userByName[repName];
-            if (!repUser?.email || !repUser.active) continue;
-
             const orgId   = opp.orgId;
-            // Cross-tenant safety: skip if the matched user belongs to a different org
-            if (repUser.orgId && repUser.orgId !== orgId) continue;
+            // The deal's rep is its OWNER, by app user id, on its own org's roster —
+            // never the display name, which another member of this org or another
+            // can share. An unassigned deal has no rep to alert.
+            const roster  = rosters.get(orgId);
+            const repUser = ownerOf(opp, roster);
+            if (!repUser?.email || !repUser.active) continue;
+            // Cross-tenant safety: the rep is THIS org's member (ownerOf refuses any
+            // other; kept as the last line, and it fails closed).
+            if (repUser.orgId !== orgId) continue;
 
             // AppHeader.saveProfile saves these fields flat on the user row (top-level),
             // not nested inside user.profile. Read top-level first, fall back to
@@ -264,22 +272,23 @@ const run = async () => {
 
             const arr      = parseFloat(opp.arr) || 0;
             const name     = opp.opportunityName || opp.account || 'Unnamed deal';
-            const manager  = managerByRep[repName] || (repUser.team ? managerByTeam[repUser.team] : null);
+            // A Manager of THIS org (by managedReps, then the rep's team), active, with an address.
+            const manager  = managerOf(repUser, roster);
             const smsPhone = mobile || phone || null;
 
-            const oppActs = allActs
-                .filter(a => a.opportunityId === opp.id)
-                .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+            // The deal's own org's activities: one org's row naming another org's
+            // deal id never makes that deal look worked.
+            const oppActs = actsByDeal.get(dealKey(orgId, opp.id)) || [];
 
             const lastActDate    = oppActs[0]?.date || opp.createdDate;
-            const daysSilent     = daysSince(lastActDate);
-            const daysInStage    = daysSince(opp.stageChangedDate || opp.createdDate);
-            const avgForStage    = avgDaysInStage[opp.stage] || null;
+            const daysSilent     = daysSince(lastActDate, today);
+            const daysInStage    = daysSince(opp.stageChangedDate || opp.createdDate, today);
+            const avgForStage    = (avgDaysByOrg.get(orgId) || {})[opp.stage] || null;
             const stuckThreshold = avgForStage ? avgForStage * 2 : 21;
             const daysLapsed     = opp.forecastedCloseDate
                 ? -daysBetween(todayStr, opp.forecastedCloseDate)
                 : null;
-            const createdDays    = daysSince(opp.createdDate);
+            const createdDays    = daysSince(opp.createdDate, today);
             const stageCount     = (opp.stageHistory || []).length;
 
             // ── Signal 1: Silent deal (14+ days no activity) ──────────────────
@@ -522,12 +531,13 @@ const run = async () => {
                 .where(and(eq(automations.triggerEvent, 'task.overdue'), eq(automations.active, true)));
             const orgsWithRule = new Set(ruleRows.map(r => r.orgId));
             if (orgsWithRule.size > 0) {
-                const allTasks = await db.select().from(tasks);
+                const allTasks = await db.select().from(tasks).where(inArray(tasks.orgId, [...orgsWithRule]));
                 for (const task of allTasks) {
                     if (!orgsWithRule.has(task.orgId)) continue;
                     if (task.completed || task.status === 'Completed') continue;
                     if (!task.dueDate || task.dueDate >= todayStr) continue;
-                    const assignee = task.assignedTo ? userByName[task.assignedTo] : null;
+                    // The assignee is the task's OWNER, by app user id, in the task's own org (§0.159).
+                    const assignee = ownerOf(task, rosters.get(task.orgId));
                     if (!assignee?.email || !assignee.active) continue;
                     // Cross-tenant safety: the assignee must be THIS org's user.
                     if (assignee.orgId !== task.orgId) continue;
@@ -627,6 +637,12 @@ const run = async () => {
         console.error('pipeline-alerts: fatal error:', err.message);
         return { statusCode: 500, body: err.message };
     }
+};
+
+// The schedule's run, wrapped in a heartbeat stamp (state §0.98), so a run that
+// throws or answers 500 is on record.
+const run = async () => {
+    return runPipelineAlerts();
 };
 
 export const handler = withHeartbeat('pipeline-alerts', run);
