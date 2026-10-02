@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 2, 2026 · rules current through **§18b48** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 2, 2026 · rules current through **§18b49** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3624,3 +3624,14 @@ through `dbFetch`.
 3. **What the caller cannot see answers like what does not exist** — 404, for a read, a write, an email and a job card alike. "It exists, but not yours" is a probe's answer.
 4. **One rule for the server and the screen needs a "real move" for buttons.** The server must allow a save that keeps a status; a button that reuses that answer offers "Submit" on a quote already submitted (caught in the pane). Buttons ask `quoteMoveAllowed`, the server `quoteTransitionRefusal` — the same rule, asked two questions.
 5. **Pin it by running it and by acting as every role.** tests/roles.test.mjs and tests/quote-rules.test.mjs RUN the rules; tests/integration/quotes-access.itest.mjs reads, writes, approves, sends and emails as each role with a second org that must see nothing.
+
+## 18b49. A Number On A Screen Is Read From The Record Of What Happened — Never A Constant, Never The Current State Standing In For History (hard rule)
+
+**Origin (§0.156, 2 Oct 2026).** The Approvals tab printed fixed sub-labels ("0.7× baseline", "5% error bars for my role"), took its approval rate from a slice of a status list, counted a quote sent to the customer as approved and named the VIEWER's role as an approver; a quote's Activity panel invented its history from the current status; the tier panel timed an approval from the row's last update — after it. Jeff: "fix the stat cards to show actual data".
+
+1. **A statistic, a history, a "decided by" is read from the record** — the server's audit events, written as the thing happened — and filtered by the same visibility rule as the records it is about (quotes.mjs `?activity=true` reads only the caller's quotes' events). The current status is not history, a constant is not a measurement, and the viewer is not the actor.
+2. **A record a number trusts is written only by the server.** An endpoint that lets a client write to the log refuses the events the server owns (audit-log.mjs refuses `quote.*`, §0.156).
+3. **Nothing on record reads as nothing** — "—" and "no decisions in 30 days", never "0%", never an invented baseline.
+4. **A window has a start and no end.** The log's time is `timestamp without time zone`, which a machine off UTC reads as its local time — five hours LATE on a Chicago laptop — so a recent event reads as the future, and an end at "now" drops it (the integration suite caught it). Durations are safe: both ends read alike.
+5. **A decision names only its status.** A PUT that moves a record carries none of its content: the server merges over the stored row, and a screen's older copy would be written back (an approver's screen loaded before the rep's last change).
+6. **The list the server sends is the list.** A screen that re-filters it by a second list hides what the rule grants — the Quotes tab filtered a Manager by settings.users' managedBy, and with none set he had nothing to approve (caught in the pane as Bob). The Manager's narrowing is the deals rule's, applied by the server.

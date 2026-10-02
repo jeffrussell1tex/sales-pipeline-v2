@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -3118,13 +3118,174 @@ const mutations = [
 
     ['quotes tab: a rep\'s list filtered by the creator\'s name again',
         'src/Tabs/QuotesTab.jsx',
-        "        // which hid a quote an Admin wrote on the rep's own deal.\n        return true;",
-        "        // which hid a quote an Admin wrote on the rep's own deal.\n        return q.createdBy === currentUser;"],
+        "    const visibleQuotes = useMemo(() => quotes || [], [quotes]);",
+        "    const visibleQuotes = useMemo(() => (quotes || []).filter(q => q.createdBy === currentUser), [quotes]);"],
+
+    ['quotes tab: a Manager filtered by a second list again — nothing to approve',
+        'src/Tabs/QuotesTab.jsx',
+        "    const visibleQuotes = useMemo(() => quotes || [], [quotes]);",
+        "    const visibleQuotes = useMemo(() => (quotes || []).filter(q => userRole !== 'Manager'), [quotes]);"],
 
     ['qa seed: the Approved quote is stamped with the Clerk id again',
         'scripts/qa-seed-plan.mjs',
         "approvedBy: manager?.name || admin?.name || null,",
         "approvedBy: manager?.clerkUserId || admin?.clerkUserId || null,"],
+
+    // ── §0.156 — the Approvals tab tells the truth: the send-back, the record ──
+    ['approval stats: a send-back counts as an approval',
+        'src/utils/approvalStats.js',
+        "        const kind = e.action === APPROVAL_EVENT.approved ? 'approved' : e.action === APPROVAL_EVENT.sentBack ? 'sentBack' : null;",
+        "        const kind = e.action === APPROVAL_EVENT.approved || e.action === APPROVAL_EVENT.sentBack ? 'approved' : null;"],
+
+    ['approval stats: a withdrawal no longer ends the submission, so the next decision is timed from it',
+        'src/utils/approvalStats.js',
+        "        if (e.action === APPROVAL_EVENT.withdrawn) { openSince.delete(e.quoteId); continue; }",
+        "        if (e.action === APPROVAL_EVENT.withdrawn) { continue; }"],
+
+    ['approval stats: an untimed decision is averaged in as zero hours',
+        'src/utils/approvalStats.js',
+        "    const timed = decisions.map(d => d.hours).filter(h => h !== null);",
+        "    const timed = decisions.map(d => d.hours ?? 0);"],
+
+    ['approval stats: no decisions reads as a 0% approval rate',
+        'src/utils/approvalStats.js',
+        "        rate: decisions.length ? Math.round((approved / decisions.length) * 100) : null,",
+        "        rate: decisions.length ? Math.round((approved / decisions.length) * 100) : 0,"],
+
+    ['approval stats: the 30-day window lets in older decisions',
+        'src/utils/approvalStats.js',
+        "    const decisions = decisionsFrom(events).filter(d => ms(d.at) >= since);",
+        "    const decisions = decisionsFrom(events);"],
+
+    ['approval stats: the send-back note keeps the mark in front of it',
+        'src/utils/approvalStats.js',
+        "    return i >= 0 ? d.slice(i + SENT_BACK_MARK.length) : null;",
+        "    return i >= 0 ? d.slice(i) : null;"],
+
+    ['approval stats: the tier panel counts a quote at every tier',
+        'src/utils/approvalStats.js',
+        "        const atTier = (id) => tierOf.get(id) === label;",
+        "        const atTier = (id) => tierOf.has(id);"],
+
+    ['quote rules: a rep sends back a quote waiting for approval',
+        'src/utils/quoteRules.js',
+        "    if (!canApproveQuotes(role)) return 'Only an Admin or a Manager sends back a quote waiting for approval.';",
+        "    if (false) return 'Only an Admin or a Manager sends back a quote waiting for approval.';"],
+
+    ['quote rules: a send-back without a note',
+        'src/utils/quoteRules.js',
+        "    if (!n) return 'Say what to change — a send-back carries a note for the rep.';",
+        "    if (false) return 'Say what to change — a send-back carries a note for the rep.';"],
+
+    ['quote rules: an approver marks a quote waiting for approval as lost again',
+        'src/utils/quoteRules.js',
+        "            if (f === 'Pending Approval') return 'A quote waiting for approval is sent back to the rep, not marked lost.';",
+        "            if (f === 'Pending Approval') return canApproveQuotes(role) ? null : 'A quote waiting for approval is sent back to the rep, not marked lost.';"],
+
+    ['quotes: a save writes the approver note',
+        'netlify/functions/quotes.mjs',
+        "approvalTier: existing.approvalTier, approvalReason: existing.approvalReason, approvalNote: existing.approvalNote,",
+        "approvalTier: existing.approvalTier, approvalReason: existing.approvalReason,"],
+
+    ['quotes: every refused send-back is a 400 — a rep is no longer told she may not',
+        'netlify/functions/quotes.mjs',
+        "if (refusal) return refuse(from !== 'Pending Approval' ? 409 : !canApproveQuotes(userRole) ? 403 : 400, refusal);",
+        "if (refusal) return refuse(400, refusal);"],
+
+    ['quote rules: a quote waiting for approval can be edited again (the hold gone)',
+        'src/utils/quoteRules.js',
+        "    if (quoteIsHeld(status)) return { status, refusal: 'This quote is waiting for approval — withdraw it to change it.', approvalCleared: false };",
+        "    if (false) return { status, refusal: 'This quote is waiting for approval — withdraw it to change it.', approvalCleared: false };"],
+
+    ['quote rules: a held quote reads as editable',
+        'src/utils/quoteRules.js',
+        "export const quoteTermsEditable = (status) => !quoteIsLocked(status) && !quoteIsHeld(status);",
+        "export const quoteTermsEditable = (status) => !quoteIsLocked(status);"],
+
+    ['quotes tab: Save draft on a quote waiting for approval',
+        'src/Tabs/QuotesTab.jsx',
+        "    const canSave   = !!canEdit && quoteTermsEditable(status);",
+        "    const canSave   = !!canEdit && !quoteIsLocked(status);"],
+
+    ['quotes tab: the line editor stays open on a held quote',
+        'src/Tabs/QuotesTab.jsx',
+        "if (!editQ || !quoteTermsEditable(editQ.status)) return null;",
+        "if (!editQ) return null;"],
+
+    ['quotes: an approval leaves the send-back note in place',
+        'netlify/functions/quotes.mjs',
+        "stamps.approvalNote = null;   // the send-back it answered is settled",
+        "stamps.approvalNote = existing.approvalNote;   // the send-back it answered is settled"],
+
+    ['quotes: the history of a quote the caller cannot see is answered',
+        'netlify/functions/quotes.mjs',
+        "if (!q || !visible.has(q.opportunityId)) return refuse(404, NOT_FOUND);",
+        "if (!q) return refuse(404, NOT_FOUND);"],
+
+    ['quotes: the approval flow reaches a rep for every quote in the org',
+        'netlify/functions/quotes.mjs',
+        "const events = (await approvalEvents(orgId)).filter(e => seen.has(e.quoteId));",
+        "const events = await approvalEvents(orgId);"],
+
+    ['quotes: the Clerk id leaves the server with the record',
+        'netlify/functions/quotes.mjs',
+        "by: r.userName || null, detail: r.detail || null });",
+        "by: r.userName || r.userId || null, detail: r.detail || null });"],
+
+    ['quotes: a withdrawal is recorded as a plain update',
+        'netlify/functions/quotes.mjs',
+        ": moved && from === 'Pending Approval' && to === 'Draft' ? 'quote.withdrawn'",
+        ": false ? 'quote.withdrawn'"],
+
+    ['quotes: the tier statistics read an empty record',
+        'netlify/functions/quotes.mjs',
+        "approvalTierStats(await approvalEvents(orgId), orgQuotes, await getApprovalTiers(orgId), { days: APPROVAL_EVENTS_DAYS })",
+        "approvalTierStats([], orgQuotes, await getApprovalTiers(orgId), { days: APPROVAL_EVENTS_DAYS })"],
+
+    ['audit log: a member posts a quote event again',
+        'netlify/functions/audit-log.mjs',
+        "            if (isQuoteEvent) {",
+        "            if (false) {"],
+
+    ['quotes tab: a rep is offered Approve and Send back',
+        'src/Tabs/QuotesTab.jsx',
+        "    const isApprover = canApproveQuotes(userRole);",
+        "    const isApprover = true;"],
+
+    ['quotes tab: the approval cards read no record',
+        'src/Tabs/QuotesTab.jsx',
+        "    const summary  = useMemo(() => approvalSummary(events || [], { days: 30 }), [events]);",
+        "    const summary  = useMemo(() => approvalSummary([], { days: 30 }), [events]);"],
+
+    ['quotes tab: a decision sends the screen copy of the lines',
+        'src/Tabs/QuotesTab.jsx',
+        "try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }",
+        "try { return await handleSaveQuote({ ...q, status, ...extra }, q); }"],
+
+    ['quotes tab: the print window writes a product name raw',
+        'src/Tabs/QuotesTab.jsx',
+        "<td>${esc(li.productName)}</td>",
+        "<td>${li.productName}</td>"],
+
+    ['quotes tab: one org approval record shows under another (not cleared before the read)',
+        'src/Tabs/QuotesTab.jsx',
+        "        setApprovalEvents(null); setApprovalEventsError('');",
+        "        setApprovalEventsError('');"],
+
+    ['quotes tab: a rep decides her own quote in the configurator',
+        'src/Tabs/QuotesTab.jsx',
+        "    const decides   = status === 'Pending Approval' && !!canEdit && canApproveQuotes(userRole) && !!onApprove && !!onSendBack;",
+        "    const decides   = status === 'Pending Approval' && !!canEdit && !!onApprove && !!onSendBack;"],
+
+    ['qa seed: a reset leaves a test send-back note on a quote (the plan stops naming it)',
+        'scripts/qa-seed-plan.mjs',
+        "approvalTier: null, approvalReason: null, approvedBy: null, approvedAt: null, approvalNote: null,",
+        "approvalTier: null, approvalReason: null, approvedBy: null, approvedAt: null,"],
+
+    ['approval tiers: the panel reads the field nothing sends',
+        'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
+        "{u.sentBack > 0 && <span style={{ color:T.warn }}>↩ {u.sentBack} sent back</span>}",
+        "{u.declined > 0 && <span style={{ color:T.warn }}>↩ {u.declined} sent back</span>}"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

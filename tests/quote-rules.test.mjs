@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import {
     QUOTE_STATUSES, quoteIsLocked, canApproveQuotes, quoteDiscountPct, approvalTierFor, tierNeedsApproval,
     quoteNeedsApproval, quoteTransitionRefusal, quoteMoveAllowed, quoteEditOutcome, quoteTermsChanged, DEFAULT_QUOTE_APPROVAL_TIERS,
+    quoteSendBackRefusal, SEND_BACK_NOTE_MAX, quoteIsHeld, quoteTermsEditable,
 } from '../src/utils/quoteRules.js';
 import { QUOTE_ACCEPTABLE_STATUSES } from '../src/utils/invoices.js';
 
@@ -40,18 +41,28 @@ test('the discount is the server\'s arithmetic — the average line discount, or
     assert.ok(Object.isFrozen(DEFAULT_QUOTE_APPROVAL_TIERS));
 });
 
-test('only an Admin or a Manager approves, or sends back a quote waiting for approval', () => {
+test('only an Admin or a Manager approves, or sends back a quote waiting for approval — to Draft, with a note (§0.156)', () => {
     for (const role of ['Admin', 'Manager']) {
         assert.equal(canApproveQuotes(role), true, role);
         assert.equal(move('Pending Approval', 'Approved', role), null, role);
-        assert.equal(move('Pending Approval', 'Rejected / Lost', role), null, role);
+        assert.equal(quoteSendBackRefusal({ from: 'Pending Approval', role, note: 'Bring it under 20%' }), null, role);
     }
     for (const role of ['User', 'ReadOnly', 'Dispatcher', 'Technician', 'member', undefined]) {
         assert.equal(canApproveQuotes(role), false, String(role));
         assert.match(move('Pending Approval', 'Approved', role), /Only an Admin or a Manager approves/, String(role));
-        assert.match(move('Pending Approval', 'Rejected / Lost', role), /Only an Admin or a Manager sends back/, String(role));
+        assert.match(quoteSendBackRefusal({ from: 'Pending Approval', role, note: 'Bring it under 20%' }), /Only an Admin or a Manager sends back/, String(role));
     }
     assert.match(move('Draft', 'Approved', 'Admin'), /Only a quote waiting for approval/, 'not even an Admin skips the queue');
+    // The approver's no is a send-back; Rejected / Lost is the customer's, never from the queue.
+    for (const role of ['Admin', 'Manager', 'User']) assert.match(move('Pending Approval', 'Rejected / Lost', role), /sent back to the rep, not marked lost/, role);
+    assert.equal(move('Pending Approval', 'Draft', 'User'), null, 'the rep withdraws her own');
+    assert.match(quoteSendBackRefusal({ from: 'Pending Approval', role: 'Manager', note: '   ' }), /carries a note/, 'a blank note is no note');
+    assert.match(quoteSendBackRefusal({ from: 'Pending Approval', role: 'Manager' }), /carries a note/);
+    assert.match(quoteSendBackRefusal({ from: 'Pending Approval', role: 'Manager', note: 'x'.repeat(SEND_BACK_NOTE_MAX + 1) }), /under 1000 characters/);
+    assert.equal(quoteSendBackRefusal({ from: 'Pending Approval', role: 'Manager', note: 'x'.repeat(SEND_BACK_NOTE_MAX) }), null, 'the limit itself is allowed');
+    for (const from of ['Draft', 'Approved', 'Sent to Customer', undefined]) {
+        assert.match(quoteSendBackRefusal({ from, role: 'Admin', note: 'x' }), /Only a quote waiting for approval is sent back/, String(from));
+    }
 });
 
 test('a quote whose discount needs approval is not sent until it is approved; one within the rep\'s discretion is', () => {
@@ -98,6 +109,13 @@ test('an edit: a sent or accepted quote\'s lines and terms are final; an approve
         assert.match(quoteEditOutcome({ status: s, termsChanged: true }).refusal, /lines and terms are final/, s);
     }
     for (const s of ['Draft', 'Pending Approval', 'Approved']) assert.equal(quoteIsLocked(s), false, s);
+    // Waiting for approval, the lines and terms are HELD (Jeff, 2 Oct — §0.156): the
+    // rep withdraws it to change them; a save that changes nothing still passes.
+    assert.match(quoteEditOutcome({ status: 'Pending Approval', termsChanged: true }).refusal, /waiting for approval — withdraw it to change it/);
+    assert.deepEqual(quoteEditOutcome({ status: 'Pending Approval', termsChanged: false }), { status: 'Pending Approval', refusal: null, approvalCleared: false });
+    assert.equal(quoteIsHeld('Pending Approval'), true);
+    for (const s of ['Draft', 'Approved']) assert.equal(quoteTermsEditable(s), true, s);
+    for (const s of ['Pending Approval', 'Sent to Customer', 'Accepted', 'Rejected / Lost']) assert.equal(quoteTermsEditable(s), false, s);
 });
 
 test('a change to the terms is a change in MEANING: jsonb key order, "0.00" and null-vs-empty are not; a line, the discount or the notes are', () => {
@@ -167,8 +185,10 @@ test('the Quotes tab: a rep\'s list is what the server sends; the buttons and th
     assert.ok(s.includes('{(canSend || canSubmit) && (') && s.includes('{canSave && <button onClick={onSaveDraft}'), 'Send / Submit / Save only where the rule allows');
     assert.ok(!s.includes('onClick={tier.approver ? onSubmitApproval : onSendToCustomer}'), 'the Send that showed on an accepted quote is gone');
     assert.ok(s.includes('{activeCanSend && <button onClick={handleSendToCustomer}'), 'the preview\'s Send too');
-    assert.ok(s.includes('editable={canEdit && !quoteIsLocked(activeQuote.status)}'), 'a locked quote opens no editor');
-    assert.ok(s.includes('const isManager = canApproveQuotes(userRole);'), 'Approve by the server\'s rule');
+    assert.ok(s.includes('editable={canEdit && quoteTermsEditable(activeQuote.status)}'), 'a locked or held quote opens no editor (§0.156)');
+    assert.ok(s.includes('const canSave   = !!canEdit && quoteTermsEditable(status);'), 'no Save on a quote waiting for approval');
+    assert.ok(s.includes('if (!editQ || !quoteTermsEditable(editQ.status)) return null;'), 'an editor left open closes once the quote is held');
+    assert.ok(s.includes('const isApprover = canApproveQuotes(userRole);'), 'Approve by the server\'s rule');
     assert.ok(s.includes('{(error || quoteModalError) && <div'), 'a refused save says why');
     const panel = s.slice(s.indexOf('const ConfiguratorPanel'), s.indexOf('function calcProductIntelligence'));
     assert.ok(panel.includes('const tier = approvalTierFor(discPct, tiers);') && !panel.includes('tierForDiscount('), 'the configurator decides by the server\'s discount');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../AppContext';
-import { canEditCrm, isDispatcher, dispatchAccessOf } from '../utils/roles.js';
+import { canEditCrm, dispatchAccessOf } from '../utils/roles.js';
 import { dbFetch } from '../utils/storage';
 import { T } from '../tokens.js';
 import { usableQuoteTemplates, templateLineItems, NO_TEMPLATES_NOTE } from '../utils/quoteTemplates';
@@ -9,7 +9,10 @@ import { esc } from '../utils/customerNotifications';
 import { quoteCanBeAccepted, quoteCanBecomeJob, invoiceStatusLabel, fmtMoney, cleanProductTypes, productTypeLabel, DEFAULT_PRODUCT_TYPES } from '../utils/invoices.js';
 // What may happen to a quote (§0.155): the server's one rule — the buttons, the gauge
 // and the "needs approval" words read it, so a click is never one the server refuses.
-import { quoteDiscountPct, approvalTierFor, tierNeedsApproval, quoteNeedsApproval, quoteIsLocked, quoteMoveAllowed, canApproveQuotes } from '../utils/quoteRules.js';
+import { quoteDiscountPct, approvalTierFor, tierNeedsApproval, quoteNeedsApproval, quoteIsLocked, quoteTermsEditable, quoteMoveAllowed, canApproveQuotes, SEND_BACK_NOTE_MAX } from '../utils/quoteRules.js';
+// What the approvals DID (§0.156): the server's record of each submission and
+// decision — the Approvals cards, the decisions and a quote's history read it.
+import { approvalSummary, formatHours, sendBackNoteOf } from '../utils/approvalStats.js';
 
 // ─── Design tokens ────────────────────────────────────────────
 
@@ -155,63 +158,84 @@ const ApprovalGauge = ({ discount }) => {
 };
 
 // ─── Activity log ─────────────────────────────────────────────
+// A quote's history is the RECORD (state §0.156): the server's audit events for this
+// quote — who created, saved, submitted, withdrew, sent back, approved, sent and
+// accepted it, and when. It used to be invented from the current status: "Submitted
+// for approval" whenever the quote was pending, "Accepted" by "Customer", "Applied
+// discount" dated at its creation.
 const ACTIVITY_META = {
     created:   { color: T.inkMuted, icon: '+' },
-    cloned:    { color: T.inkMuted, icon: '⎘' },
-    edit:      { color: T.warn,     icon: '✎' },
+    edit:      { color: T.inkMuted, icon: '✎' },
     submitted: { color: T.warn,     icon: '↑' },
+    withdrawn: { color: T.inkMuted, icon: '↓' },
+    sentback:  { color: T.warn,     icon: '↩' },
+    approved:  { color: T.ok,       icon: '✓' },
     sent:      { color: T.info,     icon: '→' },
-    opened:    { color: T.ok,       icon: '◉' },
     accepted:  { color: T.ok,       icon: '✓' },
-    expired:   { color: T.danger,   icon: '×' },
+    lost:      { color: T.inkMuted, icon: '×' },
+};
+const HISTORY_WORDS = {
+    'quote.created':   ['created',   'created this version'],
+    'quote.updated':   ['edit',      'saved changes'],
+    'quote.submitted': ['submitted', 'submitted it for approval'],
+    'quote.withdrawn': ['withdrawn', 'withdrew it from approval'],
+    'quote.sentback':  ['sentback',  'sent it back'],
+    'quote.approved':  ['approved',  'approved it'],
+    'quote.sent':      ['sent',      'marked it sent to the customer'],
+    'quote.emailed':   ['sent',      'emailed it to the customer'],
+    'quote.accepted':  ['accepted',  'marked it accepted by the customer'],
+    'quote.rejected':  ['lost',      'marked it lost'],
 };
 
-function buildActivityLog(quote) {
-    const log = [];
-    const d = quote.createdAt || quote.updatedAt || '';
-    log.push({ type: 'created', actor: quote.createdBy || 'Rep', date: d, note: `Created v${quote.version || 1}` });
-    if ((quote.version || 1) > 1) log.push({ type: 'cloned', actor: quote.createdBy || 'Rep', date: d, note: `Cloned from v${(quote.version || 1) - 1}` });
-    const heavy = (quote.lineItems || []).filter(li => (Number(li.discountPct) || 0) >= 10);
-    if (heavy.length) log.push({ type: 'edit', actor: quote.createdBy || 'Rep', date: d, note: `Applied discount on ${heavy.length} item${heavy.length === 1 ? '' : 's'}` });
-    if (quote.status === 'Pending Approval') log.push({ type: 'submitted', actor: quote.createdBy || 'Rep', date: quote.updatedAt || d, note: 'Submitted for approval', detail: 'Avg discount exceeds rep tier' });
-    if (quote.status === 'Sent to Customer' || quote.status === 'Negotiating') log.push({ type: 'sent', actor: quote.createdBy || 'Rep', date: quote.updatedAt || d, note: 'Sent to customer' });
-    if (quote.status === 'Accepted') log.push({ type: 'accepted', actor: 'Customer', date: quote.updatedAt || d, note: 'Accepted quote' });
-    if (quote.status === 'Expired') log.push({ type: 'expired', actor: 'System', date: quote.validUntil || d, note: 'Quote expired without acceptance' });
-    return log.filter(e => e.date);
+// The record, oldest first, as lines — a run of saves by one person is one line.
+function historyLines(events) {
+    const out = [];
+    for (const e of Array.isArray(events) ? events : []) {
+        const [type, note] = HISTORY_WORDS[e.action] || ['edit', String(e.action || '').replace(/^quote\./, '')];
+        const actor = e.by || 'Someone';
+        const prev = out[out.length - 1];
+        if (type === 'edit' && prev && prev.type === 'edit' && prev.actor === actor) { prev.count += 1; prev.date = e.at; continue; }
+        out.push({ type, note, actor, date: e.at, count: 1, detail: e.action === 'quote.sentback' ? sendBackNoteOf(e.detail) : null });
+    }
+    return out;
 }
 
-const QuoteActivityLog = ({ quote }) => {
-    const log = buildActivityLog(quote);
+const QuoteActivityLog = ({ quote, events, error }) => {
+    const log = historyLines(events);
     return (
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ ...eyebrow(T.inkMid), fontSize: 10.5 }}>Activity — v{quote.version || 1}</div>
-                <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{log.length} event{log.length === 1 ? '' : 's'}</span>
+                {Array.isArray(events) && <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{log.length} event{log.length === 1 ? '' : 's'}</span>}
             </div>
-            {log.length === 0
-                ? <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No recorded activity yet.</div>
-                : (
-                    <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                        <div style={{ position: 'absolute', left: 9, top: 6, bottom: 6, width: 1, background: T.border }} />
-                        {log.map((e, i) => {
-                            const m = ACTIVITY_META[e.type] || ACTIVITY_META.edit;
-                            return (
-                                <div key={i} style={{ display: 'flex', gap: 12, paddingBottom: i === log.length - 1 ? 0 : 12, position: 'relative' }}>
-                                    <div style={{ width: 19, height: 19, borderRadius: 10, background: T.surface, border: `1.5px solid ${m.color}`, color: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0, zIndex: 1, fontFamily: T.sans }}>{m.icon}</div>
-                                    <div style={{ flex: 1, paddingTop: 1 }}>
-                                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                                            <div style={{ fontSize: 12, color: T.ink, lineHeight: 1.35, fontFamily: T.sans }}>
-                                                <b style={{ fontWeight: 600 }}>{e.actor}</b> <span style={{ color: T.inkMid }}>{e.note}</span>
+            {error
+                ? <div role="alert" style={{ fontSize: 12, color: T.danger, fontFamily: T.sans }}>{error}</div>
+                : !Array.isArray(events)
+                    ? <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>Reading the record…</div>
+                    : log.length === 0
+                        ? <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No recorded activity yet.</div>
+                        : (
+                            <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                                <div style={{ position: 'absolute', left: 9, top: 6, bottom: 6, width: 1, background: T.border }} />
+                                {log.map((e, i) => {
+                                    const m = ACTIVITY_META[e.type] || ACTIVITY_META.edit;
+                                    return (
+                                        <div key={i} style={{ display: 'flex', gap: 12, paddingBottom: i === log.length - 1 ? 0 : 12, position: 'relative' }}>
+                                            <div style={{ width: 19, height: 19, borderRadius: 10, background: T.surface, border: `1.5px solid ${m.color}`, color: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0, zIndex: 1, fontFamily: T.sans }}>{m.icon}</div>
+                                            <div style={{ flex: 1, paddingTop: 1 }}>
+                                                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                                                    <div style={{ fontSize: 12, color: T.ink, lineHeight: 1.35, fontFamily: T.sans }}>
+                                                        <b style={{ fontWeight: 600 }}>{e.actor}</b> <span style={{ color: T.inkMid }}>{e.note}{e.count > 1 ? ` (${e.count} times)` : ''}</span>
+                                                    </div>
+                                                    <span style={{ fontSize: 10.5, color: T.inkMuted, flexShrink: 0, fontFamily: T.sans }}>{relDate(e.date)}</span>
+                                                </div>
+                                                {e.detail && <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2, fontStyle: 'italic', whiteSpace: 'pre-wrap', fontFamily: T.sans }}>“{e.detail}”</div>}
                                             </div>
-                                            <span style={{ fontSize: 10.5, color: T.inkMuted, flexShrink: 0, fontFamily: T.sans }}>{relDate(e.date)}</span>
                                         </div>
-                                        {e.detail && <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2, fontStyle: 'italic', fontFamily: T.sans }}>"{e.detail}"</div>}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )
+                                    );
+                                })}
+                            </div>
+                        )
             }
         </div>
     );
@@ -726,8 +750,38 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
         </div>
     );
 };
+// The approver's send-back (state §0.156): a note for the rep is required — the quote
+// goes back to her as a Draft, as it is, and she makes the change. Module scope, as
+// every sub-component here: one defined inside its parent remounts on each render and
+// its textarea loses focus. `tone` follows the card it sits on.
+const SendBackForm = ({ onSend, onCancel, saving, tone = 'light' }) => {
+    const [note, setNote] = useState('');
+    const text = note.trim();
+    const ready = !!text && text.length <= SEND_BACK_NOTE_MAX;
+    const dark = tone === 'dark';
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} maxLength={SEND_BACK_NOTE_MAX} autoFocus
+                aria-label="What the rep should change"
+                placeholder="What should the rep change? For example: bring the discount under 20%."
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', fontSize: 12.5, lineHeight: 1.45, fontFamily: T.sans, color: T.ink, background: T.surface, border: `1px solid ${dark ? 'rgba(255,255,255,0.25)' : T.border}`, borderRadius: T.r, resize: 'vertical', outline: 'none' }} />
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button onClick={onCancel} disabled={saving}
+                    style={{ background: 'transparent', color: dark ? T.surface : T.inkMid, border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : T.border}`, borderRadius: T.r, padding: '6px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>
+                    Cancel
+                </button>
+                <button onClick={() => { if (ready) onSend(text); }} disabled={!ready || saving}
+                    style={{ background: dark ? T.gold : T.ink, color: dark ? T.ink : T.surface, border: 'none', borderRadius: T.r, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: !ready || saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: !ready || saving ? 0.6 : 1 }}>
+                    {saving ? 'Sending…' : 'Send back to rep'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving,
-    onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, onCreateJob, canEdit, userRole, tiers }) => {
+    onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, onCreateJob, canEdit, userRole, tiers,
+    onApprove, onSendBack, onWithdraw, sentBackBy }) => {
     const { margin } = calcLineTotals(quote.lineItems || [], products || []);
     // The quote's discount, its tier and what it may do next, by the rules the
     // server applies (quoteRules.js, §0.155) — so a button is never refused.
@@ -740,9 +794,15 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
     // "Send" on one already sent (quoteMoveAllowed).
     const canSend   = !!canEdit && quoteMoveAllowed({ from: status, to: 'Sent to Customer', role: userRole, needsApproval });
     const canSubmit = !!canEdit && needsApproval && quoteMoveAllowed({ from: status, to: 'Pending Approval', role: userRole, needsApproval });
-    const canSave   = !!canEdit && !quoteIsLocked(status);
+    // Save only where the lines and terms may change — not once sent or closed, nor
+    // while the quote waits for approval (held — Jeff, 2 Oct; §0.156).
+    const canSave   = !!canEdit && quoteTermsEditable(status);
     // An approval stamped before §0.155 holds a Clerk id, not a name — not shown.
     const approver  = quote.approvedBy && !/^user_/.test(quote.approvedBy) ? quote.approvedBy : null;
+    // A quote waiting for approval (§0.156): an approver decides it here — approve, or
+    // send it back with a note; anyone else waits, and its writer may withdraw it.
+    const decides   = status === 'Pending Approval' && !!canEdit && canApproveQuotes(userRole) && !!onApprove && !!onSendBack;
+    const [sendingBack, setSendingBack] = useState(false);
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 16px' }}>
@@ -754,7 +814,7 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
                         ? <>Within your discretion — no approval needed.</>
                         : quote.approvedAt || status === 'Approved'
                             ? <><b style={{ color: tier.color }}>{tier.label}</b> — approved{approver ? <> by {approver}</> : null}.</>
-                            : <><b style={{ color: tier.color }}>{tier.approver}</b> sign-off required before send.</>}
+                            : <>Needs approval before it is sent.</>}
                 </div>
             </div>
 
@@ -775,7 +835,8 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
                 <div style={{ background: 'rgba(77,107,61,0.08)', border: `1px solid rgba(77,107,61,0.25)`, borderRadius: T.r, padding: '10px 14px' }}>
                     <div style={{ fontSize: 11, color: T.ok, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4, fontFamily: T.sans }}>• Customer signal</div>
                     <div style={{ fontSize: 11.5, color: T.inkMid, lineHeight: 1.4, fontFamily: T.sans }}>
-                        Quote delivered to customer.{quote.status === 'Accepted' ? ' Customer has accepted.' : ' Awaiting response.'}
+                        {/* "Send to customer" marks the status; nothing is emailed yet (§0.155). */}
+                        Marked as sent to the customer.{quote.status === 'Accepted' ? ' Customer has accepted.' : ' Awaiting response.'}
                     </div>
                 </div>
             )}
@@ -820,19 +881,48 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
                 </div>
             )}
 
+            {/* Sent back (§0.156): the approver's note — on the draft the rep changes,
+                and on its resubmission, until it is approved. */}
+            {quote.approvalNote && (status === 'Draft' || status === 'Pending Approval') && (
+                <div style={{ background: `${T.warn}12`, border: `1px solid ${T.warn}40`, borderRadius: T.r, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 11, color: T.warn, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4, fontFamily: T.sans }}>
+                        {status === 'Pending Approval' ? 'Sent back before' : 'Sent back'}{sentBackBy ? ` by ${sentBackBy}` : ''}
+                    </div>
+                    <div style={{ fontSize: 12, color: T.ink, lineHeight: 1.45, whiteSpace: 'pre-wrap', fontFamily: T.sans }}>{quote.approvalNote}</div>
+                    {status === 'Draft' && canEdit && <div style={{ fontSize: 11, color: T.inkMid, marginTop: 6, fontFamily: T.sans }}>Change the quote, then submit it again.</div>}
+                </div>
+            )}
+
             <div style={{ background: T.ink, borderRadius: T.r, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {/* The next step the rules allow (quoteRules.js, §0.155): send a quote
                     that is approved or within the rep's discretion, submit one that needs
                     approval, wait on one that is pending. An accepted, sent or closed
-                    quote offers none — "+ New version" changes it. */}
+                    quote offers none — "+ New version" changes it. A pending one an
+                    approver decides here — approve, or send it back with a note — and
+                    its writer may withdraw (§0.156). */}
                 {(canSend || canSubmit) && (
                     <button onClick={canSend ? onSendToCustomer : onSubmitApproval} disabled={saving} style={{ background: T.gold, color: T.ink, border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
                         {saving ? 'Saving…' : canSend ? 'Send to customer' : 'Submit for Approval'} →
                     </button>
                 )}
-                {status === 'Pending Approval' && (
-                    <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, textAlign: 'center', padding: '6px 0', fontFamily: T.sans }}>Waiting for Approval.</div>
-                )}
+                {status === 'Pending Approval' && (decides ? (
+                    sendingBack
+                        ? <SendBackForm tone="dark" saving={saving} onCancel={() => setSendingBack(false)}
+                            onSend={async (note) => { if (await onSendBack(quote, note)) setSendingBack(false); }} />
+                        : (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                <button onClick={() => setSendingBack(true)} disabled={saving} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.3)`, padding: '10px 12px', fontSize: 12.5, fontWeight: 600, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans }}>Send back…</button>
+                                <button onClick={() => onApprove(quote)} disabled={saving} style={{ background: T.ok, color: '#fff', border: 'none', padding: '10px 12px', fontSize: 12.5, fontWeight: 600, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Approve'}</button>
+                            </div>
+                        )
+                ) : (
+                    <>
+                        <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, textAlign: 'center', padding: '6px 0', fontFamily: T.sans }}>Waiting for Approval.</div>
+                        {canEdit && onWithdraw && (
+                            <button onClick={() => onWithdraw(quote)} disabled={saving} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans }}>Withdraw to make changes</button>
+                        )}
+                    </>
+                ))}
                 {canEdit && quoteIsLocked(status) && (
                     <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11.5, lineHeight: 1.45, padding: '4px 0', fontFamily: T.sans }}>
                         {status === 'Accepted' ? 'Accepted — this quote is final.' : `${status} — its lines and terms are final.`} Use “+ New version” to change it.
@@ -1130,59 +1220,45 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
 }
 
 // ─── Approvals tab ────────────────────────────────────────────
-function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, onApprove, onReject, onEdit }) {
-    // Who approves — the server's rule (quoteRules.js): an Admin or a Manager.
-    const isManager = canApproveQuotes(userRole);
-    const pending   = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
-    const [notice,  setNotice] = useState(null);
+// What waits for approval, and what was decided (state §0.156). The numbers are the
+// RECORD — the server's audit events of every submission and decision, read through
+// approvalStats.js — and the words say who acts: an approver (an Admin or a Manager)
+// approves or sends back; a rep sees her quotes waiting, and the ones sent back to
+// her. This tab used to print two fixed sub-labels ("0.7× baseline", "5% error bars
+// for my role"), take its approval rate from the first five quotes in a status list,
+// count a quote SENT TO THE CUSTOMER as approved, name the VIEWER's role as a
+// decision's approver and tell a rep "Pending your approval"; its "Sendback" only
+// opened the quote — the send-back handler was passed in and never called.
+function ApprovalsTab({ quotes, opportunities, userRole, events, eventsError, saving, onApprove, onSendBack, onOpen }) {
+    const isApprover = canApproveQuotes(userRole);
+    const [sendingBackId, setSendingBackId] = useState(null);
+    const pending  = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
+    const sentBack = useMemo(() => (quotes || []).filter(q => q.status === 'Draft' && q.approvalNote), [quotes]);
+    const summary  = useMemo(() => approvalSummary(events || [], { days: 30 }), [events]);
+    const byId     = useMemo(() => new Map((quotes || []).map(q => [q.id, q])), [quotes]);
+    const oppOf    = (q) => (opportunities || []).find(o => o.id === q?.opportunityId);
+    const read     = Array.isArray(events);
+    const waitingValue = pending.reduce((s, q) => s + (parseFloat(q.totalValue) || 0), 0);
+    const count    = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    // A card's sub-line until the record is read, or if it cannot be.
+    const recordSub = (text) => (eventsError ? 'the record could not be read' : !read ? 'reading the record…' : text);
 
-    // Recent decisions — approved/rejected in last 30 days (simulate from status)
-    const recentDecisions = useMemo(() => (quotes || []).filter(q =>
-        q.status === 'Approved' || q.status === 'Rejected / Lost' || q.status === 'Sent to Customer'
-    ).slice(0, 5), [quotes]);
-
-    // Compute KPI stats
-    const pendingARR     = pending.reduce((s, q) => s + (parseFloat(q.totalValue) || 0), 0);
-    const approvalRate   = recentDecisions.length > 0
-        ? Math.round(recentDecisions.filter(q => q.status !== 'Rejected / Lost').length / recentDecisions.length * 100)
-        : 0;
-    const myQueue        = pending.filter(q => {
-        const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-        return isManager || q.createdBy === currentUser;
-    }).length;
-    const userTitle      = isManager ? 'as Sales Manager' : 'for my review';
-
-    const handleSend = async (quote) => {
-        try {
-            const res  = await dbFetch('/.netlify/functions/quote-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: quote.id }) });
-            const data = await res.json();
-            if (!res.ok) { setNotice({ type: 'error', title: 'Send Failed', message: data.error || 'Could not send.' }); return; }
-            setNotice({ type: 'success', title: 'Quote Sent!', message: 'Delivered to customer successfully.' });
-        } catch { setNotice({ type: 'error', title: 'Send Failed', message: 'Network error. Please try again.' }); }
-    };
+    const kpis = [
+        { label: 'Waiting for approval', value: pending.length, sub: pending.length ? `${fmt(waitingValue)} in quotes` : 'none waiting' },
+        { label: 'Time to decision', value: read ? formatHours(summary.avgHours) : '—',
+          sub: recordSub(summary.avgHours !== null ? 'average, submission to decision · 30 days' : summary.total ? 'submitted before the record began' : 'no decisions in 30 days') },
+        { label: 'Approval rate', value: read && summary.rate !== null ? `${summary.rate}%` : '—',
+          sub: recordSub(summary.total ? `${summary.approved} of ${count(summary.total, 'decision', 'decisions')} approved · 30 days` : 'no decisions in 30 days') },
+        isApprover
+            ? { label: 'Waiting for you', value: pending.length, sub: pending.length ? 'approve or send back' : 'nothing to decide' }
+            : { label: 'Sent back to you', value: sentBack.length, sub: sentBack.length ? 'change and submit again' : 'nothing sent back' },
+    ];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* Notice modal */}
-            {notice && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setNotice(null)}>
-                    <div style={{ background: T.surface, borderRadius: 12, padding: '2rem', maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', textAlign: 'center', border: `1.5px solid ${notice.type === 'success' ? `${T.ok}40` : `${T.danger}33`}` }} onClick={e => e.stopPropagation()}>
-                        <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>{notice.type === 'success' ? '✓' : '⚠'}</div>
-                        <div style={{ fontSize: '1rem', fontWeight: 700, color: T.ink, marginBottom: '0.5rem', fontFamily: T.sans }}>{notice.title}</div>
-                        <div style={{ fontSize: '0.875rem', color: T.inkMid, lineHeight: 1.6, marginBottom: '1.5rem', fontFamily: T.sans }}>{notice.message}</div>
-                        <button onClick={() => setNotice(null)} style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: T.r, padding: '0.6rem 2rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Got it</button>
-                    </div>
-                </div>
-            )}
-
             {/* KPI strip */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
-                {[
-                    { label: 'Pending approval', value: pending.length, sub: pending.length > 0 ? `${fmt(pendingARR)} revenue` : 'all clear' },
-                    { label: 'Avg approval time', value: '—', sub: '0.7× baseline' },
-                    { label: 'Approval rate', value: approvalRate > 0 ? `${approvalRate}%` : '—', sub: '5% error bars for my role' },
-                    { label: 'Your approval queue', value: myQueue, sub: userTitle },
-                ].map(kpi => (
+                {kpis.map(kpi => (
                     <div key={kpi.label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '0.75rem 1rem' }}>
                         <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem', fontFamily: T.sans }}>{kpi.label}</div>
                         <div style={{ fontSize: '1.375rem', fontWeight: 700, color: T.ink, lineHeight: 1, letterSpacing: '-0.02em', fontFamily: T.sans }}>{kpi.value}</div>
@@ -1190,37 +1266,38 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
                     </div>
                 ))}
             </div>
+            {eventsError && <div role="alert" style={{ fontSize: 12, color: T.danger, fontFamily: T.sans }}>{eventsError}</div>}
 
-            {/* Pending your approval */}
+            {/* Waiting for approval */}
             <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Pending your approval</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{isApprover ? 'Waiting for your approval' : 'Your quotes waiting for approval'}</div>
                     {pending.length > 0 && (
                         <span style={{ fontSize: 10, fontWeight: 700, color: T.warn, background: `${T.warn}15`, border: `1px solid ${T.warn}40`, padding: '2px 8px', borderRadius: 10, fontFamily: T.sans }}>
-                            {pending.length} quotes needing
+                            {pending.length} waiting
                         </span>
                     )}
                 </div>
 
                 {pending.length === 0 ? (
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '2.5rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans }}>
-                        No quotes pending approval. 🎉
+                        {isApprover ? 'Nothing is waiting for your approval.' : 'None of your quotes is waiting for approval.'}
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {pending.map(q => {
-                            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+                            const opp = oppOf(q);
                             const { totalValue: tv } = calcLineTotals(q.lineItems || [], []);
                             const avgDiscPct = quoteDiscountPct(q.lineItems, q.dealDiscount);
                             const tier = approvalTierFor(avgDiscPct, APPROVAL_TIERS);
                             const reason = q.approvalReason || `Avg discount ${Math.round(avgDiscPct)}% — exceeds ${tier.approver ? Math.round((APPROVAL_TIERS[APPROVAL_TIERS.indexOf(tier) - 1]?.maxDiscount || 0) * 100) : 10}% rep tier`;
+                            const open = sendingBackId === q.id;
                             return (
                                 <div key={q.id} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
                                     {/* Card header strip */}
                                     <div style={{ padding: '10px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10, background: T.surface2 }}>
                                         <span style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 10, color: T.inkMuted }}>{q.quoteNumber || q.id}</span>
-                                        <span style={{ fontSize: 9.5, fontWeight: 700, color: T.warn, background: `${T.warn}15`, border: `1px solid ${T.warn}40`, padding: '1px 7px', borderRadius: 10, fontFamily: T.sans, letterSpacing: 0.3, textTransform: 'uppercase' }}>Pending approval</span>
-                                        {q.billingContact && <span style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>mailing id</span>}
+                                        <span style={{ fontSize: 9.5, fontWeight: 700, color: T.warn, background: `${T.warn}15`, border: `1px solid ${T.warn}40`, padding: '1px 7px', borderRadius: 10, fontFamily: T.sans, letterSpacing: 0.3, textTransform: 'uppercase' }}>Waiting for approval</span>
                                         <div style={{ flex: 1 }} />
                                         <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{q.createdBy || '—'}</span>
                                     </div>
@@ -1230,25 +1307,38 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
                                             <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, lineHeight: 1.2, marginBottom: 2, fontFamily: T.sans }}>{opp?.account || '—'}</div>
                                             <div style={{ fontSize: 12, color: T.inkMid, marginBottom: 6, fontFamily: T.sans }}>{opp?.opportunityName || opp?.account || '—'} — {q.name || q.quoteNumber}</div>
                                             <div style={{ fontSize: 11, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>Reason: {reason}</div>
+                                            {q.approvalNote && <div style={{ fontSize: 11, color: T.inkMid, marginTop: 4, fontFamily: T.sans }}>Sent back before: “{q.approvalNote}”</div>}
                                         </div>
-                                        {/* Right: Revenue + actions */}
+                                        {/* Right: value + actions */}
                                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                             <div style={{ fontSize: 18, fontWeight: 700, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>{fmt(q.totalValue || tv || 0)}</div>
                                             <div style={{ fontSize: 10.5, color: T.inkMuted, marginBottom: 10, fontFamily: T.sans }}>{Math.round(avgDiscPct)}% disc · {tier.label}</div>
                                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                                                <button onClick={() => onEdit(q)}
+                                                <button onClick={() => onOpen(q)}
                                                     style={{ background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '6px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>
-                                                    Sendback
+                                                    Open
                                                 </button>
-                                                {isManager && (
-                                                    <button onClick={() => onApprove(q)}
-                                                        style={{ background: T.ok, color: '#fff', border: 'none', borderRadius: T.r, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                                {isApprover && (
+                                                    <button onClick={() => setSendingBackId(open ? null : q.id)} disabled={saving}
+                                                        style={{ background: open ? T.surface2 : 'transparent', color: T.ink, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, padding: '6px 12px', fontSize: 12, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans }}>
+                                                        Send back…
+                                                    </button>
+                                                )}
+                                                {isApprover && (
+                                                    <button onClick={() => onApprove(q)} disabled={saving}
+                                                        style={{ background: T.ok, color: '#fff', border: 'none', borderRadius: T.r, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: saving ? 0.6 : 1 }}>
                                                         Approve
                                                     </button>
                                                 )}
                                             </div>
                                         </div>
                                     </div>
+                                    {open && (
+                                        <div style={{ padding: '0 16px 14px' }}>
+                                            <SendBackForm saving={saving} onCancel={() => setSendingBackId(null)}
+                                                onSend={async (note) => { if (await onSendBack(q, note)) setSendingBackId(null); }} />
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -1256,45 +1346,38 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
                 )}
             </div>
 
-            {/* Recent decisions */}
+            {/* Recent decisions — the record's, newest first */}
             <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Recent decisions</div>
                     <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>Last 30 days</span>
                 </div>
                 <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
-                    {recentDecisions.length === 0 ? (
-                        <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans }}>No recent decisions.</div>
+                    {!read || summary.decisions.length === 0 ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans }}>
+                            {eventsError ? 'The approval record could not be read.' : !read ? 'Reading the record…' : 'No decisions in the last 30 days.'}
+                        </div>
                     ) : (
-                        recentDecisions.map((q, i) => {
-                            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                            const isApproved = q.status === 'Approved' || q.status === 'Sent to Customer';
-                            const isSentback = q.status === 'Rejected / Lost';
-                            const statusLabel = isApproved ? 'APPROVED' : isSentback ? 'SENT BACK' : q.status.toUpperCase();
-                            const statusColor = isApproved ? T.ok : isSentback ? T.danger : T.inkMuted;
+                        summary.decisions.slice(0, 10).map((d, i, arr) => {
+                            const q = byId.get(d.quoteId);
+                            const opp = oppOf(q);
+                            const approved = d.kind === 'approved';
                             return (
-                                <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: i < recentDecisions.length - 1 ? `1px solid ${T.border}` : 'none', cursor: 'pointer' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                    onClick={() => onEdit(q)}>
-                                    {/* Status tag */}
+                                <div key={`${d.quoteId}-${d.at}`} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: i < arr.length - 1 ? `1px solid ${T.border}` : 'none', cursor: q ? 'pointer' : 'default' }}
+                                    onMouseEnter={e => { if (q) e.currentTarget.style.background = T.surface2; }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                    onClick={() => { if (q) onOpen(q); }}>
                                     <div style={{ width: 72, flexShrink: 0 }}>
-                                        <span style={{ fontSize: 9.5, fontWeight: 700, color: statusColor, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans }}>{statusLabel}</span>
+                                        <span style={{ fontSize: 9.5, fontWeight: 700, color: approved ? T.ok : T.warn, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans }}>{approved ? 'Approved' : 'Sent back'}</span>
                                     </div>
-                                    {/* Account + quote number */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{opp?.account || '—'}</div>
-                                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace', marginTop: 1 }}>{q.quoteNumber || q.id}</div>
-                                        {isSentback && q.approvalReason && (
-                                            <div style={{ fontSize: 10.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans, marginTop: 2 }}>"{q.approvalReason}"</div>
-                                        )}
+                                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace', marginTop: 1 }}>{q?.quoteNumber || '—'}</div>
+                                        {d.note && <div style={{ fontSize: 10.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans, marginTop: 2 }}>“{d.note}”</div>}
                                     </div>
-                                    {/* Right: approver + date + Revenue */}
                                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                        <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>{fmt(q.totalValue || 0)}</div>
-                                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 1 }}>
-                                            {(q.approvedBy && !/^user_/.test(q.approvedBy) ? q.approvedBy : null) || (isManager ? 'Sales Manager' : 'Rep')} · {(q.updatedAt || q.createdAt || '').slice(0, 10) || '—'}
-                                        </div>
+                                        <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>{fmt(q?.totalValue || 0)}</div>
+                                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 1 }}>{d.by || '—'} · {String(d.at || '').slice(0, 10) || '—'}</div>
                                     </div>
                                 </div>
                             );
@@ -1315,8 +1398,6 @@ export default function QuotesTab() {
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useApp();
 
-    const isAdmin   = userRole === 'Admin';
-    const isManager = userRole === 'Manager';
     // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
     // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.
     const canEdit   = canEditCrm(userRole);
@@ -1360,21 +1441,14 @@ export default function QuotesTab() {
     React.useEffect(() => { APPROVAL_TIERS = approvalTiers; }, [approvalTiers]);
     React.useEffect(() => { PRODUCT_TYPES_LIVE = cleanProductTypes(settings?.productTypes); }, [settings?.productTypes]);
 
-    const managedReps = useMemo(() => new Set((settings?.users || []).filter(u => u.managedBy === currentUser || u.manager === currentUser).map(u => u.name)), [settings, currentUser]);
-
-    const visibleQuotes = useMemo(() => (quotes || []).filter(q => {
-        // A Dispatcher reads every quote — "what was sold" — and changes none (§0.151).
-        if (isAdmin || isDispatcher(userRole)) return true;
-        if (isManager) {
-            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-            if (!opp) return q.createdBy === currentUser;
-            return managedReps.has(opp.salesRep) || opp.salesRep === currentUser || q.createdBy === currentUser;
-        }
-        // A rep (and ReadOnly): the server sends only the quotes on deals they can see
-        // (quotes.mjs, §0.155) — that IS the list. This filtered by the creator's NAME,
-        // which hid a quote an Admin wrote on the rep's own deal.
-        return true;
-    }), [quotes, opportunities, userRole, currentUser, managedReps]);
+    // The quotes are what the server sends, for EVERY role: quotes.mjs applies the
+    // deals list's own rule (dealVisibleTo) — a rep her own deals' quotes (§0.155),
+    // a Dispatcher and an Admin the org's, a Manager the reps Clerk names him and the
+    // whole org when it names none, as the Pipeline's isRepVisible does. This tab
+    // re-filtered a rep by the creator's NAME (§0.155), and a Manager by a SECOND
+    // list, settings.users' managedBy — with none set, a Manager saw no one's quotes
+    // and had nothing to approve (caught in the pane as Bob, §0.156).
+    const visibleQuotes = useMemo(() => quotes || [], [quotes]);
 
     // ── Deal summaries ────────────────────────────────────────
     const oppQuoteSummaries = useMemo(() => {
@@ -1438,6 +1512,53 @@ export default function QuotesTab() {
         })();
         return () => { cancelled = true; };
     }, [activeQuote?.id, activeQuote?.status, settings?.dispatchEnabled]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+    // The approval record (§0.156): the server's events of each submission and
+    // decision on the quotes this user can see — read while the Approvals tab is open,
+    // and again whenever the quotes change (a decision, a submission, another org's
+    // list). Cleared first, so one org's record never shows under another's (§0.125).
+    const [approvalEvents,      setApprovalEvents]      = useState(null);
+    const [approvalEventsError, setApprovalEventsError] = useState('');
+    useEffect(() => {
+        let cancelled = false;
+        setApprovalEvents(null); setApprovalEventsError('');
+        if (subTab !== 'approvals') return;
+        (async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/quotes?activity=true');
+                const data = await res.json().catch(() => ({}));
+                if (cancelled) return;
+                if (!res.ok) { setApprovalEventsError(data.error || `Could not read the approval record (HTTP ${res.status}).`); return; }
+                setApprovalEvents(Array.isArray(data.events) ? data.events : []);
+            } catch (e) {
+                if (!cancelled) setApprovalEventsError('Could not read the approval record — check your connection.');
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [subTab, quotes]);
+
+    // The active quote's history — its Activity panel (§0.156) — read when the quote,
+    // or its last save, changes; cleared first.
+    const [quoteHistory, setQuoteHistory] = useState({ events: null, error: '' });
+    useEffect(() => {
+        let cancelled = false;
+        setQuoteHistory({ events: null, error: '' });
+        if (!activeQuote?.id || subTab !== 'configurator') return;
+        (async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/quotes?activity=true&quoteId=' + encodeURIComponent(activeQuote.id));
+                const data = await res.json().catch(() => ({}));
+                if (cancelled) return;
+                if (!res.ok) { setQuoteHistory({ events: null, error: data.error || `Could not read this quote's history (HTTP ${res.status}).` }); return; }
+                setQuoteHistory({ events: Array.isArray(data.events) ? data.events : [], error: '' });
+            } catch (e) {
+                if (!cancelled) setQuoteHistory({ events: null, error: 'Could not read this quote\'s history — check your connection.' });
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [activeQuote?.id, activeQuote?.updatedAt, subTab]);   // eslint-disable-line react-hooks/exhaustive-deps
+    // Who sent the active quote back, from its history — the banner names them.
+    const sentBackBy = useMemo(() => [...(quoteHistory.events || [])].reverse().find(e => e.action === 'quote.sentback')?.by || null, [quoteHistory.events]);
 
     // ── Navigation ────────────────────────────────────────────
     const openConfigurator = (oppId, quoteId = null) => {
@@ -1522,11 +1643,23 @@ export default function QuotesTab() {
         finally { setSaving(false); }
     };
 
-    const handleSubmitApproval  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Pending Approval' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
-    const handleSendToCustomer  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Sent to Customer' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+    // A move names only the status (§0.156). The server merges over the stored quote,
+    // so a body carrying the screen's copy of the lines could write an older copy back
+    // — an approver's screen loaded before the rep's last change, approving lines the
+    // rep had already replaced. Resolves to the saved quote, or null on a refusal
+    // (handleSaveQuote shows it).
+    const moveQuote = async (q, status, extra = {}) => {
+        if (!q) return null;
+        setSaving(true);
+        try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }
+        catch (err) { setError(err.message); return null; }
+        finally { setSaving(false); }
+    };
+    const handleSubmitApproval  = () => moveQuote(activeQuote, 'Pending Approval');
+    const handleSendToCustomer  = () => moveQuote(activeQuote, 'Sent to Customer');
     const handleSaveDraft       = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
     // The customer's decision (state §0.149): the server stamps acceptedAt and syncs the deal.
-    const handleAccept          = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Accepted' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+    const handleAccept          = () => moveQuote(activeQuote, 'Accepted');
     // Quote → job: written server-side first, the server's job adopted; a refusal
     // is shown on the card, never logged (§18b32). A 409 means the job already
     // exists — that job is adopted, which is what the user wanted to see.
@@ -1557,8 +1690,11 @@ export default function QuotesTab() {
             return saved;
         } finally { setSaving(false); }
     };
-    const handleApprove         = async (q) => { await handleSaveQuote({ ...q, status: 'Approved' }, q); };
-    const handleReject          = async (q) => { await handleSaveQuote({ ...q, status: 'Rejected / Lost' }, q); };
+    const handleApprove         = (q) => moveQuote(q, 'Approved');
+    // The approver's send-back (§0.156): to Draft, with the note — true once saved.
+    const handleSendBack        = async (q, note) => !!(await moveQuote(q, 'Draft', { sendBack: true, sendBackNote: note }));
+    // The rep takes her quote back out of the queue, to change it.
+    const handleWithdraw        = (q) => moveQuote(q, 'Draft');
     const handleSaveProductLocal  = async (data) => { await handleSaveProduct(data, data.id ? (products || []).find(p => p.id === data.id) || null : null); };
     const handleDeleteProductLocal = async (id) => { await handleDeleteProduct(id); };
 
@@ -1574,7 +1710,7 @@ export default function QuotesTab() {
         } catch {
             const w = window.open('', '_blank');
             if (!w) return;
-            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeQuote.quoteNumber || 'Quote'}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body><h1>${activeQuote.name || activeQuote.quoteNumber || 'Quote'}</h1><p>${configuratorOpp?.account || ''}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${li.productName}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p>${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}${activeQuote.notes?.trim() ? `<h3 style="font-size:0.75rem;text-transform:uppercase;color:#8a8378;margin-top:1.5rem">Notes</h3><p style="white-space:pre-wrap">${esc(activeQuote.notes.trim())}</p>` : ''}</body></html>`);
+            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(activeQuote.quoteNumber || 'Quote')}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid ${T.border};font-size:0.875rem}th{background:${T.surface2};font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body><h1>${esc(activeQuote.name || activeQuote.quoteNumber || 'Quote')}</h1><p>${esc(configuratorOpp?.account || '')}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${esc(li.productName)}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p>${activeQuote.paymentTerms ? `<p>Payment terms: ${esc(activeQuote.paymentTerms)}</p>` : ''}${activeQuote.notes?.trim() ? `<h3 style="font-size:0.75rem;text-transform:uppercase;color:#8a8378;margin-top:1.5rem">Notes</h3><p style="white-space:pre-wrap">${esc(activeQuote.notes.trim())}</p>` : ''}</body></html>`);
             w.document.close(); setTimeout(() => w.print(), 400);
         }
     };
@@ -1640,7 +1776,7 @@ export default function QuotesTab() {
                             { label: 'Deals with quotes', value: oppQuoteSummaries.length, sub: `of ${(opportunities || []).filter(o => !o.stage.startsWith('Closed')).length} active opps` },
                             { label: 'Need a quote',      value: needsQuote.length,         sub: `${fmt(needsQuote.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0))} in open revenue` },
                             { label: 'Total quoted',      value: fmt(oppQuoteSummaries.reduce((s, x) => s + (parseFloat(x.latest?.totalValue) || 0), 0)), sub: 'across active quotes' },
-                            { label: 'Pending approval',  value: pendingCount,              sub: pendingCount > 0 ? 'need manager action' : 'all clear' },
+                            { label: 'Pending approval',  value: pendingCount,              sub: pendingCount > 0 ? 'waiting for approval' : 'all clear' },
                         ].map(kpi => (
                             <div key={kpi.label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '0.75rem 1rem' }}>
                                 <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem', fontFamily: T.sans }}>{kpi.label}</div>
@@ -1876,7 +2012,8 @@ export default function QuotesTab() {
                                     {/* Inline line item editor — shown when "Edit in builder" is clicked */}
                                     {editingQuoteId && (() => {
                                         const editQ = configuratorQuotes.find(q => q.id === editingQuoteId);
-                                        if (!editQ) return null;
+                                        // An editor left open closes once the quote is held or sent (§0.156).
+                                        if (!editQ || !quoteTermsEditable(editQ.status)) return null;
                                         return (
                                             <div style={{ marginBottom: 14 }}>
                                                 <LineItemEditor
@@ -1898,16 +2035,17 @@ export default function QuotesTab() {
                                                 quote={activeQuote}
                                                 otherQuote={prevQuote}
                                                 label={prevQuote ? 'Current' : 'Active'}
-                                                editable={canEdit && !quoteIsLocked(activeQuote.status)}
+                                                editable={canEdit && quoteTermsEditable(activeQuote.status)}
                                                 products={products || []}
                                                 onEdit={() => setEditingQuoteId(activeQuote.id)}
                                             />
                                         )}
-                                        {activeQuote && <ConfiguratorPanel quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving}
+                                        {activeQuote && <ConfiguratorPanel key={activeQuote.id} quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving}
                                             onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled} canEdit={canEdit} userRole={userRole} tiers={approvalTiers}
+                                            onApprove={handleApprove} onSendBack={handleSendBack} onWithdraw={canEdit ? handleWithdraw : null} sentBackBy={sentBackBy}
                                             job={linkedJob} jobLoading={jobLoading} jobBusy={jobBusy} jobError={jobError} onCreateJob={canCreateJob ? handleCreateJob : null} />}
                                     </div>
-                                    {activeQuote && <div style={{ marginTop: 14 }}><QuoteActivityLog quote={activeQuote} /></div>}
+                                    {activeQuote && <div style={{ marginTop: 14 }}><QuoteActivityLog quote={activeQuote} events={quoteHistory.events} error={quoteHistory.error} /></div>}
                                 </>
                             )}
 
@@ -1925,7 +2063,7 @@ export default function QuotesTab() {
                                                 // The server's rule (quoteRules.js): approved, or within the rep's discretion.
                                                 const tier = approvalTierFor(quoteDiscountPct(activeQuote.lineItems, activeQuote.dealDiscount), approvalTiers);
                                                 return tierNeedsApproval(tier) && !activeQuote.approvedAt && activeQuote.status !== 'Approved'
-                                                    ? <div style={{ fontSize: 11, color: tier.color, fontWeight: 600, fontFamily: T.sans }}>⚠ Needs {tier.approver} approval before send.</div>
+                                                    ? <div style={{ fontSize: 11, color: tier.color, fontWeight: 600, fontFamily: T.sans }}>⚠ Needs approval before it is sent.</div>
                                                     : <div style={{ fontSize: 11, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>✓ Good to send — within rep authority.</div>;
                                             })()}
                                         </div>
@@ -1936,7 +2074,7 @@ export default function QuotesTab() {
                                                 <button onClick={() => setViewMode('build')} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>← Back to build</button>
                                             </div>
                                         </div>
-                                        <QuoteActivityLog quote={activeQuote} />
+                                        <QuoteActivityLog quote={activeQuote} events={quoteHistory.events} error={quoteHistory.error} />
                                     </div>
                                 </div>
                             )}
@@ -1964,12 +2102,13 @@ export default function QuotesTab() {
                 <ApprovalsTab
                     quotes={visibleQuotes}
                     opportunities={opportunities}
-                    currentUser={currentUser}
                     userRole={userRole}
-                    settings={settings}
+                    events={approvalEvents}
+                    eventsError={approvalEventsError}
+                    saving={saving}
                     onApprove={handleApprove}
-                    onReject={handleReject}
-                    onEdit={(q) => openConfigurator(q.opportunityId, q.id)}
+                    onSendBack={handleSendBack}
+                    onOpen={(q) => openConfigurator(q.opportunityId, q.id)}
                 />
             )}
 

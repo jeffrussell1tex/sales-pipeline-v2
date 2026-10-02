@@ -182,7 +182,9 @@ test('the CRM tabs: canEdit is canEditCrm — a Dispatcher and ReadOnly see no e
     }
     assert.ok(code(read('src/Tabs/PipelineTab.jsx')).includes('{canEdit && ('), 'Pipeline\'s Add button');
     assert.ok(code(read('src/Tabs/PipelineTab.jsx')).includes('{canEdit && <button onClick={handleAddNew}'), 'and its mobile twin — shown on a phone to a Dispatcher it was a 403 waiting to happen');
-    assert.ok(code(read('src/Tabs/QuotesTab.jsx')).includes('if (isAdmin || isDispatcher(userRole)) return true;'), 'a Dispatcher reads every quote');
+    // Every quote the server sends — the deals rule, for every role (§0.156); a
+    // Dispatcher's is the org's (dealVisibleTo, tests/integration/quotes-access).
+    assert.ok(code(read('src/Tabs/QuotesTab.jsx')).includes('const visibleQuotes = useMemo(() => quotes || [], [quotes]);'), 'a Dispatcher reads every quote');
 });
 
 test('the banners say "CRM view only" for a Dispatcher', () => {

@@ -64,7 +64,9 @@ const ACTIONS = {
     'report-deliveries.mjs':        ['report_delivery.sent', 'report_delivery.failed'],
     'report-prompt.mjs':            ['ai.report_prompt'],
     'ai-score.mjs':                 ['ai.deal_scored'],
-    'quotes.mjs':                   ['quote.created', 'quote.updated', 'quote.submitted', 'quote.approved', 'quote.rejected', 'quote.sent', 'quote.accepted', 'quote.deleted'],
+    'quotes.mjs':                   ['quote.created', 'quote.updated', 'quote.submitted', 'quote.approved', 'quote.rejected', 'quote.sent', 'quote.accepted', 'quote.deleted',
+                                     // §0.156 — the approver's send-back, the rep's withdrawal
+                                     'quote.sentback', 'quote.withdrawn'],
     'quote-email.mjs':              ['quote.emailed'],
     'products.mjs':                 ['product.created', 'product.updated', 'product.deactivated'],
     'automations.mjs':              ['automation.created', 'automation.updated', 'automation.deleted'],

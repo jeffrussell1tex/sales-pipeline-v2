@@ -387,7 +387,9 @@ test('QuotesTab: Customer accepted for an acceptable quote (editors only); the j
     assert.ok(s.includes("onAccept={canEdit ? handleAccept : null} dispatchEnabled={!!settings?.dispatchEnabled}"));
     assert.ok(s.includes('onCreateJob={canCreateJob ? handleCreateJob : null} />}'), 'only whoever runs Dispatch is offered the button (§0.152)');
     assert.ok(s.includes("const canCreateJob = dispatchAccessOf(userRole, settings) === 'full';"));
-    assert.ok(s.includes("await handleSaveQuote({ ...activeQuote, status: 'Accepted' }, activeQuote);"));
+    // The accept names only the status since §0.156 — the server merges over the stored quote.
+    assert.ok(s.includes("const handleAccept          = () => moveQuote(activeQuote, 'Accepted');"));
+    assert.ok(s.includes('try { return await handleSaveQuote({ id: q.id, status, ...extra }, q); }'), 'a move carries no copy of the lines');
     assert.ok(s.includes("if (res.status === 409 && data.job) { setLinkedJob(data.job); return; }"), 'an existing job is adopted');
     assert.ok(s.includes("if (!res.ok || !data.job) { setJobError(data.error || `The job was not created (HTTP ${res.status}).`); return; }"), 'a refusal is shown, never logged');
     assert.ok(s.includes("}, [activeQuote?.id, activeQuote?.status, settings?.dispatchEnabled]);"), 'the read re-keys on the quote and the switch');

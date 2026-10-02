@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
-import { quotes, opportunities, settings as settingsTable } from '../../db/schema.js';
-import { eq, asc, and, desc, sql } from 'drizzle-orm';
+import { quotes, opportunities, auditLog, settings as settingsTable } from '../../db/schema.js';
+import { eq, asc, and, desc, sql, inArray, gte } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, withNumberRetry, auditAs, getCallerName } from './_lib.mjs';
 // A quote belongs to its DEAL (state §0.155, guide §18b48): who may read or change a
@@ -11,13 +11,20 @@ import { dealVisibleTo } from '../../src/utils/roles.js';
 import { dealReadContext, dealAccess } from './_dealAccess.mjs';
 import {
     DEFAULT_QUOTE_APPROVAL_TIERS, approvalTierFor, quoteDiscountPct, quoteNeedsApproval,
-    quoteTransitionRefusal, quoteEditOutcome, quoteTermsChanged, canApproveQuotes,
+    quoteTransitionRefusal, quoteEditOutcome, quoteTermsChanged, canApproveQuotes, quoteSendBackRefusal,
 } from '../../src/utils/quoteRules.js';
+// What the approvals DID is read from the record (state §0.156): the audit log's
+// quote events, which this function writes as it moves a quote.
+// The action words stay literals here, as every writer's do (tests/audit-coverage);
+// tests/approval-stats.test.mjs pins them to approvalStats.js's.
+import { APPROVAL_FLOW_ACTIONS, SENT_BACK_MARK, approvalTierStats } from '../../src/utils/approvalStats.js';
 
 // A status a save MOVES the quote to names the event (§0.143); anything else is an
 // update. The words are the ones the app stores: this map listed 'Sent' and
 // 'Rejected', which nothing sends, so a send or a reject was audited as a plain
 // update and sentAt was never stamped (§0.155).
+// Pending Approval → Draft is decided in the PUT: an approver's send-back
+// ('quote.sentback') or the rep's withdrawal ('quote.withdrawn') — §0.156.
 const QUOTE_STATUS_ACTIONS = Object.freeze({
     'Pending Approval': 'quote.submitted',
     Approved:           'quote.approved',
@@ -142,6 +149,23 @@ export async function getApprovalTiers(orgId) {
     return DEFAULT_QUOTE_APPROVAL_TIERS;
 }
 
+// The record the approval numbers read (state §0.156): the audit log's approval-flow
+// events in this org over the last `days` days, oldest first — the newest kept if
+// there are more than the cap. `by` is the actor's roster name; the Clerk id is not
+// sent. A member cannot post a quote event (audit-log.mjs), so these are the server's.
+export const APPROVAL_EVENTS_DAYS = 90;
+const APPROVAL_EVENTS_MAX = 5000;
+const QUOTE_HISTORY_MAX = 200;
+const eventOf = (r) => ({ quoteId: r.entityId, action: r.action, at: r.timestamp, by: r.userName || null, detail: r.detail || null });
+async function approvalEvents(orgId, days = APPROVAL_EVENTS_DAYS) {
+    const since = new Date(Date.now() - days * 86400000);
+    const rows = await db.select().from(auditLog)
+        .where(and(eq(auditLog.orgId, orgId), eq(auditLog.entityType, 'quote'),
+            inArray(auditLog.action, [...APPROVAL_FLOW_ACTIONS]), gte(auditLog.timestamp, since)))
+        .orderBy(desc(auditLog.timestamp)).limit(APPROVAL_EVENTS_MAX);
+    return rows.reverse().map(eventOf);
+}
+
 // What a quote submitted for approval is stamped with: the tier its discount falls
 // in, and why — "Avg discount 25% > 20% Mgr approval tier".
 function approvalStamp(quote, tiers) {
@@ -181,28 +205,17 @@ export const handler = async (event) => {
     try {
         // ── GET — the quotes on the deals the caller can see ─────────────────
         if (event.httpMethod === 'GET') {
-            // Approval stats — grouped by tier for the last 90 days. Settings →
-            // Approval tiers reads them; they count every rep's quotes, so they are
-            // for the roles that approve.
-            if (event.queryStringParameters?.approvalStats === 'true') {
+            const qs = event.queryStringParameters || {};
+            // Approval statistics by tier — Settings → Approval tiers reads them. They
+            // count every rep's quotes, so they are for the roles that approve. From
+            // the RECORD (§0.156): the decisions of the last 90 days and the quotes
+            // waiting now. They timed an approval from the row's last update — after
+            // it — and counted a 'Declined' status nothing sets.
+            if (qs.approvalStats === 'true') {
                 if (!canApproveQuotes(userRole)) return refuse(403, 'Forbidden: approval statistics are for an Admin or a Manager');
-                const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-                const allQuotes = await db.select().from(quotes).where(eq(quotes.orgId, orgId));
-                const recent = allQuotes.filter(q => new Date(q.updatedAt) >= ninetyDaysAgo);
-                // Get org's approval tiers to ensure all tiers are represented
-                const tiers = await getApprovalTiers(orgId);
-                const stats = tiers.map(tier => {
-                    const tierQuotes = recent.filter(q => q.approvalTier === tier.label);
-                    const approved   = tierQuotes.filter(q => q.status === 'Approved').length;
-                    const declined   = tierQuotes.filter(q => q.status === 'Declined').length;
-                    const pending    = tierQuotes.filter(q => q.status === 'Pending Approval').length;
-                    // Avg hours from submission to approval
-                    const times = tierQuotes
-                        .filter(q => q.approvedAt && q.updatedAt)
-                        .map(q => (new Date(q.approvedAt) - new Date(q.updatedAt)) / 3600000);
-                    const avgHours = times.length > 0 ? Math.round(times.reduce((a,b) => a+b,0) / times.length) : 0;
-                    return { tier: tier.label, quotes: tierQuotes.length, approved, declined, pending, avgHours };
-                });
+                const orgQuotes = await db.select({ id: quotes.id, status: quotes.status, approvalTier: quotes.approvalTier })
+                    .from(quotes).where(eq(quotes.orgId, orgId));
+                const stats = approvalTierStats(await approvalEvents(orgId), orgQuotes, await getApprovalTiers(orgId), { days: APPROVAL_EVENTS_DAYS });
                 return { statusCode: 200, headers, body: JSON.stringify({ approvalStats: stats }) };
             }
 
@@ -215,7 +228,29 @@ export const handler = async (event) => {
             const deals = await db.select({ id: opportunities.id, ownerId: opportunities.ownerId, salesRep: opportunities.salesRep })
                 .from(opportunities).where(eq(opportunities.orgId, orgId));
             const visible = new Set(deals.filter(d => dealVisibleTo(d, ctx)).map(d => d.id));
-            const oppId = event.queryStringParameters?.opportunityId;
+
+            // What happened, from the record (§0.156) — for the quotes the caller can
+            // see, and no others. With `quoteId`: that quote's whole history (its
+            // Activity panel), 404 for one the caller cannot see, as for one that does
+            // not exist. Without: the approval flow of the last 90 days (the Approvals
+            // tab's cards and decisions).
+            if (qs.activity === 'true') {
+                if (qs.quoteId) {
+                    const [q] = await db.select({ opportunityId: quotes.opportunityId }).from(quotes)
+                        .where(and(eq(quotes.id, String(qs.quoteId)), eq(quotes.orgId, orgId))).limit(1);
+                    if (!q || !visible.has(q.opportunityId)) return refuse(404, NOT_FOUND);
+                    const rows = await db.select().from(auditLog)
+                        .where(and(eq(auditLog.orgId, orgId), eq(auditLog.entityType, 'quote'), eq(auditLog.entityId, String(qs.quoteId))))
+                        .orderBy(desc(auditLog.timestamp)).limit(QUOTE_HISTORY_MAX);
+                    return { statusCode: 200, headers, body: JSON.stringify({ events: rows.reverse().map(eventOf) }) };
+                }
+                const seen = new Set((await db.select({ id: quotes.id, opportunityId: quotes.opportunityId }).from(quotes).where(eq(quotes.orgId, orgId)))
+                    .filter(q => visible.has(q.opportunityId)).map(q => q.id));
+                const events = (await approvalEvents(orgId)).filter(e => seen.has(e.quoteId));
+                return { statusCode: 200, headers, body: JSON.stringify({ events, days: APPROVAL_EVENTS_DAYS }) };
+            }
+
+            const oppId = qs.opportunityId;
             let rows;
             if (oppId) {
                 // All versions for a specific opportunity
@@ -260,7 +295,7 @@ export const handler = async (event) => {
                 status: 'Draft',
                 // A new draft carries no approval stamp — the server writes one when
                 // the quote is submitted.
-                approvalTier: null, approvalReason: null,
+                approvalTier: null, approvalReason: null, approvalNote: null,
                 // Who wrote it, from the roster — not the body's word for it.
                 createdBy: (await getCallerName(auth.userId, orgId)) || data.createdBy || null,
             };
@@ -299,11 +334,12 @@ export const handler = async (event) => {
             // leaves out keeps its value — a PUT without lineItems used to write [] and
             // zero totals. The deal, the version and the author are the stored ones.
             // The approval tier and its reason are the server's stamp — what an
-            // approver reads — so a save cannot rewrite them either.
+            // approver reads — and the note an approver sent it back with is theirs
+            // (§0.156), so a save cannot rewrite any of them.
             const merged = {
                 ...existing, ...sanitize(data),
                 id: existing.id, opportunityId: existing.opportunityId, version: existing.version, createdBy: existing.createdBy,
-                approvalTier: existing.approvalTier, approvalReason: existing.approvalReason,
+                approvalTier: existing.approvalTier, approvalReason: existing.approvalReason, approvalNote: existing.approvalNote,
             };
             const lineItems = Array.isArray(merged.lineItems) ? merged.lineItems : [];
             const totals = calcTotals(lineItems, merged.dealDiscount || 0);
@@ -316,7 +352,17 @@ export const handler = async (event) => {
             const termsChanged = quoteTermsChanged(existing, merged);
             const edit = quoteEditOutcome({ status: from, termsChanged });
             if (edit.refusal) return refuse(409, edit.refusal);
-            const requested = data.status ?? from;
+            // A SEND-BACK (Jeff, 2 Oct — §0.156): an approver returns a quote waiting
+            // for approval to the rep as a Draft, with a note saying what to change —
+            // the quote as it is: a quote waiting for approval is HELD, so an edit in
+            // the same save was refused above (quoteEditOutcome). A non-approver is 403,
+            // a quote not waiting 409, a missing or overlong note 400.
+            const sendBack = data.sendBack === true;
+            if (sendBack) {
+                const refusal = quoteSendBackRefusal({ from, role: userRole, note: data.sendBackNote });
+                if (refusal) return refuse(from !== 'Pending Approval' ? 409 : !canApproveQuotes(userRole) ? 403 : 400, refusal);
+            }
+            const requested = sendBack ? 'Draft' : (data.status ?? from);
             const to = requested === from ? edit.status : requested;
             const moveRefusal = quoteTransitionRefusal({
                 from: edit.status, to, role: userRole,
@@ -340,7 +386,9 @@ export const handler = async (event) => {
                 // row records who, by id. It used to hold the Clerk id.
                 stamps.approvedBy = (await getCallerName(auth.userId, orgId)) || 'Approver';
                 stamps.approvedAt = new Date();
+                stamps.approvalNote = null;   // the send-back it answered is settled
             }
+            if (sendBack) stamps.approvalNote = String(data.sendBackNote).trim();
             if (moved && to === 'Sent to Customer') stamps.sentAt = new Date();
             if (moved && to === 'Accepted') {
                 stamps.acceptedAt = new Date();
@@ -362,9 +410,15 @@ export const handler = async (event) => {
             const [updated] = await db.update(quotes).set(payload)
                 .where(and(eq(quotes.id, existing.id), eq(quotes.orgId, orgId)))
                 .returning();
+            // Pending Approval → Draft is a send-back or a withdrawal — the record the
+            // approval numbers read tells them apart (§0.156). A send-back's note ends
+            // its detail, after SENT_BACK_MARK.
+            const action = sendBack ? 'quote.sentback'
+                : moved && from === 'Pending Approval' && to === 'Draft' ? 'quote.withdrawn'
+                : (moved && QUOTE_STATUS_ACTIONS[to]) || 'quote.updated';
             await auditAs(orgId, auth.userId, {
-                action: (moved && QUOTE_STATUS_ACTIONS[to]) || 'quote.updated', entityType: 'quote', entityId: updated.id, entityName: updated.name || updated.quoteNumber,
-                detail: `${updated.quoteNumber} v${updated.version} · ${moved ? `${from} → ${to}` : (updated.status || 'Draft')}${edit.approvalCleared ? ' · an edit cleared the approval' : ''}${stamps.approvalTier ? ' · ' + stamps.approvalTier : ''}`,
+                action, entityType: 'quote', entityId: updated.id, entityName: updated.name || updated.quoteNumber,
+                detail: `${updated.quoteNumber} v${updated.version} · ${moved ? `${from} → ${to}` : (updated.status || 'Draft')}${edit.approvalCleared ? ' · an edit cleared the approval' : ''}${stamps.approvalTier ? ' · ' + stamps.approvalTier : ''}${sendBack ? SENT_BACK_MARK + stamps.approvalNote : ''}`,
             });
             return { statusCode: 200, headers, body: JSON.stringify({ quote: updated }) };
         }

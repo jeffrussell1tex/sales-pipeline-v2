@@ -30,6 +30,16 @@ export const handler = async (event) => {
             if (!data.id || !data.action || !data.entityType || !data.entityId) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields: id, action, entityType, entityId' }) };
             }
+            // A quote's events are the record the approval numbers and a quote's
+            // history read (state §0.156): quotes.mjs writes them as it moves the
+            // quote. A member could post "quote.approved" for her own quote here — the
+            // actor is the caller's, but the event is invented — so none is taken.
+            // The app's own client entries (create, update, delete, merge, dispatch.*)
+            // never name a quote.
+            const isQuoteEvent = String(data.action).trim().toLowerCase().startsWith('quote.') || String(data.entityType).trim().toLowerCase() === 'quote';
+            if (isQuoteEvent) {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Quote events are recorded by the server as the quote changes' }) };
+            }
             // Actor and time are derived server-side and the client's values are
             // ignored. Previously these were taken straight from the request body
             // (App.jsx sends a display name as userId), which let any authenticated

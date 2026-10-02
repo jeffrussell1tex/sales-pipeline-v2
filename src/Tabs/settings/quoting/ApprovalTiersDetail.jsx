@@ -15,13 +15,6 @@ const DEFAULT_APPROVAL_TIERS = [
     { id:'cfo',  label:'CFO approval', color:'#6b2a22', maxDiscount:1.00, approver:'CFO',           sla:'48h',fallback:'CEO',       active:true },
 ];
 
-const APPROVAL_TIER_USAGE = [
-    { tier:'Rep',          tone:'rep', quotes:312, approved:312, declined:0,  pending:0,  avgHours:0  },
-    { tier:'Mgr approval', tone:'mgr', quotes:88,  approved:76,  declined:12, pending:4,  avgHours:6  },
-    { tier:'VP approval',  tone:'vp',  quotes:24,  approved:20,  declined:4,  pending:2,  avgHours:18 },
-    { tier:'CFO approval', tone:'cfo', quotes:6,   approved:5,   declined:1,  pending:1,  avgHours:36 },
-];
-
 const DEFAULT_TRIGGERS = [
     { k:'Average discount %',    on:true,  hint:'Calculated across all line items.' },
     { k:'Single-line discount',  on:false, hint:'Trigger if any one line exceeds the threshold.' },
@@ -423,7 +416,9 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                                 const tones = ['rep','mgr','vp','cfo'];
                                 const tone = tones[i] || 'neutral';
                                 // Match live stats to tier by label, fall back to zeros
-                                const u = approvalStats?.find(s => s.tier === t.label) || { quotes:0, approved:0, declined:0, pending:0, avgHours:0 };
+                                // The server's, from the record (state §0.156): approved and
+                                // sent back in 90 days, waiting now, hours to a decision.
+                                const u = approvalStats?.find(s => s.tier === t.label) || { quotes:0, approved:0, sentBack:0, pending:0, avgHours:0 };
                                 return (
                                     <div key={t.id} style={{ padding:'10px 0', borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none' }}>
                                         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
@@ -434,7 +429,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                                         </div>
                                         <div style={{ fontSize:11, color:T.inkMid, display:'flex', gap:12, fontFamily:T.sans }}>
                                             <span>✓ {u.approved}</span>
-                                            {u.declined > 0 && <span style={{ color:T.danger }}>✗ {u.declined}</span>}
+                                            {u.sentBack > 0 && <span style={{ color:T.warn }}>↩ {u.sentBack} sent back</span>}
                                             {u.pending  > 0 && <span style={{ color:T.warn }}>● {u.pending} pending</span>}
                                             {u.avgHours > 0 && <span style={{ marginLeft:'auto', color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>~{u.avgHours}h avg</span>}
                                         </div>

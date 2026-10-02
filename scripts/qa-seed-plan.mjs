@@ -286,7 +286,11 @@ export function buildQaSeed({ orgId, today, roster }) {
         return {
             id: `q${QA_ID_MARK}${pad(i + 1, 2)}`, orgId, opportunityId: o.id, quoteNumber: `Q-${year}-${pad(i + 1, 3)}`, version: 1,
             name: `${o.opportunityName} v1`, status, validUntil: d(30), paymentTerms: 'Net 30', billingContact: null,
-            lineItems, dealDiscount: '0', ...totals, ...pending, ...approved,
+            lineItems, dealDiscount: '0', ...totals,
+            // Every approval field named, so a --reset puts a quote back whole — a
+            // send-back's note or an approval made while testing included (§0.156).
+            approvalTier: null, approvalReason: null, approvedBy: null, approvedAt: null, approvalNote: null,
+            ...pending, ...approved,
             sentAt: status === 'Sent to Customer' ? at(d(-2)) : null,
             acceptedAt: status === 'Accepted' ? at(o.wonDate || d(-1)) : null,
             syncedToOpp: status === 'Accepted', createdBy: o.salesRep || admin?.name || null,

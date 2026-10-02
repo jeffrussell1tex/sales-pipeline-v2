@@ -111,6 +111,13 @@ test('the money adds up the way the app adds it', () => {
     assert.deepEqual(approvalFor(pending.lineItems), { approvalTier: pending.approvalTier, approvalReason: pending.approvalReason });
     assert.equal(pending.approvalTier, 'VP approval', '25% is over the manager tier');
     assert.equal(R.quotes.find(q => q.status === 'Approved').approvedBy, 'Bob Russell', 'approved by the Manager — by name, as quotes.mjs stamps it (§0.155)');
+    // A --reset rewrites only the keys a row names: every approval field is named, so a
+    // send-back's note or an approval made while testing is put back too (§0.156).
+    for (const q of R.quotes) {
+        for (const k of ['approvalTier', 'approvalReason', 'approvedBy', 'approvedAt', 'approvalNote']) assert.ok(k in q, `${q.id} names ${k}`);
+        assert.equal(q.approvalNote, null, `${q.id}: no seeded note`);
+    }
+    assert.equal(R.quotes.filter(q => q.approvedBy).length, 1, 'only the Approved quote carries an approver');
 });
 
 test('every status the next commit (quotes) needs is present, and the numbers are the app\'s formats', () => {

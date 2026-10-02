@@ -29,6 +29,14 @@ export const LOCKED_QUOTE_STATUSES = Object.freeze([
 ]);
 export const quoteIsLocked = (status) => LOCKED_QUOTE_STATUSES.includes(status);
 
+// Waiting for approval, a quote's lines and terms are HELD (Jeff, 2 Oct — state
+// §0.156): the approver decides on what they read, so the rep withdraws it to change
+// it. A rep could edit a pending quote, and an approver approve lines that changed
+// after they looked.
+export const quoteIsHeld = (status) => status === 'Pending Approval';
+// May the lines and terms change now? Not once the quote is sent or closed, nor while held.
+export const quoteTermsEditable = (status) => !quoteIsLocked(status) && !quoteIsHeld(status);
+
 // What "the lines and terms" are — the fields the customer sees.
 export const QUOTE_TERMS_FIELDS = Object.freeze(['lineItems', 'dealDiscount', 'validUntil', 'paymentTerms', 'billingContact', 'notes']);
 
@@ -104,11 +112,26 @@ export function quoteTransitionRefusal({ from, to, role, needsApproval = false }
             // The statuses invoices.js's quoteCanBeAccepted offers the button on.
             return ['Approved', 'Sent to Customer', 'Sent', 'Negotiating'].includes(f) ? null : 'Only a sent or approved quote can be accepted.';
         case 'Rejected / Lost':
-            if (f === 'Pending Approval') return canApproveQuotes(role) ? null : 'Only an Admin or a Manager sends back a quote waiting for approval.';
+            // The customer's no (§0.156): an approver's is a send-back, to Draft.
+            if (f === 'Pending Approval') return 'A quote waiting for approval is sent back to the rep, not marked lost.';
             return ['Approved', 'Sent to Customer', 'Sent', 'Negotiating'].includes(f) ? null : `A ${named(f)} quote is not marked lost.`;
         default:
             return `"${t}" is set by the app, not by hand.`;   // Superseded, Expired
     }
+}
+
+// A SEND-BACK (Jeff, 2 Oct — state §0.156): an approver returns a quote waiting for
+// approval to the rep as a Draft, with a note saying what to change. It is the
+// approver's "no" — Rejected / Lost is the customer's, and closes the quote. The
+// rep's own Pending → Draft is a withdrawal and needs no note.
+export const SEND_BACK_NOTE_MAX = 1000;
+export function quoteSendBackRefusal({ from, role, note }) {
+    if ((from || 'Draft') !== 'Pending Approval') return 'Only a quote waiting for approval is sent back.';
+    if (!canApproveQuotes(role)) return 'Only an Admin or a Manager sends back a quote waiting for approval.';
+    const n = String(note ?? '').trim();
+    if (!n) return 'Say what to change — a send-back carries a note for the rep.';
+    if (n.length > SEND_BACK_NOTE_MAX) return `Keep the note under ${SEND_BACK_NOTE_MAX} characters.`;
+    return null;
 }
 
 // What a BUTTON may offer: a real move the rule allows. quoteTransitionRefusal lets
@@ -118,12 +141,14 @@ export function quoteTransitionRefusal({ from, to, role, needsApproval = false }
 export const quoteMoveAllowed = (args) => (args?.from || 'Draft') !== args?.to && quoteTransitionRefusal(args) === null;
 
 // What an EDIT does — `termsChanged`: any QUOTE_TERMS_FIELDS value differs from the
-// stored row. A locked quote refuses; an approved one returns to Draft (the
-// approval no longer matches what would be sent); anything else keeps its status.
+// stored row. A locked quote refuses, and a held one (waiting for approval); an
+// approved one returns to Draft (the approval no longer matches what would be
+// sent); anything else keeps its status.
 export function quoteEditOutcome({ status, termsChanged }) {
     if (!termsChanged) return { status, refusal: null, approvalCleared: false };
     if (status === 'Accepted') return { status, refusal: 'An accepted quote is final — start a new version to change it.', approvalCleared: false };
     if (quoteIsLocked(status)) return { status, refusal: 'This quote was sent — its lines and terms are final. Start a new version to change them.', approvalCleared: false };
+    if (quoteIsHeld(status)) return { status, refusal: 'This quote is waiting for approval — withdraw it to change it.', approvalCleared: false };
     if (status === 'Approved') return { status: 'Draft', refusal: null, approvalCleared: true };
     return { status, refusal: null, approvalCleared: false };
 }
