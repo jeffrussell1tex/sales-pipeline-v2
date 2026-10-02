@@ -34,7 +34,7 @@ const EXEMPT = {
     'score-leads-batch.mjs':   'a scheduled job — the heartbeat is its record',
 };
 // Functions that write NO table but hand data to a model or send it out — they must audit too.
-const MUST_AUDIT_ANYWAY = ['report-prompt.mjs', 'ai-score.mjs', 'quote-email.mjs', 'invite-user.mjs'];
+const MUST_AUDIT_ANYWAY = ['report-prompt.mjs', 'ai-score.mjs', 'quote-email.mjs', 'invite-user.mjs', 'quote-reminders.mjs'];   // the last: emails an approver (§0.158)
 
 test('THE GUARD — every function that writes the database audits, unless the allowlist says why not', () => {
     const files = readdirSync(FN).filter(f => f.endsWith('.mjs') && !f.startsWith('_'));
@@ -68,6 +68,7 @@ const ACTIONS = {
                                      // §0.156 — the approver's send-back, the rep's withdrawal
                                      'quote.sentback', 'quote.withdrawn'],
     'quote-email.mjs':              ['quote.emailed'],
+    'quote-reminders.mjs':          ['quote.reminded'],   // §0.158 — the SLA reminder's record
     'products.mjs':                 ['product.created', 'product.updated', 'product.deactivated'],
     'automations.mjs':              ['automation.created', 'automation.updated', 'automation.deleted'],
     'webhooks.mjs':                 ['webhook.created', 'webhook.updated', 'webhook.secret_rotated', 'webhook.deleted'],

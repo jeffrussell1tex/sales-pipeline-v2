@@ -31,6 +31,11 @@ schedule = "0 6 * * *"
 [functions."report-deliveries"]
 schedule = "*/5 * * * *"
 
+# Approval reminders (state §0.158): hourly; a quote waiting past its tier's SLA
+# reminds the tier's backup — or its approver again — once per submission.
+[functions."quote-reminders"]
+schedule = "0 * * * *"
+
 # Security headers — served on every response. These improve the domain's
 # standing with corporate proxy / reputation engines (Zscaler, Netskope, etc.)
 # and are good practice regardless. Deliberately NO Content-Security-Policy yet:

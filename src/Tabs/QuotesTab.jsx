@@ -189,6 +189,7 @@ const ACTIVITY_META = {
     submitted: { color: T.warn,     icon: '↑' },
     withdrawn: { color: T.inkMuted, icon: '↓' },
     sentback:  { color: T.warn,     icon: '↩' },
+    reminded:  { color: T.warn,     icon: '⏱' },
     approved:  { color: T.ok,       icon: '✓' },
     sent:      { color: T.info,     icon: '→' },
     accepted:  { color: T.ok,       icon: '✓' },
@@ -200,6 +201,7 @@ const HISTORY_WORDS = {
     'quote.submitted': ['submitted', 'submitted it for approval'],
     'quote.withdrawn': ['withdrawn', 'withdrew it from approval'],
     'quote.sentback':  ['sentback',  'sent it back'],
+    'quote.reminded':  ['reminded',  'sent a reminder'],   // the SLA reminder (§0.158)
     'quote.approved':  ['approved',  'approved it'],
     'quote.sent':      ['sent',      'marked it sent to the customer'],
     'quote.emailed':   ['sent',      'emailed it to the customer'],
@@ -215,7 +217,9 @@ function historyLines(events) {
         const actor = e.by || 'Someone';
         const prev = out[out.length - 1];
         if (type === 'edit' && prev && prev.type === 'edit' && prev.actor === actor) { prev.count += 1; prev.date = e.at; continue; }
-        out.push({ type, note, actor, date: e.at, count: 1, detail: e.action === 'quote.sentback' ? sendBackNoteOf(e.detail) : null });
+        // A send-back's note; a reminder's recipients — the tail of its detail (§0.158).
+        const remindedTo = e.action === 'quote.reminded' ? String(e.detail || '').split(' · to ')[1] : null;
+        out.push({ type, note, actor, date: e.at, count: 1, detail: e.action === 'quote.sentback' ? sendBackNoteOf(e.detail) : remindedTo ? `to ${remindedTo}` : null });
     }
     return out;
 }

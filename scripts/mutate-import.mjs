@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -3387,6 +3387,147 @@ const mutations = [
         'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
         "if (m === 'role') return { ...base, approverRole: 'Manager' };",
         "if (m === 'role') return base;"],
+
+    // ── §0.158 — the approval emails: who is told, when, once ──
+    ['approval notices: a switched-off notice still sends',
+        'src/utils/approvalNotices.js',
+        "    return p ? p.enabled !== false : true;",
+        "    return true;"],
+
+    ['approval notices: an inactive user or an invite never accepted is emailed',
+        'src/utils/approvalNotices.js',
+        "    return !!u && u.active !== false && !!email && !email.endsWith('@placeholder.local');",
+        "    return !!u && !!email;"],
+
+    ['approval notices: the submitter is told of her own submission',
+        'src/utils/approvalNotices.js',
+        "    return firstGroup([approverGroup(tier, people), backupGroup(tier, people), holders(people, 'Admin')]);",
+        "    return firstGroup([approverGroup(tier, (Array.isArray(roster) ? roster : []).filter(reachable)), backupGroup(tier, people), holders(people, 'Admin')]);"],
+
+    ['approval notices: an org that has not chosen tells the Admins, not every Manager',
+        'src/utils/approvalNotices.js',
+        "        : holders(people, 'Manager')   // an org that has not chosen: every Manager (1a)",
+        "        : holders(people, 'Admin')   // an org that has not chosen: every Manager (1a)"],
+
+    ['approval reminders: the approver is reminded before the backup',
+        'src/utils/approvalNotices.js',
+        "    return firstGroup([backupGroup(tier, people), approverGroup(tier, people), holders(people, 'Admin')]);",
+        "    return firstGroup([approverGroup(tier, people), backupGroup(tier, people), holders(people, 'Admin')]);"],
+
+    ['approval reminders: a reminder repeats every hour',
+        'src/utils/approvalNotices.js',
+        "    if (rem !== null && rem >= sub) return false;",
+        "    if (false) return false;"],
+
+    ['approval reminders: a quote submitted before the record began is reminded',
+        'src/utils/approvalNotices.js',
+        "    if (!hours || sub === null) return false;",
+        "    if (!hours) return false;"],
+
+    ['sla: "2d" reads as two hours',
+        'src/utils/quoteRules.js',
+        "    return /^d/i.test(m[2] || '') ? n * 24 : n;",
+        "    return n;"],
+
+    ['sla: a tier\'s SLA is saved as typed — "soon" and all',
+        'src/utils/quoteRules.js',
+        "            sla: slaHours(t?.sla) ? `${slaHours(t.sla)}h` : null,",
+        "            sla: t?.sla || null,"],
+
+    ['quotes: a submission tells no one',
+        'netlify/functions/quotes.mjs',
+        ": moved && to === 'Pending Approval' ? 'submitted' : null;",
+        ": null;"],
+
+    ['approval mail: the approver is told of his own decision',
+        'netlify/functions/_approvalMail.mjs',
+        "if (submitter && submitter.id !== actorId && reachable(submitter) && wantsNotice(submitter, key)) {",
+        "if (submitter && reachable(submitter) && wantsNotice(submitter, key)) {"],
+
+    ['approval mail: the submitter is looked up by app id with a Clerk id',
+        'netlify/functions/_approvalMail.mjs',
+        "roster.find(u => u.clerkUserId === sub.userId)",
+        "roster.find(u => u.id === sub.userId)"],
+
+    ['reminders: the reminder is recorded as a plain update — and repeats',
+        'netlify/functions/quote-reminders.mjs',
+        "action: 'quote.reminded'",
+        "action: 'quote.updated'"],
+
+    ['templates: an approver\'s note reaches the email raw',
+        'netlify/functions/send-email.mjs',
+        "${escHtml(note)}",
+        "${note}"],
+
+    ['header: the digest choice comes back for the approval notices',
+        'src/components/layout/AppHeader.jsx',
+        "{!isDigestOnly && !isInstantOnly && pref.enabled && (",
+        "{!isDigestOnly && pref.enabled && ("],
+
+    ['app: the quote link in an email opens nothing',
+        'src/App.jsx',
+        "if (quoteLinkRef.current === undefined) quoteLinkRef.current = takeQuoteLink(window.location.search);",
+        "if (quoteLinkRef.current === undefined) quoteLinkRef.current = null;"],
+
+    ['app: a used quote link is kept — every later visit in the tab reopens it',
+        'src/App.jsx',
+        "        dropQuoteLink();",
+        "        /* kept */"],
+
+    ['quote link: the id is not kept — signing in loses it',
+        'src/utils/approvalNotices.js',
+        "        try { store?.setItem(QUOTE_LINK_KEY, id); } catch { /* storage unavailable */ }",
+        "        /* not kept */"],
+
+    ['quote link: a kept id is never read after sign-in',
+        'src/utils/approvalNotices.js',
+        "    return kept && QUOTE_LINK_ID.test(kept) ? kept : null;",
+        "    return null;"],
+
+    ['quote link: an id that could not be a quote\'s is kept and opened',
+        'src/utils/approvalNotices.js',
+        "if (!QUOTE_LINK_ID.test(id)) {",
+        "if (false) {"],
+
+    ['quote link: a refused link leaves the old one waiting',
+        'src/utils/approvalNotices.js',
+        "{ dropQuoteLink(store); return null; }",
+        "{ return null; }"],
+
+    ['quote link: dropping it removes nothing',
+        'src/utils/approvalNotices.js',
+        "    try { store?.removeItem(QUOTE_LINK_KEY); } catch { /* storage unavailable */ }",
+        "    /* removes nothing */"],
+
+    ['defaults: an org that never saved its tiers is never reminded',
+        'src/utils/quoteRules.js',
+        "approver: 'Sales Manager', sla: '8h' }),",
+        "approver: 'Sales Manager', sla: null }),"],
+
+    ['tiers page: shows a reminder time the job does not send',
+        'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
+        "DEFAULT_QUOTE_APPROVAL_TIERS.map((t, i) => ({ ...t, id:",
+        "DEFAULT_QUOTE_APPROVAL_TIERS.map((t, i) => ({ ...t, sla: t.sla || '4h', id:"],
+
+    ['reminders: an org that never saved its tiers reminds by nothing',
+        'netlify/functions/quote-reminders.mjs',
+        "s.extra.approvalTiers : DEFAULT_QUOTE_APPROVAL_TIERS;",
+        "s.extra.approvalTiers : [];"],
+
+    ['header: an Admin or a Manager sees "Quote alerts" twice',
+        'src/components/layout/AppHeader.jsx',
+        "{alertType === 'quoteApproved' && <div style=",
+        "{(alertType === 'quoteApproved' || (alertType === 'quotePending' && (isManager || isAdmin))) && <div style="],
+
+    ['header: an Admin or a Manager who submits is emailed with no switch to stop it',
+        'src/components/layout/AppHeader.jsx',
+        "const isDigestOnly = alertType === 'taskDigest' || alertType === 'overdueTaskNudge';",
+        "if ((alertType === 'quoteApproved' || alertType === 'quoteRejected') && (isManager || isAdmin)) return null; const isDigestOnly = alertType === 'taskDigest' || alertType === 'overdueTaskNudge';"],
+
+    ['tiers page: a reminder time is kept as typed',
+        'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
+        "if (field === 'sla') return { ...t, sla: slaHours(val) ? `${slaHours(val)}h` : null };",
+        "if (field === 'sla') return { ...t, sla: val };"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

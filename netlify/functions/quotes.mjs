@@ -9,6 +9,8 @@ import { serverErrorBody, withNumberRetry, auditAs, getCallerName, getCallerId }
 // to a quote is one rule too; QuotesTab's buttons read the same module.
 import { dealVisibleTo } from '../../src/utils/roles.js';
 import { dealReadContext, dealAccess } from './_dealAccess.mjs';
+// Who hears of an approval's step (§0.158): the approver, or the person who submitted.
+import { sendApprovalNotices } from './_approvalMail.mjs';
 import {
     DEFAULT_QUOTE_APPROVAL_TIERS, approvalTierFor, quoteDiscountPct, quoteNeedsApproval,
     quoteTransitionRefusal, quoteEditOutcome, quoteTermsChanged, canApproveQuotes, quoteSendBackRefusal,
@@ -439,6 +441,25 @@ export const handler = async (event) => {
                 action, entityType: 'quote', entityId: updated.id, entityName: updated.name || updated.quoteNumber,
                 detail: `${updated.quoteNumber} v${updated.version} · ${moved ? `${from} → ${to}` : (updated.status || 'Draft')}${edit.approvalCleared ? ' · an edit cleared the approval' : ''}${stamps.approvalTier ? ' · ' + stamps.approvalTier : ''}${sendBack ? SENT_BACK_MARK + stamps.approvalNote : ''}`,
             });
+            // Who hears of it (Jeff, 2 Oct — §0.158): a submission tells the tier's
+            // approver(s); an approval or a send-back tells the person who submitted
+            // it — instant, by each person's own switch. After the save and its audit
+            // row: a failed send never undoes the change it reports.
+            const notice = sendBack ? 'sentBack'
+                : moved && to === 'Approved' ? 'approved'
+                : moved && to === 'Pending Approval' ? 'submitted' : null;
+            if (notice) {
+                try {
+                    await sendApprovalNotices({
+                        orgId, kind: notice, quote: updated,
+                        tier: approvalTierFor(quoteDiscountPct(lineItems, merged.dealDiscount), tiers),
+                        actorId: await getCallerId(auth.userId, orgId), actorName: await getCallerName(auth.userId, orgId),
+                        note: sendBack ? stamps.approvalNote : null,
+                    });
+                } catch (e) {
+                    console.error('quotes: approval notices failed —', e.message);
+                }
+            }
             return { statusCode: 200, headers, body: JSON.stringify({ quote: updated }) };
         }
 

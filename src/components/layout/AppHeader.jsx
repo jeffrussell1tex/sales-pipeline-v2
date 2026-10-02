@@ -128,7 +128,6 @@ export default function AppHeader({
         quoteApproved:      { enabled: true,  mode: 'instant' },
         quoteRejected:      { enabled: true,  mode: 'instant' },
         quotePending:       { enabled: true,  mode: 'instant' },
-        quoteAccepted:      { enabled: true,  mode: 'instant' },
         agreementRenewal:   { enabled: true,  mode: 'instant' },
     };
     const ALERT_LABELS = {
@@ -139,8 +138,9 @@ export default function AppHeader({
         dealSilent: 'Deal gone silent (no activity 14d)', dealStuck: 'Deal stuck in stage too long',
         closeLapsed: 'Close date lapsed', dealMomentum: 'Deal momentum (stage advance)',
         managerAlerts: 'Manager escalation alerts', quoteApproved: 'Quote approved',
-        quoteRejected: 'Quote rejected', quotePending: 'Quote submitted for approval',
-        quoteAccepted: 'Quote accepted by customer',
+        // The stored key stays 'quoteRejected'; the step is a send-back since §0.156.
+        // "Quote accepted by customer" is gone: nothing ever sent it (guide §18b50).
+        quoteRejected: 'Quote sent back', quotePending: 'Quote waiting for my approval',
         agreementRenewal: 'Maintenance agreement expiring (Dispatch)',
     };
 
@@ -584,13 +584,18 @@ export default function AppHeader({
                                             if (alertType === 'quotePending' && !isManager && !isAdmin) return null;
                                             // Renewal alerts go to the org's Admins and Managers (state §0.110).
                                             if (alertType === 'agreementRenewal' && !isManager && !isAdmin) return null;
-                                            if ((alertType === 'quoteApproved' || alertType === 'quoteRejected') && (isManager || isAdmin)) return null;
+                                            // "Quote approved" and "Quote sent back" reach whoever submitted the quote, and any
+                                            // role may: a discount that needs approval waits for it, an Admin's or a Manager's
+                                            // too. So every role has the two switches (§0.158).
                                             const pref = prefs[alertType] || DEFAULT_PREFS[alertType] || { enabled: true, mode: 'instant' };
                                             const isDigestOnly = alertType === 'taskDigest' || alertType === 'overdueTaskNudge';
+                                            // The approval notices are instant — never digested (Jeff, 2 Oct; §0.158).
+                                            const isInstantOnly = alertType === 'quotePending' || alertType === 'quoteApproved' || alertType === 'quoteRejected';
                                             return (
                                                 <React.Fragment key={alertType}>
                                                     {alertType === 'dealSilent' && <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '1rem', paddingTop: '0.75rem', borderTop: `1px solid ${T.border}`, marginBottom: '0.375rem', fontFamily: T.sans }}>Pipeline health alerts</div>}
-                                                    {(alertType === 'quoteApproved' || (alertType === 'quotePending' && (isManager || isAdmin))) && <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '1rem', paddingTop: '0.75rem', borderTop: `1px solid ${T.border}`, marginBottom: '0.375rem', fontFamily: T.sans }}>Quote alerts</div>}
+                                                    {/* Every role's first quote switch is "Quote approved" (§0.158) — the heading goes once, above it. */}
+                                                    {alertType === 'quoteApproved' && <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '1rem', paddingTop: '0.75rem', borderTop: `1px solid ${T.border}`, marginBottom: '0.375rem', fontFamily: T.sans }}>Quote alerts</div>}
                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0', borderBottom: `1px solid ${T.border}` }}>
                                                         <div style={{ flex: 1 }}>
                                                             <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: T.ink, fontFamily: T.sans }}>
@@ -603,7 +608,8 @@ export default function AppHeader({
                                                             <button onClick={() => togglePref(alertType, 'enabled', !pref.enabled)} style={{ width: 36, height: 20, borderRadius: '999px', border: 'none', cursor: 'pointer', background: pref.enabled ? T.ink : T.border, position: 'relative', transition: 'background 0.2s', flexShrink: 0 }} title={pref.enabled ? 'Disable' : 'Enable'}>
                                                                 <span style={{ position: 'absolute', top: 2, left: pref.enabled ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }}/>
                                                             </button>
-                                                            {!isDigestOnly && pref.enabled && (
+                                                            {isInstantOnly && pref.enabled && <span style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans }}>Instant</span>}
+                                                            {!isDigestOnly && !isInstantOnly && pref.enabled && (
                                                                 <select value={pref.mode} onChange={e => togglePref(alertType, 'mode', e.target.value)} style={{ fontSize: 12, padding: '3px 6px', border: `1px solid ${T.border}`, borderRadius: T.r, fontFamily: T.sans, background: T.surface, cursor: 'pointer' }}>
                                                                     <option value="instant">Instant</option>
                                                                     <option value="digest">Digest</option>

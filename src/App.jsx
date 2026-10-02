@@ -35,6 +35,7 @@ import { useMerge } from './hooks/useMerge';
 import { useUIState } from './hooks/useUIState';
 import { useCalendarState } from './hooks/useCalendarState';
 import { readCalendarReturn } from './utils/calendarReturn.js';
+import { takeQuoteLink, dropQuoteLink } from './utils/approvalNotices.js';
 import { useUserHandlers } from './hooks/useUserHandlers';
 import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
@@ -859,6 +860,29 @@ dbFetch('/.netlify/functions/users?me=true')
         getQuotesForOpp,
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useQuotes();
+
+    // An approval email's link to a quote (§0.158): ?quote=<id> opens it in the Quotes
+    // tab once the quotes have loaded — the deal's configurator, as "Quotes" on a deal
+    // does. Read once; the parameter leaves the URL so a refresh does not reopen it. A
+    // quote this user cannot see — another org's, another rep's — is not in the list,
+    // and nothing opens. (The older emails' ?deal= links are read by nothing — §9.)
+    // Opened signed out, the link outlives the sign-in screen's reload of "/" in the
+    // tab's sessionStorage (takeQuoteLink) — taken once here, dropped once used.
+    const quoteLinkRef = useRef(undefined);
+    if (quoteLinkRef.current === undefined) quoteLinkRef.current = takeQuoteLink(window.location.search);
+    useEffect(() => {
+        const id = quoteLinkRef.current;
+        if (!id || !(quotes || []).length) return;
+        quoteLinkRef.current = null;
+        dropQuoteLink();
+        const cleaned = new URL(window.location.href);
+        cleaned.searchParams.delete('quote');   // only the quote's parameter; any other stays
+        window.history.replaceState(null, '', cleaned.pathname + cleaned.search);
+        const q = quotes.find(x => x.id === id);
+        if (!q) return;
+        setQuotesDeepLinkOppId(q.opportunityId);
+        setActiveTab('quotes');
+    }, [quotes]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     // handleUpdateFiscalYearStart managed by useSettings hook
 

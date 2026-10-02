@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 2, 2026 · rules current through **§18b50** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 2, 2026 · rules current through **§18b51** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3645,3 +3645,14 @@ through `dbFetch`.
 3. **A setting that names people names them by app id, and is checked against THIS org's roster when it is saved.** settings.mjs refuses an id from another org, a user who does not hold the role, a deactivated one (400) — the cleaner cannot read the roster, the save can.
 4. **A change of mode never quietly lowers a control.** A save that would stop a tier needing approval is the Admin's explicit choice: by role prefills a Manager; by person refuses the save until each tier names someone or says "No approval needed".
 5. **The reader survives the named person's departure.** An Admin always decides; a name the roster cannot resolve reads "a former approver", never a raw id; a refusal names who decides.
+6. **The defaults are one list.** A page's starting values are the server's defaults, drawn from the same module — never a copy. Settings → Approval tiers kept its own starting tiers with reminder times the server's defaults did not have, so an org that never saved was shown reminders the job never sent (§0.158; Jeff: "Remind at 8h/24h/48h").
+
+## 18b51. A Link Into The App Survives Sign-In — Held In The Tab, Used Once (hard rule)
+
+**Origin (§0.158, 2 Oct 2026).** The approval email's "Open the quote" — `/?quote=<id>` — opened the quote for someone signed in, and not for someone signed out: Clerk's `<SignIn />` ends with a full page load of its after-sign-in URL — "/" when the app sets none (read in the clerk-js 5.128 the app loads: `RedirectUrls` → `navigate` → `window.location.href`) — and that load drops the query. Jeff: "it takes me to accelerep login but does not navigate all the way to the quote".
+
+1. **What a link carries is taken once, on mount — from the URL, else from the tab** — and the URL's copy is written to the tab's sessionStorage at once, before the sign-in screen can reload it away (`takeQuoteLink`, src/utils/approvalNotices.js).
+2. **It is used once the signed-in data has loaded, then dropped** — from the tab, and from the URL (its own parameter only; any other stays) — so a refresh or a later visit does not reopen it (`dropQuoteLink`).
+3. **Only an id waits, checked to the shape of one — never data.** Whether anything opens is the server's list's to say: another org's or another rep's record is not in it, and nothing opens.
+4. **The tab, not the browser.** sessionStorage, not localStorage: a link belongs to the tab it was opened in, and must not reopen in another tab or after a restart.
+5. **Test it signed OUT.** A signed-in check proves nothing about sign-in: sign out, open the link, sign in, and read where the app lands (§0.158 did, as Karen). The older emails' `?deal=` links need a reader and all of this (state §9).

@@ -14,7 +14,8 @@
 // rules", a free-text approver and fallback, "Add co-approver", "View quotes routed",
 // "View pending now", "Move…", a drag handle, an "Active" pill, and a deal simulator
 // whose value and term changed nothing. The discount cap's editor existed and
-// nothing opened it. The SLA column stays as it was until the reminders read it.
+// nothing opened it. The SLA column is the reminder's time since §0.158: after it, with
+// no decision, the backup is emailed (quote-reminders.mjs).
 import React, { useState } from 'react';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
@@ -23,18 +24,16 @@ import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { QPill } from './shared.jsx';
 import {
-    APPROVER_ROLES, cleanApprovalRouting, cleanApprovalTiers, tierNeedsApproval, decidedByWords, approvalTierFor,
+    APPROVER_ROLES, cleanApprovalRouting, cleanApprovalTiers, tierNeedsApproval, decidedByWords, approvalTierFor, slaHours,
+    DEFAULT_QUOTE_APPROVAL_TIERS,
 } from '../../../utils/quoteRules.js';
 
-// The page's starting tiers for an org that has saved none — the same bands as
-// quoteRules' defaults, with ids, colours and the SLA the column shows.
-const DEFAULT_APPROVAL_TIERS = [
-    { id:'rep', label:'Rep',          color:'#4d6b3d', maxDiscount:0.10, approver:null,            sla:null  },
-    { id:'mgr', label:'Mgr approval', color:'#b87333', maxDiscount:0.20, approver:'Sales Manager', sla:'8h'  },
-    { id:'vp',  label:'VP approval',  color:'#9c3a2e', maxDiscount:0.30, approver:'VP Sales',      sla:'24h' },
-    { id:'cfo', label:'CFO approval', color:'#6b2a22', maxDiscount:1.00, approver:'CFO',           sla:'48h' },
-];
 const TIER_COLORS = ['#4d6b3d', '#b87333', '#9c3a2e', '#6b2a22', '#3a5a7a', '#7a6a48'];
+// The page's starting tiers for an org that has saved none: quoteRules' defaults —
+// the bands, the approvers and the reminder times quote-reminders.mjs reminds by —
+// with ids and colours. One list, so the page never shows a reminder the job does
+// not send (§0.158; it had its own copy, and the server's had no times).
+const DEFAULT_APPROVAL_TIERS = DEFAULT_QUOTE_APPROVAL_TIERS.map((t, i) => ({ ...t, id: ['rep', 'mgr', 'vp', 'cfo'][i] || `tier_${i + 1}`, color: TIER_COLORS[i % TIER_COLORS.length] }));
 const NONE = '__none__';
 const byCap = (list) => {
     const sorted = [...list].sort((a, b) => (Number(a.maxDiscount) || 1) - (Number(b.maxDiscount) || 1));
@@ -169,6 +168,9 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                     const n = parseFloat(val) / 100;
                     return isNaN(n) ? t : { ...t, maxDiscount: Math.max(0.01, Math.min(1, n)) };
                 }
+                // The reminder's time, as the reminder reads it (§0.158): "8h" — "2d"
+                // reads as 48h — or none.
+                if (field === 'sla') return { ...t, sla: slaHours(val) ? `${slaHours(val)}h` : null };
                 return { ...t, [field]: val };
             });
             return field === 'maxDiscount' ? byCap(next) : next;
@@ -247,7 +249,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                     {/* Discount thresholds table */}
                     <CSectionCard
                         title="Discount thresholds"
-                        description="When a quote's average discount crosses a threshold, it waits for that tier's approver before it can be sent."
+                        description="When a quote's average discount crosses a threshold, it waits for that tier's approver before it can be sent. After the reminder time with no decision, the backup is emailed — or the approver again, with no backup."
                         headAction={
                             <button onClick={addTier} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
                                 + Add tier
@@ -256,7 +258,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                     >
                         <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'visible' }}>
                             <div style={{ display:'grid', gridTemplateColumns:grid, padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10, borderRadius:`${T.r+2}px ${T.r+2}px 0 0` }}>
-                                {['Tier','Discount range','Approver','Backup','SLA',''].map((h,i) => (
+                                {['Tier','Discount range','Approver','Backup','Reminder after',''].map((h,i) => (
                                     <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i===4 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
                                 ))}
                             </div>
@@ -349,7 +351,7 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                                                     ...(i >= tiers.length - 2 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }) }}>
                                                     <MenuItem label="Edit name" sub="What the tier is called" onClick={() => startEdit(i,'label',t.label)} />
                                                     {i < tiers.length - 1 && <MenuItem label="Edit discount cap" sub={`Currently ${Math.round(hi*100)}%`} onClick={() => startEdit(i,'maxDiscount',String(Math.round(hi*100)))} />}
-                                                    <MenuItem label="Edit SLA" sub={`Currently ${t.sla || 'not set'}`} onClick={() => startEdit(i,'sla',t.sla || '')} />
+                                                    <MenuItem label="Edit reminder time" sub={`The backup is emailed after ${t.sla || '— not set'}`} onClick={() => startEdit(i,'sla',t.sla || '')} />
                                                     <MenuItem label="Insert tier above" sub={`Splits ${Math.round(lo*100)}–${Math.round(hi*100)}%: the new tier takes the lower half`} onClick={() => insertAbove(i)} />
                                                     {i < tiers.length - 1 && <MenuItem label="Insert tier below" sub="Splits the next band: the new tier takes its lower half" onClick={() => insertBelow(i)} />}
                                                     {tiers.length > 1 && <MenuItem label="Delete tier" sub="Remove this approval tier" onClick={() => deleteTier(i)} danger />}

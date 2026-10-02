@@ -151,6 +151,54 @@ function formatCurrency(val) {
 
 export const emailTemplates = {
 
+    // ── Quote approvals (state §0.158) — instant notices, each by its reader's own
+    // switch (src/utils/approvalNotices.js). Escaped: the quote's and the account's
+    // names, people's names and an approver's note are typed by people.
+
+    /**
+     * A quote waits for approval — to the tier's approver(s) when it is submitted,
+     * or, with `reminder`, to the backup once the tier's SLA has passed.
+     */
+    quoteWaiting({ name, quoteNumber, account, dealName, discountPct, value, tierLabel, submittedBy, url, reminder = false, waitedHours = null }) {
+        const subject = reminder
+            ? `Reminder: quote ${quoteNumber} is still waiting for approval`
+            : `Quote ${quoteNumber} is waiting for your approval`;
+        const html = layout(escHtml(subject), `
+            <h2>${reminder ? 'A quote is still waiting for approval' : 'A quote is waiting for your approval'}</h2>
+            <p>Hi ${escHtml(name)}, ${reminder
+                ? `quote <strong>${escHtml(quoteNumber)}</strong> has waited ${escHtml(String(waitedHours ?? ''))} hours for a decision. You can approve it or send it back.`
+                : `<strong>${escHtml(submittedBy)}</strong> submitted quote <strong>${escHtml(quoteNumber)}</strong> for approval.`}</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Account</span><span>${escHtml(account || '—')}</span></div>
+                <div class="detail-row"><span class="detail-label">Deal</span><span>${escHtml(dealName || '—')}</span></div>
+                <div class="detail-row"><span class="detail-label">Discount</span><span>${escHtml(String(discountPct ?? 0))}% · ${escHtml(tierLabel || '')}</span></div>
+                <div class="detail-row"><span class="detail-label">Value</span><span>${formatCurrency(value)}</span></div>
+            </div>
+            <a class="btn" href="${escHtml(url)}">Open the quote →</a>
+        `);
+        return { subject, html };
+    },
+
+    /**
+     * An approver decided — to the person who submitted the quote: approved, or sent
+     * back with the approver's note.
+     */
+    quoteDecided({ name, quoteNumber, account, dealName, decision, decidedBy, note, url }) {
+        const approved = decision === 'approved';
+        const subject = approved ? `Quote ${quoteNumber} is approved` : `Quote ${quoteNumber} was sent back`;
+        const html = layout(escHtml(subject), `
+            <h2>${approved ? 'Your quote is approved' : 'Your quote was sent back'}</h2>
+            <p>Hi ${escHtml(name)}, <strong>${escHtml(decidedBy)}</strong> ${approved ? 'approved' : 'sent back'} quote <strong>${escHtml(quoteNumber)}</strong>${approved ? ' — it can go to the customer.' : '. Change it, then submit it again.'}</p>
+            ${!approved && note ? `<div class="detail-box"><div style="font-size:13px;line-height:1.5;color:#1a1a2e;white-space:pre-wrap">${escHtml(note)}</div></div>` : ''}
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Account</span><span>${escHtml(account || '—')}</span></div>
+                <div class="detail-row"><span class="detail-label">Deal</span><span>${escHtml(dealName || '—')}</span></div>
+            </div>
+            <a class="btn" href="${escHtml(url)}">Open the quote →</a>
+        `);
+        return { subject, html };
+    },
+
     /**
      * A saved report, delivered on its schedule or by "Send now" (state §0.135).
      * The table arrives already rendered and ESCAPED (reportDelivery.js).

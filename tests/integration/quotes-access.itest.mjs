@@ -257,6 +257,9 @@ test('ACCEPT: the value goes to the STORED deal — never the body\'s', async ()
 
 test('EMAIL: the CRM\'s writers only, the deal\'s writer only, by the send rule; every value escaped; the signature found by the Clerk id', async () => {
     const send = (org, role, user, quoteId) => emailFn(ev(org, role, user, 'POST', { quoteId })).then(parse);
+    // The approval notices the tests above sent (§0.158 — an approval tells the rep) are
+    // not this test's to count: only the customer's email is.
+    mails.length = 0;
     for (const [role, user] of [['ReadOnly', CLERK.ro], ['Technician', CLERK.tech], ['Dispatcher', CLERK.disp]]) {
         assert.equal((await send(A, role, user, Q.approvedMail)).status, 403, role);
     }

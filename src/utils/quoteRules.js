@@ -44,12 +44,15 @@ export const QUOTE_TERMS_FIELDS = Object.freeze(['lineItems', 'dealDiscount', 'v
 export const canApproveQuotes = (role) => role === 'Admin' || role === 'Manager';
 
 // The tiers when an org has saved none (Settings → Quoting → Approval tiers saves
-// the same shape: a label, a maxDiscount ratio, an approver).
+// the same shape: a label, a maxDiscount ratio, an approver, the reminder's time).
+// The page draws its starting tiers from this list, and quote-reminders.mjs reminds
+// by it — an org that never saved is reminded at the times the page shows (Jeff,
+// 2 Oct: "Remind at 8h/24h/48h"; §0.158).
 export const DEFAULT_QUOTE_APPROVAL_TIERS = Object.freeze([
-    Object.freeze({ maxDiscount: 0.10, label: 'Rep',          approver: null }),
-    Object.freeze({ maxDiscount: 0.20, label: 'Mgr approval', approver: 'Sales Manager' }),
-    Object.freeze({ maxDiscount: 0.30, label: 'VP approval',  approver: 'VP Sales' }),
-    Object.freeze({ maxDiscount: 1.00, label: 'CFO approval', approver: 'CFO' }),
+    Object.freeze({ maxDiscount: 0.10, label: 'Rep',          approver: null,            sla: null }),
+    Object.freeze({ maxDiscount: 0.20, label: 'Mgr approval', approver: 'Sales Manager', sla: '8h' }),
+    Object.freeze({ maxDiscount: 0.30, label: 'VP approval',  approver: 'VP Sales',      sla: '24h' }),
+    Object.freeze({ maxDiscount: 1.00, label: 'CFO approval', approver: 'CFO',           sla: '48h' }),
 ]);
 
 const pct = (v) => Math.min(Math.max(Number(v) || 0, 0), 100);
@@ -126,6 +129,17 @@ export function decidedByWords(tier, nameOf) {
     return /\ban Admin\b/.test(words) ? words : `${words}, or an Admin`;
 }
 
+// A tier's SLA in hours — "8h", "24 h", "2d" — the time a quote may wait for a
+// decision before the backup is reminded (§0.158, Jeff's 3a). Anything else, or 0,
+// is no reminder.
+export function slaHours(sla) {
+    const m = /^\s*(\d{1,4})\s*(h|hr|hrs|hour|hours|d|day|days)?\s*$/i.exec(String(sla ?? ''));
+    if (!m) return null;
+    const n = Number(m[1]);
+    if (!n) return null;
+    return /^d/i.test(m[2] || '') ? n * 24 : n;
+}
+
 // The tiers an Admin saves, cleaned for the mode chosen — what the settings PUT
 // stores and the page sends. The bands ascend and the last is open-ended; each
 // keeps only its own mode's approver and backup (a backup needs an approver, and
@@ -143,7 +157,8 @@ export function cleanApprovalTiers(tiers, mode) {
             label: String(t?.label ?? '').trim().slice(0, 60) || `Tier ${i + 1}`,
             color: /^#[0-9a-fA-F]{6}$/.test(String(t?.color)) ? t.color : null,
             maxDiscount: Number.isFinite(cap) ? Math.min(1, Math.max(0.01, cap)) : 1,
-            sla: t?.sla ? String(t.sla).trim().slice(0, 12) : null,
+            // The reminder's time, as the reminder reads it (§0.158): "8h", or none.
+            sla: slaHours(t?.sla) ? `${slaHours(t.sla)}h` : null,
             approverRole: null, backupRole: null, approverUserId: null, backupUserId: null, approver: null,
         };
         if (mode === 'role') {
