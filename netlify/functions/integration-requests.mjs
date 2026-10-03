@@ -45,7 +45,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 // Who asked, for the mail and the record. users.clerk_user_id is the Clerk
 // identity verifyAuth hands back; users.id is the app id — separate spaces.
-async function requesterOf(orgId, clerkUserId) {
+async function requesterOf(orgId, clerkUserId, orgRole) {
     try {
         const rows = await db
             .select({ name: users.name, email: users.email })
@@ -55,7 +55,7 @@ async function requesterOf(orgId, clerkUserId) {
         if (rows[0]) return rows[0];
         // No roster row yet — a fresh workspace whose Admin has not pressed Sync
         // (state §0.108): provision it now, so the mail and the record carry a name.
-        const made = await ensureRosterRow({ clerkUserId, orgId });
+        const made = await ensureRosterRow({ clerkUserId, orgId, orgRole });
         return made ? { name: made.name, email: made.email } : null;
     } catch { return null; }
 }
@@ -117,7 +117,7 @@ export const handler = async (event) => {
             return json(200, { request: { appId: app.id, ...existing[app.id] }, already: true, notified: false });
         }
 
-        const requester = await requesterOf(orgId, userId);
+        const requester = await requesterOf(orgId, userId, auth.orgRole);
         const requestedAt = new Date().toISOString();
         const record = { requestedAt, byUserId: userId, byName: requester?.name || null, note: note || null };
         const next = { ...existing, [app.id]: record };

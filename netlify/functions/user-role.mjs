@@ -5,13 +5,15 @@ import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { isAppUserId } from './_ownership.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 
-// Change an existing user's role.
+// Change a user's role IN THIS ORG.
 //
-// Clerk publicMetadata.role is the source of truth — auth.mjs derives userRole
-// from it on every request, and the `users` table is only a mirror. Before this
-// endpoint existed, nothing anywhere wrote a role change back to Clerk: editing
-// a role in Settings updated the mirror alone, so server-side authorization was
-// unchanged. The selector looked like it worked and did nothing that mattered.
+// The role is the one on the person's row in this org's roster: auth.mjs reads
+// it on every request (state §0.163, guide §18b56). It used to be Clerk's
+// USER-level publicMetadata.role — one value for every org a person belongs to
+// — and this endpoint wrote it there, so an Admin of one org changed a person's
+// role in every org they were in: Ryan's mistaken Read only, set in QA, reached
+// Accelerep Test and Accelerep (§0.153). Clerk is no longer written. The row is
+// the role, and this is the one path that changes an existing row's role.
 //
 // Roles are validated against auth.mjs's APP_ROLES -- the one list. This file
 // used to carry its own copy, which is how a second list starts: two lists that
@@ -65,8 +67,8 @@ export const handler = async (event) => {
             return { statusCode: 400, headers, body: JSON.stringify({ error: 'targetUserId must be the Accelerep user id (usr_...), not the Clerk id.' }) };
         }
 
-        // The roster row is the bridge between the two spaces. Org-scoped, so an
-        // Admin of one tenant cannot name a row in another.
+        // The roster row IS the role. Org-scoped, so an Admin of one tenant
+        // cannot name a row in another.
         const [target] = await db
             .select({ id: users.id, clerkUserId: users.clerkUserId, role: users.role, name: users.name, profile: users.profile })
             .from(users)
@@ -75,82 +77,61 @@ export const handler = async (event) => {
         if (!target) {
             return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found in this organization.' }) };
         }
-        // An invited row has no Clerk identity until acceptance, and Clerk is where
-        // the role has to land to mean anything. Writing the mirror alone here would
-        // reproduce the exact bug this endpoint exists to fix.
-        if (!target.clerkUserId) {
-            return {
-                statusCode: 409, headers,
-                body: JSON.stringify({ error: `${target.name || 'That user'} has not accepted their invitation yet, so their role cannot be changed. Re-send the invitation with the role you want.` }),
-            };
-        }
-        const targetClerkId = target.clerkUserId;
 
         // An admin removing their own admin rights can lock the org out of its
         // own settings, so it has to be deliberate — done from another account.
-        // Compared in CLERK space: `userId` comes from the JWT.
-        if (targetClerkId === userId && role !== 'Admin') {
+        // Compared in CLERK space: `userId` comes from the JWT. An invited row
+        // (no Clerk identity yet) is never the caller.
+        if (target.clerkUserId && target.clerkUserId === userId && role !== 'Admin') {
             return { statusCode: 400, headers, body: JSON.stringify({ error: 'You cannot change your own role. Ask another Admin.' }) };
         }
 
-        const { createClerkClient } = await import('@clerk/backend');
-        const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
-
-        // Confirm the target is a member of THIS org before touching them —
-        // Clerk user ids are global, so without this an admin of one tenant
-        // could rewrite the role of a user in another.
-        let isMember = false;
-        try {
-            const memberships = await clerk.users.getOrganizationMembershipList({ userId: targetClerkId });
-            isMember = (memberships?.data || memberships || [])
-                .some(m => (m.organization?.id || m.organizationId) === orgId);
-        } catch (e) {
-            return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found.' }) };
+        // A linked row: confirm its person is still a member of THIS org before
+        // changing what they may do in it. An invited row has no Clerk identity
+        // yet — its role is the one they will hold when they accept, linked by
+        // the invited email (users.mjs ?me=true), so it may be set now.
+        if (target.clerkUserId) {
+            const { createClerkClient } = await import('@clerk/backend');
+            const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+            let isMember = false;
+            try {
+                const memberships = await clerk.users.getOrganizationMembershipList({ userId: target.clerkUserId });
+                isMember = (memberships?.data || memberships || [])
+                    .some(m => (m.organization?.id || m.organizationId) === orgId);
+            } catch (e) {
+                return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found.' }) };
+            }
+            if (!isMember) {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'That user is not a member of this organization.' }) };
+            }
         }
-        if (!isMember) {
-            return { statusCode: 403, headers, body: JSON.stringify({ error: 'That user is not a member of this organization.' }) };
-        }
 
-        const clerkUser = await clerk.users.getUser(targetClerkId);
-        const priorRole = clerkUser.publicMetadata?.role || 'User';
+        const priorRole = target.role || 'User';
 
-        // Merge rather than replace — publicMetadata carries other keys (name).
-        await clerk.users.updateUser(targetClerkId, {
-            publicMetadata: { ...(clerkUser.publicMetadata || {}), role },
-        });
-
-        // Keep the mirror in step. Best-effort: Clerk is authoritative, so a
-        // failure here is a stale roster row, not a failed permission change.
-        //
         // `profile.userType` is written alongside the column because the blob held
         // its own copy of the role, frozen at row creation and never updated by any
         // role change. flatten() no longer reads it, but leaving a second stale
         // answer in the row is how the first one got believed.
         //
-        // A drizzle UPDATE that matches nothing does NOT throw, so the try/catch
-        // alone proved nothing. Count the rows.
-        try {
-            const touched = await db.update(users)
-                .set({ role, profile: { ...(target.profile || {}), userType: role }, updatedAt: new Date() })
-                .where(and(eq(users.id, targetUserId), eq(users.orgId, orgId)))
-                .returning({ id: users.id });
-            if (touched.length !== 1) {
-                console.warn('user-role: mirror update touched', touched.length, 'rows for', targetUserId,
-                    '-- expected exactly 1. Clerk was updated; the roster row was not.');
-            }
-        } catch (e) {
-            console.warn('user-role: mirror update failed for', targetUserId, e?.message);
+        // A drizzle UPDATE that matches nothing does NOT throw, so count the rows:
+        // this write is the role change itself, not a mirror of one.
+        const touched = await db.update(users)
+            .set({ role, profile: { ...(target.profile || {}), userType: role }, updatedAt: new Date() })
+            .where(and(eq(users.id, targetUserId), eq(users.orgId, orgId)))
+            .returning({ id: users.id });
+        if (touched.length !== 1) {
+            console.warn('user-role: the update touched', touched.length, 'rows for', targetUserId, '-- expected exactly 1');
+            return { statusCode: 500, headers, body: JSON.stringify({ error: 'The role was not saved. Try again.' }) };
         }
 
-        const name = ((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim()
-            || clerkUser.emailAddresses?.[0]?.emailAddress || targetUserId;
+        const name = target.name || targetUserId;
 
         await writeAudit(orgId, {
             action: 'user.role.changed',
             entityType: 'user',
             entityId: targetUserId,   // the app id — the permanent one
             entityName: name,
-            detail: `Role ${priorRole} \u2192 ${role}`,
+            detail: `Role ${priorRole} → ${role}`,
             userId,
             userName: await getCallerName(userId, orgId),
         });
@@ -158,7 +139,7 @@ export const handler = async (event) => {
         return {
             statusCode: 200, headers,
             body: JSON.stringify({
-                ok: true, userId: targetUserId, clerkUserId: targetClerkId, role, priorRole,
+                ok: true, userId: targetUserId, clerkUserId: target.clerkUserId, role, priorRole,
                 // verifyAuth caches the role briefly, so the change is not
                 // instant on already-issued requests.
                 note: 'Role changes take up to 30 seconds to take effect.',

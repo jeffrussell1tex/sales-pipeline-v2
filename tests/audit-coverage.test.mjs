@@ -34,7 +34,7 @@ const EXEMPT = {
     'score-leads-batch.mjs':   'a scheduled job — the heartbeat is its record',
 };
 // Functions that write NO table but hand data to a model or send it out — they must audit too.
-const MUST_AUDIT_ANYWAY = ['report-prompt.mjs', 'ai-score.mjs', 'quote-email.mjs', 'invite-user.mjs', 'quote-reminders.mjs'];   // the last: emails an approver (§0.158)
+const MUST_AUDIT_ANYWAY = ['report-prompt.mjs', 'ai-score.mjs', 'quote-email.mjs', 'quote-reminders.mjs'];   // the last: emails an approver (§0.158); invite-user.mjs is deleted (§0.163)
 
 test('THE GUARD — every function that writes the database audits, unless the allowlist says why not', () => {
     const files = readdirSync(FN).filter(f => f.endsWith('.mjs') && !f.startsWith('_'));
@@ -83,7 +83,6 @@ const ACTIONS = {
     'recommendation-log.mjs':       ['recommendation.dismissed'],
     'backup.mjs':                   ['backup.created', 'backup.schedule_set', 'backup.restored'],
     'merge.mjs':                    ['account.merged', 'contact.merged', 'account.merge_undone', 'contact.merge_undone'],
-    'invite-user.mjs':              ['user.invited'],
     'lead-intake.mjs':              ['lead.received'],
     'train-lead-model.mjs':         ['lead_model.trained'],
     'dispatch-jobs.mjs':            ['dispatch_job.created', 'dispatch_job.updated', 'dispatch_job.deleted', 'dispatch_job.line_item_added', 'dispatch_job.line_item_removed'],

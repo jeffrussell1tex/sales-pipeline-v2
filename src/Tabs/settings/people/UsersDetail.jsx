@@ -1337,9 +1337,8 @@ export const UsersDetail = ({ settings, onBack }) => {
             const c = data.counts || {};
             let msg = `Synced: ${c.created} added, ${c.updated} updated, ${c.unchanged} unchanged`;
             if (c.dbOnly > 0) msg += ` · ${c.dbOnly} in Accelerep not in Clerk (review)`;
-            // Members whose Clerk role is missing or one this version does not know
-            // (users-sync.mjs roleDrift, §0.153). Said here, or the report reaches no one.
-            if (c.roleDrift > 0) msg += ` · ${c.roleDrift} without a recognised role in Clerk`;
+            // No role report: the sync no longer reads or writes a role — the role is
+            // the row's, per org, and an Admin sets it (state §0.163).
             setSyncMsg(msg);
             setDrift(null);   // reconciled
             // Refresh the roster from the DB so new/updated rows appear immediately.

@@ -45,13 +45,15 @@ test('any other non-active status is refused too', () => {
 
 // ── The wiring, pinned as text ──────────────────────────────────────────────
 
-test('verifyAuth refuses a pending token BEFORE caching or reading the user', () => {
+test("verifyAuth refuses a pending token BEFORE caching or reading the caller's role", () => {
     const auth = src('../netlify/functions/auth.mjs');
     const call  = auth.indexOf('pendingSessionRefusal(payload)');
     const cache = auth.indexOf('authCache.set(token');
-    const user  = auth.indexOf('clerk.users.getUser(userId)');
+    // The role lookup: since §0.163 the caller's row in this org's roster (it was a
+    // Clerk getUser for the user-level metadata).
+    const user  = auth.indexOf('row = await rosterRoleOf(userId, orgId);');
     assert.ok(call > 0, 'verifyAuth must call pendingSessionRefusal on the verified payload');
-    assert.ok(call < user,  'the refusal must come before the user lookup');
+    assert.ok(user > 0 && call < user,  'the refusal must come before the role lookup');
     assert.ok(call < cache, 'a refused token must never be cached as a result');
     assert.match(auth.slice(call, call + 160), /if \(pending\) return pending;/, 'and the refusal must be RETURNED, not logged');
 });

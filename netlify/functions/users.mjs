@@ -60,17 +60,17 @@ export const handler = async (event) => {
 
     // ROLE IS DELIBERATELY ABSENT from sanitize.
     //
-    // Clerk publicMetadata.role is the source of truth — auth.mjs reads it on
-    // every request and this table is only a mirror. Taking role from the request
-    // body caused two problems that produced the drift between the Accelerep user
-    // list and Clerk:
+    // The role on this table's row IS the role in this org — auth.mjs reads it on
+    // every request (state §0.163; until then Clerk's user-level metadata was the
+    // source and this column a mirror). Taking role from the request body caused
+    // two problems, back when the column was the mirror:
     //   1. `PUT ?me=true` let any user rewrite their own mirror role, and a save
     //      that simply omitted userType silently downgraded them to 'User'.
     //   2. An admin editing a user wrote the new role to the mirror only, so the
     //      roster and actual authorization disagreed with no warning.
-    // Role changes go through user-role.mjs, which writes Clerk first. Callers
-    // that legitimately set role (invite, Clerk sync, user-role) pass it
-    // explicitly via withRole() below.
+    // Role changes go through user-role.mjs (Admin-only). A NEW row's role is set
+    // explicitly via withRole() below (an Admin's invite or create); upsertUser
+    // never changes an existing row's role.
     const sanitize = (data) => ({
         id:           data.id,
         // Carried through so an update cannot blank the Clerk link. Absent on
@@ -252,6 +252,7 @@ export const handler = async (event) => {
                         and(eq(users.email, clerkEmail), eq(users.orgId, orgId))
                     );
                 }
+                const matchedByEmail = !!row;
 
                 // 3. Display name fallback
                 if (!row && displayName) {
@@ -270,24 +271,26 @@ export const handler = async (event) => {
                 // has the same hazard and is Admin-triggered; this path fires
                 // for every user on every load and must not carry it.
                 if (row && !row.clerkUserId) {
-                    // Validated, not copied. auth.mjs refuses a role it does not
-                    // recognise, so mirroring one here would only make the roster
-                    // agree with a value that authorizes nothing.
-                    const clerkRole = clerkUser.publicMetadata?.role;
-                    const realRole = isAppRole(clerkRole) ? clerkRole
-                                   : isAppRole(row.role)  ? row.role
-                                   : 'User';
+                    // The ROW's role — it is this org's, and it is what the server
+                    // enforces (state §0.163) — and only when the row was found by
+                    // the invited EMAIL: the invitation was addressed to this
+                    // person. A row found by display name alone was not, so its
+                    // role does not come with it: the caller links as a rep and an
+                    // Admin grants anything more. Never Clerk's user-level role —
+                    // one value for every org. Validated: a value that is not one
+                    // of ours authorizes nothing, so it is not carried over.
+                    const linkRole = matchedByEmail && isAppRole(row.role) ? row.role : 'User';
                     try {
                         await db.update(users)
                             .set({
                                 clerkUserId: userId,
-                                role:        realRole,
+                                role:        linkRole,
                                 active:      true,
-                                profile:     { ...(row.profile || {}), status: 'Active', userType: realRole },
+                                profile:     { ...(row.profile || {}), status: 'Active', userType: linkRole },
                                 updatedAt:   new Date(),
                             })
                             .where(and(eq(users.id, row.id), eq(users.orgId, orgId)));
-                        row = { ...row, clerkUserId: userId, role: realRole, active: true };
+                        row = { ...row, clerkUserId: userId, role: linkRole, active: true };
                         // The caller cache keys on clerkUserId and has just been proved
                         // wrong by this very write: it holds a 30s 'no roster row' answer
                         // for this identity, which fails CLOSED — the user would own
@@ -302,7 +305,7 @@ export const handler = async (event) => {
                 // sign-in into a fresh workspace (state §0.108). Provision one from Clerk
                 // now, in the shape users-sync.mjs creates, so the user owns what they
                 // create and is named on it from this request on.
-                if (!row) row = await ensureRosterRow({ clerkUserId: userId, orgId, userRole, clerkUser });
+                if (!row) row = await ensureRosterRow({ clerkUserId: userId, orgId, clerkUser, orgRole: auth.orgRole });
             }
 
             return { statusCode: 200, headers, body: JSON.stringify({ user: row ? flatten(row) : null }) };
@@ -441,7 +444,11 @@ export const handler = async (event) => {
         // the pre-write roster, finds no match, and stamps NULL — an UNASSIGNED
         // record, which by policy is editable org-wide.
         const upsertUser = async (clean) => {
-            const { id, ...updateData } = clean;
+            // An EXISTING row's role is never changed here — a create that names
+            // an id already in the org, or a PUT: the role on the row is what the
+            // server enforces (state §0.163), and user-role.mjs, Admin-only, is
+            // the one path that changes it. A new row is inserted with its role.
+            const { id, role: _keepStoredRole, ...updateData } = clean;
             try {
                 const [row] = await db
                     .insert(users)
@@ -480,6 +487,12 @@ export const handler = async (event) => {
                 if (invites.length === 0) {
                     return { statusCode: 400, headers, body: JSON.stringify({ error: 'No invites provided' }) };
                 }
+                // Only an Admin grants a role (state §0.163): the invited role is
+                // the role the person will hold in this org — the roster row is
+                // what the server enforces. A Manager invites reps.
+                if (userRole !== 'Admin' && invites.some((i) => (i.role || 'User') !== 'User')) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can invite someone with a role other than Sales Rep.' }) };
+                }
 
                 // Initialise Clerk backend client once for this batch
                 const { createClerkClient } = await import('@clerk/backend');
@@ -511,9 +524,9 @@ export const handler = async (event) => {
                     const email = (invite.email || '').trim().toLowerCase();
                     if (!email) { errors.push({ email: '', error: 'Email required' }); continue; }
 
-                    // The invited role is written into Clerk publicMetadata below, and
-                    // auth.mjs reads that on every request for the life of the account.
-                    // An unvalidated value therefore persists as a role no gate knows:
+                    // The invited role becomes the role on the person's row in this
+                    // org, which the server enforces from their first request (state
+                    // §0.163). An unvalidated value would persist as a role no gate knows:
                     // the invite screen seeded its rows with 'Sales Rep' (the LABEL for
                     // 'User'), so an untouched row created exactly that. Refuse the row
                     // rather than coercing it — the caller chose a role and is entitled
@@ -546,8 +559,8 @@ export const handler = async (event) => {
                             emailAddress:   email,
                             role:           (invite.role === 'Admin') ? 'org:admin' : 'org:member',
                             redirectUrl:    appUrl,
+                            // No role here: the row below is the one place it lives.
                             publicMetadata: {
-                                role:      invite.role      || 'User',
                                 team:      invite.team      || null,
                                 territory: invite.territory || null,
                             },
@@ -611,6 +624,10 @@ export const handler = async (event) => {
             const createRole = data.userType || data.role || 'User';
             if (!isAppRole(createRole)) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: `"${createRole}" is not a valid role. Expected one of: ${APP_ROLES.join(', ')}.` }) };
+            }
+            // Only an Admin grants a role (state §0.163) — a Manager adds reps.
+            if (createRole !== 'User' && userRole !== 'Admin') {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can add someone with a role other than Sales Rep.' }) };
             }
             try {
                 const result = await upsertUser(withRole(sanitize({ ...data, id: data.id || newUserId() }), createRole));

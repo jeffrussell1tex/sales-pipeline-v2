@@ -1,4 +1,4 @@
-import { verifyToken, createClerkClient } from '@clerk/backend';
+import { verifyToken } from '@clerk/backend';
 import {
     APP_ROLES, isAppRole, isAdmin, isManager, canSeeAll, isReadOnly, isTechnician, isDispatcher,
 } from '../../src/utils/roles.js';
@@ -15,10 +15,12 @@ import { requireWrite, requireRole } from './_roleGate.mjs';
 // being mixed (users-sync fell back to the membership role when publicMetadata
 // carried none), which is where the `member` and `admin` badges came from.
 //
-// The paths that write a role -- admin create and invite (users.mjs),
-// user-role, users-sync -- validate against isAppRole() before the value reaches
-// Clerk or the mirror. (invite-user.mjs does NOT, and nothing in the app calls
-// it — state §9, flagged for deletion.)
+// The role is PER ORG (state §0.163, guide §18b56): the role on the caller's row
+// in the active org's roster (_callerRole.mjs), never Clerk's user-level
+// metadata. The paths that write it -- user-role (an Admin), users.mjs (an
+// Admin's invite or create, the first-load link, a first sign-in's new row),
+// users-sync (new rows only) -- validate against isAppRole(). (invite-user.mjs,
+// which did not, is deleted.)
 export {
     APP_ROLES, isAppRole, isAdmin, isManager, canSeeAll, isReadOnly, isTechnician, isDispatcher,
     requireWrite, requireRole,
@@ -43,8 +45,9 @@ export const pendingSessionRefusal = (payload) =>
         : null;
 
 
-// Short-lived in-memory cache keyed by token to avoid repeated Clerk API calls
-// during bulk imports (97 records × 3 concurrent = ~97 getUser calls → rate limit)
+// Short-lived in-memory cache keyed by token to avoid a role lookup per record
+// during bulk imports (97 records × 3 concurrent — it was a Clerk getUser per
+// call, and the rate limit, before the role moved to the roster, §0.163)
 // TTL is kept short (30s) and we always validate the token's own exp claim so that
 // org-switch scenarios can never serve a stale orgId beyond the token's lifetime.
 const authCache = new Map();
@@ -111,29 +114,46 @@ export async function verifyAuth(event) {
             return { error: 'No organization membership found. Please contact your administrator.', status: 403 };
         }
 
-        // Fetch user metadata (cached to avoid rate limits on bulk operations)
-        const clerk = createClerkClient({ secretKey: clerkSecretKey });
-        const user = await clerk.users.getUser(userId);
-        const meta = user.publicMetadata || {};
+        // The role is the caller's IN THIS ORG (state §0.163): the role on their
+        // row in this org's roster — never Clerk's user-level publicMetadata, one
+        // value for every org a person is in, which made an Admin anywhere an
+        // Admin everywhere. The org role in the verified token (`o.rol` in a v2
+        // token, `org_role` in v1) is Clerk's org:admin / org:member — who may
+        // administer the Clerk organization, not what anyone may do here — and is
+        // handed on for one thing: a new org's first Admin (_lib.mjs
+        // ensureRosterRow).
+        let row;
+        try {
+            const { rosterRoleOf } = await import('./_callerRole.mjs');
+            row = await rosterRoleOf(userId, orgId);
+        } catch (e) {
+            // No role is assumed when the roster cannot be read — fail closed.
+            console.error('verifyAuth: role lookup failed:', e.message);
+            return { error: 'The service is unavailable — try again shortly.', status: 503 };
+        }
 
-        // An ABSENT role is a rep -- that is deliberate and safe. A role that is
-        // PRESENT but not one of ours is neither: it means something wrote a value
-        // into Clerk that no gate in this app recognises. requireWrite refuses it
-        // below; warn here so the log names the string and the user.
-        const rawRole     = meta.role;
+        // No row is a rep — what a member without a role has always been. A row
+        // holding a value that is not one of ours is refused by requireWrite;
+        // warn here so the log names the string and the user.
+        const rawRole     = row?.role;
         const userRole    = rawRole || 'User';
         if (rawRole && !isAppRole(rawRole)) {
             console.warn('verifyAuth: UNRECOGNISED role', JSON.stringify(rawRole), 'for user', userId, 'in org', orgId);
         }
-        const managedReps = meta.managedReps || [];
+        const managedReps = row?.managedReps || [];
+        const orgRole     = payload.o?.rol ? 'org:' + payload.o.rol : (payload.org_role || null);
 
-        const result = { userId, orgId, userRole, managedReps, error: null };
+        const result = { userId, orgId, userRole, managedReps, orgRole, error: null };
 
-        // Cache result, evicting stale entries to prevent unbounded growth
-        authCache.set(token, { result, ts: Date.now() });
-        if (authCache.size > 500) {
-            const oldest = [...authCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0][0];
-            authCache.delete(oldest);
+        // Cached only when the row was found. "No row" is the moment before
+        // users?me=true links an invited row or provisions one; caching it held
+        // the caller at a rep for 30 s after the link.
+        if (row) {
+            authCache.set(token, { result, ts: Date.now() });
+            if (authCache.size > 500) {
+                const oldest = [...authCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0][0];
+                authCache.delete(oldest);
+            }
         }
 
         return result;

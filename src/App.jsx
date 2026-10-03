@@ -102,7 +102,6 @@ function App() {
     // on screen. Every mount-time load keys on this value: nothing before it
     // is set, again whenever it changes.
     const activeOrgId = (clerkUser && organization?.id) || null;
-    const clerkUserMeta = clerkUser?.publicMetadata || {};
 
     // Clerk's display name is a FALLBACK, not the identity.
     //
@@ -120,16 +119,6 @@ function App() {
     const clerkName = clerkUser
         ? (((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim() || clerkUser.emailAddresses?.[0]?.emailAddress || 'User')
         : '';
-    const [userRole, setUserRole] = React.useState('User');
-
-    React.useEffect(() => {
-        if (clerkUser) {
-            const meta = clerkUser.publicMetadata || {};
-            setUserRole(meta.role || 'User');
-            window.clerkUserRole = meta.role || 'User';
-            window.clerkManagedReps = meta.managedReps || [];
-        }
-    }, [clerkUser]);
     // ── State hooks ──
     const modalState = useModalState();
     const uiState = useUIState();
@@ -184,8 +173,20 @@ function App() {
     const currentUser   = myProfile?.name || clerkName;
     const currentUserId = myProfile?.id   || null;
 
+    // The caller's role IN THE ACTIVE ORG (state §0.163): the role on their row in
+    // this org's roster, as users?me=true returned it — the role the server
+    // enforces on every request. It was Clerk's user-level metadata, one value for
+    // every org a person is in, so an Admin of one org saw an Admin's screens in
+    // every org. Read only while the profile is THIS org's: after the header's
+    // switcher the last org's row stays in state until the new org's answers
+    // (guide §18b55); until then a rep's screens, which open nothing the server
+    // would not refuse.
+    const [myProfileOrgId, setMyProfileOrgId] = React.useState(null);
+    const roleKnown = !!myProfile && !!activeOrgId && myProfileOrgId === activeOrgId;
+    const userRole  = (roleKnown && myProfile.role) || 'User';
+
     // Its own effect, with its own dependencies. These globals used to be set by
-    // the role effect above, keyed on [clerkUser] — correct while the name came
+    // the old Clerk role effect, keyed on [clerkUser] — correct while the name came
     // from Clerk and could not change afterwards. It can now: it changes the
     // moment the roster row lands, which [clerkUser] does not observe. A console
     // global that lags the value it mirrors is worse than no global, because it
@@ -464,12 +465,17 @@ const orgSwitched = prevOrgIdRef.current && prevOrgIdRef.current !== organizatio
 prevOrgIdRef.current = organization?.id || null;
 loadSettings(clerkUser, orgSwitched, organization?.id || null);
 
-// Load current user's own profile (notification prefs, etc.)
+// Load current user's own profile (notification prefs, etc.) — and with it the
+// caller's role in THIS org (state §0.163). An answer for an org the user has
+// since switched away from is dropped, not shown as this org's (§18b55).
+const meOrgId = organization?.id || null;
 dbFetch('/.netlify/functions/users?me=true')
     .then(r => r.ok ? r.json() : null)
     .then(data => {
+        if (prevOrgIdRef.current !== meOrgId) return;
         if (data?.user) {
             setMyProfile(data.user);
+            setMyProfileOrgId(meOrgId);
             setProfileForm({
                 firstName: data.user.firstName || '',
                 lastName:  data.user.lastName  || '',
@@ -659,31 +665,34 @@ dbFetch('/.netlify/functions/users?me=true')
     // into calConnectResult for the surface that offered Connect, the URL is
     // cleaned so a refresh does not replay it, and the browser lands on that
     // surface: Connected apps or Company calendar for an Admin who started
-    // there, the profile panel's Calendar tab otherwise. The role is read from
-    // Clerk's metadata directly — the `userRole` state is one render behind it.
+    // there, the profile panel's Calendar tab otherwise. It waits for the
+    // caller's role in this org (roleKnown — the profile's, §0.163): the surface
+    // it opens is an Admin's.
     const calReturnHandled = useRef(false);
     useEffect(() => {
-        if (!clerkUser || calReturnHandled.current) return;
+        if (!clerkUser || !roleKnown || calReturnHandled.current) return;
         const r = readCalendarReturn(window.location.search);
         if (!r) return;
         calReturnHandled.current = true;
         setCalConnectResult(r);
         window.history.replaceState(null, '', window.location.pathname);
-        const adminHere = (clerkUser.publicMetadata?.role || 'User') === 'Admin';
+        const adminHere = userRole === 'Admin';
         if (adminHere && (r.from === 'apps' || r.from === 'company')) {
             setSettingsOpenPanel(r.from === 'apps' ? 'apps' : 'company-calendar');
             setActiveTab('settings');
         } else {
             setShowProfilePanel(true);
         }
-    }, [clerkUser]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [clerkUser, roleKnown]); // eslint-disable-line react-hooks/exhaustive-deps
     const canEdit = !isReadOnly;
     const canSeeAll = isAdmin || isManager;
     const canManageSettings = isAdmin;
     const canManageUsers = isAdmin;
     const canDeleteData = isAdmin || isManager;
-    // Manager can see only reps assigned to them (stored in Clerk publicMetadata.managedReps)
-    const managedReps = new Set(clerkUserMeta.managedReps || []);
+    // Manager can see only reps assigned to them — their row's profile.managedReps
+    // in THIS org (state §0.163; it was Clerk's user-level metadata, one list for
+    // every org)
+    const managedReps = new Set((roleKnown && myProfile.managedReps) || []);
     const isRepVisible = (repName) => {
         if (isAdmin) return true;
         if (isManager) return managedReps.size === 0 || managedReps.has(repName);

@@ -154,24 +154,26 @@ test("Clerk's ORG membership role is not a source for the app role", () => {
     const sync = read('netlify/functions/users-sync.mjs');
     assert.ok(!/member\.role\s*\?\.\s*replace|member\.role\.replace/.test(sync),
         'users-sync is deriving an app role from the Clerk org membership role again');
-    assert.match(sync, /isAppRole\(rawRole\)/, 'users-sync must validate the role it mirrors');
+    assert.ok(!/member\.role\b/.test(sync.replace(/^\s*\/\/.*$/gm, '')), 'users-sync reads the Clerk org membership role at all');
 });
 
-test('users-sync mirrors the role through mirrorRoleOf, with the row found first (§0.153)', () => {
-    // The line this replaced wrote 'User' over every value the running code did
-    // not know. On a deploy older than a role, that is every holder of the role:
-    // the dev site turned the Dispatcher into a "Sales Rep" on 1 Oct 2026.
+test('users-sync neither reads nor writes a role (§0.163): an existing row keeps its own, a new row is a rep', () => {
+    // It used to mirror Clerk's USER-level publicMetadata.role onto the row —
+    // one value for every org a person is in — so a role set in one org
+    // overwrote the row in the next. The row's role is the role now (per org),
+    // and only an Admin changes it (user-role.mjs).
     const sync = read('netlify/functions/users-sync.mjs');
-    assert.ok(sync.includes("import { mirrorRoleOf } from '../../src/utils/roles.js';"), 'the real rule, imported directly');
+    const code = sync.replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(!/publicMetadata\s*\?*\.\s*role/.test(code), 'REGRESSION: users-sync reads Clerk\'s user-level role again');
+    assert.ok(!/mirrorRoleOf/.test(code), 'the mirror rule is gone');
     const lookup = sync.indexOf('const existing = dbByClerkId.get(clerkUserId) || dbByEmail.get(email);');
-    const role = sync.indexOf('const role = mirrorRoleOf(rawRole, existing?.role);');
-    assert.ok(lookup > -1 && role > lookup, 'the row is found first, then its role is read');
-    assert.equal((sync.match(/const existing = /g) || []).length, 1, 'one lookup, not a second one after the role');
-    assert.ok(!/const role = isAppRole\(rawRole\) \? rawRole : 'User'/.test(sync), 'the coercion is gone');
-    assert.ok(sync.includes('if (existing.role !== role) patch.role = role;'), 'an update still writes only a change');
-    const usersScreen = read('src/Tabs/settings/people/UsersDetail.jsx');
-    assert.ok(usersScreen.includes('if (c.roleDrift > 0) msg += ` · ${c.roleDrift} without a recognised role in Clerk`;'),
-        'the Users screen says it: a report no one sees is not a report');
+    const role = sync.indexOf("const role = 'User';");
+    assert.ok(lookup > -1 && role > lookup, 'a new row is a rep');
+    assert.equal((sync.match(/const existing = /g) || []).length, 1, 'one lookup');
+    assert.ok(!/patch\.role\s*=/.test(code), 'REGRESSION: an update writes a role again');
+    assert.ok(!/roleDrift/.test(code), 'no role report — there is no Clerk role to report on');
+    const usersScreen = read('src/Tabs/settings/people/UsersDetail.jsx').replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(!/roleDrift/.test(usersScreen), 'the Users screen no longer reports one');
 });
 
 test('flatten() lets the column win over the profile blob', () => {

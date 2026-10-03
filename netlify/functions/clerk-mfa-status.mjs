@@ -10,8 +10,11 @@
  */
 
 import { createClerkClient } from '@clerk/backend';
-import { verifyAuth }        from './auth.mjs';
+import { verifyAuth, APP_ROLES } from './auth.mjs';
 import { serverErrorBody } from './_lib.mjs';
+import { db } from '../../db/index.js';
+import { users } from '../../db/schema.js';
+import { eq } from 'drizzle-orm';
 
 const HEADERS = {
     'Content-Type':                 'application/json',
@@ -60,13 +63,19 @@ export const handler = async (event) => {
         }
 
         // ── Fetch full user records for each member ───────────────────────────
-        // We need user.totpEnabled, user.twoFactorEnabled, user.publicMetadata.role
+        // We need user.totpEnabled and user.twoFactorEnabled. The ROLE is not
+        // Clerk's: it is the one on each person's row in this org's roster, the
+        // role the server enforces (state §0.163).
         const userDetails = await Promise.allSettled(
             allMembers.map(m => {
                 const userId = m.publicUserData?.userId || m.userId;
                 return clerk.users.getUser(userId);
             })
         );
+
+        const roster = await db.select({ clerkUserId: users.clerkUserId, role: users.role })
+            .from(users).where(eq(users.orgId, orgId));
+        const roleIn = new Map(roster.filter(r => r.clerkUserId).map(r => [r.clerkUserId, r.role]));
 
         // ── Build enrollment data ─────────────────────────────────────────────
         const enrolled    = [];
@@ -75,13 +84,15 @@ export const handler = async (event) => {
         userDetails.forEach((result, idx) => {
             if (result.status !== 'fulfilled') return;
             const user   = result.value;
-            const member = allMembers[idx];
 
             // Clerk exposes MFA state via user.twoFactorEnabled (boolean)
             // and user.totpEnabled for TOTP specifically.
             const hasMfa  = user.twoFactorEnabled === true || user.totpEnabled === true;
             const email   = user.emailAddresses?.[0]?.emailAddress || '';
-            const role    = user.publicMetadata?.role || member.role || 'User';
+            // This org's role, never Clerk's user-level one (one value for every
+            // org) and never the org membership role (org:admin / org:member —
+            // who administers the Clerk organization, a different thing).
+            const role    = roleIn.get(user.id) || 'User';
             const userId  = user.id;
             const name    = [user.firstName, user.lastName].filter(Boolean).join(' ') || email;
 
@@ -102,7 +113,7 @@ export const handler = async (event) => {
         });
 
         // Role display order
-        const ROLE_ORDER = ['Admin', 'Manager', 'Sales Rep', 'ReadOnly', 'User'];
+        const ROLE_ORDER = APP_ROLES;
         const byRole = Object.values(roleMap).sort((a, b) => {
             const ai = ROLE_ORDER.indexOf(a.role);
             const bi = ROLE_ORDER.indexOf(b.role);

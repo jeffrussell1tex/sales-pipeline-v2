@@ -1,5 +1,10 @@
 // scripts/check-clerk-roles.mjs — READ ONLY. Writes nothing, to Clerk or the DB.
 //
+// SINCE §0.163 NOTHING READS THE VALUE THIS CHECKS. The role the server enforces
+// is the one on each person's row in the org's roster (check-mirror-roles.mjs is
+// the deploy check now); Clerk's user-level publicMetadata.role is left over.
+// This still reports what is there, for the record.
+//
 // WHY THIS EXISTS
 //
 // auth.mjs now ALLOWS three roles rather than DENYING two. That is the correct

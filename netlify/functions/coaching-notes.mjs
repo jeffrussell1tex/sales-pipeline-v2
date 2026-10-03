@@ -40,7 +40,8 @@ async function callerRow(clerkUserId, orgId, userRole) {
     const [row] = await db.select().from(users)
         .where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));
     if (!row) return null;
-    // The role that authorizes is the verified one (Clerk metadata), not the mirror column.
+    // The role that authorizes is the verified one — since §0.163 this same row's role,
+    // read by verifyAuth (and cached with the token for 30 s).
     return { ...row, role: userRole };
 }
 

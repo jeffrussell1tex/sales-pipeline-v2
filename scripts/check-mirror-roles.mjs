@@ -11,7 +11,8 @@
 //
 // It prints every roster row grouped by org, flags any value outside
 // APP_ROLES in EITHER location, and exits 1 if anything was flagged.
-// Nothing is modified. Nothing here imports Clerk, Drizzle, or the app.
+// Nothing is modified. Nothing here imports Clerk, Drizzle, or the app — the
+// pure role list in src/utils/roles.js aside.
 //
 //   node --env-file=.env scripts/check-mirror-roles.mjs
 //   node --env-file=.env scripts/check-mirror-roles.mjs --org=org_3Cwn...
@@ -27,7 +28,10 @@
 // actually found rather than guessing.
 import { neon } from '@netlify/neon';
 
-const APP_ROLES = ['Admin', 'Manager', 'User', 'ReadOnly', 'Technician'];
+// The one list (src/utils/roles.js) — this file's own copy had no Dispatcher, so
+// it would have named every Dispatcher as a broken role (state §0.163, the
+// sweep that made this column the role the server enforces).
+import { APP_ROLES } from '../src/utils/roles.js';
 
 const argOrgs = process.argv.slice(2)
     .filter((a) => a.startsWith('--org='))

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 3, 2026 · rules current through **§18b55** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 3, 2026 · rules current through **§18b56** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -189,11 +189,11 @@ authorizedParties: [
 
 ## 5b. Users table ↔ Clerk (source of truth)
 
-Clerk is authoritative for identity, email, org membership, and role (`publicMetadata.role`); the `users` table is a **mirror** used for the in-app roster + app-only fields (quota, team, territory, profile prefs). Consequences:
+Clerk is authoritative for identity, email and org membership. **The ROLE is the `users` row's, per org** (§0.163, §18b56) — the role the server enforces; the table also holds the in-app roster and the app-only fields (quota, team, territory, profile prefs). Consequences:
 - **Wiping `users` does NOT lose assignments** — ownership fields (`salesRep`, `accountOwner`, `assignedTo`, `repName`, `createdBy`) are name-**strings on each entity row**, not FKs. They survive a roster wipe.
 - **Re-adding an existing member via Invite fails** — Clerk rejects an org invitation for someone already in the org. To rebuild roster rows for existing members, use **Sync-from-Clerk**, not Invite.
-- **`users-sync.mjs`** (Admin) reconciles roster ← Clerk: creates missing rows, role authoritative-from-Clerk, name refresh, team/territory fill-blanks-only, quota/profile untouched, reports (never deletes) DB-rows-not-in-Clerk. Button in Settings → Users. Reuse this as the canonical "roster out of sync" fix.
-- **`GET ?me=true` only reads/promotes** an existing row (email/name match) — it does **not** insert. **`PUT ?me=true` inserts** and is self-only (`data.id` must equal the caller's Clerk id). So a plain refresh won't rebuild a missing row; a profile save (or Sync-from-Clerk) will.
+- **`users-sync.mjs`** (Admin) reconciles roster ← Clerk: creates missing rows (as reps), never changes a role (§0.163), team/territory fill-blanks-only, quota/profile untouched, reports (never deletes) DB-rows-not-in-Clerk and name drift (never applies it). Button in Settings → Users. Reuse this as the canonical "roster out of sync" fix.
+- **`GET ?me=true`** links the caller's row — by the invited email, with its role, or by display name alone, as a rep (§0.163) — or, when nothing matches, provisions one (§0.108: a rep, or a fresh org's first Admin). **`PUT ?me=true`** is self-only and keeps the stored role.
 - **Quota is DB-only** (not in Clerk metadata) — the one field Sync can't restore; needs manual re-key or Neon PITR.
 
 ## 6. State Management
@@ -851,7 +851,7 @@ Two traps beyond the clipping rule above, both hit by `TimeDropdown` this sessio
 | User (Sales Rep) | Own data only, create & edit |
 | ReadOnly | View only, no changes |
 
-Role is stored in Clerk `publicMetadata.role` and extracted in `auth.mjs`. It flows into the app as `userRole` via context.
+The role is the one on the caller's row in the active org's roster (`users.role`), read by `auth.mjs` on every request (`_callerRole.mjs`, §0.163, §18b56). It flows into the app as `userRole` via context — the client takes it from `users?me=true` for the active org.
 
 ```js
 const isAdmin = userRole === 'Admin';
@@ -863,20 +863,20 @@ const canSeeAll = isAdmin || isManager; // exposed on context
 by `auth.mjs`, so every endpoint still imports it from there). Six strings,
 `Object.freeze`d, with `isAppRole()` and `ROLE_OPTIONS` — the picker words, where
 the stored value `'User'` reads "Sales Rep". Every path that writes a role — admin
-create and invite in `users.mjs`, `user-role.mjs`, the Clerk sync — validates
+create and invite in `users.mjs` (Admin-only above a rep, §0.163), `user-role.mjs`, the first-load link — validates
 against it; the pickers (`UsersDetail`, `UserModal`), field-level security and
 `scripts/check-clerk-roles.mjs` import it. There were **eight** lists before 26 Aug
 (§18b24) and **five** again by 30 Sep (§0.151); each one that is not this one will
-drift. (`invite-user.mjs` writes a role WITHOUT `isAppRole` and nothing in the app
-calls it — flagged for deletion, state §9.)
+drift. (`invite-user.mjs`, which wrote a role WITHOUT `isAppRole` and which nothing
+called, is deleted — §0.163.)
 
 **Clerk carries a second vocabulary and it is not this one.** `org:admin` /
 `org:member` are *organization membership* roles: they govern who administers the
 Clerk org, not what anyone may do in Accelerep. `users-sync.mjs` used to fall
 back to them, stripped of the `org:` prefix, which is where the `member` and
-`admin` badges in the Users list came from. A member with no `publicMetadata.role`
-is a **rep** — that is what `auth.mjs` decides — and the sync now says the same
-instead of inventing a third answer, reporting the divergence as `roleDrift`.
+`admin` badges in the Users list came from. Since §0.163 the sync reads no role at
+all — the role is the roster row's, per org — and a new row is a **rep**; the one
+use of `org:admin` is a fresh org's first Admin (§18b56).
 
 ### Server-side enforcement (shipped — client-side `canEdit` is UX only, never security)
 
@@ -918,11 +918,11 @@ A **Dispatcher** runs field-service scheduling and reads the CRM to see what was
 **`role` must never be taken from a request body into the `users` table.** It was, via `sanitize()`, on every write — so a self-service profile save that omitted `userType` silently demoted the caller to `'User'`, and admin role edits updated the roster while authorization kept reading the old Clerk value.
 
 - `users.mjs` passes role explicitly through `withRole(clean, known)`; `roleOf(id)` preserves the stored value on update.
-- Only three paths set one: **invite** (same role goes to Clerk with the invitation), **admin create**, and **`user-role.mjs`** (writes Clerk first, mirror second).
+- The paths that set one: an Admin's **invite** or **create** (a Manager adds reps only), the **first-load link** (an invited row's role, by email), a **first sign-in's new row** (a rep, or a fresh org's first Admin), and **`user-role.mjs`** — the one path that changes an existing row's role. Clerk is not written (§0.163).
 - **`users-sync?check=true`** is a dry run — same reconciliation, no writes, no audit row — used to show an out-of-sync banner on Settings → Users. Reconciling silently is not enough; drift needs to be *visible*, or it accumulates unnoticed.
 - Deleting a roster row does **not** remove the Clerk account, so Sync will recreate it. Removing access means removing the user from the organization in Clerk.
 
-`auth.mjs` reads `publicMetadata.role` on every request; the `users` table is a mirror. **Changing a role means writing to Clerk** — `user-role.mjs` (Admin-only) does this, then updates the mirror best-effort, and audits `user.role.changed`. It verifies org membership first, because Clerk user ids are global and an Admin of one tenant must not be able to rewrite a role in another. It also refuses self-demotion from Admin.
+`auth.mjs` reads the role from the caller's row in the active org's roster on every request (`_callerRole.mjs`, §0.163) — the `users` table IS the role, per org. **Changing a role means changing that one row** — `user-role.mjs` (Admin-only) does it, counts the row it wrote, and audits `user.role.changed`; it confirms a linked person is still a member of the org first, and refuses self-demotion from Admin. It used to write Clerk's user-level `publicMetadata.role` — one value for every org — so a change in one org changed the person in every org (§0.153).
 
 Before this existed, the Settings role selector wrote only the mirror and changed nothing the server enforced.
 
@@ -3701,3 +3701,15 @@ through `dbFetch`.
 5. **Anything above that view that can save — a dirty flag, a registered save — is reset when the active org changes.**
 6. **Say when the state did not load** — a toast, and the view says why it will not open; never the defaults dressed as the org's settings.
 7. **Test it with the real hook**: tests/settings-org-load.test.mjs runs the file itself against stand-ins for React and the fetch layer — a late answer after a switch, a failed load, a same-org reload, a save that lands after a switch.
+
+## 18b56. A Role Is Per Org: The Roster Row Is The One Source — Nothing Reads Clerk's User-Level Role (hard rule)
+
+**Origin (§0.163, 3 Oct 2026 — the cross-org audit's per-person role, HIGH).** The role the server enforced was Clerk's USER-level `publicMetadata.role`: one value for every org a person belongs to. An Admin anywhere was an Admin everywhere they were a member — and there could mint an API key, point a webhook or the audit stream at their own server, download the backup or wipe the roster; one org could make another org's only Admin read-only; Ryan's mistaken Read only, set in QA, reached two more orgs (§0.153). Half the server already read the per-org `users.role`, so a person had two roles.
+
+1. **The role is the one on the person's row in that org's roster** — `users.role`, one row per (org_id, clerk_user_id) by a unique index. `verifyAuth` reads it for the org the token names (`_callerRole.mjs`); the client takes it from `users?me=true` for the active org, and only while that profile is the active org's (§18b55). A Manager's reps come from the same row.
+2. **Nothing reads a role, or a Manager's reps, from Clerk's user-level metadata** — tests/org-roles.test.mjs scans every function and client file for it.
+3. **No row is a rep, and "no row" is never cached** — it is the moment before the first-load link or provisioning.
+4. **Only an Admin grants a role.** `user-role.mjs` is the one path that changes an existing row's role; an invite or a create above a rep is Admin-only; a create naming an existing row keeps its role. Clerk is not written.
+5. **A row's role reaches a person only by the invited EMAIL** — a display-name match links as a rep.
+6. **A new row is a rep. The one bootstrap is a fresh org's first Admin:** the org's Clerk admin (`org:admin` in the verified token), while the org has no Admin row at all. Clerk's org role grants nothing else.
+7. **Test it with the real `verifyAuth`** against the database — tests/integration/org-roles.itest.mjs, the Clerk SDK a stand-in that records writes (there must be none) — and give the suite its own org namespace: sharing one, two suites delete each other's rows in the full run.

@@ -30,8 +30,9 @@ import { APP_ROLES, CRM_WRITE_ROLES, isReadOnly, isTechnician, isDispatcher } fr
 // the wrong layer (18b22). Each refusal says which rule refused: the body is the
 // only way to tell them apart.
 //
-// DEPLOY NOTE: this can lock out a user whose Clerk publicMetadata.role holds a
-// non-canonical string. Run `node --env-file=.env scripts/check-clerk-roles.mjs`
+// DEPLOY NOTE: this can lock out a user whose ROLE holds a non-canonical string —
+// since §0.163 the role on their row in the org's roster (it was Clerk's
+// publicMetadata.role). Run `node --env-file=.env scripts/check-mirror-roles.mjs`
 // (read-only) BEFORE deploying and fix anyone it names.
 //
 // Usage:

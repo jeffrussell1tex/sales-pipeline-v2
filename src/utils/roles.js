@@ -66,12 +66,14 @@ export function crmReadScope(role) {
 //   role               the caller's
 //   callerId           their users.id (usr_…), or null when they have no roster row
 //   unassignedVisible  the org's switch (settings.extra.unassignedDealsVisibleToReps)
-//   managedReps        a Manager's reps, as DISPLAY NAMES from Clerk
+//   managedReps        a Manager's reps, as DISPLAY NAMES, from their row in this
+//                      org's roster (profile.managedReps — §0.163; it was Clerk's
+//                      user-level metadata, one list for every org)
 // 'own' keys on the OWNER ID — a display name is not an identity (a renamed rep
 // vanished from her own pipeline; two reps sharing a name saw each other's). An
 // unassigned deal is the switch's call, decided BEFORE the owner comparison: a
 // caller who cannot be resolved (null) must not meet an unassigned deal (null) in
-// `null === null` (18b22). A Manager whose reps are named in Clerk is narrowed to
+// `null === null` (18b22). A Manager whose reps are named on their row is narrowed to
 // their deals and the unassigned ones — still by NAME, until managedReps holds ids.
 export function dealVisibleTo(deal, ctx = {}) {
     if (!deal) return false;
@@ -113,25 +115,3 @@ export const canUseDispatch = (role, extra) => dispatchAccessOf(role, extra) !==
 // value that is not here — 'User', an absent role, a legacy string — counts,
 // as it did before this list existed.
 export const NON_REP_ROLES = Object.freeze(['Admin', 'Manager', 'ReadOnly', 'Technician', 'Dispatcher']);
-
-// What "Sync from Clerk" (users-sync.mjs) writes into the roster's role column
-// for a member whose Clerk role is `clerkRole`, the row holding `storedRole`:
-//   - a role this code knows: Clerk's. Clerk is the source of truth.
-//   - no role in Clerk: 'User', which is what verifyAuth decides
-//     (`meta.role || 'User'`).
-//   - a value this code does not know, that the row ALREADY holds: kept. Only a
-//     version of this app that knew the role could have written it there.
-//   - any other value (a typo in the Clerk dashboard, a legacy string, a member
-//     with no row yet): 'User', as before.
-// The third case is the 1 Oct 2026 fix (state §0.153). The dev site, a deploy
-// older than the Dispatcher role on the same database and the same Clerk, ran
-// a sync and the Dispatcher's row became a "Sales Rep"; the role was then
-// "corrected" in Clerk, which holds one role per person for every org they are
-// in. The fourth case keeps 'User' on purpose: the Monday team digest
-// (digest.mjs) and the renewal alerts (pipeline-alerts.mjs) pick recipients
-// from this column, so a mistyped demotion must not leave an Admin row behind.
-export function mirrorRoleOf(clerkRole, storedRole) {
-    if (isAppRole(clerkRole)) return clerkRole;
-    if (clerkRole && clerkRole === storedRole) return storedRole;
-    return 'User';
-}

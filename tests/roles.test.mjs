@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
     APP_ROLES, isAppRole, ROLE_OPTIONS, canSeeAll, canEditCrm, CRM_WRITE_ROLES, crmReadScope,
-    NON_REP_ROLES, isDispatcher, isTechnician, mirrorRoleOf, dealVisibleTo,
+    NON_REP_ROLES, isDispatcher, isTechnician, dealVisibleTo,
 } from '../src/utils/roles.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -59,28 +59,9 @@ test('NON_REP_ROLES: every role but a sales rep, frozen — the rosters count a 
     assert.equal(isTechnician('Technician'), true);
 });
 
-// ── the roster mirror: what "Sync from Clerk" writes (§0.153) ───────────────
-
-test('mirrorRoleOf: a role we know comes from Clerk; no role is a rep; a role newer than this code is kept; anything else is a rep', () => {
-    for (const r of APP_ROLES) for (const stored of ['User', 'Admin', 'Dispatcher', undefined]) {
-        assert.equal(mirrorRoleOf(r, stored), r, `${r} in Clerk is mirrored over ${String(stored)}`);
-    }
-    for (const none of [undefined, null, '']) {
-        assert.equal(mirrorRoleOf(none, 'Dispatcher'), 'User', 'no role in Clerk is a Sales Rep: what verifyAuth decides');
-        assert.equal(mirrorRoleOf(none, none), 'User', 'nothing in either place is a rep, never an empty role');
-    }
-    // 1 Oct 2026: the dev site, older than the Dispatcher role, synced and the
-    // Dispatcher became a "Sales Rep". A value this code does not know that the
-    // row ALREADY holds was written by a version that did know it, so it stays.
-    assert.equal(isAppRole('Estimator'), false, 'the fixture is not a role this code knows');
-    assert.equal(mirrorRoleOf('Estimator', 'Estimator'), 'Estimator', 'a role newer than the running code is left alone');
-    // A value the row does NOT hold is a typo, a legacy string or a new member: a
-    // rep, as before. Never a kept Admin: the Monday team digest and the renewal
-    // alerts pick their recipients from this column.
-    assert.equal(mirrorRoleOf('admin', 'Admin'), 'User', 'a mistyped demotion does not keep the Admin row (the team digest reads it)');
-    assert.equal(mirrorRoleOf('Read Only', 'Manager'), 'User');
-    assert.equal(mirrorRoleOf('Estimator', undefined), 'User', 'a NEW row: a rep, so an Admin can open it and set a real role');
-});
+// mirrorRoleOf is gone (§0.163): the sync no longer reads or writes a role — the
+// role is the row's, per org. tests/integration/org-roles.itest.mjs proves the sync
+// leaves a row's role alone and makes a new member a rep.
 
 // ── the server wiring ────────────────────────────────────────────────────────
 
@@ -103,7 +84,7 @@ test('dealVisibleTo: a Technician none; a rep her own by owner id, the unassigne
     for (const role of ['Admin', 'Dispatcher', 'Manager']) for (const d of [mine, theirs, none]) assert.equal(dealVisibleTo(d, { role }), true, role);
     const mgr = { role: 'Manager', managedReps: ['Me'] };
     assert.equal(dealVisibleTo(mine, mgr), true);
-    assert.equal(dealVisibleTo(theirs, mgr), false, 'a Manager narrowed to the reps named in Clerk');
+    assert.equal(dealVisibleTo(theirs, mgr), false, 'a Manager narrowed to the reps named on their row in this org (§0.163)');
     assert.equal(dealVisibleTo(none, mgr), true, 'and the unassigned');
     assert.equal(dealVisibleTo(theirs, { role: 'Admin', managedReps: ['Me'] }), true, 'only a Manager is narrowed');
     assert.equal(dealVisibleTo(null, { role: 'Admin' }), false);

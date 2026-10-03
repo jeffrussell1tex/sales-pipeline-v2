@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs tests/settings-org-load.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs tests/settings-org-load.test.mjs tests/org-roles.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -396,8 +396,8 @@ const mutations = [
 
     ['users.mjs: acceptance rewrites the PRIMARY KEY again (the orphaning defect)',
         'netlify/functions/users.mjs',
-        '                                clerkUserId: userId,\n                                role:        realRole,',
-        '                                id: userId,\n                                role:        realRole,'],
+        '                                clerkUserId: userId,\n                                role:        linkRole,',
+        '                                id: userId,\n                                role:        linkRole,'],
 
     ['bulkClient: chunking disabled',
         'src/utils/bulkClient.js', 'export const BULK_CHUNK = 400;', 'export const BULK_CHUNK = 100000;'],
@@ -701,9 +701,9 @@ const mutations = [
         "body: JSON.stringify({ error: 'Forbidden: unrecognised role. Ask an administrator to reset your role.' }),",
         "body: JSON.stringify({ error: 'Forbidden: read-only role' }),"],
 
-    ['role: users-sync falls back to the Clerk ORG membership role again',
+    ['role: users-sync falls back to Clerk\'s roles again (user-level, then the ORG membership role)',
         'netlify/functions/users-sync.mjs',
-        "            const role = mirrorRoleOf(rawRole, existing?.role);",
+        "            const role = 'User';",
         "            const role = cu.publicMetadata?.role || member.role?.replace('org:', '') || 'User';"],
 
     ['role: flatten() spreads the profile blob last, so userType overrides the column',
@@ -1746,16 +1746,16 @@ const mutations = [
     // ── §0.108: first sign-in provisioning of the roster row ──
     ['roster: the self-profile GET no longer provisions a missing row (a fresh workspace stays unowned)',
         'netlify/functions/users.mjs',
-        '                if (!row) row = await ensureRosterRow({ clerkUserId: userId, orgId, userRole, clerkUser });',
+        '                if (!row) row = await ensureRosterRow({ clerkUserId: userId, orgId, clerkUser, orgRole: auth.orgRole });',
         '                /* no provisioning */'],
     ['roster: an integration request from an unrostered user records no name again',
         'netlify/functions/integration-requests.mjs',
-        '        const made = await ensureRosterRow({ clerkUserId, orgId });',
+        '        const made = await ensureRosterRow({ clerkUserId, orgId, orgRole });',
         '        const made = null;'],
-    ['roster: the provisioned role is copied from Clerk unvalidated',
+    ['roster: a new row takes Clerk\'s user-level role again (an Admin of one org carried into the next)',
         'netlify/functions/_lib.mjs',
-        "        const role = ok(rawRole) ? rawRole : ok(userRole) ? userRole : 'User';",
-        "        const role = rawRole || userRole || 'User';"],
+        "        let role = 'User';",
+        "        let role = cu?.publicMetadata?.role || 'User';"],
 
     // ── §0.107: check:fnscope — every name a function file reads is bound ──
     ['fnscope: the scanner stops reporting (every read counts as bound)',
@@ -2820,10 +2820,6 @@ const mutations = [
         "        automation:'admin',",
         ""],
 
-    ["audit coverage: an invite is sent and the log never says so — the file still audits nothing after the sendEmail",
-        "netlify/functions/invite-user.mjs",
-        "await auditAs(orgId, userId, { action: 'user.invited',",
-        "void ({ action: 'user_invited',"],
 
     // ── §0.146 money in the app's face on the Quotes tab ─────────────────────
     ["quotes font: the catalog's list price goes back to monospace (Jeff's circled column)",
@@ -3055,36 +3051,10 @@ const mutations = [
         '                repsCanUseDispatch:   row.extra?.repsCanUseDispatch    ?? false,',
         '                // (dropped)'],
 
-    // ── the roster mirror: what "Sync from Clerk" writes (§0.153) ───────────
-    ['roster: Sync turns a role newer than the running code into a Sales Rep again (the 1 Oct Dispatcher)',
-        'src/utils/roles.js',
-        "    if (clerkRole && clerkRole === storedRole) return storedRole;",
-        "    if (false) return storedRole;"],
+    // (§0.163: the roster mirror's rule, mirrorRoleOf, is gone with its two mutants.)
 
-    ['roster: Sync keeps the row whenever Clerk holds an unknown value (a mistyped demotion keeps the Admin row)',
-        'src/utils/roles.js',
-        "    if (clerkRole && clerkRole === storedRole) return storedRole;",
-        "    if (clerkRole && storedRole) return storedRole;"],
-
-    ['roster: a member with no role in Clerk keeps the stored role (verifyAuth says Sales Rep)',
-        'src/utils/roles.js',
-        "    if (clerkRole && clerkRole === storedRole) return storedRole;",
-        "    if (!clerkRole && storedRole) return storedRole;\n    if (clerkRole && clerkRole === storedRole) return storedRole;"],
-
-    ['roster: the empty-role guard goes (no role anywhere mirrors as no role)',
-        'src/utils/roles.js',
-        "    if (clerkRole && clerkRole === storedRole) return storedRole;",
-        "    if (clerkRole === storedRole) return storedRole;"],
-
-    ['roster: users-sync coerces every unknown role to Sales Rep again',
-        'netlify/functions/users-sync.mjs',
-        "            const role = mirrorRoleOf(rawRole, existing?.role);",
-        "            const role = isAppRole(rawRole) ? rawRole : 'User';"],
-
-    ['roster: the Users screen drops the role report from the sync message',
-        'src/Tabs/settings/people/UsersDetail.jsx',
-        "            if (c.roleDrift > 0) msg += ` · ${c.roleDrift} without a recognised role in Clerk`;",
-        "            // (dropped)"],
+    // (§0.163: mirrorRoleOf, the sync's role coercion and its role report are
+    // gone — the sync neither reads nor writes a role; their mutants with them.)
 
     // ── the QA org seed (§0.153) ────────────────────────────────────────────
     ['qa seed: a deal names a pipeline the org does not define (the Test org\'s orphans)',
@@ -3866,6 +3836,100 @@ const mutations = [
         'src/Tabs/SalesManagerTab.jsx',
         "        if (!settingsLoaded) {",
         "        if (false) {"],
+
+    // ── §0.163 — a role is per org: the roster row is the one source ──
+    // Caught by tests/org-roles.test.mjs (the scans and THE GUARD), with
+    // calendar-return, role-vocabulary and roster-provision. The behaviour runs
+    // against the test database in tests/integration/org-roles.itest.mjs.
+    ['org role: the role lookup drops the org — a person\'s row in another org decides',
+        'netlify/functions/_callerRole.mjs',
+        "        .where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)))",
+        "        .where(eq(users.clerkUserId, clerkUserId))"],
+
+    ['org role: "no row" is cached — the caller stays a rep for 30 s after the link',
+        'netlify/functions/auth.mjs',
+        "        if (row) {\n            authCache.set(token, { result, ts: Date.now() });",
+        "        if (true) {\n            authCache.set(token, { result, ts: Date.now() });"],
+
+    ['org role: a roster that cannot be read is treated as a rep instead of refused',
+        'netlify/functions/auth.mjs',
+        "            return { error: 'The service is unavailable — try again shortly.', status: 503 };",
+        "            row = null;"],
+
+    ['org role: the token\'s org role is not handed on (no first Admin, ever)',
+        'netlify/functions/auth.mjs',
+        "        const orgRole     = payload.o?.rol ? 'org:' + payload.o.rol : (payload.org_role || null);",
+        "        const orgRole     = null;"],
+
+    ['org role: the first-Admin rule fires in an org that already has an Admin',
+        'netlify/functions/_lib.mjs',
+        "            if (!anAdmin) role = 'Admin';",
+        "            role = 'Admin';"],
+
+    ['org role: any Clerk member, not the org admin, becomes the first Admin',
+        'netlify/functions/_lib.mjs',
+        "        if (orgRole === 'org:admin') {",
+        "        if (orgRole) {"],
+
+    ['org role: the first-load link hands over a row\'s role on a NAME match',
+        'netlify/functions/users.mjs',
+        "                    const linkRole = matchedByEmail && isAppRole(row.role) ? row.role : 'User';",
+        "                    const linkRole = isAppRole(row.role) ? row.role : 'User';"],
+
+    ['org role: a Manager invites an Admin',
+        'netlify/functions/users.mjs',
+        "                if (userRole !== 'Admin' && invites.some((i) => (i.role || 'User') !== 'User')) {",
+        "                if (false) {"],
+
+    ['org role: a Manager creates an Admin',
+        'netlify/functions/users.mjs',
+        "            if (createRole !== 'User' && userRole !== 'Admin') {",
+        "            if (false) {"],
+
+    ['org role: a create naming an existing row rewrites its role',
+        'netlify/functions/users.mjs',
+        "            const { id, role: _keepStoredRole, ...updateData } = clean;",
+        "            const { id, ...updateData } = clean;"],
+
+    ['org role: the Clerk invitation carries the role again (a second copy)',
+        'netlify/functions/users.mjs',
+        "                            publicMetadata: {\n                                team:      invite.team      || null,",
+        "                            publicMetadata: {\n                                role:      invite.role      || 'User',\n                                team:      invite.team      || null,"],
+
+    ['org role: user-role writes Clerk\'s user-level role again (every org at once)',
+        'netlify/functions/user-role.mjs',
+        "        const priorRole = target.role || 'User';",
+        "        const priorRole = target.role || 'User'; await (await import('@clerk/backend')).createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY }).users.updateUser(target.clerkUserId, { publicMetadata: { role } });"],
+
+    ['org role: a role change that saved nothing reports success',
+        'netlify/functions/user-role.mjs',
+        "            return { statusCode: 500, headers, body: JSON.stringify({ error: 'The role was not saved. Try again.' }) };",
+        "            /* best effort */"],
+
+    ['org role: the MFA panel labels people by Clerk\'s user-level role again',
+        'netlify/functions/clerk-mfa-status.mjs',
+        "            const role    = roleIn.get(user.id) || 'User';",
+        "            const role    = user.publicMetadata?.role || 'User';"],
+
+    ['org role (client): the last org\'s role stays on screen in the next org',
+        'src/App.jsx',
+        "    const roleKnown = !!myProfile && !!activeOrgId && myProfileOrgId === activeOrgId;",
+        "    const roleKnown = !!myProfile;"],
+
+    ['org role (client): a late profile answer for the org the user left is taken',
+        'src/App.jsx',
+        "        if (prevOrgIdRef.current !== meOrgId) return;",
+        "        if (false) return;"],
+
+    ['org role (client): the role is read from Clerk\'s user-level metadata again',
+        'src/App.jsx',
+        "    const userRole  = (roleKnown && myProfile.role) || 'User';",
+        "    const userRole  = clerkUser?.publicMetadata?.role || 'User';"],
+
+    ['org role (client): the calendar return decides "Admin?" before the role is known',
+        'src/App.jsx',
+        "        if (!clerkUser || !roleKnown || calReturnHandled.current) return;",
+        "        if (!clerkUser || calReturnHandled.current) return;"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

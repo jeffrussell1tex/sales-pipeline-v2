@@ -524,17 +524,23 @@ export async function assertOwnership({ table, entity, id, orgId, userId, userRo
 // request recorded no name and everything they created was unowned (an
 // unresolvable caller stamps null, §18b20). Now a signed-in member of an org
 // with no roster row gets one, from Clerk's own record, in the shape
-// users-sync.mjs creates: our usr_ id, the Clerk id in its own column, the
-// role VALIDATED (Clerk's publicMetadata.role when it is one of ours, else the
-// verified role, else 'User'), profile { status, userType }.
+// users-sync.mjs creates: our usr_ id, the Clerk id in its own column, a rep's
+// role (below), profile { status, userType }.
+//
+// THE ROLE OF A NEW ROW (state §0.163, guide §18b56). Never Clerk's user-level
+// role: that is one value for every org a person is in, and a fresh org's row
+// taking it carried an Admin of one org into the next. A rep — except the one
+// bootstrap: in an org with NO Admin row at all, a caller the verified token
+// names this org's Clerk admin (`orgRole` 'org:admin' — who administers the
+// Clerk organization) becomes its first Admin. After that only an Admin grants
+// a role (user-role.mjs).
 //
 // Idempotent: an existing row by Clerk id, else by email in this org, is
 // returned untouched — LINKING a pending (invited) row to a Clerk identity
 // stays users.mjs's job. `clerkUser` may be handed in by a caller that has
-// already fetched it; otherwise it is fetched. isAppRole is imported lazily
-// so a test that mocks auth.mjs without it still loads this module. Never
-// throws; null when Clerk cannot be read.
-export async function ensureRosterRow({ clerkUserId, orgId, userRole, clerkUser } = {}) {
+// already fetched it; otherwise it is fetched. Never throws; null when Clerk
+// cannot be read.
+export async function ensureRosterRow({ clerkUserId, orgId, clerkUser, orgRole } = {}) {
     if (!clerkUserId || !orgId) return null;
     try {
         const [byId] = await db.select().from(users).where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)));
@@ -549,10 +555,12 @@ export async function ensureRosterRow({ clerkUserId, orgId, userRole, clerkUser 
             const [byEmail] = await db.select().from(users).where(and(eq(users.email, email), eq(users.orgId, orgId)));
             if (byEmail) return byEmail;   // an invited row: users.mjs ?me=true links it
         }
-        const { isAppRole } = await import('./auth.mjs');
-        const ok = (r) => typeof isAppRole === 'function' && isAppRole(r);
-        const rawRole = cu?.publicMetadata?.role;
-        const role = ok(rawRole) ? rawRole : ok(userRole) ? userRole : 'User';
+        let role = 'User';
+        if (orgRole === 'org:admin') {
+            const [anAdmin] = await db.select({ id: users.id }).from(users)
+                .where(and(eq(users.orgId, orgId), eq(users.role, 'Admin'))).limit(1);
+            if (!anAdmin) role = 'Admin';
+        }
         const name = ((cu?.firstName || '') + ' ' + (cu?.lastName || '')).trim() || email || clerkUserId;
         const [row] = await db.insert(users).values({
             id: 'usr_' + randomUUID(), clerkUserId, orgId, name, email: email || `${clerkUserId}@no-email.invalid`, role,

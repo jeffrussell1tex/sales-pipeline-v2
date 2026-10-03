@@ -94,7 +94,9 @@ test('App.jsx reads the return once the role is known, cleans the URL, and lands
     assert.ok(s.includes("import { readCalendarReturn } from './utils/calendarReturn.js';"));
     assert.ok(s.includes('        const r = readCalendarReturn(window.location.search);'));
     assert.ok(s.includes("        window.history.replaceState(null, '', window.location.pathname);"), 'a refresh must not replay the landing');
-    assert.ok(s.includes("        const adminHere = (clerkUser.publicMetadata?.role || 'User') === 'Admin';"), 'the role is read from Clerk, not the one-render-behind state');
+    assert.ok(s.includes('        if (!clerkUser || !roleKnown || calReturnHandled.current) return;'), "it waits for the caller's role in THIS org (the profile's — §0.163)");
+    assert.ok(s.includes("        const adminHere = userRole === 'Admin';"), "the role in this org — never Clerk's user-level metadata");
+    assert.ok(s.includes('    }, [clerkUser, roleKnown]); // eslint-disable-line react-hooks/exhaustive-deps'), 'and it runs again when the role becomes known');
     assert.ok(s.includes("            setSettingsOpenPanel(r.from === 'apps' ? 'apps' : 'company-calendar');"));
     assert.ok(s.includes("            setActiveTab('settings');"));
     assert.ok(s.includes('            setShowProfilePanel(true);'), 'a User lands in the profile panel');
