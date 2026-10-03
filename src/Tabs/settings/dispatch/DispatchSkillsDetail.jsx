@@ -1,5 +1,6 @@
 // settings/dispatch/DispatchSkillsDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
@@ -53,12 +54,7 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
     };
 
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const SKILL_CATS = ['Field','Electrical','Plumbing','HVAC','Solar','Role','Other'];
     const COLORS = ['#7a5a3c','#3a5a7a','#b87333','#4d6b3d','#9c3a2e','#7a6a48','#2a2622'];

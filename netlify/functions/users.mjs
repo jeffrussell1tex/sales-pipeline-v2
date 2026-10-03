@@ -51,7 +51,9 @@ export const handler = async (event) => {
 
     const auth = await verifyAuth(event);
     if (auth.error) {
-        return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
+        // The code travels with it: 'deactivated' is how the app knows to show
+        // its no-access page rather than a screen of failed loads (§0.164).
+        return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error, ...(auth.code ? { code: auth.code } : {}) }) };
     }
 
     const { userId, orgId, userRole } = auth;
@@ -135,8 +137,9 @@ export const handler = async (event) => {
     });
 
     // Flatten a DB row back into the shape the frontend expects
-    // Attach a role explicitly. `known` should come from Clerk (sync/invite) or
-    // from the existing row — never from a client request body.
+    // Attach a role explicitly. `known` is the stored row's role on an update;
+    // on a create or an invitation it is the role the request names, and only
+    // an Admin names one above Sales Rep (state §0.163).
     const withRole = (clean, known) => (known ? { ...clean, role: known } : clean);
 
     // Preserve the stored role when updating an existing row, so an update that
@@ -154,7 +157,7 @@ export const handler = async (event) => {
     // the blob silently overrode the column on every response. Two answers to one
     // question shipped to the client on every load:
     //
-    //   role      users.role          maintained by user-role.mjs and the Clerk sync
+    //   role      users.role          maintained by user-role.mjs (and, before §0.163, the Clerk sync)
     //   userType  profile.userType    written once at row creation and never again
     //
     // Nothing updated the blob copy — not a role change, not a sync — so it was
@@ -280,17 +283,21 @@ export const handler = async (event) => {
                     // one value for every org. Validated: a value that is not one
                     // of ours authorizes nothing, so it is not carried over.
                     const linkRole = matchedByEmail && isAppRole(row.role) ? row.role : 'User';
+                    // A row an Admin DEACTIVATED stays off when its person first
+                    // signs in (state §0.164): linking it must not switch it back
+                    // on — an invited row (status Invited) is the one turned on here.
+                    const stillOff = row.profile?.status === 'Deactivated';
                     try {
                         await db.update(users)
                             .set({
                                 clerkUserId: userId,
                                 role:        linkRole,
-                                active:      true,
-                                profile:     { ...(row.profile || {}), status: 'Active', userType: linkRole },
+                                active:      !stillOff,
+                                profile:     { ...(row.profile || {}), status: stillOff ? 'Deactivated' : 'Active', userType: linkRole },
                                 updatedAt:   new Date(),
                             })
                             .where(and(eq(users.id, row.id), eq(users.orgId, orgId)));
-                        row = { ...row, clerkUserId: userId, role: linkRole, active: true };
+                        row = { ...row, clerkUserId: userId, role: linkRole, active: !stillOff };
                         // The caller cache keys on clerkUserId and has just been proved
                         // wrong by this very write: it holds a 30s 'no roster row' answer
                         // for this identity, which fails CLOSED — the user would own
@@ -306,6 +313,11 @@ export const handler = async (event) => {
                 // now, in the shape users-sync.mjs creates, so the user owns what they
                 // create and is named on it from this request on.
                 if (!row) row = await ensureRosterRow({ clerkUserId: userId, orgId, clerkUser, orgRole: auth.orgRole });
+                // The row just linked was deactivated: no access, as from the next
+                // request on (verifyAuth) — said now, not after a screen of failures.
+                if (row && row.active === false && row.profile?.status === 'Deactivated') {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Your access to this organization has been turned off. Ask an Admin of the organization to restore it.', code: 'deactivated' }) };
+                }
             }
 
             return { statusCode: 200, headers, body: JSON.stringify({ user: row ? flatten(row) : null }) };
@@ -629,6 +641,19 @@ export const handler = async (event) => {
             if (createRole !== 'User' && userRole !== 'Admin') {
                 return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can add someone with a role other than Sales Rep.' }) };
             }
+            // A create never overwrites a row (state §0.164). sanitize() builds a
+            // FULL row, so a body naming an id already in this org wiped what it
+            // lacked — the Clerk link, team, quota, the profile — and an unlinked
+            // row is no role at all to the server (a rep until the next sign-in
+            // relinks it). Found when §0.163's suite did exactly that to a
+            // Manager. Changing a member is PUT, which merges first.
+            if (data.id) {
+                const [taken] = await db.select({ id: users.id }).from(users)
+                    .where(and(eq(users.id, data.id), eq(users.orgId, orgId)));
+                if (taken) {
+                    return { statusCode: 409, headers, body: JSON.stringify({ error: 'That member already exists — edit them instead.' }) };
+                }
+            }
             try {
                 const result = await upsertUser(withRole(sanitize({ ...data, id: data.id || newUserId() }), createRole));
                 if (!result) {
@@ -656,9 +681,9 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
             try {
-                // Role is preserved, never taken from the body: writing it here
-                // would change the roster without changing Clerk, which is what
-                // auth.mjs actually reads. Role changes go through user-role.mjs.
+                // Role is preserved, never taken from the body: the role on the row
+                // is what the server enforces (state §0.163), and user-role.mjs is
+                // the one path that changes it.
                 const merged = await mergeForUpdate(data);
                 const storedRole = await roleOf(data.id) || 'User';
                 // The blob's userType copy follows the column (§0.109): a body
@@ -668,10 +693,26 @@ export const handler = async (event) => {
                 // First day on a team (state §0.82): when profile.teamId changes, stamp
                 // team_joined_at — the floor a team coaching note is read against.
                 // Leaving a team clears it; an unchanged team leaves the column alone.
-                const [before] = await db.select({ profile: users.profile }).from(users)
+                const [before] = await db.select({ profile: users.profile, active: users.active, clerkUserId: users.clerkUserId }).from(users)
                     .where(and(eq(users.id, data.id), eq(users.orgId, orgId)));
                 const prevTeam = before?.profile?.teamId || null, nextTeam = clean.profile?.teamId || null;
                 if (before && prevTeam !== nextTeam) clean.teamJoinedAt = nextTeam ? new Date() : null;
+                // ACCESS (state §0.164 — Jeff: "Deactivated means no access").
+                // Deactivating takes away every right in this org, so it is an
+                // Admin's to give and take back — and never your own (a lockout).
+                // The status says WHY a row is off, so the first-load link can tell
+                // a deactivated row from an invitation not yet accepted.
+                const wasActive = !before || before.active !== false;
+                const nowActive = clean.active !== false;
+                if (before && wasActive !== nowActive) {
+                    if (userRole !== 'Admin') {
+                        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can deactivate or reactivate a member.' }) };
+                    }
+                    if (!nowActive && before.clerkUserId && before.clerkUserId === userId) {
+                        return { statusCode: 400, headers, body: JSON.stringify({ error: 'You cannot deactivate yourself. Ask another Admin.' }) };
+                    }
+                    clean.profile = { ...clean.profile, status: nowActive ? (before.clerkUserId ? 'Active' : 'Invited') : 'Deactivated' };
+                }
                 const result = await upsertUser(clean);
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };

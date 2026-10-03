@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 3, 2026 · rules current through **§18b56** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 3, 2026 · rules current through **§18b57** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -920,7 +920,7 @@ A **Dispatcher** runs field-service scheduling and reads the CRM to see what was
 - `users.mjs` passes role explicitly through `withRole(clean, known)`; `roleOf(id)` preserves the stored value on update.
 - The paths that set one: an Admin's **invite** or **create** (a Manager adds reps only), the **first-load link** (an invited row's role, by email), a **first sign-in's new row** (a rep, or a fresh org's first Admin), and **`user-role.mjs`** — the one path that changes an existing row's role. Clerk is not written (§0.163).
 - **`users-sync?check=true`** is a dry run — same reconciliation, no writes, no audit row — used to show an out-of-sync banner on Settings → Users. Reconciling silently is not enough; drift needs to be *visible*, or it accumulates unnoticed.
-- Deleting a roster row does **not** remove the Clerk account, so Sync will recreate it. Removing access means removing the user from the organization in Clerk.
+- Deleting a roster row does **not** remove the Clerk account, so Sync — or the person's next sign-in — recreates it, as a rep. **Removing access is DEACTIVATE** (§0.164, §18b56.8): the row and its history stay, and every request in that org is refused; or remove the person from the organization in Clerk.
 
 `auth.mjs` reads the role from the caller's row in the active org's roster on every request (`_callerRole.mjs`, §0.163) — the `users` table IS the role, per org. **Changing a role means changing that one row** — `user-role.mjs` (Admin-only) does it, counts the row it wrote, and audits `user.role.changed`; it confirms a linked person is still a member of the org first, and refuses self-demotion from Admin. It used to write Clerk's user-level `publicMetadata.role` — one value for every org — so a change in one org changed the person in every org (§0.153).
 
@@ -3713,3 +3713,13 @@ through `dbFetch`.
 5. **A row's role reaches a person only by the invited EMAIL** — a display-name match links as a rep.
 6. **A new row is a rep. The one bootstrap is a fresh org's first Admin:** the org's Clerk admin (`org:admin` in the verified token), while the org has no Admin row at all. Clerk's org role grants nothing else.
 7. **Test it with the real `verifyAuth`** against the database — tests/integration/org-roles.itest.mjs, the Clerk SDK a stand-in that records writes (there must be none) — and give the suite its own org namespace: sharing one, two suites delete each other's rows in the full run.
+8. **Deactivated means no access** (§0.164 — Jeff: "Deactivated means no access"). `verifyAuth` refuses an inactive row (403, code `deactivated`, never cached) and the app says so for that org; the row keeps its role for a reactivation. Deactivating and reactivating are an Admin's — the row menu or the profile, both through one helper that sends only `{ id, active }` — never one's own deactivation; the row's status says why it is off, so the first-load link never switches a deactivated row back on. **A member's status has one rule** (`memberStatus.js`): an inactive row is an invitation only with status `Invited` and no Clerk link — the invite path stores invitations off — otherwise it is deactivated.
+
+## 18b57. A Save Handed Up Through A Ref Is The Latest One — Re-handed Every Render, Taken Back On Unmount (hard rule)
+
+**Origin (§0.164, 3 Oct 2026).** The Settings leave guard's "Save changes and continue" runs the save the open panel put in `settingsSaveRef`. Panels put it there in an effect keyed on `[dirty]`, so the guard held the save of the FIRST edit — a closure over the form as it was then: "AB" typed, "A" saved (observed in Accelerep QA). Three panels set it during render and never took it back, so the guard could run an earlier panel's save from the next one.
+
+1. **A callback a parent will call later is handed over every render** — an effect with no dependency list (`src/Tabs/settings/shared/useRegisterSave.js`) — because it closes over that render's state. A dependency list freezes it at the render that last changed a dependency.
+2. **Taken back on unmount.** A closed panel's save must not be left for the next panel's guard.
+3. **One helper, every panel** — tests/settings-leave-guard.test.mjs runs the helper and scans that no panel assigns the slot itself.
+4. **A save the guard can run throws when it did not save** (guide §18a10) — a refusal included — or the guard moves on as though it had.

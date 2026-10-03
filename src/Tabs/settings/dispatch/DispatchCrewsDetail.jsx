@@ -1,5 +1,6 @@
 // settings/dispatch/DispatchCrewsDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
@@ -88,12 +89,7 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
     };
 
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const CREW_COLORS = ['#3a5a7a','#4d6b3d','#b87333','#9c3a2e','#7a6a48','#8a8378','#2a2622'];
 

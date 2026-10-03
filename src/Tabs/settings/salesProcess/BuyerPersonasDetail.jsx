@@ -1,5 +1,6 @@
 // settings/salesProcess/BuyerPersonasDetail.jsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { useApp } from '../../../AppContext';
 import { dbFetch } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
@@ -123,12 +124,7 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const handleCancel = () => { setPersonas(JSON.parse(JSON.stringify(saved))); setDirty(false); };
 

@@ -1010,8 +1010,10 @@ export default function OpportunityModal({
 
     const allPipelines = (pipelines && pipelines.length > 0) ? pipelines : [{ id: 'default', name: 'New Business', color: T.info }];
 
-    const modalUserRecord = (settings.users || []).find(u => u.name === currentUser);
-    const modalUserRole = modalUserRecord ? (modalUserRecord.userType || 'User') : (settings.users || []).length === 0 ? 'Admin' : 'User';
+    // The caller's role in THIS org — the one the server enforces (state §0.163)
+    // — from context. It was guessed (§0.164): the roster row found by DISPLAY
+    // NAME, and an empty roster read as Admin.
+    const { userRole: modalUserRole = 'User' } = useApp();
     const canViewField = (fieldKey) => {
         const fv = settings.fieldVisibility || {};
         const rules = fv[fieldKey];

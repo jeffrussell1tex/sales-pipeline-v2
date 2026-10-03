@@ -132,6 +132,13 @@ export async function verifyAuth(event) {
             return { error: 'The service is unavailable — try again shortly.', status: 503 };
         }
 
+        // Deactivated in this org (state §0.164 — Jeff: "Deactivated means no
+        // access"): the row and its history are kept, and every request in this
+        // org is refused until an Admin reactivates it. Not cached.
+        if (row && row.active === false) {
+            return { error: 'Your access to this organization has been turned off. Ask an Admin of the organization to restore it.', status: 403, code: 'deactivated' };
+        }
+
         // No row is a rep — what a member without a role has always been. A row
         // holding a value that is not one of ours is refused by requireWrite;
         // warn here so the log names the string and the user.

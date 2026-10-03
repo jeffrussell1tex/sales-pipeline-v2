@@ -9,6 +9,7 @@
 // quote-to-job.mjs. The three built-ins stay (the quote maths and the PDF branch
 // on their ids); their kinds are the Admin's to change.
 import React, { useState } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { T } from '../shared/tokens.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { putSettings } from '../shared/saveSettings.js';
@@ -63,7 +64,7 @@ export const ProductTypesDetail = ({ settings, setSettings, onBack, setSettingsD
         }
     };
 
-    if (settingsSaveRef) settingsSaveRef.current = handleSave;
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     return (
         <CategoryDetailChrome

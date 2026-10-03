@@ -12,6 +12,7 @@
 // four seeded ids MUST stay 'commercial' | 'residential' | 'industrial' |
 // 'government' or every existing row stops resolving. Labels are free to change.
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
@@ -85,7 +86,7 @@ const TypeRow = ({ type, count, onChange, onRemove, canRemove }) => (
     </div>
 );
 
-export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, setSettingsDirty }) => {
+export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchPropertyTypes;
     const seeded = (saved && saved.length) ? saved : DEFAULT_PROPERTY_TYPES;
 
@@ -139,7 +140,10 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
         const clean = types
             .map(t => ({ id: t.id, label: (t.label || '').trim() || t.id, icon: PROPERTY_ICONS.includes(t.icon) ? t.icon : 'building' }))
             .filter(t => t.id);
-        if (!clean.length) { setError('Keep at least one property type.'); return; }
+        // Thrown, not returned (§0.164): the leave guard's "Save changes and
+        // continue" runs this too, and only a throw keeps it from moving on as
+        // though a refused or failed save had saved (guide §18a10).
+        if (!clean.length) { const e = new Error('Keep at least one property type.'); setError(e.message); throw e; }
         setSaving(true); setError('');
         setTypes(clean);
         if (setSettings) setSettings(s => ({ ...s, dispatchPropertyTypes: clean }));
@@ -148,9 +152,12 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
             setDirty(false);
         } catch (err) {
             setError(err.message || 'Save failed.');
+            throw err;
+        } finally {
+            setSaving(false);
         }
-        setSaving(false);
     }, [types, setSettings]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     return (
         <CategoryDetailChrome error={error} crumb="Property types" category="Dispatch" title="Property types"

@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs tests/settings-org-load.test.mjs tests/org-roles.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs tests/settings-org-load.test.mjs tests/org-roles.test.mjs tests/settings-leave-guard.test.mjs tests/member-status.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -3930,6 +3930,200 @@ const mutations = [
         'src/App.jsx',
         "        if (!clerkUser || !roleKnown || calReturnHandled.current) return;",
         "        if (!clerkUser || calReturnHandled.current) return;"],
+
+    // ── §0.164 — deactivated means no access; the modal's role; the leave guard's save ──
+    // Caught by tests/org-roles.test.mjs and tests/settings-leave-guard.test.mjs
+    // (the real useRegisterSave, run). Deactivation runs against the test
+    // database in tests/integration/org-roles.itest.mjs.
+    ['access: a deactivated member is let in',
+        'netlify/functions/auth.mjs',
+        "        if (row && row.active === false) {",
+        "        if (false) {"],
+
+    ['access: the role lookup reports every row as active',
+        'netlify/functions/_callerRole.mjs',
+        "    return { role: row.role, managedReps: Array.isArray(reps) ? reps : [], active: row.active !== false };",
+        "    return { role: row.role, managedReps: Array.isArray(reps) ? reps : [], active: true };"],
+
+    ['access: the refusal\'s code never reaches the app (no no-access page)',
+        'netlify/functions/users.mjs',
+        "        return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error, ...(auth.code ? { code: auth.code } : {}) }) };",
+        "        return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };"],
+
+    ['access: a Manager takes access away',
+        'netlify/functions/users.mjs',
+        "                    if (userRole !== 'Admin') {\n                        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can deactivate or reactivate a member.' }) };",
+        "                    if (false) {\n                        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can deactivate or reactivate a member.' }) };"],
+
+    ['access: an Admin deactivates themselves (a lockout)',
+        'netlify/functions/users.mjs',
+        "                    if (!nowActive && before.clerkUserId && before.clerkUserId === userId) {",
+        "                    if (false) {"],
+
+    ['access: a deactivated row\'s status does not say why',
+        'netlify/functions/users.mjs',
+        "                    clean.profile = { ...clean.profile, status: nowActive ? (before.clerkUserId ? 'Active' : 'Invited') : 'Deactivated' };",
+        "                    /* status left as it was */"],
+
+    ['access: the first-load link switches a deactivated row back on',
+        'netlify/functions/users.mjs',
+        "                                active:      !stillOff,",
+        "                                active:      true,"],
+
+    ['access: a deactivated row just linked is answered as a member',
+        'netlify/functions/users.mjs',
+        "                if (row && row.active === false && row.profile?.status === 'Deactivated') {",
+        "                if (false) {"],
+
+    ['access (client): the refusal is read as an ordinary failure',
+        'src/App.jsx',
+        "        return body?.code === 'deactivated' ? { deactivated: true } : null;",
+        "        return null;"],
+
+    ['access (client): the deactivated org is never recorded',
+        'src/App.jsx',
+        "        setAccessRevokedOrg(data?.deactivated ? meOrgId : null);",
+        "        setAccessRevokedOrg(null);"],
+
+    ['access (client): the no-access page never shows',
+        'src/App.jsx',
+        "    if (accessRevokedOrg && accessRevokedOrg === activeOrgId) {",
+        "    if (false) {"],
+
+    ['modal: the role is guessed again, and an empty roster reads as Admin',
+        'src/components/modals/OpportunityModal.jsx',
+        "    const { userRole: modalUserRole = 'User' } = useApp();",
+        "    const modalUserRole = (settings.users || []).length === 0 ? 'Admin' : 'User';"],
+
+    ['leave guard: the save is registered on [dirty] again — "AB" typed, "A" saved',
+        'src/Tabs/settings/shared/useRegisterSave.js',
+        "        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };\n    });",
+        "        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };\n    }, [dirty]);"],
+
+    ['leave guard: a closed panel leaves its save behind',
+        'src/Tabs/settings/shared/useRegisterSave.js',
+        "        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };",
+        "        return undefined;"],
+
+    ['leave guard: a panel sets the slot during render again (never taken back)',
+        'src/Tabs/settings/dispatch/DispatchBlockTypesDetail.jsx',
+        "    useRegisterSave(settingsSaveRef, dirty, handleSave);",
+        "    if (settingsSaveRef) settingsSaveRef.current = handleSave;"],
+
+    ['leave guard: Property types swallows a failed save (the guard moves on)',
+        'src/Tabs/settings/dispatch/DispatchPropertyTypesDetail.jsx',
+        "            setError(err.message || 'Save failed.');\n            throw err;",
+        "            setError(err.message || 'Save failed.');"],
+
+    ['leave guard: Property types is not given the save slot',
+        'src/Tabs/AdminView.jsx',
+        "        if (id === 'dsp-proptypes') return <DispatchPropertyTypesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;",
+        "        if (id === 'dsp-proptypes') return <DispatchPropertyTypesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty}/>;"],
+
+    ['clerk cleanup: it removes more than the role keys',
+        'scripts/clear-clerk-roles.mjs',
+        "const KEYS = ['role', 'managedReps'];",
+        "const KEYS = ['role', 'managedReps', 'team'];"],
+
+    ['clerk cleanup: a live key applies without --live',
+        'scripts/clear-clerk-roles.mjs',
+        "if (APPLY && instance.startsWith('LIVE') && !LIVE_OK) {",
+        "if (false) {"],
+
+    ['roster: a create overwrites an existing row (its Clerk link, team, quota and profile wiped)',
+        'netlify/functions/users.mjs',
+        "                if (taken) {",
+        "                if (false) {"],
+
+    // §0.164, found in the pane check: the Users screen had no way back from
+    // Deactivated, read every inactive row (each pending invitation) as
+    // deactivated, and confirmed with a red "Delete"; the login-card pages
+    // had a title nobody could read. tests/member-status.test.mjs and
+    // tests/org-roles.test.mjs.
+    ['member status: a pending invitation reads as Deactivated again',
+        'src/Tabs/settings/people/memberStatus.js',
+        "    if (u.active === false) return invited && !u.clerkUserId ? 'Invited' : 'Deactivated';",
+        "    if (u.active === false) return 'Deactivated';"],
+    ['member status: a linked member the server refuses reads as a pending invitation',
+        'src/Tabs/settings/people/memberStatus.js',
+        "invited && !u.clerkUserId ? 'Invited' : 'Deactivated'",
+        "invited ? 'Invited' : 'Deactivated'"],
+    ['users list: the list derives its own status again',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "        const status = memberStatus(u);",
+        "        const status = u.active === false ? 'Deactivated' : 'Active';"],
+    ['users profile: the header says Active for everyone again',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "<StatusPill status={status}/>",
+        "<StatusPill status=\"Active\"/>"],
+    ['users export: the Status column writes Active for everyone again',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "if (f === 'Status') return `\"${memberStatus(u)}\"`;",
+        "if (f === 'Status') return '\"Active\"';"],
+    ['users menu: no way back from Deactivated',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "u.status === 'Deactivated' && { label:'Reactivate', action: () => {",
+        "false && { label:'Reactivate', action: () => {"],
+    ['users menu: Deactivate read off the display row, so offered on every row',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "(u._raw || u).active !== false && { label:'Deactivate', action: () => {",
+        "u.active !== false && { label:'Deactivate', action: () => {"],
+    ['users access: the body ignores the flag (a deactivate reactivates)',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "        body:JSON.stringify({ id, active }),",
+        "        body:JSON.stringify({ id, active: true }),"],
+    ['users access: a refused deactivate or reactivate is swallowed',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));\n    return d.user || { id, active };",
+        "    if (false) throw new Error(d.error || ('HTTP ' + res.status));\n    return d.user || { id, active };"],
+    ['users access: the server answer is dropped',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "    return d.user || { id, active };",
+        "    return { id, active };"],
+    ['users profile: a deactivate behind the red Delete confirm again',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "            } catch(err) { setError('Could not deactivate: ' + err.message); }\n        }, false);",
+        "            } catch(err) { setError('Could not deactivate: ' + err.message); }\n        });"],
+    ['users menu: a reactivate behind the red Delete confirm again',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "} catch(err) { setUserActionError(`Could not reactivate ${u.name}: ${err.message}`); }\n                                                    }, false);",
+        "} catch(err) { setUserActionError(`Could not reactivate ${u.name}: ${err.message}`); }\n                                                    });"],
+    ['users menu: the deactivate confirm says they lose all of Accelerep again',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "showConfirm(`Deactivate ${u.name}? They keep their record and role but lose access to this organization until an Admin reactivates them.`, async () => {",
+        "showConfirm(`Deactivate ${u.name}? They keep their record but lose access to Accelerep.`, async () => {"],
+    ['users profile: the button reads Deactivated and deactivates again',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "<PeopleSecBtn onClick={handleReactivate}>Reactivate</PeopleSecBtn>",
+        "<PeopleSecBtn onClick={handleDeactivate}>Deactivated</PeopleSecBtn>"],
+    ['users profile: Deactivate offered on an invitation not yet accepted',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        ") : user.active !== false && (",
+        ") : ("],
+    ['users profile: Reactivate deactivates',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "const row = await setMemberActive(user.id, true);",
+        "const row = await setMemberActive(user.id, false);"],
+    ['users menu: the list keeps its stale row after a deactivate',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "const row = await setMemberActive(u.id, false);\n                                                            _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, ...row } : su) }));",
+        "const row = await setMemberActive(u.id, false);\n                                                            _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, active: false } : su) }));"],
+    ['users list: the subtitle promises a bulk select again',
+        'src/Tabs/settings/people/UsersDetail.jsx',
+        "Deactivate or reactivate from a row's ⋯ menu.</div>",
+        "Use bulk select for role changes, deactivation, or MFA enforcement.</div>"],
+    ['login card: the no-access title is dark on the dark card again',
+        'src/App.jsx',
+        "<h2 style={{ color: T.surface, fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No access to {organization.name}</h2>",
+        "<h2 style={{ color: T.ink, fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No access to {organization.name}</h2>"],
+    ['login card: the no-organization title is dark on the dark card again',
+        'src/App.jsx',
+        "<h2 style={{ color: T.surface, fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No Organization Found</h2>",
+        "<h2 style={{ color: T.ink, fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No Organization Found</h2>"],
+    ["login card: the no-access switcher is Clerk's dark default again",
+        'src/App.jsx',
+        "<OrganizationSwitcher appearance={{ elements: { rootBox: { display: 'flex', alignItems: 'center' }, organizationSwitcherTrigger: { padding: '6px 12px', borderRadius: T.r, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.1)', color: T.surface, fontSize: 13, fontWeight: 600 } } }}/>",
+        "<OrganizationSwitcher/>"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

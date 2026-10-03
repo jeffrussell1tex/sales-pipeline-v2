@@ -182,6 +182,10 @@ function App() {
     // (guide §18b55); until then a rep's screens, which open nothing the server
     // would not refuse.
     const [myProfileOrgId, setMyProfileOrgId] = React.useState(null);
+    // Deactivated in the active org (state §0.164): users?me=true answers 403
+    // 'deactivated' — the server refuses every request in that org — and the app
+    // says so (below) instead of showing a screen of failed loads.
+    const [accessRevokedOrg, setAccessRevokedOrg] = React.useState(null);
     const roleKnown = !!myProfile && !!activeOrgId && myProfileOrgId === activeOrgId;
     const userRole  = (roleKnown && myProfile.role) || 'User';
 
@@ -470,9 +474,15 @@ loadSettings(clerkUser, orgSwitched, organization?.id || null);
 // since switched away from is dropped, not shown as this org's (§18b55).
 const meOrgId = organization?.id || null;
 dbFetch('/.netlify/functions/users?me=true')
-    .then(r => r.ok ? r.json() : null)
+    .then(async r => {
+        if (r.ok) return r.json();
+        // Deactivated in this org (§0.164): every request here is refused.
+        const body = r.status === 403 ? await r.json().catch(() => null) : null;
+        return body?.code === 'deactivated' ? { deactivated: true } : null;
+    })
     .then(data => {
         if (prevOrgIdRef.current !== meOrgId) return;
+        setAccessRevokedOrg(data?.deactivated ? meOrgId : null);
         if (data?.user) {
             setMyProfile(data.user);
             setMyProfileOrgId(meOrgId);
@@ -1552,15 +1562,43 @@ dbFetch('/.netlify/functions/users?me=true')
         );
     }
 
+    // .login-card is dark in every color scheme (index.css), so text on it is
+    // light. Both pages below had a T.ink title on it, which could not be read
+    // (the no-access page copied this one; seen in the §0.164 pane check).
     if (!organization) {
         return (
             <div className="login-page">
                 <div className="login-card" style={{ textAlign: 'center', padding: '3rem', maxWidth: '420px', margin: '10vh auto' }}>
                     <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏢</div>
-                    <h2 style={{ color: T.ink, fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No Organization Found</h2>
-                    <p style={{ color: T.inkMid, fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+                    <h2 style={{ color: T.surface, fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No Organization Found</h2>
+                    <p style={{ color: T.surfaceInkFg, fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
                         You haven't been added to a company yet. Contact your administrator to be invited to your organization.
                     </p>
+                    <button onClick={() => signOut()} style={{ padding: '0.5rem 1.5rem', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', color: T.inkMid }}>
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Deactivated in THIS org (state §0.164 — Jeff: "Deactivated means no
+    // access"). The server refuses every request here; the switcher offers the
+    // person's other orgs, if they have any.
+    if (accessRevokedOrg && accessRevokedOrg === activeOrgId) {
+        return (
+            <div className="login-page">
+                <div className="login-card" style={{ textAlign: 'center', padding: '3rem', maxWidth: '420px', margin: '10vh auto' }}>
+                    <h2 style={{ color: T.surface, fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No access to {organization.name}</h2>
+                    <p style={{ color: T.surfaceInkFg, fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+                        Your access to this organization has been turned off. Ask an Admin of the organization to restore it.
+                    </p>
+                    {userMemberships?.data?.length > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+                            {/* The header's dark-band look (AppHeader.jsx) — Clerk's default trigger is dark text. */}
+                            <OrganizationSwitcher appearance={{ elements: { rootBox: { display: 'flex', alignItems: 'center' }, organizationSwitcherTrigger: { padding: '6px 12px', borderRadius: T.r, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.1)', color: T.surface, fontSize: 13, fontWeight: 600 } } }}/>
+                        </div>
+                    )}
                     <button onClick={() => signOut()} style={{ padding: '0.5rem 1.5rem', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', color: T.inkMid }}>
                         Sign Out
                     </button>

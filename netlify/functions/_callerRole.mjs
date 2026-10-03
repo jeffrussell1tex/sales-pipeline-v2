@@ -13,17 +13,18 @@ import { db } from '../../db/index.js';
 import { users } from '../../db/schema.js';
 import { and, eq } from 'drizzle-orm';
 
-// { role, managedReps } from the caller's row in this org, or null when the
+// { role, managedReps, active } from the caller's row in this org, or null when the
 // caller has no row there yet (a first sign-in before users?me=true links an
 // invited row or provisions one). managedReps is the row's profile.managedReps —
-// the same per-org source the scheduled jobs read (_jobRoster.mjs).
+// the same per-org source the scheduled jobs read (_jobRoster.mjs). active is
+// false for a member an Admin deactivated: no access in this org (§0.164).
 export async function rosterRoleOf(clerkUserId, orgId) {
     if (!clerkUserId || !orgId) return null;
-    const [row] = await db.select({ role: users.role, profile: users.profile })
+    const [row] = await db.select({ role: users.role, profile: users.profile, active: users.active })
         .from(users)
         .where(and(eq(users.clerkUserId, clerkUserId), eq(users.orgId, orgId)))
         .limit(1);
     if (!row) return null;
     const reps = row.profile?.managedReps;
-    return { role: row.role, managedReps: Array.isArray(reps) ? reps : [] };
+    return { role: row.role, managedReps: Array.isArray(reps) ? reps : [], active: row.active !== false };
 }

@@ -503,7 +503,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'dsp-templates') return <DispatchJobTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'dsp-plans')     return <DispatchServicePlansDetail settings={settings} onBack={onBack} setSettingsDirty={setSettingsDirty}/>;
         if (id === 'dsp-customer-notify') return <DispatchCustomerNotificationsDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
-        if (id === 'dsp-proptypes') return <DispatchPropertyTypesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty}/>;
+        if (id === 'dsp-proptypes') return <DispatchPropertyTypesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
         if (id === 'duplicates')      return <DuplicateScanView onBack={onBack}/>;
         if (id === 'contact-duplicates') return <ContactDuplicateScanView onBack={onBack}/>;

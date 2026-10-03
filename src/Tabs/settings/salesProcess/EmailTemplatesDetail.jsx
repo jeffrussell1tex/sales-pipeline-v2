@@ -4,6 +4,7 @@
 // rep's own mail client. Saved through the settings PUT like every other
 // Sales-process list (settings.extra.emailTemplates, both halves).
 import React, { useState, useEffect, useRef } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -93,11 +94,7 @@ export const EmailTemplatesDetail = ({ settings, setSettings, onBack, setSetting
         setSaving(false);
     };
     useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
-    useEffect(() => {
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const handleCancel = () => { setItems(saved.map(t => ({ ...t }))); setSelId(saved[0]?.id || null); setDirty(false); };
     const addTemplate = () => {

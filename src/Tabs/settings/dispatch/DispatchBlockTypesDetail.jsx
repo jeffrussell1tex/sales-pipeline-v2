@@ -5,6 +5,7 @@
 // Admin-managed like job categories, skills and licence levels, so an org can use
 // its own vocabulary rather than a hardcoded list.
 import React, { useState } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { T } from '../shared/tokens.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { dbFetch } from '../../../utils/storage';
@@ -61,7 +62,7 @@ export const DispatchBlockTypesDetail = ({ settings, setSettings, onBack, setSet
         }
     };
 
-    if (settingsSaveRef) settingsSaveRef.current = handleSave;
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     return (
         <CategoryDetailChrome

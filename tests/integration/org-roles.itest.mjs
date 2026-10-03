@@ -246,7 +246,7 @@ test('FIRST ADMIN: a fresh org\'s Clerk admin is its first Admin, once; Clerk\'s
     assert.equal(g.body.user.role, 'User', 'REGRESSION: an Admin elsewhere (Clerk\'s user-level role) joins a fresh org as a rep');
 });
 
-test('a Manager cannot invite or create anyone above a rep; an invitation carries no role to Clerk; a create naming an existing row cannot change its role', async () => {
+test('a Manager cannot invite or create anyone above a rep; an invitation carries no role to Clerk; a create naming an existing row is refused (409) and the row keeps its role and its Clerk link', async () => {
     const invite = (token, role, email) => usersHandler(ev(token, 'POST', { action: 'invite', invites: [{ email, role }] }));
     const up = parse(await invite(tokenFor(MANAGER_A, ORG_A), 'Admin', 'mgr-invites-admin@itest-orgrole.local'));
     assert.equal(up.status, 403, 'REGRESSION: a Manager inviting an Admin — the row\'s role is now the role');
@@ -262,8 +262,10 @@ test('a Manager cannot invite or create anyone above a rep; an invitation carrie
     const create = parse(await usersHandler(ev(tokenFor(MANAGER_A, ORG_A), 'POST', { name: 'Made By Manager', email: 'made@itest-orgrole.local', userType: 'Admin' })));
     assert.equal(create.status, 403, 'a Manager cannot create an Admin either');
     const overwrite = parse(await usersHandler(ev(tokenFor(ADMIN_A, ORG_A), 'POST', { id: 'usr_itest_orgrole_mgr_a', name: 'Max Manager', email: 'mgr-a@itest-orgrole.local', userType: 'Admin' })));
-    assert.ok([200, 201].includes(overwrite.status), JSON.stringify(overwrite.body));
-    assert.equal((await rowOf('usr_itest_orgrole_mgr_a', ORG_A)).role, 'Manager', 'REGRESSION: a create naming an existing row keeps its role — user-role is the one path that changes it');
+    assert.equal(overwrite.status, 409, 'a create never overwrites a row (§0.164) — editing is PUT, which merges first');
+    const kept = await rowOf('usr_itest_orgrole_mgr_a', ORG_A);
+    assert.equal(kept.role, 'Manager', 'REGRESSION: a create naming an existing row keeps its role — user-role is the one path that changes it');
+    assert.equal(kept.clerkUserId, MANAGER_A, 'REGRESSION (§0.164): the create wiped the row\'s Clerk link — an unlinked row is no role at all to the server');
 });
 
 test('the sync neither reads nor writes a role: an existing row keeps its own, a new member is a rep', async () => {
@@ -278,4 +280,61 @@ test('the sync neither reads nor writes a role: an existing row keeps its own, a
     assert.ok(made, 'the new member has a row');
     assert.equal(made.role, 'User', 'a new row is a rep — Clerk\'s Admin is not copied');
     assert.equal((await rowOf('usr_itest_orgrole_admin_b', ORG_B)).role, 'Admin', 'the Admin running it is unchanged');
+});
+
+// ── §0.164 — deactivated means no access (Jeff, 3 Oct: "Deactivated means no access") ──
+
+test('DEACTIVATED: an Admin takes access away (a Manager cannot, nobody their own); refused in that org with a code the app reads, untouched in the next; reactivated, it is back', async () => {
+    const D = 'user_itest_orgrole_deact';
+    person(D, 'deact@itest-orgrole.local', 'Dee', 'Act');
+    orgsOf.set(D, [ORG_A, ORG_B]);
+    await db.insert(users).values([
+        { id: 'usr_itest_orgrole_deact_a', orgId: ORG_A, clerkUserId: D, name: 'Dee Act', email: 'deact@itest-orgrole.local', role: 'Manager', active: true, profile: { status: 'Active' } },
+        { id: 'usr_itest_orgrole_deact_b', orgId: ORG_B, clerkUserId: D, name: 'Dee Act', email: 'deact@itest-orgrole.local', role: 'User', active: true, profile: { status: 'Active' } },
+    ]);
+    const put = (token, body) => usersHandler(ev(token, 'PUT', body));
+
+    const byMgr = parse(await put(tokenFor(MANAGER_A, ORG_A), { id: 'usr_itest_orgrole_deact_a', active: false }));
+    assert.equal(byMgr.status, 403, 'REGRESSION: a Manager takes away an Admin\'s — or anyone\'s — access');
+    const self = parse(await put(tokenFor(ADMIN_A, ORG_A), { id: 'usr_itest_orgrole_admin_a', active: false }));
+    assert.equal(self.status, 400, 'an Admin cannot deactivate themselves — a lockout');
+    assert.equal((await rowOf('usr_itest_orgrole_admin_a', ORG_A)).active, true);
+
+    const off = parse(await put(tokenFor(ADMIN_A, ORG_A), { id: 'usr_itest_orgrole_deact_a', active: false }));
+    assert.equal(off.status, 200, JSON.stringify(off.body));
+    const row = await rowOf('usr_itest_orgrole_deact_a', ORG_A);
+    assert.equal(row.active, false);
+    assert.equal(row.profile.status, 'Deactivated', 'the status says why the row is off');
+    assert.equal(row.role, 'Manager', 'the role is kept for a reactivation');
+
+    const a = await verifyAuth({ headers: { authorization: 'Bearer ' + tokenFor(D, ORG_A) } });
+    assert.equal(a.status, 403, 'REGRESSION: a deactivated member is still let in');
+    assert.equal(a.code, 'deactivated');
+    const me = parse(await usersHandler(ev(tokenFor(D, ORG_A), 'GET', undefined, { me: 'true' })));
+    assert.equal(me.status, 403);
+    assert.equal(me.body.code, 'deactivated', 'the code reaches the app, which shows its no-access page');
+    const b = await verifyAuth({ headers: { authorization: 'Bearer ' + tokenFor(D, ORG_B) } });
+    assert.equal(b.error, null, 'the same person keeps full access in B');
+    assert.equal(b.userRole, 'User');
+
+    const on = parse(await put(tokenFor(ADMIN_A, ORG_A), { id: 'usr_itest_orgrole_deact_a', active: true }));
+    assert.equal(on.status, 200, JSON.stringify(on.body));
+    assert.equal((await rowOf('usr_itest_orgrole_deact_a', ORG_A)).profile.status, 'Active');
+    const back = await verifyAuth({ headers: { authorization: 'Bearer ' + tokenFor(D, ORG_A) } });
+    assert.equal(back.error, null);
+    assert.equal(back.userRole, 'Manager', 'reactivated, with the role it had');
+});
+
+test('DEACTIVATED before the invitation was accepted: the first-load link does not switch the row back on', async () => {
+    await db.insert(users).values({ id: 'usr_itest_orgrole_deact_inv', orgId: ORG_A, clerkUserId: null, name: 'Late Joiner', email: 'late@itest-orgrole.local', role: 'User', active: false, profile: { status: 'Deactivated' } });
+    const LATE = 'user_itest_orgrole_late';
+    person(LATE, 'late@itest-orgrole.local', 'Late', 'Joiner');
+    const me = parse(await usersHandler(ev(tokenFor(LATE, ORG_A), 'GET', undefined, { me: 'true' })));
+    assert.equal(me.status, 403, JSON.stringify(me.body));
+    assert.equal(me.body.code, 'deactivated');
+    const row = await rowOf('usr_itest_orgrole_deact_inv', ORG_A);
+    assert.equal(row.clerkUserId, LATE, 'linked to the person it was addressed to');
+    assert.equal(row.active, false, 'REGRESSION: and still off — linking switched a deactivated row back on');
+    const next = await verifyAuth({ headers: { authorization: 'Bearer ' + tokenFor(LATE, ORG_A) } });
+    assert.equal(next.code, 'deactivated', 'and refused from the next request on');
 });

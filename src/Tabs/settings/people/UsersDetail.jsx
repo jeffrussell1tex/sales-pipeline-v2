@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
 import { dbFetch, dbWrite } from '../../../utils/storage';
-import { T, eb } from '../shared/tokens.js';
+import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
 import { RToggle, RCheck, UserAvatar } from '../shared/ui.jsx';
+import { memberStatus } from './memberStatus.js';
 // THE ROLE VALUES come from the one list the server checks (src/utils/roles.js,
 // re-exported by auth.mjs as APP_ROLES). This file carried its own copy of five,
 // which is how a role added on the server went missing here; the server refuses
@@ -416,7 +417,7 @@ const UsersExportPage = ({ settings, onBack, onUsers, mfaByEmail }) => {
                 if (f === 'Team') return `"${u.team||''}"`;
                 if (f === 'Manager') return `"${u.manager||''}"`;
                 if (f === 'Territory') return `"${u.territory||''}"`;
-                if (f === 'Status') return '"Active"';
+                if (f === 'Status') return `"${memberStatus(u)}"`;   // was "Active" for everyone (state §0.164)
                 // Live from Clerk (§0.59) — was smsNotifications.enabled, a
                 // notification preference exported as a security fact.
                 if (f === 'MFA') { const v = mfaByEmail?.get((u.email || '').toLowerCase()); return `"${v === true ? 'On' : v === false ? 'Off' : 'Unknown'}"`; }
@@ -903,8 +904,35 @@ const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData }) => {
     );
 };
 
+// Deactivating takes away every right the member has in this org; reactivating
+// gives it back — the row keeps its role (state §0.164). Both are an Admin's:
+// the server refuses anyone else, and anyone deactivating themselves. Only
+// `active` is sent; the server merges it into the stored row and sets the
+// status, and its answer is the row as it now stands.
+const setMemberActive = async (id, active) => {
+    const res = await dbFetch('/.netlify/functions/users', {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ id, active }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+    return d.user || { id, active };
+};
+
+// The profile header's status. It read "● Active" for every member, deactivated
+// and invited included (state §0.164). Red is for Delete (the style guide), so a
+// deactivated member reads muted.
+const STATUS_PILL = { Active: STATUS_STYLES.ok, Invited: STATUS_STYLES.partial, Deactivated: STATUS_STYLES.none };
+const StatusPill = ({ status }) => {
+    const s = STATUS_PILL[status] || STATUS_STYLES.none;
+    return (
+        <span style={{ marginLeft:10, display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', background:s.bg, color:s.fg, borderRadius:T.r, fontSize:11, fontWeight:700 }}>● {status}</span>
+    );
+};
+
 const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     const { setSettings, showConfirm } = useApp();
+    const status = memberStatus(user);
     const [form, setForm]     = useState({ ...user });
     const [saving, setSaving] = useState(false);
     const [saved,  setSaved]  = useState(false);
@@ -924,9 +952,10 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
             const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form) });
             if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Save failed'); }
 
-            // A role change must go to CLERK, not just the users mirror: auth.mjs
-            // derives permissions from Clerk publicMetadata on every request, so
-            // writing only the DB row changes nothing the server enforces.
+            // A role change goes to user-role.mjs, the one path that changes a
+            // role: the PUT above keeps the stored one. The role is this org's
+            // roster row, which auth.mjs reads per request, cached up to 30
+            // seconds — the note below (state §0.163).
             // `role`, not `userType`: the latter is a stale copy in the profile blob.
             // Comparing against it meant the "did the role change?" test was asking
             // about a field nothing maintained.
@@ -994,18 +1023,28 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     // checked res.ok — a failed request still removed the user from the screen,
     // so they reappeared on refresh. Deactivate is now reversible; Delete is
     // separate and says what it does.
+    //
+    // Both confirms are the plain kind, not the red "Delete" one: nothing is
+    // deleted, and each undoes the other (state §0.164). Deactivate sent the
+    // whole profile form, so it also saved any unsaved edit; it sends `active`.
     const handleDeactivate = () => {
-        showConfirm(`Deactivate ${user.name}? They keep their record but lose access to Accelerep.`, async () => {
+        showConfirm(`Deactivate ${user.name}? They keep their record and role but lose access to this organization until an Admin reactivates them.`, async () => {
             try {
-                const res = await dbFetch('/.netlify/functions/users', {
-                    method:'PUT', headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({ ...form, id: user.id, active: false }),
-                });
-                if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
-                setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, active:false } : u) }));
+                const row = await setMemberActive(user.id, false);
+                setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, ...row } : u) }));
                 onUsers();
             } catch(err) { setError('Could not deactivate: ' + err.message); }
-        });
+        }, false);
+    };
+
+    const handleReactivate = () => {
+        showConfirm(`Reactivate ${user.name}? They get their access to this organization back, with the role they had.`, async () => {
+            try {
+                const row = await setMemberActive(user.id, true);
+                setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, ...row } : u) }));
+                onUsers();
+            } catch(err) { setError('Could not reactivate: ' + err.message); }
+        }, false);
     };
 
     const handleDeleteUser = () => {
@@ -1064,16 +1103,23 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
                         <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>{user.name}</div>
                         <div style={{ fontSize:13, color:T.inkMid, marginTop:2 }}>
                             {roleLabel(user.role)} · {user.team || '—'} · reports to {user.manager || '—'}
-                            <span style={{ marginLeft:10, display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', background:'rgba(77,107,61,0.10)', color:T.ok, borderRadius:T.r, fontSize:11, fontWeight:700 }}>● Active</span>
+                            <StatusPill status={status}/>
                         </div>
                     </div>
                 </div>
                 <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                     <PeopleSecBtn onClick={() => {}}>Reset password</PeopleSecBtn>
-                    <button onClick={handleDeactivate} style={{ padding:'7px 14px', background:'transparent', color:T.danger, border:`1px solid rgba(156,58,46,0.3)`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
-                        onMouseEnter={e=>{e.currentTarget.style.background='rgba(156,58,46,0.06)'}} onMouseLeave={e=>{e.currentTarget.style.background='transparent'}}>
-                        {form.active === false ? 'Deactivated' : 'Deactivate'}
-                    </button>
+                    {/* Reactivate a deactivated member, deactivate an active one. An
+                        invitation not yet accepted is neither: its row stays off until
+                        the first sign-in links it (state §0.164). */}
+                    {status === 'Deactivated' ? (
+                        <PeopleSecBtn onClick={handleReactivate}>Reactivate</PeopleSecBtn>
+                    ) : user.active !== false && (
+                        <button onClick={handleDeactivate} style={{ padding:'7px 14px', background:'transparent', color:T.danger, border:`1px solid rgba(156,58,46,0.3)`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                            onMouseEnter={e=>{e.currentTarget.style.background='rgba(156,58,46,0.06)'}} onMouseLeave={e=>{e.currentTarget.style.background='transparent'}}>
+                            Deactivate
+                        </button>
+                    )}
                     <button onClick={handleDeleteUser} style={{ padding:'7px 14px', background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
                         Delete user
                     </button>
@@ -1306,9 +1352,9 @@ export const UsersDetail = ({ settings, onBack }) => {
         return m;
     }, [mfaData]);
 
-    // Drift check on load. Clerk is authoritative for identity and role; this
-    // table is a mirror, and they diverge quietly (an invite that never
-    // completed, a role changed in the Clerk dashboard, a user removed there).
+    // Drift check on load. Clerk is authoritative for who is in the org (the
+    // role is the row's — state §0.163); the roster and Clerk diverge quietly
+    // (a member added or removed in Clerk, an invite that never completed).
     // ?check=true runs the same reconciliation and writes nothing, so the
     // difference is visible here instead of being discovered by accident.
     React.useEffect(() => {
@@ -1362,10 +1408,8 @@ export const UsersDetail = ({ settings, onBack }) => {
 
     // Map settings.users into the table display format
     const realUsers = (settings.users || []).filter(u => u.name && !u.id?.startsWith('pending_')).map(u => {
-        // Derive display status from active flag and stored status field
-        let status = 'Active';
-        if (u.active === false) status = 'Deactivated';
-        else if (u.status === 'Invited' || u.status === 'invited') status = 'Invited';
+        // One rule for the list, the profile and the export (memberStatus.js).
+        const status = memberStatus(u);
         return {
             id: u.id || u.name,
             name: u.name,
@@ -1513,7 +1557,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8 }}>
                         <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
                             <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All users</div>
-                            <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to open the user profile. Use bulk select for role changes, deactivation, or MFA enforcement.</div>
+                            <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to open the user profile. Deactivate or reactivate from a row's ⋯ menu.</div>
                         </div>
                         {/* Table header */}
                         <div style={{ display:'grid', gridTemplateColumns:'32px 1fr 120px 110px 110px 100px 40px 80px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
@@ -1583,19 +1627,28 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                 // nothing (§0.59, the dead-control sweep). Passwords, MFA
                                                 // policy and invite emails are Clerk's; restore these only
                                                 // wired to real Clerk Backend calls.
-                                                // Deactivate = reversible; keeps the row and its history.
-                                                u.active !== false && { label:'Deactivate', action: () => {
+                                                // Deactivate = reversible; keeps the row, its role and its history.
+                                                // `u` is the list's display row and carries no `active`, so
+                                                // u.active offered Deactivate on every row; the roster row is
+                                                // `_raw` (state §0.164).
+                                                (u._raw || u).active !== false && { label:'Deactivate', action: () => {
                                                     setOpenUserKebab(null);
-                                                    showConfirm(`Deactivate ${u.name}? They keep their record but lose access to Accelerep.`, async () => {
+                                                    showConfirm(`Deactivate ${u.name}? They keep their record and role but lose access to this organization until an Admin reactivates them.`, async () => {
                                                         try {
-                                                            const res = await dbFetch('/.netlify/functions/users', {
-                                                                method:'PUT', headers:{'Content-Type':'application/json'},
-                                                                body:JSON.stringify({ ...u, id: u.id, active: false }),
-                                                            });
-                                                            if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
-                                                            _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, active:false } : su) }));
+                                                            const row = await setMemberActive(u.id, false);
+                                                            _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, ...row } : su) }));
                                                         } catch(err) { setUserActionError(`Could not deactivate ${u.name}: ${err.message}`); }
-                                                    });
+                                                    }, false);
+                                                }},
+                                                // Reactivate = the way back (state §0.164): the row kept its role.
+                                                u.status === 'Deactivated' && { label:'Reactivate', action: () => {
+                                                    setOpenUserKebab(null);
+                                                    showConfirm(`Reactivate ${u.name}? They get their access to this organization back, with the role they had.`, async () => {
+                                                        try {
+                                                            const row = await setMemberActive(u.id, true);
+                                                            _setSettings(prev => ({ ...prev, users: (prev.users||[]).map(su => su.id === u.id ? { ...su, ...row } : su) }));
+                                                        } catch(err) { setUserActionError(`Could not reactivate ${u.name}: ${err.message}`); }
+                                                    }, false);
                                                 }},
                                                 // Delete = permanent. This previously sent the id in the BODY while
                                                 // the server reads it from the query string, so it 400'd, the client

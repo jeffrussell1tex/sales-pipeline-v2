@@ -10,6 +10,7 @@
 // shows under every category, so the lists degrade gracefully — you can add types
 // without categorising them and tighten later without breaking existing jobs.
 import React, { useState } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { T } from '../shared/tokens.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { dbFetch } from '../../../utils/storage';
@@ -116,7 +117,7 @@ export const DispatchJobTypesDetail = ({ settings, setSettings, onBack, setSetti
         }
     };
 
-    if (settingsSaveRef) settingsSaveRef.current = handleSave;
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const catName = (id) => cats.find(c => c.id === id)?.name || null;
 

@@ -1,5 +1,6 @@
 // settings/data/FeaturesDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { DataCard, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
@@ -209,12 +210,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSaveAi : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSaveAi);
 
     // ── Export config ─────────────────────────────────────────
     const handleExportConfig = () => {

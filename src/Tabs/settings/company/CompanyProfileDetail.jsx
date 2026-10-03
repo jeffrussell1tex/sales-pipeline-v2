@@ -1,5 +1,6 @@
 // settings/company/CompanyProfileDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
@@ -68,12 +69,7 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
     };
     // Sync dirty state to app-level nav guard
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const COUNTRIES = ['United States','Canada','United Kingdom','Australia','Germany','France','Other'].map(c => ({ value:c, label:c }));
 

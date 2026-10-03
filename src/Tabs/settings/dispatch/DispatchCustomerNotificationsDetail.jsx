@@ -6,6 +6,7 @@
 // here. The shape is customerNotifications.js's; the same module decides on
 // the server, so what this panel shows is exactly what the jobs function does.
 import React, { useState } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -58,12 +59,7 @@ export const DispatchCustomerNotificationsDetail = ({ settings, setSettings, onB
     };
 
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const off = !cfg.enabled;
 
