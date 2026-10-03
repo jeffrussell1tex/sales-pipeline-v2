@@ -153,7 +153,7 @@ test('the panel reads the three real sources and renders the four real integrati
     assert.ok(s.includes("dbFetch('/.netlify/functions/settings')"), 'Slack + requests');
     assert.ok(s.includes("dbFetch('/.netlify/functions/calendar-connections')"), 'calendar state');
     assert.ok(s.includes("dbFetch('/.netlify/functions/email-inbound')"), 'the BCC address');
-    assert.ok(s.includes("window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();"), 'Connect is the real OAuth start');
+    assert.ok(s.includes("const connectCalendar = (provider, scope) => startCalendarConnect({ provider, scope, from: 'apps' });"), 'Connect is the real OAuth start (calendarConnect.js, state §0.160)');
     assert.ok(s.includes("calendar-connections?id=${encodeURIComponent(id)}&scope=${scope}`, { method: 'DELETE' }"), 'Disconnect is the real endpoint');
     assert.ok(s.includes("{ provider:'google',"), 'Google Calendar');
     assert.ok(s.includes("{ provider:'outlook',"), 'Microsoft 365 Calendar — the backend always supported it; no UI offered it');

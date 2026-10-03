@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 2, 2026 · rules current through **§18b52** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 2, 2026 · rules current through **§18b53** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3667,3 +3667,15 @@ through `dbFetch`.
 4. **Anything computed over many rows is computed per org** — an average, a threshold, a count. One org's history never moves another org's alert (CLAUDE.md: no org's data may affect another org's behaviour).
 5. **A job runs at an instant a test can hand it** — `export const run<Job> = async ({ now = new Date() } = {})`, the scheduled `run` calling it with nothing — and keeps no module-level clock (pipeline-alerts' `today` froze at a warm container's first run).
 6. **Pin it three ways.** `tests/job-roster.test.mjs` RUNS the helpers with two orgs that share every name and team (the second org's rows last, so a last-row-wins lookup fails), scans the jobs, and holds a guard over every job in `SCHEDULED_JOBS` for a lookup keyed by a display name — a new job meets it the day it is listed. `tests/integration/scheduled-job-orgs.itest.mjs` runs the three jobs against the test database at a Monday 14:00 UTC with every sender recording, and proves each message reaches the record's owner and that org's manager and that nothing crosses — 0/8 on the old lookups, 8/8 after. Twenty-three mutants each put one cross-org or by-name lookup back.
+
+## 18b53. A Redirect Flow's State Is The Server's — Minted For A Signed-In Caller, Signed, Short-Lived, Bound To The Browser That Asked (hard rule)
+
+**Origin (§0.160, 3 Oct 2026 — the cross-org audit's first CRITICAL).** calendar-oauth-start took `userId`, `orgId` and `userRole` from the query string and sent them through the provider as unsigned base64; the callback — no auth, though the start's comment said it re-validated with verifyAuth — wrote the connection for whatever org the state named. Anyone could put their calendar into any org, and a victim who consented to someone else's link connected theirs into that org.
+
+1. **The start is signed in.** A browser redirect carries no token, so the start is a POST from the app that answers with the provider's URL, and the browser goes there. Who, which org and which role come from verifyAuth — never from the request.
+2. **The state is signed by the server and expires.** HMAC with a key derived in its own namespace (never an encryption key reused as is), ten minutes; the callback verifies it BEFORE it exchanges the code or writes anything, and writes only for the org and user the verified state names.
+3. **The state is bound to the browser that started it.** Its nonce rides an HttpOnly, SameSite=Lax cookie scoped to the callback's path; a state whose nonce this browser does not hold is refused, so a link someone else started cannot be completed in your browser; the callback clears the cookie at every exit, so a state is used once.
+4. **An unverified state may name only what the return page shows** — provider, scope, surface, each allowlisted again — never who and never which org.
+5. **The callback logs no query** — it carries the provider's one-time code.
+6. **A static guard proves it can see what it guards.** The org-scoping test is handed the shapes it must refuse — a `db` chain split across lines, a raw SQL write — and refuses them; its one-line pattern had hidden three writes by id alone.
+7. **Test it as an attacker would**, against the real database: the old unsigned state, a genuine state with its org swapped, a genuine state from another browser, an expired one — each refused, the other org's row unchanged, the code never exchanged (tests/integration/calendar-oauth.itest.mjs).

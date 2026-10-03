@@ -9,6 +9,7 @@ import { openStagesOf, commitFallbackStages } from '../utils/stageOrder';
 import { isAddressedTo, isReadBy, sortNotes, audienceLabel } from '../utils/coachingNotes';
 import { T } from '../tokens.js';
 import { dbFetch } from '../utils/storage';
+import { startCalendarConnect } from '../utils/calendarConnect.js';
 // Pinned saved reports (state §0.135): the same engine and chart the Reports tab uses.
 import { runReport, REPORT_CHARTS } from '../utils/reportQuery.js';
 import ReportChart from '../components/ReportChart.jsx';
@@ -163,7 +164,7 @@ export default function HomeTab() {
         meetingPrepOppId, setMeetingPrepOppId,
     } = useApp();
 
-    const { userId, orgId } = useAuth();
+    const { orgId } = useAuth();
 
     // ── Pinned reports (state §0.135) ─────────────────────────────────────────
     // The ids ride my profile (the library's Pin); the rows come from the
@@ -196,10 +197,8 @@ export default function HomeTab() {
         setActiveTab('reports');
     };
     const [calSrc, setCalSrc] = React.useState('all'); // 'all' | 'user' | 'org'
-    const connectMyCalendar = () => {
-        const qs = new URLSearchParams({ provider: 'google', scope: 'user', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User', from: 'home' });
-        window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
-    };
+    // calendarConnect.js (state §0.160): who and which org are the server's to say.
+    const connectMyCalendar = () => startCalendarConnect({ provider: 'google', scope: 'user', from: 'home' });
 
     // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
     // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.

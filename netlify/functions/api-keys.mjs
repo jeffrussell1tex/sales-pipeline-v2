@@ -119,7 +119,7 @@ export const handler = async (event) => {
             await db
                 .update(apiKeys)
                 .set({ revokedAt: new Date(), updatedAt: new Date() })
-                .where(eq(apiKeys.id, id));
+                .where(and(eq(apiKeys.id, id), eq(apiKeys.orgId, orgId)));
             await auditAs(orgId, userId, { action: 'apikey.revoked', entityType: 'apikey', entityId: existing.id, entityName: existing.name, detail: `${existing.keyPrefix}…` });
 
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };

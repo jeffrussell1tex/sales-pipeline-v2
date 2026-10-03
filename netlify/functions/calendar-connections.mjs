@@ -114,7 +114,7 @@ export const handler = async (event) => {
 
                 await db
                     .delete(userCalendarConnections)
-                    .where(eq(userCalendarConnections.id, id));
+                    .where(and(eq(userCalendarConnections.id, id), eq(userCalendarConnections.orgId, orgId), eq(userCalendarConnections.userId, userId)));
                 await auditAs(orgId, userId, { action: 'calendar.disconnected', entityType: 'calendar_connection', entityId: id, entityName: 'My calendar', detail: 'personal connection removed' });
 
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
@@ -141,7 +141,7 @@ export const handler = async (event) => {
 
                 await db
                     .delete(orgCalendarConnections)
-                    .where(eq(orgCalendarConnections.id, id));
+                    .where(and(eq(orgCalendarConnections.id, id), eq(orgCalendarConnections.orgId, orgId)));
                 await auditAs(orgId, userId, { action: 'calendar.disconnected', entityType: 'calendar_connection', entityId: id, entityName: 'Company calendar', detail: 'the workspace connection removed by an Admin' });
 
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };

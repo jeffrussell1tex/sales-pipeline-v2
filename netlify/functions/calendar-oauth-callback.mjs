@@ -6,8 +6,12 @@
 //     stores it in user_calendar_connections or org_calendar_connections,
 //     then redirects the browser back to the app's Settings → Calendar tab.
 //
-// The `state` param (base64 JSON) was set by calendar-oauth-start.mjs and
-// contains: { userId, orgId, provider, scope, userRole }
+// The `state` was minted by calendar-oauth-start.mjs for a signed-in caller: signed,
+// short-lived, and bound to the browser that asked by a nonce cookie (state §0.160;
+// _oauthState.mjs; guide §18b53). Only a state that verifies — signature, expiry,
+// this browser's nonce — writes anything, and only for the org and user it names.
+// Until §0.160 the state was unsigned base64 that the client built, and this
+// function trusted it: anyone could write a calendar connection into any org.
 //
 // Required env vars by provider:
 //   Google:  GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
@@ -17,6 +21,7 @@
 import { neon } from '@netlify/neon';
 import { encrypt } from './crypto.mjs';
 import { calendarReturnUrl } from '../../src/utils/calendarReturn.js';
+import { verifyState, peekState, stateSecret, cookieFrom, clearNonceCookie } from './_oauthState.mjs';
 
 // Use raw SQL to avoid Drizzle ORM cold-start issues in redirect callbacks
 function getDb() {
@@ -92,23 +97,18 @@ async function getCalendarEmail(provider, accessToken) {
 }
 
 export const handler = async (event) => {
-    // Log all incoming params for debugging
-    console.log('callback params:', JSON.stringify(event.queryStringParameters));
-    console.log('callback method:', event.httpMethod);
-
+    // (The query is not logged: it carries the provider's one-time code.)
     const { code, state, error } = event.queryStringParameters || {};
 
-    // Restore context from state FIRST (providers echo `state` on their own
-    // error responses too), so even a refusal goes back to the right surface
-    // with the right provider named. A state that will not parse is null.
-    let stateData = null;
-    if (state) {
-        try { stateData = JSON.parse(Buffer.from(state, 'base64').toString('utf8')); }
-        catch { console.error('Failed to parse OAuth state'); }
-    }
+    // The return page names the provider and the surface even on a refusal
+    // (providers echo `state` on their own errors too) — read from the state
+    // WITHOUT trusting it: calendarReturnUrl allowlists each value again, and who
+    // and which org come only from the VERIFIED state below.
+    const shown = state ? peekState(state) : {};
     const back = (status, reason) => ({
         statusCode: 302,
-        headers: { Location: calendarReturnUrl(APP_URL, { status, provider: stateData?.provider, scope: stateData?.scope, from: stateData?.from, reason }) },
+        // Every exit clears the nonce cookie: a state is used once.
+        headers: { Location: calendarReturnUrl(APP_URL, { status, provider: shown.provider, scope: shown.scope, from: shown.from, reason }), 'Set-Cookie': clearNonceCookie() },
         body: '',
     });
 
@@ -123,11 +123,16 @@ export const handler = async (event) => {
         return back('error', 'missing_code');
     }
 
-    if (!stateData) return back('error', 'bad_state');
+    // Signed by the start for a signed-in caller, unexpired, and begun in THIS
+    // browser (its nonce cookie) — or nothing is written (state §0.160).
+    const verified = verifyState(state, { secret: stateSecret(process.env), cookieNonce: cookieFrom(event.headers) });
+    if (!verified.ok) {
+        console.error('calendar-oauth-callback: state refused —', verified.why);
+        return back('error', 'bad_state');
+    }
+    const { userId, orgId, userRole, provider, scope } = verified.data;
 
-    const { userId, orgId, provider, scope, userRole } = stateData;
-
-    // Re-enforce admin check for org scope — state is user-controlled so we validate again
+    // The start refused a non-Admin; the role rode here signed, and is checked again.
     if (scope === 'org' && userRole !== 'Admin') {
         console.error('Non-admin attempted org calendar connection');
         return back('error', 'not_admin');
@@ -169,7 +174,7 @@ export const handler = async (event) => {
                     SET encrypted_refresh_token = ${encryptedRefreshToken},
                         calendar_email = ${calendarEmail},
                         updated_at = ${now}
-                    WHERE id = ${existing[0].id}
+                    WHERE id = ${existing[0].id} AND org_id = ${orgId}
                 `;
             } else {
                 const newId = 'ucal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -181,7 +186,7 @@ export const handler = async (event) => {
                 `;
             }
         } else {
-            // Org connection — upsert per provider per org
+            // Org connection ('org' — verifyState admits only the two scopes) — upsert per provider per org
             const existing = await sql`
                 SELECT id FROM org_calendar_connections
                 WHERE org_id = ${orgId} AND provider = ${provider}
@@ -200,7 +205,7 @@ export const handler = async (event) => {
                         calendar_name = ${calendarName},
                         connected_by = ${userId},
                         updated_at = ${now}
-                    WHERE id = ${existing[0].id}
+                    WHERE id = ${existing[0].id} AND org_id = ${orgId}
                 `;
             } else {
                 const newId = 'ocal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);

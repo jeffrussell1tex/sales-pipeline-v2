@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -1633,8 +1633,8 @@ const mutations = [
         '        if (false) setActiveItem(it);'],
     ['calendar return: the start drops `from` from state — everyone lands on Home',
         'netlify/functions/calendar-oauth-start.mjs',
-        "const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole, from })).toString('base64');",
-        "const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole })).toString('base64');"],
+        "userRole: auth.userRole, provider, scope, from }, { secret });",
+        "userRole: auth.userRole, provider, scope }, { secret });"],
 
     // ── §0.98 (item 32): scheduled-job heartbeats ───────────────────────────────
     ['heartbeat: a job that stopped running reads ok forever',
@@ -3651,6 +3651,77 @@ const mutations = [
         'src/Tabs/settings/quoting/ApprovalTiersDetail.jsx',
         "if (field === 'sla') return { ...t, sla: slaHours(val) ? `${slaHours(val)}h` : null };",
         "if (field === 'sla') return { ...t, sla: val };"],
+
+    // ── §0.160 — the calendar Connect, bound to a signed-in start ──
+    ['calendar state: a forged signature passes — any org can be named',
+        'netlify/functions/_oauthState.mjs',
+        "    if (!same(state.slice(dot + 1), macOf(body, secret))) return bad('signature');",
+        "    if (false) return bad('signature');"],
+
+    ['calendar state: a state never expires',
+        'netlify/functions/_oauthState.mjs',
+        "    if (!(Number(d.e) > now)) return bad('expired');",
+        "    if (false) return bad('expired');"],
+
+    ['calendar state: completed in a browser that did not start it',
+        'netlify/functions/_oauthState.mjs',
+        "    if (!same(d.n, cookieNonce)) return bad('another browser');",
+        "    if (false) return bad('another browser');"],
+
+    ['calendar state: a scope or provider the flow does not have is signed through',
+        'netlify/functions/_oauthState.mjs',
+        "    if (!CALENDAR_RETURN_SCOPES.includes(d.s) || !CALENDAR_RETURN_PROVIDERS.includes(d.p)) return bad('values');",
+        "    if (false) return bad('values');"],
+
+    ['calendar start: a rep starts the company calendar',
+        'netlify/functions/calendar-oauth-start.mjs',
+        "    if (scope === 'org' && auth.userRole !== 'Admin') return fail(403, 'Only Admins can connect a company calendar');",
+        "    if (false) return fail(403, 'Only Admins can connect a company calendar');"],
+
+    ["calendar start: the org in the state is the body's, not the sign-in's",
+        'netlify/functions/calendar-oauth-start.mjs',
+        "signState({ userId: auth.userId, orgId: auth.orgId,",
+        "signState({ userId: auth.userId, orgId: data.orgId || auth.orgId,"],
+
+    ['calendar callback: an unverified state is written',
+        'netlify/functions/calendar-oauth-callback.mjs',
+        "    if (!verified.ok) {",
+        "    if (false) {"],
+
+    ['calendar callback: the nonce is never spent — a state replays',
+        'netlify/functions/calendar-oauth-callback.mjs',
+        ", 'Set-Cookie': clearNonceCookie() },",
+        " },"],
+
+    ['calendar connect: the browser follows any URL a reply names',
+        'src/utils/calendarConnect.js',
+        "if (res?.ok && typeof data?.url === 'string' && data.url.startsWith('https://')) {",
+        "if (res?.ok && typeof data?.url === 'string') {"],
+
+    ['calendar disconnect: a personal connection deleted by id alone',
+        'netlify/functions/calendar-connections.mjs',
+        ".where(and(eq(userCalendarConnections.id, id), eq(userCalendarConnections.orgId, orgId), eq(userCalendarConnections.userId, userId)));",
+        ".where(eq(userCalendarConnections.id, id));"],
+
+    ['calendar disconnect: the company calendar deleted by id alone',
+        'netlify/functions/calendar-connections.mjs',
+        ".where(and(eq(orgCalendarConnections.id, id), eq(orgCalendarConnections.orgId, orgId)));",
+        ".where(eq(orgCalendarConnections.id, id));"],
+
+    ['api keys: a revoke by id alone',
+        'netlify/functions/api-keys.mjs',
+        "                .set({ revokedAt: new Date(), updatedAt: new Date() })\n                .where(and(eq(apiKeys.id, id), eq(apiKeys.orgId, orgId)));",
+        "                .set({ revokedAt: new Date(), updatedAt: new Date() })\n                .where(eq(apiKeys.id, id));"],
+
+    ['org-scoping guard: a db chain split across lines goes unseen again',
+        'tests/org-scoping.test.mjs',
+        "    const re = /db\\s*\\.\\s*(delete|update)\\s*\\(/g;",
+        "    const re = /db\\.(delete|update)\\s*\\(/g;"],
+
+    ['org-scoping guard: a raw SQL write goes unseen',
+        'tests/org-scoping.test.mjs',
+        "        if (/\\b(UPDATE|DELETE)\\b/i.test(m[1]) && !/org_id/.test(m[1])) {",
+        "        if (false) {"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

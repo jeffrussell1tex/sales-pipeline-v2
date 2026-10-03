@@ -1,23 +1,26 @@
 // netlify/functions/calendar-oauth-start.mjs
-// Initiates the OAuth 2.0 authorization flow for calendar providers.
+// Begins the OAuth 2.0 authorization flow for a calendar provider.
 //
-// GET /.netlify/functions/calendar-oauth-start?provider=google&scope=user|org
-//   → Redirects the browser to the provider's authorization page.
+// POST /.netlify/functions/calendar-oauth-start   { provider, scope: 'user' | 'org', from }
+//   → 200 { url } — the provider's consent page, for the browser to go to — and a
+//     cookie on this browser holding the state's nonce.
 //
-// Required env vars by provider:
-//   Google:  GOOGLE_CLIENT_ID
-//   Outlook: MICROSOFT_CLIENT_ID
-//   Yahoo:   YAHOO_CLIENT_ID
-//
-// The `scope` param controls whether we're connecting a personal (user) or
-// org-wide calendar. `scope=org` requires Admin role — enforced here and again
-// in the callback.
-//
-// State parameter encodes: { userId, orgId, provider, scope, userRole, from }
-// encoded as base64 JSON so the callback can restore context after the redirect.
+// Signed in (state §0.160 — the cross-org audit, 2 Oct 2026): who connects, to which
+// org and with which role come from verifyAuth. Until §0.160 they came from the query
+// string and rode to the callback as unsigned base64, and the callback wrote the
+// connection for whatever org they named. The state is now signed and bound to the
+// browser that asked (_oauthState.mjs; guide §18b53). `scope=org` needs an Admin.
 // `from` (state §0.97) is the surface the user clicked Connect on, allowlisted.
+//
+// A GET is the link from before §0.160 (a tab left open on an old build): it goes
+// back to the app with "start the connection again" — nothing it carries is read.
+//
+// Required env vars: the provider's client id (GOOGLE_CLIENT_ID, MICROSOFT_CLIENT_ID,
+// YAHOO_CLIENT_ID) and SETTINGS_ENCRYPTION_KEY (the state's signing key derives from it).
 
-import { cleanCalendarReturnFrom } from '../../src/utils/calendarReturn.js';
+import { verifyAuth } from './auth.mjs';
+import { cleanCalendarReturnFrom, calendarReturnUrl } from '../../src/utils/calendarReturn.js';
+import { signState, stateSecret, nonceCookie } from './_oauthState.mjs';
 
 const APP_URL = process.env.URL || 'https://salespipelinetracker.com';
 const CALLBACK_URL = `${APP_URL}/.netlify/functions/calendar-oauth-callback`;
@@ -48,69 +51,45 @@ function getClientId(provider) {
 
 export const handler = async (event) => {
     const headers = {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
         'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
+    const fail = (statusCode, error) => ({ statusCode, headers, body: JSON.stringify({ error }) });
 
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
-    if (event.httpMethod !== 'GET') {
-        return { statusCode: 405, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Method not allowed' }) };
+    if (event.httpMethod === 'GET') {
+        const from = cleanCalendarReturnFrom(event.queryStringParameters?.from);
+        return { statusCode: 302, headers: { Location: calendarReturnUrl(APP_URL, { status: 'error', from, reason: 'bad_state' }) }, body: '' };
     }
+    if (event.httpMethod !== 'POST') return fail(405, 'Method not allowed');
 
-    // userId, orgId, userRole are passed as query params from the frontend.
-    // The OAuth start endpoint is a browser redirect — no Authorization header is possible.
-    // Security note: scope=org is re-validated in the callback using verifyAuth, so
-    // a spoofed userRole here cannot actually grant org-level access.
-    const {
-        provider,
-        scope,
-        userId,
-        orgId,
-        userRole = 'User',
-        from: fromRaw,
-    } = event.queryStringParameters || {};
-    // Where the user clicked Connect (state §0.97, item 30): carried through the
-    // provider in `state` so the callback can send them back to that surface.
-    // Allowlisted; anything else is 'home'.
-    const from = cleanCalendarReturnFrom(fromRaw);
+    const auth = await verifyAuth(event);
+    if (auth.error) return fail(auth.status || 401, auth.error);
 
-    if (!userId || !orgId) {
-        return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'userId and orgId are required' }) };
-    }
+    let data = {};
+    try { data = JSON.parse(event.body || '{}') || {}; } catch { return fail(400, 'Invalid JSON'); }
+    const { provider, scope } = data;
+    // Where the user clicked Connect (state §0.97): signed into the state so the
+    // callback can send them back to that surface. Anything else is 'home'.
+    const from = cleanCalendarReturnFrom(data.from);
 
-    // Validate provider
-    if (!provider || !AUTH_URLS[provider]) {
-        return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'provider must be google, outlook, or yahoo' }) };
-    }
-
-    // Validate scope
-    if (!scope || !['user', 'org'].includes(scope)) {
-        return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'scope must be "user" or "org"' }) };
-    }
-
-    // Only admins can connect org calendars
-    if (scope === 'org' && userRole !== 'Admin') {
-        return { statusCode: 403, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Only Admins can connect a company calendar' }) };
-    }
-
-    // Yahoo does not support org-level connections
-    if (scope === 'org' && provider === 'yahoo') {
-        return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Yahoo Calendar does not support org-level connections' }) };
-    }
+    if (!provider || !AUTH_URLS[provider]) return fail(400, 'provider must be google, outlook, or yahoo');
+    if (!scope || !['user', 'org'].includes(scope)) return fail(400, 'scope must be "user" or "org"');
+    // Only an Admin connects the company calendar — the signed-in caller's role.
+    if (scope === 'org' && auth.userRole !== 'Admin') return fail(403, 'Only Admins can connect a company calendar');
+    if (scope === 'org' && provider === 'yahoo') return fail(400, 'Yahoo Calendar does not support org-level connections');
 
     const clientId = getClientId(provider);
-    if (!clientId) {
-        return {
-            statusCode: 503,
-            headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: `${provider} OAuth is not configured. Set the required env vars in Netlify.` }),
-        };
-    }
+    if (!clientId) return fail(503, `${provider} OAuth is not configured. Set the required env vars in Netlify.`);
+    const secret = stateSecret(process.env);
+    if (!secret) return fail(503, 'Calendar connections are not configured on this site (no signing key).');
 
-    // Encode state — restored by the callback to know who/what to store
-    const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole, from })).toString('base64');
+    // Who, which org and which role are the verified token's — never the request's.
+    const { state, nonce } = signState({ userId: auth.userId, orgId: auth.orgId, userRole: auth.userRole, provider, scope, from }, { secret });
 
-    // Build the authorization URL
     const params = new URLSearchParams({
         client_id:     clientId,
         redirect_uri:  CALLBACK_URL,
@@ -120,21 +99,12 @@ export const handler = async (event) => {
         access_type:   'offline',   // Google: request refresh token
         prompt:        'consent',   // Google/Microsoft: force refresh token even if previously granted
     });
-
     // Microsoft uses a slightly different param name for offline access
-    if (provider === 'outlook') {
-        params.delete('access_type');
-    }
+    if (provider === 'outlook') params.delete('access_type');
 
-    const authUrl = `${AUTH_URLS[provider]}?${params.toString()}`;
-
-    // Redirect the browser to the provider's login/consent screen
     return {
-        statusCode: 302,
-        headers: {
-            ...headers,
-            Location: authUrl,
-        },
-        body: '',
+        statusCode: 200,
+        headers: { ...headers, 'Set-Cookie': nonceCookie(nonce) },
+        body: JSON.stringify({ url: `${AUTH_URLS[provider]}?${params.toString()}` }),
     };
 };

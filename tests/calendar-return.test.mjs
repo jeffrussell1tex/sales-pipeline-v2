@@ -66,11 +66,11 @@ test('calendarReturnMessage names the provider and the reason, in one sentence',
 
 // ── source scans: the round trip is wired end to end ─────────────────────────
 
-test('calendar-oauth-start carries an allowlisted `from` through the provider in state', () => {
+test('calendar-oauth-start carries an allowlisted `from` through the provider in the signed state', () => {
     const s = code(read('netlify/functions/calendar-oauth-start.mjs'));
-    assert.ok(s.includes("import { cleanCalendarReturnFrom } from '../../src/utils/calendarReturn.js';"));
-    assert.ok(s.includes('    const from = cleanCalendarReturnFrom(fromRaw);'));
-    assert.ok(s.includes("const state = Buffer.from(JSON.stringify({ userId, orgId, provider, scope, userRole, from })).toString('base64');"), 'from rides in state');
+    assert.ok(s.includes("import { cleanCalendarReturnFrom, calendarReturnUrl } from '../../src/utils/calendarReturn.js';"));
+    assert.ok(s.includes('    const from = cleanCalendarReturnFrom(data.from);'));
+    assert.ok(s.includes('signState({ userId: auth.userId, orgId: auth.orgId, userRole: auth.userRole, provider, scope, from }, { secret })'), 'from rides in the signed state (§0.160)');
 });
 
 test('calendar-oauth-callback redirects through calendarReturnUrl at every exit, each with its reason', () => {
@@ -78,8 +78,9 @@ test('calendar-oauth-callback redirects through calendarReturnUrl at every exit,
     assert.ok(s.includes("import { calendarReturnUrl } from '../../src/utils/calendarReturn.js';"));
     assert.ok(!s.includes('SUCCESS_REDIRECT') && !s.includes('ERROR_REDIRECT'), 'the unread literals are gone');
     assert.ok(!s.includes('subtab=calendar'), 'nothing reads subtab; nothing sends it');
-    assert.ok(s.includes('headers: { Location: calendarReturnUrl(APP_URL, { status, provider: stateData?.provider, scope: stateData?.scope, from: stateData?.from, reason }) },'));
-    assert.ok(s.indexOf('let stateData = null;') < s.indexOf('if (error) {'), 'state is parsed BEFORE the provider-error branch, so even a refusal names the provider');
+    assert.ok(s.includes("headers: { Location: calendarReturnUrl(APP_URL, { status, provider: shown.provider, scope: shown.scope, from: shown.from, reason }), 'Set-Cookie': clearNonceCookie() },"));
+    const peek = s.indexOf('const shown = state ? peekState(state) : {};');
+    assert.ok(peek > 0 && peek < s.indexOf('if (error) {'), 'the shown fields are read BEFORE the provider-error branch, so even a refusal names the provider');
     for (const reason of ['provider_denied', 'missing_code', 'bad_state', 'not_admin', 'no_refresh_token', 'server_error']) {
         assert.ok(s.includes(`back('error', '${reason}')`), reason);
         assert.ok(Object.hasOwn(CALENDAR_RETURN_REASONS, reason), reason + ' has a sentence');
@@ -117,20 +118,20 @@ test('Settings opens the requested panel once and clears the request', () => {
 
 test('every Connect names where it started, and every surface shows the outcome', () => {
     const ca = code(read('src/Tabs/settings/integrations/ConnectedAppsDetail.jsx'));
-    assert.ok(ca.includes("userRole: userRole || 'User', from: 'apps' });"));
+    assert.ok(ca.includes("startCalendarConnect({ provider, scope, from: 'apps' })"));
     assert.ok(ca.includes("const returnNote = returned && returned.provider === cal.provider ? calendarReturnMessage(returned) : '';"), "on the provider's own card");
     assert.ok(ca.includes("<CardNote text={returnNote} tone={returned?.status === 'success' ? 'ok' : 'danger'}/>"));
     assert.ok(ca.includes('returned={calConnectResult}'));
     assert.ok(ca.includes('useEffect(() => () => { if (calConnectResult) setCalConnectResult(null); }, []);'), 'cleared when the panel closes');
     const hd = code(read('src/components/layout/AppHeader.jsx'));
-    assert.ok(hd.includes("            from: 'profile',"));
+    assert.ok(hd.includes("startCalendarConnect({ provider: 'google', scope: 'user', from: 'profile' })"));
     assert.ok(hd.includes("const returnedHere = calConnectResult && (calConnectResult.from === 'profile' || calConnectResult.from === 'home');"));
     assert.ok(hd.includes("        if (returnedHere && showProfilePanel) setProfilePanelTab('calendar');"), 'the Calendar tab is selected so the line is in view');
     assert.ok(hd.includes('{calendarReturnMessage(calConnectResult)}'));
     const home = code(read('src/Tabs/HomeTab.jsx'));
-    assert.ok(home.includes("userRole: userRole || 'User', from: 'home' });"));
+    assert.ok(home.includes("startCalendarConnect({ provider: 'google', scope: 'user', from: 'home' })"));
     const cc = code(read('src/Tabs/settings/company/CompanyCalendarDetail.jsx'));
-    assert.ok(cc.includes("userRole: userRole || 'User', from: 'company' });"));
+    assert.ok(cc.includes("startCalendarConnect({ provider: 'google', scope: 'org', from: 'company' })"));
     assert.ok(cc.includes("{calConnectResult && calConnectResult.from === 'company' && ("));
     assert.ok(cc.includes('{calendarReturnMessage(calConnectResult)}'));
 });

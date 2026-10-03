@@ -24,7 +24,7 @@
 //     each a request recorded on the org and mailed to the product owner, never
 //     a Connect.
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@clerk/clerk-react';
+import { startCalendarConnect } from '../../../utils/calendarConnect.js';
 import { dbFetch, dbWrite } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
@@ -358,7 +358,6 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     // A Connect that started here comes back here (state §0.97): the outcome is
     // shown on that provider's card and cleared when the panel closes.
     useEffect(() => () => { if (calConnectResult) setCalConnectResult(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-    const { userId, orgId } = useAuth();
     const isAdmin = userRole === 'Admin';
 
     const [slackModal,    setSlackModal]    = useState(false);
@@ -474,10 +473,8 @@ export const ConnectedAppsDetail = ({ onBack }) => {
     const slackConnected = connectedApps.slack === true && !!slackConfig?.webhookUrl;
 
     // ── Calendars ──────────────────────────────────────────────────────────
-    const connectCalendar = (provider, scope) => {
-        const qs = new URLSearchParams({ provider, scope, userId: userId || '', orgId: orgId || '', userRole: userRole || 'User', from: 'apps' });
-        window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
-    };
+    // calendarConnect.js (state §0.160): who and which org are the server's to say.
+    const connectCalendar = (provider, scope) => startCalendarConnect({ provider, scope, from: 'apps' });
     const disconnectCalendar = async (id, scope, provider) => {
         setBusy('cal'); note('cal:' + provider, '');
         const r = await dbWrite(`/.netlify/functions/calendar-connections?id=${encodeURIComponent(id)}&scope=${scope}`, { method: 'DELETE' });

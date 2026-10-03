@@ -7,7 +7,7 @@ import { CSectionCard, DetailPageChrome } from '../shared/form.jsx';
 import { LIcon } from '../shared/ui.jsx';
 import { MONTHS_SHORT, MONTHS_FULL } from './constants.js';
 import { useApp } from '../../../AppContext';
-import { useAuth } from '@clerk/clerk-react';
+import { startCalendarConnect } from '../../../utils/calendarConnect.js';
 import { calendarReturnMessage } from '../../../utils/calendarReturn.js';
 
 const FEDERAL_HOLIDAYS = [
@@ -57,7 +57,6 @@ const MonthGrid = ({ m, year, allHolidays }) => {
 
 export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     const { userRole, calConnectResult, setCalConnectResult } = useApp();
-    const { userId, orgId } = useAuth();
     const isAdmin = userRole === 'Admin';
     const [orgCals, setOrgCals]       = useState([]);
     const [orgCalsLoading, setOcl]    = useState(false);
@@ -94,10 +93,8 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     };
     useEffect(() => { loadOrgCals(); /* eslint-disable-next-line */ }, []);
 
-    const connectCorporateCalendar = () => {
-        const qs = new URLSearchParams({ provider: 'google', scope: 'org', userId: userId || '', orgId: orgId || '', userRole: userRole || 'User', from: 'company' });
-        window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
-    };
+    // calendarConnect.js (state §0.160): the server checks the Admin, from the sign-in.
+    const connectCorporateCalendar = () => startCalendarConnect({ provider: 'google', scope: 'org', from: 'company' });
     // The outcome of a Connect that started here (state §0.97): shown once, cleared when the panel closes.
     useEffect(() => () => { if (calConnectResult) setCalConnectResult(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
     const disconnectCorporateCalendar = async (id) => {

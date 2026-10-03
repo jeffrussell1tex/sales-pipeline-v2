@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { OrganizationSwitcher, useOrganizationList, useAuth } from '@clerk/clerk-react';
+import { OrganizationSwitcher, useOrganizationList } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
+import { startCalendarConnect } from '../../utils/calendarConnect.js';
 import { isDispatcher, canUseDispatch } from '../../utils/roles.js';
 import { T } from '../../tokens.js';
 
@@ -170,18 +171,10 @@ export default function AppHeader({
         saveProfile({ notificationPrefs: { ...prefs, [alertType]: { ...(prefs[alertType] || DEFAULT_PREFS[alertType]), [field]: value } } });
     };
 
-    // Same OAuth entry point HomeTab uses — one flow, not a second implementation
-    // that can drift. It is a full-page redirect, so nothing to await here.
-    const { userId: clerkUserId, orgId: clerkOrgId } = useAuth();
-    const connectCalendar = () => {
-        const qs = new URLSearchParams({
-            provider: 'google', scope: 'user',
-            userId: clerkUserId || '', orgId: clerkOrgId || '',
-            userRole: userRole || 'User',
-            from: 'profile',
-        });
-        window.location.href = '/.netlify/functions/calendar-oauth-start?' + qs.toString();
-    };
+    // The one Connect every surface uses (calendarConnect.js, state §0.160): the
+    // signed-in start answers with the provider's page. Who connects and to which
+    // org are the server's to say — nothing here names them.
+    const connectCalendar = () => startCalendarConnect({ provider: 'google', scope: 'user', from: 'profile' });
 
     // The connection RECORD (which account, since when, and its id) as opposed to
     // the derived `calendarConnected` boolean. Fetched only when the tab is opened
