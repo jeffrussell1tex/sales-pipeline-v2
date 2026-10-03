@@ -113,8 +113,15 @@ const thanksBody = (company) => `
 // same 404 for both, so the response never says which.
 async function orgForToken(token) {
     if (!TOKEN_RE.test(token)) return null;
-    const [row] = await db.select().from(settings)
-        .where(sql`${settings.extra}->'webToLead'->>'token' = ${token}`);
+    // Exactly ONE org holds a token, or none does (state §0.161). Two rows carrying
+    // it were a coin toss between their orgs — whichever row came first got the
+    // leads; now the form answers for neither. The unique index on the token
+    // (db/apply-settings-uniqueness.mjs) makes two impossible; this holds without it.
+    const rows = await db.select().from(settings)
+        .where(sql`${settings.extra}->'webToLead'->>'token' = ${token}`)
+        .limit(2);
+    if (rows.length !== 1) return null;
+    const [row] = rows;
     if (!row?.orgId) return null;
     const cfg = cleanWebToLead(row.extra?.webToLead);
     if (!cfg.enabled || cfg.token !== token) return null;

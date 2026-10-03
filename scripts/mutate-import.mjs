@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -2155,8 +2155,8 @@ const mutations = [
 
     ['web-to-lead: a save without the token drops the stored one (the link dies on every settings save)',
         'src/utils/webToLead.js',
-        "        : typeof kept.token === 'string' && TOKEN_RE.test(kept.token) ? kept.token\n",
-        ''],
+        "    const own = saving ? kept.token : src.token;",
+        "    const own = saving ? null : src.token;"],
 
     ['web-to-lead: the settings PUT loses the key (18b12 — the GET half alone)',
         'netlify/functions/settings.mjs',
@@ -3722,6 +3722,62 @@ const mutations = [
         'tests/org-scoping.test.mjs',
         "        if (/\\b(UPDATE|DELETE)\\b/i.test(m[1]) && !/org_id/.test(m[1])) {",
         "        if (false) {"],
+
+    // ── §0.161 — one org per web-form token; one settings row per org ──
+    ["web form: a save takes the payload's token again — another org's form, copied",
+        'src/utils/webToLead.js',
+        "    const own = saving ? kept.token : src.token;",
+        "    const own = src.token || kept.token;"],
+
+    ['web form: a save without a mint reads the payload',
+        'src/utils/webToLead.js',
+        "    const saving = prev !== null || typeof mint === 'function';",
+        "    const saving = typeof mint === 'function';"],
+
+    ['web form: two rows holding a token — the first one wins',
+        'netlify/functions/lead-intake.mjs',
+        "    if (rows.length !== 1) return null;",
+        "    if (!rows.length) return null;"],
+
+    ["restore: a settings row keeps the file's id — another org's",
+        'netlify/functions/backup.mjs',
+        "                return { ...r, id: orgId, extra };",
+        "                return { ...r, extra };"],
+
+    ["restore: a settings row carries another org's stored key",
+        'netlify/functions/backup.mjs',
+        "                delete extra.anthropicApiKey;",
+        "                /* key kept */"],
+
+    ["restore: a settings row carries another org's form token",
+        'netlify/functions/backup.mjs',
+        "                if (extra.webToLead && typeof extra.webToLead === 'object') extra.webToLead = { ...extra.webToLead, token: null, enabled: false };",
+        "                /* token kept */"],
+
+    ['restore: settings rows go in as the file wrote them',
+        'netlify/functions/backup.mjs',
+        "upsertChunked(table, key === 'settings' ? ownSettings(rows) : rows); }",
+        "upsertChunked(table, rows); }"],
+
+    ['inbound: an empty dropbox secret is used — any org\'s address is computable',
+        'netlify/functions/email-inbound.mjs',
+        "        if (!process.env.BCC_SECRET) {",
+        "        if (false) {"],
+
+    ['schema: settings no longer unique per org — a push drops the index again',
+        'db/schema.ts',
+        "    uniqueIndex('settings_org_id_uniq').on(t.orgId),",
+        "    // (unique org index removed)"],
+
+    ['schema: a web-form token no longer unique',
+        'db/schema.ts',
+        "    uniqueIndex('settings_web_to_lead_token_uq').on(sql`(${t.extra}->'webToLead'->>'token')`),",
+        "    // (unique token index removed)"],
+
+    ['apply script: builds a unique index over duplicates',
+        'db/apply-settings-uniqueness.mjs',
+        "if (dupOrgs[0].n || dupTokens[0].n) throw new Error(",
+        "if (false) throw new Error("],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

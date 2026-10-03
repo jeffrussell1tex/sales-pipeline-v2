@@ -306,6 +306,22 @@ export const handler = async (event) => {
                 return count;
             }
 
+            // A restored settings row is THIS org's (state §0.161 — the cross-org audit).
+            // Its id is the org's, never the file's: a file naming another org's id could
+            // take that id before that org's first save, and every later save of theirs
+            // would write nothing. And it carries no credential a file cannot prove is
+            // this org's — the web form's token (another org's would make two rows carry
+            // it) and the stored Anthropic key (one encryption key serves every org): the
+            // form comes back turned off, the key is entered again. With settings unique
+            // on org_id, a restore fills an org that has no settings row, and changes
+            // nothing for one that has.
+            const ownSettings = (rows) => rows.map(r => {
+                const extra = r?.extra && typeof r.extra === 'object' && !Array.isArray(r.extra) ? { ...r.extra } : {};
+                if (extra.webToLead && typeof extra.webToLead === 'object') extra.webToLead = { ...extra.webToLead, token: null, enabled: false };
+                delete extra.anthropicApiKey;
+                return { ...r, id: orgId, extra };
+            });
+
             let imported = 0;
             const errs = [];
 
@@ -327,7 +343,7 @@ export const handler = async (event) => {
             for (const { key, table } of crmEntities) {
                 const rows = ents[key];
                 if (!Array.isArray(rows) || rows.length === 0) continue;
-                try { imported += await upsertChunked(table, rows); }
+                try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : rows); }
                 catch (e) { errs.push(`${key}: ${e.message}`); }
             }
 

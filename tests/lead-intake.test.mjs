@@ -48,6 +48,21 @@ test('cleanWebToLead: a token is minted ONLY by a mint, only when on-with-none o
     assert.equal(cleanWebToLead({ enabled: true }, first, () => 'bad token').token, first.token, 'a mint that returns a malformed token is ignored');
 });
 
+test("cleanWebToLead: a SAVE never takes the payload's token — least of all another org's, copied from its embed (§0.161)", () => {
+    const OTHER = 'AnotherOrgsPublicToken0123456789';   // well-formed — the embed on another org's site
+    let n = 0;
+    const mint = () => { n++; return 'MintedToken_' + String(n).padStart(20, '0'); };
+    const prev = { enabled: true, token: TOK };
+    assert.equal(cleanWebToLead({ enabled: true, token: OTHER }, prev, mint).token, TOK, 'REGRESSION: the stored token stands');
+    assert.equal(cleanWebToLead({ enabled: true, token: OTHER }, prev).token, TOK, 'with or without a mint');
+    assert.equal(n, 0, 'and nothing was minted');
+    const fresh = cleanWebToLead({ enabled: true, token: OTHER }, null, mint).token;
+    assert.match(fresh, TOKEN_RE);
+    assert.notEqual(fresh, OTHER, 'no stored token: a fresh mint — never the payload');
+    assert.equal(cleanWebToLead({ enabled: false, token: OTHER }, null, mint).token, null, 'off: nothing at all');
+    assert.equal(cleanWebToLead({ enabled: true, token: OTHER }).token, OTHER, 'not a save (the GET, the intake): raw IS the stored config, read as it is');
+});
+
 test('cleanWebToLead: source defaults, thank-you URL is https or nothing (never an open redirect from the payload)', () => {
     assert.equal(cleanWebToLead({ source: '  ' }).source, WEB_LEAD_SOURCE);
     assert.equal(cleanWebToLead({ source: 'Website' }).source, 'Website');
@@ -90,7 +105,8 @@ test('lead-intake.mjs: token-only authority, a turned-off form is a 404, the ins
     const s = code(read('netlify/functions/lead-intake.mjs'));
     assert.ok(!s.includes("from './auth.mjs'"), 'no Clerk auth — this is the public surface');
     assert.ok(!s.includes('apiKeys'), 'and not an API-key surface either (api-surface.test.mjs pins the same)');
-    assert.ok(s.includes("        .where(sql`${settings.extra}->'webToLead'->>'token' = ${token}`);"), 'the token finds the settings row');
+    assert.ok(s.includes("        .where(sql`${settings.extra}->'webToLead'->>'token' = ${token}`)\n        .limit(2);"), 'the token finds the settings row');
+    assert.ok(s.includes('    if (rows.length !== 1) return null;'), 'exactly one org holds a token, or the form answers for none (§0.161)');
     assert.ok(s.includes('    if (!cfg.enabled || cfg.token !== token) return null;'), 'a turned-off form, or a token that does not normalise to itself, is not found');
     assert.ok(s.includes("    if (!TOKEN_RE.test(token)) return null;"), 'a malformed token is not even looked up');
     assert.ok(s.includes('            assignedTo: null,       // UNASSIGNED — the claim-request pool. Never from the caller.\n            ownerId:    null,'), 'unassigned, unowned — never from the payload');

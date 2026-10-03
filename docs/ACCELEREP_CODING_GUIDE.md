@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 2, 2026 · rules current through **§18b53** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 2, 2026 · rules current through **§18b54** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3679,3 +3679,13 @@ through `dbFetch`.
 5. **The callback logs no query** — it carries the provider's one-time code.
 6. **A static guard proves it can see what it guards.** The org-scoping test is handed the shapes it must refuse — a `db` chain split across lines, a raw SQL write — and refuses them; its one-line pattern had hidden three writes by id alone.
 7. **Test it as an attacker would**, against the real database: the old unsigned state, a genuine state with its org swapped, a genuine state from another browser, an expired one — each refused, the other org's row unchanged, the code never exchanged (tests/integration/calendar-oauth.itest.mjs).
+
+## 18b54. A Public Token Is The Server's, And One Org Holds It — A Uniqueness The Code Relies On Is Declared In The Schema (hard rule)
+
+**Origin (§0.161, 3 Oct 2026 — the cross-org audit's second CRITICAL).** The settings save took a web form's token from the payload whenever it was well-formed, so an Admin of any org could save another org's public token (it sits in that org's website embed); the public intake then resolved the token with no LIMIT and no exactly-one check, and answered for whichever row came first. §6.0a7 recorded the settings unique index as applied in the Neon SQL editor; on 2 Oct neither database had it, and db/schema.ts had never declared it.
+
+1. **A public token is minted, kept and rotated by the server alone.** A save takes it from the stored config, a fresh mint or an explicit rotate — never from the request, even when the request sends back the value the GET gave it.
+2. **The lookup answers only when exactly one row holds the token.** Fetch two: one is the answer, two is no answer — never a coin toss between orgs (lead-intake's `orgForToken`).
+3. **The database holds the uniqueness too** — a unique index on the token, and on settings.org_id — so no path (a restore, a hand edit, a future endpoint) can make the second row.
+4. **A uniqueness the code relies on is declared in db/schema.ts and applied by a script** that refuses duplicates, adds only, and reads back what the database holds (db/apply-settings-uniqueness.mjs). An index applied by hand and declared nowhere is not there the next time anyone looks.
+5. **A restore makes rows the restoring org's** — the org's id where the id is the org's, and no credential a file cannot prove belongs to this org (a form token, a stored key).

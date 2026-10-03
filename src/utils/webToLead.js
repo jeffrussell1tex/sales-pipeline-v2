@@ -42,14 +42,21 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * server's token factory — passed ONLY by the PUT, and only called when the
  * form is on and has no token, or a rotate was asked for. The GET and the
  * client pass no mint and can therefore never create a token.
+ *
+ * A SAVE (a stored config or a mint passed) takes the token from the stored
+ * config, a fresh mint or a rotate — NEVER from the payload (state §0.161).
+ * Until then a well-formed token in the payload replaced the stored one, so an
+ * Admin of any org could save another org's public token (it is in that org's
+ * website embed) and receive its leads (the cross-org audit, §9). Without
+ * either (the GET, the intake) `raw` IS the stored config, read as it is.
  */
 export function cleanWebToLead(raw, prev = null, mint = null) {
     const src  = raw  && typeof raw  === 'object' && !Array.isArray(raw)  ? raw  : {};
     const kept = prev && typeof prev === 'object' && !Array.isArray(prev) ? prev : {};
     const enabled = src.enabled === true;
-    let token = typeof src.token === 'string' && TOKEN_RE.test(src.token) ? src.token
-        : typeof kept.token === 'string' && TOKEN_RE.test(kept.token) ? kept.token
-        : null;
+    const saving = prev !== null || typeof mint === 'function';
+    const own = saving ? kept.token : src.token;
+    let token = typeof own === 'string' && TOKEN_RE.test(own) ? own : null;
     if (typeof mint === 'function' && (src.rotate === true || (enabled && !token))) {
         const t = mint();
         if (typeof t === 'string' && TOKEN_RE.test(t)) token = t;

@@ -258,6 +258,12 @@ export const handler = async (event) => {
         if (!sharedOk && !verifySvix(event)) {
             return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid webhook signature' }) };
         }
+        // No dropbox secret, no dropbox (state §0.161): with BCC_SECRET unset every
+        // address's signature would be an HMAC under an empty key — computable by
+        // anyone, for any org. The GET already reports this as not configured.
+        if (!process.env.BCC_SECRET) {
+            return { statusCode: 503, headers, body: JSON.stringify({ error: 'Inbound email is not configured' }) };
+        }
 
         const body = JSON.parse(event.body || '{}');
         // Resend inbound shape: { type: 'email.received', data: { from, to, cc, bcc, subject, text, html } }

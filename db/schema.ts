@@ -1,6 +1,7 @@
 import {
     pgTable, text, integer, boolean, timestamp, jsonb, varchar, decimal, index, uniqueIndex, primaryKey
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 // ── USERS ─────────────────────────────────────────────────────────────────────
 // Sales reps, managers, admins — one row per user account
 export const users = pgTable('users', {
@@ -326,6 +327,12 @@ export const settings = pgTable('settings', {
     quotesEnabled:   boolean('quotes_enabled').default(false),
 }, (t) => [
     index('settings_org_id_idx').on(t.orgId),
+    // One settings row per org, and one org per web-form token (state §0.161 — the
+    // cross-org audit: the unique index §6.0a7 recorded was in neither database, and
+    // this file had never declared it, so nothing kept it). Applied by
+    // db/apply-settings-uniqueness.mjs; declared here so a drizzle-kit push keeps both.
+    uniqueIndex('settings_org_id_uniq').on(t.orgId),
+    uniqueIndex('settings_web_to_lead_token_uq').on(sql`(${t.extra}->'webToLead'->>'token')`),
 ]);
 // ── AUDIT LOG ─────────────────────────────────────────────────────────────────
 export const auditLog = pgTable('audit_log', {
