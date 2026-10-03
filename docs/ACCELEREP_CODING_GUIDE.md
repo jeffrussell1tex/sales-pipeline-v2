@@ -1319,7 +1319,7 @@ fifth gate (18b6).
   - `VITE_CLERK_PUBLISHABLE_KEY`
   - `CLERK_SECRET_KEY`
   - `NETLIFY_DATABASE_URL` (auto-injected by Netlify Neon integration; the local `.env` uses the same name — this line said `NEON_DATABASE_URL` until 28 Aug, which was wrong)
-  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
+  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (`GOOGLE_REFRESH_TOKEN`, still set on both projects, has been read by nothing since the early calendar work — state §9, 3 Oct)
   - `RESEND_API_KEY`
 - **DB migrations:** `drizzle-kit push` (not `migrate`) — schema changes are pushed directly
 - The `netlify.toml` configures redirects so all routes serve `index.html` (SPA routing)
