@@ -260,8 +260,8 @@ function App() {
     const {
         settings, setSettings, settingsReady,
         loadSettings, handleUpdateFiscalYearStart, handleAddTaskType,
-        settingsSaveError,
-    } = useSettings();
+        settingsSaveError, settingsOrgId, settingsLoadError,
+    } = useSettings(activeOrgId);
 
     // The settings autosave is a background effect with no UI of its own. When it
     // is rejected — a non-admin hitting the Admin-only PUT /settings — surface it
@@ -270,6 +270,14 @@ function App() {
         if (!settingsSaveError) return;
         setUndoToast({ error: `Settings not saved — ${settingsSaveError}` });
     }, [settingsSaveError]);
+
+    // A failed settings load leaves the defaults on screen, and nothing saves
+    // settings until a load succeeds (state §0.162) — say so, or every pipeline,
+    // stage and switch looks reset with no explanation.
+    useEffect(() => {
+        if (!settingsLoadError) return;
+        setUndoToast({ error: `Settings did not load (${settingsLoadError}) — nothing in Settings can be saved until they do. Reload the page to try again.` });
+    }, [settingsLoadError]);
 
     // Dependency refs — populated after showConfirm/softDelete/addAudit are defined below
     const _addAuditRef    = useRef(null);
@@ -454,7 +462,7 @@ dbFetch('/.netlify/functions/leads')
 // Settings + users loading delegated to useSettings hook
 const orgSwitched = prevOrgIdRef.current && prevOrgIdRef.current !== organization?.id;
 prevOrgIdRef.current = organization?.id || null;
-loadSettings(clerkUser, orgSwitched);
+loadSettings(clerkUser, orgSwitched, organization?.id || null);
 
 // Load current user's own profile (notification prefs, etc.)
 dbFetch('/.netlify/functions/users?me=true')
@@ -1448,6 +1456,16 @@ dbFetch('/.netlify/functions/users?me=true')
     const [pendingNavTab, setPendingNavTab] = React.useState(null);
     const [showNavGuard, setShowNavGuard]   = React.useState(false);
     const settingsSaveRef = React.useRef(null);
+    // An org switch ends every unsaved Settings edit (state §0.162). The dirty
+    // flag and the open panel's save live here, above the Settings view, and
+    // outlived it: three panels hand over their save during render and never
+    // take it back, so after the header's switcher changed the org the leave
+    // guard's "Save changes and continue" could run the previous org's panel
+    // save — its values — with the new org's token.
+    useEffect(() => {
+        setSettingsDirty(false);
+        settingsSaveRef.current = null;
+    }, [activeOrgId]);
 
     // ── Scroll lock — prevent background scroll when any modal/panel is open ──
     // Placed here so ALL state variables it depends on are already initialized.
@@ -1554,6 +1572,7 @@ dbFetch('/.netlify/functions/users?me=true')
         settings, setSettings,
         activeOrgId,   // the signed-in org, or null — a mount-time load keys on it (§0.125; the Settings feed and counts since §0.148)
         settingsDirty, setSettingsDirty, settingsSaveRef,
+        settingsOrgId, settingsLoadError,   // whose settings are in state; why not (§0.162)
         opportunities, setOpportunities,
         accounts, setAccounts,
         contacts, setContacts,

@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs tests/settings-org-load.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -3778,6 +3778,94 @@ const mutations = [
         'db/apply-settings-uniqueness.mjs',
         "if (dupOrgs[0].n || dupTokens[0].n) throw new Error(",
         "if (false) throw new Error("],
+
+    // ── §0.162 — one org's settings in state; Settings rebuilt per org ──
+    // Caught by tests/settings-org-load.test.mjs: the real hook run against
+    // stand-ins, then pins on the view, App's wiring and the Sales Manager save.
+    ['settings: a late answer for the org the user left lands in the new org',
+        'src/hooks/useSettings.js',
+        "                if (gen !== loadGenRef.current) return;   // a newer load owns the state",
+        "                if (false) return;   // a newer load owns the state"],
+
+    ['settings: the roster of the org the user left lands in the new org',
+        'src/hooks/useSettings.js',
+        "                        if (gen !== loadGenRef.current) return;   // the roster of an org the user left",
+        "                        if (false) return;   // the roster of an org the user left"],
+
+    ["settings: the autosave PUTs whichever org's settings are in state with the active org's token",
+        'src/hooks/useSettings.js',
+        "        if (!org || org !== activeOrgId) return;",
+        "        if (!org) return;"],
+
+    ['settings: a successful load records no org — nothing autosaves, Settings never opens',
+        'src/hooks/useSettings.js',
+        "                settingsOrgRef.current = orgId;\n                setSettingsOrgId(orgId);",
+        "                setSettingsOrgId(orgId);"],
+
+    ['settings: a failed load is not reported — Settings waits forever, App says nothing',
+        'src/hooks/useSettings.js',
+        "                if (settingsOrgRef.current !== orgId) setLoadError(err?.message || 'the request failed');",
+        "                if (false) setLoadError(err?.message || 'the request failed');"],
+
+    ['settings: a switch keeps the previous org recorded — a failed load back on it goes unreported',
+        'src/hooks/useSettings.js',
+        "            settingsOrgRef.current = null;\n            setSettingsOrgId(null);",
+        "            setSettingsOrgId(null);"],
+
+    ['settings: a switch keeps reporting the previous org as loaded — back on it, Settings opens on the defaults',
+        'src/hooks/useSettings.js',
+        "            setSettingsOrgId(null);\n            setLoadError('');\n            setSettings(DEFAULT_SETTINGS);",
+        "            setLoadError('');\n            setSettings(DEFAULT_SETTINGS);"],
+
+    ['settings: a same-org reload resets like a switch — the open Settings view closes mid-edit',
+        'src/hooks/useSettings.js',
+        "        const switched = clearFirst || (prevOrgId && prevOrgId !== orgId);",
+        "        const switched = true;"],
+
+    ["settings: a save that lands after a switch sets the new org's baseline",
+        'src/hooks/useSettings.js',
+        "            if (settingsOrgRef.current === org) lastSavedRef.current = json;",
+        "            lastSavedRef.current = json;"],
+
+    ['settings: the unscoped localStorage bootstrap returns',
+        'src/hooks/useSettings.js',
+        "    const [settings, setSettings] = useState(DEFAULT_SETTINGS);",
+        "    const [settings, setSettings] = useState(() => { try { const s = safeStorage.getItem('salesSettings'); if (s) return { ...DEFAULT_SETTINGS, ...JSON.parse(s), users: [] }; } catch (e) {} return DEFAULT_SETTINGS; });"],
+
+    ['settings: the dead settings copies are kept',
+        'src/hooks/useSettings.js',
+        "                if (k && (k === 'salesUsers' || k.startsWith('salesSettings')",
+        "                if (k && (k === 'salesUsers' || false"],
+
+    ['settings view: opens on whatever settings are in state',
+        'src/Tabs/SettingsTab.jsx',
+        "    const loaded = !!activeOrgId && settingsOrgId === activeOrgId;",
+        "    const loaded = true;"],
+
+    ['settings view: one AdminView carried across orgs (no key)',
+        'src/Tabs/SettingsTab.jsx',
+        "                ? <AdminView key={activeOrgId} activeOrgId={activeOrgId}",
+        "                ? <AdminView activeOrgId={activeOrgId}"],
+
+    ['app: the settings hook is not told the active org',
+        'src/App.jsx',
+        "    } = useSettings(activeOrgId);",
+        "    } = useSettings();"],
+
+    ['app: settings load without their org',
+        'src/App.jsx',
+        "loadSettings(clerkUser, orgSwitched, organization?.id || null);",
+        "loadSettings(clerkUser, orgSwitched);"],
+
+    ["app: an org switch leaves the previous org's panel save armed",
+        'src/App.jsx',
+        "        setSettingsDirty(false);\n        settingsSaveRef.current = null;\n    }, [activeOrgId]);",
+        "    }, [activeOrgId]);"],
+
+    ['manager: tiers and SPIFFs save over settings that never loaded',
+        'src/Tabs/SalesManagerTab.jsx',
+        "        if (!settingsLoaded) {",
+        "        if (false) {"],
 ];
 
 // ── BASELINE ────────────────────────────────────────────────────────────────

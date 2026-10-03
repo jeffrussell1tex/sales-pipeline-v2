@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 2, 2026 · rules current through **§18b54** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 3, 2026 · rules current through **§18b55** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -218,8 +218,8 @@ All state lives in `App.jsx` and is distributed via `AppContext`. Components con
 - Settings are stored in the DB via `/.netlify/functions/settings` (PUT = upsert).
 - **Users are NEVER stored in the settings blob** — they have their own `/users` endpoint.
 - `useSettings` strips users before saving: `const { users: _stripUsers, ...settingsToSave } = settings`.
-- On load, settings and users are loaded in parallel. `settingsReady.current` gates the save effect to prevent writing before the initial load completes.
-- Non-user settings are cached in localStorage for instant paint. Users are always loaded fresh from DB.
+- On load, settings and users are loaded in parallel; each load is for ONE org and only the latest load's answers apply. The org whose settings are in state (`settingsOrgId`) is recorded only when its load succeeds; `settingsReady.current` and that org gate the save effect — nothing saves before the active org's load succeeds, or while another org is active (§18b55).
+- Nothing is cached in localStorage: settings and users always load from the DB, and every load deletes the copies earlier builds kept (§0.162 — the cache was keyed by the first membership, and an unscoped copy seeded the first paint).
 
 ---
 
@@ -420,7 +420,7 @@ Settings are org-wide (stages, field visibility, feature flags, fiscal year, the
 - **The plaintext never leaves the server.** GET returns `anthropicApiKeySet` (boolean) to all members and `anthropicApiKeyLast4` to Admins only. There is no code path that returns the key.
 - **Key inputs are write-only.** Always empty on load; track intent in state (`keyAction`) so an untouched field never clears a stored key. Omit the field from the PUT to preserve, send `null` to clear.
 - **`scrubAiSettings()` runs on GET and PUT**, so any stray plaintext self-heals out of the DB on the next admin save. `extractLegacyKey()` migrates a pre-existing plaintext key into the encrypted field once.
-- **Never mirror settings containing key material to localStorage** or echo them in the `useSettings` auto-save — `stripKeyMaterial()` handles both, and self-heals pre-fix caches.
+- **Never mirror settings containing key material to localStorage** or echo them in the `useSettings` auto-save — `stripKeyMaterial()` keeps it out of the auto-save; since §0.162 the hook keeps no localStorage copy at all and deletes the old ones on every load.
 - **Never log the key or put it in error responses, audit rows, or exported config.** Audit records only *that* it changed: `settings.apikey.set|cleared|migrated` (plus `settings.updated`).
 - Server-side consumers (`ai-score.mjs`) read the ciphertext from the DB row and decrypt in-process — never via the settings HTTP response.
 
@@ -3689,3 +3689,15 @@ through `dbFetch`.
 3. **The database holds the uniqueness too** — a unique index on the token, and on settings.org_id — so no path (a restore, a hand edit, a future endpoint) can make the second row.
 4. **A uniqueness the code relies on is declared in db/schema.ts and applied by a script** that refuses duplicates, adds only, and reads back what the database holds (db/apply-settings-uniqueness.mjs). An index applied by hand and declared nowhere is not there the next time anyone looks.
 5. **A restore makes rows the restoring org's** — the org's id where the id is the org's, and no credential a file cannot prove belongs to this org (a form token, a stored key).
+
+## 18b55. State Loaded For One Org Is Used Only While That Org Is Active — A View That Copies It Opens Only On It, Rebuilt For Each Org (hard rule)
+
+**Origin (§0.162, 3 Oct 2026 — two HIGH findings of the cross-org audit).** The header's OrganizationSwitcher changes the org in place, with no reload. `useSettings` started from an unscoped localStorage copy, marked itself ready whether its load succeeded or not, and applied any answer whenever it came back; the Settings view kept one `AdminView` across orgs, its open panel holding the form it had copied from the previous org; the leave guard's flag and save lived in App, above the view, and outlived it. Every save goes out with the ACTIVE org's token — so each of these could write one org's values into another, or the defaults over an org's real settings.
+
+1. **Tag org-scoped state with the org it was loaded for, and record the tag only when the load SUCCEEDS.** A failed load leaves nothing to save: defaults on screen are not the org's settings.
+2. **Number the loads; apply only the latest.** An answer that comes back for an older load — the org the user just left — is dropped, the data and the roster alike.
+3. **A write uses the state only while its tag is the active org** — the token on the request is the active org's, whatever the state holds.
+4. **A view that copies state when it opens opens only on the active org's own state, keyed by the org** (`<AdminView key={activeOrgId}>` behind `settingsOrgId === activeOrgId`), so nothing it copied, opened or typed survives a switch.
+5. **Anything above that view that can save — a dirty flag, a registered save — is reset when the active org changes.**
+6. **Say when the state did not load** — a toast, and the view says why it will not open; never the defaults dressed as the org's settings.
+7. **Test it with the real hook**: tests/settings-org-load.test.mjs runs the file itself against stand-ins for React and the fetch layer — a late answer after a switch, a failed load, a same-org reload, a save that lands after a switch.

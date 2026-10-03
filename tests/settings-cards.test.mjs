@@ -148,6 +148,6 @@ test('the Settings feed and live counts key on the active org — an org switch 
     assert.equal((av.match(/\}, \[activeOrgId\]\);/g) || []).length, 2, 'both mount-time loads re-run on a switch');
     assert.doesNotMatch(av, /return \(\) => \{ cancelled = true; \};\n\s+\}, \[\]\);/, 'neither load is mount-only any more');
     assert.ok(av.includes('setLiveCounts({});') && av.includes('setRecentFeed([]);'), 'the last org’s state is cleared before the load');
-    assert.ok(read('src/Tabs/SettingsTab.jsx').includes('<AdminView activeOrgId={activeOrgId} settings={settings}'), 'the tab hands the id down');
+    assert.ok(read('src/Tabs/SettingsTab.jsx').includes('<AdminView key={activeOrgId} activeOrgId={activeOrgId} settings={settings}'), 'the tab hands the id down');
     assert.ok(read('src/App.jsx').includes('        activeOrgId,   // the signed-in org, or null'), 'the id is in the app context');
 });

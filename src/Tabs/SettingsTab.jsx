@@ -3,6 +3,26 @@ import { useApp } from '../AppContext';
 import { T } from './settings/shared/tokens.js';
 import { AdminView } from './AdminView.jsx';
 
+// What Settings shows until the ACTIVE org's settings are in state (state
+// §0.162). A panel copies the settings it is handed when it opens, and its Save
+// writes with the active org's token — so no panel opens on anything else: not
+// the previous org's settings after the header's switcher changes the org, not
+// the defaults after a failed load.
+function SettingsNotLoaded({ failed }) {
+    return (
+        <div style={{ padding:'20px 22px', border:`1px solid ${T.border}`, borderRadius:T.rLg, background:T.surface, fontFamily:T.sans }}>
+            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>
+                {failed ? "This organization's settings did not load." : "Loading this organization's settings…"}
+            </div>
+            {failed && (
+                <div style={{ fontSize:12, color:T.inkMuted, marginTop:4 }}>
+                    Nothing here can be changed until they load. Reload the page to try again.
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function SettingsTab() {
     const {
         settings, setSettings,
@@ -12,7 +32,11 @@ export default function SettingsTab() {
         setSettingsDirty = () => {}, settingsSaveRef = { current: null },
         settingsOpenPanel = null, setSettingsOpenPanel = () => {},
         activeOrgId = null,
+        settingsOrgId = null, settingsLoadError = '',
     } = useApp();
+    // Open only on the active org's own settings; rebuilt from scratch for each
+    // org (the key), so no panel, form or open item carries across a switch.
+    const loaded = !!activeOrgId && settingsOrgId === activeOrgId;
 
     return (
         <div className="tab-page" style={{ fontFamily:T.sans }}>
@@ -35,8 +59,10 @@ export default function SettingsTab() {
                 live here was unreachable — as was the `canAdmin` split, since Managers
                 cannot open the tab either. Personal preferences live behind the avatar
                 menu for every user. */}
-            <AdminView activeOrgId={activeOrgId} settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} settingsDirty={settingsDirty} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}
-                openPanelId={settingsOpenPanel} onOpenedPanel={() => setSettingsOpenPanel(null)}/>
+            {loaded
+                ? <AdminView key={activeOrgId} activeOrgId={activeOrgId} settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} settingsDirty={settingsDirty} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}
+                    openPanelId={settingsOpenPanel} onOpenedPanel={() => setSettingsOpenPanel(null)}/>
+                : <SettingsNotLoaded failed={!!settingsLoadError}/>}
         </div>
     );
 }

@@ -340,7 +340,7 @@ function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, t
 // `fyRange` is the current fiscal year { from, to }: the board's quota column is
 // the ANNUAL figure, so its bar is fiscal-year-to-date won by close day — not
 // every deal ever (state §0.80).
-function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, isAdmin, opportunities, quarters, quotaMode, saveState, setActiveTab, setAllQuotaMode, setSaveState, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, updateRepField, visibleReps }) {
+function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, isAdmin, opportunities, quarters, quotaMode, saveState, setActiveTab, setAllQuotaMode, setSaveState, setSettings, setSpiffClaims, settings, settingsLoaded, showConfirm, spiffClaims, updateRepField, visibleReps }) {
     const unassignedReps = isAdmin ? visibleReps.filter(u => !u.territory?.trim()) : [];
     const visibleTerritories = [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort();
     const terrFilter = settings.__qbTerrFilter || 'all';
@@ -383,6 +383,14 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
     };
 
     const saveExtra = async (patch, label) => {
+        // Only over THIS org's loaded settings (state §0.162): the patch is built
+        // from the settings on screen, which are the defaults until the org's
+        // load succeeds — saving then would put default tiers, or a SPIFF list of
+        // one, over the org's real ones.
+        if (!settingsLoaded) {
+            setSaveState({ status: 'error', msg: `Not saved — this organization's settings have not loaded. Reload the page and try again.` });
+            return false;
+        }
         setSaveState({ status: 'saving', msg: '' });
         try {
             const res = await dbFetch('/.netlify/functions/settings', {
@@ -727,6 +735,7 @@ export default function SalesManagerTab() {
         setEditingTask, setTaskRailId, setTaskRailMode,
         spiffClaims, setSpiffClaims,
         isMobile,
+        activeOrgId, settingsOrgId,
     } = useApp();
 
     const isAdmin   = userRole === 'Admin';
@@ -1307,6 +1316,7 @@ export default function SalesManagerTab() {
             {subTab === 'admin'    && <AdminTab
                 card={card} cardHdr={cardHdr} eyebrow={eyebrow}
                 settings={settings} setSettings={setSettings}
+                settingsLoaded={!!activeOrgId && settingsOrgId === activeOrgId}
                 opportunities={opportunities} currentUser={currentUser} isAdmin={isAdmin}
                 visibleReps={visibleReps} quarters={quarters} quotaMode={quotaMode} fyRange={fyRange}
                 getRepTotal={getRepTotal} updateRepField={updateRepField}

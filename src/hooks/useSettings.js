@@ -5,7 +5,8 @@ import { safeStorage, dbFetch, dbWrite, waitForToken } from '../utils/storage';
 // The server no longer returns the org's Anthropic key, but browsers that ran
 // an earlier build still have the plaintext sitting in localStorage — and this
 // hook mirrors settings straight back out on every change, which would re-post
-// it. Strip key material from anything we read from or write to storage/DB.
+// it. Strip key material from anything we write to the DB. (Since §0.162 the
+// hook neither reads nor writes that localStorage copy; every load deletes it.)
 // The server scrubs the same fields; this is defence in depth on the client.
 const KEY_SHAPED = /^sk-[A-Za-z0-9_-]{16,}$/;
 const isKeyString = (v) => typeof v === 'string' && KEY_SHAPED.test(v.trim());
@@ -116,9 +117,8 @@ const serializeForSave = (settings) => {
     return JSON.stringify(value);
 };
 
-export function useSettings() {
+export function useSettings(activeOrgId = null) {
     const settingsReady = useRef(false);
-    const orgIdRef = useRef(null); // track current org for cache key scoping
     // Serialized form of the last state KNOWN to the server — set on load and
     // after each accepted PUT. The autosave diffs against this and skips
     // no-change writes. Without it the effect fired on every settings OBJECT
@@ -129,70 +129,74 @@ export function useSettings() {
     // debt, closed here).
     const lastSavedRef = useRef(null);
 
-    const getStorageKey = () => orgIdRef.current
-        ? `salesSettings_${orgIdRef.current}`
-        : 'salesSettings'; // fallback for initial paint before org known
+    // WHICH ORG's settings are in state (state §0.162). Every load is for one
+    // org — the org App passes, the org its token speaks for — and takes the
+    // next number; an answer that comes back for an older number is dropped, so
+    // a slow answer for the org the user just left never lands in the new one.
+    // The org is recorded only when its load SUCCEEDS; until then nothing
+    // autosaves and the Settings view does not open (SettingsTab compares it
+    // with the active org). This hook used to start from an UNSCOPED
+    // localStorage copy, mark itself ready whether the load succeeded or not,
+    // and PUT the next change an Admin made — the defaults, or an earlier
+    // build's cached copy, possibly another org's — over the org's real
+    // pipelines, stages and KPIs.
+    const loadGenRef     = useRef(0);
+    const loadOrgRef     = useRef(null);   // the org the latest load is for
+    const settingsOrgRef = useRef(null);   // the org whose settings are in state
+    const [settingsOrgId, setSettingsOrgId] = useState(null);
+    // Non-empty when the active org's settings did not load.
+    const [loadError, setLoadError] = useState('');
 
     // Non-empty when the last autosave was rejected.
     const [saveError, setSaveError] = useState('');
 
-    const [settings, setSettings] = useState(() => {
-        // Bootstrap non-user settings from localStorage for instant paint,
-        // but NEVER seed users from localStorage — always authoritative from DB.
-        // We can't scope by orgId here (not known yet) so we read the unscoped key
-        // as a best-effort bootstrap — it will be overwritten by DB data momentarily.
-        try {
-            const saved = safeStorage.getItem('salesSettings');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    const { value: clean, found } = stripKeyMaterial(parsed);
-                    // If this cache predates the fix it still holds the plaintext
-                    // key — rewrite it immediately rather than waiting for the next
-                    // settings change to overwrite it.
-                    if (found) { try { safeStorage.setItem('salesSettings', JSON.stringify(clean)); } catch(e) {} }
-                    return { ...DEFAULT_SETTINGS, ...clean, users: [] };
-                } catch(e) {}
-            }
-        } catch(e) {}
-        return DEFAULT_SETTINGS;
-    });
+    const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 
-    // Load settings from DB on mount
-    const loadSettings = (clerkUser, clearFirst = false) => {
-        if (!clerkUser) return;
+    // Load the org's settings and roster from the DB. App calls this for the
+    // active org each time its main load runs — at sign-in, and on every switch.
+    const loadSettings = (clerkUser, clearFirst = false, orgId = null) => {
+        if (!clerkUser || !orgId) return;
 
-        // Extract orgId from clerkUser's active org — used to scope the localStorage key
-        const orgId = clerkUser.organizationMemberships?.[0]?.organization?.id || null;
-        const prevOrgId = orgIdRef.current;
-        orgIdRef.current = orgId;
+        // Each load is for ONE org and takes the next number; only the latest
+        // load's answers are applied.
+        const gen = ++loadGenRef.current;
+        const prevOrgId = loadOrgRef.current;
+        loadOrgRef.current = orgId;
+        const switched = clearFirst || (prevOrgId && prevOrgId !== orgId);
 
-        // Reset state when switching orgs to prevent bleed-through
-        if (clearFirst || (prevOrgId && prevOrgId !== orgId)) {
+        // Reset state when switching orgs to prevent bleed-through — nothing is
+        // ready, and no org's settings are in state, until this load succeeds.
+        if (switched) {
             settingsReady.current = false;
+            settingsOrgRef.current = null;
+            setSettingsOrgId(null);
+            setLoadError('');
             setSettings(DEFAULT_SETTINGS);
-            // Purge ALL sales/accel keys — org switch must start completely clean
-            try {
-                const keysToRemove = [];
-                for (let i = 0; i < localStorage.length; i++) {
-                    const k = localStorage.key(i);
-                    if (k && (k.startsWith('salesSettings') || k.startsWith('salesUsers') || k.startsWith('accel'))) {
-                        keysToRemove.push(k);
-                    }
-                }
-                keysToRemove.forEach(k => safeStorage.removeItem(k));
-            } catch(e) {}
         }
-        // Always purge the stale users cache — users are authoritative from DB only
-        try { safeStorage.removeItem('salesUsers'); } catch(e) {}
+        // Purge what nothing reads any more — the users cache (users are
+        // authoritative from DB only) and the settings copies earlier builds
+        // kept (unscoped, or keyed by the FIRST membership, kept after
+        // sign-out) — and on an org switch every sales/accel key: a switch
+        // starts completely clean.
+        try {
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && (k === 'salesUsers' || k.startsWith('salesSettings')
+                    || (switched && (k.startsWith('salesUsers') || k.startsWith('accel'))))) {
+                    keysToRemove.push(k);
+                }
+            }
+            keysToRemove.forEach(k => safeStorage.removeItem(k));
+        } catch(e) {}
 
-        // Load settings and users in parallel, only mark ready when both complete.
         // On org switch, delay users fetch 500ms to ensure Clerk JWT has rotated.
-        const usersDelay = (clearFirst || (prevOrgId && prevOrgId !== orgId)) ? 500 : 0;
+        const usersDelay = switched ? 500 : 0;
 
-        const settingsPromise = dbFetch('/.netlify/functions/settings')
+        dbFetch('/.netlify/functions/settings')
             .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => {
+                if (gen !== loadGenRef.current) return;   // a newer load owns the state
                 if (data.settings) {
                     const { users: _stripUsers, ...settingsFromDb } = data.settings;
                     setSettings(prev => {
@@ -215,10 +219,23 @@ export function useSettings() {
                         return next;
                     });
                 }
+                // This org's settings are in state: the autosave and the
+                // Settings view may use them from here.
+                settingsOrgRef.current = orgId;
+                setSettingsOrgId(orgId);
+                setLoadError('');
+                setTimeout(() => { if (gen === loadGenRef.current) settingsReady.current = true; }, 0);
             })
-            .catch(err => { console.error('Failed to load settings:', err); });
+            .catch(err => {
+                console.error('Failed to load settings:', err);
+                if (gen !== loadGenRef.current) return;
+                // A reload of the org already in state keeps that copy: it is
+                // this org's. A first load or a switch that failed has nothing
+                // to save — the autosave stays off, and Settings says why.
+                if (settingsOrgRef.current !== orgId) setLoadError(err?.message || 'the request failed');
+            });
 
-        const usersPromise = waitForToken()
+        waitForToken()
             .then(() => new Promise(resolve => setTimeout(resolve, usersDelay)))
             .then(() =>
                 dbFetch('/.netlify/functions/users')
@@ -231,17 +248,13 @@ export function useSettings() {
                         return r.json();
                     })
                     .then(data => {
+                        if (gen !== loadGenRef.current) return;   // the roster of an org the user left
                         if (data && data.users) {
                             setSettings(prev => ({ ...prev, users: data.users }));
                         }
                     })
                     .catch(() => {})
             );
-
-        // Mark ready only after both loads complete (or fail)
-        Promise.allSettled([settingsPromise, usersPromise]).then(() => {
-            setTimeout(() => { settingsReady.current = true; }, 0);
-        });
     };
 
     // Save settings to DB whenever they change (after initial load).
@@ -250,23 +263,30 @@ export function useSettings() {
     // only via handleUpdateFiscalYearStart (explicit user action in Settings).
     // Including it here causes DEFAULT_SETTINGS value (1) to race against and
     // overwrite the real DB value on every settings load cycle.
+    // activeOrgId is read, not a dependency: the effect runs when the settings
+    // change, and each run sees that render's active org.
     useEffect(() => {
         if (!settingsReady.current) return;
+        // Only the org whose settings are in state, and only while it is the
+        // active org — the PUT goes out with the ACTIVE org's token (§0.162).
+        const org = settingsOrgRef.current;
+        if (!org || org !== activeOrgId) return;
         const { users: _stripUsers, fiscalYearStart: _stripFiscal, ...rest } = settings;
-        // Never mirror key material to disk or echo it back to the server. The
-        // key is written only by the AI settings panel, via an explicit PUT.
+        // Never echo key material back to the server. The key is written only
+        // by the AI settings panel, via an explicit PUT.
         const { value: settingsToSave } = stripKeyMaterial(rest);
         // No-change guard: users/roster refreshes and the load's own
         // mirror-back produce new OBJECTS with identical payloads — skip them.
         // Only a payload that differs from the server's last-known state PUTs.
         const json = JSON.stringify(settingsToSave);
         if (json === lastSavedRef.current) return;
-        // DB FIRST, cache second. This used to write localStorage BEFORE the PUT
-        // and then discard the Response — dbFetch resolves for ANY status (guide
-        // 18b1), so a non-admin's 403 on this Admin-only endpoint left the change
-        // cached locally forever: the UI showed it, a reload re-read it from cache,
-        // and nothing ever reached the database. A failure that masked itself
-        // indefinitely on one machine while no one else saw the change.
+        // DB only. This used to write localStorage BEFORE the PUT and then
+        // discard the Response — dbFetch resolves for ANY status (guide 18b1), so
+        // a non-admin's 403 on this Admin-only endpoint left the change cached
+        // locally forever: the UI showed it, a reload re-read it from cache, and
+        // nothing ever reached the database. The cache itself is gone (§0.162):
+        // it was keyed by the FIRST membership, not the active org, and nothing
+        // read it but the unscoped bootstrap.
         (async () => {
             const r = await dbWrite('/.netlify/functions/settings', {
                 method: 'PUT',
@@ -275,14 +295,13 @@ export function useSettings() {
             });
             if (!r.ok) {
                 setSaveError(r.error);
-                return;                       // do NOT cache what the server rejected
+                return;                       // the baseline stays: the server does not hold this
             }
             setSaveError('');
-            lastSavedRef.current = json;      // the server now holds this state
-            try {
-                // Scope by orgId so switching orgs never reads another org's cached settings
-                safeStorage.setItem(getStorageKey(), JSON.stringify(settingsToSave));
-            } catch(e) {}
+            // The server now holds this state — this org's baseline, unless the
+            // user switched orgs while the PUT was out (that org's load has set
+            // its own).
+            if (settingsOrgRef.current === org) lastSavedRef.current = json;
         })();
     }, [settings]);
 
@@ -300,6 +319,8 @@ export function useSettings() {
         settings,
         setSettings,
         settingsReady,
+        settingsOrgId,
+        settingsLoadError: loadError,
         settingsSaveError: saveError,
         loadSettings,
         handleUpdateFiscalYearStart,
