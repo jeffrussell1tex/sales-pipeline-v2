@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 3, 2026 · rules current through **§18b57** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 4, 2026 · rules current through **§18b58** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -920,7 +920,7 @@ A **Dispatcher** runs field-service scheduling and reads the CRM to see what was
 - `users.mjs` passes role explicitly through `withRole(clean, known)`; `roleOf(id)` preserves the stored value on update.
 - The paths that set one: an Admin's **invite** or **create** (a Manager adds reps only), the **first-load link** (an invited row's role, by email), a **first sign-in's new row** (a rep, or a fresh org's first Admin), and **`user-role.mjs`** — the one path that changes an existing row's role. Clerk is not written (§0.163).
 - **`users-sync?check=true`** is a dry run — same reconciliation, no writes, no audit row — used to show an out-of-sync banner on Settings → Users. Reconciling silently is not enough; drift needs to be *visible*, or it accumulates unnoticed.
-- Deleting a roster row does **not** remove the Clerk account, so Sync — or the person's next sign-in — recreates it, as a rep. **Removing access is DEACTIVATE** (§0.164, §18b56.8): the row and its history stay, and every request in that org is refused; or remove the person from the organization in Clerk.
+- Deleting a roster row does **not** remove the Clerk account, so Sync — or the person's next sign-in — recreates it, as a rep. **Removing access is DEACTIVATE** (§0.164, §18b56.8): the row and its history stay, and every request in that org is refused; or remove the person from the organization in Clerk. An invitation not yet accepted is REVOKED, not deleted (§0.165, §18b58): DELETE refuses its row, because the Clerk invitation would stay live.
 
 `auth.mjs` reads the role from the caller's row in the active org's roster on every request (`_callerRole.mjs`, §0.163) — the `users` table IS the role, per org. **Changing a role means changing that one row** — `user-role.mjs` (Admin-only) does it, counts the row it wrote, and audits `user.role.changed`; it confirms a linked person is still a member of the org first, and refuses self-demotion from Admin. It used to write Clerk's user-level `publicMetadata.role` — one value for every org — so a change in one org changed the person in every org (§0.153).
 
@@ -3723,3 +3723,15 @@ through `dbFetch`.
 2. **Taken back on unmount.** A closed panel's save must not be left for the next panel's guard.
 3. **One helper, every panel** — tests/settings-leave-guard.test.mjs runs the helper and scans that no panel assigns the slot itself.
 4. **A save the guard can run throws when it did not save** (guide §18a10) — a refusal included — or the guard moves on as though it had.
+
+## 18b58. Access Granted Elsewhere Is Taken Back There — A Revoke That Only Hides A Row Is Worse Than None (hard rule)
+
+**Origin (§0.165, 4 Oct 2026).** The Pending invites page's Revoke removed the row from the page's own state and called nothing; Delete user removed an invitation's row and left its Clerk invitation live — so a "revoked" or "deleted" invitee could still accept and join. The page around them was invented — figures, dates, a link, switches — and the invite page sent neither its expiry nor its note.
+
+1. **A control does what it says, or it is not there.** A security action that only looks done — a row hidden, a switch saved nowhere — reports a revocation that never happened (§0.59's sweep, again).
+2. **Access granted outside our database is removed where it was granted.** An invitation lives in Clerk: revoke it there, then remove the row — and when Clerk refuses, keep the row (fail closed) and say so.
+3. **Every path that removes a row asks what the row stands for.** An invitation's row is revoked, never deleted alone (DELETE answers 409); a member is deactivated (§18b56.8). `isOpenInvitationRow()` is the one predicate.
+4. **Removing anyone is an Admin's, and never one's own** — the role lives on the row (§18b56), so a delete demotes as surely as a role change.
+5. **Every change to who has access is audited** — invite, revoke, deactivate, delete.
+6. **Show the outside system's own facts** — Clerk's sent and expiry dates, the expiry it was actually given (one list, `src/utils/inviteExpiry.js`) — never a placeholder that reads like data.
+7. **Test with a stand-in that keeps the outside state per org** and refuses a call into another org (tests/integration/invitations.itest.mjs): an address invited to two orgs, revoked in one, keeps the other.

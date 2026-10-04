@@ -229,6 +229,17 @@ export function invalidateRoster(orgId) {
     }
 }
 
+/**
+ * An invitation not yet accepted (state §0.165): a roster row with no Clerk
+ * identity whose status is Invited — the invite path stores one so, and the
+ * person's first sign-in links it. Its Clerk invitation is what lets them in,
+ * so removing one is REVOKING it (users.mjs); deleting the row alone left the
+ * invitation live. Nor is one drift to the sync: its person has not joined.
+ */
+export function isOpenInvitationRow(row) {
+    return !!row && !row.clerkUserId && /^invited$/i.test(row.profile?.status || '');
+}
+
 export async function resolveOwnerId(name, orgId) {
     if (!orgId) throw new Error('_lib.resolveOwnerId: orgId is required.');
     const wanted = String(name ?? '').trim().toLowerCase();

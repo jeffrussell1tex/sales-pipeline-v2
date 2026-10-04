@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
 import { dbFetch, dbWrite } from '../../../utils/storage';
 import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
-import { RToggle, RCheck, UserAvatar } from '../shared/ui.jsx';
-import { memberStatus } from './memberStatus.js';
+import { RCheck, UserAvatar } from '../shared/ui.jsx';
+import { memberStatus, invitationEntries } from './memberStatus.js';
+import { INVITE_EXPIRY_DAYS } from '../../../utils/inviteExpiry.js';
 // THE ROLE VALUES come from the one list the server checks (src/utils/roles.js,
 // re-exported by auth.mjs as APP_ROLES). This file carried its own copy of five,
 // which is how a role added on the server went missing here; the server refuses
@@ -126,9 +127,10 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     // admin did not touch was sent with a role the server does not recognise — and
     // because the label matched no <option>, the select displayed "Admin".
     const [defaultRole, setDefaultRole] = useState('User');
-    const [expiry, setExpiry] = useState('7 days');
-    const [requireMfa, setRequireMfa] = useState(true);
-    const [note, setNote] = useState('Welcome to the team! Click below to set up your password — should take under 5 minutes.');
+    // Days the link lasts, sent to Clerk (state §0.165). The note and the "Require
+    // MFA" switch that sat here were never sent anywhere: Clerk's invitation email
+    // is its own template, and MFA is Clerk's setting, not one invitation's.
+    const [expiry, setExpiry] = useState(7);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState('');
@@ -153,6 +155,9 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     };
 
     const readyCount = rows.filter(r => r.email.trim() && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email.trim())).length;
+    // Real counts for the seat card (state §0.165) — "Pending today" was a literal 0.
+    const activeToday  = (settings.users || []).filter(u => u.name && memberStatus(u) === 'Active').length;
+    const pendingToday = (settings.users || []).filter(u => u.name && memberStatus(u) === 'Invited').length;
 
     const handleSend = async () => {
         const validated = validateRows();
@@ -161,9 +166,22 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
         if (invalid.length > 0) { setError(`Fix ${invalid.length} error${invalid.length > 1 ? 's' : ''} before sending.`); return; }
         setSaving(true); setError('');
         try {
-            const invites = validated.map(r => ({ email:r.email.trim(), role:r.role||defaultRole, team:r.team, manager:r.manager, territory:r.territory, note, expiry, requireMfa }));
+            const invites = validated.map(r => ({ email:r.email.trim(), role:r.role||defaultRole, team:r.team, manager:r.manager, territory:r.territory, expiresInDays: expiry }));
             const resp = await dbFetch('/.netlify/functions/users', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'invite', invites }) });
-            if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Invite failed'); }
+            const d = await resp.json().catch(() => ({}));
+            // The new rows join the roster on screen — the list showed none of
+            // them until a reload (state §0.165).
+            const sent = Array.isArray(d.invited) ? d.invited : [];
+            if (sent.length) setSettings(prev => {
+                const byId = new Map((prev.users || []).map(u => [u.id, u]));
+                sent.forEach(u => byId.set(u.id, { ...(byId.get(u.id) || {}), ...u }));
+                return { ...prev, users: [...byId.values()] };
+            });
+            // Per-invite refusals come back in `errors` — with a 201 when some went
+            // out. They were dropped, and the screen said "Sent!".
+            const failed = Array.isArray(d.errors) ? d.errors : [];
+            if (failed.length) throw new Error(`${sent.length} sent; not sent — ${failed.map(f => `${f.email || 'a row'}: ${f.error}`).join('; ')}`);
+            if (!resp.ok) throw new Error(d.error || 'Invite failed');
             setSaved(true);
             setTimeout(() => { setSaved(false); onUsers(); }, 1500);
         } catch(err) {
@@ -179,7 +197,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
             <PeopleCrumb onBack={onBack} onUsers={onUsers} leaf="Invite" />
             <PeoplePageHeader
                 title="Invite users"
-                subtitle="Send invitations to join the workspace. Invitees receive a 7-day expiring email link."
+                subtitle={`Send invitations to join the workspace. Clerk emails each invitee a link that lasts ${expiry} days.`}
                 statusDetail={readyCount > 0 ? `${readyCount} ready to send` : null}
                 rightActions={<>
                     <PeopleSecBtn onClick={onUsers}>Cancel</PeopleSecBtn>
@@ -233,21 +251,9 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                             </div>
                             <div>
                                 <div style={{ ...eb(T.inkMuted), marginBottom:5 }}>Invite expiry</div>
-                                <select style={sel} value={expiry} onChange={e=>setExpiry(e.target.value)}>
-                                    {['3 days','7 days','14 days','30 days'].map(o=><option key={o}>{o}</option>)}
+                                <select style={sel} value={expiry} onChange={e=>setExpiry(Number(e.target.value))}>
+                                    {INVITE_EXPIRY_DAYS.map(n=><option key={n} value={n}>{n} days</option>)}
                                 </select>
-                            </div>
-                            <div style={{ gridColumn:'1 / 3' }}>
-                                <div style={{ ...eb(T.inkMuted), marginBottom:5 }}>Personal note (optional)</div>
-                                <textarea value={note} onChange={e=>setNote(e.target.value)} rows={3}
-                                    style={{ ...inp, resize:'vertical', lineHeight:1.5 }}
-                                    placeholder="Appears in the invitation email above the join button."/>
-                            </div>
-                            <div style={{ gridColumn:'1 / 3', display:'flex', flexDirection:'column', gap:10, padding:12, background:T.bg, borderRadius:T.r }}>
-                                <label style={{ display:'flex', alignItems:'center', gap:10, fontSize:12.5, color:T.ink, cursor:'pointer' }}>
-                                    <RToggle on={requireMfa} onChange={setRequireMfa}/>
-                                    Require MFA on first login
-                                </label>
                             </div>
                         </div>
                     </SectionCard>
@@ -257,9 +263,9 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                 <div style={{ position:'sticky', top:0 }}>
                     <SectionCard title="Seat impact" description="If you send all valid invites.">
                         {[
-                            { label:'Active today', value:(settings.users||[]).filter(u=>u.name).length },
-                            { label:'Pending today', value:0 },
-                            { label:'After this batch', value:(settings.users||[]).filter(u=>u.name).length + readyCount, warn: readyCount > 0 },
+                            { label:'Active today', value:activeToday },
+                            { label:'Pending today', value:pendingToday },
+                            { label:'After this batch', value:activeToday + pendingToday + readyCount, warn: readyCount > 0 },
                         ].map((r,i) => (
                             <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderTop: i>0 ? `1px solid ${T.border}` : 'none' }}>
                                 <span style={{ fontSize:12.5, color:T.inkMid }}>{r.label}</span>
@@ -268,13 +274,13 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                         ))}
                     </SectionCard>
 
-                    <SectionCard title="Email preview" description="What recipients will see.">
-                        <div style={{ padding:14, background:T.bg, borderRadius:T.r, border:`1px solid ${T.border}` }}>
-                            <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, marginBottom:6, fontFamily:T.sans }}>From: Accelerep &lt;noreply@accelerep.com&gt;</div>
-                            <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, marginBottom:8 }}>You've been invited to Accelerep</div>
-                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.55, marginBottom:10 }}>{note || 'Join your team on Accelerep.'}</div>
-                            <div style={{ padding:'8px 14px', background:T.ink, color:'#fbf8f3', borderRadius:T.r, fontSize:12, fontWeight:700, display:'inline-block' }}>Accept invite →</div>
-                            <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:8 }}>This invite expires in {expiry}.</div>
+                    {/* The preview that sat here was invented — a sender, a subject, a note
+                        that was never sent. Clerk writes the email (state §0.165). */}
+                    <SectionCard title="The email" description="Sent by Clerk, not by Accelerep.">
+                        <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.55 }}>
+                            Each invitee gets Clerk's invitation email for this workspace, with a link that lasts {expiry} days.
+                            Accepting it signs them in with the role chosen here. Pending invites lists who has not joined
+                            yet, and Resend there sends a fresh link.
                         </div>
                     </SectionCard>
                 </div>
@@ -512,136 +518,99 @@ const UsersExportPage = ({ settings, onBack, onUsers, mfaByEmail }) => {
     );
 };
 
+// Invitations not yet accepted (state §0.165): the roster's invited rows and
+// this org's pending Clerk invitations, with Clerk's own dates. The page read
+// rows with a lower-case 'invited' status — the invite path stores 'Invited', so
+// it listed none — and printed made-up figures ("Opened email", "Sent Recently",
+// "in 7d") beside buttons that did nothing: Revoke only hid the row on screen.
 const UsersPendingPage = ({ settings, onBack, onUsers }) => {
-    // Pending invites are surfaced from settings.users with status 'invited'
-    const pendingUsers = (settings.users || []).filter(u => u.status === 'invited');
-    const [openPendingKebab, setOpenPendingKebab] = useState(null); // invite id
-    const [localPending, setLocalPending] = useState(null); // tracks revocations in session
+    const { showConfirm, setSettings } = useApp();
+    const [clerkInvites, setClerkInvites] = useState(null);   // null while reading
+    const [loadError, setLoadError] = useState('');
+    const [actionError, setActionError] = useState('');
+    const [busyEmail, setBusyEmail] = useState(null);
 
-    React.useEffect(() => {
-        if (openPendingKebab === null) return;
-        const handler = () => setOpenPendingKebab(null);
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
-    }, [openPendingKebab]);
+    const loadInvites = React.useCallback(async () => {
+        setLoadError('');
+        try {
+            const res = await dbFetch('/.netlify/functions/users?invitations=pending');
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+            setClerkInvites(Array.isArray(d.invitations) ? d.invitations : []);
+        } catch (e) {
+            setClerkInvites([]);
+            setLoadError(`Clerk's invitations could not be read (${e.message}), so the dates are missing.`);
+        }
+    }, []);
+    useEffect(() => { loadInvites(); }, [loadInvites]);
 
-    const basePending = pendingUsers.map((u,i) => ({ id:u.id||i, name:u.name, email:u.email||'', role:u.role||'User', team:u.team||'—', invitedBy:'—', sent:'Recently', opened:false, expires:'in 7d' }));
+    const entries = invitationEntries(settings.users || [], clerkInvites || []);
+    const now = Date.now();
+    const isExpired = (inv) => !!(inv && inv.expiresAt && inv.expiresAt < now);
+    const liveCount = entries.filter(e => e.invite && !isExpired(e.invite)).length;
 
-    const displayPending = localPending !== null ? localPending : basePending;
-
-    const handleRevoke  = (id) => { setLocalPending((displayPending).filter(u => u.id !== id)); setOpenPendingKebab(null); };
-    const handleResend  = (id) => { setOpenPendingKebab(null); /* POST to resend invite */ };
-    const handleCopyLink= (id) => { setOpenPendingKebab(null); navigator.clipboard?.writeText(`https://accelerep.com/invite/${id}`).catch(()=>{}); };
-    const handleReinvite= (id) => { setLocalPending(displayPending.map(u => u.id===id ? { ...u, expired:false, expires:'in 7d', sent:'just now' } : u)); setOpenPendingKebab(null); };
-
-    const openCount    = displayPending.filter(u => !u.expired).length;
-    const openedCount  = displayPending.filter(u => u.opened).length;
-    const expiringSoon = displayPending.filter(u => u.warn).length;
-    const expired      = displayPending.filter(u => u.expired).length;
+    const doResend = async (e) => {
+        if (busyEmail) return;
+        setBusyEmail(e.email); setActionError('');
+        try { await resendInvite(e.row); await loadInvites(); }
+        catch (err) { setActionError(`Could not resend to ${e.email}: ${err.message}`); }
+        finally { setBusyEmail(null); }
+    };
+    const doRevoke = (e) => {
+        if (busyEmail) return;
+        showConfirm(`Revoke the invitation to ${e.email}? Its link stops working${e.row ? ' and their row is removed' : ''}. You can invite them again later.`, async () => {
+            setBusyEmail(e.email); setActionError('');
+            try {
+                const r = await revokeInvite(e.email);
+                if (r.removedRowId) setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== r.removedRowId) }));
+                setClerkInvites(prev => (prev || []).filter(inv => inv.email !== e.email));
+            } catch (err) { setActionError(`Could not revoke the invitation to ${e.email}: ${err.message}`); }
+            finally { setBusyEmail(null); }
+        }, false);
+    };
 
     return (
         <div style={{ fontFamily:T.sans }}>
             <PeopleCrumb onBack={onBack} onUsers={onUsers} leaf="Pending invites" />
             <PeoplePageHeader
                 title="Pending invites"
-                subtitle="Track who has been invited but hasn't joined yet."
-                statusDetail={`${openCount} active · ${expired} expired`}
-                rightActions={<>
-                    <PeopleSecBtn>Resend all active</PeopleSecBtn>
-                    <PeoplePriBtn onClick={onUsers}>← Back to users</PeoplePriBtn>
-                </>}
+                subtitle="Invited, not joined yet. Revoke withdraws the invitation in Clerk; Resend sends a fresh link."
+                statusDetail={clerkInvites === null ? 'Reading invitations…' : `${entries.length} pending · ${liveCount} with a live link`}
+                rightActions={<PeoplePriBtn onClick={onUsers}>← Back to users</PeoplePriBtn>}
             />
-
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:18, alignItems:'start' }}>
-                <div>
-                    {/* KPI strip */}
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:16 }}>
-                        {[
-                            { label:'Open invites',     value:openCount,    color:T.ink },
-                            { label:'Opened email',     value:openedCount,  color:T.ok },
-                            { label:'Expiring soon',    value:expiringSoon, color:T.warn },
-                            { label:'Expired',          value:expired,      color:T.danger },
-                        ].map(k => (
-                            <div key={k.label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 14px' }}>
-                                <div style={{ fontSize:22, fontWeight:700, color:k.color, fontFamily:'ui-monospace,Menlo,monospace', lineHeight:1 }}>{k.value}</div>
-                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:4 }}>{k.label}</div>
-                            </div>
-                        ))}
+            {loadError && (
+                <div style={{ marginBottom:12, padding:'9px 12px', background:`${T.warn}12`, border:`1px solid ${T.warn}55`, borderRadius:T.r, fontSize:12.5, color:T.warn }}>{loadError}</div>
+            )}
+            {actionError && (
+                <div style={{ marginBottom:12, padding:'9px 12px', background:`${T.danger}12`, border:`1px solid ${T.danger}55`, borderRadius:T.r, fontSize:12.5, color:T.danger }}>{actionError}</div>
+            )}
+            <SectionCard title="Invitations" description="Sent and expiry dates are Clerk's.">
+                {entries.length === 0 ? (
+                    <div style={{ padding:'32px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
+                        {clerkInvites === null ? 'Reading invitations…' : 'No invitations pending.'}
                     </div>
-
-                    <SectionCard title="Invites" description="Status reflects the latest action.">
-                        {displayPending.length === 0 ? (
-                            <div style={{ padding:'32px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>All caught up. No invites pending.</div>
-                        ) : displayPending.map((u, i) => (
-                            <div key={u.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 0', borderBottom: i < displayPending.length-1 ? `1px solid ${T.border}` : 'none' }}>
-                                <UserAvatar name={u.name} size={32}/>
-                                <div style={{ flex:1, minWidth:0 }}>
-                                    <div style={{ fontSize:13, fontWeight:600, color: u.expired ? T.inkMuted : T.ink }}>{u.name}</div>
-                                    <div style={{ fontSize:11, color:T.inkMuted }}>{u.email}</div>
-                                </div>
-                                <RolePill role={u.role}/>
-                                <div style={{ fontSize:11.5, color:T.inkMid, minWidth:80 }}>{u.team || '—'}</div>
-                                <div style={{ fontSize:11, color:T.inkMuted, minWidth:70 }}>via {u.invitedBy}</div>
-                                <div style={{ fontSize:11, color:T.inkMuted, minWidth:70 }}>Sent {u.sent}</div>
-                                <div style={{ fontSize:11, color: u.opened ? T.ok : T.inkMuted, minWidth:60 }}>{u.opened ? '● Opened' : '○ Not yet'}</div>
-                                <div style={{ fontSize:11, fontWeight:600, color: u.expired ? T.danger : u.warn ? T.warn : T.inkMid, minWidth:55 }}>{u.expires}</div>
-                                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                                    {u.expired
-                                        ? <>
-                                            <PeopleSecBtn onClick={() => handleReinvite(u.id)}>Re-invite</PeopleSecBtn>
-                                            <PeopleSecBtn onClick={() => handleRevoke(u.id)}>Revoke</PeopleSecBtn>
-                                        </>
-                                        : <>
-                                            <PeopleSecBtn onClick={() => handleResend(u.id)}>Resend</PeopleSecBtn>
-                                            <PeopleSecBtn>Edit</PeopleSecBtn>
-                                            <div style={{ position:'relative' }}>
-                                                <button onClick={e => { e.stopPropagation(); setOpenPendingKebab(openPendingKebab === u.id ? null : u.id); }}
-                                                    style={{ background:'none', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMuted, fontSize:15, cursor:'pointer', padding:'4px 8px', lineHeight:1 }}
-                                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
-                                                {openPendingKebab === u.id && (
-                                                    <div onClick={e => e.stopPropagation()}
-                                                        style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:180 }}>
-                                                        {[
-                                                            { label:'Copy invite link', action: () => handleCopyLink(u.id) },
-                                                            { label:'Edit role',         action: () => setOpenPendingKebab(null) },
-                                                            { label:'Revoke invite',     action: () => handleRevoke(u.id), danger: true },
-                                                        ].map((item, mi) => (
-                                                            <button key={mi} onClick={item.action}
-                                                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
-                                                                onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
-                                                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                                                                {item.label}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </>
-                                    }
-                                </div>
+                ) : entries.map((e, i) => {
+                    const expired = isExpired(e.invite);
+                    return (
+                        <div key={e.email} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 0', borderBottom: i < entries.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                            <UserAvatar name={e.row?.name || e.email} size={32}/>
+                            <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{e.row?.name || e.email}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted }}>{e.email}</div>
                             </div>
-                        ))}
-                    </SectionCard>
-                </div>
-
-                <div style={{ position:'sticky', top:0 }}>
-                    <SectionCard title="Reminder cadence" description="When automatic resends fire.">
-                        {[
-                            { day:'Day 0', label:'Initial invite sent', on:true },
-                            { day:'Day 3', label:'First reminder — email', on:true },
-                            { day:'Day 5', label:'Second reminder — email', on:true },
-                            { day:'Day 7', label:'Invite expires — marked closed', on:true },
-                        ].map((r,i) => (
-                            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderTop: i>0 ? `1px solid ${T.border}` : 'none' }}>
-                                <span style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, minWidth:36 }}>{r.day}</span>
-                                <span style={{ flex:1, fontSize:12.5, color:T.ink }}>{r.label}</span>
-                                <RToggle on={r.on} onChange={() => {}}/>
+                            {e.row ? <RolePill role={e.row.role || 'User'}/> : <span style={{ fontSize:11, color:T.inkMuted }}>Not in the roster</span>}
+                            <div style={{ fontSize:11, color:T.inkMuted, minWidth:90 }}>Sent {fmtDate(e.invite?.createdAt)}</div>
+                            <div style={{ fontSize:11, fontWeight:600, minWidth:110, color: !e.invite || expired ? T.warn : T.inkMid }}>
+                                {!e.invite ? (clerkInvites === null ? '…' : 'No live link') : expired ? `Expired ${fmtDate(e.invite.expiresAt)}` : `Expires ${fmtDate(e.invite.expiresAt)}`}
                             </div>
-                        ))}
-                    </SectionCard>
-                </div>
-            </div>
+                            <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                                {e.row && <PeopleSecBtn onClick={() => doResend(e)}>{busyEmail === e.email ? 'Working…' : 'Resend'}</PeopleSecBtn>}
+                                <PeopleSecBtn onClick={() => doRevoke(e)}>Revoke</PeopleSecBtn>
+                            </div>
+                        </div>
+                    );
+                })}
+            </SectionCard>
         </div>
     );
 };
@@ -919,6 +888,32 @@ const setMemberActive = async (id, active) => {
     return d.user || { id, active };
 };
 
+// Invitations (state §0.165). Revoke withdraws THIS org's Clerk invitation for
+// the email and removes its row — the old Revoke only hid the row on screen, and
+// Delete user left the invitation live. Resend is the invite again: the server
+// revokes the old invitation and Clerk sends a fresh link.
+const revokeInvite = async (email) => {
+    const res = await dbFetch('/.netlify/functions/users', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ action:'revoke-invite', email }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+    return d;
+};
+const resendInvite = async (row) => {
+    const res = await dbFetch('/.netlify/functions/users', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ action:'invite', invites:[{ email: row.email, role: row.role || 'User', team: row.team || null, territory: row.territory || null }] }),
+    });
+    const d = await res.json().catch(() => ({}));
+    const refused = Array.isArray(d.errors) && d.errors[0];
+    if (refused) throw new Error(refused.error || 'Clerk refused the invitation');
+    if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+    return d;
+};
+const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString() : '—');
+
 // The profile header's status. It read "● Active" for every member, deactivated
 // and invited included (state §0.164). Red is for Delete (the style guide), so a
 // deactivated member reads muted.
@@ -1059,6 +1054,18 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
         });
     };
 
+    // An invitation not yet accepted is revoked, not deleted (state §0.165):
+    // deleting the row left the Clerk invitation live.
+    const handleRevokeInvite = () => {
+        showConfirm(`Revoke the invitation to ${user.email || user.name}? Its link stops working and their row is removed. You can invite them again later.`, async () => {
+            try {
+                const r = await revokeInvite(user.email);
+                if (r.removedRowId) setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(u => u.id !== r.removedRowId) }));
+                onUsers();
+            } catch(err) { setError('Could not revoke the invitation: ' + err.message); }
+        }, false);
+    };
+
     const inp = { width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontFamily:T.sans, background:'#f5efe3', color:T.ink, outline:'none', boxSizing:'border-box' };
     const sel = { ...inp, cursor:'pointer' };
     const lbl = { display:'block', fontSize:11, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:5, fontFamily:T.sans };
@@ -1120,9 +1127,14 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
                             Deactivate
                         </button>
                     )}
-                    <button onClick={handleDeleteUser} style={{ padding:'7px 14px', background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
-                        Delete user
-                    </button>
+                    {/* An invitation not yet accepted is revoked, not deleted (state §0.165). */}
+                    {status === 'Invited' ? (
+                        <PeopleSecBtn onClick={handleRevokeInvite}>Revoke invite</PeopleSecBtn>
+                    ) : (
+                        <button onClick={handleDeleteUser} style={{ padding:'7px 14px', background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                            Delete user
+                        </button>
+                    )}
                     {dirty && <PeoplePriBtn onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : saved ? '✓ Saved' : 'Save changes'}</PeoplePriBtn>}
                 </div>
             </div>
@@ -1650,10 +1662,21 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                         } catch(err) { setUserActionError(`Could not reactivate ${u.name}: ${err.message}`); }
                                                     }, false);
                                                 }},
+                                                // An invitation not yet accepted is revoked, not deleted (state
+                                                // §0.165): deleting its row left the Clerk invitation live.
+                                                u.status === 'Invited' && { label:'Revoke invite', action: () => {
+                                                    setOpenUserKebab(null);
+                                                    showConfirm(`Revoke the invitation to ${u.email || u.name}? Its link stops working and their row is removed. You can invite them again later.`, async () => {
+                                                        try {
+                                                            const r = await revokeInvite(u.email);
+                                                            if (r.removedRowId) _setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(su => su.id !== r.removedRowId) }));
+                                                        } catch(err) { setUserActionError(`Could not revoke the invitation to ${u.email || u.name}: ${err.message}`); }
+                                                    }, false);
+                                                }},
                                                 // Delete = permanent. This previously sent the id in the BODY while
                                                 // the server reads it from the query string, so it 400'd, the client
                                                 // never checked res.ok, and the row reappeared on refresh.
-                                                { label:'Delete user', danger: true, action: () => {
+                                                u.status !== 'Invited' && { label:'Delete user', danger: true, action: () => {
                                                     setOpenUserKebab(null);
                                                     showConfirm(`Permanently delete ${u.name}? This cannot be undone. Their record is removed from Accelerep; the Clerk account is unaffected.`, async () => {
                                                         try {
@@ -1705,7 +1728,6 @@ export const UsersDetail = ({ settings, onBack }) => {
                             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
                                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
                                     <button onClick={() => setPeopleView('pending')} style={{ fontSize:13.5, fontWeight:700, color:T.ink, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, padding:0, textAlign:'left' }}>Pending invites →</button>
-                                    {pendingCount > 0 && <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Resend all</button>}
                                 </div>
                                 <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom: pendingCount > 0 ? 10 : 0 }}>Sent but not yet accepted.</div>
                                 {pendingCount === 0
@@ -1717,11 +1739,6 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                 <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{u.name}</div>
                                                 <div style={{ fontSize:11, color:T.inkMuted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</div>
                                             </div>
-                                            {u.invitedDaysAgo != null && (
-                                                <span style={{ fontSize:11, color:T.warn, fontWeight:600, flexShrink:0 }}>
-                                                    {u.invitedDaysAgo === 1 ? 'yesterday' : `${u.invitedDaysAgo}d ago`}
-                                                </span>
-                                            )}
                                         </div>
                                     ))
                                 }
@@ -1744,7 +1761,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                                     { label:'Reps',     value:repCount },
                                     { label:'Managers', value:mgrCount },
                                     { label:'Admins',   value:adminCount },
-                                    ...(pendingCount > 0 ? [{ label:'Pending', value:pendingCount, sub:'expires in 7d', color:T.warn }] : []),
+                                    ...(pendingCount > 0 ? [{ label:'Pending', value:pendingCount, sub:'not joined yet', color:T.warn }] : []),
                                 ].map((row,i) => (
                                     <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 0', borderTop:`1px solid ${T.border}` }}>
                                         <span style={{ fontSize:12.5, color:T.inkMid }}>{row.label}</span>

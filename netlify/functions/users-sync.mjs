@@ -23,7 +23,7 @@ import { db } from '../../db/index.js';
 import { users, auditLog } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth, requireRole } from './auth.mjs';
-import { serverErrorBody, invalidateRoster } from './_lib.mjs';
+import { serverErrorBody, invalidateRoster, isOpenInvitationRow } from './_lib.mjs';
 import { streamAudit } from './_auditStream.mjs';
 import { randomUUID } from 'crypto';
 
@@ -195,6 +195,9 @@ export const handler = async (event) => {
         const dbOnly = dbRows
             .filter((r) => !(r.clerkUserId && clerkIds.has(r.clerkUserId)))
             .filter((r) => r.email && !clerkEmails.has(r.email.toLowerCase()))
+            // An invitation not yet accepted is not drift: its person has not
+            // joined, so Clerk has no member for it yet (state §0.165).
+            .filter((r) => !isOpenInvitationRow(r))
             .map((r) => ({ id: r.id, name: r.name, email: r.email }));
 
         // 5. Audit (best-effort). A dry run changes nothing, so it must not

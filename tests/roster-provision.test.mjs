@@ -37,7 +37,7 @@ test('ensureRosterRow: our id, the Clerk id in its column, a rep\'s role but for
 
 test('the self-profile GET provisions when nothing matched; the request function provisions an unrostered requester', () => {
     const u = code(read('netlify/functions/users.mjs'));
-    assert.ok(u.includes("import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName, ensureRosterRow } from './_lib.mjs';"));
+    assert.match(u, /import \{ [^}]*ensureRosterRow[^}]* \} from '\.\/_lib\.mjs';/);
     const line = '                if (!row) row = await ensureRosterRow({ clerkUserId: userId, orgId, clerkUser, orgRole: auth.orgRole });';
     assert.ok(u.includes(line), 'REGRESSION (§0.108): a member with no roster row gets one on their first load');
     const linkEnd = u.indexOf("console.warn('users.mjs: link update failed:'");

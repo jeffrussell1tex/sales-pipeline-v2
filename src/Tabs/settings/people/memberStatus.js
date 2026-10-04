@@ -12,3 +12,25 @@ export function memberStatus(u) {
     if (u.active === false) return invited && !u.clerkUserId ? 'Invited' : 'Deactivated';
     return invited ? 'Invited' : 'Active';
 }
+
+// The Pending invites list (state §0.165): the roster's invitations not yet
+// accepted and this org's pending Clerk invitations, one entry per email — a
+// row with no live invitation (expired, or revoked in Clerk) still shows, to be
+// resent or revoked; an invitation with no row (made in Clerk's dashboard) shows
+// too. The newest invitation wins when Clerk holds two for one address.
+export function invitationEntries(users, invites) {
+    const byEmail = new Map();
+    for (const u of users) {
+        const email = (u.email || '').toLowerCase();
+        if (!email || memberStatus(u) !== 'Invited') continue;
+        byEmail.set(email, { email, row: u, invite: null });
+    }
+    for (const inv of invites) {
+        const email = (inv.email || '').toLowerCase();
+        if (!email) continue;
+        const entry = byEmail.get(email) || { email, row: null, invite: null };
+        if (!entry.invite || (inv.createdAt || 0) > (entry.invite.createdAt || 0)) entry.invite = inv;
+        byEmail.set(email, entry);
+    }
+    return [...byEmail.values()].sort((a, b) => a.email.localeCompare(b.email));
+}

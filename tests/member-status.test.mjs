@@ -45,7 +45,7 @@ test('memberStatus: an invitation not yet accepted is Invited, not Deactivated; 
 const screen = code(read('src/Tabs/settings/people/UsersDetail.jsx'));
 
 test('the Users list, the profile header and the export all read memberStatus — none keeps its own rule', () => {
-    assert.ok(screen.includes("import { memberStatus } from './memberStatus.js';"));
+    assert.match(screen, /import \{ [^}]*\bmemberStatus\b[^}]* \} from '\.\/memberStatus\.js';/);
     assert.ok(screen.includes('        const status = memberStatus(u);'), 'the list');
     assert.ok(!/status\s*=\s*'Deactivated'/.test(screen), 'REGRESSION: the list derives its own status again');
     assert.ok(screen.includes('    const status = memberStatus(user);'), 'the profile');

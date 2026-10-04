@@ -1,9 +1,9 @@
 import { db } from '../../db/index.js';
 import { users } from '../../db/schema.js';
-import { eq, asc, and } from 'drizzle-orm';
+import { eq, asc, and, sql } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
-import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName, ensureRosterRow } from './_lib.mjs';
+import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName, ensureRosterRow, isOpenInvitationRow } from './_lib.mjs';
 import { pickSelfEditable } from './_selfProfile.mjs';
 import { randomUUID } from 'crypto';
 // Pure, shared with the Sales Manager tab (the _stage.mjs / stageClock.js
@@ -11,8 +11,22 @@ import { randomUUID } from 'crypto';
 import { cleanForecastCalls } from '../../src/utils/forecastCall.js';
 import { streamAudit } from './_auditStream.mjs';
 import { crmReadScope } from '../../src/utils/roles.js';
+import { INVITE_EXPIRY_DAYS, DEFAULT_INVITE_EXPIRY_DAYS } from '../../src/utils/inviteExpiry.js';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
+
+// ── Clerk organization invitations (state §0.165) ───────────────────────────
+// Every call names the CALLER's org — the token's, never one from the request —
+// so a list or a revoke reaches no other org's invitations.
+const clerkClient = async () => {
+    const { createClerkClient } = await import('@clerk/backend');
+    return createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+};
+const inviteEmail = (inv) => (inv.emailAddress || inv.email_address || '').toLowerCase();
+const pendingInvitationsOf = async (clerk, orgId) => {
+    const list = await clerk.organizations.getOrganizationInvitationList({ organizationId: orgId, status: ['pending'], limit: 500 });
+    return list?.data || (Array.isArray(list) ? list : []);
+};
 
 // Roster ids are ours and permanent. This function is the ONLY place a new one
 // is minted. Nothing derives an id from Clerk, from an email, or from a name:
@@ -439,6 +453,31 @@ export const handler = async (event) => {
     console.log('users.mjs: userRole =', userRole, '| method =', event.httpMethod);
 
     try {
+        // ── GET ?invitations=pending — this org's pending Clerk invitations ──
+        // (state §0.165). The Pending invites page lists them beside the roster's
+        // invited rows, with Clerk's own dates — it printed "Sent Recently" and
+        // "in 7d" for every row. An Admin's, like every other part of access.
+        if (event.httpMethod === 'GET' && event.queryStringParameters?.invitations === 'pending') {
+            if (userRole !== 'Admin') {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can see the pending invitations.' }) };
+            }
+            let pending;
+            try {
+                pending = await pendingInvitationsOf(await clerkClient(), orgId);
+            } catch (e) {
+                console.warn('users.mjs: could not list pending org invitations:', e.message);
+                return { statusCode: 502, headers, body: JSON.stringify({ error: 'Could not read the invitations from Clerk.' }) };
+            }
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({ invitations: pending.map((inv) => ({
+                    id: inv.id, email: inviteEmail(inv), clerkRole: inv.role || null,
+                    createdAt: inv.createdAt ?? null, expiresAt: inv.expiresAt ?? null,
+                })) }),
+            };
+        }
+
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
             const rows = await db.select().from(users).where(eq(users.orgId, orgId)).orderBy(asc(users.name));
@@ -493,6 +532,53 @@ export const handler = async (event) => {
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body || '{}');
 
+            // ── Revoke an invitation (state §0.165) ───────────────────────────
+            // The Pending invites page's Revoke only hid the row on screen, and
+            // Delete user removed the row but not the invitation: either way the
+            // person could still accept and join. This revokes THIS org's pending
+            // Clerk invitations for the email, then removes the invitation's row.
+            // An Admin's, like every other change to who has access (§0.164).
+            if (data.action === 'revoke-invite') {
+                if (userRole !== 'Admin') {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can revoke an invitation.' }) };
+                }
+                const email = String(data.email || '').trim().toLowerCase();
+                if (!email) {
+                    return { statusCode: 400, headers, body: JSON.stringify({ error: 'email is required' }) };
+                }
+                const [row] = await db.select().from(users)
+                    .where(and(eq(users.orgId, orgId), sql`lower(${users.email}) = ${email}`)).limit(1);
+                if (row && row.clerkUserId) {
+                    return { statusCode: 409, headers, body: JSON.stringify({ error: 'They have already joined. Deactivate them instead.' }) };
+                }
+                const clerk = await clerkClient();
+                let mine;
+                try {
+                    mine = (await pendingInvitationsOf(clerk, orgId)).filter((inv) => inviteEmail(inv) === email);
+                } catch (e) {
+                    return { statusCode: 502, headers, body: JSON.stringify({ error: 'Could not reach Clerk. Nothing was revoked.' }) };
+                }
+                // Fails closed: a revoke Clerk refuses keeps the row, because the
+                // invitation may still be live.
+                for (const inv of mine) {
+                    try {
+                        await clerk.organizations.revokeOrganizationInvitation({ organizationId: orgId, invitationId: inv.id, requestingUserId: userId });
+                    } catch (e) {
+                        return { statusCode: 502, headers, body: JSON.stringify({ error: 'Clerk did not revoke the invitation, so it may still be live. Try again.' }) };
+                    }
+                }
+                const removeRow = isOpenInvitationRow(row);
+                if (!mine.length && !removeRow) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'No pending invitation for that email in this organization.' }) };
+                }
+                if (removeRow) {
+                    await db.delete(users).where(and(eq(users.id, row.id), eq(users.orgId, orgId)));
+                    invalidateRoster(orgId);
+                }
+                await writeAudit(orgId, 'user.invite_revoked', row?.id || email, row?.name || email, userId, await getCallerName(userId, orgId));
+                return { statusCode: 200, headers, body: JSON.stringify({ revoked: mine.length, removedRowId: removeRow ? row.id : null }) };
+            }
+
             // ── Invite flow ───────────────────────────────────────────────────
             if (data.action === 'invite') {
                 const invites = Array.isArray(data.invites) ? data.invites : [];
@@ -507,8 +593,7 @@ export const handler = async (event) => {
                 }
 
                 // Initialise Clerk backend client once for this batch
-                const { createClerkClient } = await import('@clerk/backend');
-                const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+                const clerk = await clerkClient();
 
                 // Redirect URL — where Clerk sends the invitee after they accept.
                 // Netlify sets URL to the site's primary domain in production.
@@ -523,14 +608,14 @@ export const handler = async (event) => {
                 // “Setup your organization” screen.
                 let pendingInvitations = [];
                 try {
-                    const list = await clerk.organizations.getOrganizationInvitationList({ organizationId: orgId, status: ['pending'], limit: 500 });
-                    pendingInvitations = list?.data || (Array.isArray(list) ? list : []);
+                    pendingInvitations = await pendingInvitationsOf(clerk, orgId);
                 } catch (e) {
                     console.warn('users.mjs: could not list pending org invitations:', e.message);
                 }
 
                 const results = [];
                 const errors  = [];
+                const inviterName = await getCallerName(userId, orgId);
 
                 for (const invite of invites) {
                     const email = (invite.email || '').trim().toLowerCase();
@@ -547,13 +632,17 @@ export const handler = async (event) => {
                         errors.push({ email, error: `"${invite.role}" is not a valid role. Expected one of: ${APP_ROLES.join(', ')}.` });
                         continue;
                     }
+                    // How long the link lasts — one of the screen's choices (state §0.165).
+                    const days = invite.expiresInDays ?? DEFAULT_INVITE_EXPIRY_DAYS;
+                    if (!INVITE_EXPIRY_DAYS.includes(days)) {
+                        errors.push({ email, error: `An invitation lasts ${INVITE_EXPIRY_DAYS.join(', ')} days — not "${invite.expiresInDays}".` });
+                        continue;
+                    }
 
                     try {
                         // 1. Revoke any existing pending invitation for this email so the
                         //    re-create below succeeds and sends a brand-new magic link.
-                        const existingInv = pendingInvitations.find(
-                            (inv) => (inv.emailAddress || inv.email_address || '').toLowerCase() === email
-                        );
+                        const existingInv = pendingInvitations.find((inv) => inviteEmail(inv) === email);
                         if (existingInv) {
                             try { await clerk.organizations.revokeOrganizationInvitation({ organizationId: orgId, invitationId: existingInv.id, requestingUserId: userId }); }
                             catch (revErr) { console.warn(`users.mjs: revoke failed for ${email}:`, revErr.message); }
@@ -570,6 +659,7 @@ export const handler = async (event) => {
                             inviterUserId:  userId,
                             emailAddress:   email,
                             role:           (invite.role === 'Admin') ? 'org:admin' : 'org:member',
+                            expiresInDays:  days,
                             redirectUrl:    appUrl,
                             // No role here: the row below is the one place it lives.
                             publicMetadata: {
@@ -613,6 +703,11 @@ export const handler = async (event) => {
                             }), invite.role || 'User'));
                             results.push(flatten(row));
                         }
+                        // Who invited whom, as what (state §0.165) — an invitation grants
+                        // access and a role, and it was the one change to who has access
+                        // the log never recorded. A resend is an invitation too.
+                        await writeAudit(orgId, 'user.invited', results[results.length - 1]?.id || email,
+                            `${email} as ${invite.role || 'User'}, ${days} days`, userId, inviterName);
 
                     } catch (err) {
                         // Clerk throws if the email already belongs to a signed-up member
@@ -745,7 +840,23 @@ export const handler = async (event) => {
             if (!id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
+            // Removing a member is an Admin's (state §0.165), like deactivating
+            // (§0.164): the role lives on the row since §0.163, so a Manager who
+            // deleted an Admin's row demoted them — the next sign-in re-provisions
+            // a rep. Never your own row.
+            if (userRole !== 'Admin') {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can remove a member.' }) };
+            }
             const [deletedRow] = await db.select().from(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
+            if (deletedRow && deletedRow.clerkUserId && deletedRow.clerkUserId === userId) {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'You cannot remove yourself. Ask another Admin.' }) };
+            }
+            // An invitation not yet accepted is REVOKED, not deleted: deleting the
+            // row left the Clerk invitation live, and accepting it signed the
+            // person in to a new rep row.
+            if (isOpenInvitationRow(deletedRow)) {
+                return { statusCode: 409, headers, body: JSON.stringify({ error: 'They have not joined yet. Revoke the invitation instead.', code: 'invitation' }) };
+            }
             await db.delete(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
             invalidateRoster(orgId);
             await writeAudit(orgId, 'user.deleted', id, deletedRow?.name || id, userId, await getCallerName(userId, orgId));
