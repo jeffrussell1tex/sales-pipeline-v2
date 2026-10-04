@@ -65,6 +65,11 @@ const ALIASES = {
     salesRep:       [['salesrep', 1], ['owner', 0.9], ['rep', 0.9], ['assignedto', 0.9], ['opportunityowner', 1]],
     stage:          [['stage', 1], ['salesstage', 1], ['dealstage', 1], ['status', 0.7]],
     arr:            [['arr', 1], ['annualrecurringrevenue', 1], ['amount', 0.9], ['value', 0.7], ['dealvalue', 0.9]],
+    // team-member-only — Settings → Users → Import CSV (state §0.167). No other
+    // importer has these keys, so nothing above maps differently.
+    memberName:     [['fullname', 1], ['name', 1], ['displayname', 1], ['membername', 1], ['employeename', 1], ['username', 0.7]],
+    role:           [['role', 1], ['userrole', 1], ['accessrole', 1], ['usertype', 0.9], ['accesslevel', 0.9], ['permission', 0.7]],
+    team:           [['team', 1], ['teamname', 1], ['salesteam', 1], ['group', 0.7]],
 };
 
 // Headers a field must NEVER take, regardless of substring overlap. These exist
@@ -83,6 +88,9 @@ const DENY = {
     personalEmail: [/optout|status|invalid|display/],
     title:         [/courtesy|salutation|honorific|prefix/],
     website:       [/email/],
+    // A person's whole name, never a part of one or another thing's: "First
+    // Name" alone ends in "name" and would take the slot, and so would "Team Name".
+    memberName:    [/first|last|middle|given|family|surname|team|territory|company|account|manager|owner/],
 };
 
 // Score one (field, header) pair. 0 means "no match".

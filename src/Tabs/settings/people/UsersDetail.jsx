@@ -1,5 +1,6 @@
 // settings/people/UsersDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../../../AppContext';
 import { dbFetch, dbWrite } from '../../../utils/storage';
 import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
@@ -289,108 +290,11 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
     );
 };
 
-const UsersImportPage = ({ settings, onBack, onUsers }) => {
-    const [step, setStep] = useState(1);
-    const [file, setFile] = useState(null);
-    const [dragging, setDragging] = useState(false);
-
-    const stepLabels = ['Upload file', 'Map & validate', 'Confirm & send'];
-
-    const handleDrop = (e) => {
-        e.preventDefault(); setDragging(false);
-        const f = e.dataTransfer.files[0];
-        if (f && (f.name.endsWith('.csv') || f.name.endsWith('.xlsx'))) { setFile(f); setStep(2); }
-    };
-
-    return (
-        <div style={{ fontFamily:T.sans }}>
-            <PeopleCrumb onBack={onBack} onUsers={onUsers} leaf="Import" />
-            <PeoplePageHeader
-                title="Import users from CSV"
-                subtitle="Upload a CSV or XLSX file to bulk-create users."
-                statusDetail={file ? `${file.name}` : null}
-                rightActions={<>
-                    <PeopleSecBtn onClick={onUsers}>Cancel</PeopleSecBtn>
-                    {step > 1 && <PeopleSecBtn onClick={() => setStep(s => s - 1)}>← Back</PeopleSecBtn>}
-                    {step === 3 && <PeoplePriBtn onClick={onUsers}>Import users</PeoplePriBtn>}
-                </>}
-            />
-
-            {/* Step indicator */}
-            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
-                {stepLabels.map((label, i) => {
-                    const n = i + 1;
-                    const done = step > n; const active = step === n;
-                    return (
-                        <React.Fragment key={n}>
-                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                <span style={{ width:22, height:22, borderRadius:'50%', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700,
-                                    background: done ? T.ok : active ? T.ink : T.border,
-                                    color: (done || active) ? '#fbf8f3' : T.inkMuted }}>
-                                    {done ? '✓' : n}
-                                </span>
-                                <span style={{ fontSize:12.5, fontWeight: active ? 700 : 500, color: active ? T.ink : T.inkMuted }}>{label}</span>
-                            </div>
-                            {i < stepLabels.length - 1 && <span style={{ flex:'0 0 48px', height:1, background:T.border }}/>}
-                        </React.Fragment>
-                    );
-                })}
-            </div>
-
-            {step === 1 && (
-                <SectionCard title="Upload file" description="Accepted: .csv, .xlsx — max 5 MB.">
-                    <div
-                        onDragOver={e=>{e.preventDefault();setDragging(true)}}
-                        onDragLeave={()=>setDragging(false)}
-                        onDrop={handleDrop}
-                        style={{ border:`2px dashed ${dragging ? T.goldInk : T.borderStrong}`, borderRadius:6, padding:'48px 24px', textAlign:'center', background: dragging ? 'rgba(200,185,154,0.08)' : T.bg, cursor:'pointer', transition:'all 150ms' }}
-                        onClick={() => document.getElementById('pt-csv-upload').click()}
-                    >
-                        <div style={{ fontSize:32, marginBottom:10 }}>📄</div>
-                        <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:6 }}>Drop your CSV or XLSX here</div>
-                        <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:16 }}>or click to browse</div>
-                        <div style={{ display:'inline-block', padding:'8px 18px', background:T.ink, color:'#fbf8f3', borderRadius:T.r, fontSize:12.5, fontWeight:600 }}>Browse files</div>
-                        <input id="pt-csv-upload" type="file" accept=".csv,.xlsx" style={{ display:'none' }}
-                            onChange={e=>{ if(e.target.files[0]){ setFile(e.target.files[0]); setStep(2); } }}/>
-                    </div>
-                    <div style={{ marginTop:14, fontSize:12, color:T.inkMuted }}>
-                        Don't have a file?{' '}
-                        <span style={{ color:T.info, fontWeight:600, cursor:'pointer' }}>Download template →</span>
-                        <span style={{ marginLeft:16, color:T.inkMuted }}>Required columns: Email, Name. Optional: Role, Team, Manager, Territory.</span>
-                    </div>
-                </SectionCard>
-            )}
-
-            {step === 2 && (
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:16 }}>
-                    <SectionCard title="Column mapping" description={file ? `${file.name} · columns detected` : ''}>
-                        <div style={{ fontSize:13, color:T.inkMid, padding:'24px', textAlign:'center' }}>
-                            Upload a real CSV to see column mapping here. In production, detected columns will appear with auto-matched Accelerep fields.
-                        </div>
-                        <div style={{ marginTop:12, display:'flex', gap:8, justifyContent:'flex-end' }}>
-                            <PeoplePriBtn onClick={() => setStep(3)}>Next → Preview</PeoplePriBtn>
-                        </div>
-                    </SectionCard>
-                    <SectionCard title="Defaults" description="Applied to rows missing a value.">
-                        <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.6 }}>
-                            <div style={{ marginBottom:8 }}><strong>Role:</strong> Sales Rep</div>
-                            <div style={{ marginBottom:8 }}><strong>Team:</strong> Ask later</div>
-                            <div><strong>MFA:</strong> Required on first login</div>
-                        </div>
-                    </SectionCard>
-                </div>
-            )}
-
-            {step === 3 && (
-                <SectionCard title="Preview" description="Review before importing.">
-                    <div style={{ padding:'32px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
-                        Upload and map a CSV file to preview rows here.
-                    </div>
-                </SectionCard>
-            )}
-        </div>
-    );
-};
+// The Import CSV page that stood here was a mockup (state §0.167): it read no
+// file, said "In production, detected columns will appear", and its "Import
+// users" closed the page. Import CSV opens the shared CSV importer for team
+// members now — CsvImportModal, with the rules in src/utils/userImport.js — and
+// each row it imports is an invitation.
 
 const UsersExportPage = ({ settings, onBack, onUsers, mfaByEmail }) => {
     const users = settings.users || [];
@@ -734,14 +638,18 @@ const UsersSeatPage = ({ settings, onBack, onUsers }) => {
     );
 };
 
-const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData }) => {
+const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData, mfaFailed }) => {
     // Everything on this page is REAL or says it is unknown (§0.59). The
     // first version derived "MFA" from smsNotifications.enabled — a
     // notification preference standing in for a security fact — hardcoded
     // SSO/session-policy/stale tiles, rendered four fabricated audit events
     // with demo names, and offered four buttons wired to nothing. A security
     // page whose signals are invented is worse than no page: it certifies.
-    const loading     = mfaData === null;
+    // Loading until the fetch answers; a fetch that failed is UNKNOWN, not
+    // loading — this page said "Loading…" for good, and "nobody" not enrolled,
+    // in green (state §0.167).
+    const loading     = mfaData === null && !mfaFailed;
+    const failed      = mfaData === null && !!mfaFailed;
     const enrolled    = mfaData?.enrolled ?? 0;
     const total       = mfaData?.total ?? 0;
     const notEnrolled = mfaData?.notEnrolled ?? [];
@@ -780,7 +688,7 @@ const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData }) => {
             <PeoplePageHeader
                 title="Security health"
                 subtitle="MFA enrollment live from Clerk · events from the audit log."
-                statusDetail={loading ? 'Loading…' : `MFA ${enrolled}/${total} enrolled${score !== null ? ` · ${score}%` : ''}`}
+                statusDetail={loading ? 'Loading…' : failed ? 'MFA unknown — could not read Clerk' : `MFA ${enrolled}/${total} enrolled${score !== null ? ` · ${score}%` : ''}`}
                 rightActions={
                     <PeopleSecBtn onClick={() => window.open('https://dashboard.clerk.com', '_blank', 'noopener')}>
                         MFA policy — managed in Clerk ↗
@@ -808,8 +716,8 @@ const UsersSecurityPage = ({ settings, onBack, onUsers, mfaData }) => {
                         for every org. */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                         {[
-                            { label:'MFA enrolled',     value: loading ? '…' : `${enrolled}/${total}`, sub:'live from Clerk', color: notEnrolled.length > 0 ? T.warn : T.ok },
-                            { label:'Not enrolled',     value: loading ? '…' : `${notEnrolled.length}`, sub: notEnrolled.length > 0 ? 'listed below' : 'nobody', color: notEnrolled.length > 0 ? T.warn : T.ok },
+                            { label:'MFA enrolled',     value: loading ? '…' : failed ? '—' : `${enrolled}/${total}`, sub: failed ? 'could not read Clerk' : 'live from Clerk', color: failed ? T.inkMuted : notEnrolled.length > 0 ? T.warn : T.ok },
+                            { label:'Not enrolled',     value: loading ? '…' : failed ? '—' : `${notEnrolled.length}`, sub: failed ? 'unknown' : notEnrolled.length > 0 ? 'listed below' : 'nobody', color: failed ? T.inkMuted : notEnrolled.length > 0 ? T.warn : T.ok },
                             { label:'SSO · sessions',   value:'Clerk', sub:'managed in the Clerk dashboard', color:T.inkMuted },
                         ].map((m,i) => (
                             <div key={i} style={{ padding:'10px 12px', background:T.bg, border:`1px solid ${T.border}`, borderLeft:`3px solid ${m.color}`, borderRadius:T.r }}>
@@ -918,6 +826,19 @@ const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString() : '—');
 // and invited included (state §0.164). Red is for Delete (the style guide), so a
 // deactivated member reads muted.
 const STATUS_PILL = { Active: STATUS_STYLES.ok, Invited: STATUS_STYLES.partial, Deactivated: STATUS_STYLES.none };
+// The Users row menu's place (guide §16, the menu rule — state §0.167): fixed,
+// from the ⋯ button's rect, right-aligned to it, below it unless the room under
+// it is short and there is more above, and kept 8px inside the viewport.
+const KEBAB_W = 200;
+const kebabPlacement = (r) => {
+    const below = window.innerHeight - r.bottom, above = r.top;
+    const openUp = below < 240 && above > below;
+    const left = Math.max(8, Math.min(r.right - KEBAB_W, window.innerWidth - KEBAB_W - 8));
+    return openUp
+        ? { left, bottom: window.innerHeight - r.top + 4, maxHeight: above - 16 }
+        : { left, top: r.bottom + 4, maxHeight: below - 16 };
+};
+
 const StatusPill = ({ status }) => {
     const s = STATUS_PILL[status] || STATUS_STYLES.none;
     return (
@@ -1115,7 +1036,9 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
                     </div>
                 </div>
                 <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <PeopleSecBtn onClick={() => {}}>Reset password</PeopleSecBtn>
+                    {/* "Reset password" sat here and did nothing (onClick={() => {}}) — a
+                        dead control §0.59's sweep missed (state §0.167). Passwords are
+                        Clerk's; no Admin control here resets a member's. */}
                     {/* Reactivate a deactivated member, deactivate an active one. An
                         invitation not yet accepted is neither: its row stays off until
                         the first sign-in links it (state §0.164). */}
@@ -1312,20 +1235,36 @@ export const UsersDetail = ({ settings, onBack }) => {
     const [filter, setFilter]   = useState('All'); // All|Active|Invited|Deactivated|MFA off
     const [search, setSearch]   = useState('');
     const [selected, setSelected] = useState(new Set());
-    const [peopleView, setPeopleView] = useState(null); // null|'invite'|'import'|'export'|'pending'|'seats'|'security'|'profile'
+    const [peopleView, setPeopleView] = useState(null); // null|'invite'|'export'|'pending'|'seats'|'security'|'profile'
     const [viewingUser, setViewingUser] = useState(null);
     const [openUserKebab, setOpenUserKebab] = useState(null); // user id
-    const { showConfirm, setSettings: _setSettings } = useApp();
+    const [kebabPos, setKebabPos] = useState(null);
+    const kebabMenuRef = React.useRef(null);
+    const { showConfirm, setSettings: _setSettings, setCsvImportType, setShowCsvImportModal } = useApp();
 
-    // Close kebab on click-outside
+    // Close kebab on click-outside, scroll or resize (guide §16, the menu rule) —
+    // but not on an event inside it: the menu is portaled to <body>, and its own
+    // scrollbar would close it.
     React.useEffect(() => {
         if (openUserKebab === null) return;
-        const handler = () => setOpenUserKebab(null);
+        const handler = (e) => {
+            if (kebabMenuRef.current && e && e.target && kebabMenuRef.current.contains(e.target)) return;
+            setOpenUserKebab(null);
+        };
         document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
+        window.addEventListener('scroll', handler, true);
+        window.addEventListener('resize', handler);
+        return () => {
+            document.removeEventListener('click', handler);
+            window.removeEventListener('scroll', handler, true);
+            window.removeEventListener('resize', handler);
+        };
     }, [openUserKebab]);
 
     const onUsers = () => { setPeopleView(null); setViewingUser(null); };
+    // Import CSV opens the shared CSV importer for team members (state §0.167):
+    // each row it imports is an invitation, sent once the Admin has reviewed them.
+    const openCsvImport = () => { setCsvImportType('users'); setShowCsvImportModal(true); };
 
     // Reconcile the roster against Clerk (Admin tool). Creates rows for members
     // missing from the DB, conservatively updates existing ones (see users-sync.mjs),
@@ -1340,17 +1279,21 @@ export const UsersDetail = ({ settings, onBack }) => {
     // standing in for a security fact. One fetch here feeds the list dots,
     // the chips, the seats rail, the export column, the Security page and the
     // profile card. null = unknown (still loading, or the fetch failed) and
-    // renders as unknown — never guessed in either direction.
+    // renders as unknown — never guessed in either direction. `mfaFailed` says
+    // which: the Security health card read "Clerk not reachable" while the fetch
+    // was still on its way, and the Security page "Loading…" after it had failed
+    // (state §0.167).
     const [mfaData, setMfaData] = useState(null);
+    const [mfaFailed, setMfaFailed] = useState(false);
     React.useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const res = await dbFetch('/.netlify/functions/clerk-mfa-status');
-                if (!res.ok) return;               // stays unknown
+                if (!res.ok) { if (!cancelled) setMfaFailed(true); return; }   // stays unknown
                 const d = await res.json();
                 if (!cancelled) setMfaData(d);
-            } catch (e) { /* stays unknown */ }
+            } catch (e) { if (!cancelled) setMfaFailed(true); }               // stays unknown
         })();
         return () => { cancelled = true; };
     }, []);
@@ -1411,11 +1354,10 @@ export const UsersDetail = ({ settings, onBack }) => {
 
     // Sub-page router
     if (peopleView === 'invite')   return <UsersInvitePage   settings={settings} onBack={onBack} onUsers={onUsers}/>;
-    if (peopleView === 'import')   return <UsersImportPage   settings={settings} onBack={onBack} onUsers={onUsers}/>;
     if (peopleView === 'export')   return <UsersExportPage   settings={settings} onBack={onBack} onUsers={onUsers} mfaByEmail={mfaByEmail}/>;
     if (peopleView === 'pending')  return <UsersPendingPage  settings={settings} onBack={onBack} onUsers={onUsers}/>;
     if (peopleView === 'seats')    return <UsersSeatPage     settings={settings} onBack={onBack} onUsers={onUsers}/>;
-    if (peopleView === 'security') return <UsersSecurityPage settings={settings} onBack={onBack} onUsers={onUsers} mfaData={mfaData}/>;
+    if (peopleView === 'security') return <UsersSecurityPage settings={settings} onBack={onBack} onUsers={onUsers} mfaData={mfaData} mfaFailed={mfaFailed}/>;
     if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers} mfaByEmail={mfaByEmail}/>;
 
     // Map settings.users into the table display format
@@ -1498,7 +1440,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                     </div>
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
-                    <button onClick={() => setPeopleView('import')} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                    <button onClick={openCsvImport} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                         onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Import CSV</button>
                     <button onClick={() => setPeopleView('export')} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                         onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Export</button>
@@ -1625,13 +1567,22 @@ export const UsersDetail = ({ settings, onBack }) => {
                                 </div>
                                 {/* Kebab */}
                                 <div style={{ position:'relative' }}>
-                                    <button onClick={e => { e.stopPropagation(); setOpenUserKebab(openUserKebab === u.id ? null : u.id); }}
+                                    <button onClick={e => {
+                                            e.stopPropagation();
+                                            if (openUserKebab === u.id) { setOpenUserKebab(null); return; }
+                                            setKebabPos(kebabPlacement(e.currentTarget.getBoundingClientRect()));
+                                            setOpenUserKebab(u.id);
+                                        }}
                                         style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
                                         onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                         onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
-                                    {openUserKebab === u.id && (
-                                        <div onClick={e => e.stopPropagation()}
-                                            style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>
+                                    {/* Portaled and fixed (guide §16, state §0.167): absolute inside
+                                        the table, it opened upward over whatever sat above the row. The
+                                        stopPropagation stays — a portal's clicks still reach the row's
+                                        onClick through React, which would open the profile. */}
+                                    {openUserKebab === u.id && kebabPos && createPortal(
+                                        <div ref={kebabMenuRef} onClick={e => e.stopPropagation()}
+                                            style={{ position:'fixed', left:kebabPos.left, ...(kebabPos.top != null ? { top:kebabPos.top } : { bottom:kebabPos.bottom }), maxHeight:kebabPos.maxHeight, overflowY:'auto', zIndex:1000, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', width:KEBAB_W }}>
                                             {[
                                                 { label:'View profile', action: () => { setViewingUser(u._raw || u); setPeopleView('profile'); setOpenUserKebab(null); } },
                                                 // 'Reset password', 'Enforce MFA' and 'Resend invite' were
@@ -1694,7 +1645,8 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                     {item.label}
                                                 </button>
                                             ))}
-                                        </div>
+                                        </div>,
+                                        document.body,
                                     )}
                                 </div>
                             </div>
@@ -1784,7 +1736,7 @@ export const UsersDetail = ({ settings, onBack }) => {
                                         // of unknown counting as neither on nor off (§0.59).
                                         label: 'MFA on',
                                         value: mfaByEmail ? `${mfaOn}/${activeCount}` : '—',
-                                        sub:   !mfaByEmail ? 'unknown — Clerk not reachable'
+                                        sub:   !mfaByEmail ? (mfaFailed ? 'unknown — could not read Clerk' : 'loading…')
                                              : mfaOff > 0  ? `${mfaOff} off`
                                              : mfaOn > 0   ? 'all enrolled'
                                              : 'no Clerk-linked members',

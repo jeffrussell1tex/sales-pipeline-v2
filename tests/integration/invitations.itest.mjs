@@ -15,6 +15,11 @@
 // Clerk; a resend revokes the old invitation in the same org; and the sync does
 // not report an invitation not yet accepted as drift.
 //
+// §0.167: an invitation's row takes the name it was sent (the team import sends
+// each row's), and clearing an org's users revokes its pending invitations
+// before any row goes — failing closed — and touches no other org's. The clear
+// runs in an org of its own (ORG_C), so it deletes nothing another test reads.
+//
 // Run:  npm run test:int   (needs DATABASE_URL_TEST)
 if (!process.env.DATABASE_URL_TEST) {
     throw new Error('DATABASE_URL_TEST is not set — refusing to run integration tests against a non-test database.');
@@ -29,7 +34,8 @@ import assert from 'node:assert/strict';
 // only this file writes to it.
 const ORG_A = 'itest_invite_A';
 const ORG_B = 'itest_invite_B';
-const ORGS = [ORG_A, ORG_B];
+const ORG_C = 'itest_invite_C';   // cleared by its own Admin (§0.167)
+const ORGS = [ORG_A, ORG_B, ORG_C];
 
 // ── The Clerk stand-in ──────────────────────────────────────────────────────
 const people = new Map();
@@ -40,6 +46,7 @@ const membersOf = new Map();     // org id → the clerk ids the sync lists
 const invitations = [];          // Clerk's invitations, each in ONE org
 const revokes = [];              // every revoke, with the org it named
 let failRevoke = false;
+let failList = false;   // §0.167: the clear's list, refused
 let serialInv = 0;
 const invite = (organizationId, emailAddress, extra = {}) => {
     serialInv += 1;
@@ -63,9 +70,10 @@ const clerkClient = {
         getOrganizationMembershipList: async ({ organizationId, offset = 0 }) => ({
             data: offset ? [] : (membersOf.get(organizationId) || []).map((uid) => ({ id: 'mem_' + uid, role: 'org:member', publicUserData: { userId: uid } })),
         }),
-        getOrganizationInvitationList: async ({ organizationId, status }) => ({
-            data: invitations.filter((i) => i.organizationId === organizationId && (!status || status.includes(i.status))),
-        }),
+        getOrganizationInvitationList: async ({ organizationId, status }) => {
+            if (failList) throw new Error('Clerk is unavailable');
+            return { data: invitations.filter((i) => i.organizationId === organizationId && (!status || status.includes(i.status))) };
+        },
         revokeOrganizationInvitation: async ({ organizationId, invitationId }) => {
             if (failRevoke) throw new Error('Clerk is unavailable');
             const inv = invitations.find((i) => i.id === invitationId && i.organizationId === organizationId);
@@ -114,12 +122,16 @@ const ADMIN_A = 'user_itest_invite_admin_a';
 const MANAGER_A = 'user_itest_invite_mgr_a';
 const MEMBER_A = 'user_itest_invite_member_a';
 const ADMIN_B = 'user_itest_invite_admin_b';
+const ADMIN_C = 'user_itest_invite_admin_c';
+const MEMBER_C = 'user_itest_invite_member_c';
 const GONE = 'user_itest_invite_gone';   // has a row in A, but is no longer a member in Clerk
 const E = (local) => `${local}@itest-invite.local`;
 const invitedRow = (id, org, email, extra = {}) => ({
     id, orgId: org, clerkUserId: null, name: email.split('@')[0], email, role: 'User', active: false, profile: { status: 'Invited' }, ...extra,
 });
-let invDupA, invDupB, invKeepA, invJoinedA;
+let invDupA, invDupB, invKeepA, invJoinedA, invC;
+const rowsOf = async (org) => db.select().from(users).where(eq(users.orgId, org));
+const clearAs = (clerkId, org) => usersHandler(ev(tokenFor(clerkId, org), 'DELETE', undefined, { clear: 'true' }));
 
 const cleanup = async () => {
     await db.delete(users).where(inArray(users.orgId, ORGS));
@@ -133,8 +145,11 @@ before(async () => {
     person(MANAGER_A, E('mgr-a'), 'Max', 'Manager');
     person(MEMBER_A, E('joined'), 'Jo', 'Ined');
     person(ADMIN_B, E('admin-b'), 'Bea', 'Admin');
+    person(ADMIN_C, E('admin-c'), 'Cy', 'Admin');
+    person(MEMBER_C, E('member-c'), 'Cam', 'Member');
     membersOf.set(ORG_A, [ADMIN_A, MANAGER_A, MEMBER_A]);
     membersOf.set(ORG_B, [ADMIN_B]);
+    membersOf.set(ORG_C, [ADMIN_C, MEMBER_C]);
     await db.insert(users).values([
         { id: 'usr_itest_invite_admin_a', orgId: ORG_A, clerkUserId: ADMIN_A, name: 'Ada Admin', email: E('admin-a'), role: 'Admin', active: true, profile: { status: 'Active' } },
         { id: 'usr_itest_invite_mgr_a', orgId: ORG_A, clerkUserId: MANAGER_A, name: 'Max Manager', email: E('mgr-a'), role: 'Manager', active: true, profile: { status: 'Active' } },
@@ -147,11 +162,16 @@ before(async () => {
         invitedRow('usr_itest_invite_dup_b', ORG_B, E('dup')),
         invitedRow('usr_itest_invite_keep_a', ORG_A, E('keep')),
         invitedRow('usr_itest_invite_nolink_a', ORG_A, E('nolink')),   // its Clerk invitation is gone (expired)
+        // ORG_C — cleared by its Admin at the end of the file.
+        { id: 'usr_itest_invite_admin_c', orgId: ORG_C, clerkUserId: ADMIN_C, name: 'Cy Admin', email: E('admin-c'), role: 'Admin', active: true, profile: { status: 'Active' } },
+        { id: 'usr_itest_invite_member_c', orgId: ORG_C, clerkUserId: MEMBER_C, name: 'Cam Member', email: E('member-c'), role: 'User', active: true, profile: { status: 'Active' } },
+        invitedRow('usr_itest_invite_invited_c', ORG_C, E('invited-c')),
     ]);
     invDupA = invite(ORG_A, E('dup'));
     invDupB = invite(ORG_B, E('dup'));
     invKeepA = invite(ORG_A, E('keep'));
     invJoinedA = invite(ORG_A, E('joined'));   // a stray invitation for someone who has joined
+    invC = invite(ORG_C, E('invited-c'));
 });
 
 after(cleanup);
@@ -268,4 +288,69 @@ test('the sync does not report an invitation not yet accepted as drift — a mem
     const drift = (r.body.dbOnly || []).map((x) => x.email);
     assert.ok(!drift.includes(E('keep')), 'REGRESSION: a pending invitation is reported as "in Accelerep, not in Clerk"');
     assert.ok(drift.includes(E('gone')), 'a member no longer in Clerk is still reported');
+});
+
+test('an invitation\'s row takes the name it was sent — trimmed, cut to the column — and none is the address before the @ (§0.167)', async () => {
+    const r = parse(await usersHandler(ev(tokenFor(ADMIN_A, ORG_A), 'POST', { action: 'invite', invites: [
+        { email: E('named'), name: '  Nia Named  ', role: 'User' },
+        { email: E('long'), name: 'L'.repeat(300), role: 'User' },
+        { email: E('blank'), name: '   ', role: 'User' },
+    ] })));
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.deepEqual(r.body.errors, []);
+    const stored = async (email) => (await db.select().from(users).where(and(eq(users.orgId, ORG_A), eq(users.email, email))))[0]?.name;
+    assert.equal(await stored(E('named')), 'Nia Named', 'REGRESSION: the import\'s Name column is dropped — and the first sign-in never renames a row');
+    assert.equal(await stored(E('long')), 'L'.repeat(255), 'cut to the column — the row is written after Clerk has sent the invitation, so a longer name must never reach the insert');
+    assert.equal(await stored(E('blank')), 'blank');
+    assert.equal(r.body.invited.find((u) => u.email === E('named'))?.name, 'Nia Named', 'and the answer carries it, for the roster on screen');
+});
+
+test('a Manager cannot clear an org\'s users — and nothing is revoked on the way to the refusal (§0.167)', async () => {
+    const before = revokes.length;
+    const r = parse(await clearAs(MANAGER_A, ORG_A));
+    assert.equal(r.status, 403, JSON.stringify(r.body));
+    assert.equal(revokes.length, before, 'REGRESSION: a refused clear revoked invitations');
+    assert.equal(invKeepA.status, 'pending');
+});
+
+test('a clear whose invitations Clerk cannot list removes no member — it fails closed (§0.167)', async () => {
+    failList = true;
+    try {
+        const r = parse(await clearAs(ADMIN_C, ORG_C));
+        assert.equal(r.status, 502, JSON.stringify(r.body));
+    } finally {
+        failList = false;
+    }
+    assert.equal((await rowsOf(ORG_C)).length, 3, 'REGRESSION: the rows went with the invitations unread — any of them may be live');
+    assert.equal(invC.status, 'pending');
+});
+
+test('a clear Clerk refuses to revoke for removes no member — it fails closed (§0.167)', async () => {
+    failRevoke = true;
+    try {
+        const r = parse(await clearAs(ADMIN_C, ORG_C));
+        assert.equal(r.status, 502, JSON.stringify(r.body));
+    } finally {
+        failRevoke = false;
+    }
+    assert.equal((await rowsOf(ORG_C)).length, 3, 'REGRESSION: the rows went while an invitation may still be live');
+    assert.equal(invC.status, 'pending');
+});
+
+test('clearing an org\'s users revokes ITS pending invitations, then removes its rows — no other org\'s of either (§0.167)', async () => {
+    const aRows = (await rowsOf(ORG_A)).length, bRows = (await rowsOf(ORG_B)).length;
+    const r = parse(await clearAs(ADMIN_C, ORG_C));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.count, 3);
+    assert.equal(r.body.revoked, 1);
+    assert.equal(invC.status, 'revoked', 'REGRESSION: the emptied org\'s invitation is live — its person can still join it, as a rep');
+    assert.ok(revokes.some((x) => x.invitationId === invC.id && x.organizationId === ORG_C));
+    assert.deepEqual(await rowsOf(ORG_C), []);
+    assert.equal(invKeepA.status, 'pending', 'REGRESSION: another org\'s invitation was revoked');
+    assert.equal(invDupB.status, 'pending');
+    assert.equal((await rowsOf(ORG_A)).length, aRows, 'no other org\'s row');
+    assert.equal((await rowsOf(ORG_B)).length, bRows);
+    const audit = await db.select().from(auditLog).where(and(eq(auditLog.orgId, ORG_C), eq(auditLog.action, 'user.cleared')));
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0].entityName, 'All users (3); 1 pending invitation(s) revoked');
 });

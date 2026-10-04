@@ -140,13 +140,17 @@ const pluralise = (one) => {
 const plural = (n, one, many = pluralise(one)) => `${n} ${n === 1 ? one : many}`;
 
 // The single place a sentence is produced from the numbers. Nothing parses this
-// back; it is terminal output for a human.
-export const describeReceipt = (r, noun = 'record') => {
+// back; it is terminal output for a human. `words` is for an import whose rows
+// are not records saved: the team import SENDS invitations (state §0.167) — "3
+// invitations sent", not "created" — and its skipped rows are not all duplicates.
+const SAVE_WORDS = Object.freeze({ created: 'created', failed: 'did not save', skipped: 'skipped as duplicates', none: 'Nothing was saved' });
+export const describeReceipt = (r, noun = 'record', words = {}) => {
+    const w = { ...SAVE_WORDS, ...words };
     const parts = [];
-    if (r.created) parts.push(`${plural(r.created, noun)} created`);
+    if (r.created) parts.push(`${plural(r.created, noun)} ${w.created}`);
     if (r.updated) parts.push(`${r.updated} overwritten`);
 
-    const saved = parts.length ? parts.join(', ') : 'Nothing was saved';
+    const saved = parts.length ? parts.join(', ') : w.none;
 
     const reasons = [];
     if (r.notFound)    reasons.push(`${r.notFound} no longer exist`);
@@ -156,11 +160,11 @@ export const describeReceipt = (r, noun = 'record') => {
     const tail = [];
     if (r.failed) {
         tail.push(reasons.length
-            ? `${r.failed} did not save (${reasons.join('; ')})`
-            : `${r.failed} did not save`);
+            ? `${r.failed} ${w.failed} (${reasons.join('; ')})`
+            : `${r.failed} ${w.failed}`);
     }
     if (r.dropped) tail.push(`${plural(r.dropped, 'row')} skipped before sending — required fields were empty`);
-    if (r.skipped) tail.push(`${r.skipped} skipped as duplicates`);
+    if (r.skipped) tail.push(`${r.skipped} ${w.skipped}`);
 
     const body = tail.length ? `${saved}. ${tail.join('. ')}.` : `${saved}.`;
     return r.error ? `${body} ${r.error}` : body;

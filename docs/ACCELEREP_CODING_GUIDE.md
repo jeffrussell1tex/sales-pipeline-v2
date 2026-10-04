@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 4, 2026 · rules current through **§18b59** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 4, 2026 · rules current through **§18b60** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3748,3 +3748,14 @@ through `dbFetch`.
 6. **A key or path the server issued is checked for its exact shape**, never a prefix.
 7. **Site-wide machinery shows a tenant its health, never cross-org counts or raw errors** (job-status, Jeff: "Nobody in the app").
 8. **Test with two orgs in one suite**: org B's rows seeded, A's writes aimed at B's ids, and B's rows unchanged after (tests/integration/foreign-ids.itest.mjs).
+
+## 18b60. An Import Whose Rows Reach People Stops At Review — And A Clear Takes Back Access First (hard rule)
+
+**Origin (§0.167, 4 Oct 2026 — Jeff: "why cant we replace it with the csv importer that is used for leads, contacts, accounts").** Settings → Users → Import CSV was a mockup that read no file. Made real, each row is an invitation: an email to a person, sent by Clerk, that cannot be unsent. Separately, `users?clear=true` deleted an org's rows and left its pending invitations live, so an invitee could still join the emptied org.
+
+1. **An import whose rows send something stops at a Review that lists who gets it, who does not and why** — always, even with nothing to skip — and its button names the act ("Send N invitations"). Nothing is sent from Preview.
+2. **A row that cannot go as written is refused at Review, never guessed**: a role the server does not know, a team or territory the workspace does not have, a person already on the team, an address repeated or not one, a name already taken (owners resolve by name — two of one name make every assignment by it a 409). A refused row claims neither its address nor its name.
+3. **What the server will store is decided on the client and sent** — the import sends the name it shows, the server's default made visible — so the checks see the stored value; and a value the first sign-in never revisits (the row's name) is taken at invite time.
+4. **A value with a column limit is cut before an outside system acts on it**: the invitation goes out before the row is written, so a name the column cannot hold would fail the insert for a person already invited.
+5. **The rules for a row live in a pure module beside the shared importer** (`src/utils/userImport.js`); the importer stays one importer, and a new type adds fields, a review and a handler — not a second modal.
+6. **A destructive clear takes back what grants access first — pending invitations — and fails closed**: a list or a revoke the outside system refuses stops it before any row goes (tests/integration/invitations.itest.mjs, in an org of the suite's own).

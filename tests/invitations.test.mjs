@@ -100,7 +100,8 @@ test('an invited member is revoked, not deleted — on the row menu and the prof
 });
 
 test('the invite page sends the expiry it shows, reports refusals, and carries nothing that is never sent', () => {
-    const invitePage = between(screen, 'const UsersInvitePage = ', '\nconst UsersImportPage = ');
+    // The page after it is the Export page since the mockup Import page went (§0.167).
+    const invitePage = between(screen, 'const UsersInvitePage = ', '\nconst UsersExportPage = ');
     assert.ok(invitePage.includes('expiresInDays: expiry }));'), 'REGRESSION: the chosen expiry is not sent');
     assert.ok(invitePage.includes('<select style={sel} value={expiry} onChange={e=>setExpiry(Number(e.target.value))}>'));
     assert.ok(invitePage.includes('{INVITE_EXPIRY_DAYS.map(n=><option key={n} value={n}>{n} days</option>)}'));

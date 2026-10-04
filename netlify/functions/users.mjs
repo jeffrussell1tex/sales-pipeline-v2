@@ -691,10 +691,18 @@ export const handler = async (event) => {
                             // and acceptance fills that in without touching the id.
                             // The old `pending_` id was a placeholder that later got
                             // overwritten -- the rewrite this batch removes.
+                            // The name the invitation carries (state §0.167 — the
+                            // team import sends each row's): the first sign-in links
+                            // this row and never renames it (GET ?me — ownership stores
+                            // names), so it is the name the member keeps. Cut to the
+                            // column's 255 here: the row is written after Clerk has sent
+                            // the invitation, so a name the column cannot hold must never
+                            // reach the insert. None given, the address's local part, as before.
+                            const givenName = typeof invite.name === 'string' ? invite.name.trim().slice(0, 255) : '';
                             const row = await upsertUser(withRole(sanitize({
                                 id:        newUserId(),
                                 email,
-                                name:      email.split('@')[0],
+                                name:      givenName || email.split('@')[0],
                                 userType:  invite.role      || 'User',
                                 team:      invite.team      || null,
                                 territory: invite.territory || null,
@@ -829,17 +837,38 @@ export const handler = async (event) => {
 
         // ── DELETE ────────────────────────────────────────────────────────────
         if (event.httpMethod === 'DELETE') {
-            // clear=true — delete all users for this org (used by Clear All Data).
-            // Admin only: the method-level ADMIN_ROLES gate above also admits
-            // Managers, but wiping every user is destructive enough to require
-            // full Admin. Writes an audit row + returns the deleted count.
+            // clear=true — delete all users for this org. Nothing in the app calls
+            // it since the Clear All Data button went (108a3e3, 26 Mar); an Admin's
+            // session still can. Admin only: the method-level ADMIN_ROLES gate
+            // above also admits Managers, but wiping every user is destructive
+            // enough to require full Admin. Writes an audit row + returns the
+            // deleted count.
             if (event.queryStringParameters?.clear === 'true') {
                 const forbidden = requireRole(auth, ['Admin'], headers);
                 if (forbidden) return forbidden;
+                // The org's pending invitations are revoked FIRST (state §0.167):
+                // deleting every row left them live, and accepting one signed its
+                // person in to the emptied org — as a rep, no row naming a role.
+                // Fails closed, like a single revoke: a list or a revoke Clerk
+                // refuses stops the clear before any row is deleted.
+                const clerk = await clerkClient();
+                let pending;
+                try {
+                    pending = await pendingInvitationsOf(clerk, orgId);
+                } catch (e) {
+                    return { statusCode: 502, headers, body: JSON.stringify({ error: 'Could not read the pending invitations from Clerk. No member was removed.' }) };
+                }
+                for (const inv of pending) {
+                    try {
+                        await clerk.organizations.revokeOrganizationInvitation({ organizationId: orgId, invitationId: inv.id, requestingUserId: userId });
+                    } catch (e) {
+                        return { statusCode: 502, headers, body: JSON.stringify({ error: 'Clerk did not revoke a pending invitation, so it may still be live. No member was removed — try again.' }) };
+                    }
+                }
                 const deleted = await db.delete(users).where(eq(users.orgId, orgId)).returning({ id: users.id });
                 invalidateRoster(orgId);
-                await writeAudit(orgId, 'user.cleared', 'ALL', `All users (${deleted.length})`, userId, await getCallerName(userId, orgId));
-                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length }) };
+                await writeAudit(orgId, 'user.cleared', 'ALL', `All users (${deleted.length}); ${pending.length} pending invitation(s) revoked`, userId, await getCallerName(userId, orgId));
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true, count: deleted.length, revoked: pending.length }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) {

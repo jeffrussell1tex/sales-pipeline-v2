@@ -7,6 +7,8 @@ import {
     mergeReceipts, receiptFromPreflight, isClean, isPartial, describeReceipt,
     receiptFromError, emptyReceipt,
 } from '../../utils/importReceipt';
+import { USER_IMPORT_FIELDS, userConflicts, inviteFrom, roleLabelOf } from '../../utils/userImport.js';
+import { DEFAULT_INVITE_EXPIRY_DAYS } from '../../utils/inviteExpiry.js';
 import { T } from '../../tokens.js';
 
 const modalActions = { display:'flex', justifyContent:'flex-end', gap:8, marginTop:20, paddingTop:16, borderTop:`1px solid ${T.border}` };
@@ -23,6 +25,9 @@ const norm = (s) => (s || '').toString().trim().toLowerCase();
 // same-file re-import rendered 1,504 of them and froze the tab on every
 // state change.
 const CONFLICTS_PER_PAGE = 100;
+// The team import's Review lists who gets an invitation; past this many it says
+// how many more instead of rendering them all.
+const INVITES_SHOWN = 100;
 
 /**
  * Given the incoming mapped records and the existing DB records already in
@@ -84,6 +89,9 @@ const recordLabel = (rec, importType) => {
     if (importType === 'accounts') {
         return { primary: rec.name || '(unnamed)', secondary: rec.phone || '' };
     }
+    if (importType === 'users') {
+        return { primary: rec.memberName || rec.email || '(no email)', secondary: rec.memberName ? (rec.email || '') : '' };
+    }
     // opportunities
     return { primary: rec.opportunityName || '(unnamed)', secondary: rec.account || '' };
 };
@@ -92,7 +100,7 @@ const recordLabel = (rec, importType) => {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function CsvImportModal({ importType, contacts, accounts, opportunities, onClose, onImportContacts, onImportAccounts, onImportOpportunities }) {
+export default function CsvImportModal({ importType, contacts, accounts, opportunities, users, teams, territories, onClose, onImportContacts, onImportAccounts, onImportOpportunities, onImportUsers }) {
     // steps: upload → mapping → preview → conflicts (if any) → results
     const [step, setStep] = useState('upload');
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
@@ -103,6 +111,9 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     const [mappingConfidence, setMappingConfidence] = useState({});
     const [parseError, setParseError] = useState('');
     const [importStats, setImportStats] = useState(null);
+    // The team import's addresses the server refused, each with its reason —
+    // a count alone would not say which people to look at.
+    const [refusals, setRefusals] = useState([]);
     const [importing, setImporting] = useState(false);
     const [importProgress, setImportProgress] = useState(0);
 
@@ -172,13 +183,16 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         { key: 'daysInStage',     label: 'Days in Stage' },
     ];
 
+    // A team member's columns live with the rules that read them (userImport.js).
     const appFields = importType === 'contacts' ? contactFields
         : importType === 'opportunities' ? opportunityFields
+        : importType === 'users' ? USER_IMPORT_FIELDS
         : accountFields;
 
     // Always read live importType, not a stale closure
     const getAppFields = () => importType === 'contacts' ? contactFields
         : importType === 'opportunities' ? opportunityFields
+        : importType === 'users' ? USER_IMPORT_FIELDS
         : accountFields;
 
     // ---------------------------------------------------------------------------
@@ -272,6 +286,15 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
 
     const handleCheckDuplicates = () => {
         const { records: data, dropped } = getMapped();
+        // A team member's row is an invitation — an email Clerk sends — so this
+        // import always stops at Review, even with nothing to skip: nothing is
+        // sent until the Admin has read who gets one and pressed Send (state §0.167).
+        if (importType === 'users') {
+            setConflicts(userConflicts(data, { roster: users || [], teams, territories }));
+            setConflictPage(0);
+            setStep('conflicts');
+            return;
+        }
         const found = detectDuplicates(
             data,
             contacts || [],
@@ -310,6 +333,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     const runImport = async (data, resolvedConflicts, droppedCount = 0) => {
         setImporting(true);
         setImportProgress(0);
+        setRefusals([]);
         window.__importProgressCb = (done, total) => setImportProgress(Math.round((done / total) * 100));
 
         // Build a Set of incoming indices that are conflicts
@@ -341,6 +365,13 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 result = await onImportOpportunities(newRecords, overwrites);
             } else if (importType === 'accounts') {
                 result = await onImportAccounts(newRecords, overwrites);
+            } else if (importType === 'users') {
+                // Invitations, not rows: the handler answers with the receipt and
+                // the addresses the server refused. A refusal is a counted result,
+                // not a thrown one — the list below the tiles names each address.
+                const sent = await onImportUsers(newRecords.map(r => inviteFrom(r, { teams, territories })));
+                setRefusals(sent?.refusals || []);
+                result = sent?.receipt;
             } else {
                 throw new Error(`Unknown import type: "${importType}"`);
             }
@@ -440,19 +471,23 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
 
     const entityLabel = importType === 'contacts' ? 'contacts'
         : importType === 'opportunities' ? 'opportunities'
+        : importType === 'users' ? 'team members'
         : 'accounts';
+    const isUsers = importType === 'users';
 
     // ---------------------------------------------------------------------------
     // Step indicator
     // ---------------------------------------------------------------------------
 
     const STEPS = ['upload', 'mapping', 'preview', 'conflicts', 'results'];
-    const STEP_LABELS = ['Upload', 'Mapping', 'Preview', 'Conflicts', 'Results'];
+    // The team import's fourth step is Review, and it always shows: Send is there.
+    const STEP_LABELS = ['Upload', 'Mapping', 'Preview', isUsers ? 'Review' : 'Conflicts', 'Results'];
     // If no conflicts were found we skip the conflicts step visually
-    const visibleSteps = conflicts.length === 0 && step !== 'conflicts'
+    const hideConflictStep = !isUsers && conflicts.length === 0 && step !== 'conflicts';
+    const visibleSteps = hideConflictStep
         ? ['upload', 'mapping', 'preview', 'results']
         : STEPS;
-    const visibleLabels = conflicts.length === 0 && step !== 'conflicts'
+    const visibleLabels = hideConflictStep
         ? ['Upload', 'Mapping', 'Preview', 'Results']
         : STEP_LABELS;
 
@@ -499,7 +534,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 userSelect: 'none',
                 flexShrink: 0,
             }}>
-                Import {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : 'Accounts'} from CSV
+                Import {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : isUsers ? 'Team Members' : 'Accounts'} from CSV
                 <button
                     onClick={onClose}
                     style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: T.surface, borderRadius: '6px', width: '28px', height: '28px', fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
@@ -550,6 +585,13 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                         <p style={{ color: T.inkMid, marginBottom: '24px', fontSize: '14px' }}>
                             Upload a CSV file with your {entityLabel}. The first row should contain column headers.
                         </p>
+                        {isUsers && (
+                            <p style={{ color: T.inkMid, margin: '-12px 0 24px', fontSize: '13px' }}>
+                                One person per row. Email is required; Name, Role, Team and Territory are optional, and a
+                                role, team or territory must be one this workspace has. Each person gets an invitation
+                                email — nothing is sent until you have reviewed the list.
+                            </p>
+                        )}
                         <div
                             style={{
                                 border: `2px dashed ${T.border}`, borderRadius: '8px', padding: '48px',
@@ -706,15 +748,143 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                         {importProgress > 0 ? `Saving… ${importProgress}%` : 'Checking…'}
                                     </>
                                 ) : (
-                                    <>Check for Duplicates →</>
+                                    <>{isUsers ? 'Review →' : 'Check for Duplicates →'}</>
                                 )}
                             </button>
                         </div>
                     </div>
                 )}
 
+                {/* ── Step: Review (team members) ── state §0.167. An invitation is
+                    an email to a person, so this is a list to read before Send, not
+                    a choice per row: someone already on the team is skipped (Resend
+                    on Pending invites sends a fresh link), and so is a row naming a
+                    role, team or territory this workspace does not have, or a name
+                    already taken. */}
+                {step === 'conflicts' && isUsers && (() => {
+                    const skipIdx = new Set(conflicts.map(c => c.incomingIndex));
+                    const toInvite = previewData
+                        .filter((_, idx) => !skipIdx.has(idx))
+                        .map(r => inviteFrom(r, { teams, territories }));
+                    const none = toInvite.length === 0;
+                    return (
+                    <div>
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                            <div style={summaryCardStyle('neutral')}>
+                                <div style={{ fontSize: '22px', fontWeight: '700', color: '#1c1917' }}>{toInvite.length}</div>
+                                <div style={{ fontSize: '12px', color: T.inkMid, marginTop: '2px' }}>To invite</div>
+                            </div>
+                            <div style={summaryCardStyle(conflicts.length ? 'warn' : 'neutral')}>
+                                <div style={{ fontSize: '22px', fontWeight: '700', color: conflicts.length ? T.warn : T.inkMid }}>{conflicts.length}</div>
+                                <div style={{ fontSize: '12px', color: conflicts.length ? T.warn : T.inkMid, marginTop: '2px' }}>Not invited</div>
+                            </div>
+                        </div>
+
+                        <p style={{ fontSize: '13px', color: T.inkMid, margin: '0 0 12px' }}>
+                            Each person to invite gets Clerk's invitation email for this workspace, with a link that
+                            lasts {DEFAULT_INVITE_EXPIRY_DAYS} days. Pending invites lists who has not joined yet, and
+                            Resend there sends a fresh link.
+                        </p>
+
+                        {toInvite.length > 0 && (
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: '8px', overflow: 'auto', maxHeight: '260px', marginBottom: '12px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                    <thead>
+                                        <tr>
+                                            {['Email', 'Name', 'Role', 'Team', 'Territory'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {toInvite.slice(0, INVITES_SHOWN).map(inv => (
+                                            <tr key={inv.email}>
+                                                <td style={{ ...tdStyle, fontWeight: '600' }}>{inv.email}</td>
+                                                <td style={tdStyle}>{inv.name}</td>
+                                                <td style={tdStyle}>{roleLabelOf(inv.role)}</td>
+                                                <td style={tdStyle}>{inv.team || '—'}</td>
+                                                <td style={tdStyle}>{inv.territory || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {toInvite.length > INVITES_SHOWN && (
+                                    <div style={{ textAlign: 'center', padding: '8px', color: T.inkMid, fontSize: '12.5px' }}>
+                                        …and {toInvite.length - INVITES_SHOWN} more
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {conflicts.length > 0 && (
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={{ ...thStyle, width: '32px' }}>#</th>
+                                            <th style={thStyle}>From CSV</th>
+                                            <th style={thStyle}>Not invited</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {pagedConflicts.map((c, idx) => {
+                                            const inLabel = recordLabel(c.incoming, importType);
+                                            return (
+                                                <tr key={c.incomingIndex}>
+                                                    <td style={{ ...tdStyle, color: T.inkMuted, textAlign: 'center' }}>{conflictPage * CONFLICTS_PER_PAGE + idx + 1}</td>
+                                                    <td style={tdStyle}>
+                                                        <div style={{ fontWeight: '600', color: T.ink }}>{inLabel.primary}</div>
+                                                        {inLabel.secondary && <div style={{ fontSize: '12px', color: T.inkMid }}>{inLabel.secondary}</div>}
+                                                    </td>
+                                                    <td style={{ ...tdStyle, color: T.warn }}>{c.matchReason}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {conflictPages > 1 && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: '12px' }}>
+                                <button type="button" disabled={conflictPage === 0}
+                                    onClick={() => setConflictPage(p => Math.max(0, p - 1))}
+                                    style={{ ...secBtn, fontSize: '12px', padding: '4px 12px', opacity: conflictPage === 0 ? 0.4 : 1, cursor: conflictPage === 0 ? 'default' : 'pointer' }}>← Prev</button>
+                                <span style={{ fontSize: '12px', color: T.inkMid, fontFamily: 'ui-monospace,Menlo,monospace' }}>
+                                    {conflictPage * CONFLICTS_PER_PAGE + 1}–{Math.min((conflictPage + 1) * CONFLICTS_PER_PAGE, conflicts.length)} of {conflicts.length}
+                                </span>
+                                <button type="button" disabled={conflictPage >= conflictPages - 1}
+                                    onClick={() => setConflictPage(p => Math.min(conflictPages - 1, p + 1))}
+                                    style={{ ...secBtn, fontSize: '12px', padding: '4px 12px', opacity: conflictPage >= conflictPages - 1 ? 0.4 : 1, cursor: conflictPage >= conflictPages - 1 ? 'default' : 'pointer' }}>Next →</button>
+                            </div>
+                        )}
+
+                        <div style={modalActions}>
+                            <button type="button" style={secBtn} onClick={() => setStep('preview')}>← Back</button>
+                            <button
+                                type="button"
+                                onClick={handleImportFromConflicts}
+                                disabled={importing || none}
+                                style={{ ...priBtn, display: 'flex', alignItems: 'center', gap: '8px', opacity: (importing || none) ? 0.5 : 1, cursor: none ? 'not-allowed' : 'pointer' }}
+                            >
+                                {importing ? (
+                                    <>
+                                        <span style={{
+                                            width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)',
+                                            borderTopColor: 'white', borderRadius: '50%',
+                                            animation: 'spin 0.7s linear infinite', display: 'inline-block', flexShrink: 0
+                                        }} />
+                                        {importProgress > 0 ? `Sending… ${importProgress}%` : 'Sending…'}
+                                    </>
+                                ) : (
+                                    <>Send {toInvite.length} invitation{toInvite.length === 1 ? '' : 's'} →</>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                    );
+                })()}
+
                 {/* ── Step: Conflicts ── */}
-                {step === 'conflicts' && (
+                {step === 'conflicts' && !isUsers && (
                     <div>
                         {/* Summary cards */}
                         <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
@@ -876,7 +1046,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                     const clean = isClean(r);
                     const partial = isPartial(r);
                     const tiles = [
-                        { n: r.created,   label: 'created',   color: '#1c1917', show: r.created > 0 || clean },
+                        { n: r.created,   label: isUsers ? 'invited' : 'created', color: '#1c1917', show: r.created > 0 || clean },
                         { n: r.updated,   label: 'overwritten', color: T.info,  show: r.updated > 0 },
                         { n: r.skipped,   label: 'skipped',   color: T.inkMid,  show: r.skipped > 0 },
                         { n: r.dropped,   label: 'not sent',  color: T.warn,    show: r.dropped > 0 },
@@ -889,10 +1059,14 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                             {clean ? '\u2705' : partial ? '\u26a0\ufe0f' : '\u274c'}
                         </div>
                         <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px', color: clean ? T.ink : partial ? T.warn : T.danger }}>
-                            {clean ? 'Import Complete!' : partial ? 'Partially Imported' : 'Nothing Was Imported'}
+                            {isUsers
+                                ? (clean ? 'Invitations Sent' : partial ? 'Some Invitations Sent' : 'No Invitations Sent')
+                                : (clean ? 'Import Complete!' : partial ? 'Partially Imported' : 'Nothing Was Imported')}
                         </h3>
                         <p style={{ color: T.inkMid, marginBottom: '24px', fontSize: '14px', maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
-                            {describeReceipt(r, importType === 'contacts' ? 'contact' : importType === 'accounts' ? 'account' : 'opportunity')}
+                            {isUsers
+                                ? describeReceipt(r, 'invitation', { created: 'sent', failed: 'not sent', skipped: 'skipped', none: 'No invitation was sent' })
+                                : describeReceipt(r, importType === 'contacts' ? 'contact' : importType === 'accounts' ? 'account' : 'opportunity')}
                             {clean && importType === 'contacts' && ' Any new companies have been added to your Accounts list.'}
                         </p>
 
@@ -905,6 +1079,24 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 </div>
                             ))}
                         </div>
+
+                        {/* Who was not invited, and why: the server's refusals first —
+                            they were sent and turned down — then the rows Review
+                            skipped. */}
+                        {isUsers && (refusals.length > 0 || conflicts.length > 0) && (
+                            <div style={{ textAlign: 'left', maxWidth: 560, margin: '0 auto 20px', border: `1px solid ${T.border}`, borderRadius: '8px', maxHeight: '220px', overflowY: 'auto' }}>
+                                <div style={{ ...thStyle, position: 'sticky', top: 0 }}>Not invited</div>
+                                {[
+                                    ...refusals.map(f => ({ email: f.email || '(no address)', why: f.error || 'refused' })),
+                                    ...conflicts.map(c => ({ email: c.incoming.email || '(no address)', why: c.matchReason })),
+                                ].map((x, i) => (
+                                    <div key={i} style={{ ...tdStyle, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                                        <span style={{ fontWeight: '600' }}>{x.email}</span>
+                                        <span style={{ color: T.inkMid, textAlign: 'right' }}>{x.why}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {/* A discrepancy means the server's count disagreed with
                             its own id lists, so those rows were deliberately not

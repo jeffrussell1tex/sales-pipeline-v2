@@ -5,7 +5,7 @@ import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
 import { buildOpportunityRow } from '../../utils/importRows';
 import {
-    mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError,
+    mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError, emptyReceipt,
 } from '../../utils/importReceipt';
 import OpportunityModal from '../modals/OpportunityModal';
 import ContactRail from '../rails/ContactRail';
@@ -127,7 +127,7 @@ export default function ModalLayer() {
         // Data
         opportunities, setOpportunities, accounts, setAccounts,
         contacts, setContacts, tasks, setTasks, activities, setActivities,
-        leads, setLeads, settings, currentUser, stages, allPipelines, activePipeline,
+        leads, setLeads, settings, setSettings, currentUser, stages, allPipelines, activePipeline,
         spiffClaims, setSpiffClaims,
         handleSave, handleSaveAccount, handleSaveContact, handleSaveTask, handleSaveActivity,
         handleDeleteActivity, handleDeleteTask, handleCompleteTask,
@@ -426,6 +426,9 @@ export default function ModalLayer() {
                     contacts={contacts}
                     accounts={accounts}
                     opportunities={opportunities}
+                    users={settings.users || []}
+                    teams={settings.teams || []}
+                    territories={settings.territories || []}
                     onClose={() => { document.activeElement?.blur(); setShowCsvImportModal(false); }}
                     onImportContacts={async (newContacts, overwrites = []) => {
                         // Three phases: auto-create missing companies, POST new
@@ -603,6 +606,51 @@ export default function ModalLayer() {
                         }
 
                         return settle(mergeReceipts(...phases), 'opportunity');
+                    }}
+                    onImportUsers={async (invites) => {
+                        // A team member's row is an INVITATION (state §0.167): it goes
+                        // through the invite path — the Invite page's request, ten
+                        // addresses at a time — which sends Clerk's email and writes
+                        // the row. The path answers per address: `invited` holds the
+                        // rows it wrote, `errors` each address it refused and why. A
+                        // request answered any other way (a 403, a 500, no network)
+                        // stops the run, and the rest are counted as not sent — never
+                        // guessed at. Nothing here throws a refusal: the modal renders
+                        // the receipt, and the refusals name the people.
+                        const INVITES_PER_REQUEST = 10;
+                        const receipt = { ...emptyReceipt(), attempted: invites.length };
+                        const refusals = [];
+                        for (let i = 0; i < invites.length; i += INVITES_PER_REQUEST) {
+                            const chunk = invites.slice(i, i + INVITES_PER_REQUEST);
+                            let res = null, d = {};
+                            try {
+                                res = await dbFetch('/.netlify/functions/users', {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'invite', invites: chunk }),
+                                });
+                                d = await res.json().catch(() => ({}));
+                            } catch (e) {
+                                d = { error: e.message || 'The request did not complete.' };
+                            }
+                            const answered = !!res && (res.status === 201 || (res.status === 400 && Array.isArray(d.errors)));
+                            if (!answered) {
+                                receipt.failed += invites.length - i;
+                                receipt.error = `Sending stopped: ${d.error || ('HTTP ' + (res ? res.status : 'no response'))}.`;
+                                break;
+                            }
+                            const sent = Array.isArray(d.invited) ? d.invited : [];
+                            receipt.created += sent.length;
+                            receipt.failed += chunk.length - sent.length;
+                            if (Array.isArray(d.errors)) refusals.push(...d.errors);
+                            // The new rows join the roster on screen, as the Invite page's do.
+                            if (sent.length) setSettings(prev => {
+                                const byId = new Map((prev.users || []).map(u => [u.id, u]));
+                                sent.forEach(u => byId.set(u.id, { ...(byId.get(u.id) || {}), ...u }));
+                                return { ...prev, users: [...byId.values()] };
+                            });
+                            onProgress(i + chunk.length, invites.length);
+                        }
+                        return { receipt, refusals };
                     }}
                 />
             )}
