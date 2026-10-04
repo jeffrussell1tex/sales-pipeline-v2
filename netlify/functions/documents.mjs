@@ -39,7 +39,7 @@ import { db } from '../../db/index.js';
 import { documents, documentLinks, documentVersions } from '../../db/schema.js';
 import { eq, and, inArray, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, allowOrigin, auditAs } from './_lib.mjs';
+import { serverErrorBody, allowOrigin, auditAs, getCallerName } from './_lib.mjs';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -77,11 +77,15 @@ const extOf = (filename = '') => (filename.split('.').pop() || '').toLowerCase()
 const safeName = (s = '') => s.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 180);
 
 // Blob key is namespaced by orgId FIRST — so even a leaked/forged key can never
-// reach another tenant's bytes; we also re-validate the prefix on every mutation.
+// reach another tenant's bytes; every mutation re-checks the key it is given.
 const buildKey = (orgId, docId, v, filename) =>
   `${orgId}/${docId}/v${v}/${safeName(filename)}`;
-const keyBelongsTo = (key, orgId, docId) =>
-  typeof key === 'string' && key.startsWith(`${orgId}/${docId}/`);
+// The key must be one upload-url could have issued — buildKey's exact shape, for
+// this org, this document and this version — never a client's own path under
+// the prefix (state §0.166: the check took any key below it).
+const KEY_SHAPE = /^[^/]+\/[^/]+\/v\d+\/[A-Za-z0-9._-]+$/;
+const keyIs = (key, orgId, docId, v) =>
+  typeof key === 'string' && key.startsWith(`${orgId}/${docId}/v${v}/`) && KEY_SHAPE.test(key);
 
 async function presignPut(key, contentType) {
   return getSignedUrl(r2(), new PutObjectCommand({ Bucket: BUCKET(), Key: key, ContentType: contentType }), { expiresIn: PUT_TTL });
@@ -235,19 +239,30 @@ export const handler = async (event) => {
       if (!action || action === 'create') {
         const { id, name, ext, category, sizeKb, storageKey, contentType, visibility, visibilityUserIds, note, links } = data;
         if (!id || !name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id and name required' }) };
-        if (!keyBelongsTo(storageKey, orgId, id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'storageKey/org mismatch' }) };
+        if (!keyIs(storageKey, orgId, id, 1)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'storageKey/org mismatch' }) };
         if (ext && !ALLOWED_EXT.has(String(ext).toLowerCase())) return { statusCode: 415, headers, body: JSON.stringify({ error: 'Unsupported file type' }) };
 
         const now = new Date();
         const row = {
           id, orgId, name, ext: (ext || '').toLowerCase(), category: category || 'Note',
-          sizeKb: Number(sizeKb) || 0, ownerId: userId, ownerName: auth.userName || data.ownerName || 'Unknown',
+          // The caller's roster name (state §0.166). verifyAuth has never carried a
+          // userName, so every document and version read "Unknown"; a name the
+          // client sends is not taken for who did it.
+          sizeKb: Number(sizeKb) || 0, ownerId: userId, ownerName: (await getCallerName(userId, orgId)) || 'Unknown',
           visibilityKind: visibility || 'team', visibilityUserIds: Array.isArray(visibilityUserIds) ? visibilityUserIds : [],
           version: 1, storageKey, contentType: contentType || null, note: note || null,
           uploadedAt: now, modifiedAt: now, createdAt: now, updatedAt: now,
         };
-        await db.insert(documents).values(row)
-          .onConflictDoUpdate({ target: documents.id, setWhere: eq(documents.orgId, orgId), set: { ...row, createdAt: undefined } });
+        // A create never takes over an id (state §0.166). The upsert this was wrote
+        // nothing for an id another org holds — and the version and link rows below
+        // went in anyway, against that org's document (the links' unique index
+        // ignores the org, so one could block that org's own link). An id this org
+        // holds is refused too: a create resets a document to version 1, and
+        // changing one is PUT, a new file is new-version.
+        const [created] = await db.insert(documents).values(row)
+          .onConflictDoNothing({ target: documents.id })
+          .returning({ id: documents.id });
+        if (!created) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.' }) };
 
         // version 1
         await db.insert(documentVersions).values({
@@ -267,13 +282,13 @@ export const handler = async (event) => {
         const [doc] = await db.select().from(documents)
           .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
         if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
-        if (!keyBelongsTo(storageKey, orgId, id)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'storageKey/org mismatch' }) };
         const v = (doc.version || 1) + 1;
+        if (!keyIs(storageKey, orgId, id, v)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'storageKey/org mismatch' }) };
         const now = new Date();
         await db.insert(documentVersions).values({
           id: 'dvr_' + crypto.randomUUID(), orgId, documentId: id, v,
           storageKey, sizeKb: Number(sizeKb) || 0, contentType: contentType || null,
-          byId: userId, byName: auth.userName || 'Unknown', note: note || null, createdAt: now,
+          byId: userId, byName: (await getCallerName(userId, orgId)) || 'Unknown', note: note || null, createdAt: now,
         });
         await db.update(documents)
           .set({ version: v, storageKey, sizeKb: Number(sizeKb) || 0, contentType: contentType || doc.contentType, modifiedAt: now, updatedAt: now })
@@ -296,7 +311,7 @@ export const handler = async (event) => {
         await db.insert(documentVersions).values({
           id: 'dvr_' + crypto.randomUUID(), orgId, documentId: id, v,
           storageKey: src.storageKey, sizeKb: src.sizeKb, contentType: src.contentType,
-          byId: userId, byName: auth.userName || 'Unknown', note: `Restored from v${src.v}`, createdAt: now,
+          byId: userId, byName: (await getCallerName(userId, orgId)) || 'Unknown', note: `Restored from v${src.v}`, createdAt: now,
         });
         await db.update(documents)
           .set({ version: v, storageKey: src.storageKey, sizeKb: src.sizeKb, modifiedAt: now, updatedAt: now })

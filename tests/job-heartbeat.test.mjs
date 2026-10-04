@@ -180,7 +180,7 @@ test('the wrapper stamps start and finish, never breaks the job, and returns or 
     assert.ok(s.includes('okCount:    ok ? sql`${siteJobHeartbeats.okCount} + 1` : siteJobHeartbeats.okCount,'), 'counts are incremented in the database, not read-modify-written');
 });
 
-test('job-status is Admin-only and returns THIS site\'s rows as stored', () => {
+test('job-status is Admin-only and returns THIS site\'s rows — their health, never the cross-org summary or the error text', () => {
     const s = code(read('netlify/functions/job-status.mjs'));
     assert.ok(s.includes("import { verifyAuth, requireRole } from './auth.mjs';"));
     assert.ok(s.includes("    const forbidden = requireRole(auth, ['Admin'], HEADERS);"));
@@ -188,7 +188,10 @@ test('job-status is Admin-only and returns THIS site\'s rows as stored', () => {
     assert.ok(s.includes("import { jobsEnabled, siteKey } from '../../src/utils/jobHealth.js';"));
     assert.ok(s.includes('        const site = siteKey(process.env);'));
     assert.ok(s.includes('        const rows = await db.select().from(siteJobHeartbeats).where(eq(siteJobHeartbeats.site, site));'), 'REGRESSION (item 34): only this deployment\'s rows — dev and prod share the database');
-    assert.ok(s.includes("body: JSON.stringify({ now: new Date().toISOString(), site, enabled: jobsEnabled(process.env), jobs: rows })"), 'the server clock, the site and the flag ride along for the verdict (item 36)');
+    assert.ok(s.includes("body: JSON.stringify({ now: new Date().toISOString(), site, enabled: jobsEnabled(process.env), jobs: rows.map(publicJob) })"), 'the server clock, the site and the flag ride along for the verdict (item 36)');
+    // §0.166 (Jeff: "Nobody in the app"): a job's summary is counts across every
+    // org on the site, and its error text can quote any org's data.
+    assert.ok(s.includes('const publicJob = ({ lastSummary: _summary, lastError: _error, ...job }) => job;'), 'REGRESSION (§0.166): a tenant\'s Admin reads every org\'s counts and the raw error text');
     assert.ok(!s.includes('orgId'), 'site-wide: no org filter, no org data');
 });
 

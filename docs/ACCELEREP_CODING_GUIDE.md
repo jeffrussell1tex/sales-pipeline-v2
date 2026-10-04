@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 4, 2026 · rules current through **§18b58** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 4, 2026 · rules current through **§18b59** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3735,3 +3735,16 @@ through `dbFetch`.
 5. **Every change to who has access is audited** — invite, revoke, deactivate, delete.
 6. **Show the outside system's own facts** — Clerk's sent and expiry dates, the expiry it was actually given (one list, `src/utils/inviteExpiry.js`) — never a placeholder that reads like data.
 7. **Test with a stand-in that keeps the outside state per org** and refuses a call into another org (tests/integration/invitations.itest.mjs): an address invited to two orgs, revoked in one, keeps the other.
+
+## 18b59. An Id Another Org Holds Is Refused — Before Anything Else Is Written (hard rule)
+
+**Origin (§0.166, 4 Oct 2026 — the cross-org audit's lower findings).** Ids are global keys and writes upsert org-scoped, so an upsert naming another org's id writes nothing — and the code after it did not ask. The document create wrote version and link rows against another org's document; the job create a status-history row against another org's job; the rest crashed on the missing row, and the 500 told the caller the id existed elsewhere. A member's id was the client's to choose.
+
+1. **An org-scoped upsert that comes back empty has told you the id is another org's.** Check what came back — `.returning()`, or a read by id AND org — before any second write: history, versions, links, notices, audits. Then 409 (a create) or 404 (an update).
+2. **A create never takes over an id**, this org's included: `onConflictDoNothing` + `.returning()`, 409 when nothing came back.
+3. **A PUT is strictly an update**: look the record up in the org first and 404 (accounts, contacts, tasks, opportunities); where an upsert stands in for one, its empty answer is the 404.
+4. **New ids are the server's where an id is identity** (a member's, which signs their inbound address) — a client id is a choice of key the client should not have.
+5. **A child names a parent in its own org** — a line item's job, a location's customer — or it is refused (404).
+6. **A key or path the server issued is checked for its exact shape**, never a prefix.
+7. **Site-wide machinery shows a tenant its health, never cross-org counts or raw errors** (job-status, Jeff: "Nobody in the app").
+8. **Test with two orgs in one suite**: org B's rows seeded, A's writes aimed at B's ids, and B's rows unchanged after (tests/integration/foreign-ids.itest.mjs).

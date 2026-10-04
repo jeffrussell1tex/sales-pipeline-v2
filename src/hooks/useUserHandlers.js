@@ -67,8 +67,10 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
                 setUserModalSaving(false);
             }
         } else {
-            const newId = 'usr_' + crypto.randomUUID();
-            const payload = { ...userData, id: newId, email: userData.email || '' };
+            // The server mints the id (state §0.166): the member is the row it
+            // answers with. An id sent from here was adopted as given.
+            const { id: _noClientId, ...fields } = userData;
+            const payload = { ...fields, email: userData.email || '' };
             try {
                 const res = await dbFetch('/.netlify/functions/users', {
                     method: 'POST',
@@ -81,7 +83,12 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
                     setUserModalSaving(false);
                     return;
                 }
-                const savedUser = data.user || payload;
+                const savedUser = data.user;
+                if (!savedUser || !savedUser.id) {
+                    setUserModalError('The member was not saved. Please try again.');
+                    setUserModalSaving(false);
+                    return;
+                }
                 setSettings(prev => ({
                     ...prev,
                     users: [...(prev.users || []), savedUser]

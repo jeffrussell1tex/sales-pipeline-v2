@@ -104,6 +104,9 @@ export const handler = async (event) => {
 
             const [inserted] = await db.select().from(dispatchScheduleBlocks)
                 .where(and(eq(dispatchScheduleBlocks.id, data.id), eq(dispatchScheduleBlocks.orgId, orgId)));
+            // An id another org holds: the upsert wrote nothing, and this crashed — a 500
+            // that said the id was taken elsewhere (state §0.166).
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That block id is already in use.' }) };
 
             await auditAs(orgId, userId, { action: 'dispatch_block.created', entityType: 'dispatch_block', entityId: inserted.id, entityName: inserted.title || inserted.blockType, detail: `${inserted.blockType} · ${inserted.startDate}${inserted.endDate && inserted.endDate !== inserted.startDate ? ' → ' + inserted.endDate : ''}${inserted.allDay ? ' · all day' : ''}` });
             return { statusCode: 201, headers, body: JSON.stringify({ block: normalise(inserted) }) };

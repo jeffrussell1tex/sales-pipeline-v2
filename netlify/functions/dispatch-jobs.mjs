@@ -206,6 +206,11 @@ export const handler = async (event) => {
                 if (!data.id || !data.jobId || !data.description) {
                     return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, jobId, description required' }) };
                 }
+                // A line item belongs to one of this org's jobs (state §0.166) — the
+                // id it names was taken as given.
+                const [ownJob] = await db.select({ id: dispatchJobs.id }).from(dispatchJobs)
+                    .where(and(eq(dispatchJobs.id, data.jobId), eq(dispatchJobs.orgId, orgId)));
+                if (!ownJob) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Job not found' }) };
                 const row = {
                     id:          data.id,
                     orgId,
@@ -225,6 +230,8 @@ export const handler = async (event) => {
                     .onConflictDoUpdate({ target: dispatchJobLineItems.id, setWhere: eq(dispatchJobLineItems.orgId, orgId), set: { ...row, createdAt: undefined } });
                 const [inserted] = await db.select().from(dispatchJobLineItems)
                     .where(and(eq(dispatchJobLineItems.id, data.id), eq(dispatchJobLineItems.orgId, orgId)));
+                // An id another org holds: the upsert wrote nothing, and this crashed (§0.166).
+                if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That line item id is already in use.' }) };
                 await auditAs(orgId, userId, { action: 'dispatch_job.line_item_added', entityType: 'dispatch_job', entityId: data.jobId, entityName: inserted.description, detail: `${inserted.itemType} · qty ${inserted.quantity} · $${Number(inserted.totalPrice || 0).toLocaleString()}` });
                 return { statusCode: 201, headers, body: JSON.stringify({ lineItem: normaliseLineItem(inserted) }) };
             }
@@ -358,10 +365,16 @@ export const handler = async (event) => {
                 return r;
             }, { label: 'job number' });
 
-            await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');
-
+            // A job id another org holds (state §0.166): the upsert writes nothing
+            // for it, and the status history, customer notice and audit below went
+            // on regardless — the first as a stray row against that org's job,
+            // before a crash on the missing row (a 500 that said the id was taken
+            // elsewhere). The row is this org's, or the create is refused.
             const [written] = await db.select().from(dispatchJobs)
                 .where(and(eq(dispatchJobs.id, data.id), eq(dispatchJobs.orgId, orgId)));
+            if (!written) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That job id is already in use.' }) };
+
+            await recordStatusChange(orgId, data.id, null, row.status, userId, 'Job created');
             // A job created already scheduled confirms the appointment (§0.111).
             await notifyCustomer({ orgId, before: priorJob || null, after: written, actorName: await getCallerName(userId, orgId) });
             const [inserted] = await db.select().from(dispatchJobs)

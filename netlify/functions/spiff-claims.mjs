@@ -88,6 +88,9 @@ export const handler = async (event) => {
                 .values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: spiffClaims.id, setWhere: eq(spiffClaims.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })
                 .returning();
+            // An id another org holds (state §0.166): the org-scoped upsert writes
+            // nothing, and this went on to crash on the missing row — a 500.
+            if (!upserted) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Claim not found in your organization' }) };
             await auditAs(orgId, auth.userId, { action: CLAIM_STATUS_ACTIONS[data.status] || 'spiff_claim.updated', entityType: 'spiff_claim', entityId: upserted.id, entityName: `${upserted.repName} · ${upserted.spiffName || upserted.spiffId}`, detail: `${upserted.status || 'pending'}${upserted.amount != null ? ` · $${Number(upserted.amount).toLocaleString()}` : ''}` });
             return { statusCode: 200, headers, body: JSON.stringify({ spiffClaim: upserted }) };
         }

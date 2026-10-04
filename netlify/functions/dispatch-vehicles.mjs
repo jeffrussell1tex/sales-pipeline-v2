@@ -99,6 +99,9 @@ export const handler = async (event) => {
 
             const [inserted] = await db.select().from(dispatchVehicles)
                 .where(and(eq(dispatchVehicles.id, data.id), eq(dispatchVehicles.orgId, orgId)));
+            // An id another org holds: the upsert wrote nothing, and this crashed — a 500
+            // that said the id was taken elsewhere (state §0.166).
+            if (!inserted) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That vehicle id is already in use.' }) };
 
             await auditAs(orgId, auth.userId, { action: 'dispatch_vehicle.created', entityType: 'dispatch_vehicle', entityId: inserted.id, entityName: inserted.name, detail: [inserted.year, inserted.make, inserted.model].filter(Boolean).join(' ') || inserted.type || null });
             return { statusCode: 201, headers, body: JSON.stringify({ vehicle: normalise(inserted) }) };

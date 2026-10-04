@@ -84,6 +84,9 @@ export const handler = async (event) => {
                 .insert(products).values({ ...payload, createdAt: new Date() })
                 .onConflictDoUpdate({ target: products.id, setWhere: eq(products.orgId, orgId), set: payload })
                 .returning();
+            // An id another org holds (state §0.166): the org-scoped upsert writes
+            // nothing, and this went on to crash on the missing row — a 500.
+            if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Product not found in your organization' }) };
             await auditAs(orgId, auth.userId, { action: 'product.updated', entityType: 'product', entityId: updated.id, entityName: updated.name, detail: `${updated.category || 'uncategorised'} · list $${Number(updated.listPrice || 0).toLocaleString()}${updated.active === false ? ' · inactive' : ''}` });
             return { statusCode: 200, headers, body: JSON.stringify({ product: updated }) };
         }

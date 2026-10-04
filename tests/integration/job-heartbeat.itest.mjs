@@ -164,6 +164,9 @@ test('job-status: an Admin reads every row OF THIS SITE and none of another\'s; 
     assert.equal(byJob[JOB_OK].okCount, 2, 'site A\'s own count, not B\'s');
     assert.equal(byJob[JOB_500].lastStatus, 'error');
     assert.ok(body.jobs.every(j => j.site === SITE_A), 'every row is this site\'s');
+    // §0.166: the health, not the cross-org summary or the error text — both are
+    // in the row (the stamps above read them from the database), neither leaves.
+    assert.ok(body.jobs.every(j => !('lastSummary' in j) && !('lastError' in j)), 'REGRESSION (§0.166): a tenant\'s Admin reads every org\'s counts and the raw error text');
     const onB = JSON.parse((await onSite(SITE_B_URL, () => status('itest_hb_org'))).body);
     assert.equal(onB.site, SITE_B);
     const bJobs = onB.jobs.filter(j => j.job.startsWith('itest_hb_')).sort((x, y) => x.job.localeCompare(y.job));

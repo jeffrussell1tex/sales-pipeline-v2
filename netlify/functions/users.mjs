@@ -749,8 +749,13 @@ export const handler = async (event) => {
                     return { statusCode: 409, headers, body: JSON.stringify({ error: 'That member already exists — edit them instead.' }) };
                 }
             }
+            // The server mints every new id (state §0.166). The client's was taken,
+            // so a create could adopt a deleted member's id — their personal inbound
+            // address names only the id, so their mail would land here — or probe
+            // another org's (it answered 500 when the id was held there). An id
+            // naming this org's member is refused above (§0.164); any other is ignored.
             try {
-                const result = await upsertUser(withRole(sanitize({ ...data, id: data.id || newUserId() }), createRole));
+                const result = await upsertUser(withRole(sanitize({ ...data, id: newUserId() }), createRole));
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
                 }
