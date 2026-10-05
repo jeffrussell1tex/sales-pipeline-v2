@@ -51,10 +51,10 @@ test('inviteFrom: the address lowercased, the name given or the address before t
     const territories = [{ id: 'r1', name: 'Northeast' }];
     assert.deepEqual(
         inviteFrom({ email: ' Ann.Lee@X.test ', memberName: ' Ann Lee ', role: 'manager', team: 'east coast', territory: 'NORTHEAST' }, { teams, territories }),
-        { email: 'ann.lee@x.test', name: 'Ann Lee', role: 'Manager', team: 'East Coast', territory: 'Northeast' });
+        { email: 'ann.lee@x.test', name: 'Ann Lee', role: 'Manager', team: 'East Coast', teamId: 't1', territory: 'Northeast' });
     assert.deepEqual(
         inviteFrom({ email: 'bo@x.test' }, { teams, territories }),
-        { email: 'bo@x.test', name: 'bo', role: undefined, team: null, territory: null },
+        { email: 'bo@x.test', name: 'bo', role: undefined, team: null, teamId: null, territory: null },
         'no name in the file: the part of the address before the @, sent and shown — the server\'s own default');
     assert.equal(inviteFrom({ email: 'c@x.test', team: 'legacy team' }, { teams }).team, 'Legacy Team', 'a team stored as a plain string is a name too');
 });
@@ -158,7 +158,7 @@ test('the importer: a team import always stops at Review, sends through onImport
 
 test('the handler sends through the invite path, ten to a request, and counts what the server answered', () => {
     const l = code(read('src/components/layout/ModalLayer.jsx'));
-    const h = between(l, 'onImportUsers={async (invites) => {', 'return { receipt, refusals };');
+    const h = between(l, 'onImportUsers={async (invites) => {', 'return { receipt, refusals, warning };');
     assert.ok(h.includes('const INVITES_PER_REQUEST = 10;'));
     assert.ok(h.includes("body: JSON.stringify({ action: 'invite', invites: chunk }),"));
     assert.ok(h.includes('receipt.created += sent.length;'));

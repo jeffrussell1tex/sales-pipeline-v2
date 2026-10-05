@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 4, 2026 · rules current through **§18b60** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 4, 2026 · rules current through **§18b61** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3759,3 +3759,11 @@ through `dbFetch`.
 4. **A value with a column limit is cut before an outside system acts on it**: the invitation goes out before the row is written, so a name the column cannot hold would fail the insert for a person already invited.
 5. **The rules for a row live in a pure module beside the shared importer** (`src/utils/userImport.js`); the importer stays one importer, and a new type adds fields, a review and a handler — not a second modal.
 6. **A destructive clear takes back what grants access first — pending invitations — and fails closed**: a list or a revoke the outside system refuses stops it before any row goes (tests/integration/invitations.itest.mjs, in an org of the suite's own).
+
+## 18b61. A Fact Held In Several Places Is Written In All Of Them — And A Limit Shown Is The One Enforced (hard rule)
+
+**Origin (§0.168, 4 Oct 2026 — Jeff: "fix all 3").** An invitation stored its team as a name alone, while the Teams page reads the team's list and coaching notes and the digest read the member's teamId — an invited member joined on no team; and a team changed on the profile kept the member's old teamId. Seat usage printed a plan, a price and a 50-seat cap that exist nowhere, while Clerk enforced its own limit (5 by default, 20 on QA). "Change password" pointed at a fixed host that is neither instance's account page.
+
+1. **A fact held in several places is written in all of them in one act**: a team membership is the team's `repIds`, the member's `teamId` and `team` (`src/utils/teamMembership.js`); a write path that sets one leaves a member half on a team. Taking it away takes it from all of them — a revoked invitation's id leaves the team's list.
+2. **A limit shown is the limit enforced, read from the system that enforces it** — Clerk's `maxAllowedMemberships` for the organization, `0` none — with loading, unknown and failed each said; never a constant on a screen, and never a plan, a price or a button the product does not have.
+3. **An outside system's own screen is reached through its SDK** (`openUserProfile()`), never a hard-coded host — the host differs per instance, and each instance's public config names its own.

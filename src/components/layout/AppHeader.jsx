@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { OrganizationSwitcher, useOrganizationList } from '@clerk/clerk-react';
+import { OrganizationSwitcher, useOrganizationList, useClerk } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
@@ -74,6 +74,11 @@ export default function AppHeader({
     }, []);
 
     const { userMemberships } = useOrganizationList({ userMemberships: { infinite: true } });
+    // Clerk's own profile screen, opened in the app (state §0.168): the password
+    // link went to a fixed https://accounts.clerk.dev — not this app's account
+    // page on either instance (deep-yak-16.accounts.dev on dev,
+    // accounts.salespipelinetracker.com on prod).
+    const { openUserProfile } = useClerk();
     const [profilePanelTab, setProfilePanelTab] = useState('profile');
     const [profileSaving, setProfileSaving]     = useState(false);
 
@@ -552,7 +557,11 @@ export default function AppHeader({
                                             </div>
                                         </div>
                                         <div style={{ padding: '0.75rem', background: T.bg, borderRadius: T.r, fontSize: 12, color: T.inkMid, marginBottom: '1rem', border: `1px solid ${T.border}`, fontFamily: T.sans }}>
-                                            🔑 Password managed via Clerk. <a href="https://accounts.clerk.dev" target="_blank" rel="noreferrer" style={{ color: T.goldInk }}>Change password →</a>
+                                            🔑 Password managed via Clerk.{' '}
+                                            <button type="button" onClick={() => { setShowProfilePanel(false); openUserProfile(); }}
+                                                style={{ background: 'none', border: 'none', padding: 0, color: T.goldInk, cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}>
+                                                Change password →
+                                            </button>
                                         </div>
                                         <button onClick={() => saveProfile({ firstName: profileForm.firstName, lastName: profileForm.lastName, email: profileForm.email, phone: profileForm.phone, mobile: profileForm.mobile, title: profileForm.title, emailSignature: profileForm.emailSignature })} disabled={profileSaving}
                                             style={{ width: '100%', padding: '0.625rem', background: T.ink, color: T.surfaceInkFg, border: 'none', borderRadius: T.r, fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', fontFamily: T.sans }}>

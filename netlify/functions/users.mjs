@@ -478,6 +478,32 @@ export const handler = async (event) => {
             };
         }
 
+        // ── GET ?seats=true — this org's membership limit, from Clerk ─────────
+        // (state §0.168). The Seat usage page and the Users rail printed a plan,
+        // a per-seat price and a 50-seat cap that exist nowhere. The one limit
+        // that is real is Clerk's: an organization allows maxAllowedMemberships
+        // members — 0 means unlimited, 5 is Clerk's default (§0.153) — and Clerk
+        // counts the members it compares with it. An Admin's, like invitations.
+        if (event.httpMethod === 'GET' && event.queryStringParameters?.seats === 'true') {
+            if (userRole !== 'Admin') {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only an Admin can see the membership limit.' }) };
+            }
+            try {
+                const clerk = await clerkClient();
+                const org = await clerk.organizations.getOrganization({ organizationId: orgId, includeMembersCount: true });
+                const pending = await pendingInvitationsOf(clerk, orgId);
+                const count = (n) => (Number.isFinite(n) ? n : null);
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ limit: count(org?.maxAllowedMemberships), members: count(org?.membersCount), pendingInvitations: pending.length }),
+                };
+            } catch (e) {
+                console.warn('users.mjs: could not read the org membership limit:', e.message);
+                return { statusCode: 502, headers, body: JSON.stringify({ error: 'Could not read the membership limit from Clerk.' }) };
+            }
+        }
+
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
             const rows = await db.select().from(users).where(eq(users.orgId, orgId)).orderBy(asc(users.name));
@@ -705,6 +731,11 @@ export const handler = async (event) => {
                                 name:      givenName || email.split('@')[0],
                                 userType:  invite.role      || 'User',
                                 team:      invite.team      || null,
+                                // The team's id with its name (state §0.168): teamId is
+                                // what coaching notes and the manager digest read, and
+                                // the invite stored the name alone. The screen resolves
+                                // it from the org's teams, as the team editor does.
+                                teamId:    (typeof invite.teamId === 'string' && invite.teamId) ? invite.teamId : null,
                                 territory: invite.territory || null,
                                 active:    false,
                                 status:    'Invited',

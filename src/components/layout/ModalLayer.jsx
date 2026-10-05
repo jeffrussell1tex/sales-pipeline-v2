@@ -4,6 +4,7 @@ import { dbFetch, dbWrite } from '../../utils/storage';
 import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
 import { buildOpportunityRow } from '../../utils/importRows';
+import { teamsWithMembers } from '../../utils/teamMembership.js';
 import {
     mergeReceipts, receiptFromInsert, receiptFromUpdate, isClean, ImportError, emptyReceipt,
 } from '../../utils/importReceipt';
@@ -620,6 +621,7 @@ export default function ModalLayer() {
                         const INVITES_PER_REQUEST = 10;
                         const receipt = { ...emptyReceipt(), attempted: invites.length };
                         const refusals = [];
+                        const landed = [];
                         for (let i = 0; i < invites.length; i += INVITES_PER_REQUEST) {
                             const chunk = invites.slice(i, i + INVITES_PER_REQUEST);
                             let res = null, d = {};
@@ -639,6 +641,7 @@ export default function ModalLayer() {
                                 break;
                             }
                             const sent = Array.isArray(d.invited) ? d.invited : [];
+                            landed.push(...sent);
                             receipt.created += sent.length;
                             receipt.failed += chunk.length - sent.length;
                             if (Array.isArray(d.errors)) refusals.push(...d.errors);
@@ -650,7 +653,19 @@ export default function ModalLayer() {
                             });
                             onProgress(i + chunk.length, invites.length);
                         }
-                        return { receipt, refusals };
+                        // Each new member joins the list of the team its row names
+                        // (state §0.168): the invite stores the team's name and id on
+                        // the row, and the Teams page reads the team's own list. The
+                        // invitations went out either way, so a failed save is a
+                        // warning, not a failed import.
+                        let warning = null;
+                        const { teams: joinedTeams, changed: teamsChanged } = teamsWithMembers(settings.teams, landed);
+                        if (teamsChanged) {
+                            const rt = await dbWrite('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ teams: joinedTeams }) });
+                            if (rt.ok) setSettings(prev => ({ ...prev, teams: joinedTeams }));
+                            else warning = `The invitations went out, but the team list was not updated — ${rt.error}`;
+                        }
+                        return { receipt, refusals, warning };
                     }}
                 />
             )}

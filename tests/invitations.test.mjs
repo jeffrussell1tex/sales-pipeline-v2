@@ -81,7 +81,10 @@ test('Revoke and Resend are real calls — Revoke withdraws the invitation in Cl
     assert.ok(resend.includes("if (refused) throw new Error(refused.error || 'Clerk refused the invitation');"), 'a per-invite refusal is shown — the server answers it in `errors`');
     const page = between(screen, 'const UsersPendingPage = ', '\nconst UsersSeatPage = ');
     assert.ok(page.includes('const r = await revokeInvite(e.email);'));
-    assert.ok(page.includes('if (r.removedRowId) setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== r.removedRowId) }));'), 'the roster on screen loses the row the server removed');
+    // Through one helper since §0.168, which also takes the id off its team's list.
+    assert.ok(page.includes('const note = await dropRevokedRow(r.removedRowId, settings.teams, setSettings);'));
+    assert.ok(between(screen, 'const dropRevokedRow = async (removedRowId, teams, setSettings) => {', '\n};')
+        .includes('setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== removedRowId) }));'), 'the roster on screen loses the row the server removed');
     assert.ok(page.includes('try { await resendInvite(e.row); await loadInvites(); }'), 'Resend, then Clerk\'s new dates');
     assert.ok(page.includes('{e.row && <PeopleSecBtn onClick={() => doResend(e)}>'), 'Resend only for a roster row — an invitation made in Clerk carries no app role');
 });

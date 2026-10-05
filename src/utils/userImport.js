@@ -7,6 +7,7 @@
 // under node --test (csvMapping.js and importReceipt.js, the same reasoning).
 import { ROLE_OPTIONS } from './roles.js';
 import { memberStatus } from '../Tabs/settings/people/memberStatus.js';
+import { teamIdNamed } from './teamMembership.js';
 
 const norm = (s) => String(s ?? '').trim().toLowerCase();
 const text = (v) => String(v ?? '').trim() || null;
@@ -54,15 +55,19 @@ const canonical = (cell, names) => names.find((n) => norm(n) === norm(cell)) || 
 // renames it (users.mjs, GET ?me — ownership stores names), so the name an
 // invitation carries is the one the member keeps. None in the file, the part of
 // the address before the @ — the server's own default, made visible at Review
-// so the name check below sees the name that will be stored.
+// so the name check below sees the name that will be stored. The team goes with
+// its id (state §0.168): the row's teamId, and the team's list the inviting
+// screen adds the new member to (teamMembership.js).
 export function inviteFrom(record, { teams, territories } = {}) {
     const email = norm(record.email);
     const team = text(record.team), territory = text(record.territory);
+    const teamName = team && (canonical(team, namesOf(teams)) || team);
     return {
         email,
         name: text(record.memberName) || email.split('@')[0],
         role: roleValueOf(record.role),
-        team: team && (canonical(team, namesOf(teams)) || team),
+        team: teamName,
+        teamId: teamIdNamed(teams, teamName),
         territory: territory && (canonical(territory, namesOf(territories)) || territory),
     };
 }

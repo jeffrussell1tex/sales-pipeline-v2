@@ -47,6 +47,8 @@ const invitations = [];          // Clerk's invitations, each in ONE org
 const revokes = [];              // every revoke, with the org it named
 let failRevoke = false;
 let failList = false;   // §0.167: the clear's list, refused
+let failOrg = false;    // §0.168: the membership limit's read, refused
+const orgLimits = new Map();   // org id → maxAllowedMemberships (Clerk's default, 5, when unset)
 let serialInv = 0;
 const invite = (organizationId, emailAddress, extra = {}) => {
     serialInv += 1;
@@ -67,6 +69,14 @@ const clerkClient = {
         },
     },
     organizations: {
+        getOrganization: async ({ organizationId, includeMembersCount }) => {
+            if (failOrg) throw new Error('Clerk is unavailable');
+            return {
+                id: organizationId,
+                maxAllowedMemberships: orgLimits.has(organizationId) ? orgLimits.get(organizationId) : 5,
+                ...(includeMembersCount ? { membersCount: (membersOf.get(organizationId) || []).length } : {}),
+            };
+        },
         getOrganizationMembershipList: async ({ organizationId, offset = 0 }) => ({
             data: offset ? [] : (membersOf.get(organizationId) || []).map((uid) => ({ id: 'mem_' + uid, role: 'org:member', publicUserData: { userId: uid } })),
         }),
@@ -303,6 +313,38 @@ test('an invitation\'s row takes the name it was sent — trimmed, cut to the co
     assert.equal(await stored(E('long')), 'L'.repeat(255), 'cut to the column — the row is written after Clerk has sent the invitation, so a longer name must never reach the insert');
     assert.equal(await stored(E('blank')), 'blank');
     assert.equal(r.body.invited.find((u) => u.email === E('named'))?.name, 'Nia Named', 'and the answer carries it, for the roster on screen');
+});
+
+test('an invitation\'s row carries the team id it was sent — none sent is none (§0.168)', async () => {
+    const r = parse(await usersHandler(ev(tokenFor(ADMIN_A, ORG_A), 'POST', { action: 'invite', invites: [
+        { email: E('teamed'), role: 'User', team: 'East', teamId: 'team_itest_east' },
+        { email: E('teamless'), role: 'User' },
+    ] })));
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const profileOf = async (email) => (await db.select().from(users).where(and(eq(users.orgId, ORG_A), eq(users.email, email))))[0]?.profile || {};
+    assert.equal((await profileOf(E('teamed'))).teamId, 'team_itest_east', 'REGRESSION: the invite stores the team\'s name alone — coaching notes and the digest read teamId');
+    assert.equal((await profileOf(E('teamless'))).teamId ?? null, null);
+    assert.equal(r.body.invited.find((u) => u.email === E('teamed'))?.teamId, 'team_itest_east', 'and the answer carries it, for the team list the screen saves');
+});
+
+test('seats: an Admin reads THIS org\'s membership limit, Clerk\'s count and the invitations pending; a Manager is refused; a read Clerk refuses is a 502 (§0.168)', async () => {
+    orgLimits.set(ORG_A, 20);
+    orgLimits.set(ORG_B, 0);
+    const pendingIn = (org) => invitations.filter((i) => i.organizationId === org && i.status === 'pending').length;
+    const a = parse(await usersHandler(ev(tokenFor(ADMIN_A, ORG_A), 'GET', undefined, { seats: 'true' })));
+    assert.equal(a.status, 200, JSON.stringify(a.body));
+    assert.deepEqual(a.body, { limit: 20, members: 3, pendingInvitations: pendingIn(ORG_A) }, 'REGRESSION: the seat numbers are not Clerk\'s for the caller\'s org');
+    const b = parse(await usersHandler(ev(tokenFor(ADMIN_B, ORG_B), 'GET', undefined, { seats: 'true' })));
+    assert.deepEqual(b.body, { limit: 0, members: 1, pendingInvitations: pendingIn(ORG_B) }, 'org B reads its own — 0 is no limit');
+    const m = parse(await usersHandler(ev(tokenFor(MANAGER_A, ORG_A), 'GET', undefined, { seats: 'true' })));
+    assert.equal(m.status, 403, 'an Admin\'s, like the invitations');
+    failOrg = true;
+    try {
+        const f = parse(await usersHandler(ev(tokenFor(ADMIN_A, ORG_A), 'GET', undefined, { seats: 'true' })));
+        assert.equal(f.status, 502, 'a read Clerk refuses is said, never guessed');
+    } finally {
+        failOrg = false;
+    }
 });
 
 test('a Manager cannot clear an org\'s users — and nothing is revoked on the way to the refusal (§0.167)', async () => {

@@ -114,6 +114,8 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // The team import's addresses the server refused, each with its reason —
     // a count alone would not say which people to look at.
     const [refusals, setRefusals] = useState([]);
+    // A team list the import could not save after the invitations went out.
+    const [importWarning, setImportWarning] = useState(null);
     const [importing, setImporting] = useState(false);
     const [importProgress, setImportProgress] = useState(0);
 
@@ -334,6 +336,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         setImporting(true);
         setImportProgress(0);
         setRefusals([]);
+        setImportWarning(null);
         window.__importProgressCb = (done, total) => setImportProgress(Math.round((done / total) * 100));
 
         // Build a Set of incoming indices that are conflicts
@@ -371,6 +374,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                 // not a thrown one — the list below the tiles names each address.
                 const sent = await onImportUsers(newRecords.map(r => inviteFrom(r, { teams, territories })));
                 setRefusals(sent?.refusals || []);
+                setImportWarning(sent?.warning || null);
                 result = sent?.receipt;
             } else {
                 throw new Error(`Unknown import type: "${importType}"`);
@@ -1079,6 +1083,12 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
                                 </div>
                             ))}
                         </div>
+
+                        {isUsers && importWarning && (
+                            <p style={{ color: T.warn, fontSize: '12.5px', marginBottom: '16px', maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>
+                                {importWarning}
+                            </p>
+                        )}
 
                         {/* Who was not invited, and why: the server's refusals first —
                             they were sent and turned down — then the rows Review

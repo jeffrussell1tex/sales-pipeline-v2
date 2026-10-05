@@ -7,6 +7,7 @@ import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
 import { RCheck, UserAvatar } from '../shared/ui.jsx';
 import { memberStatus, invitationEntries } from './memberStatus.js';
 import { INVITE_EXPIRY_DAYS } from '../../../utils/inviteExpiry.js';
+import { teamIdNamed, teamsWithMembers, teamsWithout } from '../../../utils/teamMembership.js';
 // THE ROLE VALUES come from the one list the server checks (src/utils/roles.js,
 // re-exported by auth.mjs as APP_ROLES). This file carried its own copy of five,
 // which is how a role added on the server went missing here; the server refuses
@@ -167,7 +168,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
         if (invalid.length > 0) { setError(`Fix ${invalid.length} error${invalid.length > 1 ? 's' : ''} before sending.`); return; }
         setSaving(true); setError('');
         try {
-            const invites = validated.map(r => ({ email:r.email.trim(), role:r.role||defaultRole, team:r.team, manager:r.manager, territory:r.territory, expiresInDays: expiry }));
+            const invites = validated.map(r => ({ email:r.email.trim(), role:r.role||defaultRole, team:r.team, teamId: teamIdNamed(settings.teams, r.team), manager:r.manager, territory:r.territory, expiresInDays: expiry }));
             const resp = await dbFetch('/.netlify/functions/users', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'invite', invites }) });
             const d = await resp.json().catch(() => ({}));
             // The new rows join the roster on screen — the list showed none of
@@ -178,11 +179,22 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                 sent.forEach(u => byId.set(u.id, { ...(byId.get(u.id) || {}), ...u }));
                 return { ...prev, users: [...byId.values()] };
             });
+            // Each new member joins the list of the team chosen for them (state
+            // §0.168): the Teams page reads the team's list, and the invite
+            // stored the name alone, so an invited member joined on no team.
+            const { teams: joinedTeams, changed: teamsChanged } = teamsWithMembers(settings.teams, sent);
+            let teamNote = '';
+            if (teamsChanged) {
+                const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: joinedTeams }) });
+                if (rt.ok) setSettings(prev => ({ ...prev, teams: joinedTeams }));
+                else teamNote = ` The team list was not updated — ${rt.error}`;
+            }
             // Per-invite refusals come back in `errors` — with a 201 when some went
             // out. They were dropped, and the screen said "Sent!".
             const failed = Array.isArray(d.errors) ? d.errors : [];
-            if (failed.length) throw new Error(`${sent.length} sent; not sent — ${failed.map(f => `${f.email || 'a row'}: ${f.error}`).join('; ')}`);
+            if (failed.length) throw new Error(`${sent.length} sent; not sent — ${failed.map(f => `${f.email || 'a row'}: ${f.error}`).join('; ')}.${teamNote}`);
             if (!resp.ok) throw new Error(d.error || 'Invite failed');
+            if (teamNote) throw new Error(`${sent.length} sent.${teamNote}`);
             setSaved(true);
             setTimeout(() => { setSaved(false); onUsers(); }, 1500);
         } catch(err) {
@@ -466,8 +478,9 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
             setBusyEmail(e.email); setActionError('');
             try {
                 const r = await revokeInvite(e.email);
-                if (r.removedRowId) setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== r.removedRowId) }));
+                const note = await dropRevokedRow(r.removedRowId, settings.teams, setSettings);
                 setClerkInvites(prev => (prev || []).filter(inv => inv.email !== e.email));
+                if (note) setActionError(note);
             } catch (err) { setActionError(`Could not revoke the invitation to ${e.email}: ${err.message}`); }
             finally { setBusyEmail(null); }
         }, false);
@@ -519,19 +532,30 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
     );
 };
 
-const UsersSeatPage = ({ settings, onBack, onUsers }) => {
+// The Seat usage page (state §0.168). It printed a "Business plan · billed
+// monthly", a $39 per-seat price, a "Soft cap" overage policy and a 50-seat
+// cap, with a "Manage plan" and two "Add seats" wired to nothing — there is no
+// plan and no billing. The one limit that is real is Clerk's membership limit
+// for the organization (users?seats=true): the members Clerk counts against it,
+// the invitations pending, and the roster's members by role and by team.
+const UsersSeatPage = ({ settings, onBack, onUsers, seats, seatsFailed }) => {
     const users = settings.users || [];
-    const activeUsers = users.filter(u => u.name);
-    const cap = 50;
-    const used = activeUsers.length;
-    const pct = used / cap;
+    // The roster's members: everyone but an invitation not yet accepted. A
+    // deactivated member is still one in Clerk — deactivating is the app's.
+    const members = users.filter(u => u.name && memberStatus(u) !== 'Invited');
+    const limit   = Number.isFinite(seats?.limit) ? seats.limit : null;        // 0 is no limit
+    const inClerk = Number.isFinite(seats?.members) ? seats.members : null;
+    const pending = Number.isFinite(seats?.pendingInvitations) ? seats.pendingInvitations : null;
+    const capped  = limit > 0 && inClerk !== null;
+    const pct     = capped ? inClerk / limit : null;
+    const left    = capped ? Math.max(limit - inClerk, 0) : null;
 
     // Counted off `role` (the users.role column), not `userType` (a copy in the
     // profile blob that no role change ever updated). The counts were reading the
     // stale copy, which is why this panel could show Admins 0 with an Admin on the
     // screen above it. `Unrecognised` is deliberately visible rather than dropped:
     // those users are treated as reps by the server and someone has to know.
-    const countRole = (v) => activeUsers.filter(u => u.role === v).length;
+    const countRole = (v) => members.filter(u => u.role === v).length;
     const breakdown = [
         { role:'Admin',         count: countRole('Admin'),      color:'#6b2a22' },
         { role:'Manager',       count: countRole('Manager'),    color:'#b87333' },
@@ -539,38 +563,46 @@ const UsersSeatPage = ({ settings, onBack, onUsers }) => {
         { role:'Dispatcher',    count: countRole('Dispatcher'), color:'#7a6a48' },
         { role:'Technician',    count: countRole('Technician'), color:'#5e4e7a' },
         { role:'ReadOnly',      count: countRole('ReadOnly'),   color:'#3a5a7a' },
-        { role:'Unrecognised',  count: activeUsers.filter(u => !isKnownRole(u.role)).length, color:'#9c3a2e' },
+        { role:'Unrecognised',  count: members.filter(u => !isKnownRole(u.role)).length, color:'#9c3a2e' },
     ].filter(b => b.count > 0);
+    // The bar is out of the limit when there is one, else out of the members.
+    const scale = Math.max(capped ? limit : 0, members.length, 1);
 
-    const allTeams = [...new Set(activeUsers.map(u => u.team).filter(Boolean))].sort();
-    const teamCounts = allTeams.map(t => ({ name:t, count:activeUsers.filter(u=>u.team===t).length }));
+    const allTeams = [...new Set(members.map(u => u.team).filter(Boolean))].sort();
+    const teamCounts = allTeams.map(t => ({ name:t, count:members.filter(u=>u.team===t).length }));
     const maxTeam = Math.max(...teamCounts.map(t=>t.count), 1);
 
-    const warnPct = pct >= 0.8;
-    const barColor = pct >= 1 ? T.danger : pct >= 0.8 ? T.warn : T.ok;
+    const status = !seats ? (seatsFailed ? 'Unknown — could not read Clerk' : 'Loading…')
+        : inClerk === null ? 'Unknown — Clerk sent no count'
+        : capped ? `${inClerk} of ${limit} members (${Math.round(pct * 100)}%)`
+        : limit === 0 ? `${inClerk} members · no limit`
+        : `${inClerk} members`;
 
     return (
         <div style={{ fontFamily:T.sans }}>
             <PeopleCrumb onBack={onBack} onUsers={onUsers} leaf="Seat usage" />
             <PeoplePageHeader
                 title="Seat usage"
-                subtitle="Workspace seat allocation and plan limits."
-                statusDetail={`${used} of ${cap} used (${Math.round(pct*100)}%)`}
-                rightActions={<PeoplePriBtn onClick={() => {}}>Add seats</PeoplePriBtn>}
+                subtitle="Members of this organization against Clerk's membership limit — the one limit there is."
+                statusDetail={status}
+                rightActions={
+                    <PeopleSecBtn onClick={() => window.open('https://dashboard.clerk.com', '_blank', 'noopener')}>
+                        Membership limit — set in Clerk ↗
+                    </PeopleSecBtn>
+                }
             />
 
-            <SectionCard title="Workspace seats" description="Business plan · billed monthly"
-                headAction={<PeopleSecBtn>Manage plan</PeopleSecBtn>}>
+            <SectionCard title="Members" description="Counted by Clerk, which holds the limit.">
                 <div style={{ display:'flex', alignItems:'baseline', gap:12, marginBottom:14 }}>
-                    <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:52, color:T.ink, lineHeight:1 }}>{used}</span>
-                    <span style={{ fontSize:16, color:T.inkMid }}>of {cap} seats used</span>
+                    <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:52, color:T.ink, lineHeight:1 }}>{inClerk ?? '—'}</span>
+                    <span style={{ fontSize:16, color:T.inkMid }}>{capped ? `of ${limit} allowed` : limit === 0 ? 'members · no limit set' : 'members'}</span>
                     <span style={{ flex:1 }}/>
-                    <span style={{ fontSize:11.5, color:T.inkMuted }}>{cap - used} remaining</span>
+                    {capped && <span style={{ fontSize:11.5, color:T.inkMuted }}>{left} remaining</span>}
                 </div>
-                {/* Stacked bar */}
+                {/* The roster's members by role */}
                 <div style={{ display:'flex', height:20, borderRadius:T.r, overflow:'hidden', border:`1px solid ${T.border}`, marginBottom:10 }}>
                     {breakdown.map(b => (
-                        <div key={b.role} title={`${b.role}: ${b.count}`} style={{ width:`${(b.count/cap)*100}%`, background:b.color }}/>
+                        <div key={b.role} title={`${b.role}: ${b.count}`} style={{ width:`${(b.count/scale)*100}%`, background:b.color }}/>
                     ))}
                     <div style={{ flex:1, background:T.surface2 }}/>
                 </div>
@@ -582,16 +614,22 @@ const UsersSeatPage = ({ settings, onBack, onUsers }) => {
                             <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.ink, fontWeight:700 }}>{b.count}</span>
                         </div>
                     ))}
-                    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11.5, color:T.inkMuted }}>
-                        <span style={{ width:8, height:8, background:T.surface2, borderRadius:2, border:`1px solid ${T.borderStrong}` }}/>
-                        <span>Available</span>
-                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontWeight:700 }}>{cap - used}</span>
-                    </div>
+                    {capped && (
+                        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11.5, color:T.inkMuted }}>
+                            <span style={{ width:8, height:8, background:T.surface2, borderRadius:2, border:`1px solid ${T.borderStrong}` }}/>
+                            <span>Available</span>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontWeight:700 }}>{left}</span>
+                        </div>
+                    )}
+                </div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:10, lineHeight:1.5 }}>
+                    The bar is the roster's members by role.
+                    {pending !== null && ` ${pending} invitation${pending === 1 ? '' : 's'} pending in Clerk.`}
                 </div>
             </SectionCard>
 
             <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:18, alignItems:'start' }}>
-                <SectionCard title="By team" description="Seat count per team.">
+                <SectionCard title="By team" description="Members per team.">
                     {teamCounts.length === 0
                         ? <div style={{ color:T.inkMuted, fontSize:13, textAlign:'center', padding:24 }}>No teams configured.</div>
                         : teamCounts.map(t => (
@@ -609,26 +647,25 @@ const UsersSeatPage = ({ settings, onBack, onUsers }) => {
                 </SectionCard>
 
                 <div style={{ position:'sticky', top:0 }}>
-                    <SectionCard title="Plan & billing" description="Current plan details.">
+                    <SectionCard title="Membership limit" description="Clerk's, for this organization.">
                         {[
-                            ['Plan',         'Business'],
-                            ['Seats included',`${cap}`],
-                            ['Per-seat price','$39 / mo'],
-                            ['Overage policy','Soft cap'],
+                            ['Limit',               limit === null ? '—' : limit === 0 ? 'None' : String(limit)],
+                            ['Members',             inClerk === null ? '—' : String(inClerk)],
+                            ['Invitations pending', pending === null ? '—' : String(pending)],
                         ].map(([k,v],i) => (
-                            <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderTop: i>0?`1px solid ${T.border}`:'none' }}>
+                            <div key={k} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderTop: i>0?`1px solid ${T.border}`:'none' }}>
                                 <span style={{ fontSize:12.5, color:T.inkMid }}>{k}</span>
                                 <span style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{v}</span>
                             </div>
                         ))}
+                        <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.5, marginTop:8 }}>
+                            Set per organization in the Clerk dashboard: Organizations → this organization → Membership limit.
+                        </div>
                     </SectionCard>
-                    {warnPct && (
-                        <SectionCard title="⚠ Approaching limit" description="">
-                            <div style={{ fontSize:12.5, color:T.warn, lineHeight:1.55 }}>
-                                You're using <strong>{Math.round(pct*100)}%</strong> of your seats. Consider adding seats before you hit the cap.
-                            </div>
-                            <div style={{ marginTop:10 }}>
-                                <PeoplePriBtn onClick={() => {}}>Add seats</PeoplePriBtn>
+                    {capped && pct >= 0.8 && (
+                        <SectionCard title={pct >= 1 ? '⚠ At the limit' : '⚠ Approaching the limit'} description="">
+                            <div style={{ fontSize:12.5, color: pct >= 1 ? T.danger : T.warn, lineHeight:1.55 }}>
+                                <strong>{inClerk}</strong> of <strong>{limit}</strong> memberships are taken. At the limit Clerk refuses the next member — raise it in the Clerk dashboard.
                             </div>
                         </SectionCard>
                     )}
@@ -809,6 +846,19 @@ const revokeInvite = async (email) => {
     if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
     return d;
 };
+// A revoked invitation's row is gone (state §0.165): it leaves the roster on
+// screen and — the invite put it there (§0.168) — its team's list. Returns a
+// sentence when the team list could not be saved, null otherwise.
+const dropRevokedRow = async (removedRowId, teams, setSettings) => {
+    if (!removedRowId) return null;
+    setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== removedRowId) }));
+    const { teams: remaining, changed } = teamsWithout(teams, removedRowId);
+    if (!changed) return null;
+    const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: remaining }) });
+    if (!rt.ok) return `The invitation was revoked, but the team list was not updated — ${rt.error}`;
+    setSettings(prev => ({ ...prev, teams: remaining }));
+    return null;
+};
 const resendInvite = async (row) => {
     const res = await dbFetch('/.netlify/functions/users', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -865,7 +915,13 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     const handleSave = async () => {
         setSaving(true); setError('');
         try {
-            const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form) });
+            // The member's teamId is the id of the team the form names, on every
+            // save (state §0.168): the form carried the row's teamId as it was
+            // loaded, so a new team kept the old id — the one coaching notes and
+            // the digest read — and comparing with the page's first copy of the
+            // member would keep an id that was already wrong.
+            const toSave = { ...form, teamId: teamIdNamed(settings.teams, form.team) };
+            const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(toSave) });
             if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Save failed'); }
 
             // A role change goes to user-role.mjs, the one path that changes a
@@ -926,7 +982,7 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
             // Update local settings state
             setSettings(prev => ({
                 ...prev,
-                users: (prev.users||[]).map(u => u.id === form.id ? { ...u, ...form } : u),
+                users: (prev.users||[]).map(u => u.id === toSave.id ? { ...u, ...toSave } : u),
                 teams: updatedTeams,
             }));
             setSaved(true); setTimeout(() => setSaved(false), 2500);
@@ -981,7 +1037,8 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
         showConfirm(`Revoke the invitation to ${user.email || user.name}? Its link stops working and their row is removed. You can invite them again later.`, async () => {
             try {
                 const r = await revokeInvite(user.email);
-                if (r.removedRowId) setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(u => u.id !== r.removedRowId) }));
+                const note = await dropRevokedRow(r.removedRowId, settings.teams, setSettings);
+                if (note) { setError(note); return; }
                 onUsers();
             } catch(err) { setError('Could not revoke the invitation: ' + err.message); }
         }, false);
@@ -1297,6 +1354,25 @@ export const UsersDetail = ({ settings, onBack }) => {
         })();
         return () => { cancelled = true; };
     }, []);
+    // Clerk's membership limit for this org and its count of members (state
+    // §0.168) — the rail and the Seat usage page printed a 50-seat cap that
+    // exists nowhere. Read with the list and again as the page opens and
+    // closes; null is loading, `seatsFailed` a read that did not answer.
+    const [seats, setSeats] = useState(null);
+    const [seatsFailed, setSeatsFailed] = useState(false);
+    const onSeatPage = peopleView === 'seats';
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await dbFetch('/.netlify/functions/users?seats=true');
+                if (!res.ok) { if (!cancelled) { setSeats(null); setSeatsFailed(true); } return; }
+                const d = await res.json();
+                if (!cancelled) { setSeats(d); setSeatsFailed(false); }
+            } catch (e) { if (!cancelled) { setSeats(null); setSeatsFailed(true); } }
+        })();
+        return () => { cancelled = true; };
+    }, [onSeatPage]);
     // Map(lower-cased email → true/false). An email in NEITHER list is not a
     // Clerk member (e.g. a pending invite) — absent from the map, i.e. unknown.
     const mfaByEmail = React.useMemo(() => {
@@ -1356,7 +1432,7 @@ export const UsersDetail = ({ settings, onBack }) => {
     if (peopleView === 'invite')   return <UsersInvitePage   settings={settings} onBack={onBack} onUsers={onUsers}/>;
     if (peopleView === 'export')   return <UsersExportPage   settings={settings} onBack={onBack} onUsers={onUsers} mfaByEmail={mfaByEmail}/>;
     if (peopleView === 'pending')  return <UsersPendingPage  settings={settings} onBack={onBack} onUsers={onUsers}/>;
-    if (peopleView === 'seats')    return <UsersSeatPage     settings={settings} onBack={onBack} onUsers={onUsers}/>;
+    if (peopleView === 'seats')    return <UsersSeatPage     settings={settings} onBack={onBack} onUsers={onUsers} seats={seats} seatsFailed={seatsFailed}/>;
     if (peopleView === 'security') return <UsersSecurityPage settings={settings} onBack={onBack} onUsers={onUsers} mfaData={mfaData} mfaFailed={mfaFailed}/>;
     if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers} mfaByEmail={mfaByEmail}/>;
 
@@ -1620,7 +1696,8 @@ export const UsersDetail = ({ settings, onBack }) => {
                                                     showConfirm(`Revoke the invitation to ${u.email || u.name}? Its link stops working and their row is removed. You can invite them again later.`, async () => {
                                                         try {
                                                             const r = await revokeInvite(u.email);
-                                                            if (r.removedRowId) _setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(su => su.id !== r.removedRowId) }));
+                                                            const note = await dropRevokedRow(r.removedRowId, settings.teams, _setSettings);
+                                                            if (note) setUserActionError(note);
                                                         } catch(err) { setUserActionError(`Could not revoke the invitation to ${u.email || u.name}: ${err.message}`); }
                                                     }, false);
                                                 }},
@@ -1656,9 +1733,13 @@ export const UsersDetail = ({ settings, onBack }) => {
 
                 {/* Right rail — all values derived from live displayUsers */}
                 {(() => {
-                    const cap          = 50; // seat cap — update when plan changes
-                    const seatPct      = Math.round((activeCount / cap) * 100);
-                    const seatColor    = seatPct >= 90 ? T.danger : seatPct >= 75 ? T.warn : T.ok;
+                    // Clerk's membership limit (state §0.168) — "50" was invented.
+                    // Clerk's count of members is what it holds against the limit;
+                    // a limit of 0 is none.
+                    const limit        = Number.isFinite(seats?.limit) ? seats.limit : null;
+                    const inClerk      = Number.isFinite(seats?.members) ? seats.members : null;
+                    const seatPct      = limit > 0 && inClerk !== null ? Math.round((inClerk / limit) * 100) : null;
+                    const seatColor    = seatPct === null ? T.inkMuted : seatPct >= 100 ? T.danger : seatPct >= 80 ? T.warn : T.ok;
 
                     // Role breakdown from users.role — the column, not the profile copy.
                     // Single values, no label aliases. The `|| 'Sales Rep'` and
@@ -1699,16 +1780,20 @@ export const UsersDetail = ({ settings, onBack }) => {
                             {/* Seat usage */}
                             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
                                 <button onClick={() => setPeopleView('seats')} style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:4, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, padding:0, display:'block', textAlign:'left' }}>Seat usage →</button>
-                                <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Workspace limits.</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Members against Clerk's limit.</div>
                                 <div style={{ display:'flex', alignItems:'baseline', gap:4, marginBottom:6 }}>
-                                    <span style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{activeCount}</span>
-                                    <span style={{ fontSize:13, color:T.inkMuted }}>/ {cap}</span>
+                                    <span style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{inClerk ?? '—'}</span>
+                                    <span style={{ fontSize:13, color:T.inkMuted }}>{limit > 0 ? `/ ${limit}` : limit === 0 ? 'no limit' : ''}</span>
                                     <div style={{ flex:1 }}/>
-                                    <span style={{ fontSize:11.5, fontWeight:600, color:seatColor }}>{seatPct}%</span>
+                                    <span style={{ fontSize:11.5, fontWeight:600, color:seatColor }}>
+                                        {seatPct !== null ? `${seatPct}%` : !seats ? (seatsFailed ? 'could not read Clerk' : 'loading…') : ''}
+                                    </span>
                                 </div>
-                                <div style={{ height:5, background:T.border, borderRadius:3, marginBottom:12, overflow:'hidden' }}>
-                                    <div style={{ width:`${Math.min(seatPct,100)}%`, height:'100%', background:seatColor, borderRadius:3 }}/>
-                                </div>
+                                {seatPct !== null && (
+                                    <div style={{ height:5, background:T.border, borderRadius:3, marginBottom:12, overflow:'hidden' }}>
+                                        <div style={{ width:`${Math.min(seatPct,100)}%`, height:'100%', background:seatColor, borderRadius:3 }}/>
+                                    </div>
+                                )}
                                 {[
                                     { label:'Reps',     value:repCount },
                                     { label:'Managers', value:mgrCount },
