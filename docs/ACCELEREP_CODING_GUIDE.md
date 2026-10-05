@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 4, 2026 · rules current through **§18b61** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
+**Updated:** October 5, 2026 · rules current through **§18b62** (the line read §18b38 while §18b39 and §18b40 stood in the body — the header lagged twice; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3767,3 +3767,13 @@ through `dbFetch`.
 1. **A fact held in several places is written in all of them in one act**: a team membership is the team's `repIds`, the member's `teamId` and `team` (`src/utils/teamMembership.js`); a write path that sets one leaves a member half on a team. Taking it away takes it from all of them — a revoked invitation's id leaves the team's list.
 2. **A limit shown is the limit enforced, read from the system that enforces it** — Clerk's `maxAllowedMemberships` for the organization, `0` none — with loading, unknown and failed each said; never a constant on a screen, and never a plan, a price or a button the product does not have.
 3. **An outside system's own screen is reached through its SDK** (`openUserProfile()`), never a hard-coded host — the host differs per instance, and each instance's public config names its own.
+
+## 18b62. A Read Is Gated Like The Write Beside It — And A Value Bound For jsonb Is Never Pre-Stringified (hard rule)
+
+**Origin (§0.169, 5 Oct 2026 — the cross-org audit's within-org findings; Jeff: "go with your recommendation").** Inside one org, every write was gated somewhere, and the reads beside them were not: every role read the export run list and schedules, the automation rules and their runs, and the Slack webhook URL; any member scored — wrote — any deal and read its cached score; a Technician read every customer, location and technician's time off, and any job's line items and history by id. A rep filed a SPIFF claim in any rep's name, approved and paid, and four PUTs built the row from the body alone. And the job editor wrote its co-tech list into a jsonb column through `JSON.stringify`: 22 of 26 rows held a jsonb STRING, so the one scoped job read, `Array.isArray`, matched no co-tech.
+
+1. **A read is gated like the write beside it.** An endpoint's GET is reviewed with its PUT: for the role (export is an Admin's; automations are read by the roles that manage them), for the record (scoring a deal is a write on it — the edit policy, `assertOwnership`, asked before any key, switch or cached answer), and for a credential inside an object everyone reads (the Slack webhook URL reaches an Admin; the rest of the config, everyone).
+2. **A field user's reads derive from one rule of "their work"** — `_techJobs.mjs`'s `techOnJob`, the lead or a co-tech. What a Technician reaches comes through their jobs (customers, locations, line items, history) or their own technician row (time off); with no row linked to them, a 403 — nothing, never everything.
+3. **A rep's edit of their own record never reaches what a manager decides** — a SPIFF claim's status, approval, payment and rep — and a rep's new claim is filed in their roster name, the server's, as a document's owner is (§0.166). Ownership compares ids; the one exception, a claim (`spiff_claims` holds no owner id), compares the roster name trimmed and in any case, until the table carries one.
+4. **A value bound for a jsonb column is passed as the value** — drizzle serializes it. `JSON.stringify` first stores a jsonb STRING, and every reader that asks `Array.isArray` sees nothing. Until the stored rows are rewritten, a reader parses both shapes (`coTechIdsOf`).
+5. **What a screen writes by its own PUT never rides an echo of a whole object.** The settings autosave sends the app's copy of every key; a key a panel saves on its own (the AI key, the Slack config) is left out of it (`payloadForSave`), or the copy held since sign-in puts an older value back — or, where the read hid part of it from the role, a partial one. The PUT and its no-change baseline are built by one function.

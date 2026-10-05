@@ -37,6 +37,11 @@ export const handler = async (event) => {
     if (auth.error) return { statusCode: auth.status || 401, headers: HEADERS, body: JSON.stringify({ error: auth.error }) };
     const { userId, orgId, userRole } = auth;
 
+    // Export is an Admin's (state §0.169), its schedules too: every role could
+    // list them, the destinations included. Export lives in Settings, the Admin's.
+    const adminErr = requireAdmin(userRole);
+    if (adminErr) return adminErr;
+
     try {
         // ── GET — list all schedules for this org ──────────────────────────
         if (event.httpMethod === 'GET') {
@@ -47,10 +52,6 @@ export const handler = async (event) => {
                 .orderBy(desc(exportSchedules.createdAt));
             return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ schedules: rows }) };
         }
-
-        // All write methods are Admin-only
-        const adminErr = requireAdmin(userRole);
-        if (adminErr) return adminErr;
 
         // ── POST — create a new schedule ───────────────────────────────────
         if (event.httpMethod === 'POST') {

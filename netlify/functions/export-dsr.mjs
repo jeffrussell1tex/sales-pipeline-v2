@@ -53,6 +53,12 @@ export const handler = async (event) => {
     if (auth.error) return { statusCode: auth.status || 401, headers: HEADERS, body: JSON.stringify({ error: auth.error }) };
     const { userId, orgId, userRole } = auth;
 
+    // The GDPR request queue is an Admin's, its read too (state §0.169): every
+    // role could list each request — whose data, access or erasure, its notes.
+    // It sits on the Export page, in Settings, the Admin's.
+    const adminErr = requireAdmin(userRole);
+    if (adminErr) return adminErr;
+
     try {
         // ── GET — list all DSR requests for this org ───────────────────────
         if (event.httpMethod === 'GET') {
@@ -70,10 +76,6 @@ export const handler = async (event) => {
 
             return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ dsrQueue: annotated }) };
         }
-
-        // All write methods are Admin-only
-        const adminErr = requireAdmin(userRole);
-        if (adminErr) return adminErr;
 
         // ── POST — create a new DSR request ───────────────────────────────
         if (event.httpMethod === 'POST') {

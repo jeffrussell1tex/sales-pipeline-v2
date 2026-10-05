@@ -4,6 +4,7 @@ import { eq, and, gte, lte } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, getCallerName, auditAs } from './_lib.mjs';
+import { resolveTechnicianId } from './_techScope.mjs';
 
 // Technician availability exceptions — PTO, sick, training, jury duty and so on.
 // The dispatch_schedule_blocks table was declared in schema.ts but had no
@@ -57,6 +58,14 @@ export const handler = async (event) => {
         if (event.httpMethod === 'GET') {
             const params = event.queryStringParameters || {};
             const clauses = [eq(dispatchScheduleBlocks.orgId, orgId)];
+            // A Technician reads their own time off and no one else's (state §0.169)
+            // — every technician's blocks, reasons included, were theirs to read.
+            // With no technician row linked to them there is nothing of theirs.
+            if (gate.access === 'tech') {
+                const myTechId = await resolveTechnicianId(orgId, userId);
+                if (!myTechId) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No technician record is linked to your account.' }) };
+                clauses.push(eq(dispatchScheduleBlocks.techId, myTechId));
+            }
             if (params.techId) clauses.push(eq(dispatchScheduleBlocks.techId, params.techId));
             if (params.to)     clauses.push(lte(dispatchScheduleBlocks.startDate, params.to));
             if (params.from)   clauses.push(gte(dispatchScheduleBlocks.endDate, params.from));

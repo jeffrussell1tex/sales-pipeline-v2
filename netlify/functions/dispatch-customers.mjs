@@ -4,6 +4,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, withNumberRetry, auditAs } from './_lib.mjs';
+import { techScopeOf } from './_techScope.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -117,6 +118,15 @@ export const handler = async (event) => {
     const gate = await dispatchGate(auth, event, headers);
     if (gate.response) return gate.response;
 
+    // A Technician reads the customers of the jobs they are on, and those
+    // customers' service locations — no other (state §0.169): every customer and
+    // location of the org was theirs to read. With no technician row linked to
+    // them there is nothing of theirs to read (dispatch-jobs answers the same).
+    const techScope = gate.access === 'tech' ? await techScopeOf(orgId, auth.userId) : null;
+    if (gate.access === 'tech' && !techScope) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'No technician record is linked to your account.' }) };
+    }
+
     const params  = event.queryStringParameters || {};
     // ?resource=locations routes to service locations sub-resource
     const resource = params.resource; // 'locations' | undefined
@@ -131,7 +141,8 @@ export const handler = async (event) => {
                     ? and(eq(dispatchServiceLocations.orgId, orgId), eq(dispatchServiceLocations.customerId, params.customerId))
                     : eq(dispatchServiceLocations.orgId, orgId);
                 const rows = await db.select().from(dispatchServiceLocations).where(where);
-                return { statusCode: 200, headers, body: JSON.stringify({ locations: rows.map(normaliseLoc) }) };
+                const visible = techScope ? rows.filter((l) => techScope.customerIds.has(l.customerId)) : rows;
+                return { statusCode: 200, headers, body: JSON.stringify({ locations: visible.map(normaliseLoc) }) };
             }
 
             if (event.httpMethod === 'POST') {
@@ -210,7 +221,8 @@ export const handler = async (event) => {
         if (event.httpMethod === 'GET') {
             const rows = await db.select().from(dispatchCustomers)
                 .where(eq(dispatchCustomers.orgId, orgId));
-            return { statusCode: 200, headers, body: JSON.stringify({ customers: rows.map(normaliseCust) }) };
+            const visible = techScope ? rows.filter((c) => techScope.customerIds.has(c.id)) : rows;
+            return { statusCode: 200, headers, body: JSON.stringify({ customers: visible.map(normaliseCust) }) };
         }
 
         if (event.httpMethod === 'POST') {

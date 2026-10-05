@@ -149,16 +149,19 @@ export const handler = async (event) => {
                 return { statusCode: 200, headers, body: JSON.stringify(result) };
             }
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const clean = sanitize(data);
-            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'contact', orgId });
-            if (ownPut.change) clean.ownerId = ownPut.ownerId;
-            const { id, ...updateData } = clean;
             // PUT is strictly an update: unknown ids 404 instead of silently creating.
-            const [target] = await db.select({ id: contacts.id, [ownerKeyFor('contact')]: ownerColumnOf(contacts, 'contact') })
-                .from(contacts).where(and(eq(contacts.id, data.id), eq(contacts.orgId, orgId)));
+            // The stored row is read whole and the update built over it (state
+            // §0.169): sanitize() builds a FULL row, so a body naming three fields
+            // blanked the rest (CLAUDE.md; leads, opportunities and tasks merge the
+            // same way).
+            const [target] = await db.select().from(contacts).where(and(eq(contacts.id, data.id), eq(contacts.orgId, orgId)));
             if (!target) {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Contact not found' }) };
             }
+            const clean = sanitize({ ...target, ...data });
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'contact', orgId });
+            if (ownPut.change) clean.ownerId = ownPut.ownerId;
+            const { id, ...updateData } = clean;
             // Object-level authorization. Previously selected contacts.createdBy,
             // which does not exist -- db.select({ owner: undefined }) THREW, so a
             // rep editing any contact got a 500 rather than an answer.

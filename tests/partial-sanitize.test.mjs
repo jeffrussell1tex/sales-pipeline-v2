@@ -204,3 +204,34 @@ test('tasks.mjs PUT merges the stored row before sanitize — a partial PUT must
     assert.equal(src.includes('const clean = sanitize(data);'), false,
         'the bare full-row sanitize call must not return — `completed ?? false` un-completes the task it omits');
 });
+
+// ── accounts, contacts, activities and SPIFF claims (state §0.169) ───────────
+// The in-org audit found the same full-row PUT in four more endpoints. Accounts:
+// a body naming three fields blanked the rest, and the emptied territory let the
+// assignment rules hand the account a new one. Contacts and activities: every
+// absent column blanked — an activity's linked contacts among them. SPIFF
+// claims: a body naming the claim's SPIFF and rep but not its status reset an
+// approved claim to pending and blanked its approval; one naming neither failed
+// the insert's NOT NULL check, a 500. Each now reads the stored row whole and
+// sanitizes the body over it. Behaviour: tests/integration/in-org.itest.mjs.
+// Each file keeps a full-row sanitize(data) for its CREATE — a new row has
+// nothing stored to merge.
+
+for (const [file, merge, why] of [
+    ['accounts',     'const clean = sanitize({ ...prior, ...data });',                 'a body naming three fields blanked the rest, the territory among them'],
+    ['contacts',     'const clean = sanitize({ ...target, ...data });',                'a body naming three fields blanked the rest'],
+    ['activities',   'const clean = sanitize({ ...base, ...data });',                  'a body naming three fields blanked the rest, the linked contacts among them'],
+    ['spiff-claims', 'const clean = sanitize({ ...(existing || {}), ...changes });',  'a body without a status reset an approved claim to pending, or was a 500'],
+]) {
+    test(`${file}.mjs PUT merges the stored row before sanitize — ${why}`, () => {
+        const src = readFileSync(new URL(`../netlify/functions/${file}.mjs`, import.meta.url), 'utf8');
+        assert.equal(src.split(merge).length - 1, 1, 'the PUT sanitizes the body overlaid on the stored row, exactly once');
+        assert.equal(src.includes('const clean = sanitize(data);'), false, 'the bare full-row build from the body alone must not return');
+        assert.ok(src.indexOf('await db.select().from(') < src.indexOf(merge), 'the stored row is read whole before the merge');
+    });
+}
+
+test('activities.mjs: a body naming only the legacy contactId means that contact — the stored list does not override it', () => {
+    const src = readFileSync(new URL('../netlify/functions/activities.mjs', import.meta.url), 'utf8');
+    assert.ok(src.includes("const base = ('contactId' in data && !('contactIds' in data)) ? { ...target, contactIds: undefined } : target;"));
+});

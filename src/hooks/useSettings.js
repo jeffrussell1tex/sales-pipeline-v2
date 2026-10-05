@@ -108,14 +108,22 @@ const DEFAULT_SETTINGS = {
     },
 };
 
+// What the autosave may send for a settings state — never the roster (the
+// /users endpoint's), the fiscal year (its own explicit save), key material
+// (the AI panel's) or the Slack config (state §0.169). The Connected Apps panel
+// writes Slack by an explicit PUT and keeps its own copy, so the copy held here
+// since sign-in is an older one, and a member's has no webhook URL — the GET
+// gives it to an Admin alone — so echoing it would put back an old config, or,
+// after a promotion, wipe the webhook. A key the PUT is not sent, it keeps.
+const payloadForSave = (settings) => {
+    const { users: _stripUsers, fiscalYearStart: _stripFiscal, slackConfig: _stripSlack, ...rest } = settings;
+    return stripKeyMaterial(rest).value;
+};
+
 // The exact bytes the autosave would PUT for a given settings state. One
 // serializer used by BOTH the autosave and the load-time baseline below, so
 // they can never disagree about what "unchanged" means.
-const serializeForSave = (settings) => {
-    const { users: _stripUsers, fiscalYearStart: _stripFiscal, ...rest } = settings;
-    const { value } = stripKeyMaterial(rest);
-    return JSON.stringify(value);
-};
+const serializeForSave = (settings) => JSON.stringify(payloadForSave(settings));
 
 export function useSettings(activeOrgId = null) {
     const settingsReady = useRef(false);
@@ -271,10 +279,10 @@ export function useSettings(activeOrgId = null) {
         // active org — the PUT goes out with the ACTIVE org's token (§0.162).
         const org = settingsOrgRef.current;
         if (!org || org !== activeOrgId) return;
-        const { users: _stripUsers, fiscalYearStart: _stripFiscal, ...rest } = settings;
-        // Never echo key material back to the server. The key is written only
-        // by the AI settings panel, via an explicit PUT.
-        const { value: settingsToSave } = stripKeyMaterial(rest);
+        // Never echo key material or the Slack config back to the server: the AI
+        // panel and the Connected Apps panel write them, each by an explicit PUT
+        // (payloadForSave above — the baseline's own shape).
+        const settingsToSave = payloadForSave(settings);
         // No-change guard: users/roster refreshes and the load's own
         // mirror-back produce new OBJECTS with identical payloads — skip them.
         // Only a payload that differs from the server's last-known state PUTs.

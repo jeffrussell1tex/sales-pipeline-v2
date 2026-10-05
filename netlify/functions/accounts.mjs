@@ -219,14 +219,18 @@ export const handler = async (event) => {
                 return { statusCode: 200, headers, body: JSON.stringify(result) };
             }
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const clean = sanitize(data);
-            const { id, ...updateData } = clean;
-            // Read the stored row first so a rename can be detected and cascaded below.
-            const [prior] = await db.select().from(accounts).where(and(eq(accounts.id, clean.id), eq(accounts.orgId, orgId)));
+            // Read the stored row first: a rename is detected and cascaded below, and
+            // the update is built over it (state §0.169). sanitize() builds a FULL
+            // row, so a body naming three fields blanked the rest — and an unset
+            // territory let the rules reassign one (CLAUDE.md; leads, opportunities
+            // and tasks merge the same way).
+            const [prior] = await db.select().from(accounts).where(and(eq(accounts.id, data.id), eq(accounts.orgId, orgId)));
             // PUT is strictly an update: unknown ids 404 instead of silently creating.
             if (!prior) {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Account not found' }) };
             }
+            const clean = sanitize({ ...prior, ...data });
+            const { id, ...updateData } = clean;
             // Object-level authorization: reps may only edit their own or
             // unassigned accounts. `prior` is the full row, already loaded above,
             // so passing it means no second query -- the policy applied is

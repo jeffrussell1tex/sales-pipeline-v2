@@ -109,14 +109,20 @@ export const handler = async (event) => {
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const clean = sanitize(data);
-            const { id, ...updateData } = clean;
             // PUT is strictly an update: unknown ids 404 instead of silently creating.
-            const [target] = await db.select({ id: activities.id, [ownerKeyFor('activity')]: ownerColumnOf(activities, 'activity') })
-                .from(activities).where(and(eq(activities.id, data.id), eq(activities.orgId, orgId)));
+            // The stored row is read whole and the update built over it (state
+            // §0.169): sanitize() builds a FULL row, so a body naming three fields
+            // blanked the rest (CLAUDE.md; leads, opportunities and tasks merge the
+            // same way).
+            const [target] = await db.select().from(activities).where(and(eq(activities.id, data.id), eq(activities.orgId, orgId)));
             if (!target) {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Activity not found' }) };
             }
+            // A body naming only the legacy single contactId means that contact: the
+            // stored contactIds must not override it in the merge.
+            const base = ('contactId' in data && !('contactIds' in data)) ? { ...target, contactIds: undefined } : target;
+            const clean = sanitize({ ...base, ...data });
+            const { id, ...updateData } = clean;
             // Object-level authorization. Previously selected activities.repName,
             // which is not a column on this table -- the column is `author`. As
             // with contacts.createdBy, db.select({ owner: undefined }) THREW, so

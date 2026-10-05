@@ -15,13 +15,16 @@
  *
  * Feature gate: checks settings.aiScoringEnabled before running.
  * If false, returns { disabled: true }.
+ *
+ * Who: a writer (requireWrite), on a deal they may edit — its rep, anyone
+ * while it is unassigned, an Admin or a Manager (assertOwnership; §0.169).
  */
 
 import { db } from '../../db/index.js';
 import { opportunities, activities, settings } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
-import { serverErrorBody, auditAs } from './_lib.mjs';
+import { verifyAuth, requireWrite } from './auth.mjs';
+import { serverErrorBody, auditAs, assertOwnership } from './_lib.mjs';
 // The org's BYOK key, else the site's — one helper for every Anthropic call
 // (state §0.141; this file carried its own copy of the decrypt before).
 import { resolveAnthropicKey } from './_aiKey.mjs';
@@ -41,28 +44,40 @@ export const handler = async (event) => {
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { orgId } = auth;
 
-    // Prefer org-level BYOK key; fall back to shared env var
-    const [orgSettingsRow] = await db.select({ extra: settings.extra })
-        .from(settings)
-        .where(eq(settings.orgId, orgId))
-        .limit(1);
-    const { apiKey, usingOrgKey } = resolveAnthropicKey(orgSettingsRow?.extra);
-
-    if (!apiKey) return { statusCode: 503, headers, body: JSON.stringify({ error: 'No Anthropic API key configured. Add your key in Settings → AI Features, or contact your administrator.' }) };
+    // A score is written to the deal and the deal goes to the model, so scoring
+    // is a writer's, on a deal they may edit (state §0.169): any member could
+    // score any deal in the org — a Technician or a read-only member, a rep
+    // another rep's — and read its cached score.
+    const forbidden = requireWrite(auth, event, headers);
+    if (forbidden) return forbidden;
 
     try {
         const body = JSON.parse(event.body || '{}');
         const { opportunityId, forceRefresh } = body;
         if (!opportunityId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'opportunityId required' }) };
 
-        // ── Check feature gate (reuse orgSettingsRow fetched above) ─────────
-        const aiEnabled = orgSettingsRow?.extra?.aiScoringEnabled ?? false;
-        if (!aiEnabled) return { statusCode: 200, headers, body: JSON.stringify({ disabled: true }) };
-
         // ── Load opportunity ──────────────────────────────────────────────────
         const [opp] = await db.select().from(opportunities)
             .where(and(eq(opportunities.id, opportunityId), eq(opportunities.orgId, orgId)));
         if (!opp) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Opportunity not found' }) };
+        // The deal's rep — anyone, while it is unassigned — or an Admin or a
+        // Manager: the edit policy. Asked before the key and the switch, so a
+        // deal that is not yours is refused whatever the org's setup.
+        const notYours = await assertOwnership({ table: opportunities, entity: 'opportunity', id: opportunityId, orgId, userId: auth.userId, userRole: auth.userRole, headers, row: opp });
+        if (notYours) return notYours;
+
+        // Prefer org-level BYOK key; fall back to shared env var
+        const [orgSettingsRow] = await db.select({ extra: settings.extra })
+            .from(settings)
+            .where(eq(settings.orgId, orgId))
+            .limit(1);
+        const { apiKey, usingOrgKey } = resolveAnthropicKey(orgSettingsRow?.extra);
+
+        if (!apiKey) return { statusCode: 503, headers, body: JSON.stringify({ error: 'No Anthropic API key configured. Add your key in Settings → AI Features, or contact your administrator.' }) };
+
+        // ── Check feature gate (reuse orgSettingsRow fetched above) ─────────
+        const aiEnabled = orgSettingsRow?.extra?.aiScoringEnabled ?? false;
+        if (!aiEnabled) return { statusCode: 200, headers, body: JSON.stringify({ disabled: true }) };
 
         // ── Return cached score if fresh (< 24h) and not forcing refresh ──────
         const cached = opp.aiScore;

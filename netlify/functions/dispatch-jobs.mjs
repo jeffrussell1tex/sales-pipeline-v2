@@ -12,6 +12,9 @@ import { serverErrorBody, withNumberRetry, getCallerName, auditAs } from './_lib
 // Customer-facing notifications (state §0.111): decided and sent AFTER the row
 // is written, from the stored before/after rows; never changes the response.
 import { notifyCustomer } from './_customerNotify.mjs';
+// Whose jobs a Technician's are — one definition for every dispatch read (§0.169).
+import { resolveTechnicianId } from './_techScope.mjs';
+import { techOnJob } from './_techJobs.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -135,23 +138,12 @@ export async function nextJobNumber(orgId) {
 }
 
 // ── Technician scoping ────────────────────────────────────────────────────────
-// A Technician is a mobile/field user. Jobs FK the TECHNICIAN ROW
-// (dispatch_jobs.assignedTechId -> dispatch_technicians.id), not the user, so the
-// caller's Clerk id must be resolved to their technician row before anything can
-// be scoped. A user with the Technician role but no linked technician row owns
-// nothing and is denied — this fails closed by design.
-async function resolveTechnicianId(orgId, userId) {
-    if (!userId) return null;
-    const [row] = await db.select({ id: dispatchTechnicians.id })
-        .from(dispatchTechnicians)
-        .where(and(eq(dispatchTechnicians.orgId, orgId), eq(dispatchTechnicians.userId, userId)));
-    return row?.id || null;
-}
-
-// A technician is on a job if they are the lead or a co-tech.
-const techOnJob = (job, techId) =>
-    !!techId && (job.assignedTechId === techId ||
-        (Array.isArray(job.coTechIds) ? job.coTechIds : []).includes(techId));
+// A Technician is a mobile/field user, scoped to the jobs they are on — the lead
+// or a co-tech. resolveTechnicianId (_techScope.mjs) finds their technician row;
+// techOnJob (_techJobs.mjs) is the one test of "their job", shared with the
+// customers and time-off reads (state §0.169). It reads a co-tech list stored as
+// jsonb TEXT, which most rows hold: the copy here read it as an array and matched
+// no co-tech.
 
 // The ONLY fields a technician may write, on a job assigned to them. Everything
 // else — reassignment, scheduling, customer, pricing — stays with dispatch.
@@ -189,6 +181,16 @@ export const handler = async (event) => {
     const params   = event.queryStringParameters || {};
     const resource = params.resource; // 'lineitems' | 'history' | undefined
 
+    // A Technician reads a job's line items and history only for a job they are on
+    // (state §0.169) — the list and a single job were scoped, these two read any
+    // job's by id. 404, as a single job answers, so job ids cannot be probed.
+    const techMayReadJob = async (jobId) => {
+        if (!tech) return true;
+        const [row] = await db.select().from(dispatchJobs)
+            .where(and(eq(dispatchJobs.id, jobId), eq(dispatchJobs.orgId, orgId)));
+        return !!row && techOnJob(normaliseJob(row), myTechId);
+    };
+
     try {
         // ════════════════════════════════════════════════════
         // LINE ITEMS sub-resource  ?resource=lineitems&jobId=xxx
@@ -196,6 +198,7 @@ export const handler = async (event) => {
         if (resource === 'lineitems') {
             if (event.httpMethod === 'GET') {
                 if (!params.jobId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'jobId required' }) };
+                if (!(await techMayReadJob(params.jobId))) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
                 const rows = await db.select().from(dispatchJobLineItems)
                     .where(and(eq(dispatchJobLineItems.orgId, orgId), eq(dispatchJobLineItems.jobId, params.jobId)));
                 return { statusCode: 200, headers, body: JSON.stringify({ lineItems: rows.map(normaliseLineItem) }) };
@@ -252,6 +255,7 @@ export const handler = async (event) => {
         // ════════════════════════════════════════════════════
         if (resource === 'history') {
             if (!params.jobId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'jobId required' }) };
+            if (!(await techMayReadJob(params.jobId))) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
             const rows = await db.select().from(dispatchJobStatusHistory)
                 .where(and(eq(dispatchJobStatusHistory.orgId, orgId), eq(dispatchJobStatusHistory.jobId, params.jobId)))
                 .orderBy(desc(dispatchJobStatusHistory.createdAt));

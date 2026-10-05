@@ -22,7 +22,7 @@ const headers = {
     'Access-Control-Allow-Headers':'Content-Type, Authorization',
 };
 
-// Admins and Managers can manage automations; all roles can read
+// Admins and Managers manage automations, and only they read them (state §0.169).
 const canWrite = (role) => ['Admin', 'Manager'].includes(role);
 
 export const handler = async (event) => {
@@ -31,6 +31,13 @@ export const handler = async (event) => {
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { userId, orgId, userRole } = auth;
+
+    // Every method, reads included (state §0.169): the rules — whom they email,
+    // what they assign — and every rule's run history were every role's to read.
+    // The panel is in Settings, the Admin's.
+    if (!canWrite(userRole)) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Insufficient role' }) };
+    }
 
     try {
         // ── GET /automations?runs=<id> — run history for one rule ─────────────
@@ -53,11 +60,6 @@ export const handler = async (event) => {
                 .where(eq(automations.orgId, orgId))
                 .orderBy(asc(automations.createdAt));
             return { statusCode: 200, headers, body: JSON.stringify({ automations: rules }) };
-        }
-
-        // Write operations — Admin/Manager only
-        if (!canWrite(userRole)) {
-            return { statusCode: 403, headers, body: JSON.stringify({ error: 'Insufficient role' }) };
         }
 
         // ── POST — create a rule ───────────────────────────────────────────────

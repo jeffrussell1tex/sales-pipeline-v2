@@ -46,6 +46,16 @@ function scrubAiSettings(ai) {
     return out;
 }
 
+// ── Slack webhook: an Admin's to read (state §0.169) ─────────────────
+// The webhook URL is a credential: whoever holds it posts to the org's Slack
+// channel, as the org. Every member read it on GET. An Admin sets it, tests it
+// and sees it; everyone else reads the rest of the config — the server posts
+// the alerts itself (send-slack.mjs reads the stored config, not the client's).
+const withoutWebhookUrl = (cfg) => {
+    const { webhookUrl: _webhookUrl, ...rest } = cfg || {};
+    return rest;
+};
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -123,7 +133,7 @@ export const handler = async (event) => {
                 // appeared to work and reverted on reload. Third instance of this
                 // failure mode after the audit-streaming keys; see guide 18b.
                 connectedApps:  row.extra?.connectedApps  || {},
-                slackConfig:    row.extra?.slackConfig    || {},
+                slackConfig:    isAdmin(userRole) ? (row.extra?.slackConfig || {}) : withoutWebhookUrl(row.extra?.slackConfig),
                 // What dispatch customers are told (state §0.111). Off by default;
                 // the panel and the jobs function read one normaliser.
                 customerNotifications: cleanCustomerNotifications(row.extra?.customerNotifications),

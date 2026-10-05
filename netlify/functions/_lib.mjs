@@ -117,10 +117,13 @@ export async function resolveCaller(clerkUserId, orgId) {
     }
 }
 
-// Display-name half. FOR RENDERING, AUDIT AND EXPORT ONLY.
+// Display-name half. FOR RENDERING, AUDIT AND EXPORT — with one exception.
 //
-// NOTHING AUTHORIZES ON THIS ANY MORE. Ownership compares ids (see getCallerId
-// below and mayMutate in _ownership.mjs). It is kept because audit rows, email
+// Ownership compares ids (see getCallerId below and mayMutate in
+// _ownership.mjs). The one thing that authorizes on this is a rep's edit of a
+// SPIFF claim (spiff-claims.mjs, state §0.169): spiff_claims names its rep and
+// holds no owner id, so a rep's own claim is the one whose name is theirs —
+// until the table carries an owner id. It is kept because audit rows, email
 // templates and the visibility filters still render a human-readable name, and
 // because a name is what a CSV carries.
 //

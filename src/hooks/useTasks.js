@@ -100,11 +100,18 @@ export function useTasks(deps) {
                 relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
                 task.type ? 'Type: ' + task.type : '',
             ].filter(Boolean).join('\n');
-            await fetch('/.netlify/functions/calendar-add-event', {
+            // dbFetch, for the sign-in token (state §0.169): verifyAuth reads only
+            // the Authorization header, and a bare fetch sent none — every call was
+            // refused, and no event was ever added. A refusal, and a 200 that says
+            // { connected: false } (no Google calendar connected), add nothing:
+            // both reach the warning below.
+            const res = await dbFetch('/.netlify/functions/calendar-add-event', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: task.title, date: task.dueDate, description }),
             });
+            const result = await res.json().catch(() => ({}));
+            if (!res.ok || result.connected === false) throw new Error(result.error || result.message || `the server returned ${res.status}`);
         } catch (err) {
             console.warn('Calendar event creation failed (non-blocking):', err);
         }
@@ -205,12 +212,16 @@ export function useTasks(deps) {
                 relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
                 task.type ? 'Type: ' + task.type : '',
             ].filter(Boolean).join('\n');
-            const res = await fetch('/.netlify/functions/calendar-add-event', {
+            // dbFetch, for the sign-in token (state §0.169), as above. A 200 that
+            // says { connected: false } added nothing — no Google calendar is
+            // connected — so it is not a success.
+            const res = await dbFetch('/.netlify/functions/calendar-add-event', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: task.title, date: task.dueDate, description }),
             });
-            if (!res.ok) throw new Error('Failed');
+            const result = await res.json().catch(() => ({}));
+            if (!res.ok || result.connected === false) throw new Error('Failed');
             setCalendarAddFeedback(prev => ({ ...prev, [task.id]: 'success' }));
         } catch {
             setCalendarAddFeedback(prev => ({ ...prev, [task.id]: 'error' }));
