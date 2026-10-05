@@ -18,12 +18,13 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
 
     const handleSave = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, [settingsKey]: items }));
         try {
             // A failure was only console.error'd and the dirty flag cleared anyway.
             // This file is generic, so that one bug applied to every settings key
             // rendered through it.
             await putSettings({ [settingsKey]: items });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, [settingsKey]: items }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

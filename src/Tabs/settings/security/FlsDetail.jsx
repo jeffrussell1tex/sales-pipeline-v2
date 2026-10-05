@@ -1,5 +1,6 @@
 // settings/security/FlsDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { SecCrumb, SecTitle, SecBtn } from './shared.jsx';
@@ -87,7 +88,7 @@ const FLS_OBJECTS_LIST = Object.keys(FLS_OBJECT_FIELDS);
 
 const FLS_LEVELS = ['Edit','Read','Masked','Hidden'];
 
-export const FlsDetail = ({ onBack }) => {
+export const FlsDetail = ({ onBack, setSettings, setSettingsDirty, settingsSaveRef }) => {
     const [objFilter, setObjFilter] = React.useState(FLS_OBJECTS_LIST[0]);
     const [search,    setSearch]    = React.useState('');
     const [matrix,    setMatrix]    = React.useState({}); // { [fieldKey]: { [role]: level } }
@@ -178,14 +179,23 @@ export const FlsDetail = ({ onBack }) => {
                 body: JSON.stringify({ fieldVisibility: matrix }),
             });
             if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            // The app's copy follows the save (state §0.170) — it kept the old
+            // matrix until a reload.
+            if (setSettings) setSettings(prev => ({ ...prev, fieldVisibility: matrix }));
             setDirty(false);
             showToast('Field-level security saved.');
         } catch (e) {
             showToast(e.message, true);
+            // Rethrown (state §0.170): the leave guard's "Save and continue" runs
+            // this too, and only a throw keeps it from moving on.
+            throw e;
         } finally {
             setSaving(false);
         }
     };
+    // Hand the leave guard this panel's unsaved state and its save (state §0.170).
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     // ── Export matrix as CSV ──────────────────────────────────────
     const handleExport = () => {

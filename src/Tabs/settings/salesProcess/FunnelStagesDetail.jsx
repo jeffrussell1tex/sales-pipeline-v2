@@ -38,9 +38,10 @@ export const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsD
     const handleCancel = () => { setStages(JSON.parse(JSON.stringify(saved))); setDirty(false); };
     const handleSave   = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, funnelStages: stages }));
         try {
             await putSettings({ funnelStages: stages });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, funnelStages: stages }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

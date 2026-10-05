@@ -1,5 +1,6 @@
 // settings/salesProcess/LeadScoringDetail.jsx
 import React, { useState, useEffect } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -85,7 +86,7 @@ const RuleTable = ({ kind, rules, onChange }) => {
     );
 };
 
-export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
+export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     // Progress toward the predictive threshold: how many of this org's leads are
     // decided (Converted / Dead). An Admin's context holds every lead.
     const { leads } = useApp();
@@ -141,20 +142,27 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack }) => {
         setSaving(true);
         // Was fire-and-forget: dbFetch resolves for ANY status (guide 18b1), so a
         // 403 from the Admin-only PUT /settings cleared the dirty flag and left the
-        // panel looking saved. Revert on failure so the form stays dirty.
-        let snapshot;
-        setSettings(prev => { snapshot = prev; return { ...prev, leadScoring: cfg }; });
+        // panel looking saved. The app's copy changes only once the save lands
+        // (state §0.170) — a snapshot put back on failure also put back anything
+        // else changed meanwhile.
         setSaveError('');
         try {
             await putSettings({ leadScoring: cfg });
+            setSettings(prev => ({ ...prev, leadScoring: cfg }));
             setSaved(JSON.parse(JSON.stringify(cfg)));
             setDirty(false);
         } catch (e) {
-            setSettings(snapshot);
             setSaveError(`Lead scoring not saved — ${e.message}`);
+            // Clear the spinner, then rethrow: the leave guard's "Save and
+            // continue" runs this too, and only a throw keeps it from moving on.
+            setSaving(false);
+            throw e;
         }
         setSaving(false);
     };
+    // Hand the leave guard this panel's unsaved state and its save (state §0.170).
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const warmMin = cfg.buckets?.warm?.[0] ?? 41;
     const hotMin  = cfg.buckets?.hot?.[0]  ?? 71;

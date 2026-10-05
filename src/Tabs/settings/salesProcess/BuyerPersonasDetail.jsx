@@ -108,11 +108,12 @@ export const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettings
     // ── Handlers ──
     const handleSave = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, buyerPersonas: personas }));
         try {
             // Was a bare dbFetch with no res.ok check, then setDirty(false) OUTSIDE
             // the try — a failed save reported success.
             await putSettings({ buyerPersonas: personas });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, buyerPersonas: personas }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

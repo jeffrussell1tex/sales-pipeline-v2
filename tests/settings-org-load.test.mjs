@@ -1,10 +1,12 @@
-// The settings hook holds ONE org's settings and saves only while that org is
-// the active one (state §0.162). Two cross-org audit findings (2 Oct): the
-// autosave wrote after a failed load — the defaults, or an unscoped cached copy,
-// over the org's real pipelines, stages and KPIs — and after the header's
-// switcher changed the org, a slow answer for the org just left could land in
-// the new one while the open Settings panel saved the old org's values with the
-// new org's token.
+// The settings hook holds ONE org's settings (state §0.162) and, since §0.170,
+// writes nothing: each settings screen saves the keys it owns. Two cross-org
+// audit findings (2 Oct) made this file: the autosave wrote after a failed load
+// — the defaults, or an unscoped cached copy, over the org's real pipelines,
+// stages and KPIs — and after the header's switcher changed the org, a slow
+// answer for the org just left could land in the new one while the open
+// Settings panel saved the old org's values with the new org's token. The
+// autosave is gone (§0.170); the load's rules stay pinned here, and so does the
+// absence of any write.
 //
 // The hook is the REAL file, read from disk and run with React and the fetch
 // layer swapped for stand-ins (the repo has no React test renderer), so the
@@ -48,7 +50,10 @@ export const dbFetch      = (...a) => ${w}.dbFetch(...a);
 export const dbWrite      = (...a) => ${w}.dbWrite(...a);
 export const waitForToken = ()     => ${w}.waitForToken();
 `);
-    const wired = swap(swap(hookSrc, "from 'react';", `from "${react}";`), "from '../utils/storage';", `from "${storage}";`);
+    // The defaults module is real (pure) — a data: URL module resolves it by its file URL.
+    const defaults = new URL('../src/utils/settingsDefaults.js', import.meta.url).href;
+    const wired = swap(swap(swap(hookSrc, "from 'react';", `from "${react}";`), "from '../utils/storage';", `from "${storage}";`),
+        "from '../utils/settingsDefaults.js';", `from "${defaults}";`);
     return (await import(dataUrl(wired))).useSettings;
 }
 
@@ -197,7 +202,7 @@ test('a failed first load records no org, keeps the reason, and saves nothing', 
     assert.deepEqual(w.env.writes, [], "an edit over the defaults must not PUT them over the org's real settings");
 });
 
-test("a successful load records its org, skips the mirror-back, and saves a real change with that org's token", async (t) => {
+test("a successful load records its org — and a change to the app's copy writes nothing (state §0.170)", async (t) => {
     const w = await setup(t);
     w.activate(A);
     w.api.loadSettings(USER, false, A);
@@ -211,8 +216,19 @@ test("a successful load records its org, skips the mirror-back, and saves a real
     assert.deepEqual(w.env.writes, [], 'the load and the roster are not changes');
     w.api.setSettings((prev) => ({ ...prev, pipelines: [...prev.pipelines, { id: 'p2', name: 'Renewals' }] }));
     await w.flush();
-    assert.deepEqual(w.env.writes.map((x) => [x.org, x.body.pipelines.map((p) => p.name)]),
-        [[A, ['org_A pipeline', 'Renewals']]]);
+    assert.deepEqual(w.env.writes, [],
+        'the screen that changed it saves its own keys; the hook PUT the whole object, every key as it was at sign-in, over newer saves');
+    assert.deepEqual(w.api.settings.pipelines.map((p) => p.name), ['org_A pipeline', 'Renewals'], 'the copy still changes');
+    assert.deepEqual(Object.keys(w.api).sort(), ['loadSettings', 'setSettings', 'settings', 'settingsLoadError', 'settingsOrgId'],
+        'no save error, ready flag or unused handlers — nothing here saves');
+});
+
+test('the defaults the first paint shows are the shared ones the server keeps', async (t) => {
+    const w = await setup(t);
+    w.activate(A);
+    const { DEFAULT_SETTINGS } = await import(new URL('../src/utils/settingsDefaults.js', import.meta.url).href);
+    assert.deepEqual(w.api.settings.pipelines, DEFAULT_SETTINGS.pipelines);
+    assert.deepEqual(w.api.settings.quotaData, DEFAULT_SETTINGS.quotaData);
 });
 
 test("after a switch, the left org's late answers are dropped and nothing saves across orgs", async (t) => {
@@ -236,10 +252,10 @@ test("after a switch, the left org's late answers are dropped and nothing saves 
     assert.deepEqual(w.api.settings.pipelines, pipelinesOf(B));
     w.api.setSettings((prev) => ({ ...prev, companyLegalName: 'B Ltd, renamed' }));
     await w.flush();
-    assert.deepEqual(w.env.writes.map((x) => [x.org, x.body.companyLegalName]), [[B, 'B Ltd, renamed']]);
+    assert.deepEqual(w.env.writes, [], 'nothing goes out from the hook, with any org\'s token');
 });
 
-test('the autosave refuses while the loaded org is not the active one', async (t) => {
+test('an edit to the app\'s copy writes nothing, whichever org is active (state §0.170)', async (t) => {
     const w = await setup(t);
     w.activate(A);
     w.api.loadSettings(USER, false, A);
@@ -249,11 +265,10 @@ test('the autosave refuses while the loaded org is not the active one', async (t
     w.activate(B);                                         // B is active; its load has not started
     w.api.setSettings((prev) => ({ ...prev, companyLegalName: 'typed during the switch' }));
     await w.flush();
-    assert.deepEqual(w.env.writes, [], "A's settings must never go out with B's token");
-    w.activate(A);                                         // back on A, the same kind of edit saves
+    w.activate(A);
     w.api.setSettings((prev) => ({ ...prev, companyLegalName: 'typed on A' }));
     await w.flush();
-    assert.deepEqual(w.env.writes.map((x) => [x.org, x.body.companyLegalName]), [[A, 'typed on A']]);
+    assert.deepEqual(w.env.writes, [], "A's settings once went out with B's token from here (§0.162); now nothing does");
 });
 
 test('no settings are read from localStorage, and the copies earlier builds kept are deleted', async (t) => {
@@ -278,7 +293,7 @@ test('no settings are read from localStorage, and the copies earlier builds kept
     assert.deepEqual([...w.env.local.keys()], [], 'a switch starts clean');
 });
 
-test('a reload of the same org that fails keeps the loaded copy and keeps saving', async (t) => {
+test('a reload of the same org that fails keeps the loaded copy', async (t) => {
     t.mock.method(console, 'error', () => {});
     const w = await setup(t);
     w.activate(A);
@@ -293,9 +308,7 @@ test('a reload of the same org that fails keeps the loaded copy and keeps saving
     await w.flush();
     assert.equal(w.api.settingsOrgId, A, "the copy in state is still this org's own");
     assert.equal(w.api.settingsLoadError, '');
-    w.api.setSettings((prev) => ({ ...prev, companyLegalName: 'after the failed reload' }));
-    await w.flush();
-    assert.deepEqual(w.env.writes.map((x) => x.org), [A]);
+    assert.deepEqual(w.api.settings.pipelines, pipelinesOf(A), 'the copy stays — Settings stays open');
 });
 
 test('switching away and back, a failed load is reported even for an org loaded before', async (t) => {
@@ -319,29 +332,6 @@ test('switching away and back, a failed load is reported even for an org loaded 
     assert.notDeepEqual(w.api.settings.pipelines, pipelinesOf(B));
 });
 
-test("a save that lands after a switch does not become the new org's baseline", async (t) => {
-    const w = await setup(t);
-    w.activate(A);
-    w.api.loadSettings(USER, false, A);
-    await w.flush();
-    w.answer(SETTINGS, A, settingsOf(A));
-    await w.flush();
-    w.env.holdWrites = true;
-    w.api.setSettings((prev) => ({ ...prev, companyLegalName: 'A, renamed' }));
-    await w.flush();
-    assert.equal(w.env.writes.length, 1, "A's PUT is out");
-    w.activate(B);
-    w.api.loadSettings(USER, true, B);
-    await w.flush();
-    w.answer(SETTINGS, B, settingsOf(B));
-    await w.flush();
-    w.env.releaseWrites();                                 // A's PUT lands after B loaded
-    await w.flush();
-    w.api.setSettings((prev) => ({ ...prev, users: [{ id: 'ub', name: 'B Rep' }] }));   // a roster refresh
-    await w.flush();
-    assert.equal(w.env.writes.length, 1, "B's unchanged settings must not be re-sent because A's save moved the baseline");
-});
-
 // ── The view, the wiring, the other writer ─────────────────────────────────
 
 const tabSrc = codeOnly(readFileSync(new URL('../src/Tabs/SettingsTab.jsx', import.meta.url), 'utf8'));
@@ -356,8 +346,8 @@ test("Settings opens only on the active org's own settings, rebuilt for each org
     assert.ok(tabSrc.includes(': <SettingsNotLoaded failed={!!settingsLoadError}/>}'));
 });
 
-test('App hands the hook the active org, loads for it, and ends unsaved Settings edits on a switch', () => {
-    assert.ok(appSrc.includes('} = useSettings(activeOrgId);'), 'the autosave compares the loaded org with this');
+test('App loads the active org, and ends unsaved Settings edits on a switch', () => {
+    assert.ok(appSrc.includes('} = useSettings();'), 'the hook takes no org: it loads the one App names, and saves nothing (§0.170)');
     assert.ok(appSrc.includes('loadSettings(clerkUser, orgSwitched, organization?.id || null);'),
         'a load without its org loads nothing');
     assert.ok(/useEffect\(\(\) => \{\s*setSettingsDirty\(false\);\s*settingsSaveRef\.current = null;\s*\}, \[activeOrgId\]\);/.test(appSrc),
@@ -368,5 +358,6 @@ test('App hands the hook the active org, loads for it, and ends unsaved Settings
 test("the Sales Manager tiers and SPIFFs save only over the loaded org's settings", () => {
     assert.ok(/const saveExtra = async \(patch, label\) => \{\s*if \(!settingsLoaded\) \{/.test(mgrSrc),
         'the patch is built from the settings on screen — the defaults until the load succeeds');
-    assert.ok(mgrSrc.includes('settingsLoaded={!!activeOrgId && settingsOrgId === activeOrgId}'));
+    // The saves are the page's since §0.170 (its drafts outlive the sub-tabs).
+    assert.ok(mgrSrc.includes('const settingsLoaded = !!activeOrgId && settingsOrgId === activeOrgId;'));
 });

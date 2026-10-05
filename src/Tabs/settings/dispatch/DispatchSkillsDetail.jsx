@@ -32,9 +32,10 @@ export const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSetting
     const handleSave = async () => {
         setSaving(true);
         const payload = { dispatchSkills: skills, dispatchCerts: certs, dispatchLicenses: licenses };
-        setSettings(prev => ({ ...prev, ...payload }));
         try {
             await putSettings(payload);
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, ...payload }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

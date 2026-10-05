@@ -45,9 +45,10 @@ export const DispatchCustomerNotificationsDetail = ({ settings, setSettings, onB
     const handleSave = async () => {
         setSaving(true);
         const payload = { customerNotifications: cleanCustomerNotifications(cfg) };
-        setSettings(prev => ({ ...prev, ...payload }));
         try {
             await putSettings(payload);   // throws on non-2xx
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, ...payload }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

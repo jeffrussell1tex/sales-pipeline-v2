@@ -191,16 +191,13 @@ test('export: an Admin’s — the runs, the run list and the schedules, before 
     before(dsr, 'const adminErr = requireAdmin(userRole);', "if (event.httpMethod === 'GET') {", 'the GDPR queue read is gated');
 });
 
-// ── The settings autosave (found in the pane check; Jeff: "Strip Slack only") ─
+// ── The settings autosave (found in the §0.169 pane check; gone in §0.170) ──
 
-test('the settings autosave never sends the Slack config — one payload builder for the PUT and its baseline', () => {
+test('no settings PUT echoes the Slack config — the autosave that did is gone (§0.170)', () => {
+    // §0.169 left the Slack config out of the autosave; §0.170 took the autosave
+    // out: the hook loads, and the Connected Apps panel alone writes Slack.
     const s = code(read('src/hooks/useSettings.js'));
-    const build = between(s, 'const payloadForSave = (settings) => {', 'return stripKeyMaterial(rest).value;');
-    assert.ok(build.includes('const { users: _stripUsers, fiscalYearStart: _stripFiscal, slackConfig: _stripSlack, ...rest } = settings;'),
-        'the Connected Apps panel writes Slack by its own PUT; the copy held here since sign-in is older, and a member’s has no webhook URL');
-    assert.ok(s.includes('const serializeForSave = (settings) => JSON.stringify(payloadForSave(settings));'), 'the baseline is the payload’s own shape');
-    assert.ok(s.includes('const settingsToSave = payloadForSave(settings);'), 'the PUT is the same shape — the two can never disagree about "unchanged"');
-    assert.ok(!s.includes('const { value: settingsToSave } = stripKeyMaterial(rest);'), 'the effect’s own copy of the strip is gone');
+    assert.ok(!/dbWrite|method:\s*'PUT'|slackConfig/.test(s), 'the hook writes nothing, the Slack config least of all');
     // A key the PUT is not sent, the server keeps — the merge half is unchanged.
     const server = code(read('netlify/functions/settings.mjs'));
     assert.ok(server.includes("slackConfig:    'slackConfig'    in data ? (data.slackConfig    || {}) : existingExtra.slackConfig    || {},"));

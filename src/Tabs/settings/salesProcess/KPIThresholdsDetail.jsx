@@ -55,11 +55,18 @@ export const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettings
 
     const handleCancel = () => { setRows(JSON.parse(JSON.stringify(saved))); setDirty(false); setErrors({}); setShowAdd(false); };
     const handleSave   = async () => {
-        if (hasErrors) return;
+        if (hasErrors) {
+            // Thrown, not returned (state §0.170): the leave guard's "Save and
+            // continue" runs this too, and a return let it move on, the edits lost.
+            const e = new Error('Fix the highlighted thresholds before saving.');
+            setSaveError(e.message);
+            throw e;
+        }
         setSaving(true);
-        setSettings(prev => ({ ...prev, kpiThresholds: rows }));
         try {
             await putSettings({ kpiThresholds: rows });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, kpiThresholds: rows }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

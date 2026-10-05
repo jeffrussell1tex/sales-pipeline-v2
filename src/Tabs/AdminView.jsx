@@ -5,6 +5,7 @@ import { jobHealth } from '../utils/jobHealth.js';
 import DuplicateScanView from './DuplicateScanView';
 import ContactDuplicateScanView from './ContactDuplicateScanView';
 import { T, eb } from './settings/shared/tokens.js';
+import { LeaveGuardModal } from './settings/shared/LeaveGuardModal.jsx';
 import { StatusChip, SettingIcon, Avatar, Ring, CategoryChip } from './settings/shared/ui.jsx';
 import { CompanyProfileDetail } from './settings/company/CompanyProfileDetail.jsx';
 import { FiscalYearDetail } from './settings/company/FiscalYearDetail.jsx';
@@ -88,50 +89,8 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
     );
 };
 
-// Module scope — a component defined inside AdminView would be a new type on
-// every render and remount mid-save. Mirrors the wording and option order of the
-// top-level nav guard in App.jsx so the two do not feel like different features.
-const LeaveGuardModal = ({ saving, canSave, failed, onStay, onSave, onDiscard }) => (
-    <div style={{ position:'fixed', inset:0, zIndex:99999, display:'flex', alignItems:'center', justifyContent:'center',
-        background:'rgba(42,38,34,0.55)' }} onClick={saving ? undefined : onStay}>
-        <div onClick={e => e.stopPropagation()}
-            style={{ background:T.surface, borderRadius:8, boxShadow:'0 24px 64px rgba(42,38,34,0.22)',
-                width:420, maxWidth:'92vw', padding:'26px 30px', fontFamily:T.sans }}>
-            <div style={{ fontSize:17, fontWeight:700, color:T.ink, marginBottom:8 }}>Unsaved changes</div>
-            {failed && (
-                <div style={{ fontSize:12.5, fontWeight:600, color:T.danger, marginBottom:10, fontFamily:T.sans }}>
-                    The save did not go through — the panel behind this dialog shows why. Your changes are still here.
-                </div>
-            )}
-            <div style={{ fontSize:13.5, color:T.inkMid, lineHeight:1.55, marginBottom:22 }}>
-                This panel has changes that have not been saved. Save them, or discard and continue.
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                {canSave && (
-                    <button onClick={onSave} disabled={saving}
-                        style={{ padding:'10px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:4,
-                            fontSize:13.5, fontWeight:600, cursor:saving?'default':'pointer', textAlign:'left',
-                            opacity:saving?0.6:1, fontFamily:T.sans }}>
-                        {saving ? 'Saving…' : 'Save changes and continue'}
-                    </button>
-                )}
-                <button onClick={onStay} disabled={saving}
-                    style={{ padding:'10px 16px', background:canSave?'transparent':T.ink,
-                        color:canSave?T.inkMid:'#fbf8f3', border:canSave?`1px solid ${T.borderStrong}`:'none',
-                        borderRadius:4, fontSize:13.5, fontWeight:600, cursor:saving?'default':'pointer',
-                        textAlign:'left', fontFamily:T.sans }}>
-                    Stay here
-                </button>
-                <button onClick={onDiscard} disabled={saving}
-                    style={{ padding:'10px 16px', background:'transparent', color:T.danger,
-                        border:`1px solid ${T.border}`, borderRadius:4, fontSize:13.5, fontWeight:500,
-                        cursor:saving?'default':'pointer', textAlign:'left', fontFamily:T.sans }}>
-                    Discard changes and continue
-                </button>
-            </div>
-        </div>
-    </div>
-);
+// The leave guard's dialog is shared with App's page guard (state §0.170):
+// settings/shared/LeaveGuardModal.jsx.
 
 export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, settingsDirty, setSettingsDirty, settingsSaveRef, openPanelId = null, onOpenedPanel }) => {
     const [tab,   setTab  ] = useState('All');
@@ -450,11 +409,11 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'pipelines')            return <PipelinesDetail        settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
-        if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
 
         // Quoting detail pages
-        if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'product-types')   return <ProductTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
 
         // Data detail pages
@@ -467,7 +426,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'sso')              return <SsoDetail       onBack={onBack}/>;
         if (id === 'mfa')              return <MfaDetail       onBack={onBack}/>;
         if (id === 'session')          return <SessionDetail   onBack={onBack}/>;
-        if (id === 'field-visibility') return <FlsDetail       onBack={onBack}/>;
+        if (id === 'field-visibility') return <FlsDetail       onBack={onBack} setSettings={setSettings} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'audit-log')        return <AuditDetail     onBack={onBack}/>;
 
         // Integrations detail pages
@@ -486,13 +445,13 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'email-templates') return <EmailTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
-        if (id === 'competitors')     return <CompetitorsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'reasons-won')     return <ReasonsWonDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
-        if (id === 'lead-scoring')    return <LeadScoringDetail    settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'lead-visibility') return <LeadVisibilityDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'account-segments') return <AccountSegmentsDetail settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
+        if (id === 'competitors')     return <CompetitorsDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'reasons-won')     return <ReasonsWonDetail      settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'lead-scoring')    return <LeadScoringDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'lead-visibility') return <LeadVisibilityDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'account-segments') return <AccountSegmentsDetail settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         // Dispatch detail pages
         if (id === 'dsp-skills'    || id === 'dispatch-skills')   return <DispatchSkillsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
@@ -504,7 +463,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'dsp-plans')     return <DispatchServicePlansDetail settings={settings} onBack={onBack} setSettingsDirty={setSettingsDirty}/>;
         if (id === 'dsp-customer-notify') return <DispatchCustomerNotificationsDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'dsp-proptypes') return <DispatchPropertyTypesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
-        if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
+        if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'duplicates')      return <DuplicateScanView onBack={onBack}/>;
         if (id === 'contact-duplicates') return <ContactDuplicateScanView onBack={onBack}/>;
 

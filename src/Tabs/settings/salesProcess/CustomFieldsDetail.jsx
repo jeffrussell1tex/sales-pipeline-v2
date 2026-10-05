@@ -56,9 +56,10 @@ export const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsD
     const handleCancel = () => { setFields(JSON.parse(JSON.stringify(saved))); setDirty(false); setShowAdd(false); };
     const handleSave   = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, customFieldsByObject: fields }));
         try {
             await putSettings({ customFieldsByObject: fields });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, customFieldsByObject: fields }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

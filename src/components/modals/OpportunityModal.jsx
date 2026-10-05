@@ -489,7 +489,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.border}` }}>
                 <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-                <PrimaryBtn type="button" onClick={() => onUpdate && onUpdate()}>Update</PrimaryBtn>
+                <PrimaryBtn type="button" onClick={() => onUpdate && onUpdate()}>Save</PrimaryBtn>
             </div>
         </div>
     );
@@ -607,7 +607,7 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.border}` }}>
                 <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-                <PrimaryBtn type="button" onClick={() => onUpdate && onUpdate()}>Update</PrimaryBtn>
+                <PrimaryBtn type="button" onClick={() => onUpdate && onUpdate()}>Save</PrimaryBtn>
             </div>
         </div>
     );
@@ -730,7 +730,7 @@ function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.border}` }}>
                 <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-                <PrimaryBtn type="button" onClick={() => onUpdate && onUpdate()}>Update</PrimaryBtn>
+                <PrimaryBtn type="button" onClick={() => onUpdate && onUpdate()}>Save</PrimaryBtn>
             </div>
         </div>
     );
@@ -2153,7 +2153,7 @@ export default function OpportunityModal({
                                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
                                         <GhostBtn type="button" onClick={onClose} disabled={saving}>Cancel</GhostBtn>
                                         <PrimaryBtn saving={saving}>
-                                            {saving ? 'Saving…' : opportunity ? 'Update' : 'Create'}
+                                            {saving ? 'Saving…' : opportunity ? 'Save' : 'Create'}
                                         </PrimaryBtn>
                                     </div>
 

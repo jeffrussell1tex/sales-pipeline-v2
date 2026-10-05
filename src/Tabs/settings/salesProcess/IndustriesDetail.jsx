@@ -1,5 +1,6 @@
 // settings/salesProcess/IndustriesDetail.jsx
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { createPortal } from 'react-dom';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
@@ -32,7 +33,7 @@ const DEFAULT_INDUSTRIES = [
     { k:'Non-profit',          subs:['Foundations','NGOs'] },
 ];
 
-export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, setAccountsDeepFilter }) => {
+export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, setAccountsDeepFilter, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.industries?.length ? settings.industries : DEFAULT_INDUSTRIES;
     const [industries, setIndustries] = useState(() => cloneIndustries(saved));
     const [dirty, setDirty]     = useState(false);
@@ -49,18 +50,26 @@ export const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, 
     const handleCancel = () => { setIndustries(cloneIndustries(saved)); setDirty(false); };
     const handleSave   = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, industries }));
         try {
             await putSettings({ industries });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, industries }));
             setSaveError('');
             setDirty(false);
         } catch (e) {
             // Keep the panel dirty: the change was NOT saved, and clearing the
             // flag here is what made a 403 look like success.
             setSaveError(e.message);
+            // Clear the spinner, then rethrow: the leave guard's "Save and
+            // continue" runs this too, and only a throw keeps it from moving on.
+            setSaving(false);
+            throw e;
         }
         setSaving(false);
     };
+    // Hand the leave guard this panel's unsaved state and its save (state §0.170).
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     // Industry kebab state
     const [openIndKebab, setOpenIndKebab]     = useState(null); // industry key

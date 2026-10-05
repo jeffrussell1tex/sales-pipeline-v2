@@ -146,9 +146,10 @@ export const DispatchPropertyTypesDetail = ({ settings, setSettings, onBack, set
         if (!clean.length) { const e = new Error('Keep at least one property type.'); setError(e.message); throw e; }
         setSaving(true); setError('');
         setTypes(clean);
-        if (setSettings) setSettings(s => ({ ...s, dispatchPropertyTypes: clean }));
         try {
             await putSettings({ dispatchPropertyTypes: clean });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            if (setSettings) setSettings(s => ({ ...s, dispatchPropertyTypes: clean }));
             setDirty(false);
         } catch (err) {
             setError(err.message || 'Save failed.');

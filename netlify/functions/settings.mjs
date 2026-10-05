@@ -15,6 +15,9 @@ import { randomBytes } from 'crypto';
 import { encrypt, decrypt } from './crypto.mjs';
 import { serverErrorBody, writeAudit, getCallerName } from './_lib.mjs';
 import { DEFAULT_LEAD_SCORING } from './score-lead.mjs';
+// A key a workspace has never saved is the shared default (state §0.170) — the
+// app's own copy, so a read, a save and the app's first paint agree.
+import { settingsSeeds, DEFAULT_SETTINGS } from '../../src/utils/settingsDefaults.js';
 
 // ── BYOK key quarantine ──────────────────────────────────────────────
 // The org's Anthropic key may only ever live in extra.anthropicApiKey, as
@@ -70,6 +73,13 @@ export const handler = async (event) => {
                 .orderBy(desc(settings.updatedAt));
             if (rows.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ settings: null }) };
             const row = rows[0];
+            // A key this workspace has never saved reads as the shared default
+            // (src/utils/settingsDefaults.js, state §0.170); one it holds, even as
+            // null, is its own — every settings save writes every key it knows, so
+            // only a key no save has written is absent. Until §0.170 the defaults
+            // reached the database only through the app's autosave.
+            const ex = { ...settingsSeeds(), ...(row.extra || {}) };
+            const saved = (k) => !!row.extra && k in row.extra;
 
             // BYOK key: the plaintext NEVER leaves the server. Every member gets a
             // boolean so the UI can render "key configured"; only an Admin gets the
@@ -88,27 +98,28 @@ export const handler = async (event) => {
                 companyName:      row.companyName     || '',
                 companyLogo:      row.companyLogo     || '',
                 fiscalYearStart:  row.fiscalYearStart || '',
-                funnelStages:     row.extra?.funnelStages || row.stages || [],
+                // Older rows kept stages and pain points in their own columns — those first.
+                funnelStages:     saved('funnelStages') ? (row.extra.funnelStages || row.stages || []) : (row.stages?.length ? row.stages : ex.funnelStages),
                 competitors:      row.extra?.competitors      || [],
                 reasonsWon:       row.extra?.reasonsWon       || [],
                 reasonsLost:      row.extra?.reasonsLost      || [],
                 products:         row.extra?.products        || [],
                 taskTypes:        row.taskTypes       || ['Call', 'Meeting', 'Email'],
-                painPoints:       row.extra?.painPoints || row.painPoints || [],
+                painPoints:       saved('painPoints') ? (row.extra.painPoints || row.painPoints || []) : (row.painPoints?.length ? row.painPoints : ex.painPoints),
                 verticalMarkets:  row.verticalMarkets || [],
                 fieldVisibility:  row.fieldVisibility || {},
                 // Extended fields — stored in the extra jsonb blob column
-                quotaData:        row.extra?.quotaData       || null,
+                quotaData:        ex.quotaData               || null,
                 commissionTiers:  row.extra?.commissionTiers || null,
                 spiffs:           row.extra?.spiffs          || [],
-                pipelines:        row.extra?.pipelines       || null,
+                pipelines:        ex.pipelines               || null,
                 teams:            row.extra?.teams           || null,
                 territories:      row.extra?.territories     || null,
                 verticals:        row.extra?.verticals       || null,
                 kpiTolerances:    row.extra?.kpiTolerances   || null,
                 kpiTargets:       row.extra?.kpiTargets      || null,
                 logoUrl:          row.extra?.logoUrl         || null,
-                kpiConfig:        row.extra?.kpiConfig       || null,
+                kpiConfig:        ex.kpiConfig               || null,
                 commissionPlan:   row.extra?.commissionPlan  || null,
                 aiScoringEnabled: row.extra?.aiScoringEnabled ?? false,
                 // §0.141: may report prompts be read by Claude? An Admin's switch
@@ -125,7 +136,7 @@ export const handler = async (event) => {
                 // their own deals". Both halves, like the leads key (tests/ownership-registry).
                 unassignedDealsVisibleToReps: row.extra?.unassignedDealsVisibleToReps ?? false,
                 customerTypes:    row.extra?.customerTypes    || [],
-                companyProfile:   row.extra?.companyProfile   || null,
+                companyProfile:   ex.companyProfile           || null,
                 leadConvBenchmarks: row.extra?.leadConvBenchmarks || null,
                 // Integrations panel. Written and read back by ConnectedAppsDetail,
                 // but present in neither half — so the PUT dropped both keys, the
@@ -202,10 +213,10 @@ export const handler = async (event) => {
                 // ('commercial' etc.) keep resolving.
                 dispatchPropertyTypes: row.extra?.dispatchPropertyTypes || [],
                 dispatchCerts:        row.extra?.dispatchCerts         || [],
-                dispatchLicenses:     row.extra?.dispatchLicenses      || ['Apprentice','Journeyman','Master','Lead'],
+                dispatchLicenses:     ex.dispatchLicenses              || DEFAULT_SETTINGS.dispatchLicenses,
                 dispatchTrades:       row.extra?.dispatchTrades         || [],
                 dispatchJobTypes:     row.extra?.dispatchJobTypes       || [],
-                dispatchBlockTypes:   row.extra?.dispatchBlockTypes     || [{ id:'bt_pto', name:'PTO', color:'#4d6b3d' }, { id:'bt_sick', name:'Sick', color:'#9c3a2e' }, { id:'bt_holiday', name:'Holiday', color:'#3a5a7a' }, { id:'bt_training', name:'Training', color:'#b87333' }, { id:'bt_jury', name:'Jury duty', color:'#7a6a48' }, { id:'bt_bereavement', name:'Bereavement', color:'#5a544c' }, { id:'bt_other', name:'Other', color:'#8a8378' }],
+                dispatchBlockTypes:   ex.dispatchBlockTypes             || DEFAULT_SETTINGS.dispatchBlockTypes,
                 dispatchVehicles:     row.extra?.dispatchVehicles      || [],
                 dispatchEquipment:     row.extra?.dispatchEquipment      || [],
                 dispatchJobs:         row.extra?.dispatchJobs          || [],
@@ -249,6 +260,10 @@ export const handler = async (event) => {
             const existing = await db.select().from(settings).where(eq(settings.orgId, orgId))
                 .orderBy(desc(settings.updatedAt));
             const existingExtra = existing.length > 0 ? (existing[0].extra || {}) : {};
+            // A key not sent keeps what is stored — and a seeded key never stored
+            // is the shared default (state §0.170), so the first screen a new
+            // workspace saves writes the defaults with it, never nulls in their place.
+            const base = { ...settingsSeeds(), ...existingExtra };
 
             // Who approves each discount tier (state §0.157): the tiers cleaned for
             // the mode the Admin chose — and every named PERSON must be an active
@@ -309,17 +324,17 @@ export const handler = async (event) => {
             // Merge: incoming data wins for any key it explicitly provides,
             // keys absent from the payload fall back to whatever is in the DB.
             const extra = {
-                quotaData:        'quotaData'        in data ? (data.quotaData        || null) : existingExtra.quotaData        || null,
+                quotaData:        'quotaData'        in data ? (data.quotaData        || null) : base.quotaData                 || null,
                 commissionTiers:  'commissionTiers'  in data ? (data.commissionTiers  || null) : existingExtra.commissionTiers  || null,
                 spiffs:           'spiffs'           in data ? (data.spiffs           || [])   : existingExtra.spiffs           || [],
-                pipelines:        'pipelines'        in data ? (data.pipelines        || null) : existingExtra.pipelines        || null,
+                pipelines:        'pipelines'        in data ? (data.pipelines        || null) : base.pipelines                 || null,
                 teams:            'teams'            in data ? (data.teams            || null) : existingExtra.teams            || null,
                 territories:      'territories'      in data ? (data.territories      || null) : existingExtra.territories      || null,
                 verticals:        'verticals'        in data ? (data.verticals        || null) : existingExtra.verticals        || null,
                 kpiTolerances:    'kpiTolerances'    in data ? (data.kpiTolerances    || null) : existingExtra.kpiTolerances    || null,
                 kpiTargets:       'kpiTargets'       in data ? (data.kpiTargets       || null) : existingExtra.kpiTargets       || null,
                 logoUrl:          'logoUrl'          in data ? (data.logoUrl          || null) : existingExtra.logoUrl          || null,
-                kpiConfig:        'kpiConfig'        in data ? (data.kpiConfig        || null) : existingExtra.kpiConfig        || null,
+                kpiConfig:        'kpiConfig'        in data ? (data.kpiConfig        || null) : base.kpiConfig                 || null,
                 commissionPlan:   'commissionPlan'   in data ? (data.commissionPlan   || null) : existingExtra.commissionPlan   || null,
                 products:         'products'         in data ? (data.products         || [])   : existingExtra.products         || [],
                 aiScoringEnabled: 'aiScoringEnabled' in data ? !!data.aiScoringEnabled : existingExtra.aiScoringEnabled ?? false,
@@ -328,7 +343,7 @@ export const handler = async (event) => {
                 unassignedLeadsVisibleToReps: 'unassignedLeadsVisibleToReps' in data ? !!data.unassignedLeadsVisibleToReps : existingExtra.unassignedLeadsVisibleToReps ?? true,
                 unassignedDealsVisibleToReps: 'unassignedDealsVisibleToReps' in data ? !!data.unassignedDealsVisibleToReps : existingExtra.unassignedDealsVisibleToReps ?? false,
                 customerTypes:    'customerTypes'    in data ? (data.customerTypes    || [])   : existingExtra.customerTypes    || [],
-                companyProfile:   'companyProfile'   in data ? (data.companyProfile   || null) : existingExtra.companyProfile   || null,
+                companyProfile:   'companyProfile'   in data ? (data.companyProfile   || null) : base.companyProfile            || null,
                 leadConvBenchmarks:   'leadConvBenchmarks'   in data ? (data.leadConvBenchmarks   || null) : existingExtra.leadConvBenchmarks   || null,
                 connectedApps:  'connectedApps'  in data ? (data.connectedApps  || {}) : existingExtra.connectedApps  || {},
                 slackConfig:    'slackConfig'    in data ? (data.slackConfig    || {}) : existingExtra.slackConfig    || {},
@@ -363,7 +378,7 @@ export const handler = async (event) => {
                 quoteDefaults:        'quoteDefaults'        in data ? (data.quoteDefaults        || null) : existingExtra.quoteDefaults        || null,
                 quoteBoilerplate:     'quoteBoilerplate'     in data ? (data.quoteBoilerplate     || null) : existingExtra.quoteBoilerplate     || null,
                 // Sales process Group 1
-                funnelStages:         'funnelStages'         in data ? (data.funnelStages         || [])   : existingExtra.funnelStages         || [],
+                funnelStages:         'funnelStages'         in data ? (data.funnelStages         || [])   : base.funnelStages                  || [],
                 kpiThresholds:        'kpiThresholds'        in data ? (data.kpiThresholds        || null) : existingExtra.kpiThresholds        || null,
                 assignmentRules:      'assignmentRules'      in data ? (data.assignmentRules      || null) : existingExtra.assignmentRules      || null,
                 // Sales process Group 2
@@ -381,10 +396,10 @@ export const handler = async (event) => {
                 dispatchSkills:       'dispatchSkills'       in data ? (data.dispatchSkills       || [])   : existingExtra.dispatchSkills        || [],
                 dispatchPropertyTypes: 'dispatchPropertyTypes' in data ? (data.dispatchPropertyTypes || []) : existingExtra.dispatchPropertyTypes || [],
                 dispatchCerts:        'dispatchCerts'        in data ? (data.dispatchCerts        || [])   : existingExtra.dispatchCerts         || [],
-                dispatchLicenses:     'dispatchLicenses'     in data ? (data.dispatchLicenses     || null) : existingExtra.dispatchLicenses      || null,
+                dispatchLicenses:     'dispatchLicenses'     in data ? (data.dispatchLicenses     || null) : base.dispatchLicenses               || null,
                 dispatchTrades:       'dispatchTrades'       in data ? (data.dispatchTrades       || [])   : existingExtra.dispatchTrades        || [],
                 dispatchJobTypes:     'dispatchJobTypes'     in data ? (data.dispatchJobTypes     || [])   : existingExtra.dispatchJobTypes      || [],
-                dispatchBlockTypes:   'dispatchBlockTypes'   in data ? (data.dispatchBlockTypes   || [])   : existingExtra.dispatchBlockTypes    || [],
+                dispatchBlockTypes:   'dispatchBlockTypes'   in data ? (data.dispatchBlockTypes   || [])   : base.dispatchBlockTypes             || [],
                 dispatchVehicles:     'dispatchVehicles'     in data ? (data.dispatchVehicles     || [])   : existingExtra.dispatchVehicles      || [],
                 dispatchEquipment:     'dispatchEquipment'     in data ? (data.dispatchEquipment     || [])   : existingExtra.dispatchEquipment      || [],
                 dispatchJobs:         'dispatchJobs'         in data ? (data.dispatchJobs         || [])   : existingExtra.dispatchJobs          || [],
@@ -392,7 +407,7 @@ export const handler = async (event) => {
                 dispatchJobTemplates: 'dispatchJobTemplates' in data ? (data.dispatchJobTemplates || [])   : existingExtra.dispatchJobTemplates  || [],
                 featureFlags:         'featureFlags'         in data ? (data.featureFlags         || {})   : existingExtra.featureFlags         || {},
                 aiSettings:           'aiSettings'           in data ? (scrubAiSettings(data.aiSettings) || null) : scrubAiSettings(existingExtra.aiSettings) || null,
-                painPoints:           'painPoints'           in data ? (data.painPoints           || [])   : existingExtra.painPoints           || [],
+                painPoints:           'painPoints'           in data ? (data.painPoints           || [])   : base.painPoints                    || [],
                 competitors:          'competitors'          in data ? (data.competitors          || [])   : existingExtra.competitors          || [],
                 reasonsWon:           'reasonsWon'           in data ? (data.reasonsWon           || [])   : existingExtra.reasonsWon           || [],
                 reasonsLost:          'reasonsLost'          in data ? (data.reasonsLost          || [])   : existingExtra.reasonsLost          || [],
@@ -414,7 +429,7 @@ export const handler = async (event) => {
                 stages:          'funnelStages'    in data ? (data.funnelStages    || [])                          : (existing[0]?.stages         ?? []),
                 taskTypes:       'taskTypes'       in data ? (data.taskTypes       || ['Call', 'Meeting', 'Email']) : (existing[0]?.taskTypes       ?? ['Call', 'Meeting', 'Email']),
                 painPoints:      'painPoints'      in data ? (data.painPoints      || [])                          : (existing[0]?.painPoints      ?? []),
-                verticalMarkets: 'verticalMarkets' in data ? (data.verticalMarkets || [])                          : (existing[0]?.verticalMarkets ?? []),
+                verticalMarkets: 'verticalMarkets' in data ? (data.verticalMarkets || [])                          : (existing[0]?.verticalMarkets ?? DEFAULT_SETTINGS.verticalMarkets),
                 fieldVisibility: 'fieldVisibility' in data ? (data.fieldVisibility || {})                          : (existing[0]?.fieldVisibility ?? {}),
                 extra,
                 updatedAt:       new Date(),

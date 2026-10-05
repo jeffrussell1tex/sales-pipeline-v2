@@ -64,9 +64,10 @@ export const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDir
     const handleCancel = () => { setGroups(JSON.parse(JSON.stringify(saved))); setDirty(false); };
     const handleSave   = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, painPoints: groups }));
         try {
             await putSettings({ painPoints: groups });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, painPoints: groups }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

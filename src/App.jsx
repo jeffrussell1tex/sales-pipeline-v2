@@ -25,6 +25,7 @@ import TasksTab from './Tabs/TasksTab';
 import HomeTab from './Tabs/HomeTab';
 import DocumentsTab from './Tabs/DocumentsTab';
 import SettingsTab from './Tabs/SettingsTab';
+import { LeaveGuardModal } from './Tabs/settings/shared/LeaveGuardModal.jsx';
 import ContactModal, { NestedNewContactForm, NestedNewAccountForm } from './components/modals/ContactModal';
 import ViewingBar, { SliceDropdown } from './components/ui/ViewingBar';
 import AppHeader from './components/layout/AppHeader';
@@ -76,10 +77,6 @@ function App() {
         }
     }, [orgListLoaded, clerkLoaded, organization, userMemberships?.data]);
 
-    // Guard: prevents settings useEffect from writing to DB before DB data has loaded.
-    // Without this, the effect fires on mount with localStorage/default values and
-    // overwrites the DB — the #1 cause of data loss / "self-deleting" content.
-    // settingsReady managed by useSettings hook
 
     // Make getToken available to dbFetch utility ONLY when org is active
     // organizationId in getToken ensures Clerk includes org_id in the JWT
@@ -262,19 +259,12 @@ function App() {
     }, []);
 
     // ── Phase 1: Custom Hooks ─────────────────────────────────────────
+    // The settings hook loads; it never writes (state §0.170) — each screen saves
+    // the keys it owns, so there is no background save to report on here.
     const {
-        settings, setSettings, settingsReady,
-        loadSettings, handleUpdateFiscalYearStart, handleAddTaskType,
-        settingsSaveError, settingsOrgId, settingsLoadError,
-    } = useSettings(activeOrgId);
-
-    // The settings autosave is a background effect with no UI of its own. When it
-    // is rejected — a non-admin hitting the Admin-only PUT /settings — surface it
-    // through the existing toast, or the write fails with nothing on screen at all.
-    useEffect(() => {
-        if (!settingsSaveError) return;
-        setUndoToast({ error: `Settings not saved — ${settingsSaveError}` });
-    }, [settingsSaveError]);
+        settings, setSettings,
+        loadSettings, settingsOrgId, settingsLoadError,
+    } = useSettings();
 
     // A failed settings load leaves the defaults on screen, and nothing saves
     // settings until a load succeeds (state §0.162) — say so, or every pipeline,
@@ -507,6 +497,10 @@ dbFetch('/.netlify/functions/users?me=true')
 
            
 
+    // The guarded tab switch (navigateTo, below — state §0.170) for the shortcuts,
+    // read at key time, so the handler needs no dependency on unsaved state.
+    const navigateToRef = useRef(null);
+
     // ── Global keyboard shortcuts ─────────────────────────────
     useEffect(() => {
         const handler = (e) => {
@@ -566,24 +560,25 @@ dbFetch('/.netlify/functions/users?me=true')
                     setTaskRailId('new'); setTaskRailMode('new');
                     break;
                 case '1':
-                    e.preventDefault(); setActiveTab('home'); break;
+                    e.preventDefault(); navigateToRef.current('home'); break;
                 case '2':
-                    e.preventDefault(); setActiveTab('pipeline'); break;
+                    e.preventDefault(); navigateToRef.current('pipeline'); break;
                 case '3':
-                    e.preventDefault(); setActiveTab('tasks'); break;
+                    e.preventDefault(); navigateToRef.current('tasks'); break;
                 case '4':
-                    e.preventDefault(); setActiveTab('accounts'); break;
+                    e.preventDefault(); navigateToRef.current('accounts'); break;
                 case '5':
-                    e.preventDefault(); setActiveTab('contacts'); break;
+                    e.preventDefault(); navigateToRef.current('contacts'); break;
                 case '6':
-                    e.preventDefault(); setActiveTab('leads'); break;
+                    e.preventDefault(); navigateToRef.current('leads'); break;
                 case '7':
-                    e.preventDefault(); setActiveTab('quotes'); break;
+                    e.preventDefault(); navigateToRef.current('quotes'); break;
                 case '8':
-                    e.preventDefault(); setActiveTab('reports'); break;
+                    e.preventDefault(); navigateToRef.current('reports'); break;
                 case 'o': case 'O':
                     if (!['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) {
-                        e.preventDefault(); setActiveTab('pipeline'); setTimeout(() => { setEditingOpp(null); setShowModal(true); }, 100);
+                        // The new deal opens only once the pipeline is open — not over the guard.
+                        e.preventDefault(); if (navigateToRef.current('pipeline')) setTimeout(() => { setEditingOpp(null); setShowModal(true); }, 100);
                     }
                     break;
                 case '/':
@@ -911,7 +906,6 @@ dbFetch('/.netlify/functions/users?me=true')
         setActiveTab('quotes');
     }, [quotes]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-    // handleUpdateFiscalYearStart managed by useSettings hook
 
     const toggleAccountExpanded = (accountId) => {
         setExpandedAccounts({
@@ -937,7 +931,6 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // handleCompleteTask managed by useTasks hook
 
-    // handleAddTaskType managed by useSettings hook
 
 
     // handleAddTaskToCalendar managed by useTasks hook
@@ -1450,9 +1443,10 @@ dbFetch('/.netlify/functions/users?me=true')
     // A Dispatcher lands on Dispatch — the FIRST time the rule says they may use it
     // (the role from Clerk AND the org's settings loaded with the module on), and
     // only from Home; after that the tabs are theirs to choose (the CRM is theirs to
-    // read). Not keyed on settingsReady: that is a ref, always truthy, flipped after a
-    // timeout, and never re-runs an effect — the first cut landed against the default
-    // settings (module off), marked itself done and never tried again.
+    // read). Not keyed on the settings hook's old ready flag (a ref, gone with the
+    // autosave in §0.170): a ref never re-runs an effect — the first cut landed
+    // against the default settings (module off), marked itself done and never
+    // tried again.
     const dispatcherLandedRef = useRef(false);
     useEffect(() => {
         if (dispatcherLandedRef.current || !isDispatcher(userRole) || !canUseDispatch(userRole, settings)) return;
@@ -1474,6 +1468,8 @@ dbFetch('/.netlify/functions/users?me=true')
     const [settingsDirty, setSettingsDirty] = React.useState(false);
     const [pendingNavTab, setPendingNavTab] = React.useState(null);
     const [showNavGuard, setShowNavGuard]   = React.useState(false);
+    const [navGuardSaving, setNavGuardSaving] = React.useState(false);
+    const [navGuardFailed, setNavGuardFailed] = React.useState(false);
     const settingsSaveRef = React.useRef(null);
     // An org switch ends every unsaved Settings edit (state §0.162). The dirty
     // flag and the open panel's save live here, above the Settings view, and
@@ -1512,23 +1508,57 @@ dbFetch('/.netlify/functions/users?me=true')
         quickLogOpen, showNavGuard,
     ]);
 
-    const handleNavClick = React.useCallback((tab) => {
-        if (activeTab === 'settings' && settingsDirty && tab !== 'settings') {
+    // Every way the user leaves a tab goes through here (state §0.170): the top
+    // nav, the header's tabs, the keyboard shortcuts and in-app links — the
+    // context's setActiveTab IS this. On a page with unsaved edits (a Settings
+    // panel, the Sales Manager's incentives) it asks first. This guard and its
+    // dialog were here before, but nothing called them: leaving Settings by the
+    // nav dropped an unsaved edit without a word. Moves made on load (an org
+    // switch, a deep link, a Dispatcher's landing) use the raw setter — nothing
+    // is unsaved then. Returns whether the tab changed.
+    const navigateTo = React.useCallback((tab) => {
+        if ((activeTab === 'settings' || activeTab === 'salesManager') && settingsDirty && tab !== activeTab) {
             setPendingNavTab(tab);
+            setNavGuardFailed(false);
             setShowNavGuard(true);
-        } else {
-            setActiveTab(tab);
+            return false;
         }
+        setActiveTab(tab);
+        return true;
     }, [activeTab, settingsDirty, setActiveTab]);
+    navigateToRef.current = navigateTo;
+
+    // "Save changes and continue": the page's own save (settingsSaveRef — the
+    // open panel's, or the Sales Manager's), which throws when it does not save;
+    // the page shows why, and the dialog stays.
+    const navGuardSave = React.useCallback(async () => {
+        const save = settingsSaveRef.current;
+        if (!save) return;
+        setNavGuardSaving(true);
+        setNavGuardFailed(false);
+        try {
+            await save();
+        } catch {
+            setNavGuardSaving(false);
+            setNavGuardFailed(true);
+            return;
+        }
+        setNavGuardSaving(false);
+        setSettingsDirty(false);
+        setShowNavGuard(false);
+        if (pendingNavTab) { setActiveTab(pendingNavTab); setPendingNavTab(null); }
+    }, [pendingNavTab, setActiveTab]);
 
     const navGuardDiscard = React.useCallback(() => {
         setSettingsDirty(false);
+        setNavGuardFailed(false);
         setShowNavGuard(false);
         if (pendingNavTab) { setActiveTab(pendingNavTab); setPendingNavTab(null); }
     }, [pendingNavTab, setActiveTab]);
 
     const navGuardCancel = React.useCallback(() => {
         setShowNavGuard(false);
+        setNavGuardFailed(false);
         setPendingNavTab(null);
     }, []);
 
@@ -1683,8 +1713,6 @@ dbFetch('/.netlify/functions/users?me=true')
         handleAddActivity,
         handleDeleteActivity,
         handleSaveActivity,
-        handleUpdateFiscalYearStart,
-        handleAddTaskType,
         loadOpportunities,
         loadAccounts,
         loadContacts,
@@ -1725,7 +1753,7 @@ dbFetch('/.netlify/functions/users?me=true')
         calConnectResult, setCalConnectResult, settingsOpenPanel, setSettingsOpenPanel,
         fetchCalendarEvents,
         // Navigation
-        activeTab, setActiveTab,
+        activeTab, setActiveTab: navigateTo,   // the guarded switch (state §0.170)
         activePipelineId, setActivePipelineId,
         allRepNames,
         allTeamNames,
@@ -1876,19 +1904,19 @@ dbFetch('/.netlify/functions/users?me=true')
             <nav className="nav-tabs">
                 <button 
                     className={`nav-tab ${activeTab === 'home' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('home')}
+                    onClick={() => navigateTo('home')}
                 >
                     HOME
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'pipeline' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('pipeline')}
+                    onClick={() => navigateTo('pipeline')}
                 >
                     PIPELINE
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'tasks' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('tasks')}
+                    onClick={() => navigateTo('tasks')}
                     style={{ position: 'relative' }}
                 >
                     TASKS
@@ -1910,53 +1938,53 @@ dbFetch('/.netlify/functions/users?me=true')
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'accounts' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('accounts')}
+                    onClick={() => navigateTo('accounts')}
                 >
                     ACCOUNTS
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'contacts' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('contacts')}
+                    onClick={() => navigateTo('contacts')}
                 >
                     CONTACTS
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('leads')}
+                    onClick={() => navigateTo('leads')}
                     style={{ display: settings.leadsEnabled === false ? 'none' : '' }}
                 >
                     LEADS
                 </button>
                 <button
                     className={`nav-tab ${activeTab === 'quotes' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('quotes')}
+                    onClick={() => navigateTo('quotes')}
                     style={{ display: settings.quotesEnabled === false ? 'none' : '' }}
                 >
                     QUOTES
                 </button>
                 <button
                     className={`nav-tab ${activeTab === 'dispatch' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('dispatch')}
+                    onClick={() => navigateTo('dispatch')}
                     style={{ display: canUseDispatch(userRole, settings) ? '' : 'none' }}
                 >
                     DISPATCH
                 </button>
                 <button
                     className={`nav-tab ${activeTab === 'documents' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('documents')}
+                    onClick={() => navigateTo('documents')}
                 >
                     DOCUMENTS
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('reports')}
+                    onClick={() => navigateTo('reports')}
                 >
                     REPORTS
                 </button>
                 {(isAdmin || isManager) && (
                     <button
                         className={`nav-tab ${activeTab === 'salesManager' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('salesManager')}
+                        onClick={() => navigateTo('salesManager')}
                     >
                         SALES MANAGER
                     </button>
@@ -1964,7 +1992,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 {isAdmin && (
                     <button 
                         className={`nav-tab ${activeTab === 'settings' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('settings')}
+                        onClick={() => navigateTo('settings')}
                     >
                         SETTINGS
                     </button>
@@ -2269,24 +2297,10 @@ dbFetch('/.netlify/functions/users?me=true')
         <QuickLogFab />
 
             {showNavGuard && (
-                <div style={{ position:'fixed', inset:0, zIndex:99999, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(42,38,34,0.55)' }}
-                     onClick={navGuardCancel}>
-                    <div style={{ background:T.surface, borderRadius:8, boxShadow:'0 24px 64px rgba(42,38,34,0.22)', width:420, padding:'28px 32px', fontFamily:'"Plus Jakarta Sans",system-ui,sans-serif' }}
-                         onClick={e => e.stopPropagation()}>
-                        <div style={{ fontSize:17, fontWeight:700, color:T.ink, marginBottom:8 }}>Unsaved changes</div>
-                        <div style={{ fontSize:13.5, color:T.inkMid, lineHeight:1.55, marginBottom:24 }}>You have unsaved changes in Settings. Save them before leaving, or discard and continue.</div>
-                        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                            <button onClick={navGuardCancel}
-                                style={{ padding:'10px 16px', background:T.ink, color:T.surface, border:'none', borderRadius:4, fontSize:13.5, fontWeight:600, cursor:'pointer', textAlign:'left' }}>
-                                Stay on Settings (save first)
-                            </button>
-                            <button onClick={navGuardDiscard}
-                                style={{ padding:'10px 16px', background:'transparent', color:T.danger, border:`1px solid ${T.border}`, borderRadius:4, fontSize:13.5, fontWeight:500, cursor:'pointer', textAlign:'left' }}>
-                                Discard changes and continue
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <LeaveGuardModal saving={navGuardSaving} failed={navGuardFailed}
+                    canSave={!!settingsSaveRef.current}
+                    message={`${activeTab === 'salesManager' ? 'The Sales Manager page' : 'Settings'} has changes that have not been saved. Save them, or discard and continue.`}
+                    onStay={navGuardCancel} onSave={navGuardSave} onDiscard={navGuardDiscard}/>
             )}
         </AppProvider>
     );

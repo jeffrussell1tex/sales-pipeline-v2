@@ -17,6 +17,7 @@
 // nothing opened it. The SLA column is the reminder's time since §0.158: after it, with
 // no decision, the backup is emailed (quote-reminders.mjs).
 import React, { useState } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
@@ -75,7 +76,7 @@ const MenuItem = ({ label, sub, onClick, danger }) => (
     </button>
 );
 
-export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
+export const ApprovalTiersDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const savedTiers = withIds(settings?.approvalTiers || DEFAULT_APPROVAL_TIERS);
     const savedMode  = cleanApprovalRouting(settings?.approvalRouting);
     const [tiers,       setTiers]       = useState(() => JSON.parse(JSON.stringify(savedTiers)));
@@ -132,8 +133,11 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
     };
     const handleSave = async () => {
         if (mode === 'person' && tiers.some(t => needsChoice.has(t.id) && !t.approverUserId)) {
-            setSaveError('Choose an approver for each tier marked "Choose an approver…", or set it to "No approval needed".');
-            return;
+            // Thrown, not returned (state §0.170): the leave guard's "Save and
+            // continue" runs this too, and a return let it move on, the edit lost.
+            const e = new Error('Choose an approver for each tier marked "Choose an approver…", or set it to "No approval needed".');
+            setSaveError(e.message);
+            throw e;
         }
         const clean = cleanApprovalTiers(tiers, mode);
         setSaving(true);
@@ -145,9 +149,16 @@ export const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
         } catch (e) {
             // Keep the panel dirty: the change was NOT saved (a 400 names why).
             setSaveError(e.message);
+            // Clear the spinner, then rethrow: the leave guard's "Save and
+            // continue" runs this too, and only a throw keeps it from moving on.
+            setSaving(false);
+            throw e;
         }
         setSaving(false);
     };
+    // Hand the leave guard this panel's unsaved state and its save (state §0.170).
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     // ── Tier kebab and inline edits ──────────────────────────
     const [openTierMenu, setOpenTierMenu] = useState(null);

@@ -1,5 +1,6 @@
 // settings/quoting/QuoteTemplatesDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
@@ -1029,7 +1030,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
     );
 };
 
-export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
+export const QuoteTemplatesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const savedTemplates  = settings?.quoteTemplates?.length ? settings.quoteTemplates : DEFAULT_QUOTE_TEMPLATES;
     const savedDefaults   = settings?.quoteDefaults || { validity:'30 days', paymentTerms:'Net-30', autoRenew:'60-day notice', currency:'USD', signOff:'DocuSign', issueDate:'Date sent' };
     const savedBoilerplate = settings?.quoteBoilerplate || '"Pricing reflects current list less applicable discounts. Quote valid for 30 days from issue. Auto-renews for like terms unless 60-day written notice…"';
@@ -1061,18 +1062,26 @@ export const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
     const handleCancel = () => { setTemplates(JSON.parse(JSON.stringify(savedTemplates))); setDefaults({ ...savedDefaults }); setBoilerplate(savedBoilerplate); setDirty(false); };
     const handleSave   = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate }));
         try {
             await putSettings({ quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate }));
             setSaveError('');
             setDirty(false);
         } catch (e) {
             // Keep the panel dirty: the change was NOT saved, and clearing the
             // flag here is what made a 403 look like success.
             setSaveError(e.message);
+            // Clear the spinner, then rethrow: the leave guard's "Save and
+            // continue" runs this too, and only a throw keeps it from moving on.
+            setSaving(false);
+            throw e;
         }
         setSaving(false);
     };
+    // Hand the leave guard this panel's unsaved state and its save (state §0.170).
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const handleCreateTemplate = ({ name, mode, sourceTpl, isDefault, visibleTo, blocks, pageSetup, useCase, blankVariant }) => {
         const newTpl = {

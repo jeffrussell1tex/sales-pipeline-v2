@@ -49,6 +49,7 @@ test('Session: no policy form, no sessionPolicy PUT the server drops, no invente
 test('sessionPolicy is read by nothing and written by nothing — the key never existed server-side', () => {
     assert.ok(!read('netlify/functions/settings.mjs').includes('sessionPolicy'));
     assert.ok(!read('src/hooks/useSettings.js').includes('sessionPolicy'));
+    assert.ok(!read('src/utils/settingsDefaults.js').includes('sessionPolicy'), 'nor among the defaults (one module since §0.170)');
 });
 
 // ── Import ───────────────────────────────────────────────────────────────────

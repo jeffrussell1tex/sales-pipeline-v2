@@ -21,12 +21,11 @@ test('users.mjs audit rows attribute the CALLER as actor, never the target', () 
         'the target-as-actor shape must not return: every user.updated row read as the subject acting on themselves');
 });
 
-test('the settings autosave diffs against the server baseline before PUTting', () => {
-    assert.ok(hookSrc.includes('if (json === lastSavedRef.current) return;'),
-        'without the no-change guard, every load mirror-back and roster refresh PUTs an unchanged payload — junk settings.updated audits for admins, naked 403 toasts for non-writers');
-    const baselines = hookSrc.match(/lastSavedRef\.current = serializeForSave\(next\);/g) || [];
-    assert.equal(baselines.length, 2,
-        'both load paths (settings present / absent) must adopt what arrived as the baseline, or the first edit after load is swallowed as baseline instead of saved');
-    assert.ok(hookSrc.includes('lastSavedRef.current = json;'),
-        'an accepted PUT must advance the baseline, or the next unrelated settings change re-sends the same payload');
+test('the settings hook writes nothing — no autosave, so no baseline to keep (state §0.170)', () => {
+    // The no-change guard this pinned (§0.54) stopped the autosave's junk PUTs;
+    // §0.170 took the autosave out — each screen saves the keys it owns.
+    assert.ok(!/dbWrite|method:\s*'PUT'|lastSavedRef|serializeForSave/.test(hookSrc),
+        'a background PUT of the whole object put back newer saves, wrote every save twice, and logged every key it held');
+    assert.ok(!/settingsSaveError|handleAddTaskType|handleUpdateFiscalYearStart|settingsReady/.test(hookSrc),
+        'its save error, its unused handlers and its ready flag went with it');
 });

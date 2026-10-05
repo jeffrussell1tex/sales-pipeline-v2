@@ -55,13 +55,15 @@ export const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDir
     const handleSave = async () => {
         setSaving(true);
         const dbValue = startMonth + 1; // convert 0-indexed UI to 1-indexed DB (matches AppContext)
-        setSettings(prev => ({ ...prev, fiscalYearStart: dbValue }));
         try {
             // Was a bare dbFetch with no res.ok check, then setDirty(false)
             // OUTSIDE the try — so a 403 cleared the flag and reported success.
             // putSettings throws on non-2xx; the rethrow lets the navigation
             // guard know the save did not land.
             await putSettings({ fiscalYearStart: dbValue });
+            // The app's copy follows the save (state §0.170): set before it, a
+            // refused save moved every quarter in the app anyway, until a reload.
+            setSettings(prev => ({ ...prev, fiscalYearStart: dbValue }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { audienceLabel, sortNotes } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
@@ -8,6 +8,7 @@ import { fiscalRange } from '../utils/reportPeriod';
 import { userQuotaFor, closeDayInRange } from '../utils/pipelineReport';
 import { forecastCallOf, withForecastCall, bestCaseOf } from '../utils/forecastCall';
 import { T } from '../tokens.js';
+import { useRegisterSave } from './settings/shared/useRegisterSave.js';
 
 // ── V1 Design tokens ──────────────────────────────────────────
 
@@ -98,21 +99,15 @@ function buildRepStats(rep, opportunities, activities, tasks, period) {
     return { rep, quota, closedArr, commit, bestCase, bestCaseEstimated, pipelineArr, attainPct, score, healthColor, healthLabel, trend, daysSinceAct, act7d, stuck, overdueCnt, wonOpps, wonInQ, activeOpps };
 }
 
-// ── QuotaRepCard (unchanged from original) ────────────────────
-function QuotaRepCard({ u, quotaMode, quarters, inputSt, updateRepField, compactInput }) {
-    const [localAnnual, setLocalAnnual] = React.useState(u.annualQuota != null ? String(u.annualQuota) : '');
-    const [localQ, setLocalQ] = React.useState(() => {
-        const out = {};
-        ['q1','q2','q3','q4'].forEach(q => { out[q] = u[q+'Quota'] != null ? String(u[q+'Quota']) : ''; });
-        return out;
-    });
-    React.useEffect(() => { setLocalAnnual(u.annualQuota != null ? String(u.annualQuota) : ''); }, [u.annualQuota]);
-    React.useEffect(() => { setLocalQ(prev => { const out={...prev}; ['q1','q2','q3','q4'].forEach(q => { out[q]=u[q+'Quota'] != null ? String(u[q+'Quota']) : ''; }); return out; }); }, [u.q1Quota,u.q2Quota,u.q3Quota,u.q4Quota]);
-    const commitAnnual = v => { const n=parseFloat(v); if(!isNaN(n)&&n>=0) updateRepField(u.id,'annualQuota',n); };
-    const commitQ = (qKey,v) => { const n=parseFloat(v); if(!isNaN(n)&&n>=0) updateRepField(u.id,qKey+'Quota',n); };
+// ── QuotaRepCard ──────────────────────────────────────────────
+// A rep's quota inputs show the page's draft for them, else the figure saved
+// (state §0.170): an edit is a draft until the Assign Quotas card's Save — each
+// input used to save the moment it lost focus.
+function QuotaRepCard({ u, quotaMode, inputSt, draft, onQuotaChange, compactInput }) {
+    const shown = (field) => (draft && field in draft) ? draft[field] : (u[field] != null ? String(u[field]) : '');
     if (compactInput) {
         if (quotaMode === 'annual') return (
-            <input type="number" value={localAnnual} placeholder="0" onChange={e=>setLocalAnnual(e.target.value)} onBlur={e=>commitAnnual(e.target.value)} onFocus={e=>e.target.style.borderColor=T.info} style={inputSt} />
+            <input type="number" value={shown('annualQuota')} placeholder="0" onChange={e=>onQuotaChange(u.id,'annualQuota',e.target.value)} onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} style={inputSt} />
         );
         return (
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
@@ -121,7 +116,7 @@ function QuotaRepCard({ u, quotaMode, quarters, inputSt, updateRepField, compact
                         {pair.map(q => { const qk=q.toLowerCase(); return (
                             <div key={q} style={{display:'flex',flexDirection:'column',gap:1}}>
                                 <div style={{fontSize:8,fontWeight:700,color:T.inkMuted,textTransform:'uppercase'}}>{q}</div>
-                                <input type="number" value={localQ[qk]||''} placeholder="0" onChange={e=>setLocalQ(p=>({...p,[qk]:e.target.value}))} onBlur={e=>commitQ(qk,e.target.value)} onFocus={e=>e.target.style.borderColor=T.info} style={inputSt} />
+                                <input type="number" value={shown(qk+'Quota')} placeholder="0" onChange={e=>onQuotaChange(u.id,qk+'Quota',e.target.value)} onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} style={inputSt} />
                             </div>
                         );})}
                     </div>
@@ -151,6 +146,21 @@ function CallCell({ value, estimated, editing, onEdit, onCancel, onSave, color }
             style={{ fontSize:13, fontWeight:600, color: estimated ? T.inkMuted : color, fontStyle: estimated ? 'italic' : 'normal', cursor:'text', display:'inline-block', border:`1px dashed ${T.gold}`, padding:'2px 6px', borderRadius:2 }}>
             {fmtV(value)}{estimated ? ' est.' : ''}
         </span>
+    );
+}
+
+// A card's unsaved changes (state §0.170): its Cancel and its Save. A failed save
+// says why in the page's banner and keeps the draft; the click swallows the throw
+// that the leave guard's "Save and continue" needs.
+function DraftActions({ label, busy, onSave, onCancel }) {
+    return (
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:'auto' }}>
+            <span style={{ fontSize:10, fontWeight:700, color:T.warn, fontFamily:T.sans }}>Unsaved changes</span>
+            <button onClick={onCancel} disabled={busy}
+                style={{ padding:'4px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontWeight:600, cursor:busy?'default':'pointer', fontFamily:T.sans }}>Cancel</button>
+            <button onClick={() => { onSave().catch(() => {}); }} disabled={busy}
+                style={{ padding:'4px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:busy?'default':'pointer', opacity:busy?0.6:1, fontFamily:T.sans }}>{busy ? 'Saving…' : label}</button>
+        </div>
     );
 }
 
@@ -340,7 +350,8 @@ function ForecastTab({ card, cardHdr, eyebrow, repStats, teamAttain, teamBest, t
 // `fyRange` is the current fiscal year { from, to }: the board's quota column is
 // the ANNUAL figure, so its bar is fiscal-year-to-date won by close day — not
 // every deal ever (state §0.80).
-function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, isAdmin, opportunities, quarters, quotaMode, saveState, setActiveTab, setAllQuotaMode, setSaveState, setSettings, setSpiffClaims, settings, settingsLoaded, showConfirm, spiffClaims, updateRepField, visibleReps }) {
+function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, isAdmin, opportunities, quotaMode, saveState, setActiveTab, setAllQuotaMode, setSaveState, setSettings, setSpiffClaims, settings, showConfirm, spiffClaims, visibleReps,
+                   quotaDrafts, onQuotaChange, tiersDraft, setTiersDraft, spiffsDraft, setSpiffsDraft, saveQuotas, cancelQuotas, saveCommission, cancelCommission, saveSpiffBoard, cancelSpiffBoard }) {
     const unassignedReps = isAdmin ? visibleReps.filter(u => !u.territory?.trim()) : [];
     const visibleTerritories = [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort();
     const terrFilter = settings.__qbTerrFilter || 'all';
@@ -382,46 +393,16 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
         }
     };
 
-    const saveExtra = async (patch, label) => {
-        // Only over THIS org's loaded settings (state §0.162): the patch is built
-        // from the settings on screen, which are the defaults until the org's
-        // load succeeds — saving then would put default tiers, or a SPIFF list of
-        // one, over the org's real ones.
-        if (!settingsLoaded) {
-            setSaveState({ status: 'error', msg: `Not saved — this organization's settings have not loaded. Reload the page and try again.` });
-            return false;
-        }
-        setSaveState({ status: 'saving', msg: '' });
-        try {
-            const res = await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT', body: JSON.stringify(patch),
-            });
-            if (!res.ok) {
-                setSaveState({ status: 'error', msg: res.status === 403
-                    ? `Not saved — only Admins can change ${label}.`
-                    : `Not saved — the server returned ${res.status}. Your ${label} changes are not stored.` });
-                return false;
-            }
-            setSaveState({ status: 'saved', msg: '' });
-            return true;
-        } catch (err) {
-            console.error('[SalesManagerTab] save ' + label, err);
-            setSaveState({ status: 'error', msg: `Not saved — network error while saving ${label}.` });
-            return false;
-        }
-    };
-
-    const tierList  = (settings.quotaData || {}).commissionTiers || [];
-    const spiffList = settings.spiffs || [];
-
-    // Local-only update (typing); persist separately on blur.
-    const applyTiers  = next => setSettings(prev => ({ ...prev, quotaData: { ...prev.quotaData, commissionTiers: next } }));
-    const saveTiers   = next => saveExtra({ quotaData: { ...(settings.quotaData || {}), commissionTiers: next } }, 'commission tiers');
-    const commitTiers = next => { applyTiers(next);  return saveTiers(next); };
-
-    const applySpiffs  = next => setSettings(prev => ({ ...prev, spiffs: next }));
-    const saveSpiffs   = next => saveExtra({ spiffs: next }, 'SPIFFs');
-    const commitSpiffs = next => { applySpiffs(next); return saveSpiffs(next); };
+    // The commission plan and the SPIFF board on screen: the page's draft while
+    // one is open (state §0.170), else what is saved. They used to change the
+    // app's copy as typed and save on blur — "+ Add SPIFF" put a blank, active $0
+    // SPIFF live before its name was typed. The saves are the page's (above the
+    // sub-tabs), so a draft outlives a sub-tab switch and the leave guard can save it.
+    const tierList  = tiersDraft  ?? ((settings.quotaData || {}).commissionTiers || []);
+    const spiffList = spiffsDraft ?? (settings.spiffs || []);
+    const editTiers  = next => setTiersDraft(next);
+    const editSpiffs = next => setSpiffsDraft(next);
+    const busy = saveState.status === 'saving';
 
     return (
         <>
@@ -481,6 +462,9 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                             ))}
                         </div>
                     )}
+                    {Object.keys(quotaDrafts).length > 0 && (
+                        <DraftActions label="Save quotas" busy={busy} onSave={saveQuotas} onCancel={cancelQuotas}/>
+                    )}
                     <div style={{ display:'flex', background:T.surface2, borderRadius:T.r, padding:2, gap:2 }}>
                         {['annual','quarterly'].map(t => (
                             <button key={t} onClick={()=>setAllQuotaMode(t)} style={{ padding:'3px 9px', borderRadius:T.r-1, border:'none', cursor:'pointer', fontFamily:T.sans, fontSize:10, fontWeight:700, background:quotaMode===t?T.surface:'transparent', color:quotaMode===t?T.ink:T.inkMid, boxShadow:quotaMode===t?'0 1px 3px rgba(0,0,0,0.08)':'none' }}>
@@ -534,7 +518,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                                             </div>
                                         </div>
                                         <div>
-                                            <QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} updateRepField={updateRepField} compactInput />
+                                            <QuotaRepCard u={u} quotaMode={quotaMode} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} draft={quotaDrafts[u.id]} onQuotaChange={onQuotaChange} compactInput />
                                         </div>
                                         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                             <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}>
@@ -560,7 +544,7 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                                 <div style={{ width:28, height:28, borderRadius:'50%', background:T.surface2, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:T.inkMuted }}>{initials}</div>
                                 <div><div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div><div style={{ fontSize:10, color:T.inkMuted }}>No territory</div></div>
                             </div>
-                            <QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} updateRepField={updateRepField} compactInput />
+                            <QuotaRepCard u={u} quotaMode={quotaMode} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} draft={quotaDrafts[u.id]} onQuotaChange={onQuotaChange} compactInput />
                             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                 <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}><div style={{ height:'100%', width:attain+'%', background:aColor, borderRadius:T.r }} /></div>
                                 <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{quota>0?attain.toFixed(1)+'%':'—'}</span>
@@ -588,6 +572,9 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                         <div style={eyebrow}>Commission Plan</div>
                         <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Tiered rates applied to all reps based on quota attainment %</div>
                     </div>
+                    {canEditIncentives && tiersDraft !== null && (
+                        <DraftActions label="Save plan" busy={busy} onSave={saveCommission} onCancel={cancelCommission}/>
+                    )}
                 </div>
                 <div style={{ padding:'16px 20px' }}>
                     {tierList.map((tier,idx) => (
@@ -595,18 +582,18 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                             {['minPercent','maxPercent','rate'].map((field,fi) => (
                                 <input key={fi} type="number" value={field==='maxPercent'&&tier.maxPercent>=999?'':tier[field]} placeholder={field==='maxPercent'?'∞':field==='rate'?'%':'%'}
                                     disabled={!canEditIncentives}
-                                    onChange={e => { const t=[...tierList]; t[idx]={...t[idx],[field]:parseFloat(e.target.value)||(field==='maxPercent'?999:0)}; applyTiers(t); }}
+                                    onChange={e => { const t=[...tierList]; t[idx]={...t[idx],[field]:parseFloat(e.target.value)||(field==='maxPercent'?999:0)}; editTiers(t); }}
                                     style={{ width:55, padding:'3px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, textAlign:'center', fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
                                     onFocus={e=>e.target.style.borderColor=T.info}
-                                    onBlur={e=>{ e.target.style.borderColor=T.border; if (canEditIncentives) saveTiers(tierList); }} />
+                                    onBlur={e=>{ e.target.style.borderColor=T.border; }} />
                             ))}
                             <span style={{ fontSize:10, color:T.inkMuted, fontWeight:600 }}>% rate</span>
                             {canEditIncentives && tierList.length>1 && (
-                                <button onClick={()=>commitTiers(tierList.filter((_,i)=>i!==idx))} style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, padding:'0', marginLeft:'auto' }}>×</button>
+                                <button onClick={()=>editTiers(tierList.filter((_,i)=>i!==idx))} style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, padding:'0', marginLeft:'auto' }}>×</button>
                             )}
                         </div>
                     ))}
-                    {canEditIncentives && <button onClick={()=>commitTiers([...tierList,{minPercent:0,maxPercent:999,rate:0}])}
+                    {canEditIncentives && <button onClick={()=>editTiers([...tierList,{minPercent:0,maxPercent:999,rate:0}])}
                         style={{ marginTop:4, background:T.surface2, border:`1.5px dashed ${T.border}`, borderRadius:T.r, padding:'6px 12px', cursor:'pointer', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:T.sans, width:'100%' }}>
                         + Add Tier
                     </button>}
@@ -620,8 +607,11 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                         <div style={eyebrow}>SPIFF Board</div>
                         <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>One-time incentive bonuses</div>
                     </div>
-                    {canEditIncentives && <button onClick={()=>commitSpiffs([...spiffList,{id:'spiff_'+Date.now(),name:'',amount:'',type:'flat',condition:'',active:true}])}
-                        style={{ padding:'4px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>+ Add SPIFF</button>}
+                    {canEditIncentives && spiffsDraft !== null && (
+                        <DraftActions label="Save SPIFFs" busy={busy} onSave={saveSpiffBoard} onCancel={cancelSpiffBoard}/>
+                    )}
+                    {canEditIncentives && <button onClick={()=>editSpiffs([...spiffList,{id:'spiff_'+Date.now(),name:'',amount:'',type:'flat',condition:'',active:true}])}
+                        style={{ padding:'4px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans, marginLeft: spiffsDraft !== null ? 6 : 'auto' }}>+ Add SPIFF</button>}
                 </div>
                 <div style={{ padding:'12px 16px' }}>
                     {spiffList.length === 0
@@ -631,36 +621,36 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
                                 <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                                     <input type="text" value={spiff.name} placeholder="SPIFF name"
                                         disabled={!canEditIncentives}
-                                        onChange={e=>applySpiffs(spiffList.map((s,i)=>i===si?{...s,name:e.target.value}:s))}
+                                        onChange={e=>editSpiffs(spiffList.map((s,i)=>i===si?{...s,name:e.target.value}:s))}
                                         style={{ flex:2, minWidth:140, padding:'4px 8px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
                                         onFocus={e=>e.target.style.borderColor=T.info}
-                                        onBlur={e=>{ e.target.style.borderColor=T.border; if (canEditIncentives) saveSpiffs(spiffList); }} />
+                                        onBlur={e=>{ e.target.style.borderColor=T.border; }} />
                                     <select value={spiff.type} disabled={!canEditIncentives}
-                                        onChange={e=>commitSpiffs(spiffList.map((s,i)=>i===si?{...s,type:e.target.value}:s))}
+                                        onChange={e=>editSpiffs(spiffList.map((s,i)=>i===si?{...s,type:e.target.value}:s))}
                                         style={{ padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, cursor:'pointer', outline:'none', color:T.ink }}>
                                         <option value="flat">Flat $</option><option value="pct">% Revenue</option><option value="multiplier">Multiplier</option>
                                     </select>
                                     <input type="number" value={spiff.amount} placeholder="0"
                                         disabled={!canEditIncentives}
-                                        onChange={e=>applySpiffs(spiffList.map((s,i)=>i===si?{...s,amount:e.target.value}:s))}
+                                        onChange={e=>editSpiffs(spiffList.map((s,i)=>i===si?{...s,amount:e.target.value}:s))}
                                         style={{ width:70, padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, textAlign:'right', outline:'none', color:T.ink }}
                                         onFocus={e=>e.target.style.borderColor=T.info}
-                                        onBlur={e=>{ e.target.style.borderColor=T.border; if (canEditIncentives) saveSpiffs(spiffList); }} />
+                                        onBlur={e=>{ e.target.style.borderColor=T.border; }} />
                                     <label style={{ display:'flex', alignItems:'center', gap:3, cursor:'pointer' }}>
                                         <input type="checkbox" checked={!!spiff.active} disabled={!canEditIncentives}
-                                            onChange={e=>commitSpiffs(spiffList.map((s,i)=>i===si?{...s,active:e.target.checked}:s))} />
+                                            onChange={e=>editSpiffs(spiffList.map((s,i)=>i===si?{...s,active:e.target.checked}:s))} />
                                         <span style={{ fontSize:10, color:T.inkMid, fontFamily:T.sans }}>Active</span>
                                     </label>
-                                    {canEditIncentives && <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>commitSpiffs(spiffList.filter((_,i)=>i!==si)))}
+                                    {canEditIncentives && <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>editSpiffs(spiffList.filter((_,i)=>i!==si)))}
                                         style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>}
                                 </div>
                                 {/* Description — stored on `condition`, which the claim modal already renders */}
                                 <input type="text" value={spiff.condition||''} placeholder="Description (shown to reps)"
                                     disabled={!canEditIncentives}
-                                    onChange={e=>applySpiffs(spiffList.map((s,i)=>i===si?{...s,condition:e.target.value}:s))}
+                                    onChange={e=>editSpiffs(spiffList.map((s,i)=>i===si?{...s,condition:e.target.value}:s))}
                                     style={{ width:'100%', marginTop:6, padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, outline:'none', color:T.inkMid, boxSizing:'border-box' }}
                                     onFocus={e=>e.target.style.borderColor=T.info}
-                                    onBlur={e=>{ e.target.style.borderColor=T.border; if (canEditIncentives) saveSpiffs(spiffList); }} />
+                                    onBlur={e=>{ e.target.style.borderColor=T.border; }} />
                             </div>
                         ))
                     }
@@ -736,6 +726,7 @@ export default function SalesManagerTab() {
         spiffClaims, setSpiffClaims,
         isMobile,
         activeOrgId, settingsOrgId,
+        setSettingsDirty, settingsSaveRef,
     } = useApp();
 
     const isAdmin   = userRole === 'Admin';
@@ -804,30 +795,135 @@ export default function SalesManagerTab() {
         }
     };
 
-    const updateRepField = (userId, field, value) => {
-        let updatedUser = null;
-        setSettings(prev => {
-            const updatedUsers = (prev.users||[]).map(u => u.id === userId ? {...u,[field]:value} : u);
-            updatedUser = updatedUsers.find(u => u.id === userId);
-            return {...prev, users:updatedUsers};
-        });
-        if (updatedUser) saveUser(updatedUser, 'quota');
+    // A rep's field — a forecast call — saved, then the app's copy (state §0.170).
+    // The rep is the one in state NOW: it was read back out of a setSettings
+    // updater, which React may run later than the line after it, and then the
+    // save was skipped without a word.
+    const updateRepField = async (userId, field, value) => {
+        const rep = (settings.users || []).find(u => u.id === userId);
+        if (!rep) return false;
+        if (!await saveUser({ ...rep, [field]: value }, 'forecast call')) return false;
+        setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === userId ? { ...u, [field]: value } : u) }));
+        return true;
     };
-    const setAllQuotaMode = mode => {
-        let toSave = [];
-        setSettings(prev => {
-            const updatedUsers = (prev.users||[]).map(u => u.userType !== 'ReadOnly' ? {...u, quotaType:mode} : u);
-            toSave = updatedUsers.filter(u => u.userType !== 'ReadOnly');
-            return {...prev, users:updatedUsers};
-        });
+    // Annual / Quarterly: one click, saved at once for every rep it changes (a
+    // single action, not a form). The same fix: the reps as in state now.
+    const setAllQuotaMode = async (mode) => {
+        const toSave = (settings.users || []).filter(u => u.userType !== 'ReadOnly' && u.quotaType !== mode).map(u => ({ ...u, quotaType: mode }));
         // Sequential, not a forEach of un-awaited promises: this can be every rep in
         // the org, and one report of the first failure beats N unhandled rejections.
-        (async () => {
-            for (const u of toSave) {
-                if (!await saveUser(u, 'quota mode')) return;   // saveUser has already surfaced it
-            }
-        })();
+        for (const u of toSave) {
+            if (!await saveUser(u, 'quota mode')) return;   // saveUser has already surfaced it
+            setSettings(prev => ({ ...prev, users: (prev.users || []).map(x => x.id === u.id ? { ...x, quotaType: mode } : x) }));
+        }
     };
+
+    // ── The Administration page's drafts (state §0.170) ──
+    // Quotas, the commission plan and the SPIFF board are drafts until their
+    // card's Save; held here, above the sub-tabs, so a sub-tab switch keeps them
+    // and the leave guard can save them while the Administration page is closed.
+    const [quotaDrafts, setQuotaDrafts] = useState({});      // { [userId]: { [field]: text } }
+    const [tiersDraft,  setTiersDraft]  = useState(null);    // null = nothing unsaved
+    const [spiffsDraft, setSpiffsDraft] = useState(null);
+    // A draft is this org's: an org switch drops it (state §0.162's rule), or a
+    // save would send one org's figures with the next org's token.
+    useEffect(() => { setQuotaDrafts({}); setTiersDraft(null); setSpiffsDraft(null); }, [activeOrgId]);
+
+    const onQuotaChange = (userId, field, text) => {
+        const rep = (settings.users || []).find(u => u.id === userId);
+        const stored = rep && rep[field] != null ? String(rep[field]) : '';
+        setQuotaDrafts(prev => {
+            const fields = { ...(prev[userId] || {}) };
+            if (text === stored) delete fields[field]; else fields[field] = text;
+            const next = { ...prev };
+            if (Object.keys(fields).length) next[userId] = fields; else delete next[userId];
+            return next;
+        });
+    };
+
+    // Only over THIS org's loaded settings (state §0.162): the patch is built
+    // from the settings on screen, which are the defaults until the org's load
+    // succeeds — saving then would put default tiers, or a SPIFF list of one,
+    // over the org's real ones.
+    const settingsLoaded = !!activeOrgId && settingsOrgId === activeOrgId;
+    const saveExtra = async (patch, label) => {
+        if (!settingsLoaded) {
+            setSaveState({ status: 'error', msg: `Not saved — this organization's settings have not loaded. Reload the page and try again.` });
+            return false;
+        }
+        setSaveState({ status: 'saving', msg: '' });
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT', body: JSON.stringify(patch),
+            });
+            if (!res.ok) {
+                setSaveState({ status: 'error', msg: res.status === 403
+                    ? `Not saved — only Admins can change ${label}.`
+                    : `Not saved — the server returned ${res.status}. Your ${label} changes are not stored.` });
+                return false;
+            }
+            setSaveState({ status: 'saved', msg: '' });
+            return true;
+        } catch (err) {
+            console.error('[SalesManagerTab] save ' + label, err);
+            setSaveState({ status: 'error', msg: `Not saved — network error while saving ${label}.` });
+            return false;
+        }
+    };
+
+    // Each save throws when nothing was saved — the page's banner says why — so
+    // the leave guard's "Save and continue" stays; a card's own button swallows it.
+    const refuse = (msg) => { setSaveState({ status: 'error', msg: `Not saved — ${msg}` }); return new Error(msg); };
+    const saveQuotas = async () => {
+        const changes = [];
+        for (const [userId, fields] of Object.entries(quotaDrafts)) {
+            const rep = (settings.users || []).find(u => u.id === userId);
+            if (!rep) continue;
+            const patch = {};
+            for (const [field, text] of Object.entries(fields)) {
+                if (String(text).trim() === '') continue;            // cleared: the figure stays
+                const n = parseFloat(text);
+                if (isNaN(n) || n < 0) throw refuse(`${rep.name}'s quota must be a number, 0 or more.`);
+                patch[field] = n;
+            }
+            if (Object.keys(patch).length) changes.push({ ...rep, ...patch });
+        }
+        for (const user of changes) {
+            if (!await saveUser(user, 'quotas')) throw new Error('Quotas not saved.');   // saveUser has said why
+            setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === user.id ? user : u) }));
+            setQuotaDrafts(prev => { const next = { ...prev }; delete next[user.id]; return next; });
+        }
+        setQuotaDrafts({});
+        if (changes.length) setSaveState({ status: 'saved', msg: '' });
+    };
+    const cancelQuotas = () => setQuotaDrafts({});
+    const saveCommission = async () => {
+        if (tiersDraft === null) return;
+        const quotaData = { ...(settings.quotaData || {}), commissionTiers: tiersDraft };
+        if (!await saveExtra({ quotaData }, 'commission tiers')) throw new Error('Commission plan not saved.');
+        setSettings(prev => ({ ...prev, quotaData }));
+        setTiersDraft(null);
+    };
+    const cancelCommission = () => setTiersDraft(null);
+    const saveSpiffBoard = async () => {
+        if (spiffsDraft === null) return;
+        // A SPIFF goes live only with a name: a nameless one reached reps' claim
+        // screens as "Unnamed SPIFF".
+        if (spiffsDraft.some(sp => !String(sp.name || '').trim())) throw refuse('give every SPIFF a name.');
+        if (!await saveExtra({ spiffs: spiffsDraft }, 'SPIFFs')) throw new Error('SPIFFs not saved.');
+        setSettings(prev => ({ ...prev, spiffs: spiffsDraft }));
+        setSpiffsDraft(null);
+    };
+    const cancelSpiffBoard = () => setSpiffsDraft(null);
+    const saveAdminDrafts = async () => {
+        if (Object.keys(quotaDrafts).length) await saveQuotas();
+        if (tiersDraft !== null) await saveCommission();
+        if (spiffsDraft !== null) await saveSpiffBoard();
+    };
+    // The page's unsaved state and its save, for the leave guard (App).
+    const adminDirty = Object.keys(quotaDrafts).length > 0 || tiersDraft !== null || spiffsDraft !== null;
+    useEffect(() => { if (setSettingsDirty) setSettingsDirty(adminDirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [adminDirty]);   // eslint-disable-line react-hooks/exhaustive-deps
+    useRegisterSave(settingsSaveRef, adminDirty, saveAdminDrafts);
 
     // "Schedule 1:1" on the Today tab (state §0.84): a new task in the rail,
     // assigned to the caller, typed Meeting when the org's task types include it.
@@ -1316,10 +1412,13 @@ export default function SalesManagerTab() {
             {subTab === 'admin'    && <AdminTab
                 card={card} cardHdr={cardHdr} eyebrow={eyebrow}
                 settings={settings} setSettings={setSettings}
-                settingsLoaded={!!activeOrgId && settingsOrgId === activeOrgId}
                 opportunities={opportunities} currentUser={currentUser} isAdmin={isAdmin}
-                visibleReps={visibleReps} quarters={quarters} quotaMode={quotaMode} fyRange={fyRange}
-                getRepTotal={getRepTotal} updateRepField={updateRepField}
+                visibleReps={visibleReps} quotaMode={quotaMode} fyRange={fyRange}
+                getRepTotal={getRepTotal}
+                quotaDrafts={quotaDrafts} onQuotaChange={onQuotaChange}
+                tiersDraft={tiersDraft} setTiersDraft={setTiersDraft} spiffsDraft={spiffsDraft} setSpiffsDraft={setSpiffsDraft}
+                saveQuotas={saveQuotas} cancelQuotas={cancelQuotas} saveCommission={saveCommission} cancelCommission={cancelCommission}
+                saveSpiffBoard={saveSpiffBoard} cancelSpiffBoard={cancelSpiffBoard}
                 saveState={saveState} setSaveState={setSaveState}
                 setAllQuotaMode={setAllQuotaMode} setActiveTab={setActiveTab}
                 showConfirm={showConfirm} spiffClaims={spiffClaims} setSpiffClaims={setSpiffClaims} />}

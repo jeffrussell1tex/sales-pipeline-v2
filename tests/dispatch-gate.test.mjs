@@ -128,7 +128,8 @@ test('settings.mjs carries repsCanUseDispatch in BOTH halves, OFF when absent (1
     const s = code(read('netlify/functions/settings.mjs'));
     const pairs = s.match(/repsCanUseDispatch:[^\n]*\?\?\s*false,/g) || [];
     assert.equal(pairs.length, 2, `GET and PUT — found ${pairs.length}`);
-    assert.ok(code(read('src/hooks/useSettings.js')).includes('repsCanUseDispatch: false,'), 'the client default agrees');
+    // The client defaults live in one module since §0.170 (the server reads it too).
+    assert.ok(code(read('src/utils/settingsDefaults.js')).includes('repsCanUseDispatch: false,'), 'the client default agrees');
 });
 
 // ── the client wiring ───────────────────────────────────────────────────────

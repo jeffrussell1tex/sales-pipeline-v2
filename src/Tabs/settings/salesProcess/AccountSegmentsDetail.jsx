@@ -1,5 +1,6 @@
 // settings/salesProcess/AccountSegmentsDetail.jsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { dbFetch } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
@@ -25,7 +26,7 @@ const AUTO_CLASS_RULES = [
     { when:'Account type = Partner',     then:'Partner' },
 ];
 
-export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActiveTab, setAccountsDeepFilter }) => {
+export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActiveTab, setAccountsDeepFilter, setSettingsDirty, settingsSaveRef }) => {
     const saved    = settings?.accountSegmentTiers?.length ? settings.accountSegmentTiers : DEFAULT_ACCT_SEGMENTS;
     const [tiers, setTiers]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
@@ -38,18 +39,26 @@ export const AccountSegmentsDetail = ({ settings, setSettings, onBack, setActive
     const handleCancel = () => { setTiers(JSON.parse(JSON.stringify(saved))); setDirty(false); setShowAdd(false); };
     const handleSave   = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, accountSegmentTiers: tiers }));
         try {
             await putSettings({ accountSegmentTiers: tiers });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, accountSegmentTiers: tiers }));
             setSaveError('');
             setDirty(false);
         } catch (e) {
             // Keep the panel dirty: the change was NOT saved, and clearing the
             // flag here is what made a 403 look like success.
             setSaveError(e.message);
+            // Clear the spinner, then rethrow: the leave guard's "Save and
+            // continue" runs this too, and only a throw keeps it from moving on.
+            setSaving(false);
+            throw e;
         }
         setSaving(false);
     };
+    // Hand the leave guard this panel's unsaved state and its save (state §0.170).
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const handleAddTier = () => {
         if (!newTier.tier.trim()) { setAddErr('Tier name is required.'); return; }

@@ -13,6 +13,7 @@
 // writer whether or not it is visible here, because visibility and authorization
 // are different rules and conflating them is how 18b20-shaped bugs start.
 import React, { useState, useEffect } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -37,7 +38,7 @@ const VisibilityCard = ({ noun, visible, onChange, pooled, routed }) => (
     </CSectionCard>
 );
 
-export const LeadVisibilityDetail = ({ settings, setSettings, onBack }) => {
+export const LeadVisibilityDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     // Absent keys = the server's defaults, so what this panel shows on first open
     // is what the server is doing: leads visible, deals hidden.
     const seed = () => ({
@@ -56,23 +57,29 @@ export const LeadVisibilityDetail = ({ settings, setSettings, onBack }) => {
     const handleCancel = () => { setVis(saved); setDirty(false); };
     const handleSave   = async () => {
         setSaving(true);
-        // Snapshot-revert on failure (guide 18b1): dbFetch resolves for ANY
-        // status, so without the revert a 403 would clear the dirty flag and
-        // leave the panel looking saved while the server kept the old policy.
+        // dbFetch resolves for ANY status (guide 18b1); putSettings throws on one,
+        // so a 403 keeps the panel dirty. The app's copy changes only once the save
+        // lands (state §0.170) — a snapshot put back on failure also put back
+        // anything else changed meanwhile.
         const patch = { unassignedLeadsVisibleToReps: vis.leads, unassignedDealsVisibleToReps: vis.deals };
-        let snapshot;
-        setSettings(prev => { snapshot = prev; return { ...prev, ...patch }; });
         setSaveError('');
         try {
             await putSettings(patch);
+            setSettings(prev => ({ ...prev, ...patch }));
             setSaved(vis);
             setDirty(false);
         } catch (e) {
-            setSettings(snapshot);
             setSaveError(`Visibility not saved — ${e.message}`);
+            // Clear the spinner, then rethrow: the leave guard's "Save and
+            // continue" runs this too, and only a throw keeps it from moving on.
+            setSaving(false);
+            throw e;
         }
         setSaving(false);
     };
+    // Hand the leave guard this panel's unsaved state and its save (state §0.170).
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     return (
         <CategoryDetailChrome

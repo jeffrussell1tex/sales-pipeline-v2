@@ -29,7 +29,7 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
     const handleCancel = () => { setForm({ ...saved }); setDirty(false); };
     const handleSave = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev,
+        const patch = {
             companyDisplayName:  form.displayName,
             companyLegalName:    form.legalName,
             companyBrandColor:   form.brandColor,
@@ -41,23 +41,13 @@ export const CompanyProfileDetail = ({ settings, setSettings, onBack, setSetting
             companyPhone:        form.phone,
             companySupportEmail: form.supportEmail,
             quoteHeader:         form.quoteHeader,
-        }));
+        };
         try {
             // Was a bare dbFetch with no res.ok check, then setDirty(false) OUTSIDE
             // the try — a 403 cleared the flag and looked like a successful save.
-            await putSettings({
-                companyDisplayName:  form.displayName,
-                companyLegalName:    form.legalName,
-                companyBrandColor:   form.brandColor,
-                companyAddress:      form.address,
-                companyCity:         form.city,
-                companyState:        form.state,
-                companyZip:          form.zip,
-                companyCountry:      form.country,
-                companyPhone:        form.phone,
-                companySupportEmail: form.supportEmail,
-                quoteHeader:         form.quoteHeader,
-            });
+            await putSettings(patch);
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, ...patch }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

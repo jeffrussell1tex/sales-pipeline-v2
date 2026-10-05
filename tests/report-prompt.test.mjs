@@ -347,7 +347,7 @@ test('the switch: settings.aiReportPromptsEnabled in BOTH halves of settings.mjs
     assert.equal((settings.match(/aiReportPromptsEnabled:/g) || []).length, 2, 'the GET projection AND the PUT whitelist (18b12)');
     assert.ok(settings.includes("aiReportPromptsEnabled: row.extra?.aiReportPromptsEnabled ?? false,"));
     assert.ok(settings.includes("aiReportPromptsEnabled: 'aiReportPromptsEnabled' in data ? !!data.aiReportPromptsEnabled : existingExtra.aiReportPromptsEnabled ?? false,"));
-    assert.ok(code(read('src/hooks/useSettings.js')).includes('    aiReportPromptsEnabled: false,'));
+    assert.ok(code(read('src/utils/settingsDefaults.js')).includes('    aiReportPromptsEnabled: false,'), 'the client default (one module since §0.170)');
     const f = code(read('src/Tabs/settings/data/FeaturesDetail.jsx'));
     assert.ok(f.includes('const [aiPrompts, setAiPrompts] = React.useState(false);'));
     assert.ok(f.includes('setAiPrompts(settings.aiReportPromptsEnabled === true);'), 'read from the settings prop, never self-fetched');

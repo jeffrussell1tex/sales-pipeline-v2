@@ -1,5 +1,6 @@
 // settings/salesProcess/LeadConversionDetail.jsx
 import React, { useState } from 'react';
+import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { T, eb } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
@@ -19,7 +20,7 @@ const DEFAULT_LEAD_CONV_BENCHMARKS = [
     { source: '_default',            good: 20, avg: 10, poor: 10 },
 ];
 
-export const LeadConvBenchmarks = ({ settings, setSettings }) => {
+export const LeadConvBenchmarks = ({ settings, setSettings, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.leadConvBenchmarks || null;
     const [rows, setRows] = useState(() =>
         saved ? JSON.parse(JSON.stringify(saved)) : JSON.parse(JSON.stringify(DEFAULT_LEAD_CONV_BENCHMARKS))
@@ -27,10 +28,13 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
     const [saved2, setSaved2] = useState(false);
+    // Unsaved edits (state §0.170): the leave guard asks before they are lost.
+    const [dirty, setDirty] = useState(false);
     const [newSource, setNewSource] = useState('');
 
     const update = (i, field, val) => {
         setRows(prev => prev.map((r, ri) => ri === i ? { ...r, [field]: val } : r));
+        setDirty(true);
     };
 
     const addRow = () => {
@@ -38,11 +42,13 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
         if (!src) return;
         if (rows.some(r => r.source.toLowerCase() === src.toLowerCase())) return;
         setRows(prev => [...prev, { source: src, good: 20, avg: 10, poor: 10 }]);
+        setDirty(true);
         setNewSource('');
     };
 
     const removeRow = (i) => {
         setRows(prev => prev.filter((_, ri) => ri !== i));
+        setDirty(true);
     };
 
     const handleSave = async () => {
@@ -51,21 +57,28 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
         // object, so every unrelated key was rewritten from this component's
         // possibly-stale copy — a lost update for anything changed elsewhere since
         // load. settings.mjs merges on 'key' in data, so a narrow patch is correct.
-        let snapshot;
-        setSettings(prev => { snapshot = prev; return { ...prev, leadConvBenchmarks: rows }; });
         setSaveError('');
         try {
             await putSettings({ leadConvBenchmarks: rows });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, leadConvBenchmarks: rows }));
+            setDirty(false);
             setSaved2(true);
             setTimeout(() => setSaved2(false), 2000);
         } catch (e) {
             // The banner above the table is where the user is looking (§18b32);
             // a console.error here was the only report of a refused save.
             setSaveError(e.message || 'Save failed.');
+            // Rethrown (state §0.170): the leave guard's "Save and continue" runs
+            // this too, and only a throw keeps it from moving on. `finally` clears the spinner.
+            throw e;
         } finally {
             setSaving(false);
         }
     };
+    // Hand the leave guard this panel's unsaved state and its save (state §0.170).
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    useRegisterSave(settingsSaveRef, dirty, handleSave);
 
     const defaultRow = rows.find(r => r.source === '_default');
     const sourceRows = rows.filter(r => r.source !== '_default');
@@ -173,7 +186,7 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
             {/* Save */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
                 {saved2 && <span style={{ fontSize: 12, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>✓ Saved</span>}
-                <button onClick={() => setRows(JSON.parse(JSON.stringify(DEFAULT_LEAD_CONV_BENCHMARKS)))}
+                <button onClick={() => { setRows(JSON.parse(JSON.stringify(DEFAULT_LEAD_CONV_BENCHMARKS))); setDirty(true); }}
                     style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
                     Reset to defaults
                 </button>
@@ -186,7 +199,7 @@ export const LeadConvBenchmarks = ({ settings, setSettings }) => {
     );
 };
 
-export const LeadConversionDetail = ({ settings, setSettings, onBack }) => {
+export const LeadConversionDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     return (
         <CategoryDetailChrome
             crumb="Lead conversion benchmarks" title="Lead conversion benchmarks"
@@ -198,7 +211,7 @@ export const LeadConversionDetail = ({ settings, setSettings, onBack }) => {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 380px', gap:20 }}>
                 <div>
                     <CSectionCard title="Conversion targets" description="Set lead→opportunity conversion thresholds per source. Reps see colored badges on lead queues; managers see variance in Sales Manager dashboards.">
-                        <LeadConvBenchmarks settings={settings} setSettings={setSettings}/>
+                        <LeadConvBenchmarks settings={settings} setSettings={setSettings} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>
                     </CSectionCard>
                 </div>
                 <div>

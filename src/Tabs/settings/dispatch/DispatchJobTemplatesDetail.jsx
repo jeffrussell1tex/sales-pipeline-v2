@@ -182,9 +182,10 @@ export const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setS
             hrs:  commitNumber(t.hrs,  HRS_BOUNDS),
         }));
         setTemplates(clean);
-        setSettings(prev => ({ ...prev, dispatchJobTemplates: clean }));
         try {
             await putSettings({ dispatchJobTemplates: clean });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, dispatchJobTemplates: clean }));
             setSaveError('');
             setDirty(false);
         } catch (e) {

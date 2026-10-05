@@ -311,7 +311,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
                         <button type="submit" className="btn" disabled={saving} style={{ opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             {saving && <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: T.surface, borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
-                            {saving ? 'Saving…' : (user ? 'Update' : 'Create')}
+                            {saving ? 'Saving…' : (user ? 'Save' : 'Create')}
                         </button>
                     </div>
                 </form>

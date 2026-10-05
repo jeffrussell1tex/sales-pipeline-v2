@@ -169,7 +169,7 @@ test('the client: a house dialog with a picker, the Team tab reads the table, Ho
     assert.ok(sm.includes('const recentNotes = sortNotes(coachingNotes)'), 'the card reads the table');
     assert.doesNotMatch(sm, /legacyNotePayload|legacyNotes|settings\.coachingNotes/, 'the import button and every read of the blob are gone (§0.83)');
     assert.doesNotMatch(read('src/utils/coachingNotes.js'), /legacyNotePayload|parseCoachingNote/, 'the import helpers are gone');
-    assert.doesNotMatch(read('src/hooks/useSettings.js'), /coachingNotes/, 'no client default for the key');
+    assert.doesNotMatch(read('src/hooks/useSettings.js') + read('src/utils/settingsDefaults.js'), /coachingNotes/, 'no client default for the key');
     assert.doesNotMatch(sm, />See all →</, 'the inert button is gone');
     const home = read('src/Tabs/HomeTab.jsx');
     assert.ok(home.includes('isAddressedTo(n, currentUserId, myTeamId)'), 'Home shows what is addressed to me');

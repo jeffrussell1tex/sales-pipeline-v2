@@ -67,9 +67,10 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
 
     const handleSave = async () => {
         setSaving(true);
-        setSettings(prev => ({ ...prev, dispatchCrews: crews }));
         try {
             await putSettings({ dispatchCrews: crews });
+            // The app's copy follows the save (state §0.170): set before it, a refused save showed anyway.
+            setSettings(prev => ({ ...prev, dispatchCrews: crews }));
             setSaveError('');
             setDirty(false);
         } catch (e) {
