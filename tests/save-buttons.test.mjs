@@ -135,11 +135,9 @@ test('every settings screen changes the app\'s copy only once its save has lande
     }
 });
 
-test('Fields & security mirrors what it saved — the app held the old matrix until a reload', () => {
-    const s = code(read('src/Tabs/settings/security/FlsDetail.jsx'));
-    before(s, "if (!res.ok) { const d = await res.json(); throw new Error(d.error); }",
-        'if (setSettings) setSettings(prev => ({ ...prev, fieldVisibility: matrix }));', 'after a save that landed');
-});
+// Fields & security mirrored what it saved until §0.171, when its grid — a
+// control that hid nothing — became a page that says per-field rules are not
+// available. It saves nothing now; tests/honest-panels.test.mjs pins that.
 
 // ── the leave guard ────────────────────────────────────────────────────────
 
@@ -152,10 +150,10 @@ const WIRED = [
     ['salesProcess/LeadConversionDetail.jsx', 'lead-conv-benchmarks'],
     ['quoting/QuoteTemplatesDetail.jsx', 'quote-templates'],
     ['quoting/ApprovalTiersDetail.jsx', 'approval-tiers'],
-    ['security/FlsDetail.jsx', 'field-visibility'],
 ];
+// (Fields & security was wired in §0.170 and left in §0.171: it saves nothing.)
 
-test('ten more screens hand the leave guard their unsaved state and a save that throws when it does not save', () => {
+test('the screens §0.170 wired hand the leave guard their unsaved state and a save that throws when it does not save', () => {
     const av = code(read('src/Tabs/AdminView.jsx'));
     for (const [f, id] of WIRED) {
         const s = code(read('src/Tabs/settings/' + f));

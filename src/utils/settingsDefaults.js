@@ -45,18 +45,6 @@ export const DEFAULT_SETTINGS = {
         { name: 'Closed Won',           weight: 100 },
         { name: 'Closed Lost',          weight: 0   },
     ],
-    fieldVisibility: {
-        arr:           { Admin: true, Manager: true, User: true, ReadOnly: true },
-        implCost:      { Admin: true, Manager: true, User: true, ReadOnly: true },
-        probability:   { Admin: true, Manager: true, User: true, ReadOnly: true },
-        weightedValue: { Admin: true, Manager: true, User: true, ReadOnly: true },
-        dealAge:       { Admin: true, Manager: true, User: true, ReadOnly: true },
-        timeInStage:   { Admin: true, Manager: true, User: true, ReadOnly: true },
-        activities:    { Admin: true, Manager: true, User: true, ReadOnly: true },
-        notes:         { Admin: true, Manager: true, User: true, ReadOnly: true },
-        nextSteps:     { Admin: true, Manager: true, User: true, ReadOnly: true },
-        closeDate:     { Admin: true, Manager: true, User: true, ReadOnly: true },
-    },
     kpiConfig: [
         { id: 'totalPipelineARR', name: 'Total Pipeline ARR',      color: 'primary', tolerances: [{ label: 'On Track', min: 100000, color: '#16a34a' },{ label: 'Warning',  min: 50000, color: '#f59e0b' },{ label: 'Critical', min: 0, color: '#ef4444' }] },
         { id: 'activeOpps',       name: 'Active Opportunities',    color: 'success', tolerances: [{ label: 'Good',     min: 10,     color: '#16a34a' },{ label: 'Low',      min: 5,     color: '#f59e0b' },{ label: 'Critical', min: 0, color: '#ef4444' }] },
@@ -96,8 +84,8 @@ export const DEFAULT_SETTINGS = {
 // already, so a workspace that never saved them reads the same either way. Not
 // the roster (`users`, the /users endpoint's), the fiscal year (its own column
 // and its own save), the columns with a database default of their own
-// (`taskTypes`, `verticalMarkets`, `fieldVisibility` — an empty one is visible
-// to all, the default), or `priceBookConfig`, which the server does not store.
+// (`taskTypes`, `verticalMarkets`), or `priceBookConfig`, which the server does
+// not store.
 export const SEEDED_KEYS = Object.freeze([
     'quotaData', 'pipelines', 'painPoints', 'funnelStages', 'kpiConfig',
     'dispatchLicenses', 'dispatchBlockTypes', 'companyProfile',

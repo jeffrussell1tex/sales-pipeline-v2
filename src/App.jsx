@@ -713,15 +713,6 @@ dbFetch('/.netlify/functions/users?me=true')
         return true;
     };
 
-    // Field-level visibility helper
-    const canViewField = (fieldKey) => {
-        const fv = settings.fieldVisibility || {};
-        const fieldRules = fv[fieldKey];
-        if (!fieldRules) return true; // not configured = visible
-        const role = userRole || 'User';
-        return fieldRules[role] !== false;
-    };
-
     // Filtered data based on role
     // ── Pipeline helpers ──────────────────────────────────────────────
     const allPipelines = (settings.pipelines && settings.pipelines.length > 0)
@@ -1687,7 +1678,6 @@ dbFetch('/.netlify/functions/users?me=true')
         coachingNotes, addCoachingNote, markCoachingNoteRead, deleteCoachingNote,
         softDelete,
         addAudit,
-        canViewField,
         isRepVisible,
         // Derived
         stages,

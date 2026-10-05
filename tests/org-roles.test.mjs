@@ -176,9 +176,13 @@ test('the two login-card pages put light text on the card — it is dark in ever
         "REGRESSION: the no-access switcher is Clerk's dark default on the dark card again");
 });
 
-test('the Opportunity modal takes the caller\'s role from context — never a guess by display name, never Admin for an empty roster', () => {
+test('the Opportunity modal guesses no role — never by display name, never Admin for an empty roster', () => {
+    // It read the caller's role from context (§0.164) for one consumer only, the
+    // field check `canViewField` — which hid nothing and left with the field-level
+    // grid (§0.171). Nothing in the modal depends on the caller's role now; the
+    // server decides what a caller may change.
     const m = code(read('src/components/modals/OpportunityModal.jsx'));
-    assert.ok(m.includes("    const { userRole: modalUserRole = 'User' } = useApp();"));
+    assert.ok(!m.includes('modalUserRole') && !m.includes('canViewField'), 'a role read with nothing to read it');
     assert.ok(!m.includes('modalUserRecord'), 'REGRESSION: the role is found by display name again');
     assert.ok(!/length === 0 \? 'Admin'/.test(m), 'REGRESSION: an empty roster reads as Admin again');
 });

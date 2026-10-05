@@ -1010,17 +1010,6 @@ export default function OpportunityModal({
 
     const allPipelines = (pipelines && pipelines.length > 0) ? pipelines : [{ id: 'default', name: 'New Business', color: T.info }];
 
-    // The caller's role in THIS org — the one the server enforces (state §0.163)
-    // — from context. It was guessed (§0.164): the roster row found by DISPLAY
-    // NAME, and an empty roster read as Admin.
-    const { userRole: modalUserRole = 'User' } = useApp();
-    const canViewField = (fieldKey) => {
-        const fv = settings.fieldVisibility || {};
-        const rules = fv[fieldKey];
-        if (!rules) return true;
-        return rules[modalUserRole] !== false;
-    };
-
     // ── Form state ──────────────────────────────────────────
     const [formData, setFormData] = useState(() => {
         const base = opportunity || {
@@ -1686,7 +1675,7 @@ export default function OpportunityModal({
                                     </div>
 
                                     {/* ── Probability ── */}
-                                    {canViewField('probability') && (() => {
+                                    {(() => {
                                         const stageDefault = (settings?.funnelStages || []).find(s => s.name === formData.stage);
                                         const rawWeight = stageDefault ? parseFloat(stageDefault.weight) : NaN;
                                         const defaultProb = !isNaN(rawWeight) ? rawWeight : null;
@@ -1957,28 +1946,24 @@ export default function OpportunityModal({
                                     })()}
 
                                     {/* ── Next steps (prominent gold accent) ── */}
-                                    {canViewField('nextSteps') && (
-                                        <div style={{ marginBottom: 16 }}>
-                                            <label style={{ ...ey(T.goldInk), display: 'block', marginBottom: 6 }}>Next Steps</label>
-                                            <div style={{ border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.gold}`, borderRadius: T.r, background: T.surface, overflow: 'hidden' }}>
-                                                <textarea value={formData.nextSteps} onChange={e => handleChange('nextSteps', e.target.value)}
-                                                    placeholder="Actions to move this deal forward…"
-                                                    rows={3}
-                                                    style={{ width: '100%', padding: '10px 12px', border: 'none', fontSize: 13, fontFamily: T.sans, resize: 'vertical', background: 'transparent', color: T.ink, outline: 'none', boxSizing: 'border-box', lineHeight: 1.55 }}/>
-                                            </div>
+                                    <div style={{ marginBottom: 16 }}>
+                                        <label style={{ ...ey(T.goldInk), display: 'block', marginBottom: 6 }}>Next Steps</label>
+                                        <div style={{ border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.gold}`, borderRadius: T.r, background: T.surface, overflow: 'hidden' }}>
+                                            <textarea value={formData.nextSteps} onChange={e => handleChange('nextSteps', e.target.value)}
+                                                placeholder="Actions to move this deal forward…"
+                                                rows={3}
+                                                style={{ width: '100%', padding: '10px 12px', border: 'none', fontSize: 13, fontFamily: T.sans, resize: 'vertical', background: 'transparent', color: T.ink, outline: 'none', boxSizing: 'border-box', lineHeight: 1.55 }}/>
                                         </div>
-                                    )}
+                                    </div>
 
                                     {/* ── Deal notes (serif italic) ── */}
-                                    {canViewField('notes') && (
-                                        <div style={{ marginBottom: 16 }}>
-                                            <label style={fieldLabelStyle}>Description / Background</label>
-                                            <textarea value={formData.notes} onChange={e => handleChange('notes', e.target.value)}
-                                                placeholder="Deal context, background, key details…"
-                                                rows={3}
-                                                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, resize: 'vertical', background: T.surface, color: T.ink, outline: 'none', boxSizing: 'border-box', lineHeight: 1.6 }}/>
-                                        </div>
-                                    )}
+                                    <div style={{ marginBottom: 16 }}>
+                                        <label style={fieldLabelStyle}>Description / Background</label>
+                                        <textarea value={formData.notes} onChange={e => handleChange('notes', e.target.value)}
+                                            placeholder="Deal context, background, key details…"
+                                            rows={3}
+                                            style={{ width: '100%', padding: '10px 12px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, resize: 'vertical', background: T.surface, color: T.ink, outline: 'none', boxSizing: 'border-box', lineHeight: 1.6 }}/>
+                                    </div>
 
                                     {/* ── Custom fields ── */}
                                     {(() => {

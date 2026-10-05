@@ -54,7 +54,8 @@ const B    = 'itest_sdef_B';      // the other org: must see none of A, and stay
 const NEW  = 'itest_sdef_new';    // no row at all
 const REQ  = 'itest_sdef_req';    // a row integration-requests.mjs created: nothing but its key
 const OLD  = 'itest_sdef_old';    // an older row: stages and pain points in their own columns
-const ORGS = [A, B, NEW, REQ, OLD];
+const MOCK = 'itest_sdef_mock';   // what the Roles and Fields & security mockups left behind (§0.171)
+const ORGS = [A, B, NEW, REQ, OLD, MOCK];
 
 const call = async (org, method, body, role = 'Admin') => {
     const res = await handler({
@@ -88,6 +89,9 @@ before(async () => {
         // What integration-requests.mjs writes for a workspace with no row: its key, the columns at their defaults.
         { id: REQ, orgId: REQ, extra: { integrationRequests: { hubspot: { appId: 'hubspot', requestedAt: now.toISOString() } } }, updatedAt: now },
         { id: OLD, orgId: OLD, stages: OLD_STAGES, painPoints: ['Old pain'], extra: {}, updatedAt: now },
+        { id: MOCK, orgId: MOCK, fieldVisibility: { arr: { User: 'Hidden' } },
+          extra: { roles: [{ id: 'r4', name: 'Customer Success', userCount: 6 }], rolePermissions: { r4: { o1: { view: 'ALL' } } }, competitors: ['Keep Rival'] },
+          updatedAt: now },
     ]);
 });
 after(cleanup);
@@ -171,4 +175,17 @@ test('only an Admin saves settings — a Manager\'s save writes nothing, default
     assert.equal(status, 403);
     const after = await rowOf(OLD);
     assert.deepEqual(after.extra, before.extra, 'no defaults written by a refused save');
+});
+
+test("the mockups' keys are served no more, and the next save leaves them out — the field matrix column untouched (§0.171)", async () => {
+    const before = await rowOf(MOCK);
+    const s = (await call(MOCK, 'GET')).body.settings;
+    for (const k of ['fieldVisibility', 'roles', 'rolePermissions']) assert.ok(!(k in s), `${k}: read by nothing, no longer served`);
+    assert.deepEqual(s.competitors, ['Keep Rival']);
+    const { status } = await call(MOCK, 'PUT', { reasonsWon: ['Price'] });
+    assert.equal(status, 200);
+    const row = await rowOf(MOCK);
+    assert.ok(!('roles' in row.extra) && !('rolePermissions' in row.extra), 'a save writes the keys it knows; these two it no longer knows');
+    assert.deepEqual(row.extra.competitors, ['Keep Rival'], 'every other key kept');
+    assert.deepEqual(row.fieldVisibility, before.fieldVisibility, 'the column is left as stored — nothing is deleted from it');
 });

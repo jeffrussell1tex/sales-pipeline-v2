@@ -328,7 +328,7 @@ export default function PipelineTab() {
         stages, exportToCSV, exportingCSV,
         showConfirm, softDelete, addAudit,
         getStageColor, getQuarter, getQuarterLabel,
-        calculateDealHealth, canViewField,
+        calculateDealHealth,
         visibleOpportunities: allVisibleOpportunities, getKpiColor,
         setUndoToast, activePipeline, allPipelines,
         handleDelete, handleSave, completeLostSave,
@@ -861,7 +861,7 @@ export default function PipelineTab() {
                                             <div className="mobile-card-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.opportunityName || opp.account || 'Unnamed'}</div>
                                             <div className="mobile-card-sub">{opp.account}{opp.site ? ' · ' + opp.site : ''}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
                                         </div>
-                                        {canViewField('arr') && <div className="mobile-card-arr">${((parseFloat(opp.arr)||0)/1000).toFixed(0)}K</div>}
+                                        <div className="mobile-card-arr">${((parseFloat(opp.arr)||0)/1000).toFixed(0)}K</div>
                                     </div>
                                     <div className="mobile-card-meta">
                                         <span style={{ background: sc.text + '22', color: sc.text, padding: '0.125rem 0.5rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>{opp.stage}</span>

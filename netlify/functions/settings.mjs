@@ -107,7 +107,6 @@ export const handler = async (event) => {
                 taskTypes:        row.taskTypes       || ['Call', 'Meeting', 'Email'],
                 painPoints:       saved('painPoints') ? (row.extra.painPoints || row.painPoints || []) : (row.painPoints?.length ? row.painPoints : ex.painPoints),
                 verticalMarkets:  row.verticalMarkets || [],
-                fieldVisibility:  row.fieldVisibility || {},
                 // Extended fields — stored in the extra jsonb blob column
                 quotaData:        ex.quotaData               || null,
                 commissionTiers:  row.extra?.commissionTiers || null,
@@ -181,8 +180,6 @@ export const handler = async (event) => {
                 customerTypeTiers:    row.extra?.customerTypeTiers    || null,
                 accountSegmentTiers:  row.extra?.accountSegmentTiers  || null,
                 leadScoring:          row.extra?.leadScoring          || DEFAULT_LEAD_SCORING,
-                rolePermissions:      row.extra?.rolePermissions      || null,
-                roles:      row.extra?.roles      || null,
                 // Quoting (persisted via quoting settings panels)
                 approvalTiers:        row.extra?.approvalTiers        || null,
                 // Who approves (§0.157): 'role' | 'person', null until an Admin
@@ -386,8 +383,6 @@ export const handler = async (event) => {
                 customerTypeTiers:    'customerTypeTiers'    in data ? (data.customerTypeTiers    || null) : existingExtra.customerTypeTiers    || null,
                 accountSegmentTiers:  'accountSegmentTiers'  in data ? (data.accountSegmentTiers  || null) : existingExtra.accountSegmentTiers  || null,
                 leadScoring:          'leadScoring'          in data ? (data.leadScoring          || null) : existingExtra.leadScoring          || null,
-                rolePermissions:      'rolePermissions'      in data ? (data.rolePermissions      || null) : existingExtra.rolePermissions      || null,
-                roles:      'roles'      in data ? (data.roles      || null) : existingExtra.roles      || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 buyerPersonas:        'buyerPersonas'        in data ? (data.buyerPersonas        || [])   : existingExtra.buyerPersonas        || [],
                 quotesEnabled:        'quotesEnabled'        in data ? !!data.quotesEnabled                : existingExtra.quotesEnabled        ?? true,
@@ -430,13 +425,12 @@ export const handler = async (event) => {
                 taskTypes:       'taskTypes'       in data ? (data.taskTypes       || ['Call', 'Meeting', 'Email']) : (existing[0]?.taskTypes       ?? ['Call', 'Meeting', 'Email']),
                 painPoints:      'painPoints'      in data ? (data.painPoints      || [])                          : (existing[0]?.painPoints      ?? []),
                 verticalMarkets: 'verticalMarkets' in data ? (data.verticalMarkets || [])                          : (existing[0]?.verticalMarkets ?? DEFAULT_SETTINGS.verticalMarkets),
-                fieldVisibility: 'fieldVisibility' in data ? (data.fieldVisibility || {})                          : (existing[0]?.fieldVisibility ?? {}),
                 extra,
                 updatedAt:       new Date(),
             };
             await db.insert(settings).values(dbRow).onConflictDoUpdate({
                 target: settings.id, setWhere: eq(settings.orgId, orgId),
-                set: { orgId, companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, fieldVisibility: dbRow.fieldVisibility, extra: dbRow.extra, updatedAt: dbRow.updatedAt }
+                set: { orgId, companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, extra: dbRow.extra, updatedAt: dbRow.updatedAt }
             });
 
             // Audit the write. Org-wide config changes are exactly the kind of

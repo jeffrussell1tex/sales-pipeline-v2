@@ -47,7 +47,7 @@ export const SETTINGS_ITEMS = [
     { id:'users',            scope:'workspace', category:'People & Teams', name:'Users',           desc:'Invite, deactivate, and assign roles & permissions',         status:'ok',      statusDetail:null },
     { id:'teams',            scope:'workspace', category:'People & Teams', name:'Teams & managers', desc:'Team structure, managers, and reporting hierarchy',          status:'ok',      statusDetail:null },
     { id:'territories',      scope:'workspace', category:'People & Teams', name:'Territories',     desc:'Sales territory definitions and rep assignments',             status:'ok',      statusDetail:null },
-    { id:'roles',            scope:'workspace', category:'People & Teams', name:'Roles & permissions', desc:'Custom roles with granular object-level permissions',    status:'ok',      statusDetail:null },
+    { id:'roles',            scope:'workspace', category:'People & Teams', name:'Roles & permissions', desc:'The six roles, and what each can see and change — enforced by the server', status:'ok', statusDetail:null },
     // Integrations
     { id:'apps',             scope:'workspace', category:'Integrations', name:'Connected apps',    desc:'Slack, Google and Microsoft 365 calendars, email logging — and requests for the rest',             status:'none',    statusDetail:null },
     { id:'api-keys',         scope:'workspace', category:'Integrations', name:'API keys',          desc:'Workspace REST API credentials',                              status:'ok',      statusDetail:null },
@@ -57,7 +57,7 @@ export const SETTINGS_ITEMS = [
     { id:'sso',              scope:'workspace', category:'Security', name:'Single sign-on (SSO)',  desc:'SAML 2.0 / OIDC through Clerk · configured in the Clerk Dashboard', status:'none', statusDetail:null, managedIn:'Clerk' },
     { id:'mfa',              scope:'workspace', category:'Security', name:'Multi-factor auth',     desc:'A second factor on sign-in · policy and factors set in Clerk', status:'none', statusDetail:null, managedIn:'Clerk', attention:false },
     { id:'session',          scope:'workspace', category:'Security', name:'Session & password',    desc:'Sessions, passwords and lockout · set in Clerk',              status:'none',    statusDetail:null, managedIn:'Clerk' },
-    { id:'field-visibility', scope:'workspace', category:'Security', name:'Field-level visibility', desc:'Role-based access control for individual fields',            status:'ok',      statusDetail:null },
+    { id:'field-visibility', scope:'workspace', category:'Security', name:'Field-level security', desc:'Not available — access is set by role and by record', status:'none', statusDetail:'Not available' },
     { id:'audit-log',        scope:'workspace', category:'Security', name:'Audit log',             desc:'Change history across all records and settings',               status:'ok',      statusDetail:null },
     // Data
     { id:'import',           scope:'workspace', category:'Data', name:'Import',                    desc:'Open the CSV importers for accounts, contacts, opportunities and leads', status:'none', statusDetail:null },

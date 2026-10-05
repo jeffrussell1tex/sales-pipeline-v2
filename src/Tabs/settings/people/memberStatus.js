@@ -13,6 +13,19 @@ export function memberStatus(u) {
     return invited ? 'Invited' : 'Active';
 }
 
+// The members holding each role who have access now — the Roles page's count
+// (state §0.171). Counted off `role` (the users.role column, as Seat usage
+// counts), and only Active rows: an invitation not yet accepted and a
+// deactivated member hold the role but reach nothing.
+export function activeMembersByRole(users = []) {
+    const out = {};
+    for (const u of users) {
+        if (!u || memberStatus(u) !== 'Active') continue;
+        out[u.role] = (out[u.role] || 0) + 1;
+    }
+    return out;
+}
+
 // The Pending invites list (state §0.165): the roster's invitations not yet
 // accepted and this org's pending Clerk invitations, one entry per email — a
 // row with no live invitation (expired, or revoked in Clerk) still shows, to be

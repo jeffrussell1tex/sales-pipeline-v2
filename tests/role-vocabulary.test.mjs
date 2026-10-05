@@ -138,7 +138,7 @@ test('no second role list — only src/utils/roles.js enumerates the roles', () 
     for (const [f, from] of [
         ['src/Tabs/settings/people/UsersDetail.jsx', "'../../../utils/roles.js'"],
         ['src/components/modals/UserModal.jsx', "'../../utils/roles.js'"],
-        ['src/Tabs/settings/security/FlsDetail.jsx', "'../../../utils/roles.js'"],
+        ['src/utils/roleAccess.js', "'./roles.js'"],
         ['scripts/check-clerk-roles.mjs', "'../src/utils/roles.js'"],
     ]) {
         const src = read(f);
@@ -146,6 +146,12 @@ test('no second role list — only src/utils/roles.js enumerates the roles', () 
         assert.ok(!/value:\s*'Technician'/.test(src), `${f} declares its own role options again`);
         assert.ok(src.includes(`from ${from}`), `${f} must take the roles from src/utils/roles.js`);
     }
+    // The Roles page carried a sixth list until §0.171 — PT_ROLES, a hand-typed
+    // five (two of them no role the app has) with invented counts. It renders
+    // roleAccess.js's rows, built from roles.js.
+    const rolesPage = read('src/Tabs/settings/people/RolesDetail.jsx').split(/\r?\n/).filter((l) => !l.trim().startsWith('//')).join('\n');
+    assert.ok(!roleList.test(rolesPage) && !/PT_ROLES|name:'Sales Rep'/.test(rolesPage), 'the Roles page declares its own roles again');
+    assert.ok(rolesPage.includes("from '../../../utils/roleAccess.js'"));
 });
 
 test("Clerk's ORG membership role is not a source for the app role", () => {

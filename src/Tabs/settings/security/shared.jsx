@@ -2,11 +2,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { T } from '../shared/tokens.js';
 
-export const SecCrumb = ({ page, onBack }) => (
+export const SecCrumb = ({ page, onBack, section = 'Security' }) => (
     <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10, fontFamily:T.sans }}>
         <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
         <span>/</span>
-        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Security</button>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>{section}</button>
         <span>/</span>
         <span style={{ color:T.ink, fontWeight:600 }}>{page}</span>
     </div>

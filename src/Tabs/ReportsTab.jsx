@@ -44,7 +44,6 @@ export default function ReportsTab({ leadsEnabled = true }) {
         getQuarterLabel,
         getStageColor,
         exportToCSV,
-        canViewField,
         isRepVisible,
         viewingRep, setViewingRep,
         viewingTeam, setViewingTeam,

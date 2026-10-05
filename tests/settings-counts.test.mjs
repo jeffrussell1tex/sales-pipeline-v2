@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { cardStateOf, fiscalYearDetail, customFieldCount, industriesDetail, fieldRuleCount, auditEventsDetail } from '../src/utils/settingsCards.js';
+import { cardStateOf, fiscalYearDetail, customFieldCount, industriesDetail, auditEventsDetail } from '../src/utils/settingsCards.js';
 import { SETTINGS_ITEMS } from '../src/Tabs/settings/catalogue.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -21,7 +21,8 @@ const detail = (id, settings = {}, live = {}) => cardStateOf(row(id), settings, 
 test('REGRESSION: with an empty settings object no card claims a number it cannot read', () => {
     for (const it of SETTINGS_ITEMS) {
         const d = cardStateOf(it, {}, {}).statusDetail;
-        assert.ok(d === null || !/\d/.test(d) || d === '0 personas' || d === '0 competitors' || d === '0 reasons', `${it.id}: "${d}"`);
+        // '6 roles' is the code's (src/utils/roles.js, §0.171) — nothing to read.
+        assert.ok(d === null || !/\d/.test(d) || d === '0 personas' || d === '0 competitors' || d === '0 reasons' || (it.id === 'roles' && d === '6 roles'), `${it.id}: "${d}"`);
     }
 });
 
@@ -73,11 +74,13 @@ test('quoting, people, security, data: real keys or nothing', () => {
     assert.equal(detail('quote-templates', { quoteTemplates: [1] }), '1 template');
     assert.equal(detail('territories', {}), null);
     assert.equal(detail('territories', { territories: [1, 2] }), '2 territories');
-    assert.equal(detail('roles', { roles: [1] }), '1 role');
+    // The six roles are the code's (§0.171): a stored 'roles' list was the mockup's, and is counted by nothing.
+    assert.equal(detail('roles', { roles: [1] }), '6 roles');
+    assert.equal(detail('roles', {}), '6 roles');
     assert.equal(detail('users', {}), null, 'no roster loaded: nothing, not "users · pending invites"');
-    assert.equal(fieldRuleCount({ arr: { User: 'hidden' }, notes: {}, phone: 'hidden' }), 2);
-    assert.equal(detail('field-visibility', { fieldVisibility: { arr: { User: 'hidden' } } }), '1 rule');
-    assert.equal(detail('field-visibility', {}), null);
+    // Per-field rules are not available (§0.171): no count of a matrix that hid nothing.
+    assert.equal(detail('field-visibility', { fieldVisibility: { arr: { User: 'Hidden' } } }), 'Not available');
+    assert.equal(cardStateOf(row('field-visibility'), {}).status, 'none');
     assert.equal(detail('features', {}), null);
     assert.equal(detail('features', { featureFlags: { a: true, b: false } }), '1 of 2 on');
     assert.equal(detail('backup', {}, {}), null);
@@ -102,7 +105,8 @@ test('the catalogue carries no typed count, no isNew, no moved — only determin
     assert.doesNotMatch(cat, /isNew:/, 'a badge that never expires');
     assert.doesNotMatch(cat, /moved:/, 'a flag nothing renders');
     for (const it of SETTINGS_ITEMS) {
-        assert.ok(it.statusDetail === null || ['Admin-defined', 'Scan on demand', 'Fit + Engagement'].includes(it.statusDetail), `${it.id}: "${it.statusDetail}"`);
+        // 'Not available' states an absence (Field-level security, §0.171) — no value behind it to go stale.
+        assert.ok(it.statusDetail === null || ['Admin-defined', 'Scan on demand', 'Fit + Engagement', 'Not available'].includes(it.statusDetail), `${it.id}: "${it.statusDetail}"`);
     }
     assert.doesNotMatch(cat, /Complete|Q1 starts Feb 1|12 holidays|users · pending invites|teams · managers|Last 30 days/, 'the old typed details');
 });

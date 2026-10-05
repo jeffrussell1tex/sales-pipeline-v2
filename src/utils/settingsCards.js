@@ -21,6 +21,7 @@
 // is not in the denominator.
 import { mfaCardOf } from './fetchStatus.js';
 import { jobsCheck } from './jobHealth.js';
+import { APP_ROLES } from './roles.js';
 
 // ── counting helpers (state §0.88) ───────────────────────────────────────────
 // Every count below reads the key the card's OWN panel saves. The catalogue
@@ -54,12 +55,6 @@ export function industriesDetail(industries) {
     return `${plural(n, 'industry', 'industries')}${subs ? ` · ${plural(subs, 'sub-type')}` : ''}`;
 }
 
-/** Field-level visibility is a matrix keyed by field; a key with any rule counts. */
-export function fieldRuleCount(matrix) {
-    if (!matrix || typeof matrix !== 'object' || Array.isArray(matrix)) return 0;
-    return Object.values(matrix).filter(v => v && (typeof v !== 'object' || Object.keys(v).length > 0)).length;
-}
-
 /** The audit-log GET is capped at 500 rows; at the cap the count is a floor, not a total. */
 export function auditEventsDetail(n) {
     if (typeof n !== 'number') return null;
@@ -87,7 +82,8 @@ export function cardStateOf(item, settings, liveCounts = {}) {
         statusDetail = teamNames.length > 0 ? `${teamNames.length} team${teamNames.length!==1?'s':''}` : null;
     }
     if (item.id === 'territories') statusDetail = countOrNull(len(settings?.territories), 'territory', 'territories');
-    if (item.id === 'roles')       statusDetail = countOrNull(len(settings?.roles), 'role');
+    // The six roles are the code's (src/utils/roles.js) — no stored list to count (§0.171).
+    if (item.id === 'roles')       statusDetail = plural(APP_ROLES.length, 'role');
     // Lead visibility — show the policy actually in force, not the static text.
     // An absent key reads as the default (visible), same as the server.
     // Deals (§0.151) default the other way: an absent key reads as hidden.
@@ -154,9 +150,6 @@ export function cardStateOf(item, settings, liveCounts = {}) {
         const tot = Object.keys(flags).length;
         statusDetail = tot > 0 ? `${on} of ${tot} on` : null;
     }
-
-    // ── Security — field-level visibility is a saved matrix ──────────────────
-    if (item.id === 'field-visibility') statusDetail = countOrNull(fieldRuleCount(settings?.fieldVisibility), 'rule');
 
     // ── Security — only show what we actually know ────────────────────────────
     if (item.id === 'sso') {

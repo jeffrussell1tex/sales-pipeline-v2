@@ -48,7 +48,9 @@ test('every replaced site goes through showConfirm / showPrompt', () => {
     assert.ok(read('src/Tabs/settings/quoting/EditBrandModal.jsx').includes("showConfirm('Discard unsaved brand changes?', onClose, false)"));
     // PriceBookDetail.jsx (two showConfirm sites) was deleted in §0.149 — the
     // Settings card now opens Quotes → Price Book, the catalog quotes draw from.
-    assert.ok(read('src/Tabs/settings/people/RolesDetail.jsx').includes("showPrompt({ title:'Rename role'"));
+    // RolesDetail's "Rename role" prompt went with the invented roles it renamed
+    // (§0.171): the page is a statement of the six real ones and renames nothing.
+    assert.ok(!/\bprompt\(|\bconfirm\(/.test(read('src/Tabs/settings/people/RolesDetail.jsx')), 'no native dialog on the Roles page');
     // The coaching note moved from the house prompt to its own dialog with a
     // picker (state §0.82; tests/coaching-notes.test.mjs pins that wiring).
     const sm = read('src/Tabs/SalesManagerTab.jsx');

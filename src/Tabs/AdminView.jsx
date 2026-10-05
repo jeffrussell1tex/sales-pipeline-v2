@@ -426,7 +426,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
         if (id === 'sso')              return <SsoDetail       onBack={onBack}/>;
         if (id === 'mfa')              return <MfaDetail       onBack={onBack}/>;
         if (id === 'session')          return <SessionDetail   onBack={onBack}/>;
-        if (id === 'field-visibility') return <FlsDetail       onBack={onBack} setSettings={setSettings} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'field-visibility') return <FlsDetail       onBack={onBack}/>;
         if (id === 'audit-log')        return <AuditDetail     onBack={onBack}/>;
 
         // Integrations detail pages
