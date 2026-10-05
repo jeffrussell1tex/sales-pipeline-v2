@@ -48,6 +48,21 @@ export const CUSTOMER_STATUS_LABELS = Object.freeze({
 });
 export const customerStatusLabel = (status) => CUSTOMER_STATUS_LABELS[status] || 'Scheduled';
 
+// How long a finished visit's status link keeps answering (state §0.172). The
+// link lived as long as its job: a completed or cancelled visit's address, its
+// technician and its company read by whoever held an old message, for good. Two
+// weeks after the visit finished — its actual end, else its last change — the
+// page answers as for a link that never was. A visit still open, or waiting on a
+// follow-up, keeps its link.
+export const STATUS_LINK_DAYS_AFTER_FINISH = 14;
+const FINISHED_STATUSES = new Set(['completed', 'cancelled']);
+export function statusLinkExpired(job, now = new Date()) {
+    if (!job || !FINISHED_STATUSES.has(job.status)) return false;
+    const ended = new Date(job.actualEnd || job.updatedAt || NaN).getTime();
+    if (!Number.isFinite(ended)) return false;
+    return now.getTime() - ended > STATUS_LINK_DAYS_AFTER_FINISH * 86400000;
+}
+
 // ── When ─────────────────────────────────────────────────────────────────────
 const DAYS   = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

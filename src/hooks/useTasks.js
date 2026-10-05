@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite } from '../utils/storage';
 
-// Fire-and-forget SMS for task assignments.
+// Fire-and-forget SMS for task assignments. The task's id only: mention-sms.mjs
+// texts its owner and words the text from the saved task (state §0.172).
 async function fireMentionSms(payload) {
     try {
         // dbfetch-ignore: an SMS notification must never block or fail the save
@@ -131,7 +132,7 @@ export function useTasks(deps) {
                 addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
                 // SMS: task reassigned to a different person
                 if (taskData.assignedTo && editingTask.assignedTo !== taskData.assignedTo) {
-                    fireMentionSms({ type: 'taskAssigned', assigneeName: taskData.assignedTo, assignedBy: taskData.createdBy || '', taskTitle: taskData.title });
+                    fireMentionSms({ type: 'taskAssigned', recordId: editingTask.id });
                 }
                 fireCalendarEvent(payload, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);
@@ -152,7 +153,7 @@ export function useTasks(deps) {
                 addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
                 // SMS: task assigned to someone on creation
                 if (taskData.assignedTo) {
-                    fireMentionSms({ type: 'taskAssigned', assigneeName: taskData.assignedTo, assignedBy: taskData.createdBy || '', taskTitle: taskData.title });
+                    fireMentionSms({ type: 'taskAssigned', recordId: newId });
                 }
                 fireCalendarEvent(newTask, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);

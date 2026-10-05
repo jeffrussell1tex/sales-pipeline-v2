@@ -74,10 +74,17 @@ test('a new row is a rep, but for a fresh org\'s first Admin (the org\'s Clerk a
     assert.ok(l.includes("            if (!anAdmin) role = 'Admin';"), 'REGRESSION: once — only while the org has no Admin row at all');
 });
 
-test('the first-load link carries an invited row\'s role by EMAIL only; Admin-only role grants; an existing row\'s role is never overwritten by a create', () => {
+test('the first-load link takes an unlinked row by the invited EMAIL only, with its role; Admin-only role grants; an existing row\'s role is never overwritten by a create', () => {
     const u = code(read('netlify/functions/users.mjs'));
-    assert.ok(u.includes('                const matchedByEmail = !!row;'), 'the email match is remembered');
-    assert.ok(u.includes("                    const linkRole = matchedByEmail && isAppRole(row.role) ? row.role : 'User';"), 'REGRESSION: a row found by display name alone hands over its role');
+    // A display-name match linked an unlinked row to whoever named themselves
+    // after it — and handed them its records (state §0.172).
+    assert.ok(!/eq\(users\.name\b/.test(u) && !/displayName/.test(u), 'REGRESSION: a roster row is looked up by name again — users.mjs filters on no name');
+    assert.ok(u.includes('                        and(eq(users.email, clerkEmail), eq(users.orgId, orgId))'), 'the invited row, by its email, in this org');
+    const lib = code(read('netlify/functions/_lib.mjs'));
+    const start = lib.indexOf('export async function ensureRosterRow(');
+    assert.ok(start >= 0, 'ensureRosterRow');
+    assert.ok(!/users\.name/.test(lib.slice(start, lib.indexOf('\n}', start))), 'nor does provisioning: the Clerk id, then the email, else a new row');
+    assert.ok(u.includes("                    const linkRole = isAppRole(row.role) ? row.role : 'User';"), 'the invited row\'s role, validated');
     assert.ok(u.includes('                                role:        linkRole,'), 'the link writes linkRole');
     assert.ok(!u.includes('realRole'), 'the old link role, from Clerk, is gone');
     assert.ok(u.includes("                if (userRole !== 'Admin' && invites.some((i) => (i.role || 'User') !== 'User')) {"), 'REGRESSION: a Manager invites an Admin — the row\'s role is the role now');

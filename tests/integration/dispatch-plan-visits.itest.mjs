@@ -5,7 +5,8 @@
 // occurrence); a deferral needs a different valid date; an unknown action, a
 // malformed date and a missing plan are refused; another org's customer is a
 // 404 and writes nothing; org B lists nothing of org A; DELETE is org-scoped
-// and idempotent; a Technician may read but not write.
+// and idempotent; a Technician reads the exceptions of their own jobs'
+// customers — with no technician row, nothing (state §0.172) — and writes none.
 //
 // Run:  npm run test:int   (needs DATABASE_URL_TEST; db/apply-plan-visits.mjs --test first)
 if (!process.env.DATABASE_URL_TEST) {
@@ -43,7 +44,7 @@ mock.module(new URL('../../netlify/functions/auth.mjs', import.meta.url).href, {
 
 const { handler } = await import('../../netlify/functions/dispatch-plan-visits.mjs');
 const { db } = await import('../../db/index.js');
-const { dispatchPlanVisits, dispatchCustomers, users, settings } = await import('../../db/schema.js');
+const { dispatchPlanVisits, dispatchCustomers, dispatchTechnicians, dispatchJobs, users, settings } = await import('../../db/schema.js');
 const { invalidateRoster } = await import('../../netlify/functions/_lib.mjs');
 const { eq } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
@@ -65,6 +66,8 @@ const rowsOf = (org) => db.select().from(dispatchPlanVisits).where(eq(dispatchPl
 const cleanup = async () => {
     for (const o of [ORG_A, ORG_B]) {
         await db.delete(dispatchPlanVisits).where(eq(dispatchPlanVisits.orgId, o));
+        await db.delete(dispatchJobs).where(eq(dispatchJobs.orgId, o));
+        await db.delete(dispatchTechnicians).where(eq(dispatchTechnicians.orgId, o));
         await db.delete(dispatchCustomers).where(eq(dispatchCustomers.orgId, o));
         await db.delete(users).where(eq(users.orgId, o));
         await db.delete(settings).where(eq(settings.orgId, o));
@@ -152,9 +155,21 @@ test('a sales rep is refused Dispatch by name while the org keeps reps out (§0.
     assert.equal((await rowsOf(ORG_A)).length, 2, 'nothing was written');
 });
 
-test('a Technician may read the exceptions but not record one', async () => {
-    assert.equal(parse(await call('GET', ORG_A, { role: 'Technician' })).status, 200);
-    const r = parse(await call('POST', ORG_A, { role: 'Technician', body: { customerId: CUST_A, planId: PLAN, dueDate: '2026-10-01', action: 'skipped' } }));
+test('a Technician reads the exceptions of their own jobs\' customers — none with no technician row — and records none (§0.172)', async () => {
+    const TECH_USER = 'clerk_itest_pv_tech';
+    const asTech = (method, extra = {}) => call(method, ORG_A, { role: 'Technician', user: TECH_USER, ...extra });
+    // No technician row linked: refused, as dispatch-customers refuses.
+    assert.equal(parse(await asTech('GET')).status, 403);
+    await db.insert(dispatchTechnicians).values({ id: 'dtech_itest_pv_me', orgId: ORG_A, firstName: 'Itest', lastName: 'Tech', userId: TECH_USER });
+    const none = parse(await asTech('GET'));
+    assert.equal(none.status, 200);
+    assert.deepEqual(none.body.visits, [], 'no job of theirs at the customer: none of its visits');
+    await db.insert(dispatchJobs).values({ id: 'djob_itest_pv_me', orgId: ORG_A, customerId: CUST_A, title: 'Itest PV job', assignedTechId: 'dtech_itest_pv_me', coTechIds: [], status: 'scheduled' });
+    const mine = parse(await asTech('GET'));
+    assert.equal(mine.status, 200);
+    assert.equal(mine.body.visits.length, (await rowsOf(ORG_A)).length, 'a job of theirs at the customer: its recorded exceptions');
+    assert.ok(mine.body.visits.every((v) => v.customerId === CUST_A));
+    const r = parse(await asTech('POST', { body: { customerId: CUST_A, planId: PLAN, dueDate: '2026-10-01', action: 'skipped' } }));
     assert.equal(r.status, 403);
     assert.equal((await rowsOf(ORG_A)).length, 2);
 });

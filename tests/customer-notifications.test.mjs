@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import {
     CUSTOMER_NOTIFICATION_DEFAULTS, cleanCustomerNotifications, notificationPlan, channelsFor,
     whenText, smsText, esc, publicStatusPath, customerStatusLabel, to12h,
+    statusLinkExpired, STATUS_LINK_DAYS_AFTER_FINISH,
 } from '../src/utils/customerNotifications.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -119,7 +120,9 @@ test('_customerNotify: the token is random and issued once, SMS without credenti
 test('dispatch-status: token-only, no-store, noindex, escaped, and every secondary read by the job\'s own org', () => {
     const s = code(read('netlify/functions/dispatch-status.mjs'));
     assert.ok(s.includes('export const TOKEN_RE = /^[A-Za-z0-9_-]{24,64}$/;'));
-    assert.ok(s.includes("const token = String(event.queryStringParameters?.t || (fromPath ? decodeURIComponent(fromPath[1]) : '')).trim();"), 'the token — from the path segment or ?t= — is the only input');
+    assert.ok(!s.includes('decodeURIComponent'), 'REGRESSION: a malformed % sequence crashes the page outside its try (§0.172)');
+    assert.ok(s.includes("        if (statusLinkExpired(job)) return notFound();"), 'a finished visit\'s link expires, answered like an unknown one');
+    assert.ok(s.includes("const token = String(event.queryStringParameters?.t || (fromPath ? fromPath[1] : '')).trim();"), 'the token — from the path segment or ?t= — is the only input');
     assert.ok(s.includes('if (!TOKEN_RE.test(token)) return notFound();'));
     assert.ok(s.includes('const [job] = await db.select().from(dispatchJobs).where(eq(dispatchJobs.publicToken, token));'), 'found by token, never by id');
     assert.ok(!/queryStringParameters\?\.(id|jobId|orgId)/.test(s), 'no id is accepted');
@@ -127,6 +130,21 @@ test('dispatch-status: token-only, no-store, noindex, escaped, and every seconda
     assert.ok(s.includes('<p class="co">${esc(company)}</p>') && s.includes("<h1>${esc(job.title || 'Service visit')}</h1>"), 'company and title are escaped');
     assert.ok(s.includes('.where(and(eq(dispatchCustomers.id, job.customerId), eq(dispatchCustomers.orgId, job.orgId)));'));
     assert.ok(!s.includes('job.id') || !s.includes('${esc(job.id)}'), 'the job id is not rendered');
+});
+
+test('statusLinkExpired: a finished visit\'s link answers for two weeks after it finished; an open one always (§0.172)', () => {
+    const now = new Date('2026-10-20T12:00:00Z');
+    const daysAgo = (n) => new Date(now.getTime() - n * 86400000);
+    assert.equal(STATUS_LINK_DAYS_AFTER_FINISH, 14);
+    assert.equal(statusLinkExpired({ status: 'completed', actualEnd: daysAgo(15), updatedAt: daysAgo(1) }, now), true, 'by its actual end');
+    assert.equal(statusLinkExpired({ status: 'completed', actualEnd: daysAgo(13) }, now), false);
+    assert.equal(statusLinkExpired({ status: 'cancelled', updatedAt: daysAgo(20) }, now), true, 'no end: its last change');
+    assert.equal(statusLinkExpired({ status: 'cancelled', updatedAt: daysAgo(2) }, now), false);
+    for (const status of ['unscheduled', 'scheduled', 'en_route', 'on_site', 'paused', 'requires_follow_up']) {
+        assert.equal(statusLinkExpired({ status, actualEnd: daysAgo(400), updatedAt: daysAgo(400) }, now), false, `${status}: still open`);
+    }
+    assert.equal(statusLinkExpired({ status: 'completed' }, now), false, 'no date to tell by: not expired');
+    assert.equal(statusLinkExpired(null, now), false);
 });
 
 test('netlify.toml: /status/:token is rewritten to the function BEFORE the SPA catch-all', () => {

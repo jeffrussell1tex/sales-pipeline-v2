@@ -1,7 +1,7 @@
 import { db } from '../../db/index.js';
 import { dispatchJobs, dispatchCustomers, dispatchTechnicians, settings } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { esc, whenText, customerStatusLabel } from '../../src/utils/customerNotifications.js';
+import { esc, whenText, customerStatusLabel, statusLinkExpired } from '../../src/utils/customerNotifications.js';
 
 // dispatch-status.mjs — the customer's public job-status page (state §0.111,
 // guide §18b35). The ONLY unauthenticated read of dispatch data in the app.
@@ -57,12 +57,18 @@ export const handler = async (event) => {
     // match on /dispatch-status/ alone missed the rewritten path. `?t=` is still
     // honoured for a direct call.
     const fromPath = String(event.path || '').match(/\/(?:status|dispatch-status)\/([^/?#]+)/);
-    const token = String(event.queryStringParameters?.t || (fromPath ? decodeURIComponent(fromPath[1]) : '')).trim();
+    // Not decoded: a token is letters, digits, _ and - only, so a % in one makes it
+    // no token — and decodeURIComponent on a malformed % sequence threw here,
+    // outside the try, so the page crashed instead of answering 404 (state §0.172).
+    const token = String(event.queryStringParameters?.t || (fromPath ? fromPath[1] : '')).trim();
     if (!TOKEN_RE.test(token)) return notFound();
 
     try {
         const [job] = await db.select().from(dispatchJobs).where(eq(dispatchJobs.publicToken, token));
         if (!job) return notFound();
+        // A finished visit's link lives two weeks after it finished (state §0.172),
+        // then answers exactly as an unknown link does.
+        if (statusLinkExpired(job)) return notFound();
 
         // Everything else is read BY THE JOB'S ORG — the token found the job, the
         // job names the org, and nothing crosses it.

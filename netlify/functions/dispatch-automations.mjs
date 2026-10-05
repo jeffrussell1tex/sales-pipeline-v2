@@ -28,7 +28,7 @@ import { sendEmail }   from './send-email.mjs';
 import { sendSlackToOrg, slackTemplates } from './send-slack.mjs';
 import { resolveOwnerId, rosterUserById } from './_lib.mjs';
 import {
-    isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, eventSubject, triggerOf,
+    isAutomationTrigger, renderMerge, taskFromAction, updateFieldPatch, eventSubject, triggerOf, dealIdOfEvent,
 } from '../../src/utils/automationEvents.js';
 
 // ── Condition evaluation ──────────────────────────────────────────────────────
@@ -157,14 +157,20 @@ const executeAction = async (action, orgId, triggerEvent, data, rule = {}) => {
             // cut wrote whatever column the rule named: an Admin's own rule
             // could set orgId and hand a deal to another tenant.
             const p = action.params || {};
-            const entityId = data.id || data.opportunity_id;
-            if (!entityId) return { type: 'update_field', status: 'skipped', reason: 'no record id' };
+            // The event's DEAL (dealIdOfEvent, state §0.172) — on a task or lead
+            // event, its deal; never the task's or the lead's own id, which wrote
+            // no row and still said ok.
+            const dealId = dealIdOfEvent(triggerEvent, data);
+            if (!dealId) return { type: 'update_field', status: 'skipped', reason: 'no deal on this event' };
             const patch = updateFieldPatch(p);
             if (!patch.ok) return { type: 'update_field', status: 'skipped', reason: patch.reason };
-            await db.update(opportunities)
+            const written = await db.update(opportunities)
                 .set({ [patch.field]: patch.value, updatedAt: new Date() })
-                .where(and(eq(opportunities.id, entityId), eq(opportunities.orgId, orgId)));
-            return { type: 'update_field', status: 'ok' };
+                .where(and(eq(opportunities.id, dealId), eq(opportunities.orgId, orgId)))
+                .returning({ id: opportunities.id });
+            return written.length
+                ? { type: 'update_field', status: 'ok' }
+                : { type: 'update_field', status: 'skipped', reason: 'the deal is not in this workspace' };
         }
 
         default:

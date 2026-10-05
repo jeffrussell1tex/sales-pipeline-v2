@@ -29,6 +29,9 @@ export async function techScopeOf(orgId, userId) {
         locationId:     dispatchJobs.locationId,
         assignedTechId: dispatchJobs.assignedTechId,
         coTechIds:      dispatchJobs.coTechIds,
+        assignedVehicleId:    dispatchJobs.assignedVehicleId,
+        assignedEquipmentIds: dispatchJobs.assignedEquipmentIds,
+        servicePlanId:        dispatchJobs.servicePlanId,
     }).from(dispatchJobs).where(eq(dispatchJobs.orgId, orgId));
     return { techId, ...techJobRefs(jobs, techId) };
 }

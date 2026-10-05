@@ -240,9 +240,13 @@ export const handler = async (event) => {
     // Lookup order, all of it scoped to THIS org:
     //   1. clerkUserId match — the normal path once a user has accepted
     //   2. Email match       — an invited row that has not been linked yet
-    //   3. Display name      — legacy fallback for hand-created rows
+    // Nothing else (state §0.172). A third step linked an unlinked row whose NAME
+    // matched the caller's Clerk display name — a name anyone types — so a member
+    // who named themselves after an unlinked row took it over, and with it every
+    // record it owns. No unlinked row but one invitation existed in any org (read
+    // 5 Oct); a person no row is addressed to by email gets their own, below.
     //
-    // On a match via email or name we LINK the row by setting clerkUserId. We do
+    // On a match via email we LINK the row by setting clerkUserId. We do
     // NOT rewrite users.id, which is what this used to do. Rewriting the primary
     // key at acceptance is how an invited user's id changed underneath anything
     // already pointed at it.
@@ -261,7 +265,6 @@ export const handler = async (event) => {
                 const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
                 const clerkUser = await clerk.users.getUser(userId);
                 const clerkEmail = clerkUser.emailAddresses?.[0]?.emailAddress?.toLowerCase() || '';
-                const displayName = ((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim();
 
                 // 2. Email match — catches invited users whose DB row has a pending_ id
                 if (clerkEmail) {
@@ -269,17 +272,9 @@ export const handler = async (event) => {
                         and(eq(users.email, clerkEmail), eq(users.orgId, orgId))
                     );
                 }
-                const matchedByEmail = !!row;
 
-                // 3. Display name fallback
-                if (!row && displayName) {
-                    [row] = await db.select().from(users).where(
-                        and(eq(users.name, displayName), eq(users.orgId, orgId))
-                    );
-                }
-
-                // Found by email or name and not yet linked: LINK it. The row keeps
-                // its id -- only clerkUserId, role and active are written.
+                // Found by the invited email and not yet linked: LINK it. The row
+                // keeps its id -- only clerkUserId, role and active are written.
                 //
                 // NOTE ON NAME. This deliberately does NOT refresh the display
                 // name from Clerk. Ownership columns still store names, so
@@ -289,14 +284,11 @@ export const handler = async (event) => {
                 // for every user on every load and must not carry it.
                 if (row && !row.clerkUserId) {
                     // The ROW's role — it is this org's, and it is what the server
-                    // enforces (state §0.163) — and only when the row was found by
-                    // the invited EMAIL: the invitation was addressed to this
-                    // person. A row found by display name alone was not, so its
-                    // role does not come with it: the caller links as a rep and an
-                    // Admin grants anything more. Never Clerk's user-level role —
-                    // one value for every org. Validated: a value that is not one
-                    // of ours authorizes nothing, so it is not carried over.
-                    const linkRole = matchedByEmail && isAppRole(row.role) ? row.role : 'User';
+                    // enforces (state §0.163) — for the row the invitation was
+                    // addressed to, found by its email. Never Clerk's user-level
+                    // role — one value for every org. Validated: a value that is not
+                    // one of ours authorizes nothing, so it is not carried over.
+                    const linkRole = isAppRole(row.role) ? row.role : 'User';
                     // A row an Admin DEACTIVATED stays off when its person first
                     // signs in (state §0.164): linking it must not switch it back
                     // on — an invited row (status Invited) is the one turned on here.

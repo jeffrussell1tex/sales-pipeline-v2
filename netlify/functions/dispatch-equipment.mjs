@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
+import { techScopeOf } from './_techScope.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -52,9 +53,16 @@ export const handler = async (event) => {
     try {
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
+            // A Technician reads the equipment checked out to them or to one of
+            // their jobs, or reserved for one (state §0.172) — they read it all.
+            const tech = gate.access === 'tech' ? await techScopeOf(orgId, auth.userId) : null;
+            if (gate.access === 'tech' && !tech) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No technician record is linked to your account.' }) };
             const rows = await db.select().from(dispatchEquipment)
                 .where(eq(dispatchEquipment.orgId, orgId));
-            return { statusCode: 200, headers, body: JSON.stringify({ equipment: rows.map(normalise) }) };
+            const visible = tech
+                ? rows.filter((e) => e.checkedOutToId === tech.techId || tech.jobIds.has(e.checkedOutJobId) || tech.reservedEquipmentIds.has(e.id))
+                : rows;
+            return { statusCode: 200, headers, body: JSON.stringify({ equipment: visible.map(normalise) }) };
         }
 
         // ── POST: create ──────────────────────────────────────────────────────

@@ -214,17 +214,26 @@ const isoDate = (d) => isoLocal(new Date(d));
  *   - a deal event links the task to the deal (opportunityId AND relatedTo —
  *     the rail reads both); a task event carries the deal id it already had
  */
+// The deal an event is about — a deal event's own id; a task's or a lead's
+// deal (`opportunity_id`), never their own id. One rule for both actions that
+// touch a deal (state §0.172): update_field read `data.id || data.opportunity_id`,
+// so on a task or lead event it wrote a deal with the TASK'S id — none — and the
+// run said ok.
+export function dealIdOfEvent(triggerEvent, data) {
+    const d = data && typeof data === 'object' ? data : {};
+    return triggerOf(triggerEvent)?.entity === 'opportunity' ? (d.id || null) : (d.opportunity_id || null);
+}
+
 export function taskFromAction(action, triggerEvent, data, { now = new Date(), id } = {}) {
     const p = (action && action.params && typeof action.params === 'object') ? action.params : {};
     const d = data && typeof data === 'object' ? data : {};
-    const trig = triggerOf(triggerEvent);
     const subject = eventSubject(d);
     const title = str(p.title, 500) || `Follow up — ${subject || triggerEvent}`;
     const offset = num(p.dueOffsetDays);
     const dueDate = offset !== null && offset >= 0 ? isoDate(now.getTime() + Math.floor(offset) * 86400000) : null;
     const assignedTo = str(p.assignedTo, 255) || str(d.sales_rep, 255) || str(d.assigned_to, 255) || null;
     const priority = TASK_PRIORITIES.includes(p.priority) ? p.priority : 'Medium';
-    const dealId = trig?.entity === 'opportunity' ? (d.id || null) : (d.opportunity_id || null);
+    const dealId = dealIdOfEvent(triggerEvent, d);
     return {
         id:            id || `task_auto_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         title:         renderMerge(title, d),

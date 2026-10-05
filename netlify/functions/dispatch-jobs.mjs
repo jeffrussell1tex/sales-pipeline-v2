@@ -351,8 +351,12 @@ export const handler = async (event) => {
                 parentJobId:      data.parentJobId       ?? null,
                 tags:             JSON.stringify(data.tags         ?? []),
                 customFields:     JSON.stringify(data.customFields ?? {}),
-                createdBy:        data.createdBy         ?? userId ?? null,
-                dispatchedBy:     data.dispatchedBy      ?? null,
+                // Who made it is the caller, stamped here — the body named anyone
+                // (state §0.172) — and POST is an upsert, so a re-POST of a job keeps
+                // the first create's. Nothing stamps dispatchedBy: the status
+                // history records who moved each status, server-side.
+                createdBy:        priorJob ? (priorJob.createdBy ?? null) : (userId ?? null),
+                dispatchedBy:     priorJob ? (priorJob.dispatchedBy ?? null) : null,
                 createdAt:        new Date(),
                 updatedAt:        new Date(),
             });
@@ -452,7 +456,9 @@ export const handler = async (event) => {
                 // they mirror the job's invoice and only invoices.mjs writes them (§18b44).
                 'customerPoNumber',
                 'techNotes','completionNotes','customerSignature','photosCount',
-                'requiresFollowUp','followUpJobId','parentJobId','createdBy','dispatchedBy',
+                'requiresFollowUp','followUpJobId','parentJobId',
+                // createdBy / dispatchedBy deliberately absent: attribution is the
+                // server's, never a body's to rewrite (state §0.172).
             ];
             scalarFields.forEach(f => { if (f in data) updates[f] = data[f]; });
             // trade and jobType are NOT NULL ('' is "none", as create writes). The

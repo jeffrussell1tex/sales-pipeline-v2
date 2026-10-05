@@ -30,12 +30,24 @@ export function coTechIdsOf(job) {
 export const techOnJob = (job, techId) =>
     !!techId && (job?.assignedTechId === techId || coTechIdsOf(job).includes(techId));
 
-// The jobs, customers and service locations a technician reaches through their jobs.
+// A job's reserved equipment units (§0.116) — written through JSON.stringify as
+// the co-tech list is, so read by the same parser. A job's equipmentIds, despite
+// the name, holds the KINDS it needs (dispatch_equipment.category values), not
+// units: it reaches no unit.
+const storedIdsOf = (v) => coTechIdsOf({ coTechIds: v });
+
+// The jobs, customers and service locations a technician reaches through their
+// jobs — and, since §0.172, the vehicle, the reserved equipment units and the
+// service plan their jobs carry: a Technician read every vehicle, every piece of
+// equipment, every plan and every customer's plan visits.
 export function techJobRefs(jobs, techId) {
     const mine = (jobs || []).filter((j) => techOnJob(j, techId));
     return {
         jobIds:      new Set(mine.map((j) => j.id)),
         customerIds: new Set(mine.map((j) => j.customerId).filter(Boolean)),
         locationIds: new Set(mine.map((j) => j.locationId).filter(Boolean)),
+        vehicleIds:           new Set(mine.map((j) => j.assignedVehicleId).filter(Boolean)),
+        reservedEquipmentIds: new Set(mine.flatMap((j) => storedIdsOf(j.assignedEquipmentIds)).filter(Boolean)),
+        servicePlanIds:       new Set(mine.map((j) => j.servicePlanId).filter(Boolean)),
     };
 }

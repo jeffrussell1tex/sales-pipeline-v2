@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite } from '../utils/storage';
 
-// Fire-and-forget SMS for deal assignments and stage changes.
-// Calls mention-sms.mjs which resolves assignee prefs server-side.
+// Fire-and-forget SMS for deal assignments and stage changes. The event and
+// the deal's id only: mention-sms.mjs texts the deal's owner, words the text
+// from the saved deal and signs it with the caller's name (state §0.172).
 async function fireMentionSms(payload) {
     try {
         // dbfetch-ignore: an SMS notification must never block or fail the save
@@ -140,7 +141,7 @@ export function useOpportunities(deps) {
                     addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
                     // SMS: rep reassigned
                     if (enrichedData.salesRep && prevOpp?.salesRep !== enrichedData.salesRep) {
-                        fireMentionSms({ type: 'dealAssigned', assigneeName: enrichedData.salesRep, assignedBy: currentUser, dealName: enrichedData.opportunityName || enrichedData.account, account: enrichedData.account });
+                        fireMentionSms({ type: 'dealAssigned', recordId: editingOpp.id });
                     }
                     // SPIFF: offer a claim on any Closed Won save that still has
                     // an unclaimed active SPIFF. deps.onDealWon no-ops when there
@@ -151,9 +152,9 @@ export function useOpportunities(deps) {
                     // SMS: stage changed
                     if (stageChanged && enrichedData.salesRep) {
                         if (enrichedData.stage === 'Closed Won') {
-                            fireMentionSms({ type: 'dealClosedWon', assigneeName: enrichedData.salesRep, assignedBy: currentUser, dealName: enrichedData.opportunityName || enrichedData.account, account: enrichedData.account, arr: enrichedData.arr });
+                            fireMentionSms({ type: 'dealClosedWon', recordId: editingOpp.id });
                         } else {
-                            fireMentionSms({ type: 'stageChanged', assigneeName: enrichedData.salesRep, assignedBy: currentUser, dealName: enrichedData.opportunityName || enrichedData.account, fromStage: prevOpp?.stage, toStage: enrichedData.stage });
+                            fireMentionSms({ type: 'stageChanged', recordId: editingOpp.id });
                         }
                     }
                     setShowModal(false); setOppModalError(null);
@@ -172,7 +173,7 @@ export function useOpportunities(deps) {
                     addAudit('create', 'opportunity', newId, enrichedData.opportunityName || enrichedData.account || newId, enrichedData.account || '');
                     // SMS: deal assigned to rep on creation
                     if (enrichedData.salesRep) {
-                        fireMentionSms({ type: 'dealAssigned', assigneeName: enrichedData.salesRep, assignedBy: currentUser, dealName: enrichedData.opportunityName || enrichedData.account, account: enrichedData.account });
+                        fireMentionSms({ type: 'dealAssigned', recordId: newId });
                     }
                     setShowModal(false); setOppModalError(null);
                 })

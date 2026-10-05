@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
+import { techScopeOf } from './_techScope.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -55,9 +56,16 @@ export const handler = async (event) => {
     try {
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
+            // A Technician reads their own vehicle and those on their jobs (state
+            // §0.172) — they read the fleet.
+            const tech = gate.access === 'tech' ? await techScopeOf(orgId, auth.userId) : null;
+            if (gate.access === 'tech' && !tech) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No technician record is linked to your account.' }) };
             const rows = await db.select().from(dispatchVehicles)
                 .where(eq(dispatchVehicles.orgId, orgId));
-            return { statusCode: 200, headers, body: JSON.stringify({ vehicles: rows.map(normalise) }) };
+            const visible = tech
+                ? rows.filter((v) => v.assignedTechId === tech.techId || tech.vehicleIds.has(v.id))
+                : rows;
+            return { statusCode: 200, headers, body: JSON.stringify({ vehicles: visible.map(normalise) }) };
         }
 
         // ── POST ──────────────────────────────────────────────────────────────

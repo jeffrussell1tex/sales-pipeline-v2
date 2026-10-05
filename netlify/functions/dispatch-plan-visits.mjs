@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, resolveCaller, auditAs } from './_lib.mjs';
+import { techScopeOf } from './_techScope.mjs';
 import { randomUUID } from 'crypto';
 import { isYmd } from '../../src/utils/planVisits.js';
 
@@ -57,10 +58,15 @@ export const handler = async (event) => {
 
     try {
         if (event.httpMethod === 'GET') {
+            // A Technician reads the plan visits of their jobs' customers (state
+            // §0.172) — they read every customer's.
+            const tech = gate.access === 'tech' ? await techScopeOf(orgId, auth.userId) : null;
+            if (gate.access === 'tech' && !tech) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No technician record is linked to your account.' }) };
             const clauses = [eq(dispatchPlanVisits.orgId, orgId)];
             if (params.customerId) clauses.push(eq(dispatchPlanVisits.customerId, params.customerId));
             const rows = await db.select().from(dispatchPlanVisits).where(and(...clauses));
-            return { statusCode: 200, headers, body: JSON.stringify({ visits: rows.map(normalise) }) };
+            const visible = tech ? rows.filter((v) => tech.customerIds.has(v.customerId)) : rows;
+            return { statusCode: 200, headers, body: JSON.stringify({ visits: visible.map(normalise) }) };
         }
 
         if (event.httpMethod === 'POST') {

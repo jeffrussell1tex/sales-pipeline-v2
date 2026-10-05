@@ -14,6 +14,7 @@ import {
     AUTOMATION_TRIGGERS, TRIGGER_GROUPS, TRIGGER_VALUES, HOURLY_TRIGGERS, triggerOf, isAutomationTrigger,
     EVENT_FIELDS, conditionFields, dealEventData, leadEventData, taskEventData, renderMerge, eventSubject,
     taskFromAction, TASK_PRIORITIES, UPDATABLE_OPPORTUNITY_FIELDS, UPDATABLE_FIELD_OPTIONS, updateFieldPatch,
+    dealIdOfEvent,
 } from '../src/utils/automationEvents.js';
 import { assigneeOptions, assigneeParams, automationSlackMessage } from '../src/utils/automationEvents.js';
 import { isoLocal } from '../src/utils/dateLocal.js';
@@ -181,12 +182,30 @@ test('the engine refuses an unknown trigger, builds the task from the shared mod
     assert.ok(s.includes('            const patch = updateFieldPatch(p);'));
     assert.ok(s.includes("            if (!patch.ok) return { type: 'update_field', status: 'skipped', reason: patch.reason };"));
     assert.ok(s.includes('                .set({ [patch.field]: patch.value, updatedAt: new Date() })'), 'only the allowlisted field, coerced');
-    assert.ok(s.includes('                .where(and(eq(opportunities.id, entityId), eq(opportunities.orgId, orgId)));'));
+    // The event's DEAL (§0.172): a task or lead event wrote a deal with its own id — none — and said ok.
+    assert.ok(s.includes('            const dealId = dealIdOfEvent(triggerEvent, data);'));
+    assert.ok(s.includes('                .where(and(eq(opportunities.id, dealId), eq(opportunities.orgId, orgId)))'));
+    assert.ok(s.includes("                : { type: 'update_field', status: 'skipped', reason: 'the deal is not in this workspace' };"), 'no row written is not ok');
+    assert.ok(s.includes("            return written.length\n                ? { type: 'update_field', status: 'ok' }\n                : { type: 'update_field', status: 'skipped'"), 'ok only when a deal of this org was written');
+    assert.ok(s.includes("            if (!dealId) return { type: 'update_field', status: 'skipped', reason: 'no deal on this event' };"), 'an event with no deal writes nothing, and says so');
+    assert.ok(!s.includes('data.id || data.opportunity_id'), 'REGRESSION: the event\'s own id as a deal id');
     assert.ok(!s.includes('[p.field]: p.value'), 'REGRESSION: the column name from the rule is never written');
     assert.ok(!s.includes("await import('../../db/schema.js')"), 'no dynamic import');
     // the run counter is org-scoped
     assert.ok(s.includes('                    .where(and(eq(automations.id, rule.id), eq(automations.orgId, orgId))),'));
     assert.ok(!/db\.update\(automations\)[\s\S]{0,200}\.where\(eq\(automations\.id, rule\.id\)\)/.test(s));
+});
+
+test('dealIdOfEvent: a deal event is its own id; a task or lead event carries its deal — never its own id (§0.172)', () => {
+    assert.equal(dealIdOfEvent('opportunity.won', { id: 'opp_1', opportunity_id: 'opp_x' }), 'opp_1');
+    assert.equal(dealIdOfEvent('opportunity.silent', { id: 'opp_2' }), 'opp_2');
+    assert.equal(dealIdOfEvent('task.completed', { id: 'task_1', opportunity_id: 'opp_3' }), 'opp_3');
+    assert.equal(dealIdOfEvent('task.overdue', { id: 'task_2' }), null, 'a task with no deal names none — not itself');
+    assert.equal(dealIdOfEvent('lead.converted', { id: 'lead_1' }), null);
+    assert.equal(dealIdOfEvent('task.completed', null), null);
+    // The task action reads the same rule.
+    const row = taskFromAction({ params: { title: 'x' } }, 'task.completed', { id: 'task_9', opportunity_id: 'opp_9' }, { id: 't' });
+    assert.equal(row.opportunityId, 'opp_9');
 });
 
 test('org-scoping scans the engine now (it was on the skip list); tasks.itest stubs it like every other suite', () => {

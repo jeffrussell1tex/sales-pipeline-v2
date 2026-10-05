@@ -1,32 +1,31 @@
 /**
- * mention-sms.mjs — On-occurrence SMS for deal and task assignments
+ * mention-sms.mjs — the text a member gets when a deal or a task is assigned to
+ * them, a deal of theirs changes stage, or one is won (state §0.172).
  *
+ * The browser names the event and the record — { type, recordId } — and nothing
+ * else. The server loads the record in the caller's org, refuses a caller who
+ * could not have saved it, texts the record's OWNER (by users.id, never a name),
+ * signs the text with the caller's roster name, and words it from the stored
+ * fields — and only for an event the record bears out (a win is a deal in Closed
+ * Won; a stage change is the deal's last recorded move).
+ *
+ * Until §0.172 the body carried the recipient's NAME and every word of the
+ * message: any signed-in member, a read-only one included, could have the org's
+ * Twilio number text any colleague with mention texts on, saying anything, under
+ * any name; and a name two members share texted whichever row came back first.
+ *
+ * POST body: { type: 'dealAssigned' | 'stageChanged' | 'dealClosedWon' | 'taskAssigned', recordId }
  * Called fire-and-forget from the browser hooks (useOpportunities, useTasks)
- * immediately after a successful DB save. Looks up the assignee's SMS prefs
- * from the users table, then sends via Twilio if they have it enabled.
- *
- * Protected by Clerk JWT (verifyAuth) — only authenticated org members can call it.
- *
- * POST body:
- * {
- *   type:        'dealAssigned' | 'taskAssigned' | 'stageChanged' | 'dealClosedWon'
- *   assigneeName: string   — name of the user being notified (must match users.name)
- *   assignedBy:   string   — name of the person who made the change
- *   dealName:     string   — opportunity name (for deal events)
- *   taskTitle:    string   — task title (for task events)
- *   account:      string   — account name
- *   fromStage:    string   — previous stage (stageChanged only)
- *   toStage:      string   — new stage (stageChanged only)
- *   arr:          number   — ARR value (dealClosedWon only)
- * }
+ * after a successful save.
  */
 
 import { db } from '../../db/index.js';
-import { users } from '../../db/schema.js';
+import { users, opportunities, tasks } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
+import { verifyAuth, requireWrite } from './auth.mjs';
 import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { serverErrorBody, getCallerName, assertOwnership } from './_lib.mjs';
+import { MENTION_EVENTS, lastMoveOf } from './_mentions.mjs';
 
 export const handler = async (event) => {
     const headers = {
@@ -41,41 +40,47 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     }
 
-    // Auth — must be a valid org member
     const auth = await verifyAuth(event);
     if (auth.error) {
         return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     }
-    const { orgId } = auth;
+    // Only the roles that change CRM records send these — the save they follow
+    // is one of theirs.
+    const forbidden = requireWrite(auth, event, headers);
+    if (forbidden) return forbidden;
+    const { orgId, userId, userRole } = auth;
 
     try {
-        const {
-            type,
-            assigneeName,
-            assignedBy,
-            dealName,
-            taskTitle,
-            account,
-            fromStage,
-            toStage,
-            arr,
-        } = JSON.parse(event.body || '{}');
+        const { type, recordId } = JSON.parse(event.body || '{}');
+        const entity = MENTION_EVENTS[type];
+        if (!entity) return { statusCode: 400, headers, body: JSON.stringify({ error: `Unknown type: ${type}` }) };
+        if (!recordId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'recordId is required' }) };
 
-        if (!type || !assigneeName) {
-            return { statusCode: 400, headers, body: JSON.stringify({ error: 'type and assigneeName are required' }) };
+        const table = entity === 'opportunity' ? opportunities : tasks;
+        const [record] = await db.select().from(table)
+            .where(and(eq(table.id, String(recordId)), eq(table.orgId, orgId)));
+        if (!record) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+
+        // A caller who could not have saved the record sends nothing about it.
+        const denied = await assertOwnership({ table, entity, id: record.id, orgId, userId, userRole, headers, row: record });
+        if (denied) return denied;
+
+        // The event must be one the record bears out.
+        let move = null;
+        if (type === 'dealClosedWon' && record.stage !== 'Closed Won') {
+            return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'not_won' }) };
+        }
+        if (type === 'stageChanged') {
+            move = lastMoveOf(record);
+            if (!move) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'no_stage_change' }) };
         }
 
-        // Look up the assignee in this org
-        const matchedUsers = await db.select().from(users)
-            .where(and(eq(users.orgId, orgId), eq(users.name, assigneeName)))
-            .limit(1);
-
-        if (matchedUsers.length === 0) {
-            console.log(`mention-sms: no user found for name "${assigneeName}" in org ${orgId}`);
-            return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'user_not_found' }) };
-        }
-
-        const user = matchedUsers[0];
+        // The recipient is the record's owner — an id, never a name.
+        if (!record.ownerId) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'unassigned' }) };
+        const [user] = await db.select().from(users)
+            .where(and(eq(users.id, record.ownerId), eq(users.orgId, orgId)));
+        if (!user) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'user_not_found' }) };
+        if (user.active === false) return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'inactive' }) };
 
         // Resolve SMS prefs — flat on user row first, fallback to user.profile
         const profile          = user.profile || {};
@@ -85,70 +90,44 @@ export const handler = async (event) => {
         const smsPhone         = mobile || phone;
 
         if (!smsNotifications.enabled) {
-            console.log(`mention-sms: SMS disabled for ${assigneeName}`);
             return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'sms_disabled' }) };
         }
-
         if (!smsNotifications.mentions) {
-            console.log(`mention-sms: mentions SMS disabled for ${assigneeName}`);
             return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'mentions_disabled' }) };
         }
-
         if (!smsPhone) {
-            console.log(`mention-sms: no phone number for ${assigneeName}`);
             return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'no_phone' }) };
         }
-
         const normalizedPhone = normalizePhone(smsPhone);
         if (!normalizedPhone) {
-            console.warn(`mention-sms: invalid phone "${smsPhone}" for ${assigneeName}`);
+            console.warn(`mention-sms: invalid phone on ${user.id}`);
             return { statusCode: 200, headers, body: JSON.stringify({ skipped: 'invalid_phone' }) };
         }
 
-        // Build the SMS body based on event type
+        // Every word below is the server's: the record's stored fields, the
+        // recipient's roster name, the caller's roster name.
+        const by       = (await getCallerName(userId, orgId)) || 'Someone';
+        const repName  = user.name || 'there';
+        const dealName = record.opportunityName || record.account || 'a deal';
         let body;
         switch (type) {
             case 'dealAssigned':
-                body = smsTemplates.dealAssigned({
-                    repName:    assigneeName,
-                    dealName:   dealName || 'a deal',
-                    account:    account  || '',
-                    assignedBy: assignedBy || 'Someone',
-                });
-                break;
-            case 'taskAssigned':
-                body = smsTemplates.taskReminder({
-                    repName:   assigneeName,
-                    taskTitle: taskTitle || 'a task',
-                    dueDate:   '',   // not shown for assignment — just the title
-                    dueTime:   null,
-                });
-                // Override with a cleaner assignment message
-                body = `Accelerep: ${assignedBy || 'Someone'} assigned you a task — "${taskTitle || 'Untitled'}"\nView: ${process.env.APP_URL || 'https://salespipelinetracker.com'}?tab=tasks`;
+                body = smsTemplates.dealAssigned({ repName, dealName, account: record.account || '', assignedBy: by });
                 break;
             case 'stageChanged':
-                body = smsTemplates.stageChanged({
-                    dealName:  dealName  || 'a deal',
-                    fromStage: fromStage || '—',
-                    toStage:   toStage   || '—',
-                    changedBy: assignedBy || 'Someone',
-                });
+                body = smsTemplates.stageChanged({ dealName, fromStage: move.fromStage, toStage: move.toStage, changedBy: by });
                 break;
             case 'dealClosedWon':
-                body = smsTemplates.dealClosedWon({
-                    repName:  assigneeName,
-                    dealName: dealName || 'a deal',
-                    account:  account  || '',
-                    arr:      arr      || 0,
-                });
+                body = smsTemplates.dealClosedWon({ repName, dealName, account: record.account || '', arr: Number(record.arr) || 0 });
                 break;
-            default:
-                return { statusCode: 400, headers, body: JSON.stringify({ error: `Unknown type: ${type}` }) };
+            case 'taskAssigned':
+                body = `Accelerep: ${by} assigned you a task — "${record.title || 'Untitled'}"\nView: ${process.env.APP_URL || 'https://salespipelinetracker.com'}?tab=tasks`;
+                break;
         }
 
         await sendSms({ to: normalizedPhone, body });
-        console.log(`mention-sms: sent ${type} → ${normalizedPhone} (${assigneeName})`);
-        return { statusCode: 200, headers, body: JSON.stringify({ success: true, type, to: normalizedPhone }) };
+        console.log(`mention-sms: sent ${type} for ${record.id} to ${user.id}`);
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true, type }) };
 
     } catch (err) {
         console.error('mention-sms error:', err.message);

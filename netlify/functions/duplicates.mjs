@@ -1,8 +1,9 @@
 import { db } from '../../db/index.js';
 import { accounts, contacts } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { verifyAuth } from './auth.mjs';
-import { serverErrorBody } from './_lib.mjs';
+import { verifyAuth, requireRole } from './auth.mjs';
+import { serverErrorBody, getCallerId } from './_lib.mjs';
+import { crmReadScope } from '../../src/utils/roles.js';
 
 // ── Duplicate detection for a site-based account model ─────────────────────────
 // Accelerep customers model accounts per site/location: a parent company (e.g.
@@ -202,8 +203,28 @@ export const handler = async (event) => {
     try {
         const q = event.queryStringParameters || {};
         const entityType = q.entityType || 'account';
+
+        // Who may look (state §0.172). This read every account and contact in the
+        // org for any member and answered with their names, emails and phones — a
+        // rep, or a Technician who reads no CRM record at all, could surface
+        // records the CRM reads never show them. The org-wide scan feeds the merge,
+        // which is an Admin's or a Manager's (merge.mjs), and opens only in
+        // Settings; the on-create probe looks only where the caller may read —
+        // crmReadScope, the six CRM reads' own rule. A rep is not warned about a
+        // duplicate another rep owns: that is the price of not showing it to them.
+        if (q.mode !== 'create') {
+            const denied = requireRole(auth, ['Admin', 'Manager'], headers);
+            if (denied) return denied;
+        }
+        const scope = crmReadScope(auth.userRole);
+        if (scope === 'none') return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) };
+        const callerId = scope === 'own' ? await getCallerId(auth.userId, orgId) : null;
+        // The accounts and contacts reads' own predicate: an owned row is its
+        // owner's, an unassigned one everyone's.
+        const readable = (r) => scope === 'all' || !r.ownerId || r.ownerId === callerId;
+
         if (entityType === 'contact') {
-            const rows = (await db.select().from(contacts).where(eq(contacts.orgId, orgId))).filter(c => !c.mergeArchived);
+            const rows = (await db.select().from(contacts).where(eq(contacts.orgId, orgId))).filter(c => !c.mergeArchived && readable(c));
 
             if (q.mode === 'create') {
                 const probe = { firstName: q.firstName || '', lastName: q.lastName || '', email: q.email || '', company: q.company || '', phone: q.phone || '', mobile: q.mobile || '', id: '__probe__' };
@@ -240,7 +261,7 @@ export const handler = async (event) => {
         }
 
         const rows = (await db.select().from(accounts).where(eq(accounts.orgId, orgId)))
-            .filter(a => !a.mergeArchived);
+            .filter(a => !a.mergeArchived && readable(a));
 
         // ── On-create lookup — returns both tiers split out ──────────────────────
         if (q.mode === 'create') {

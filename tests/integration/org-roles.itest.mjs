@@ -204,7 +204,7 @@ test('user-role changes ONE org\'s row and writes nothing to Clerk; an invited r
     assert.equal(self.status, 400, 'an Admin cannot demote themselves');
 });
 
-test('the first-load link: an invited row is claimed by EMAIL with its role; a row matched by NAME alone links as a rep', async () => {
+test('the first-load link: an invited row is claimed by EMAIL with its role; a row matched by NAME alone is not taken — the twin gets their own', async () => {
     await db.insert(users).values([
         { id: 'usr_itest_orgrole_inv', orgId: ORG_A, clerkUserId: null, name: 'Invited Person', email: 'invited@itest-orgrole.local', role: 'Manager', active: false, profile: { status: 'Invited' } },
         { id: 'usr_itest_orgrole_twin', orgId: ORG_A, clerkUserId: null, name: 'Name Twin', email: 'twin-original@itest-orgrole.local', role: 'Admin', active: false, profile: { status: 'Invited' } },
@@ -223,9 +223,23 @@ test('the first-load link: an invited row is claimed by EMAIL with its role; a r
     person(TWIN, 'someone-else@itest-orgrole.local', 'Name', 'Twin');
     const twin = parse(await usersHandler(ev(tokenFor(TWIN, ORG_A), 'GET', undefined, { me: 'true' })));
     assert.equal(twin.status, 200);
-    assert.equal(twin.body.user.id, 'usr_itest_orgrole_twin', 'the name match still links (the legacy rows rely on it)');
-    assert.equal(twin.body.user.role, 'User', 'REGRESSION: a row found by display name alone does not hand over its Admin role');
-    assert.equal((await rowOf('usr_itest_orgrole_twin', ORG_A)).role, 'User');
+    // A display name is whatever a person types (state §0.172): matching on it
+    // handed an unlinked row — and every record it owns — to its namesake.
+    assert.notEqual(twin.body.user.id, 'usr_itest_orgrole_twin', 'REGRESSION: a row matched by display name alone is taken over');
+    assert.equal(twin.body.user.role, 'User', 'the namesake gets a row of their own, as a rep');
+    const untouched = await rowOf('usr_itest_orgrole_twin', ORG_A);
+    assert.equal(untouched.clerkUserId, null, 'the unlinked row stays unlinked');
+    assert.equal(untouched.role, 'Admin', 'and keeps its role');
+
+    // A stored role that is not one of ours — 'Sales Rep' is the label, never a
+    // stored role — authorizes nothing: the link writes a rep (state §0.163).
+    await db.insert(users).values({ id: 'usr_itest_orgrole_oddrole', orgId: ORG_A, clerkUserId: null, name: 'Odd Role', email: 'oddrole@itest-orgrole.local', role: 'Sales Rep', active: false, profile: { status: 'Invited' } });
+    const ODD = 'user_itest_orgrole_oddrole';
+    person(ODD, 'oddrole@itest-orgrole.local', 'Odd', 'Role');
+    const odd = parse(await usersHandler(ev(tokenFor(ODD, ORG_A), 'GET', undefined, { me: 'true' })));
+    assert.equal(odd.body.user.id, 'usr_itest_orgrole_oddrole', 'claimed by its email');
+    assert.equal(odd.body.user.role, 'User', 'REGRESSION: a stored role that is not one of ours is carried over');
+    assert.equal((await rowOf('usr_itest_orgrole_oddrole', ORG_A)).role, 'User', 'and the row says so');
 });
 
 test('FIRST ADMIN: a fresh org\'s Clerk admin is its first Admin, once; Clerk\'s user-level Admin is not', async () => {

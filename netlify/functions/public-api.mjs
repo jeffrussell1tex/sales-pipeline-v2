@@ -295,7 +295,9 @@ export const handler = async (event) => {
             // Org-scoped filters pushed to the DB (filter + count + page in SQL)
             const conds = [eq(activities.orgId, orgId)];
             if (params.type) conds.push(eq(activities.type, params.type));
-            if (params.rep) conds.push(eq(activities.rep, params.rep));
+            // An activity names its rep as `author` — there is no `rep` column, and
+            // filtering on one failed the request (state §0.172).
+            if (params.rep) conds.push(eq(activities.author, params.rep));
             const whereExpr = and(...conds);
 
             const [{ total }] = await db
@@ -311,17 +313,21 @@ export const handler = async (event) => {
                 .limit(limit)
                 .offset(offset);
 
+            // The activities table's own columns (state §0.172). description, rep,
+            // account and durationMinutes are no column of it: those keys were
+            // always undefined, so JSON dropped them and no caller ever got them.
             const shaped = paged.map(r => ({
                 id:               r.id,
                 type:             r.type,
                 subject:          r.subject,
-                description:      r.description,
-                rep:              r.rep,
-                account:          r.account,
+                notes:            r.notes,
+                rep:              r.author,
+                account_id:       r.accountId,
                 opportunity_id:   r.opportunityId,
                 contact_id:       r.contactId,
+                lead_id:          r.leadId,
                 date:             r.date,
-                duration_minutes: r.durationMinutes,
+                duration_minutes: r.duration,
                 outcome:          r.outcome,
                 created_at:       r.createdAt,
                 updated_at:       r.updatedAt,
@@ -402,6 +408,8 @@ export const handler = async (event) => {
                 .limit(limit)
                 .offset(offset);
 
+            // The tasks table's own columns (state §0.172). account, notes and
+            // completedAt are no column of it — always undefined, never sent.
             const shaped = paged.map(r => ({
                 id:              r.id,
                 title:           r.title,
@@ -409,11 +417,13 @@ export const handler = async (event) => {
                 status:          r.status,
                 priority:        r.priority,
                 due_date:        r.dueDate,
+                due_time:        r.dueTime,
                 assigned_to:     r.assignedTo,
                 opportunity_id:  r.opportunityId,
-                account:         r.account,
-                notes:           r.notes,
-                completed_at:    r.completedAt,
+                account_id:      r.accountId,
+                contact_id:      r.contactId,
+                description:     r.description,
+                completed_date:  r.completedDate,
                 created_at:      r.createdAt,
                 updated_at:      r.updatedAt,
             }));

@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 import { dispatchGate } from './_dispatchGate.mjs';
 import { serverErrorBody, auditAs } from './_lib.mjs';
+import { techScopeOf } from './_techScope.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -99,9 +100,14 @@ export const handler = async (event) => {
     try {
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
+            // A Technician reads the plans their jobs belong to (state §0.172) —
+            // they read the org's catalogue, prices and discounts included.
+            const tech = gate.access === 'tech' ? await techScopeOf(orgId, auth.userId) : null;
+            if (gate.access === 'tech' && !tech) return { statusCode: 403, headers, body: JSON.stringify({ error: 'No technician record is linked to your account.' }) };
             const rows = await db.select().from(dispatchServicePlans)
                 .where(eq(dispatchServicePlans.orgId, orgId));
-            return { statusCode: 200, headers, body: JSON.stringify({ plans: rows.map(normalise) }) };
+            const visible = tech ? rows.filter((p) => tech.servicePlanIds.has(p.id)) : rows;
+            return { statusCode: 200, headers, body: JSON.stringify({ plans: visible.map(normalise) }) };
         }
 
         // ── POST: create (upsert on id, so a seeded import is idempotent) ─────
