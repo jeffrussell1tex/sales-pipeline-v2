@@ -1,59 +1,67 @@
 import { useState } from 'react';
+import { useOrgBoundState, resetAllOf } from './useOrgBoundState';
 import { isoLocal, todayLocal } from '../utils/dateLocal';
 
 export function useCalendarState() {
+    // The values below that hold the org's events, connections, deals or a rep
+    // belong to the org on screen (state §0.174): registered with
+    // useOrgBoundState, and put back by resetOnOrgSwitch when the org switches.
+    // The view's choices (the view, the offset, the toggles, the provider and the
+    // log-from-calendar dates) stay plain useState.
+    const resets = [];
     // Calendar strip
-    const [calendarEvents, setCalendarEvents] = useState([]);
-    const [calendarLoading, setCalendarLoading] = useState(false);
-    const [calendarError, setCalendarError] = useState(null);
-    const [calendarConnected, setCalendarConnected] = useState(false);
+    const [calendarEvents, setCalendarEvents] = useOrgBoundState(resets, []);
+    const [calendarLoading, setCalendarLoading] = useOrgBoundState(resets, false);
+    const [calendarError, setCalendarError] = useOrgBoundState(resets, null);
+    const [calendarConnected, setCalendarConnected] = useOrgBoundState(resets, false);
 
     // Calendar view
     const [calView, setCalView] = useState('week');
     const [calOffset, setCalOffset] = useState(0);
-    const [showCalConfig, setShowCalConfig] = useState(false);
+    const [showCalConfig, setShowCalConfig] = useOrgBoundState(resets, false);
     const [calShowGcal, setCalShowGcal] = useState(true);
     const [calShowCalls, setCalShowCalls] = useState(true);
     const [calShowMeetings, setCalShowMeetings] = useState(true);
     const [calShowWeekends, setCalShowWeekends] = useState(true);
-    const [calRepFilter, setCalRepFilter] = useState('all');
+    const [calRepFilter, setCalRepFilter] = useOrgBoundState(resets, 'all');
     const [calProvider, setCalProvider] = useState('google');
 
     // Log from Calendar
-    const [logFromCalOpen, setLogFromCalOpen] = useState(false);
+    const [logFromCalOpen, setLogFromCalOpen] = useOrgBoundState(resets, false);
     const [logFromCalDateFrom, setLogFromCalDateFrom] = useState(() => {
         const d = new Date(); d.setDate(d.getDate() - 7); return isoLocal(d);
     });
     const [logFromCalDateTo, setLogFromCalDateTo] = useState(() => todayLocal());
-    const [logFromCalEvents, setLogFromCalEvents] = useState([]);
-    const [logFromCalLoading, setLogFromCalLoading] = useState(false);
-    const [logFromCalError, setLogFromCalError] = useState(null);
-    const [loggedCalendarIds, setLoggedCalendarIds] = useState(new Set());
-    const [logFromCalLinkingId, setLogFromCalLinkingId] = useState(null);
-    const [logFromCalOppMap, setLogFromCalOppMap] = useState({});
+    const [logFromCalEvents, setLogFromCalEvents] = useOrgBoundState(resets, []);
+    const [logFromCalLoading, setLogFromCalLoading] = useOrgBoundState(resets, false);
+    const [logFromCalError, setLogFromCalError] = useOrgBoundState(resets, null);
+    const [loggedCalendarIds, setLoggedCalendarIds] = useOrgBoundState(resets, new Set());
+    const [logFromCalLinkingId, setLogFromCalLinkingId] = useOrgBoundState(resets, null);
+    const [logFromCalOppMap, setLogFromCalOppMap] = useOrgBoundState(resets, {});
 
     // Meeting prep
-    const [meetingPrepEvent, setMeetingPrepEvent] = useState(null);
-    const [meetingPrepOpen, setMeetingPrepOpen] = useState(false);
-    const [meetingPrepOppId, setMeetingPrepOppId] = useState(null);
+    const [meetingPrepEvent, setMeetingPrepEvent] = useOrgBoundState(resets, null);
+    const [meetingPrepOpen, setMeetingPrepOpen] = useOrgBoundState(resets, false);
+    const [meetingPrepOppId, setMeetingPrepOppId] = useOrgBoundState(resets, null);
 
     // ── Calendar connections (loaded from /calendar-connections on mount) ──────
     // userConnections: array of { id, provider, calendarEmail, connectedAt }
     // orgConnections:  array of { id, provider, calendarName, calendarEmail, connectedAt }
-    const [userCalConnections, setUserCalConnections] = useState([]);
-    const [orgCalConnections, setOrgCalConnections] = useState([]);
-    const [calConnectionsLoading, setCalConnectionsLoading] = useState(false);
-    const [calConnectionsError, setCalConnectionsError] = useState(null);
+    const [userCalConnections, setUserCalConnections] = useOrgBoundState(resets, []);
+    const [orgCalConnections, setOrgCalConnections] = useOrgBoundState(resets, []);
+    const [calConnectionsLoading, setCalConnectionsLoading] = useOrgBoundState(resets, false);
+    const [calConnectionsError, setCalConnectionsError] = useOrgBoundState(resets, null);
 
     // Tracks which provider + scope is currently being disconnected (for spinner state)
     // e.g. { id: 'ucal_123', scope: 'user' } or null
-    const [calDisconnecting, setCalDisconnecting] = useState(null);
+    const [calDisconnecting, setCalDisconnecting] = useOrgBoundState(resets, null);
 
     // Set when the app lands back from the OAuth callback redirect
     // (?calconnect=success|error) — used to show a toast/banner in the Calendar tab
-    const [calConnectResult, setCalConnectResult] = useState(null); // 'success' | 'error' | null
+    const [calConnectResult, setCalConnectResult] = useOrgBoundState(resets, null); // 'success' | 'error' | null
 
     return {
+        resetOnOrgSwitch: resetAllOf(resets),
         calendarEvents, setCalendarEvents,
         calendarLoading, setCalendarLoading,
         calendarError, setCalendarError,

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 5, 2026 · rules current through **§18b66** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b67** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3821,3 +3821,13 @@ through `dbFetch`.
 5. **No module-level variable holds an org's data.** A context or props, read in the render that draws it. An effect that copies settings into a module variable is a render behind, and keeps the last org's value across a switch and an unmount.
 6. **A component never returns early between its hooks.** A role gate belongs where the component is rendered: in the render of a switch the role reads as a rep, and a gate inside it changes the hook count, so React throws.
 7. **A switch is tested at runtime, on more than one surface,** with every request's token org logged against the org on screen. Settings hid the race (it remounts after the new org's settings load); Home showed it.
+
+## 18b67. What Is Open Belongs To The Org On Screen — A Switch Puts It Back, And A Decision On The Role Or The Settings Waits For This Org's (hard rule)
+
+**Origin (§0.174, 6 Oct 2026 — Jeff: "push dev and start the next batch"; §0.173's two findings).** §0.173 emptied the lists and remounted the tabs; the state above them outlived a switch. App's modal hook held 60 values with no reset, and its UI and calendar hooks held the open records, selections, forms and connections the same way: a contact's rail opened in Accelerep QA stayed open in Accelerep Test, showing QA's contact (observed), and an Undo offered for the last org's delete stayed on screen — its restore POSTs the rows into the org of the token (read from code). The Dispatch redirect decided in the render of a switch, on the role's rep fallback and the Dispatch-off defaults: on Dispatch in one org, a switch to another with Dispatch on went to Home (observed).
+
+1. **A value that names the org's data — a record, an id, a selection, a form, a pending action, a connection — is declared with `useOrgBoundState`** in the hook that holds it, and the hook hands App `resetOnOrgSwitch`. In useModalState every value is the org's. In useUIState and useCalendarState a new state chooses: `useOrgBoundState`, or `useState` and a line in its KEPT list in tests/org-switch-reset.test.mjs — the tab, the device, a view preference — with the reason it outlives a switch.
+2. **App puts them back on a switch only** — from one org to another, or to none — never on the first load, which keeps what a mount-time effect opened (the calendar return opens a Settings panel).
+3. **The reset is App's first effect after the hooks it resets.** App's effects run in declaration order: the reset undoes what an effect above it set for the new org in the same commit (the calendar's fetch sets its loading flag). A child's effects run before App's, so an effect anywhere that sets an org-bound value in the commit of a switch — itself, through a function it calls, or in a component's body — is undone by the reset.
+4. **A decision that reads the role or the org's settings waits for this org's** — `roleKnown` (the profile in state is this org's) and `settingsOrgId === activeOrgId` — and runs again when they land. In the render of a switch the role reads as a rep and the settings are the defaults: a redirect or a landing decided then acts for neither org. A gate in the render that only hides may read the fallback — it hides until the role lands.
+5. **A reset covers what is open, not what lands later.** The answer to an action begun in the last org lands after the reset; it is checked against the org that asked (§18b66.2) before it opens, fills or appends anything. Not yet true everywhere — state §9, found in §0.174 (a).

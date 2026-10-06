@@ -103,7 +103,7 @@ test('App.jsx reads the return once the role is known, cleans the URL, and lands
     assert.ok(s.includes('        setCalConnectResult(r);'));
     assert.ok(s.includes('calConnectResult, setCalConnectResult, settingsOpenPanel, setSettingsOpenPanel,'), 'both pairs are in the app context value');
     const hook = code(read('src/hooks/useModalState.js'));
-    assert.ok(hook.includes('const [settingsOpenPanel, setSettingsOpenPanel] = useState(null);') && hook.includes('settingsOpenPanel, setSettingsOpenPanel,'), 'the wiring file (CLAUDE.md: useModalState → App.jsx → appContextValue)');
+    assert.ok(hook.includes('const [settingsOpenPanel, setSettingsOpenPanel] = useOrgBoundState(resets, null);') && hook.includes('settingsOpenPanel, setSettingsOpenPanel,'), 'the wiring file (CLAUDE.md: useModalState → App.jsx → appContextValue)');
 });
 
 test('Settings opens the requested panel once and clears the request', () => {

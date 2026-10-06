@@ -61,7 +61,7 @@ test('Edit is offered exactly where the server would let the caller write', () =
 
 test('viewingActivity is wired: state, App destructure, context, Escape, body lock', () => {
     const hook = code(read('src/hooks/useModalState.js'));
-    assert.ok(hook.includes('const [viewingActivity, setViewingActivity] = useState(null);'));
+    assert.ok(hook.includes('const [viewingActivity, setViewingActivity] = useOrgBoundState(resets, null);'));
     assert.ok(hook.includes('        viewingActivity, setViewingActivity,'), 'returned');
     const app = code(read('src/App.jsx'));
     assert.ok(app.includes('        viewingActivity, setViewingActivity,'), 'destructured and in the context');

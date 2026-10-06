@@ -129,6 +129,26 @@ function App() {
     const uiState = useUIState();
     const calState = useCalendarState();
 
+    // An org switch puts back every value that belongs to the org on screen
+    // (state §0.174): each modal, rail, confirm, undo and reminder; each record
+    // viewer, selection, drill-down and half-filled form; the calendar's
+    // connections, meeting prep and log-from-calendar. Kept, they were the last
+    // org's — a record open in a modal, a selection a bulk action would act on —
+    // and named ids the new org does not have. On a switch only, from one org to
+    // another or to none: the first load keeps what a mount-time effect set (the
+    // calendar return opens a Settings panel). Declared before App's other
+    // effects, so it runs first in the switch's commit: what they start there for
+    // the new org is not put back (the calendar's fetch sets its loading flag).
+    const uiOrgRef = useRef(null);   // the org the open UI belongs to
+    useEffect(() => {
+        const was = uiOrgRef.current;
+        uiOrgRef.current = activeOrgId;
+        if (!was || was === activeOrgId) return;
+        modalState.resetOnOrgSwitch();
+        uiState.resetOnOrgSwitch();
+        calState.resetOnOrgSwitch();
+    }, [activeOrgId]);   // eslint-disable-line react-hooks/exhaustive-deps
+
     // Destructure for use in this component
     const {
         activeTab, setActiveTab, activePipelineId, setActivePipelineId,
@@ -1449,11 +1469,16 @@ dbFetch('/.netlify/functions/users?me=true')
     // a role that runs it — a sales rep only where the org lets reps use Dispatch.
     // It runs when the switches or the role change; nobody is on the tab before the
     // settings load, because the tab is not offered until the rule says yes.
+    // Decided on THIS org's role and settings only (state §0.174): in the render of
+    // a switch the role reads as a rep until the new org's profile loads
+    // (roleKnown), and the settings are the defaults — Dispatch off — until its
+    // settings load (settingsOrgId). Deciding then sent anyone on Dispatch to Home.
     useEffect(() => {
+        if (!roleKnown || settingsOrgId !== activeOrgId) return;
         if (activeTab === 'dispatch' && !canUseDispatch(userRole, settings)) {
             setActiveTab('home');
         }
-    }, [settings.dispatchEnabled, settings.repsCanUseDispatch, userRole]);   // eslint-disable-line react-hooks/exhaustive-deps
+    }, [settings.dispatchEnabled, settings.repsCanUseDispatch, userRole, roleKnown, settingsOrgId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     // A Dispatcher lands on Dispatch — the FIRST time the rule says they may use it
     // (the role from Clerk AND the org's settings loaded with the module on), and

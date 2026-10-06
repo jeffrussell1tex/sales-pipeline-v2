@@ -30,7 +30,7 @@ test('no native confirm() or prompt() survives anywhere under src/', () => {
 });
 
 test('the house prompt dialog is wired: state, opener, context, renderer', () => {
-    assert.ok(read('src/hooks/useModalState.js').includes('const [promptModal, setPromptModal] = useState(null);'));
+    assert.ok(read('src/hooks/useModalState.js').includes('const [promptModal, setPromptModal] = useOrgBoundState(resets, null);'));
     const app = read('src/App.jsx');
     assert.ok(app.includes('promptModal, setPromptModal,'), 'App destructures the state');
     assert.ok(app.includes('const showPrompt = ('), 'App defines showPrompt');

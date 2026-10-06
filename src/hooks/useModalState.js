@@ -1,99 +1,104 @@
-import { useState } from 'react';
+import { useOrgBoundState, resetAllOf } from './useOrgBoundState';
 
 export function useModalState() {
-    const [showModal, setShowModal] = useState(false);
-    const [showSpiffClaimModal, setShowSpiffClaimModal] = useState(false);
-    const [spiffClaimContext, setSpiffClaimContext] = useState(null);
-    const [showAccountModal, setShowAccountModal] = useState(false);
-    const [showUserModal, setShowUserModal] = useState(false);
-    const [showTaskModal, setShowTaskModal] = useState(false);
-    const [showContactModal, setShowContactModal] = useState(false);
-    const [showActivityModal, setShowActivityModal] = useState(false);
-    const [showShortcuts, setShowShortcuts] = useState(false);
-    const [showCsvImportModal, setShowCsvImportModal] = useState(false);
-    const [showLeadImportModal, setShowLeadImportModal] = useState(false);
-    const [showLeadModal, setShowLeadModal] = useState(false);
-    const [showOutlookImportModal, setShowOutlookImportModal] = useState(false);
-    const [csvImportType, setCsvImportType] = useState('contacts');
-    const [mergeModal, setMergeModal] = useState(null); // { aId, bId } | null
-    const [contactMergeModal, setContactMergeModal] = useState(null); // { aId, bId } | null
+    // Every value here — each modal, rail, confirm, undo and reminder — belongs
+    // to the org on screen (state §0.174): registered with useOrgBoundState, and
+    // put back by resetOnOrgSwitch when the org switches.
+    const resets = [];
+    const [showModal, setShowModal] = useOrgBoundState(resets, false);
+    const [showSpiffClaimModal, setShowSpiffClaimModal] = useOrgBoundState(resets, false);
+    const [spiffClaimContext, setSpiffClaimContext] = useOrgBoundState(resets, null);
+    const [showAccountModal, setShowAccountModal] = useOrgBoundState(resets, false);
+    const [showUserModal, setShowUserModal] = useOrgBoundState(resets, false);
+    const [showTaskModal, setShowTaskModal] = useOrgBoundState(resets, false);
+    const [showContactModal, setShowContactModal] = useOrgBoundState(resets, false);
+    const [showActivityModal, setShowActivityModal] = useOrgBoundState(resets, false);
+    const [showShortcuts, setShowShortcuts] = useOrgBoundState(resets, false);
+    const [showCsvImportModal, setShowCsvImportModal] = useOrgBoundState(resets, false);
+    const [showLeadImportModal, setShowLeadImportModal] = useOrgBoundState(resets, false);
+    const [showLeadModal, setShowLeadModal] = useOrgBoundState(resets, false);
+    const [showOutlookImportModal, setShowOutlookImportModal] = useOrgBoundState(resets, false);
+    const [csvImportType, setCsvImportType] = useOrgBoundState(resets, 'contacts');
+    const [mergeModal, setMergeModal] = useOrgBoundState(resets, null); // { aId, bId } | null
+    const [contactMergeModal, setContactMergeModal] = useOrgBoundState(resets, null); // { aId, bId } | null
     // A Settings catalogue id to open on the next Settings render (state §0.97):
     // App.jsx sets it when the calendar OAuth callback lands the user back on
     // a Settings panel; AdminView opens that item and clears it.
-    const [settingsOpenPanel, setSettingsOpenPanel] = useState(null);
+    const [settingsOpenPanel, setSettingsOpenPanel] = useOrgBoundState(resets, null);
 
     // ── Contact Rail ──────────────────────────────────────────────────────────
     // contactRailId: null (closed) | string id (view/edit existing) | 'new' (create)
     // contactRailMode: 'view' | 'edit' | 'new'
-    const [contactRailId,   setContactRailId]   = useState(null);
-    const [contactRailMode, setContactRailMode] = useState('view');
+    const [contactRailId,   setContactRailId]   = useOrgBoundState(resets, null);
+    const [contactRailMode, setContactRailMode] = useOrgBoundState(resets, 'view');
 
     // ── Account Rail ──────────────────────────────────────────────────────────
     // accountRailId: null (closed) | string id (view/edit existing) | 'new' (create)
     // accountRailMode: 'view' | 'edit' | 'new'
-    const [accountRailId,   setAccountRailId]   = useState(null);
-    const [accountRailMode, setAccountRailMode] = useState('view');
+    const [accountRailId,   setAccountRailId]   = useOrgBoundState(resets, null);
+    const [accountRailMode, setAccountRailMode] = useOrgBoundState(resets, 'view');
 
     // ── Task Rail ───────────────────────────────────────────────────────────────
     // taskRailId: null (closed) | string id (view/edit) | 'new' (create)
     // taskRailMode: 'view' | 'edit' | 'new'
-    const [taskRailId,   setTaskRailId]   = useState(null);
-    const [taskRailMode, setTaskRailMode] = useState('view');
+    const [taskRailId,   setTaskRailId]   = useOrgBoundState(resets, null);
+    const [taskRailMode, setTaskRailMode] = useOrgBoundState(resets, 'view');
 
     // ── Rail stack — supports Option B stacking (Contact → Account → back) ───
     // Each entry: { type: 'contact'|'account', id: string|'new', mode: string }
-    const [railStack, setRailStack] = useState([]);
+    const [railStack, setRailStack] = useOrgBoundState(resets, []);
 
     // ── Document Rail / Upload / Link picker ──────────────────────────────────
-    const [documentRailId,       setDocumentRailId]       = useState(null);
-    const [showUploadRail,       setShowUploadRail]       = useState(false);
-    const [uploadRailContext,    setUploadRailContext]    = useState(null);
-    const [showDocLinkPicker,    setShowDocLinkPicker]    = useState(false);
-    const [docLinkPickerContext, setDocLinkPickerContext] = useState(null);
+    const [documentRailId,       setDocumentRailId]       = useOrgBoundState(resets, null);
+    const [showUploadRail,       setShowUploadRail]       = useOrgBoundState(resets, false);
+    const [uploadRailContext,    setUploadRailContext]    = useOrgBoundState(resets, null);
+    const [showDocLinkPicker,    setShowDocLinkPicker]    = useOrgBoundState(resets, false);
+    const [docLinkPickerContext, setDocLinkPickerContext] = useOrgBoundState(resets, null);
 
-    const [editingOpp, setEditingOpp] = useState(null);
-    const [editingAccount, setEditingAccount] = useState(null);
-    const [editingSubAccount, setEditingSubAccount] = useState(null);
-    const [editingUser, setEditingUser] = useState(null);
-    const [editingTask, setEditingTask] = useState(null);
-    const [editingContact, setEditingContact] = useState(null);
-    const [editingActivity, setEditingActivity] = useState(null);
+    const [editingOpp, setEditingOpp] = useOrgBoundState(resets, null);
+    const [editingAccount, setEditingAccount] = useOrgBoundState(resets, null);
+    const [editingSubAccount, setEditingSubAccount] = useOrgBoundState(resets, null);
+    const [editingUser, setEditingUser] = useOrgBoundState(resets, null);
+    const [editingTask, setEditingTask] = useOrgBoundState(resets, null);
+    const [editingContact, setEditingContact] = useOrgBoundState(resets, null);
+    const [editingActivity, setEditingActivity] = useOrgBoundState(resets, null);
     // The read-only activity viewer (state §0.93): the row being read, or null.
     // Rendered by ActivityDetailDialogHost in ModalLayer; Edit hands the row to
     // editingActivity + showActivityModal.
-    const [viewingActivity, setViewingActivity] = useState(null);
-    const [activityInitialContext, setActivityInitialContext] = useState(null);
+    const [viewingActivity, setViewingActivity] = useOrgBoundState(resets, null);
+    const [activityInitialContext, setActivityInitialContext] = useOrgBoundState(resets, null);
 
-    const [parentAccountForSub, setParentAccountForSub] = useState(null);
-    const [lastCreatedAccountName, setLastCreatedAccountName] = useState(null);
-    const [accountCreatedFromOppForm, setAccountCreatedFromOppForm] = useState(false);
-    const [pendingOppFormData, setPendingOppFormData] = useState(null);
-    const [lastCreatedRepName, setLastCreatedRepName] = useState(null);
+    const [parentAccountForSub, setParentAccountForSub] = useOrgBoundState(resets, null);
+    const [lastCreatedAccountName, setLastCreatedAccountName] = useOrgBoundState(resets, null);
+    const [accountCreatedFromOppForm, setAccountCreatedFromOppForm] = useOrgBoundState(resets, false);
+    const [pendingOppFormData, setPendingOppFormData] = useOrgBoundState(resets, null);
+    const [lastCreatedRepName, setLastCreatedRepName] = useOrgBoundState(resets, null);
 
-    const [confirmModal, setConfirmModal] = useState(null);
+    const [confirmModal, setConfirmModal] = useOrgBoundState(resets, null);
     // { title, label, help, placeholder, initial, submitLabel, value, onSubmit } — the
     // app's own prompt dialog; opened through showPrompt in App.jsx (state §0.79).
-    const [promptModal, setPromptModal] = useState(null);
+    const [promptModal, setPromptModal] = useOrgBoundState(resets, null);
     // {} while the coaching-note dialog is open (state §0.82); opened through
     // showCoachingNote in App.jsx, rendered by CoachingNoteDialogHost in ModalLayer.
-    const [coachingNoteModal, setCoachingNoteModal] = useState(null);
-    const [blockedDeleteModal, setBlockedDeleteModal] = useState(null);
-    const [lostReasonModal, setLostReasonModal] = useState(null);
-    const [notesPopover, setNotesPopover] = useState(null);
-    const [undoToast, setUndoToast] = useState(null);
+    const [coachingNoteModal, setCoachingNoteModal] = useOrgBoundState(resets, null);
+    const [blockedDeleteModal, setBlockedDeleteModal] = useOrgBoundState(resets, null);
+    const [lostReasonModal, setLostReasonModal] = useOrgBoundState(resets, null);
+    const [notesPopover, setNotesPopover] = useOrgBoundState(resets, null);
+    const [undoToast, setUndoToast] = useOrgBoundState(resets, null);
 
-    const [taskReminderPopup, setTaskReminderPopup] = useState(null);
-    const [taskReminderSnoozeH, setTaskReminderSnoozeH] = useState(0);
-    const [taskReminderSnoozeM, setTaskReminderSnoozeM] = useState(15);
-    const [taskDuePopup, setTaskDuePopup] = useState(null);
-    const [taskDueQueue, setTaskDueQueue] = useState([]);
-    const [taskDueSnoozeH, setTaskDueSnoozeH] = useState(0);
-    const [taskDueSnoozeM, setTaskDueSnoozeM] = useState(15);
-    const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useState([]);
-    const [snoozedDueAlerts, setSnoozedDueAlerts] = useState({}); // { [taskId]: re-alert-at timestamp (ms) }
-    const [dismissedReminders, setDismissedReminders] = useState([]);
+    const [taskReminderPopup, setTaskReminderPopup] = useOrgBoundState(resets, null);
+    const [taskReminderSnoozeH, setTaskReminderSnoozeH] = useOrgBoundState(resets, 0);
+    const [taskReminderSnoozeM, setTaskReminderSnoozeM] = useOrgBoundState(resets, 15);
+    const [taskDuePopup, setTaskDuePopup] = useOrgBoundState(resets, null);
+    const [taskDueQueue, setTaskDueQueue] = useOrgBoundState(resets, []);
+    const [taskDueSnoozeH, setTaskDueSnoozeH] = useOrgBoundState(resets, 0);
+    const [taskDueSnoozeM, setTaskDueSnoozeM] = useOrgBoundState(resets, 15);
+    const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useOrgBoundState(resets, []);
+    const [snoozedDueAlerts, setSnoozedDueAlerts] = useOrgBoundState(resets, {}); // { [taskId]: re-alert-at timestamp (ms) }
+    const [dismissedReminders, setDismissedReminders] = useOrgBoundState(resets, []);
 
     return {
+        resetOnOrgSwitch: resetAllOf(resets),
         showModal, setShowModal,
         showSpiffClaimModal, setShowSpiffClaimModal,
         spiffClaimContext, setSpiffClaimContext,
