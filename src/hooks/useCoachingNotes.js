@@ -6,7 +6,7 @@
 // Every write checks `res.ok` and adopts the server's row (guide 18b1 / the
 // dbfetch rule): a rejected write never shows as saved.
 import { useState, useEffect, useCallback } from 'react';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 
 const URL = '/.netlify/functions/coaching-notes';
 
@@ -19,9 +19,13 @@ export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } 
     const [coachingNotesLoaded, setCoachingNotesLoaded] = useState(false);
 
     const reload = useCallback(async () => {
+        // This org's notes only (state §0.173): an answer for an org switched away
+        // from is dropped — the effect's cancel flag guarded only the wait before it.
+        const askedOrg = requestOrg();
         const res = await dbFetch(URL);
-        if (!res.ok) return false;
+        if (!res.ok || !stillOrg(askedOrg)) return false;
         const data = await res.json();
+        if (!stillOrg(askedOrg)) return false;
         setCoachingNotes(Array.isArray(data?.coachingNotes) ? data.coachingNotes : []);
         setCoachingNotesLoaded(true);
         return true;

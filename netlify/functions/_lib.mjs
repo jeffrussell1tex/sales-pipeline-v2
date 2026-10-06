@@ -549,9 +549,10 @@ export async function assertOwnership({ table, entity, id, orgId, userId, userRo
 // Clerk organization) becomes its first Admin. After that only an Admin grants
 // a role (user-role.mjs).
 //
-// Idempotent: an existing row by Clerk id, else by email in this org, is
-// returned untouched — LINKING a pending (invited) row to a Clerk identity
-// stays users.mjs's job. `clerkUser` may be handed in by a caller that has
+// Idempotent: an existing row by Clerk id, else an UNLINKED row by email in
+// this org, is returned untouched — LINKING a pending (invited) row to a Clerk
+// identity stays users.mjs's job. A row by email linked to another identity is
+// that member's: null, and no new row (state §0.173). `clerkUser` may be handed in by a caller that has
 // already fetched it; otherwise it is fetched. Never throws; null when Clerk
 // cannot be read.
 export async function ensureRosterRow({ clerkUserId, orgId, clerkUser, orgRole } = {}) {
@@ -567,7 +568,12 @@ export async function ensureRosterRow({ clerkUserId, orgId, clerkUser, orgRole }
         const email = String(cu?.emailAddresses?.[0]?.emailAddress || cu?.primaryEmailAddress?.emailAddress || '').trim().toLowerCase();
         if (email) {
             const [byEmail] = await db.select().from(users).where(and(eq(users.email, email), eq(users.orgId, orgId)));
-            if (byEmail) return byEmail;   // an invited row: users.mjs ?me=true links it
+            // An invited row (unlinked) is handed back for users.mjs ?me=true to
+            // link. One already linked is ANOTHER identity's — the address moved to
+            // a new Clerk user — and is never handed to this one (state §0.173): no
+            // row, and no new one either (the address is that member's in this org
+            // until an Admin changes it; the insert would collide on it anyway).
+            if (byEmail) return byEmail.clerkUserId ? null : byEmail;
         }
         let role = 'User';
         if (orgRole === 'org:admin') {

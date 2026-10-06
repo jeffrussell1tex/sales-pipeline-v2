@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
-import { dbFetch, waitForToken } from '../utils/storage';
+import { dbFetch, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 
 /**
  * useQuotes — manages quotes and products (price book) state.
@@ -32,12 +32,15 @@ export function useQuotes() {
 
     // ── Loaders ───────────────────────────────────────────────────────────────
     const loadQuotes = useCallback(async (setDbOffline) => {
+        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
         try {
             await waitForToken();
             const res = await dbFetch('/.netlify/functions/quotes');
+            if (!stillOrg(askedOrg)) return;
             if (setDbOffline) setDbOffline(dbStatusOf(res));
             if (!res.ok) return;
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             setQuotes(data.quotes || []);
         } catch (err) {
             console.error('Failed to load quotes:', err.message);
@@ -45,14 +48,16 @@ export function useQuotes() {
     }, []);
 
     const loadProducts = useCallback(async (includeInactive = false) => {
+        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
         try {
             await waitForToken();
             const url = includeInactive
                 ? '/.netlify/functions/products?includeInactive=true'
                 : '/.netlify/functions/products';
             const res = await dbFetch(url);
-            if (!res.ok) return;
+            if (!res.ok || !stillOrg(askedOrg)) return;
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             setProducts(data.products || []);
         } catch (err) {
             console.error('Failed to load products:', err.message);

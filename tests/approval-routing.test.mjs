@@ -125,16 +125,16 @@ test('the Quotes tab decides by the same rule and names who decides; the gauge i
     const s = code(read('src/Tabs/QuotesTab.jsx'));
     assert.ok(s.includes('const mineToDecide = (q) => mayDecideQuote({ tier: tierOf(q), role: userRole, userId });'));
     assert.ok(s.includes("value: pending.filter(mineToDecide).length"), 'Waiting for you counts what is yours');
-    assert.ok(s.includes("{decides ? 'Yours to decide' : <>Waiting for {approverWordsLive(tier)}</>}"));
+    assert.ok(s.includes("{decides ? 'Yours to decide' : <>Waiting for {approverWordsOf(tier, approverNames)}</>}"));
     assert.ok(s.includes("const decides   = status === 'Pending Approval' && !!canEdit && mayDecideQuote({ tier, role: userRole, userId }) && !!onApprove && !!onSendBack;"));
-    assert.ok(s.includes('Approver: {approverWordsLive(tier)}'));
+    assert.ok(s.includes('Approver: {approverWordsOf(tier, approverNames)}'));
     for (const k of ['approverRole:   t.approverRole   || null,', 'backupRole:     t.backupRole     || null,', 'approverUserId: t.approverUserId || null,', 'backupUserId:   t.backupUserId   || null,']) {
         assert.ok(s.includes(k), `the tiers carry ${k}`);
     }
     assert.ok(s.includes('userId={currentUserId}'), 'the caller\'s app id from the app');
     const gauge = s.slice(s.indexOf('const ApprovalGauge'), s.indexOf('// ─── Activity log'));
-    assert.ok(gauge.includes('const tiers = APPROVAL_TIERS;') && !gauge.includes('30% VP') && !gauge.includes('[0.10, 0.20, 0.30]'), 'no fixed bands');
-    assert.ok(s.includes('{tierNeedsApproval(tier) && <span') && s.includes('{approverWordsLive(tier)}</span>}'), 'the quote card names the routed approver, not the old text');
+    assert.ok(gauge.includes('const { approvalTiers: tiers } = useQuoteConfig();') && !gauge.includes('30% VP') && !gauge.includes('[0.10, 0.20, 0.30]'), 'no fixed bands');
+    assert.ok(s.includes('{tierNeedsApproval(tier) && <span') && s.includes('{approverWordsOf(tier, approverNames)}</span>}'), 'the quote card names the routed approver, not the old text');
 });
 
 test('the Approval tiers page: the choice, an approver and a backup per tier; nothing it offered that nothing did', () => {

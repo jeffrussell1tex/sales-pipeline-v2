@@ -21,7 +21,7 @@ test('ensureRosterRow: our id, the Clerk id in its column, a rep\'s role but for
     const s = code(read('netlify/functions/_lib.mjs'));
     assert.ok(s.includes('export async function ensureRosterRow({ clerkUserId, orgId, clerkUser, orgRole } = {}) {'));
     assert.ok(s.includes('        if (byId) return byId;'), 'an existing row by Clerk id is returned untouched');
-    assert.ok(s.includes('            if (byEmail) return byEmail;   // an invited row: users.mjs ?me=true links it'), 'an invited row by email is returned, not duplicated, not linked here');
+    assert.ok(s.includes('            if (byEmail) return byEmail.clerkUserId ? null : byEmail;'), 'an invited (unlinked) row by email is returned, not duplicated, not linked here — one linked to another identity is never handed over (§0.173)');
     const fn = s.slice(s.indexOf('export async function ensureRosterRow('), s.indexOf("console.warn('_lib.ensureRosterRow:', e.message);"));
     assert.ok(!/publicMetadata/.test(fn), 'REGRESSION (§0.163): a new row takes Clerk\'s user-level role again — an Admin of one org carried into the next');
     assert.ok(s.includes("        let role = 'User';"), 'a new row is a rep');

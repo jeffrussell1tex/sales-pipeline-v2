@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
-import { dbFetch, dbWrite } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 
 export function useActivities(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
@@ -10,9 +10,10 @@ export function useActivities(deps) {
     const [activityModalSaving, setActivityModalSaving] = useState(false);
 
     const loadActivities = (setDbOffline) => {
+        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
         dbFetch('/.netlify/functions/activities')
-            .then(r => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-            .then(data => setActivities(data.activities || []))
+            .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(data => { if (data && stillOrg(askedOrg)) setActivities(data.activities || []); })
             .catch(err => console.error('Failed to load activities:', err));
     };
 

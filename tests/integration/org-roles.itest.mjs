@@ -242,6 +242,23 @@ test('the first-load link: an invited row is claimed by EMAIL with its role; a r
     assert.equal((await rowOf('usr_itest_orgrole_oddrole', ORG_A)).role, 'User', 'and the row says so');
 });
 
+test('the first-load link: an address now held by ANOTHER Clerk user never hands over the member it names (§0.173)', async () => {
+    // FIRST's row is linked to FIRST; the address moved to NEW (a shared mailbox
+    // handed on), who signs in to the same org.
+    const FIRST = 'user_itest_orgrole_firstholder', NEW = 'user_itest_orgrole_newholder';
+    await db.insert(users).values({ id: 'usr_itest_orgrole_moved', orgId: ORG_A, clerkUserId: FIRST, name: 'First Holder', email: 'moved@itest-orgrole.local', role: 'Manager', active: true, profile: { status: 'Active', mobile: '+15550009999' } });
+    person(NEW, 'moved@itest-orgrole.local', 'New', 'Holder');
+    const me = parse(await usersHandler(ev(tokenFor(NEW, ORG_A), 'GET', undefined, { me: 'true' })));
+    assert.equal(me.status, 200, JSON.stringify(me.body));
+    assert.equal(me.body.user, null, 'REGRESSION: another member\'s row is answered as the caller\'s own profile');
+    const moved = await rowOf('usr_itest_orgrole_moved', ORG_A);
+    assert.equal(moved.clerkUserId, FIRST, 'still the first holder\'s');
+    assert.equal(moved.role, 'Manager');
+    assert.equal(await rowByClerk(NEW, ORG_A), undefined, 'no row is made for the new holder — the address is the first holder\'s in this org');
+    const enforced = await verifyAuth({ headers: { authorization: 'Bearer ' + tokenFor(NEW, ORG_A) } });
+    assert.equal(enforced.userRole, 'User', 'the server enforces a rep with no row — nothing of the Manager\'s');
+});
+
 test('FIRST ADMIN: a fresh org\'s Clerk admin is its first Admin, once; Clerk\'s user-level Admin is not', async () => {
     const OWNER = 'user_itest_orgrole_owner';
     const CO = 'user_itest_orgrole_coadmin';

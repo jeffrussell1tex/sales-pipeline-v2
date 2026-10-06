@@ -11,7 +11,7 @@
 
 import { useState, useCallback } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
-import { dbFetch, waitForToken } from '../utils/storage';
+import { dbFetch, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 import {
     uploadNewDocument,
     uploadNewVersion,
@@ -28,20 +28,26 @@ export function useDocuments(_deps = {}) {
 
     // ── Library (global Documents tab) ──────────────────────────────────────
     const loadDocuments = useCallback(async (setDbOffline) => {
+        // This org's library only (state §0.173): an answer for an org switched
+        // away from is dropped, and leaves the new org's load its own state.
+        const askedOrg = requestOrg();
         setDocsLoading(true);
         setDocsError(null);
         try {
             await waitForToken();
             const r = await dbFetch(DOCS_FN);
+            if (!stillOrg(askedOrg)) return;
             if (setDbOffline) setDbOffline(dbStatusOf(r));
             if (!r.ok) throw new Error('HTTP ' + r.status);
             const data = await r.json();
+            if (!stillOrg(askedOrg)) return;
             setDocuments(Array.isArray(data.documents) ? data.documents : []);
         } catch (e) {
+            if (!stillOrg(askedOrg)) return;
             console.error('Failed to load documents:', e);
             setDocsError(e.message || 'Failed to load documents');
         } finally {
-            setDocsLoading(false);
+            if (stillOrg(askedOrg)) setDocsLoading(false);
         }
     }, []);
 

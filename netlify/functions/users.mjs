@@ -272,6 +272,11 @@ export const handler = async (event) => {
                         and(eq(users.email, clerkEmail), eq(users.orgId, orgId))
                     );
                 }
+                // A row the address names that is already linked to ANOTHER Clerk
+                // identity is that member's — the address has moved to a new Clerk
+                // user (a shared mailbox handed on). It was answered as the caller's
+                // own profile (state §0.173); it is not the caller's to read or link.
+                if (row && row.clerkUserId && row.clerkUserId !== userId) row = undefined;
 
                 // Found by the invited email and not yet linked: LINK it. The row
                 // keeps its id -- only clerkUserId, role and active are written.

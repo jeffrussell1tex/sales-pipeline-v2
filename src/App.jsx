@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbStatusOf, bannerCopyOf } from './utils/fetchStatus';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
-import { safeStorage, dbFetch, waitForToken } from './utils/storage';
+import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
 import { isoLocal } from './utils/dateLocal';
@@ -63,6 +63,7 @@ function App() {
     const clerkUser = isSignedIn ? rawClerkUser : null;
     const { organization, isLoaded: orgLoaded } = useOrganization();
     const prevOrgIdRef = React.useRef(null);
+    const listsOrgRef  = React.useRef(null);   // the org whose lists are on screen (state §0.173)
     const { userMemberships, setActive, isLoaded: orgListLoaded } = useOrganizationList({
         userMemberships: { infinite: true },
     });
@@ -78,6 +79,13 @@ function App() {
     }, [orgListLoaded, clerkLoaded, organization, userMemberships?.data]);
 
 
+    // The org every request is made for is the org on screen NOW (state §0.173) —
+    // set here, as App renders, and read by the token getter below when a request
+    // is made. A getter that closed over this render's org served the previous
+    // org's token to a child's effect in the commit of a switch (Home's pinned
+    // reports, observed), because App's effects run after its children's.
+    setRequestOrg(organization?.id || null);
+
     // Make getToken available to dbFetch utility ONLY when org is active
     // organizationId in getToken ensures Clerk includes org_id in the JWT
     useEffect(() => {
@@ -86,7 +94,7 @@ function App() {
             window.__getClerkToken = null;
             return;
         }
-        window.__getClerkToken = () => getToken({ organizationId: organization.id });
+        window.__getClerkToken = () => getToken({ organizationId: requestOrg() });
     }, [getToken, organization]);
 
     // One gate for every load that fires on mount (state §0.125). The main load
@@ -431,6 +439,16 @@ function App() {
 
       useEffect(() => {
     if (!clerkUser || !organization?.id) return; // Don't load until authenticated + org active
+    // A switch shows nothing of the last org (state §0.173): its lists are emptied
+    // now, before this org's answers arrive. They stayed on screen under the new
+    // org's name until each answer landed — for good when one failed — and a late
+    // answer from the last org could land over the new one's. Each loader also
+    // drops an answer for an org no longer on screen (stillOrg).
+    if (listsOrgRef.current && listsOrgRef.current !== organization.id) {
+        setOpportunities([]); setAccounts([]); setContacts([]); setTasks([]); setActivities([]);
+        setLeads([]); documentsHook.setDocuments([]); setQuotes([]); setProducts([]);
+    }
+    listsOrgRef.current = organization.id;
     const loadData = async () => {
         const checkOk = (r) => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r; };
 
@@ -449,9 +467,10 @@ function App() {
         loadQuotes(setDbOffline);
         loadProducts();
 
+const leadsOrg = requestOrg();
 dbFetch('/.netlify/functions/leads')
     .then(checkOk).then(r => r.json())
-    .then(data => setLeads(data.leads || []))
+    .then(data => { if (stillOrg(leadsOrg)) setLeads(data.leads || []); })
     .catch(err => console.error('Failed to load leads:', err));
 
 // Settings + users loading delegated to useSettings hook
@@ -1075,6 +1094,9 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // ── Calendar strip auto-fetch (hoisted so useEffect can call it) ──────────
     const fetchCalendarEvents = async () => {
+        // The calendar of the org on screen when it was asked for (state §0.173):
+        // an answer for an org switched away from is dropped.
+        const askedOrg = requestOrg();
         setCalendarLoading(true);
         setCalendarError(null);
         try {
@@ -1087,6 +1109,7 @@ dbFetch('/.netlify/functions/users?me=true')
             const res = await dbFetch('/.netlify/functions/calendar-events?timeMin=' + weekStart.toISOString() + '&timeMax=' + weekEnd.toISOString());
             if (!res.ok) throw new Error('Failed to load calendar');
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (data.connected === false) {
                 setCalendarConnected(false);
                 setCalendarEvents([]);
@@ -1095,6 +1118,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 setCalendarConnected(true);
             }
         } catch (err) {
+            if (!stillOrg(askedOrg)) return;
             setCalendarError(err.message);
             setCalendarConnected(false);
         } finally {
@@ -1994,6 +2018,11 @@ dbFetch('/.netlify/functions/users?me=true')
                 )}
             </nav>
 
+            {/* Every tab is the active org's (state §0.173): an org switch remounts
+                them, so each loads afresh for the new org and keeps nothing of the
+                last — Reports' saved list and Leads' requests loaded once and kept
+                the last org's rows. */}
+            <React.Fragment key={activeOrgId || 'no-org'}>
             {activeTab === 'home' && (
                 <ErrorBoundary tabName="Home">
                     <HomeTab />
@@ -2054,7 +2083,12 @@ dbFetch('/.netlify/functions/users?me=true')
                 </ErrorBoundary>
             )}
 
-            {activeTab === 'salesManager' && (
+            {/* The roles the nav offers it to (state §0.173). The tab returned early
+                inside for any other role — between its hooks — so in the render of
+                an org switch, where the role reads as a rep until the new org's
+                profile loads, it rendered fewer hooks than before and React threw
+                ("Something went wrong", observed). */}
+            {activeTab === 'salesManager' && (isAdmin || isManager) && (
                 <ErrorBoundary tabName="Sales Manager">
                     <SalesManagerTab />
                 </ErrorBoundary>
@@ -2065,6 +2099,7 @@ dbFetch('/.netlify/functions/users?me=true')
                     <SettingsTab />
                 </ErrorBoundary>
             )}
+            </React.Fragment>
 
             {/* ════ MEETING PREP PANEL ════ */}
             {meetingPrepOpen && meetingPrepEvent && (() => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { OrganizationSwitcher, useOrganizationList, useClerk } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
-import { dbFetch } from '../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import { calendarReturnMessage } from '../../utils/calendarReturn.js';
 import { startCalendarConnect } from '../../utils/calendarConnect.js';
 import { isDispatcher, canUseDispatch } from '../../utils/roles.js';
@@ -54,6 +54,7 @@ export default function AppHeader({
         quickLogOpen, setQuickLogOpen,
         calendarConnected, calendarEvents, calendarLoading, calendarError, fetchCalendarEvents,
         calConnectResult, setCalConnectResult,
+        activeOrgId,
     } = useApp();
 
     const isAdmin    = userRole === 'Admin';
@@ -191,13 +192,16 @@ export default function AppHeader({
     const [calActionError, setCalActionError] = useState('');
 
     const loadCalConnection = React.useCallback(async () => {
+        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
         try {
             const res = await dbFetch('/.netlify/functions/calendar-connections');
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) { setCalConnLoaded(true); return; }
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             setCalConn((data.userConnections || [])[0] || null);
         } catch (e) { /* status falls back to the derived boolean */ }
-        setCalConnLoaded(true);
+        if (stillOrg(askedOrg)) setCalConnLoaded(true);
     }, []);
 
     useEffect(() => {
@@ -222,16 +226,28 @@ export default function AppHeader({
     const [myBccLoaded, setMyBccLoaded] = useState(false);
     const [myBccCopied, setMyBccCopied] = useState(false);
     const loadMyBcc = React.useCallback(async () => {
+        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
         try {
             const res = await dbFetch('/.netlify/functions/email-inbound');
             const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             setMyBcc(res.ok ? data : { configured: false, myAddress: null, error: data.error || `HTTP ${res.status}` });
-        } catch (e) { setMyBcc({ configured: false, myAddress: null, error: e.message }); }
+        } catch (e) { if (!stillOrg(askedOrg)) return; setMyBcc({ configured: false, myAddress: null, error: e.message }); }
         setMyBccLoaded(true);
     }, []);
     useEffect(() => {
         if (showProfilePanel && profilePanelTab === 'email' && !myBccLoaded) loadMyBcc();
     }, [showProfilePanel, profilePanelTab, myBccLoaded, loadMyBcc]);
+    // The panel's calendar record and email-logging addresses are this org's
+    // (state §0.173): a switch forgets them, and the tab loads the new org's when
+    // it is next shown — at once, if it is open. Both were loaded once and kept:
+    // after a switch the Email logging tab showed, and copied, the last org's
+    // addresses, and mail BCC'd to them was filed in that org (observed: QA's
+    // address under Accelerep Test).
+    useEffect(() => {
+        setCalConn(null); setCalConnLoaded(false);
+        setMyBcc(null); setMyBccLoaded(false); setMyBccCopied(false);
+    }, [activeOrgId]);
     const copyMyBcc = async () => {
         if (!myBcc?.myAddress) return;
         try { await navigator.clipboard.writeText(myBcc.myAddress); setMyBccCopied(true); setTimeout(() => setMyBccCopied(false), 1800); }

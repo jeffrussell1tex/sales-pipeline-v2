@@ -77,7 +77,10 @@ test('calendar: the home-tab auto-fetch waits for an org and fetches again for a
 test('the main load is gated the same way (it never had the race) and the getter is set before any load runs', () => {
     const app = read('src/App.jsx');
     assert.ok(app.includes("if (!clerkUser || !organization?.id) return; // Don't load until authenticated + org active"), 'the main load\'s gate');
-    assert.ok(app.indexOf('window.__getClerkToken = () => getToken({ organizationId: organization.id });') < app.indexOf('const activeOrgId ='), 'the token getter\'s effect is declared before every gated load, so it runs first in the same commit');
+    // Present AND first — an indexOf of a missing line is -1, and -1 is before
+    // everything: this pin passed for a getter no longer in the file (§0.173).
+    const getterAt = app.indexOf('window.__getClerkToken = () => getToken({ organizationId: requestOrg() });');
+    assert.ok(getterAt >= 0 && getterAt < app.indexOf('const activeOrgId ='), 'the token getter\'s effect is declared before every gated load, so it runs first in the same commit');
 });
 
 // ── waitForToken ─────────────────────────────────────────────────────────────

@@ -49,13 +49,17 @@ const DEFAULT_APPROVAL_TIERS = [
     { maxDiscount: 0.30, approver: 'VP Sales',      label: 'VP approval',   color: '#b55634' },
     { maxDiscount: 1.00, approver: 'CFO',           label: 'CFO approval',  color: T.danger  },
 ];
-// Used throughout the file — will be overridden per-component from settings
-let APPROVAL_TIERS = DEFAULT_APPROVAL_TIERS;
-
-const tierForDiscount = (d, tiers = APPROVAL_TIERS) => {
-    for (const t of tiers) if (d <= t.maxDiscount) return t;
-    return tiers[tiers.length - 1];
-};
+// The org's quote configuration — its approval tiers, its approvers' names, its
+// product & service types — for every component in this file, from the org's
+// settings through QuotesTab's provider (state §0.173). They lived in
+// module-level variables a tab effect kept in step: assigned AFTER the render
+// that read them, and kept across an org switch and the tab's unmounts — so the
+// tab's first render, and every render until something else re-rendered it,
+// drew the LAST org's tiers, approver names and types.
+const QuoteConfigContext = React.createContext(null);
+const NO_APPROVER_NAMES = new Map();
+const useQuoteConfig = () => React.useContext(QuoteConfigContext)
+    || { approvalTiers: DEFAULT_APPROVAL_TIERS, approverNames: NO_APPROVER_NAMES, productTypes: DEFAULT_PRODUCT_TYPES };
 
 function buildApprovalTiers(settingsApprovalTiers) {
     if (!Array.isArray(settingsApprovalTiers) || settingsApprovalTiers.length === 0) {
@@ -75,11 +79,10 @@ function buildApprovalTiers(settingsApprovalTiers) {
     }));
 }
 
-// The roster's names by app id, kept in step from settings.users by the tab's
-// effect (as APPROVAL_TIERS is) — so a tier's approver reads as a name anywhere in
-// this file. An id it cannot name reads as "a former approver" (tierApproverWords).
-let APPROVER_NAMES_LIVE = new Map();
-const approverWordsLive = (tier) => tierApproverWords(tier, (id) => APPROVER_NAMES_LIVE.get(id) || null);
+// A tier's approver in words, by the roster's names (the quote configuration's
+// approverNames). An id it cannot name reads as "a former approver"
+// (tierApproverWords).
+const approverWordsOf = (tier, approverNames) => tierApproverWords(tier, (id) => approverNames.get(id) || null);
 
 // ─── Quote math ───────────────────────────────────────────────
 function calcLineTotals(lineItems = [], products = []) {
@@ -139,12 +142,12 @@ const TYPE_COLORS = {
     one_time:   { bg: `${T.warn}18`, color: T.warn, label: 'One-time' },
     service:    { bg: `${T.info}14`, color: T.info, label: 'Service' },
 };
-// The org's product & service types (§0.149), kept in step from settings by the
-// tab's effect — the same shape as APPROVAL_TIERS above — so a badge on a line
-// item deep in the preview names an Admin-defined type without a prop chain.
-let PRODUCT_TYPES_LIVE = DEFAULT_PRODUCT_TYPES;
+// The org's product & service types (§0.149), from the quote configuration — so a
+// badge on a line item deep in the preview names an Admin-defined type without a
+// prop chain.
 const TypeBadge = ({ type }) => {
-    const c = TYPE_COLORS[type] || { bg: T.surface2, color: T.inkMid, label: productTypeLabel(type, PRODUCT_TYPES_LIVE) };
+    const { productTypes } = useQuoteConfig();
+    const c = TYPE_COLORS[type] || { bg: T.surface2, color: T.inkMid, label: productTypeLabel(type, productTypes) };
     return <span style={{ background: c.bg, color: c.color, fontSize: '0.5625rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.15rem 0.5rem', borderRadius: 999 }}>{c.label}</span>;
 };
 
@@ -153,7 +156,7 @@ const TypeBadge = ({ type }) => {
 // the tier the discount falls in. It drew 10%, 20% and 30% marks labelled "Rep",
 // "Mgr" and "VP" whatever tiers the org had saved.
 const ApprovalGauge = ({ discount }) => {
-    const tiers = APPROVAL_TIERS;
+    const { approvalTiers: tiers } = useQuoteConfig();
     const caps = tiers.map(t => Number(t.maxDiscount)).filter(c => c > 0 && c < 1);
     const span = Math.min(1, (caps.length ? Math.max(...caps) : 0.3) + 0.1);
     const pctVal = Math.min(1, discount / span);
@@ -421,12 +424,13 @@ const TemplatePickerModal = ({ opp, templates, onPick, onClose }) => {
 
 // ─── Quote column — side-by-side comparator ───────────────────
 const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, onEdit }) => {
+    const { approvalTiers, approverNames } = useQuoteConfig();
     const { lines, listTotal, totalValue, avgDisc, margin } = calcLineTotals(quote.lineItems || [], products || []);
     const otherResult = otherQuote ? calcLineTotals(otherQuote.lineItems || [], products || []) : null;
     const otherIds    = new Set((otherQuote?.lineItems || []).map(li => li.productId));
     const myIds       = new Set((quote.lineItems || []).map(li => li.productId));
     // The tier as the server decides it (quoteRules.js) — the chip agrees with a save.
-    const tier        = approvalTierFor(quoteDiscountPct(quote.lineItems, quote.dealDiscount), APPROVAL_TIERS);
+    const tier        = approvalTierFor(quoteDiscountPct(quote.lineItems, quote.dealDiscount), approvalTiers);
 
     return (
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, display: 'flex', flexDirection: 'column', opacity: readOnly ? 0.85 : 1 }}>
@@ -537,7 +541,7 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
                 <div style={{ marginTop: 8, padding: '6px 8px', background: `${tier.color}12`, border: `1px solid ${tier.color}40`, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: tier.color }} />
                     <span style={{ fontSize: 10.5, color: tier.color, fontWeight: 600, fontFamily: T.sans }}>{tier.label}</span>
-                    {tierNeedsApproval(tier) && <span style={{ fontSize: 10.5, color: T.inkMid, marginLeft: 'auto', fontFamily: T.sans }}>{approverWordsLive(tier)}</span>}
+                    {tierNeedsApproval(tier) && <span style={{ fontSize: 10.5, color: T.inkMid, marginLeft: 'auto', fontFamily: T.sans }}>{approverWordsOf(tier, approverNames)}</span>}
                 </div>
             </div>
         </div>
@@ -552,11 +556,12 @@ const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
     const [validUntil,    setValidUntil]    = useState(quote.validUntil || '');
     const [notes,         setNotes]         = useState(quote.notes || '');
     const [error,         setError]         = useState(null);
+    const { approvalTiers } = useQuoteConfig();
 
     const { lines, listTotal, totalValue } = calcLineTotals(lineItems, products || []);
     // The discount and its tier as the server reads them (quoteRules.js, §0.155).
     const avgDiscPct = quoteDiscountPct(lineItems, quote.dealDiscount);
-    const tier = approvalTierFor(avgDiscPct, APPROVAL_TIERS);
+    const tier = approvalTierFor(avgDiscPct, approvalTiers);
 
     // Catalog — grouped by category, filtered
     const catalogGroups = useMemo(() => {
@@ -806,6 +811,7 @@ const SendBackForm = ({ onSend, onCancel, saving, tone = 'light' }) => {
 const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving,
     onAccept, dispatchEnabled, job, jobLoading, jobBusy, jobError, onCreateJob, canEdit, userRole, tiers,
     onApprove, onSendBack, onWithdraw, sentBackBy, userId }) => {
+    const { approverNames } = useQuoteConfig();
     const { margin } = calcLineTotals(quote.lineItems || [], products || []);
     // The quote's discount, its tier and what it may do next, by the rules the
     // server applies (quoteRules.js, §0.155) — so a button is never refused.
@@ -944,7 +950,7 @@ const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer
                 ) : (
                     <>
                         <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, textAlign: 'center', padding: '6px 0 0', fontFamily: T.sans }}>Waiting for Approval.</div>
-                        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center', padding: '0 0 6px', fontFamily: T.sans }}>Approver: {approverWordsLive(tier)}</div>
+                        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center', padding: '0 0 6px', fontFamily: T.sans }}>Approver: {approverWordsOf(tier, approverNames)}</div>
                         {canEdit && onWithdraw && (
                             <button onClick={() => onWithdraw(quote)} disabled={saving} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans }}>Withdraw to make changes</button>
                         )}
@@ -1257,10 +1263,11 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
 // decision's approver and tell a rep "Pending your approval"; its "Sendback" only
 // opened the quote — the send-back handler was passed in and never called.
 function ApprovalsTab({ quotes, opportunities, userRole, userId, events, eventsError, saving, onApprove, onSendBack, onOpen }) {
+    const { approvalTiers, approverNames } = useQuoteConfig();
     const isApprover = canApproveQuotes(userRole);
     // Which waiting quotes are THIS approver's to decide — the tier's approver or
     // backup, or an Admin (§0.157, the server's mayDecideQuote).
-    const tierOf   = (q) => approvalTierFor(quoteDiscountPct(q.lineItems, q.dealDiscount), APPROVAL_TIERS);
+    const tierOf   = (q) => approvalTierFor(quoteDiscountPct(q.lineItems, q.dealDiscount), approvalTiers);
     const mineToDecide = (q) => mayDecideQuote({ tier: tierOf(q), role: userRole, userId });
     const [sendingBackId, setSendingBackId] = useState(null);
     const pending  = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
@@ -1320,8 +1327,8 @@ function ApprovalsTab({ quotes, opportunities, userRole, userId, events, eventsE
                             const opp = oppOf(q);
                             const { totalValue: tv } = calcLineTotals(q.lineItems || [], []);
                             const avgDiscPct = quoteDiscountPct(q.lineItems, q.dealDiscount);
-                            const tier = approvalTierFor(avgDiscPct, APPROVAL_TIERS);
-                            const reason = q.approvalReason || `Avg discount ${Math.round(avgDiscPct)}% — exceeds ${tierNeedsApproval(tier) ? Math.round((APPROVAL_TIERS[APPROVAL_TIERS.indexOf(tier) - 1]?.maxDiscount || 0) * 100) : 10}% rep tier`;
+                            const tier = approvalTierFor(avgDiscPct, approvalTiers);
+                            const reason = q.approvalReason || `Avg discount ${Math.round(avgDiscPct)}% — exceeds ${tierNeedsApproval(tier) ? Math.round((approvalTiers[approvalTiers.indexOf(tier) - 1]?.maxDiscount || 0) * 100) : 10}% rep tier`;
                             const open = sendingBackId === q.id;
                             const decides = mineToDecide(q);
                             return (
@@ -1339,7 +1346,7 @@ function ApprovalsTab({ quotes, opportunities, userRole, userId, events, eventsE
                                             <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, lineHeight: 1.2, marginBottom: 2, fontFamily: T.sans }}>{opp?.account || '—'}</div>
                                             <div style={{ fontSize: 12, color: T.inkMid, marginBottom: 6, fontFamily: T.sans }}>{opp?.opportunityName || opp?.account || '—'} — {q.name || q.quoteNumber}</div>
                                             <div style={{ fontSize: 11, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>Reason: {reason}</div>
-                                            <div style={{ fontSize: 11, color: T.inkMid, marginTop: 2, fontFamily: T.sans }}>{decides ? 'Yours to decide' : <>Waiting for {approverWordsLive(tier)}</>}</div>
+                                            <div style={{ fontSize: 11, color: T.inkMid, marginTop: 2, fontFamily: T.sans }}>{decides ? 'Yours to decide' : <>Waiting for {approverWordsOf(tier, approverNames)}</>}</div>
                                             {q.approvalNote && <div style={{ fontSize: 11, color: T.inkMid, marginTop: 4, fontFamily: T.sans }}>Sent back before: “{q.approvalNote}”</div>}
                                         </div>
                                         {/* Right: value + actions */}
@@ -1468,14 +1475,14 @@ export default function QuotesTab() {
     }, [quotesDeepLinkOppId]);
 
     // ── Visibility filter ─────────────────────────────────────
-    // Build approval tiers from settings, overriding the module-level fallback
+    // The org's approval tiers from its settings (the defaults when it has none).
     const approvalTiers = useMemo(() => buildApprovalTiers(settings?.approvalTiers), [settings?.approvalTiers]);
-    // Keep module-level reference in sync for components that use APPROVAL_TIERS directly
-    React.useEffect(() => { APPROVAL_TIERS = approvalTiers; }, [approvalTiers]);
     // The approvers' names, for a tier routed to a person (§0.157).
     const approverNames = useMemo(() => new Map((settings?.users || []).map(u => [u.id, u.name])), [settings?.users]);
-    React.useEffect(() => { APPROVER_NAMES_LIVE = approverNames; }, [approverNames]);
-    React.useEffect(() => { PRODUCT_TYPES_LIVE = cleanProductTypes(settings?.productTypes); }, [settings?.productTypes]);
+    const productTypes  = useMemo(() => cleanProductTypes(settings?.productTypes), [settings?.productTypes]);
+    // Every component in this file reads them from here, in the render that draws
+    // it (QuoteConfigContext, state §0.173).
+    const quoteConfig = useMemo(() => ({ approvalTiers, approverNames, productTypes }), [approvalTiers, approverNames, productTypes]);
 
     // The quotes are what the server sends, for EVERY role: quotes.mjs applies the
     // deals list's own rule (dealVisibleTo) — a rep her own deals' quotes (§0.155),
@@ -1756,6 +1763,7 @@ export default function QuotesTab() {
 
     // ── RENDER ────────────────────────────────────────────────
     return (
+        <QuoteConfigContext.Provider value={quoteConfig}>
         <div className="tab-page" style={{ fontFamily: T.sans }}>
 
             {/* Page header */}
@@ -2159,5 +2167,6 @@ export default function QuotesTab() {
                 />
             )}
         </div>
+        </QuoteConfigContext.Provider>
     );
 }

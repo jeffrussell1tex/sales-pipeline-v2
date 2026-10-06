@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
-import { dbFetch, dbWrite } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 
 // Fire-and-forget SMS for task assignments. The task's id only: mention-sms.mjs
 // texts its owner and words the text from the saved task (state §0.172).
@@ -28,9 +28,10 @@ export function useTasks(deps) {
     const [calendarAddFeedback, setCalendarAddFeedback] = useState({});
 
     const loadTasks = (setDbOffline) => {
+        const askedOrg = requestOrg();   // an answer for an org switched away from is dropped (state §0.173)
         dbFetch('/.netlify/functions/tasks')
-            .then(r => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-            .then(data => setTasks(data.tasks || []))
+            .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(data => { if (data && stillOrg(askedOrg)) setTasks(data.tasks || []); })
             .catch(err => console.error('Failed to load tasks:', err));
     };
 

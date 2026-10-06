@@ -733,7 +733,10 @@ export default function SalesManagerTab() {
     const isManager = userRole === 'Manager';
     const [subTab, setSubTab] = useState(() => localStorage.getItem('tab:salesmgr:subTab') || 'forecast');
 
-    if (!isAdmin && !isManager) return null;
+    // Only an Admin or a Manager reaches this tab — App.jsx renders it for those
+    // roles alone (state §0.173). It returned null here for any other role,
+    // between its hooks: in the render of an org switch the role read as a rep,
+    // the tab rendered fewer hooks than before, and React threw.
 
     const setSubTabPersist = t => { setSubTab(t); localStorage.setItem('tab:salesmgr:subTab', t); };
 

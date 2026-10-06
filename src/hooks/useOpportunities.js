@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
-import { dbFetch, dbWrite } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 
 // Fire-and-forget SMS for deal assignments and stage changes. The event and
 // the deal's id only: mention-sms.mjs texts the deal's owner, words the text
@@ -27,9 +27,13 @@ export function useOpportunities(deps) {
     const [oppModalSaving, setOppModalSaving] = useState(false);
 
     const loadOpportunities = (setDbOffline) => {
+        // This org's deals only (state §0.173): an answer for an org switched away
+        // from is dropped.
+        const askedOrg = requestOrg();
         dbFetch('/.netlify/functions/opportunities')
-            .then(r => { setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => {
+                if (!data || !stillOrg(askedOrg)) return;
                 const loadedOpps = data.opportunities || [];
                 const updatedOpps = loadedOpps.map(opp => {
                     const normalized = {

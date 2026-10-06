@@ -27,6 +27,21 @@ export const waitForToken = () => new Promise((resolve) => {
     }, 100);
 });
 
+// The org every request is made for (state §0.173): the org on screen NOW. App.jsx
+// sets it as it renders — before any effect of that render runs, a child's or
+// App's own — and the token getter reads it when a request is made. The getter
+// used to close over the org of the render that installed it, and App's effects
+// run after its children's: in the commit that switched the org, a tab's effect
+// fetched with the PREVIOUS org's token (observed: Home's pinned reports).
+let requestOrgId = null;
+export const setRequestOrg = (orgId) => { requestOrgId = orgId || null; };
+export const requestOrg = () => requestOrgId;
+// True while the org that asked is still the org on screen. A load takes
+// requestOrg() when it starts and checks this when its answer lands: an answer
+// for an org the user has switched away from is dropped, never shown under the
+// new org's name.
+export const stillOrg = (askedOrgId) => !!askedOrgId && askedOrgId === requestOrgId;
+
 // Authenticated fetch — injects Clerk JWT
 // window.__getClerkToken is set by App.jsx after useAuth() initializes
 export const dbFetch = async (url, options) => {

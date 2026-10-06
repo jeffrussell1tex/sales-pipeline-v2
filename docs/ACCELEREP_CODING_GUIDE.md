@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 5, 2026 · rules current through **§18b65** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 5, 2026 · rules current through **§18b66** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3809,3 +3809,15 @@ through `dbFetch`.
 4. **A field an endpoint answers with is a column — and a test that reads the schema says so**, not a reading of the shaper. An undefined key leaves the JSON silently; a filter on no column fails the request. tests/audit-close.test.mjs parses db/schema.ts and checks every `r.<field>` and every filter of the public API's six resources.
 5. **A column means what its schema line says, not what its name suggests.** A job's `equipmentIds` holds the kinds it needs (`dispatch_equipment.category` values); `assignedEquipmentIds` holds the units reserved for it (§0.116). Read the schema line before writing a rule over a column.
 6. **A test's data must be able to tell the rule from its mutant.** A namesake inserted after the owner (a name lookup found the owner first), a read-only member whom ownership refused anyway (the role gate was never needed), an open visit changed a moment ago (any rule by last change passed): each let a broken rule pass. Run the server rules' mutants against the integration suite, and seed what separates them.
+
+## 18b66. An Org Switch Shows Only The New Org — A Request Carries The Org On Screen, An Answer For Another Org Is Dropped, And What Loads Once Loads Per Org (hard rule)
+
+**Origin (§0.173, 6 Oct 2026 — Jeff: "go with your recommendation", the 2 Oct audit's last reports).** The header's switcher changes the org without a reload. App installed the token getter in an effect that closed over that render's org, and React runs a child's effects before App's: Home's pinned-reports request went out with the PREVIOUS org's token in the commit of a switch (observed). The lists were never emptied and took any answer. Two surfaces loaded once and kept the last org's data — Reports' saved list and the profile panel, whose email-logging address then filed BCC'd mail into the org the user had left (observed). The Sales Manager tab returned early between its hooks and threw on a switch (observed), and QuotesTab kept an org's tiers in module-level variables.
+
+1. **A request carries the org on screen when it is made.** The token getter reads the request org (`requestOrg()`, storage.js), which App sets as it renders — never an org closed over when the getter was installed.
+2. **Every load into shared state takes the org when it starts and checks it (`stillOrg`) at each step that sets state** — the response, its body, its error, its loading flag. A load for an org switched away from sets nothing.
+3. **A switch empties the shared lists before the new org's answers arrive.** Nothing of the last org is shown under the new org's name — not for a moment, and not for good when a load fails.
+4. **What loads once is keyed by the org.** The tab area remounts on a switch (`key={activeOrgId}`); a component that never unmounts resets its loaded flags on the org (the profile panel); a list kept in the browser is stored under the org's id.
+5. **No module-level variable holds an org's data.** A context or props, read in the render that draws it. An effect that copies settings into a module variable is a render behind, and keeps the last org's value across a switch and an unmount.
+6. **A component never returns early between its hooks.** A role gate belongs where the component is rendered: in the render of a switch the role reads as a rep, and a gate inside it changes the hook count, so React throws.
+7. **A switch is tested at runtime, on more than one surface,** with every request's token org logged against the org on screen. Settings hid the race (it remounts after the new org's settings load); Home showed it.

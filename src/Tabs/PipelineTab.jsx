@@ -339,6 +339,7 @@ export default function PipelineTab() {
         setSpiffClaimContext, setShowSpiffClaimModal,
         setLostReasonModal, setCsvImportType, setShowCsvImportModal,
         setActivePipelineId, isMobile,
+        activeOrgId,
     } = useApp();
     // Safe wrapper — defaults to true if AppContext hasn't been updated yet
     const { isFeatureEnabled: _ife } = useApp();
@@ -412,15 +413,20 @@ export default function PipelineTab() {
         pipelineRepFilter.length + pipelineTeamFilter.length + pipelineTerritoryFilter.length;
 
     // ── Saved views ───────────────────────────────────────────
+    // Kept per org (state §0.173): a view names the org's reps, stages and
+    // territories, and the browser held one list for every org. The tab remounts
+    // on a switch, so this reads the new org's list. A list saved under the old
+    // key is not shown: which org it was saved in cannot be told.
+    const savedViewsKey = 'pipelineSavedViews:' + (activeOrgId || 'none');
     const [savedViews, setSavedViews] = useState(() => {
-        try { const raw = localStorage.getItem('pipelineSavedViews'); return raw ? JSON.parse(raw) : []; }
+        try { const raw = localStorage.getItem(savedViewsKey); return raw ? JSON.parse(raw) : []; }
         catch { return []; }
     });
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 
     const persistSavedViews = (views) => {
         setSavedViews(views);
-        localStorage.setItem('pipelineSavedViews', JSON.stringify(views));
+        try { localStorage.setItem(savedViewsKey, JSON.stringify(views)); } catch { /* storage refused: the views last this visit */ }
     };
 
     const saveCurrentView = (name) => {

@@ -146,7 +146,11 @@ export default function QuickLogFab() {
                                 const linkedOpp = quickLogForm.opportunityId ? (opportunities || []).find(o => o.id === quickLogForm.opportunityId) : null;
                                 const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                                 const newActivity = {
-                                    id: 'act_' + Date.now(),
+                                    // A UUID, as useActivities mints (state §0.173). Ids are
+                                    // keys across every org, and 'act_' + Date.now() was the
+                                    // same for two logs in one millisecond — the second refused
+                                    // as an id another record holds (§0.166).
+                                    id: 'id_' + crypto.randomUUID(),
                                     type: quickLogForm.type,
                                     notes: quickLogForm.notes,
                                     date: today,

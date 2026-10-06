@@ -350,7 +350,8 @@ test('product & service types: settings.mjs carries productTypes in BOTH halves 
     assert.ok(q.includes('    const typeOpts  = cleanProductTypes(settings?.productTypes);'), 'the Catalog’s Type select is the org’s list');
     assert.ok(!q.includes("pbCfg.types      || ['recurring', 'one_time', 'service']"), 'the fixed list is gone');
     assert.ok(q.includes('{typeOpts.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}'), 'names shown, ids stored');
-    assert.ok(q.includes('React.useEffect(() => { PRODUCT_TYPES_LIVE = cleanProductTypes(settings?.productTypes); }, [settings?.productTypes]);'), 'the badge names a custom type');
+    assert.ok(q.includes('    const productTypes  = useMemo(() => cleanProductTypes(settings?.productTypes), [settings?.productTypes]);')
+        && q.includes('label: productTypeLabel(type, productTypes) };'), 'the badge names a custom type — the org\'s, through the quote configuration (§0.173)');
 });
 
 // ── invoices.mjs ─────────────────────────────────────────────────────────────
