@@ -336,6 +336,7 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
         const isDirty = Object.values(form).some(v => v !== '');
         const handler = e => {
             if (e.key !== 'Escape') return;
+            e.preventDefault();   // handled here — App's Escape leaves it alone (state §0.177)
             if (isDirty) {
                 showConfirm('Discard this lead?', onClose);
             } else {

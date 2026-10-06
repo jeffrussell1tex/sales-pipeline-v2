@@ -329,7 +329,7 @@ function App() {
         oppModalError, setOppModalError,
         oppModalSaving, setOppModalSaving,
         loadOpportunities,
-        handleDelete, handleSave, completeLostSave,
+        handleDelete, handleSave, completeLostSave, saveDealComments,
     } = useOpportunities(_deps);
 
     const {
@@ -367,8 +367,8 @@ function App() {
         activityModalSaving,
         setActivityModalSaving,
         loadActivities,
-        handleDeleteActivity, handleSaveActivity,
-    } = useActivities({ showConfirm: (...a) => _showConfirmRef.current?.(...a) });
+        handleDeleteActivity, handleLogActivity, handleSaveActivity,
+    } = useActivities(_deps);   // the shared deps, as the other data hooks: it was handed showConfirm alone (state §0.177)
 
     const documentsHook = useDocuments(_deps);
 
@@ -553,6 +553,14 @@ dbFetch('/.netlify/functions/users?me=true')
 
             // Escape — close topmost open thing
             if (e.key === 'Escape') {
+                // A dialog, menu or form that handled this Escape marked it (state §0.177): the
+                // lead form's Escape opened "Discard this lead?" and this handler — on window,
+                // after the form's on document — closed it 2 ms later, in the same keypress.
+                if (e.defaultPrevented) return;
+                // The app's dialogs sit above every rail and modal (§0.177), so they close first:
+                // an Escape with a confirm open over the deal modal closed the deal modal.
+                if (confirmModal) { setConfirmModal(null); return; }
+                if (promptModal) { setPromptModal(null); return; }
                 if (viewingActivity) { setViewingActivity(null); return; }
                 if (showShortcuts) { setShowShortcuts(false); return; }
                 if (showActivityModal) { setShowActivityModal(false); return; }
@@ -563,9 +571,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 if (showTaskModal) { setShowTaskModal(false); setEditingTask(null); return; }
                 if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
                 if (showProfilePanel) { setShowProfilePanel(false); return; }
-                if (confirmModal) { setConfirmModal(null); return; }
                 if (coachingNoteModal) { setCoachingNoteModal(null); return; }
-                if (promptModal) { setPromptModal(null); return; }
                 if (notesPopover) { setNotesPopover(null); return; }
                 if (undoToast) { clearTimeout(undoToast.timerId); setUndoToast(null); return; }
                 if (showNotifications) { setShowNotifications(false); return; }
@@ -1774,7 +1780,9 @@ dbFetch('/.netlify/functions/users?me=true')
         handleAddTaskToCalendar,
         handleAddActivity,
         handleDeleteActivity,
+        handleLogActivity,
         handleSaveActivity,
+        saveDealComments,
         loadOpportunities,
         loadAccounts,
         loadContacts,

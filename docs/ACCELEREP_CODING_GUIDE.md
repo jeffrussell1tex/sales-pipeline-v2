@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b69** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b70** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3850,3 +3850,13 @@ through `dbFetch`.
 2. **A data hook reads App's helpers when it uses them** — in the handler, or in the answer — never while it renders: App fills the refs behind its deps after the hooks have run, so a copy taken at a hook's top is the render before's, and null on a mount's first render. A hook copies at its top only a helper that is the same from any render (tests/hook-deps.test.mjs names them, each with its reason).
 3. **A timer clears only what it set.** The undo toast's timer compares the toast's id with its own before it clears it, so a softDelete from any render leaves a later toast alone.
 4. **A catch leaves.** The code after a try is the success path; a catch that sets an error returns, or the follow-up, the reset and the close run for what was not saved. In src/hooks a test fails a catch that falls through (tests/activity-save.test.mjs).
+
+## 18b70. A Change On Screen Is A Change Sent — Through The Hook That Owns The Record; The App's Dialogs Sit Above Every Layer (hard rule)
+
+**Origin (§0.177, 6 Oct 2026 — §0.176's found (b) and (f)).** A deal's modal logged and deleted activities and posted, edited and deleted team notes through five callbacks that set a list and sent nothing — gone, or back, on reload. The activity delete in its hook had never run (no caller; its hook handed `showConfirm` alone). The app's confirm sat at z-index 1000, under every modal and rail: "Discard this lead?" opened unseen behind the lead form, and the follow-up prompt hid behind a contact's rail.
+
+1. **A callback that changes a record sends the write, through the hook that owns the record** — `handleLogActivity`, `handleDeleteActivity`, `saveDealComments` — and answers `{ ok, error }`. A setter alone is a screen-only change (CLAUDE.md's persistent-data rule). tests/deal-modal-saves.test.mjs parses every handler that sets a shared list and fails one with no server call, outside a named allowance.
+2. **The screen waits for the answer it shows.** A form, a draft or an edit resets only after its save; a failure keeps what was typed and says why; the button shows its spinner while the request is out.
+3. **A delete that offers Undo waits for its DELETE first,** and a refused one puts the row back and says so — an Undo pressed while the DELETE is out could POST before it lands.
+4. **The app's dialogs and toasts sit above every layer** — the confirm and prompt and the blocked-delete dialog at 100100, the follow-up prompt at 100050, the Undo toast at 100200; tests/layers.test.mjs scans every z-index in src and fails a layer that rises above them. Check a dialog in the pane by what is on top at its button.
+5. **A handler that deals with an Escape marks it** (`e.preventDefault()`), and App's Escape — on window, after every handler on document — leaves a marked one alone; it closes an open confirm or prompt before anything under it.

@@ -188,7 +188,7 @@ export default function QuickLogFab() {
 
             {/* ════ FOLLOW-UP TASK PROMPT ════ */}
             {followUpPrompt && (
-                <div style={{ position: 'fixed', bottom: '2rem', right: isMobile ? '0.75rem' : '1.5rem', left: isMobile ? '0.75rem' : 'auto', zIndex: 9991, background: '#fff', border: '1px solid #e5e2db', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1.25rem', width: isMobile ? 'auto' : '280px' }}
+                <div style={{ position: 'fixed', bottom: '2rem', right: isMobile ? '0.75rem' : '1.5rem', left: isMobile ? '0.75rem' : 'auto', zIndex: 100050,   /* above the rails (state §0.177) */ background: '#fff', border: '1px solid #e5e2db', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1.25rem', width: isMobile ? 'auto' : '280px' }}
                     onClick={e => e.stopPropagation()}>
                     <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.375rem' }}>✅ Activity logged!</div>
                     <div style={{ fontSize: '0.8125rem', color: T.inkMid, marginBottom: '0.875rem' }}>Create a follow-up task for <strong>{followUpPrompt.opportunityName}</strong>?</div>

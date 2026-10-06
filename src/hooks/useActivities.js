@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
-import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
 
 export function useActivities(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast } = deps;
@@ -17,61 +17,62 @@ export function useActivities(deps) {
             .catch(err => console.error('Failed to load activities:', err));
     };
 
+    // Deleting an activity (state §0.177) — a deal's History tab is the screen that
+    // calls it. A confirm, then the DELETE, then Undo once the DELETE has landed:
+    // the Undo was offered while the DELETE was still out, so one pressed inside that
+    // round trip could POST before the DELETE landed; the activity was read through
+    // a state updater React may run after the line that tested it; and App handed
+    // this hook only showConfirm, so softDelete and setUndoToast were undefined here —
+    // the first call would have thrown. Nothing called it: the History tab's delete
+    // took the row off the screen and sent nothing, and it was back on reload.
     const handleDeleteActivity = (activityId) => {
-        let activity;
-        setActivities(prev => { activity = prev.find(a => a.id === activityId); return prev; });
+        const activity = activities.find(a => a.id === activityId);
         if (!activity) return;
-
-        showConfirm('Are you sure you want to delete this activity?', () => {
+        showConfirm('Delete this activity? You\'ll have a few seconds to undo.', async () => {
             const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
-            let snapshot;
-            setActivities(prev => {
-                snapshot = prev.slice();
-                return prev.filter(a => a.id !== activityId);
-            });
-
-            dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
-                .then(res => {
-                    if (!stillOrg(askedOrg)) return;
-                    if (!res.ok) {
-                        console.error('Failed to delete activity on server, restoring. Status:', res.status);
-                        setActivities(prev => {
-                            if (prev.some(a => a.id === activityId)) return prev;
-                            return snapshot;
-                        });
-                    }
-                })
-                .catch(err => {
-                    if (!stillOrg(askedOrg)) return;
-                    console.error('Failed to delete activity (network error), restoring:', err);
-                    setActivities(prev => {
-                        if (prev.some(a => a.id === activityId)) return prev;
-                        return snapshot;
-                    });
-                });
-
+            setActivities(prev => prev.filter(a => a.id !== activityId));
+            const r = await dbWrite(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' });
+            if (!stillOrg(askedOrg)) return;
+            if (!r.ok) {
+                setActivities(prev => (prev.some(a => a.id === activityId) ? prev : [...prev, activity]));
+                setUndoToast({ error: `Activity not deleted — ${r.error}` });
+                return;
+            }
             softDelete(
                 `Activity "${activity.type || 'Activity'}"`,
                 () => {},
-                () => {
-                    setActivities(snapshot);
+                async () => {
                     setUndoToast(null);
-                    // Undo restores the row in the UI immediately, then re-POSTs it.
-                    // This used .catch() alone, which never fires on a 403/500 — so a
-                    // rejected restore left the activity visible but deleted in the
-                    // database, and the divergence only surfaced on the next reload.
-                    dbWrite('/.netlify/functions/activities', {
+                    setActivities(prev => (prev.some(a => a.id === activityId) ? prev : [...prev, activity]));
+                    // Undo puts the row back on screen and re-POSTs it; a refused restore
+                    // takes it off again and says so.
+                    const rr = await dbWrite('/.netlify/functions/activities', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(activity),
-                    }).then(r => {
-                        if (r.ok || !stillOrg(askedOrg)) return;
-                        setActivities(prev => prev.filter(a => a.id !== activity.id));   // undo did not take
-                        setUndoToast({ error: `Could not restore the activity — ${r.error}` });
                     });
+                    if (rr.ok || !stillOrg(askedOrg)) return;
+                    setActivities(prev => prev.filter(a => a.id !== activity.id));   // undo did not take
+                    setUndoToast({ error: `Could not restore the activity — ${rr.error}` });
                 }
             );
         });
+    };
+
+    // A deal's History tab logs an activity here (state §0.177). It set the list on
+    // screen and sent nothing: the activity was gone on reload. The answer is the
+    // caller's to show — a failed save keeps its form.
+    const handleLogActivity = async (activity) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
+        const r = await dbWrite('/.netlify/functions/activities', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(activity),
+        });
+        if (!stillOrg(askedOrg)) return stopped();   // the deal modal was remounted by the switch
+        if (!r.ok) return { ok: false, error: r.error };
+        setActivities(prev => [...prev, activity]);
+        return { ok: true };
     };
 
     const fireActivityCalendarEvent = async (activity, opportunities) => {
@@ -176,6 +177,7 @@ export function useActivities(deps) {
         setActivityModalSaving,
         loadActivities,
         handleDeleteActivity,
+        handleLogActivity,
         handleSaveActivity,
     };
 }

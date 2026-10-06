@@ -131,7 +131,7 @@ export default function ModalLayer() {
         leads, setLeads, settings, setSettings, currentUser, stages, allPipelines, activePipeline,
         spiffClaims, setSpiffClaims,
         handleSave, handleSaveAccount, handleSaveContact, handleSaveTask, handleSaveActivity,
-        handleDeleteActivity, handleDeleteTask, handleCompleteTask,
+        handleDeleteActivity, handleDeleteTask, handleCompleteTask, handleLogActivity, saveDealComments,
         handleAddAccountFromOpportunity,
         addAudit, softDelete, showConfirm, loadOpportunities, loadAccounts,
         loadContacts, loadTasks, loadActivities,
@@ -140,6 +140,18 @@ export default function ModalLayer() {
         viewingTask, setViewingTask,
         isMobile,
     } = useApp();
+
+    // A deal's team notes, saved as they change (state §0.177): the list on screen
+    // and the open deal take the notes once the server has them.
+    const saveNotes = async (oppId, change) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
+        const deal = (opportunities || []).find(o => o.id === oppId);
+        const next = change(deal?.comments || []);
+        const r = await saveDealComments(oppId, next);
+        if (!stillOrg(askedOrg)) return stopped();
+        if (r.ok) setEditingOpp(prev => (prev && prev.id === oppId ? { ...prev, comments: next } : prev));
+        return r;
+    };
 
     return (
         <>
@@ -154,42 +166,18 @@ export default function ModalLayer() {
                     currentUser={currentUser}
                     activities={activities}
                     tasks={tasks}
-                    onSaveActivity={(activityData) => {
-                        const newId = 'id_' + crypto.randomUUID();
-                        setActivities(prev => [...prev, { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' }]);
-                    }}
-                    onDeleteActivity={(activityId) => {
-                        setActivities(prev => prev.filter(a => a.id !== activityId));
-                    }}
-                    onSaveComment={(oppId, comment) => {
-                        setOpportunities(prev => {
-                            const updated = prev.map(o =>
-                                o.id === oppId ? { ...o, comments: [...(o.comments || []), comment] } : o
-                            );
-                            setEditingOpp(updated.find(o => o.id === oppId) || null);
-                            return updated;
-                        });
-                    }}
-                    onEditComment={(oppId, commentId, newText) => {
-                        setOpportunities(prev => {
-                            const updated = prev.map(o =>
-                                o.id === oppId ? { ...o, comments: (o.comments || []).map(c =>
-                                    c.id === commentId ? { ...c, text: newText, edited: true, editedAt: new Date().toISOString() } : c
-                                )} : o
-                            );
-                            setEditingOpp(updated.find(o => o.id === oppId) || null);
-                            return updated;
-                        });
-                    }}
-                    onDeleteComment={(oppId, commentId) => {
-                        setOpportunities(prev => {
-                            const updated = prev.map(o =>
-                                o.id === oppId ? { ...o, comments: (o.comments || []).filter(c => c.id !== commentId) } : o
-                            );
-                            setEditingOpp(updated.find(o => o.id === oppId) || null);
-                            return updated;
-                        });
-                    }}
+                    // What the deal's History tab logs and deletes, and its team notes, are
+                    // saved (state §0.177): these five set the screen and sent nothing — gone,
+                    // or back, on reload. Each answers { ok, error } for the modal to show.
+                    onSaveActivity={(activityData) => handleLogActivity({ ...activityData, id: 'id_' + crypto.randomUUID(), createdAt: new Date().toISOString(), author: currentUser || '' })}
+                    onDeleteActivity={(activityId) => handleDeleteActivity(activityId)}
+                    onSaveComment={(oppId, comment) => saveNotes(oppId, (list) => [...list, comment])}
+                    onEditComment={(oppId, commentId, newText) => saveNotes(oppId, (list) => list.map(c =>
+                        c.id === commentId ? { ...c, text: newText, edited: true, editedAt: new Date().toISOString() } : c))}
+                    onDeleteComment={(oppId, commentId) => new Promise((answer) => {
+                        // Asked first — a cancel never answers, and the modal shows nothing.
+                        showConfirm('Delete this note? It cannot be undone.', () => { saveNotes(oppId, (list) => list.filter(c => c.id !== commentId)).then(answer); });
+                    })}
                     onClose={() => { document.activeElement?.blur(); setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
                     onDismissError={() => setOppModalError(null)}
                     onSave={(formData) => handleSave(formData, editingOpp, activePipeline, currentUser, setShowModal, setLostReasonModal)}
@@ -344,7 +332,7 @@ export default function ModalLayer() {
 
             {/* ── Undo Toast ───────────────────────────────────────── */}
             {undoToast && (
-                <div style={{ position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10050,
+                <div style={{ position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 100200,   // above every rail and modal (state §0.177)
                     background: T.ink, color: T.surface, borderRadius: '10px', padding: '0.75rem 1.25rem',
                     display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
                     minWidth: isMobile ? 'calc(100vw - 2rem)' : '320px', maxWidth: isMobile ? 'calc(100vw - 2rem)' : '480px' }}>
@@ -833,7 +821,7 @@ export default function ModalLayer() {
 
             {/* ════ BLOCKED DELETE MODAL ════ */}
             {blockedDeleteModal && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.55)', zIndex: 10200, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? '0' : '1rem' }}
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.55)', zIndex: 100100, /* above every rail and modal (state §0.177) */ display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? '0' : '1rem' }}
                     onClick={() => setBlockedDeleteModal(null)}>
                     <div style={{ background: T.surface, borderRadius: isMobile ? '16px 16px 0 0' : '14px', padding: 0, width: '100%', maxWidth: isMobile ? '100%' : '440px', boxShadow: '0 20px 60px rgba(0,0,0,0.28)', overflow: 'hidden' }}
                         onClick={e => e.stopPropagation()}>

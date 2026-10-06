@@ -214,6 +214,18 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
         date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
         notes: ''
     });
+    // The activity is saved, not only shown (state §0.177): it set the list on
+    // screen and was gone on reload. A failed save keeps the form and says why.
+    const [logState, setLogState] = React.useState({ saving: false, error: null });
+    const logActivity = async () => {
+        if (!onSaveActivity || logState.saving) return;
+        setLogState({ saving: true, error: null });
+        const r = await onSaveActivity({ ...newActivity, opportunityId: opportunity.id, contactName: '' });
+        if (!r?.ok) { setLogState({ saving: false, error: r?.error || 'The activity was not saved.' }); return; }
+        setLogState({ saving: false, error: null });
+        setNewActivity({ type: 'Call', date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'), notes: '' });
+        setShowLogActivity(false);
+    };
     const activityTypes = ['Call', 'Email', 'Meeting', 'Demo', 'Proposal Sent', 'Follow-up', 'Other'];
 
     const stageHistory = opportunity.stageHistory || [];
@@ -446,14 +458,11 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                             <GhostBtn onClick={() => setShowLogActivity(false)}>Cancel</GhostBtn>
-                            <PrimaryBtn type="button" onClick={() => {
-                                if (onSaveActivity) {
-                                    onSaveActivity({ ...newActivity, opportunityId: opportunity.id, contactName: '' });
-                                    setNewActivity({ type: 'Call', date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'), notes: '' });
-                                    setShowLogActivity(false);
-                                }
-                            }}>Save Activity</PrimaryBtn>
+                            <PrimaryBtn type="button" saving={logState.saving} onClick={logActivity}>Save Activity</PrimaryBtn>
                         </div>
+                        {logState.error && (
+                            <div role="alert" style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: T.danger, fontFamily: T.sans, textAlign: 'right' }}>{logState.error}</div>
+                        )}
                     </div>
                 )}
 
@@ -1068,6 +1077,7 @@ export default function OpportunityModal({
     const [commentDraft, setCommentDraft]               = useState('');
     const [editingCommentId, setEditingCommentId]       = useState(null);
     const [editingCommentText, setEditingCommentText]   = useState('');
+    const [noteState, setNoteState]                     = useState({ saving: false, error: null });   // state §0.177
     const [mentionQuery, setMentionQuery]               = useState(null);
     const [mentionAnchorPos, setMentionAnchorPos]       = useState(0);
     const commentTextareaRef = useRef(null);
@@ -1295,6 +1305,34 @@ export default function OpportunityModal({
     // ─────────────────────────────────────────────────────────
     //  RENDER
     // ─────────────────────────────────────────────────────────
+    // Team notes are saved as they are posted, edited or deleted (state §0.177) —
+    // they set the deal on screen only. A failure keeps the draft, or the edit, and
+    // says why; the delete asks first (ModalLayer), and a cancel answers nothing.
+    const postNote = async () => {
+        const text = commentDraft.trim();
+        if (!text || noteState.saving || !onSaveComment) return;
+        const comment = { id: 'c_' + Date.now(), text, author: currentUser || 'Anonymous', timestamp: new Date().toISOString(), mentions: extractMentions(text) };
+        setNoteState({ saving: true, error: null });
+        const r = await onSaveComment(opportunity.id, comment);
+        if (!r?.ok) { setNoteState({ saving: false, error: r?.error || 'The note was not saved.' }); return; }
+        setNoteState({ saving: false, error: null });
+        setCommentDraft(''); setMentionQuery(null);
+    };
+    const saveNoteEdit = async (commentId) => {
+        const text = editingCommentText.trim();
+        if (!text || noteState.saving || !onEditComment) return;
+        setNoteState({ saving: true, error: null });
+        const r = await onEditComment(opportunity.id, commentId, text);
+        if (!r?.ok) { setNoteState({ saving: false, error: r?.error || 'The note was not saved.' }); return; }
+        setNoteState({ saving: false, error: null });
+        setEditingCommentId(null);
+    };
+    const deleteNote = async (commentId) => {
+        if (!onDeleteComment || noteState.saving) return;
+        const r = await onDeleteComment(opportunity.id, commentId);
+        if (r && !r.ok) setNoteState({ saving: false, error: r.error || 'The note was not deleted.' });
+    };
+
     return (
         <>
             <style>{`@keyframes opp-spin { to { transform: rotate(360deg); } }`}</style>
@@ -2029,10 +2067,7 @@ export default function OpportunityModal({
                                                             }
                                                             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && commentDraft.trim()) {
                                                                 e.preventDefault();
-                                                                const text = commentDraft.trim();
-                                                                const comment = { id: 'c_' + Date.now(), text, author: currentUser || 'Anonymous', timestamp: new Date().toISOString(), mentions: extractMentions(text) };
-                                                                onSaveComment && onSaveComment(opportunity.id, comment);
-                                                                setCommentDraft(''); setMentionQuery(null);
+                                                                postNote();
                                                             }
                                                         }}
                                                         placeholder="Add a note… Type @ to mention someone (⌘/Ctrl+Enter to post)"
@@ -2058,14 +2093,11 @@ export default function OpportunityModal({
                                                     {commentDraft.trim() && (
                                                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4, gap: 6 }}>
                                                             <GhostBtn onClick={() => { setCommentDraft(''); setMentionQuery(null); }}>Discard</GhostBtn>
-                                                            <PrimaryBtn type="button" onClick={() => {
-                                                                if (!commentDraft.trim()) return;
-                                                                const text = commentDraft.trim();
-                                                                const comment = { id: 'c_' + Date.now(), text, author: currentUser || 'Anonymous', timestamp: new Date().toISOString(), mentions: extractMentions(text) };
-                                                                onSaveComment && onSaveComment(opportunity.id, comment);
-                                                                setCommentDraft(''); setMentionQuery(null);
-                                                            }}>Post Note</PrimaryBtn>
+                                                            <PrimaryBtn type="button" saving={noteState.saving} onClick={postNote}>Post Note</PrimaryBtn>
                                                         </div>
+                                                    )}
+                                                    {noteState.error && (
+                                                        <div role="alert" style={{ marginTop: 6, fontSize: 12, color: T.danger, fontFamily: T.sans }}>{noteState.error}</div>
                                                     )}
                                                 </div>
                                             </div>
@@ -2100,7 +2132,7 @@ export default function OpportunityModal({
                                                                                 style={{ width: '100%', padding: '6px 8px', border: `1.5px solid ${T.ink}`, borderRadius: T.r, fontSize: 12.5, fontFamily: T.sans, resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.5, background: T.surface, color: T.ink }}/>
                                                                             <div style={{ display: 'flex', gap: 6, marginTop: 4, justifyContent: 'flex-end' }}>
                                                                                 <GhostBtn onClick={() => setEditingCommentId(null)}>Cancel</GhostBtn>
-                                                                                <PrimaryBtn type="button" onClick={() => { if (editingCommentText.trim()) onEditComment && onEditComment(opportunity.id, c.id, editingCommentText.trim()); setEditingCommentId(null); }}>Save</PrimaryBtn>
+                                                                                <PrimaryBtn type="button" saving={noteState.saving} onClick={() => saveNoteEdit(c.id)}>Save</PrimaryBtn>
                                                                             </div>
                                                                         </div>
                                                                     ) : (
@@ -2113,7 +2145,7 @@ export default function OpportunityModal({
                                                                             style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '0.75rem', padding: '2px 4px', lineHeight: 1, borderRadius: T.r }}
                                                                             onMouseEnter={e => e.currentTarget.style.color = T.info}
                                                                             onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>✏️</button>
-                                                                        <button type="button" onClick={() => onDeleteComment && onDeleteComment(opportunity.id, c.id)} title="Delete"
+                                                                        <button type="button" onClick={() => deleteNote(c.id)} title="Delete"
                                                                             style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '0.75rem', padding: '2px 4px', lineHeight: 1, borderRadius: T.r }}
                                                                             onMouseEnter={e => e.currentTarget.style.color = T.danger}
                                                                             onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>✕</button>

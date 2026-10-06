@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
-import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../utils/storage';
 
 // Fire-and-forget SMS for deal assignments and stage changes. The event and
 // the deal's id only: mention-sms.mjs texts the deal's owner, words the text
@@ -243,9 +243,27 @@ export function useOpportunities(deps) {
         setLostReasonModal(null);
     };
 
+    // A deal's team notes are saved the moment one is posted, edited or deleted
+    // (state §0.177). They lived on the deal on screen until the deal was saved —
+    // closing the modal instead lost them on reload. The PUT merges over the stored
+    // row (§0.169), so it sends the notes alone.
+    const saveDealComments = async (oppId, comments) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
+        const r = await dbWrite('/.netlify/functions/opportunities', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: oppId, comments }),
+        });
+        if (!stillOrg(askedOrg)) return stopped();   // the deal modal was remounted by the switch
+        if (!r.ok) return { ok: false, error: r.error };
+        setOpportunities(prev => prev.map(o => (o.id === oppId ? { ...o, comments } : o)));
+        return { ok: true };
+    };
+
     return {
         opportunities,
         setOpportunities,
+        saveDealComments,
         oppModalError,
         setOppModalError,
         oppModalSaving,
