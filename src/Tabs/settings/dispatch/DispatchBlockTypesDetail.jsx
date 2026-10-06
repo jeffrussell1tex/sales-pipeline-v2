@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { T } from '../shared/tokens.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 
 const SWATCHES = ['#4d6b3d', '#9c3a2e', '#3a5a7a', '#b87333', '#7a6a48', '#5a544c', '#8a8378'];
 
@@ -38,10 +38,12 @@ export const DispatchBlockTypesDetail = ({ settings, setSettings, onBack, setSet
         setSaving(true); setError('');
         try {
             const payload = { dispatchBlockTypes: types };
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch('/.netlify/functions/settings', {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) {
                 if (res.status === 403) throw new Error('You need the Admin role to change these types.');
                 let msg = 'HTTP ' + res.status;

@@ -1,6 +1,6 @@
 // settings/data/BackupDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { LIcon } from '../shared/ui.jsx';
 import { DataStatCard, DataCard, DPill, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
@@ -40,6 +40,7 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
 
     const handleImport = async () => {
         if (!parsed) return;
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setLoading(true);
         setError('');
         try {
@@ -48,6 +49,7 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
                 body: JSON.stringify(parsed),
             });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || 'Import failed');
             setResult(data);
             onSuccess && onSuccess(data);

@@ -13,7 +13,7 @@ import React, { useState } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
 import { T } from '../shared/tokens.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 
 const uid = (p) => p + '_' + crypto.randomUUID();
 
@@ -93,10 +93,12 @@ export const DispatchJobTypesDetail = ({ settings, setSettings, onBack, setSetti
         setSaving(true); setError('');
         try {
             const payload = { dispatchTrades: cats, dispatchJobTypes: types };
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch('/.netlify/functions/settings', {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) {
                 if (res.status === 403) throw new Error('You need the Admin role to change these lists.');
                 let msg = 'HTTP ' + res.status;

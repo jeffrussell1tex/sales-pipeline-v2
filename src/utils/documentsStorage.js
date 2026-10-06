@@ -15,7 +15,15 @@
 //   previewDocument(dbFetch, {...})     → signed GET (inline) → open in new tab
 // ════════════════════════════════════════════════════════════════════════════
 
+import { requestOrg, stillOrg, stopped } from './storage.js';
+
 const DOCS_FN = '/.netlify/functions/documents';
+
+// An upload answers only in the org that asked (state §0.175). It is three
+// requests — presign, the bytes to R2, the record — and one cut by an org switch
+// stops there and never settles: the next request would carry the new org's
+// token and file the last org's upload in it. Its callers are the upload rail and
+// a record's Documents list, both remounted by a switch, so nothing waits on it.
 
 // dbFetch may return a raw Response OR already-parsed JSON depending on your
 // storage.js (the coding guide and state doc disagree). This normalizes both;
@@ -79,6 +87,7 @@ export async function uploadNewDocument(dbFetch, {
   const invalid = validateFile(file);
   if (invalid) throw new Error(invalid);
 
+  const askedOrg = requestOrg();
   const id = 'doc_' + crypto.randomUUID();
   const contentType = file.type || 'application/octet-stream';
   const sizeKb = kbOf(file);
@@ -87,7 +96,9 @@ export async function uploadNewDocument(dbFetch, {
   const { storageKey, uploadUrl } = await requestUploadUrl(dbFetch, {
     documentId: id, filename: file.name, contentType, sizeKb, kind: 'new',
   });
+  if (!stillOrg(askedOrg)) return stopped();
   await putToR2(uploadUrl, file, contentType, onProgress);
+  if (!stillOrg(askedOrg)) return stopped();
 
   const res = await dbFetch(DOCS_FN, {
     method: 'POST',
@@ -97,6 +108,7 @@ export async function uploadNewDocument(dbFetch, {
     }),
   });
   const data = await asJson(res);
+  if (!stillOrg(askedOrg)) return stopped();
   if (!data || data.error || !data.document) {
     throw new Error((data && data.error) || 'File uploaded but the record failed to save');
   }
@@ -108,19 +120,23 @@ export async function uploadNewVersion(dbFetch, { file, documentId, note = '', o
   const invalid = validateFile(file);
   if (invalid) throw new Error(invalid);
 
+  const askedOrg = requestOrg();
   const contentType = file.type || 'application/octet-stream';
   const sizeKb = kbOf(file);
 
   const { storageKey, uploadUrl } = await requestUploadUrl(dbFetch, {
     documentId, filename: file.name, contentType, sizeKb, kind: 'version',
   });
+  if (!stillOrg(askedOrg)) return stopped();
   await putToR2(uploadUrl, file, contentType, onProgress);
+  if (!stillOrg(askedOrg)) return stopped();
 
   const res = await dbFetch(`${DOCS_FN}?action=new-version`, {
     method: 'POST',
     body: JSON.stringify({ id: documentId, storageKey, sizeKb, contentType, note }),
   });
   const data = await asJson(res);
+  if (!stillOrg(askedOrg)) return stopped();
   if (!data || data.error) throw new Error((data && data.error) || 'New version failed to save');
   return data.version;
 }

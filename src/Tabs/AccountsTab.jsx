@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
-import { dbFetch, dbWrite } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────
@@ -733,6 +733,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
         if (!selectedIds.length) return;
         const count = selectedIds.length;
         showConfirm(`Delete ${count} account${count > 1 ? 's' : ''}? This cannot be undone.`, async () => {
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const toDelete = [...selectedIds];
             let snapshot;
             setAccounts(prev => {
@@ -749,9 +750,11 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
             // the list matches the database rather than reappearing on reload.
             const failedIds = [];
             for (const id of toDelete) {
+                if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
                 const r = await dbWrite(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' });
                 if (!r.ok) failedIds.push(id);
             }
+            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
             if (failedIds.length) {
                 setAccounts(prev => {
                     const have = new Set(prev.map(a => a.id));
@@ -768,6 +771,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
                     setAccounts(snapshot);
                     const notRestored = [];
                     for (const a of deletedAccounts.filter(a => !failedIds.includes(a.id))) {
+                        if (!stillOrg(askedOrg)) return;
                         const rr = await dbWrite('/.netlify/functions/accounts', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -775,6 +779,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
                         });
                         if (!rr.ok) notRestored.push(a.id);
                     }
+                    if (!stillOrg(askedOrg)) return;
                     if (notRestored.length) {
                         setAccounts(prev => prev.filter(a => !notRestored.includes(a.id)));
                         setUndoToast({ error: `${notRestored.length} account(s) could not be restored.` });

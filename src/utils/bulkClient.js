@@ -16,6 +16,12 @@
 
 export const BULK_CHUNK = 400;   // must match BULK_CHUNK in netlify/functions/_bulk.mjs
 
+// An import cut by an org switch stops before its next chunk (state §0.175): the
+// chunk would carry the new org's token and file the last org's rows in it. The
+// caller hands in `stillOrg` — whether the org that started the import is still
+// the org on screen; without one, nothing stops.
+export const ORG_SWITCHED = 'Stopped: the organization changed before every row was sent.';
+
 // Pull the most useful message out of an error response.
 // serverErrorBody returns a requestId; surfacing it is what makes the Netlify
 // function log for this exact failure findable.
@@ -45,12 +51,13 @@ export function makeBulkClient(fetchFn) {
     // Never throws. Guide 18b15: an early chunk that succeeded has to reach state
     // before the failure is reported, and throwing from inside the loop discards
     // it. The caller commits `landed` first and raises second.
-    const postNew = async (url, items, { onProgress, progressOffset = 0, progressTotal = items.length } = {}) => {
+    const postNew = async (url, items, { onProgress, progressOffset = 0, progressTotal = items.length, stillOrg } = {}) => {
         const landed = [];
         const failed = [];
         let error = null, done = 0;
 
         for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
+            if (stillOrg && !stillOrg()) { error = ORG_SWITCHED; break; }
             const chunk = items.slice(i, i + BULK_CHUNK);
             const r = await fetchFn(url, { method: 'POST', body: JSON.stringify(chunk) });
             const body = await readJson(r);
@@ -92,13 +99,14 @@ export function makeBulkClient(fetchFn) {
     // discrepancy. Applying an ambiguous set is how the UI came to show records
     // that were never written; the honest answer is that this chunk's outcome is
     // unknown and a refresh will settle it.
-    const putBulk = async (url, items, { onProgress, progressOffset = 0, progressTotal = items.length } = {}) => {
+    const putBulk = async (url, items, { onProgress, progressOffset = 0, progressTotal = items.length, stillOrg } = {}) => {
         const appliedIds = [];
         const notFound = [];
         const forbidden = [];
         let updated = 0, discrepancy = 0, error = null, done = 0;
 
         for (let i = 0; i < items.length && !error; i += BULK_CHUNK) {
+            if (stillOrg && !stillOrg()) { error = ORG_SWITCHED; break; }
             const chunk = items.slice(i, i + BULK_CHUNK);
             const r = await fetchFn(url, { method: 'PUT', body: JSON.stringify(chunk) });
             const body = await readJson(r);

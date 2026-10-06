@@ -7,7 +7,7 @@ import { CSectionCard } from '../shared/form.jsx';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 import { useApp } from '../../../AppContext';
 import { DEFAULT_LEAD_SCORING, isDecidedLead, trainNowMessage } from '../../../utils/leadScoringDefaults.js';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 
 const FIELD_OPTS = [
     { v: 'title',        l: 'Title' },
@@ -126,8 +126,10 @@ export const LeadScoringDetail = ({ settings, setSettings, onBack, setSettingsDi
     const handleTrainNow = async () => {
         setTraining(true); setTrainMsg(null);
         try {
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res  = await dbFetch('/.netlify/functions/train-lead-model', { method: 'POST' });
             const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || `Training refused (${res.status})`);
             if (data.ok && data.leadScoring) setSettings(prev => ({ ...prev, leadScoring: data.leadScoring }));
             setTrainMsg(trainNowMessage(data));

@@ -41,6 +41,7 @@ export function useTasks(deps) {
         if (!task) return;
 
         showConfirm('Are you sure you want to delete this task?', () => {
+            const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
             let snapshot;
             setTasks(prev => {
                 snapshot = prev.slice();
@@ -49,6 +50,7 @@ export function useTasks(deps) {
 
             dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
                 .then(res => {
+                    if (!stillOrg(askedOrg)) return;
                     if (!res.ok) {
                         console.error('Failed to delete task on server, restoring. Status:', res.status);
                         setTasks(prev => {
@@ -58,6 +60,7 @@ export function useTasks(deps) {
                     }
                 })
                 .catch(err => {
+                    if (!stillOrg(askedOrg)) return;
                     console.error('Failed to delete task (network error), restoring:', err);
                     setTasks(prev => {
                         if (prev.some(t => t.id === taskId)) return prev;
@@ -82,7 +85,7 @@ export function useTasks(deps) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(task),
                     }).then(r => {
-                        if (r.ok) return;
+                        if (r.ok || !stillOrg(askedOrg)) return;
                         setTasks(prev => prev.filter(t => t.id !== task.id));   // undo did not take
                         setUndoToast({ error: `Could not restore the task — ${r.error}` });
                     });
@@ -120,6 +123,7 @@ export function useTasks(deps) {
     };
 
     const handleSaveTask = async (taskData, ctx) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         const { editingTask, setShowTaskModal, opportunities } = ctx;
         setTaskModalError(null);
         setTaskModalSaving(true);
@@ -128,6 +132,7 @@ export function useTasks(deps) {
             try {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await res.json();
+                if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
                 setTasks(prev => prev.map(t => t.id === editingTask.id ? (data.task || payload) : t));
                 addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
@@ -138,6 +143,7 @@ export function useTasks(deps) {
                 fireCalendarEvent(payload, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);
             } catch (err) {
+                if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update task:', err);
                 setTaskModalError('Failed to save task. Please check your connection and try again.');
             } finally { setTaskModalSaving(false); }
@@ -149,6 +155,7 @@ export function useTasks(deps) {
             try {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) });
                 const data = await res.json();
+                if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
                 setTasks(prev => [...prev, data.task || newTask]);
                 addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
@@ -159,6 +166,7 @@ export function useTasks(deps) {
                 fireCalendarEvent(newTask, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);
             } catch (err) {
+                if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save task:', err);
                 setTaskModalError('Failed to save task. Please check your connection and try again.');
             } finally { setTaskModalSaving(false); }
@@ -181,6 +189,7 @@ export function useTasks(deps) {
 
         // Optimistic local update for instant UI feedback.
         setTasks(prev => prev.map(t => t.id === taskId ? next : t));
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
 
         // Persist immediately — without this the completion is local-only and
         // reverts on refresh (violates the no-local-only-state rule). On failure,
@@ -192,10 +201,12 @@ export function useTasks(deps) {
                 body: JSON.stringify(next),
             });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || 'Failed to save task');
             setTasks(prev => prev.map(t => t.id === taskId ? (data.task || next) : t));
             addAudit('update', 'task', taskId, next.title || taskId, next.status === 'Completed' ? 'Completed' : 'Reopened');
         } catch (err) {
+            if (!stillOrg(askedOrg)) return;
             console.error('Failed to persist task completion:', err);
             setTasks(prev => prev.map(t => t.id === taskId ? current : t));
         }

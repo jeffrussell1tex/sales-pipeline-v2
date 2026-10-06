@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
-import { dbFetch, dbWrite, waitForToken } from '../utils/storage';
+import { dbFetch, dbWrite, waitForToken, requestOrg, stillOrg } from '../utils/storage';
 // Plan recurrence and agreement renewals — pure, shared with the hourly
 // pipeline-alerts job (state §0.110).
 import { planVisitState, buildVisitQueue, buildRenewalQueue, renewedExpiry } from '../utils/planVisits.js';
@@ -1088,6 +1088,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
             const endMins  = hh * 60 + mm + durMin;
             const endStr   = `${String(Math.floor(endMins / 60) % 24).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
 
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(selectedJob.id), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1104,6 +1105,7 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                 }),
             });
             const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) {
                 if (res.status === 403) throw new Error('Your role cannot schedule jobs.');
                 throw new Error(data.error || ('HTTP ' + res.status));
@@ -1156,12 +1158,14 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
         setSaving(true);
         try {
             const [leadId = null, ...coIds] = ids;
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(selectedJob.id), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: selectedJob.id, status: 'unscheduled', assignedTechId: leadId, coTechIds: coIds }),
             });
             const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) {
                 if (res.status === 403) throw new Error('Your role cannot schedule jobs.');
                 throw new Error(data.error || ('HTTP ' + res.status));
@@ -2996,6 +3000,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
                 servicePlanId:   draft.servicePlanId   || null,
                 planStartDate:   draft.planStartDate   || null };
             const isNew = body._isNew; delete body._isNew;
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch('/.netlify/functions/dispatch-customers'
                 + (isNew ? '' : '?id=' + encodeURIComponent(draft.id)), {
                 method: isNew ? 'POST' : 'PUT',
@@ -3003,6 +3008,7 @@ const CustomersView = ({ customers, accounts, techs, jobs, plans, planVisits, pr
                 body: JSON.stringify(body),
             });
             const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(res.status === 403 ? 'Your role cannot change customers.' : (data.error || 'HTTP ' + res.status));
             const saved = data.customer || body;
             onSaved(saved);
@@ -3422,6 +3428,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                 overtimeRate: draft.overtimeRate === '' ? null : draft.overtimeRate,
             };
             delete body._isNew;
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const url = draft._isNew
                 ? '/.netlify/functions/dispatch-technicians'
                 : '/.netlify/functions/dispatch-technicians?id=' + encodeURIComponent(draft.id);
@@ -3431,6 +3438,7 @@ const TechniciansView = ({ techsRaw, users, vehicles, skills, certs, licenseLeve
                 body: JSON.stringify(body),
             });
             const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) {
                 if (res.status === 403) throw new Error('Your role cannot change technicians.');
                 throw new Error(data.error || ('HTTP ' + res.status));
@@ -4065,6 +4073,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
         }
         setSaving(true); setStatus(null);
         try {
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             let locationId = draft.locationId || null;
 
             // 1 — address, when one has been entered or changed
@@ -4087,6 +4096,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                 locationId = ldata.location?.id || locId;
             }
 
+            if (!stillOrg(askedOrg)) return;   // the job's PUT would carry the new org's token
             // 2 — the job
             const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(draft.id), {
                 method: 'PUT',
@@ -4114,6 +4124,7 @@ const JobsView = ({ jobsRaw, customers, techs, skills, licenseLevels, categories
                 }),
             });
             const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) {
                 if (res.status === 403) throw new Error('Your role cannot edit jobs.');
                 throw new Error(data.error || ('HTTP ' + res.status));
@@ -5706,6 +5717,7 @@ export default function DispatchTab() {
 
         setNewJobSaving(true);
         setNewJobError('');
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         try {
             // 1 — resolve the customer FK
             let customerId  = newJobForm.customerId;
@@ -5727,6 +5739,7 @@ export default function DispatchTab() {
                 setCustomers(prev => [...prev, createdCust].filter(Boolean));
             }
 
+            if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
             // 2 — optional service location
             let locationId = null;
             if (address) {
@@ -5745,6 +5758,7 @@ export default function DispatchTab() {
                 locationId = ldata.location?.id || locId;
             }
 
+            if (!stillOrg(askedOrg)) return;
             // 3 — the job
             const jobId = 'djob_' + crypto.randomUUID();
             const payload = {
@@ -5770,6 +5784,7 @@ export default function DispatchTab() {
             };
             const res  = await dbFetch('/.netlify/functions/dispatch-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data?.error || 'Save failed');
             // Optimistically add to local state
             const saved = data.job || data;
@@ -5882,11 +5897,13 @@ export default function DispatchTab() {
     const confirmMassSchedule = async () => {
         if (!massPlan) return;
         setMassSaving(true);
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         let done = 0, failed = 0;
         const applied = [];
         // Units reserved earlier in this same pass are not offered again (§0.116).
         const reservedThisRun = [];
         for (const pr of massPlan.proposals) {
+            if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
             pr.assignedEquipment = pickEquipmentFor(
                 pr.job.equipCategories, equipment,
                 overlappingRivals(pr.job, jobs, pr.dateStr, { start: pr.startHr, durationHrs: pr.job.durationHrs || 2 }),
@@ -5919,6 +5936,7 @@ export default function DispatchTab() {
             }
             setMassProg({ done, total: massPlan.proposals.length, failed });
         }
+        if (!stillOrg(askedOrg)) return;   // no audit row filed in the new org
 
         setJobs(prev => prev.map(j => {
             const pr = applied.find(a => a.job.id === j.id);
@@ -5948,6 +5966,7 @@ export default function DispatchTab() {
     // block is recorded even if a later unassign fails, then each job is returned
     // to the queue and the dispatcher is taken there to re-crew it.
     const saveBlock = async (blk, unassignJobIds = []) => {
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         const isNew = !!blk._isNew;
         const body = { ...blk }; delete body._isNew;
         const res = await dbFetch('/.netlify/functions/dispatch-schedule-blocks'
@@ -5972,6 +5991,7 @@ export default function DispatchTab() {
 
         const freed = [];
         for (const jobId of unassignJobIds) {
+            if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
             try {
                 const r = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(jobId), {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -5985,6 +6005,7 @@ export default function DispatchTab() {
             } catch (e) { /* counted below by omission */ }
         }
 
+        if (!stillOrg(askedOrg)) return;   // and no audit row filed in the new org
         setJobs(prev => prev.map(j => freed.includes(j.id)
             ? { ...j, assignedTechIds: [], start: null, status: 'unscheduled', window: 'TBD', assignedEquipment: [] }
             : j));
@@ -6102,12 +6123,14 @@ export default function DispatchTab() {
 
         const commit = async (overridden) => {
             setWeekMove({ busy: true, error: '', notice: '' });
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-jobs?id=' + encodeURIComponent(job.id), {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
                 const data = await res.json().catch(() => ({}));
+                if (!stillOrg(askedOrg)) return;
                 if (!res.ok) {
                     if (res.status === 403) throw new Error('Your role cannot reschedule jobs.');
                     throw new Error(data.error || ('HTTP ' + res.status));

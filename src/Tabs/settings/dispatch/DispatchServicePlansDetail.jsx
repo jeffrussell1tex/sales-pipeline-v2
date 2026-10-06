@@ -11,7 +11,7 @@
 // Per-record saves, no "Save changes" button: a whole-object PUT would clobber a
 // concurrent edit, and these rows are referenced live by customers.
 import React, { useState, useEffect, useCallback } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable } from '../salesProcess/shared.jsx';
@@ -331,8 +331,10 @@ export const DispatchServicePlansDetail = ({ settings, onBack, setSettingsDirty 
     // assign customers — that stays a deliberate per-customer choice.
     const seedFromLegacy = async () => {
         setSeeding(true); setSeedMsg('');
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         let ok = 0; const failed = [];
         for (const tier of legacyTiers) {
+            if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
             const row = {
                 id:      'plan_legacy_' + tier.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
                 name:    labelise(tier),

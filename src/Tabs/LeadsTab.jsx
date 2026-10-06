@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../AppContext';
-import { dbFetch, dbWrite } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { popoverPlacement } from '../utils/popoverPlacement.js';
 import { T } from '../tokens.js';
 
@@ -1068,7 +1068,9 @@ export default function LeadsTab() {
     [settings]);
 
     // ── Persist a lead field change to DB + local state ────────
+    // After an org switch an answer changes nothing on screen (state §0.175).
     const saveLead = useCallback(async (id, patch) => {
+        const askedOrg = requestOrg();
         let snapshot;
         setLeads(prev => { snapshot = prev; return prev.map(l => l.id === id ? { ...l, ...patch } : l); });
         // dbFetch resolves for ANY status (guide 18b1), so the old catch fired on a
@@ -1077,7 +1079,7 @@ export default function LeadsTab() {
             method: 'PUT',
             body: JSON.stringify({ id, ...patch }),
         });
-        if (!r.ok) {
+        if (!r.ok && stillOrg(askedOrg)) {
             setLeads(snapshot);
             setUndoToast({ error: `Lead not saved — ${r.error}` });
         }
@@ -1106,50 +1108,62 @@ export default function LeadsTab() {
     // rule, violated in place). Server-side delete is Admin-only (leads.mjs
     // DELETE requireRole), so the button is offered to Admins alone.
     const deleteLead = useCallback(async (id) => {
+        const askedOrg = requestOrg();
         const r = await dbWrite(`/.netlify/functions/leads?id=${id}`, { method: 'DELETE' });
+        if (!stillOrg(askedOrg)) return;
         if (r.ok) setLeads(prev => prev.filter(l => l.id !== id));
         else setUndoToast({ error: `Lead not deleted — ${r.error}` });
     }, [setLeads, setUndoToast]);
 
     const requestLead = useCallback(async (leadId, note) => {
+        const askedOrg = requestOrg();
         const id = 'lcr_' + crypto.randomUUID();
         const res = await dbFetch('/.netlify/functions/lead-requests', {
             method: 'POST',
             body: JSON.stringify({ id, leadId, note: note || null }),
         });
+        if (!stillOrg(askedOrg)) return;
         if (res.ok) {
             const data = await res.json();
             if (data?.leadRequest) setLeadRequests(prev => [data.leadRequest, ...prev]);
         } else {
             let error = 'Request not sent.';
             try { const b = await res.json(); if (b?.error) error = b.error; } catch { /* non-JSON body */ }
+            if (!stillOrg(askedOrg)) return;
             setUndoToast({ error });
         }
     }, [setUndoToast]);
 
     const cancelRequest = useCallback(async (id) => {
+        const askedOrg = requestOrg();
         const res = await dbFetch(`/.netlify/functions/lead-requests?id=${id}`, { method: 'DELETE' });
+        if (!stillOrg(askedOrg)) return;
         if (res.ok) {
             setLeadRequests(prev => prev.filter(r => r.id !== id));
         } else {
             let error = 'Request not cancelled.';
             try { const b = await res.json(); if (b?.error) error = b.error; } catch { /* non-JSON body */ }
+            if (!stillOrg(askedOrg)) return;
             setUndoToast({ error });
         }
     }, [setUndoToast]);
 
     const resolveRequest = useCallback(async (id, action) => {
+        const askedOrg = requestOrg();
         const res = await dbFetch('/.netlify/functions/lead-requests', {
             method: 'PUT',
             body: JSON.stringify({ id, action }),
         });
+        if (!stillOrg(askedOrg)) return;
         if (!res.ok) {
             let error = 'Request not resolved.';
             try { const b = await res.json(); if (b?.error) error = b.error; } catch { /* non-JSON body */ }
+            if (!stillOrg(askedOrg)) return;
             setUndoToast({ error });
             return;
         }
         const data = await res.json();
+        if (!stillOrg(askedOrg)) return;
         const resolved = data?.leadRequest;
         if (!resolved) return;
         if (action === 'approve') {
@@ -1179,8 +1193,9 @@ export default function LeadsTab() {
         };
         setEditingOpp(null);
         setShowModal(true);
-        // Pre-fill opp form after modal mounts
-        setTimeout(() => setEditingOpp(oppSeed), 50);
+        // Pre-fill opp form after modal mounts — in this org only (state §0.175)
+        const askedOrg = requestOrg();
+        setTimeout(() => { if (stillOrg(askedOrg)) setEditingOpp(oppSeed); }, 50);
         // Mark lead as converted
         saveLead(normalized.id, { status: 'Converted' });
     }, [setEditingOpp, setShowModal, currentUser, saveLead]);

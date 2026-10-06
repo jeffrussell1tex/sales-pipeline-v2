@@ -1,7 +1,7 @@
 // settings/data/FeaturesDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useRegisterSave } from '../shared/useRegisterSave.js';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { DataCard, DataCrumb, DataTitle, DataBtn, DataModal, DataModalHead, DataModalFoot } from './shared.jsx';
 
@@ -168,6 +168,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
             if (keyAction === 'set' && apiKeyInput.trim()) payload.anthropicApiKey = apiKeyInput.trim();
             if (keyAction === 'clear')                     payload.anthropicApiKey = null;
 
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch('/.netlify/functions/settings', {
                 method: 'PUT',
                 body: JSON.stringify(payload),
@@ -179,6 +180,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 throw new Error(msg);
             }
             const result = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
 
             setSettings(prev => ({
                 ...prev,

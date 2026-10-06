@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b67** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b68** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3830,4 +3830,14 @@ through `dbFetch`.
 2. **App puts them back on a switch only** — from one org to another, or to none — never on the first load, which keeps what a mount-time effect opened (the calendar return opens a Settings panel).
 3. **The reset is App's first effect after the hooks it resets.** App's effects run in declaration order: the reset undoes what an effect above it set for the new org in the same commit (the calendar's fetch sets its loading flag). A child's effects run before App's, so an effect anywhere that sets an org-bound value in the commit of a switch — itself, through a function it calls, or in a component's body — is undone by the reset.
 4. **A decision that reads the role or the org's settings waits for this org's** — `roleKnown` (the profile in state is this org's) and `settingsOrgId === activeOrgId` — and runs again when they land. In the render of a switch the role reads as a rep and the settings are the defaults: a redirect or a landing decided then acts for neither org. A gate in the render that only hides may read the fallback — it hides until the role lands.
-5. **A reset covers what is open, not what lands later.** The answer to an action begun in the last org lands after the reset; it is checked against the org that asked (§18b66.2) before it opens, fills or appends anything. Not yet true everywhere — state §9, found in §0.174 (a).
+5. **A reset covers what is open, not what lands later.** The answer to an action begun in the last org lands after the reset; it is checked against the org that asked (§18b66.2) before it opens, fills or appends anything. True everywhere since §0.175 (§18b68).
+
+## 18b68. An Action Answers Only In The Org That Began It — It Checks The Org After Every Await, Before It Sets The Screen Or Sends Its Next Request (hard rule)
+
+**Origin (§0.175, 6 Oct 2026 — Jeff: "push dev and start the next batch").** §0.173 checked every load and §0.174 put back what was open; an action's answer still landed after both, and an action that awaited and then sent again sent with the org on screen by then — dbFetch reads the org when it is called. A parse of every async path in src found 248 such points. Observed: a QuickLog save's answer offered a follow-up task for the last org's deal on the new org's screen, and Dispatch's new job sent its address and job POSTs with the new org's token; read from code, an invitation run's next ten went to the new org, and a team list built from the last org's settings was PUT into the new org's.
+
+1. **An action takes the org it began in** — `const askedOrg = requestOrg();` — at its start, before its first await.
+2. **After every await, and at the top of every .then/.catch/.finally or timer callback, it checks the org** — `if (!stillOrg(askedOrg)) return;` — before it sets shared state (the values §18b67 resets, the lists, the settings), sends a write, calls a helper that writes (`addAudit`, the SMS and calendar-event POSTs) or calls a parent back. A loop that awaits checks before each request. When the org has changed the action stops; what it already sent completes in its own org.
+3. **A shared helper whose callers a switch remounts may stop by never settling** (`stopped()`, storage.js) — `putSettings`, the document upload. A helper with callers that stay mounted takes their check instead (the bulk client's `stillOrg`).
+4. **The tests hold it:** tests/late-answers.test.mjs parses every async path in src and fails a late point with no check before it; tests/src-scope.test.mjs walks every name read under src and fails one nothing binds.
+5. **A late answer is tested in the pane by holding it:** a fetch wrapper holds the request and answers it with a made-up response after the switch — nothing is written in any org — and records every further request with its token's org; red with HEAD's file swapped in.

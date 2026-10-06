@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
-import { dbFetch, dbWrite } from '../../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../utils/storage';
 import { isoLocal } from '../../utils/dateLocal';
 import { T } from '../../tokens.js';
 
@@ -163,10 +163,12 @@ export default function QuickLogFab() {
                                     createdAt: new Date().toISOString(),
                                 };
                                 setActivities(prev => [newActivity, ...(prev || [])]);
+                                const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
                                 // The FAB closes straight after this, so a failure was
                                 // invisible: the activity showed in the list and was
                                 // gone on reload.
                                 const rq = await dbWrite('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
+                                if (!stillOrg(askedOrg)) return;
                                 if (!rq.ok) {
                                     setActivities(prev => (prev || []).filter(a => a.id !== newActivity.id));
                                     setUndoToast({ error: `Activity not logged \u2014 ${rq.error}` });

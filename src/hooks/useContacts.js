@@ -54,6 +54,7 @@ export function useContacts(deps) {
         }
 
         showConfirm('Are you sure you want to delete this contact?', () => {
+            const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
             // Snapshot captured right when user confirms, inside the callback
             let snapshot;
             setContacts(prev => {
@@ -63,6 +64,7 @@ export function useContacts(deps) {
 
             dbFetch(`/.netlify/functions/contacts?id=${contactId}`, { method: 'DELETE' })
                 .then(async res => {
+                    if (!stillOrg(askedOrg)) return;
                     if (!res.ok) {
                         // DB delete failed — restore the contact
                         console.error('Failed to delete contact on server, restoring. Status:', res.status);
@@ -74,6 +76,7 @@ export function useContacts(deps) {
                     }
                 })
                 .catch(err => {
+                    if (!stillOrg(askedOrg)) return;
                     console.error('Failed to delete contact (network error), restoring:', err);
                     setContacts(prev => {
                         if (prev.some(c => c.id === contactId)) return prev;
@@ -102,8 +105,8 @@ export function useContacts(deps) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(contact),
                     }).then(r => {
-                        if (r.ok) return;
-                        setContacts(prev => prev.filter(c.id !== contact.id));   // undo did not take
+                        if (r.ok || !stillOrg(askedOrg)) return;
+                        setContacts(prev => prev.filter(c => c.id !== contact.id));   // undo did not take
                         setUndoToast({ error: `Could not restore the contact — ${r.error}` });
                     });
                 }
@@ -112,6 +115,7 @@ export function useContacts(deps) {
     };
 
     const handleSaveContact = async (contactData, { editingContact, setShowContactModal }) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setContactModalError(null);
         setContactModalSaving(true);
         const fullName = ((contactData.firstName || '') + ' ' + (contactData.lastName || '')).trim();
@@ -120,11 +124,13 @@ export function useContacts(deps) {
             try {
                 const res = await dbFetch('/.netlify/functions/contacts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await res.json();
+                if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
                 setContacts(prev => prev.map(c => c.id === editingContact.id ? (data.contact || payload) : c));
                 addAudit('update', 'contact', editingContact.id, fullName || editingContact.id, contactData.company || '');
                 setShowContactModal(false); setContactModalError(null);
             } catch (err) {
+                if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update contact:', err);
                 setContactModalError('Failed to save contact. Please check your connection and try again.');
             } finally { setContactModalSaving(false); }
@@ -134,11 +140,13 @@ export function useContacts(deps) {
             try {
                 const res = await dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newContact) });
                 const data = await res.json();
+                if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
                 setContacts(prev => [...prev, data.contact || newContact]);
                 addAudit('create', 'contact', newId, fullName || newId, contactData.company || '');
                 setShowContactModal(false); setContactModalError(null);
             } catch (err) {
+                if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save contact:', err);
                 setContactModalError('Failed to save contact. Please check your connection and try again.');
             } finally { setContactModalSaving(false); }

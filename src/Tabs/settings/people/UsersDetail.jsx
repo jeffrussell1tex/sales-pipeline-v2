@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../../../AppContext';
-import { dbFetch, dbWrite } from '../../../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { T, eb, STATUS_STYLES } from '../shared/tokens.js';
 import { RCheck, UserAvatar } from '../shared/ui.jsx';
 import { memberStatus, invitationEntries } from './memberStatus.js';
@@ -167,10 +167,12 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
         const invalid = validated.filter(r => !r.valid);
         if (invalid.length > 0) { setError(`Fix ${invalid.length} error${invalid.length > 1 ? 's' : ''} before sending.`); return; }
         setSaving(true); setError('');
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         try {
             const invites = validated.map(r => ({ email:r.email.trim(), role:r.role||defaultRole, team:r.team, teamId: teamIdNamed(settings.teams, r.team), manager:r.manager, territory:r.territory, expiresInDays: expiry }));
             const resp = await dbFetch('/.netlify/functions/users', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'invite', invites }) });
             const d = await resp.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;   // and the last org's team list is never PUT into the new org
             // The new rows join the roster on screen — the list showed none of
             // them until a reload (state §0.165).
             const sent = Array.isArray(d.invited) ? d.invited : [];
@@ -186,6 +188,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
             let teamNote = '';
             if (teamsChanged) {
                 const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: joinedTeams }) });
+                if (!stillOrg(askedOrg)) return;
                 if (rt.ok) setSettings(prev => ({ ...prev, teams: joinedTeams }));
                 else teamNote = ` The team list was not updated — ${rt.error}`;
             }
@@ -196,7 +199,7 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
             if (!resp.ok) throw new Error(d.error || 'Invite failed');
             if (teamNote) throw new Error(`${sent.length} sent.${teamNote}`);
             setSaved(true);
-            setTimeout(() => { setSaved(false); onUsers(); }, 1500);
+            setTimeout(() => { if (!stillOrg(askedOrg)) return; setSaved(false); onUsers(); }, 1500);
         } catch(err) {
             setError(err.message || 'Failed to send invites. Please try again.');
         } finally { setSaving(false); }
@@ -851,10 +854,12 @@ const revokeInvite = async (email) => {
 // sentence when the team list could not be saved, null otherwise.
 const dropRevokedRow = async (removedRowId, teams, setSettings) => {
     if (!removedRowId) return null;
+    const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
     setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== removedRowId) }));
     const { teams: remaining, changed } = teamsWithout(teams, removedRowId);
     if (!changed) return null;
     const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: remaining }) });
+    if (!stillOrg(askedOrg)) return null;
     if (!rt.ok) return `The invitation was revoked, but the team list was not updated — ${rt.error}`;
     setSettings(prev => ({ ...prev, teams: remaining }));
     return null;
@@ -921,7 +926,9 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
             // the digest read — and comparing with the page's first copy of the
             // member would keep an id that was already wrong.
             const toSave = { ...form, teamId: teamIdNamed(settings.teams, form.team) };
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(toSave) });
+            if (!stillOrg(askedOrg)) return;
             if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Save failed'); }
 
             // A role change goes to user-role.mjs, the one path that changes a
@@ -943,6 +950,7 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
                     body: JSON.stringify({ targetUserId: user.id, role: form.role }),
                 });
                 const rd = await rr.json().catch(() => ({}));
+                if (!stillOrg(askedOrg)) return;
                 if (!rr.ok) throw new Error(rd.error || 'Could not change the role.');
                 setRoleNote('Role updated \u2014 it can take up to 30 seconds to take effect.');
             }
@@ -976,6 +984,7 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
                 // to a team the roster does not have, which reads as a data bug
                 // rather than a permissions one.
                 const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
+                if (!stillOrg(askedOrg)) return;
                 if (!rt.ok) { setError(`User saved, but the team list was not updated — ${rt.error}`); return; }
             }
 
@@ -1002,7 +1011,9 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     const handleDeactivate = () => {
         showConfirm(`Deactivate ${user.name}? They keep their record and role but lose access to this organization until an Admin reactivates them.`, async () => {
             try {
+                const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
                 const row = await setMemberActive(user.id, false);
+                if (!stillOrg(askedOrg)) return;
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, ...row } : u) }));
                 onUsers();
             } catch(err) { setError('Could not deactivate: ' + err.message); }
@@ -1012,7 +1023,9 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     const handleReactivate = () => {
         showConfirm(`Reactivate ${user.name}? They get their access to this organization back, with the role they had.`, async () => {
             try {
+                const askedOrg = requestOrg();
                 const row = await setMemberActive(user.id, true);
+                if (!stillOrg(askedOrg)) return;
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === user.id ? { ...u, ...row } : u) }));
                 onUsers();
             } catch(err) { setError('Could not reactivate: ' + err.message); }
@@ -1023,7 +1036,9 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
         showConfirm(`Permanently delete ${user.name}? This cannot be undone. Their record is removed from Accelerep; the Clerk account is unaffected.`, async () => {
             try {
                 // users.mjs DELETE reads id from the query string, not the body.
+                const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
                 const res = await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(user.id)}`, { method:'DELETE' });
+                if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || ('HTTP ' + res.status)); }
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(u => u.id !== user.id) }));
                 onUsers();
@@ -1036,8 +1051,11 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     const handleRevokeInvite = () => {
         showConfirm(`Revoke the invitation to ${user.email || user.name}? Its link stops working and their row is removed. You can invite them again later.`, async () => {
             try {
+                const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
                 const r = await revokeInvite(user.email);
+                if (!stillOrg(askedOrg)) return;
                 const note = await dropRevokedRow(r.removedRowId, settings.teams, setSettings);
+                if (!stillOrg(askedOrg)) return;
                 if (note) { setError(note); return; }
                 onUsers();
             } catch(err) { setError('Could not revoke the invitation: ' + err.message); }

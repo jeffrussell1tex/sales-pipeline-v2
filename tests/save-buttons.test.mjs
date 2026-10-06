@@ -205,8 +205,8 @@ test('every way out of a tab asks first on a page with unsaved edits — the gua
     for (const tab of ['home', 'pipeline', 'tasks', 'accounts', 'contacts', 'leads', 'quotes', 'reports']) {
         assert.ok(app.includes(`e.preventDefault(); navigateToRef.current('${tab}'); break;`), `the shortcut to ${tab}`);
     }
-    assert.ok(app.includes("e.preventDefault(); if (navigateToRef.current('pipeline')) setTimeout(() => { setEditingOpp(null); setShowModal(true); }, 100);"),
-        'the new deal opens only once the pipeline is open — not over the dialog');
+    assert.ok(app.includes("if (navigateToRef.current('pipeline')) setTimeout(() => { if (!stillOrg(askedOrg)) return; setEditingOpp(null); setShowModal(true); }, 100);"),
+        'the new deal opens only once the pipeline is open — not over the dialog — and only in the org it was asked in (§0.175)');
     const save = between(app, 'const navGuardSave = React.useCallback(async () => {', '}, [pendingNavTab, setActiveTab]);');
     assert.ok(/try \{\s*await save\(\);\s*\} catch \{\s*setNavGuardSaving\(false\);\s*setNavGuardFailed\(true\);\s*return;/.test(save), 'a save that throws keeps the dialog');
 });

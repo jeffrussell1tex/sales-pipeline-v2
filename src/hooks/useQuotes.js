@@ -72,6 +72,7 @@ export function useQuotes() {
      * @returns {object|null}  — saved quote record, or null on error
      */
     const handleSaveQuote = useCallback(async (formData, editingQuote = null) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setQuoteModalError(null);
         setQuoteModalSaving(true);
         try {
@@ -86,6 +87,7 @@ export function useQuotes() {
                 body: JSON.stringify(payload),
             });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return null;
             if (!res.ok) {
                 setQuoteModalError(data.error || 'Failed to save quote. Please try again.');
                 return null;
@@ -99,6 +101,7 @@ export function useQuotes() {
             setQuoteModalError(null);
             return saved;
         } catch (err) {
+            if (!stillOrg(askedOrg)) return null;
             setQuoteModalError('Failed to save quote. Check your connection and try again.');
             return null;
         } finally {
@@ -108,8 +111,10 @@ export function useQuotes() {
 
     const handleDeleteQuote = useCallback(async (quoteId, showConfirm) => {
         const doDelete = async () => {
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             try {
                 const res = await dbFetch('/.netlify/functions/quotes?id=' + quoteId, { method: 'DELETE' });
+                if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { console.error('Failed to delete quote'); return; }
                 setQuotes(prev => prev.filter(q => q.id !== quoteId));
             } catch (err) {
@@ -125,6 +130,7 @@ export function useQuotes() {
 
     // ── Product CRUD ──────────────────────────────────────────────────────────
     const handleSaveProduct = useCallback(async (formData, editingProduct = null) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setProductModalError(null);
         setProductModalSaving(true);
         try {
@@ -139,6 +145,7 @@ export function useQuotes() {
                 body: JSON.stringify(payload),
             });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return null;
             if (!res.ok) {
                 setProductModalError(data.error || 'Failed to save product.');
                 return null;
@@ -152,6 +159,7 @@ export function useQuotes() {
             setProductModalError(null);
             return saved;
         } catch (err) {
+            if (!stillOrg(askedOrg)) return null;
             setProductModalError('Failed to save product. Check your connection.');
             return null;
         } finally {
@@ -161,9 +169,10 @@ export function useQuotes() {
 
     const handleDeleteProduct = useCallback(async (productId, showConfirm) => {
         const doDelete = async () => {
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             try {
                 const res = await dbFetch('/.netlify/functions/products?id=' + productId, { method: 'DELETE' });
-                if (!res.ok) return;
+                if (!res.ok || !stillOrg(askedOrg)) return;
                 // Soft-delete: mark inactive in local state
                 setProducts(prev => prev.map(p => p.id === productId ? { ...p, active: false } : p));
             } catch (err) {

@@ -4,7 +4,7 @@
 // applies to every quote template. Live quote-document preview re-renders as you edit.
 import React from 'react';
 import { T } from '../shared/tokens.js';
-import { dbWrite } from '../../../utils/storage';
+import { dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { useApp } from '../../../AppContext';
 
 const SERIF = 'Georgia, "Tiempos", serif';
@@ -257,7 +257,9 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, onClose }) => {
     let snapshot;
     if (setSettings) setSettings((s) => { snapshot = s; return { ...s, quoteBrand: brand }; });
     setSaveError('');
+    const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
     const r = await dbWrite('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ quoteBrand: brand }) });
+    if (!stillOrg(askedOrg)) return;
     if (!r.ok) {
       if (setSettings && snapshot) setSettings(snapshot);
       setSaveError(`Brand not saved — ${r.error}`);

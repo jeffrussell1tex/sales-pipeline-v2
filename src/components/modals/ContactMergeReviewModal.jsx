@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../AppContext';
+import { requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
@@ -105,6 +106,7 @@ export default function ContactMergeReviewModal() {
     };
 
     const onMerge = async () => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         const resolved = buildResolved();
         const result = await handleContactMerge?.({
             survivorId: survivor.id,
@@ -115,7 +117,7 @@ export default function ContactMergeReviewModal() {
             survivorUpdatedAt: survivor.updatedAt,
             archivedUpdatedAt: archived.updatedAt,
         });
-        if (result) setContactMergeModal(null);
+        if (result && stillOrg(askedOrg)) setContactMergeModal(null);
     };
 
     const close = () => { setMergeError?.(null); setContactMergeModal(null); };

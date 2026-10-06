@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { audienceLabel, sortNotes } from '../utils/coachingNotes';
 import { useApp } from '../AppContext';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { isoLocal, todayLocal } from '../utils/dateLocal';
 import { currentQuarter } from '../utils/quarters';
 import { fiscalRange } from '../utils/reportPeriod';
@@ -375,10 +375,12 @@ function AdminTab({ card, cardHdr, currentUser, eyebrow, fyRange, getRepTotal, i
     // never reached the catch and the row flipped to Approved regardless.
     const updateClaimStatus = async (claim, status) => {
         const u = { ...claim, status, approvedAt: new Date().toISOString(), approvedBy: currentUser };
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const res = await dbFetch('/.netlify/functions/spiff-claims', {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(u),
             });
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) {
                 setSaveState({ status: 'error', msg: res.status === 403
                     ? 'Not saved \u2014 only Admins can approve or reject claims.'
@@ -802,21 +804,27 @@ export default function SalesManagerTab() {
     // The rep is the one in state NOW: it was read back out of a setSettings
     // updater, which React may run later than the line after it, and then the
     // save was skipped without a word.
+    // Each save below stops at an org switch (state §0.175): the next PUT would carry
+    // the new org's token, and the app's copy it updates is the new org's.
     const updateRepField = async (userId, field, value) => {
+        const askedOrg = requestOrg();
         const rep = (settings.users || []).find(u => u.id === userId);
         if (!rep) return false;
         if (!await saveUser({ ...rep, [field]: value }, 'forecast call')) return false;
+        if (!stillOrg(askedOrg)) return false;
         setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === userId ? { ...u, [field]: value } : u) }));
         return true;
     };
     // Annual / Quarterly: one click, saved at once for every rep it changes (a
     // single action, not a form). The same fix: the reps as in state now.
     const setAllQuotaMode = async (mode) => {
+        const askedOrg = requestOrg();
         const toSave = (settings.users || []).filter(u => u.userType !== 'ReadOnly' && u.quotaType !== mode).map(u => ({ ...u, quotaType: mode }));
         // Sequential, not a forEach of un-awaited promises: this can be every rep in
         // the org, and one report of the first failure beats N unhandled rejections.
         for (const u of toSave) {
             if (!await saveUser(u, 'quota mode')) return;   // saveUser has already surfaced it
+            if (!stillOrg(askedOrg)) return;   // and the next PUT is not sent
             setSettings(prev => ({ ...prev, users: (prev.users || []).map(x => x.id === u.id ? { ...x, quotaType: mode } : x) }));
         }
     };
@@ -891,8 +899,10 @@ export default function SalesManagerTab() {
             }
             if (Object.keys(patch).length) changes.push({ ...rep, ...patch });
         }
+        const askedOrg = requestOrg();
         for (const user of changes) {
             if (!await saveUser(user, 'quotas')) throw new Error('Quotas not saved.');   // saveUser has said why
+            if (!stillOrg(askedOrg)) return;   // and the next PUT is not sent
             setSettings(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === user.id ? user : u) }));
             setQuotaDrafts(prev => { const next = { ...prev }; delete next[user.id]; return next; });
         }
@@ -903,7 +913,9 @@ export default function SalesManagerTab() {
     const saveCommission = async () => {
         if (tiersDraft === null) return;
         const quotaData = { ...(settings.quotaData || {}), commissionTiers: tiersDraft };
+        const askedOrg = requestOrg();
         if (!await saveExtra({ quotaData }, 'commission tiers')) throw new Error('Commission plan not saved.');
+        if (!stillOrg(askedOrg)) return;
         setSettings(prev => ({ ...prev, quotaData }));
         setTiersDraft(null);
     };
@@ -913,7 +925,9 @@ export default function SalesManagerTab() {
         // A SPIFF goes live only with a name: a nameless one reached reps' claim
         // screens as "Unnamed SPIFF".
         if (spiffsDraft.some(sp => !String(sp.name || '').trim())) throw refuse('give every SPIFF a name.');
+        const askedOrg = requestOrg();
         if (!await saveExtra({ spiffs: spiffsDraft }, 'SPIFFs')) throw new Error('SPIFFs not saved.');
+        if (!stillOrg(askedOrg)) return;
         setSettings(prev => ({ ...prev, spiffs: spiffsDraft }));
         setSpiffsDraft(null);
     };

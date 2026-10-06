@@ -63,6 +63,7 @@ export function useOpportunities(deps) {
         if (!opp) return;
 
         showConfirm('Are you sure you want to delete this opportunity?', () => {
+            const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
             let snapshot;
             // Functional update: snapshot + filter in one atomic operation
             setOpportunities(prev => {
@@ -72,6 +73,7 @@ export function useOpportunities(deps) {
 
             dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
                 .then(async res => {
+                    if (!stillOrg(askedOrg)) return;
                     if (!res.ok) {
                         console.error('Failed to delete opportunity on server, restoring. Status:', res.status);
                         setOpportunities(prev => {
@@ -81,6 +83,7 @@ export function useOpportunities(deps) {
                     }
                 })
                 .catch(err => {
+                    if (!stillOrg(askedOrg)) return;
                     console.error('Failed to delete opportunity (network error), restoring:', err);
                     setOpportunities(prev => {
                         if (prev.some(o => o.id === id)) return prev;
@@ -134,12 +137,14 @@ export function useOpportunities(deps) {
             return;
         }
 
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         if (editingOpp && editingOpp.id) {
             const updatedOpp = { ...enrichedData, id: editingOpp.id };
             setOppModalSaving(true); setOppModalError(null);
             dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOpp) })
                 .then(async res => {
                     const data = await res.json();
+                    if (!stillOrg(askedOrg)) return;
                     if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
                     setOpportunities(prev => prev.map(opp => opp.id === editingOpp.id ? (data.opportunity || updatedOpp) : opp));
                     addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
@@ -163,7 +168,7 @@ export function useOpportunities(deps) {
                     }
                     setShowModal(false); setOppModalError(null);
                 })
-                .catch(err => { console.error('Failed to update opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
+                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to update opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
                 .finally(() => setOppModalSaving(false));
         } else {
             const newId = 'id_' + crypto.randomUUID();
@@ -172,6 +177,7 @@ export function useOpportunities(deps) {
             dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
                 .then(async res => {
                     const data = await res.json();
+                    if (!stillOrg(askedOrg)) return;
                     if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
                     setOpportunities(prev => [...prev, data.opportunity || newOpp]);
                     addAudit('create', 'opportunity', newId, enrichedData.opportunityName || enrichedData.account || newId, enrichedData.account || '');
@@ -181,12 +187,13 @@ export function useOpportunities(deps) {
                     }
                     setShowModal(false); setOppModalError(null);
                 })
-                .catch(err => { console.error('Failed to save opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
+                .catch(err => { if (!stillOrg(askedOrg)) return; console.error('Failed to save opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
                 .finally(() => setOppModalSaving(false));
         }
     };
 
     const completeLostSave = async (formData, editingOppRef, lostReason, lostCategory, activePipeline, currentUser, setLostReasonModal) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
         const prevOppRef = editingOppRef ? opportunities.find(o => o.id === editingOppRef.id) : null;
         const enriched = {
@@ -207,6 +214,7 @@ export function useOpportunities(deps) {
             const snapshot = opportunities;
             setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? updatedOpp : opp));
             const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOpp) });
+            if (!stillOrg(askedOrg)) return;
             if (!r.ok) {
                 setOpportunities(snapshot);                       // never show what was not stored
                 setOppModalError(`Not saved as Closed Lost — ${r.error}`);
@@ -218,6 +226,7 @@ export function useOpportunities(deps) {
             const newOpp = { ...enriched, id: newId, pipelineId: activePipeline.id };
             setOpportunities(prev => [...prev, newOpp]);
             const r = await dbWrite('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) });
+            if (!stillOrg(askedOrg)) return;
             if (!r.ok) {
                 setOpportunities(prev => prev.filter(o => o.id !== newId));
                 setOppModalError(`Not saved as Closed Lost — ${r.error}`);

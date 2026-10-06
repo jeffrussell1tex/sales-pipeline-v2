@@ -20,7 +20,7 @@
 // The old blob keys are left in place, untouched. Nothing reads them for
 // decisions any more, but deleting live data to tidy up is not worth the risk.
 import React, { useState, useEffect, useCallback } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { CSectionCard } from '../shared/form.jsx';
 import { SPTable } from '../salesProcess/shared.jsx';
@@ -370,8 +370,10 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
         setImporting(true); setImportResult('');
         const vPlan = plannedVehicleImports(legacyVehicles);
         const ePlan = plannedEquipmentImports(legacyEquipment);
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         let ok = 0; const failed = [];
         for (const row of vPlan) {
+            if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-vehicles', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
@@ -380,6 +382,7 @@ export const DispatchVehiclesDetail = ({ settings, onBack, setSettingsDirty }) =
             } catch (err) { failed.push(`${row.name}: ${err.message}`); }
         }
         for (const row of ePlan) {
+            if (!stillOrg(askedOrg)) return;
             try {
                 const res = await dbFetch('/.netlify/functions/dispatch-equipment', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });

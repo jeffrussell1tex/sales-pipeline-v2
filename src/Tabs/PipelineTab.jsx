@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../AppContext';
 import { canEditCrm, NON_REP_ROLES } from '../utils/roles.js';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { isoLocal } from '../utils/dateLocal';
 import KanbanView from '../components/KanbanView';
 import FunnelView from '../components/FunnelView';
@@ -559,11 +559,14 @@ export default function PipelineTab() {
         if (!active.length) return;
         setBulkScoring(true);
         setBulkScoreProgress({ done: 0, total: active.length });
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         let scored = 0;
         for (const opp of active) {
+            if (!stillOrg(askedOrg)) return;   // the next score would be asked with the new org's token
             try {
                 const res  = await dbFetch('/.netlify/functions/ai-score', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ opportunityId: opp.id, forceRefresh: false }) });
                 const data = await res.json();
+                if (!stillOrg(askedOrg)) return;
                 if (!data.disabled && data.score !== undefined) {
                     setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, aiScore: data } : o));
                 }

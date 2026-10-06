@@ -23,6 +23,7 @@ export function useActivities(deps) {
         if (!activity) return;
 
         showConfirm('Are you sure you want to delete this activity?', () => {
+            const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
             let snapshot;
             setActivities(prev => {
                 snapshot = prev.slice();
@@ -31,6 +32,7 @@ export function useActivities(deps) {
 
             dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                 .then(res => {
+                    if (!stillOrg(askedOrg)) return;
                     if (!res.ok) {
                         console.error('Failed to delete activity on server, restoring. Status:', res.status);
                         setActivities(prev => {
@@ -40,6 +42,7 @@ export function useActivities(deps) {
                     }
                 })
                 .catch(err => {
+                    if (!stillOrg(askedOrg)) return;
                     console.error('Failed to delete activity (network error), restoring:', err);
                     setActivities(prev => {
                         if (prev.some(a => a.id === activityId)) return prev;
@@ -62,8 +65,8 @@ export function useActivities(deps) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(activity),
                     }).then(r => {
-                        if (r.ok) return;
-                        setActivities(prev => prev.filter(a.id !== activity.id));   // undo did not take
+                        if (r.ok || !stillOrg(askedOrg)) return;
+                        setActivities(prev => prev.filter(a => a.id !== activity.id));   // undo did not take
                         setUndoToast({ error: `Could not restore the activity — ${r.error}` });
                     });
                 }
@@ -111,6 +114,7 @@ export function useActivities(deps) {
           setShowActivityModal, setFollowUpPrompt,
           setQuickLogOpen, setQuickLogForm, setQuickLogContactResults }
     ) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setActivityModalError(null);
         setActivityModalSaving(true);
 
@@ -119,11 +123,13 @@ export function useActivities(deps) {
             try {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await res.json();
+                if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
                 setActivities(prev => prev.map(a => a.id === editingActivity.id ? (data.activity || payload) : a));
                 fireActivityCalendarEvent(payload, opportunities);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
+                if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update activity:', err);
                 setActivityModalError('Failed to save activity. Please check your connection and try again.');
             } finally { setActivityModalSaving(false); }
@@ -133,15 +139,18 @@ export function useActivities(deps) {
             try {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
                 const data = await res.json();
+                if (!stillOrg(askedOrg)) return;
                 if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
                 setActivities(prev => [...prev, data.activity || newActivity]);
                 fireActivityCalendarEvent(newActivity, opportunities);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
+                if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save activity:', err);
                 setActivityModalError('Failed to save activity. Please check your connection and try again.');
             } finally { setActivityModalSaving(false); }
         }
+        if (!stillOrg(askedOrg)) return;
 
         if (activityData.opportunityId) {
             const linkedOpp = (opportunities || []).find(o => o.id === activityData.opportunityId);

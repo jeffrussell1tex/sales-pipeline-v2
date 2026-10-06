@@ -442,7 +442,8 @@ function App() {
     const softDelete = (label, deleteFunc, restoreFunc) => {
         if (undoToast) clearTimeout(undoToast.timerId);
         deleteFunc();
-        const timerId = setTimeout(() => setUndoToast(null), 5000);
+        const askedOrg = requestOrg();   // after an org switch the timer clears nothing (state §0.175)
+        const timerId = setTimeout(() => { if (stillOrg(askedOrg)) setUndoToast(null); }, 5000);
         setUndoToast({ label, restore: restoreFunc, timerId });
     };
 
@@ -617,7 +618,9 @@ dbFetch('/.netlify/functions/users?me=true')
                 case 'o': case 'O':
                     if (!['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) {
                         // The new deal opens only once the pipeline is open — not over the guard.
-                        e.preventDefault(); if (navigateToRef.current('pipeline')) setTimeout(() => { setEditingOpp(null); setShowModal(true); }, 100);
+                        e.preventDefault();
+                        const askedOrg = requestOrg();
+                        if (navigateToRef.current('pipeline')) setTimeout(() => { if (!stillOrg(askedOrg)) return; setEditingOpp(null); setShowModal(true); }, 100);
                     }
                     break;
                 case '/':
@@ -650,12 +653,13 @@ dbFetch('/.netlify/functions/users?me=true')
         setSpiffClaims(prev => (prev.length ? [] : prev));   // another org's claims never survive a switch
         if (!activeOrgId) return;                 // spiff claims: signed in with an org, or nothing
         let cancelled = false;
+        const askedOrg = requestOrg();
         const load = async () => {
             await waitForToken();
             if (cancelled) return;
             dbFetch('/.netlify/functions/spiff-claims')
                 .then(r => (r.ok ? r.json() : null))
-                .then(data => { if (!cancelled && data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
+                .then(data => { if (!cancelled && stillOrg(askedOrg) && data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
                 .catch(err => console.warn('spiff-claims load error:', err.message));
         };
         load();
@@ -685,12 +689,17 @@ dbFetch('/.netlify/functions/users?me=true')
     const calendarOrgRef = useRef(null);
     useEffect(() => {
         if (!activeOrgId) return;
-        if (calendarOrgRef.current !== activeOrgId) {   // a switch: the new org's calendar, not the last one's
+        const switched = calendarOrgRef.current !== activeOrgId;
+        if (switched) {   // a switch: the new org's calendar, not the last one's
             calendarOrgRef.current = activeOrgId;
             calendarFetchAttempted.current = false;
             setCalendarEvents([]);                       // the last org's meetings never show under the new org's name
         }
-        if (activeTab === 'home' && !calendarFetchAttempted.current && !calendarLoading) {
+        // In the commit of a switch the loading flag is the last org's fetch's
+        // (state §0.175): its answer is dropped, so it does not stand in for this
+        // org's — the new org's calendar was not fetched until Home was left and
+        // opened again.
+        if (activeTab === 'home' && !calendarFetchAttempted.current && (switched || !calendarLoading)) {
             calendarFetchAttempted.current = true;
             fetchCalendarEvents();
         }
@@ -1142,28 +1151,37 @@ dbFetch('/.netlify/functions/users?me=true')
             setCalendarError(err.message);
             setCalendarConnected(false);
         } finally {
-            setCalendarLoading(false);
+            if (stillOrg(askedOrg)) setCalendarLoading(false);   // the new org's fetch keeps its own
         }
     };
 
     // Log from Calendar handlers
+    // The calendar of the org on screen when it was asked for (state §0.175).
+    // Nothing in the app opens Log from calendar today — no caller, no modal — so
+    // the check is for the day it returns: its answer would set the new org's
+    // screen, and a meeting logged from it would be filed in the new org.
     const fetchLogFromCalEvents = async () => {
+        const askedOrg = requestOrg();
         setLogFromCalLoading(true);
         setLogFromCalError(null);
         try {
             const res = await dbFetch('/.netlify/functions/calendar-events?timeMin=' + logFromCalDateFrom + 'T00:00:00Z&timeMax=' + logFromCalDateTo + 'T23:59:59Z');
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error('Failed to load calendar events');
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             setLogFromCalEvents(data.events || []);
             setLogFromCalOpen(true);
         } catch (err) {
+            if (!stillOrg(askedOrg)) return;
             setLogFromCalError(err.message);
         } finally {
-            setLogFromCalLoading(false);
+            if (stillOrg(askedOrg)) setLogFromCalLoading(false);
         }
     };
 
     const handleLogFromCalendar = async (ev, opportunityId) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         const eventDate = ev.start?.date || (ev.start?.dateTime ? ev.start.dateTime.split('T')[0] : [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'));
         const relatedOpp = opportunityId ? (opportunities || []).find(o => o.id === opportunityId) : null;
         const activityData = {
@@ -1175,6 +1193,7 @@ dbFetch('/.netlify/functions/users?me=true')
             addToCalendar: false,
         };
         await handleSaveActivity(activityData, { editingActivity, currentUser, opportunities, setShowActivityModal, setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults });
+        if (!stillOrg(askedOrg)) return;
         setLoggedCalendarIds(prev => new Set([...prev, ev.id]));
         setLogFromCalOppMap(prev => ({ ...prev, [ev.id]: opportunityId || '' }));
         setLogFromCalLinkingId(null);
@@ -2343,7 +2362,10 @@ dbFetch('/.netlify/functions/users?me=true')
             })()}
 
         </div>
-        <ModalLayer />
+        {/* The modals and rails remount on an org switch (state §0.175): eleven
+            rails and dialogs stay mounted while hidden, and kept their drafts and
+            busy flags — the last org's — to show when next opened. */}
+        <ModalLayer key={activeOrgId || 'no-org'} />
         <QuickLogFab />
 
             {showNavGuard && (

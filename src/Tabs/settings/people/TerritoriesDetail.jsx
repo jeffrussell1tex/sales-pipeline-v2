@@ -1,7 +1,7 @@
 // settings/people/TerritoriesDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
-import { dbFetch, dbWrite } from '../../../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
@@ -55,17 +55,21 @@ const TerritoryModal = ({ mode, territory, settings, setSettings, onClose }) => 
                 });
             }
 
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const res  = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ territories: updatedTerritories }) });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || 'Save failed');
 
             // Persist changed users
             const changedUsers = updatedUsers.filter((u, i) => allUsers[i] && u.territory !== allUsers[i].territory);
             const failed = [];
             for (const u of changedUsers) {
+                if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
                 const r = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: u.territory }) });
                 if (!r.ok) failed.push(`${u.name || u.id}: ${r.error}`);
             }
+            if (!stillOrg(askedOrg)) return;
 
             if (failed.length) {
                 setErr(`Territory saved, but ${failed.length} user record(s) did not update: ${failed.join('; ')}`);
@@ -180,6 +184,9 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
     const openModal = (mode, territory = null) => { setOpenTerrKebab(null); setModal({ mode, territory }); };
 
     const handleImportCSV = () => {
+        // The org whose territories the file is merged into (state §0.175): after a
+        // switch the merged list — the last org's — would replace the new org's.
+        const askedOrg = requestOrg();
         const input = document.createElement('input');
         input.type = 'file'; input.accept = '.csv,text/csv';
         input.onchange = async (ev) => {
@@ -205,7 +212,9 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
                     else byName.set(key, { id:'terr_'+crypto.randomUUID(), name, parent, rule, ownerId:'', repIds:[], accounts:0, pipeline:'—', status:'Unassigned' });
                 });
                 const updated = Array.from(byName.values());
+                if (!stillOrg(askedOrg)) return;
                 const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ territories: updated }) });
+                if (!stillOrg(askedOrg)) return;
                 if (res.ok) { setSettings(prev => ({ ...prev, territories: updated })); window.alert(`Imported ${parsed.length} territor${parsed.length===1?'y':'ies'}.`); }
                 else window.alert('Import failed to save. Please try again.');
             } catch (e) { console.error('territory CSV import', e); window.alert('Could not import the CSV. Please check the format.'); }
@@ -216,6 +225,7 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
     const handleDelete = (tr) => {
         setOpenTerrKebab(null);
         showConfirm(`Delete territory "${tr.name}"? Assigned reps will become unassigned.`, async () => {
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const updatedTerritories = territories.filter(t => t.id !== tr.id);
             const reps = allUsers.filter(u => u.territory === tr.name);
             setDeleteErr('');
@@ -229,9 +239,11 @@ export const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
             // reported by name, not logged.
             const cleared = new Set(), failed = [];
             for (const u of reps) {
+                if (!stillOrg(askedOrg)) return;
                 const rc = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: '' }) });
                 if (rc.ok) cleared.add(u.id); else failed.push(`${u.name || u.id}: ${rc.error}`);
             }
+            if (!stillOrg(askedOrg)) return;
             setSettings(prev => ({
                 ...prev,
                 territories: updatedTerritories,

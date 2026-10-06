@@ -1,6 +1,6 @@
 // settings/integrations/AutomationsDetail.jsx
 import React, { useState, useEffect } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, useRowMenu } from './shared.jsx';
 import { useApp } from '../../../AppContext';
@@ -164,12 +164,14 @@ const AutomationModal = ({ rule, onClose, onSaved }) => {
         if (actions.some(a => a.type === 'webhook' && !a.params?.url?.trim())) { setError('Fire webhook: an endpoint URL is required'); return; }
         if (actions.some(a => a.type === 'send_slack' && !a.params?.message?.trim())) { setError('Post to Slack: a message is required'); return; }
         setSaving(true); setError('');
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const res  = await dbFetch('/.netlify/functions/automations', {
                 method: editing ? 'PUT' : 'POST',
                 body: JSON.stringify({ ...(editing ? { id: rule.id } : {}), name: name.trim(), triggerEvent: trigger, conditions, actions }),
             });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || (editing ? 'Failed to save' : 'Failed to create'));
             if (onSaved) onSaved(data.automation);
             onClose();

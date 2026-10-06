@@ -16,7 +16,7 @@ import { repDeals } from '../utils/repDeals';
 import { isDispatcher, NON_REP_ROLES } from '../utils/roles.js';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import TimeDropdown from '../components/ui/TimeDropdown';
-import { dbFetch, dbWrite } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
 // The report builder's query engine and its chart (state §0.133): the preview
 // and an opened saved report are the same runReport() over the tab's scoped
@@ -2499,10 +2499,15 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     // allowlist (§18b34), written before the state moves (the persistent-data rule).
     const togglePin = async (r) => {
         if (!myProfile?.id) { setLibError('Your profile has not loaded yet — try again in a moment.'); return; }
+        // After an org switch the answer changes nothing (state §0.175): it is the
+        // caller's row in the org that asked — its role and id merged into the new
+        // org's profile made the client's role the last org's.
+        const askedOrg = requestOrg();
         const next = isPinned(r) ? pinnedIds.filter(id => id !== r.id) : [...pinnedIds, r.id];
         setLibError('');
         const res = await dbFetch('/.netlify/functions/users?me=true', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: myProfile.id, pinnedReports: next }) });
         const data = await res.json().catch(() => ({}));
+        if (!stillOrg(askedOrg)) return;
         if (!res.ok) { setLibError(data.error || ('Pin not saved — HTTP ' + res.status)); return; }
         const stored = Array.isArray(data.user?.pinnedReports) ? data.user.pinnedReports : next;
         if (setMyProfile) setMyProfile(prev => ({ ...(prev || {}), ...(data.user || {}), pinnedReports: stored }));
@@ -2517,8 +2522,10 @@ function SavedReportsTab({ showConfirm, accounts = [], reportsOpps, reportsTimed
     // Save, then the same path the hourly job takes — and say what went where.
     const sendNow = async (delivery) => {
         setDeliveryBusy(true); setDeliveryNote(null);
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         try {
             const saved = await patchReport(deliveryFor.id, { delivery });
+            if (!stillOrg(askedOrg)) return;   // the send would be asked with the new org's token
             const res = await dbFetch('/.netlify/functions/saved-reports?action=deliver&id=' + encodeURIComponent(deliveryFor.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
             const data = await res.json().catch(() => ({}));
             const went = [...(data.sent?.email || []), ...(data.sent?.slack ? ['Slack'] : [])];
@@ -5556,6 +5563,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             chartType: 'table', description: `Activity history for ${entityName || entityType}`,
             ownerId: currentUser, ownerName: currentUser,
         };
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             // dbFetch returns a Response — check ok, then parse. This used to
             // read `data?.report` off the Response AND never checked ok, so a
@@ -5567,6 +5575,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             // Update shared savedReportsList in parent so it shows in Saved Reports tab immediately
             if (onSaveReport) onSaveReport(data?.report || payload);
             setSaveReportState('saved');
@@ -6050,7 +6059,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                             {selectedAccount?.city && <><span style={{ width:1, height:14, background:T.border }}/><span>{selectedAccount.city}{selectedAccount.state ? ', '+selectedAccount.state : ''}</span></>}
                                             <span style={{ width:1, height:14, background:T.border }}/>
                                             <span
-                                                onClick={(e) => { e.stopPropagation(); if (selectedAccount) setTimeout(() => setViewingAccount(selectedAccount), 0); }}
+                                                onClick={(e) => { e.stopPropagation(); if (selectedAccount) { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingAccount(selectedAccount); }, 0); } }}
                                                 style={{ color:T.goldInk, fontWeight:600, cursor: selectedAccount ? 'pointer' : 'default', opacity: selectedAccount ? 1 : 0.4 }}>
                                                 Open account panel ↗
                                             </span>

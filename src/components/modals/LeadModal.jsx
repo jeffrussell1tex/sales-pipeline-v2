@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../../AppContext';
-import { dbFetch } from '../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────
@@ -405,9 +405,12 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
         }
     };
 
+    // After an org switch the answer goes nowhere (state §0.175): ModalLayer adds a
+    // saved lead to the list on screen — the new org's.
     const handleSaveAnother = async () => {
+        const askedOrg = requestOrg();
         const saved = await doSave();
-        if (!saved) return;
+        if (!saved || !stillOrg(askedOrg)) return;
         setSavedCount(n => n + 1);
         setForm(BLANK);
         setErrors({});
@@ -418,8 +421,9 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
     };
 
     const handleSaveOpen = async () => {
+        const askedOrg = requestOrg();
         const saved = await doSave();
-        if (!saved) return;
+        if (!saved || !stillOrg(askedOrg)) return;
         if (onSaved) onSaved(saved);
         if (onSavedOpenCockpit) onSavedOpenCockpit(saved.id);
         onClose();

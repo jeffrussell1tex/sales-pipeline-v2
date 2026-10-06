@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
-import { dbFetch, dbWrite } from '../../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg, stopped } from '../../utils/storage';
 import { makeBulkClient } from '../../utils/bulkClient';
 import { todayLocal } from '../../utils/dateLocal';
 import { buildOpportunityRow } from '../../utils/importRows';
@@ -201,6 +201,7 @@ export default function ModalLayer() {
                     onSaveNewContact={(data) => {
                         const newId = 'id_' + crypto.randomUUID();
                         const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
+                        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
                         setContacts(prev => [...prev, nc]);
                         // Inline-created contacts get attached to whatever record the
                         // picker belongs to. A rejected POST used to leave a contact
@@ -211,7 +212,7 @@ export default function ModalLayer() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(nc)
                         }).then(r => {
-                            if (r.ok) return;
+                            if (r.ok || !stillOrg(askedOrg)) return;
                             setContacts(prev => prev.filter(c => c.id !== newId));
                             setUndoToast({ error: `Contact not created — ${r.error}` });
                         });
@@ -220,6 +221,7 @@ export default function ModalLayer() {
                     onSaveNewAccount={(data) => {
                         const newId = 'id_' + crypto.randomUUID();
                         const na = { ...data, id: newId };
+                        const askedOrg = requestOrg();
                         setAccounts(prev => [...prev, na]);
                         // Account twin of the inline contact create above.
                         dbWrite('/.netlify/functions/accounts', {
@@ -227,7 +229,7 @@ export default function ModalLayer() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(na)
                         }).then(r => {
-                            if (r.ok) return;
+                            if (r.ok || !stillOrg(askedOrg)) return;
                             setAccounts(prev => prev.filter(a => a.id !== newId));
                             setUndoToast({ error: `Account not created — ${r.error}` });
                         });
@@ -440,6 +442,10 @@ export default function ModalLayer() {
                         // modal regexed and rendered as contacts.
                         const totalProgress = newContacts.length + overwrites.length;
                         const phases = [];
+                        // An import cut by an org switch stops (state §0.175): no next
+                        // chunk with the new org's token, nothing set on its screen.
+                        const askedOrg = requestOrg();
+                        const still = () => stillOrg(askedOrg);
 
                         // Phase 1: companies referenced by the incoming contacts.
                         const existingNames = accounts.map(a => a.name.toLowerCase());
@@ -452,7 +458,8 @@ export default function ModalLayer() {
                                 verticalMarket: '', address: '', city: '', state: '',
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
-                            const acc = await bulk.postNew('/.netlify/functions/accounts', newAccts);
+                            const acc = await bulk.postNew('/.netlify/functions/accounts', newAccts, { stillOrg: still });
+                            if (!stillOrg(askedOrg)) return stopped();
                             if (acc.landed.length > 0) setAccounts(prev => [...prev, ...acc.landed]);
                             const accReceipt = receiptFromInsert(acc);
                             // A contact whose company failed would point at an
@@ -470,7 +477,8 @@ export default function ModalLayer() {
                             createdAt: new Date().toISOString()
                         }));
                         if (contactsWithIds.length > 0) {
-                            const res = await bulk.postNew('/.netlify/functions/contacts', contactsWithIds, { onProgress, progressTotal: totalProgress });
+                            const res = await bulk.postNew('/.netlify/functions/contacts', contactsWithIds, { onProgress, progressTotal: totalProgress, stillOrg: still });
+                            if (!stillOrg(askedOrg)) return stopped();
                             if (res.landed.length > 0) setContacts(prev => [...prev, ...res.landed]);
                             phases.push(receiptFromInsert(res));
                         }
@@ -483,7 +491,8 @@ export default function ModalLayer() {
                                 updatedAt: new Date().toISOString(),
                                 _existingId: undefined,
                             }));
-                            const ow = await bulk.putBulk('/.netlify/functions/contacts', overwritesWithIds, { onProgress, progressOffset: contactsWithIds.length, progressTotal: totalProgress });
+                            const ow = await bulk.putBulk('/.netlify/functions/contacts', overwritesWithIds, { onProgress, progressOffset: contactsWithIds.length, progressTotal: totalProgress, stillOrg: still });
+                            if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setContacts, overwritesWithIds, ow.appliedIds);
                             phases.push(receiptFromUpdate(ow));
                         }
@@ -493,6 +502,8 @@ export default function ModalLayer() {
                     onImportAccounts={async (newAccounts, overwrites = []) => {
                         const totalProgress = newAccounts.length + overwrites.length;
                         const phases = [];
+                        const askedOrg = requestOrg();   // an import cut by an org switch stops (state §0.175)
+                        const still = () => stillOrg(askedOrg);
 
                         // Pass 1: new accounts — parents first, then sub-accounts
                         const parents = newAccounts.filter(a => !a.parentAccount?.trim());
@@ -516,7 +527,8 @@ export default function ModalLayer() {
 
                         if (allWithIds.length > 0) {
                             onProgress(0, totalProgress);
-                            const res = await bulk.postNew('/.netlify/functions/accounts', allWithIds, { onProgress, progressTotal: totalProgress });
+                            const res = await bulk.postNew('/.netlify/functions/accounts', allWithIds, { onProgress, progressTotal: totalProgress, stillOrg: still });
+                            if (!stillOrg(askedOrg)) return stopped();
                             // Commit what actually saved before surfacing the failure.
                             if (res.landed.length > 0) setAccounts(prev => [...prev, ...res.landed]);
 
@@ -545,7 +557,8 @@ export default function ModalLayer() {
                                 const { parentAccount: _drop, _existingId, ...rest } = a;
                                 return { ...rest, id: _existingId };
                             });
-                            const ow = await bulk.putBulk('/.netlify/functions/accounts', overwritesWithIds, { onProgress, progressOffset: allWithIds.length, progressTotal: totalProgress });
+                            const ow = await bulk.putBulk('/.netlify/functions/accounts', overwritesWithIds, { onProgress, progressOffset: allWithIds.length, progressTotal: totalProgress, stillOrg: still });
+                            if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setAccounts, overwritesWithIds, ow.appliedIds);
                             phases.push(receiptFromUpdate(ow));
                         }
@@ -558,6 +571,8 @@ export default function ModalLayer() {
                         const today = todayLocal();
                         const activePipelineId = allPipelines?.[0]?.id || 'default';
                         const totalProgress = newOpps.length + overwrites.length;
+                        const askedOrg = requestOrg();   // an import cut by an org switch stops (state §0.175)
+                        const still = () => stillOrg(askedOrg);
 
                         // `existingId` set means OVERWRITE, and the two cases are
                         // not the same record. The builder lives in
@@ -582,7 +597,8 @@ export default function ModalLayer() {
                         if (newOpps.length > 0) {
                             const oppsWithIds = newOpps.map(o => buildOpp(o, null));
                             onProgress(0, totalProgress);
-                            const res = await bulk.postNew('/.netlify/functions/opportunities', oppsWithIds, { onProgress, progressTotal: totalProgress });
+                            const res = await bulk.postNew('/.netlify/functions/opportunities', oppsWithIds, { onProgress, progressTotal: totalProgress, stillOrg: still });
+                            if (!stillOrg(askedOrg)) return stopped();
                             if (res.landed.length > 0) setOpportunities(prev => [...prev, ...res.landed]);
                             const receipt = receiptFromInsert(res);
                             phases.push(receipt);
@@ -601,7 +617,8 @@ export default function ModalLayer() {
                         // never a number the server agreed with.
                         if (overwrites.length > 0) {
                             const overwritesBuilt = overwrites.map(o => buildOpp(o, o._existingId));
-                            const ow = await bulk.putBulk('/.netlify/functions/opportunities', overwritesBuilt, { onProgress, progressOffset: newOpps.length, progressTotal: totalProgress });
+                            const ow = await bulk.putBulk('/.netlify/functions/opportunities', overwritesBuilt, { onProgress, progressOffset: newOpps.length, progressTotal: totalProgress, stillOrg: still });
+                            if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setOpportunities, overwritesBuilt, ow.appliedIds);
                             phases.push(receiptFromUpdate(ow));
                         }
@@ -619,10 +636,14 @@ export default function ModalLayer() {
                         // guessed at. Nothing here throws a refusal: the modal renders
                         // the receipt, and the refusals name the people.
                         const INVITES_PER_REQUEST = 10;
+                        // Cut by an org switch, the run stops (state §0.175): the next
+                        // request would invite these people to the org now on screen.
+                        const askedOrg = requestOrg();
                         const receipt = { ...emptyReceipt(), attempted: invites.length };
                         const refusals = [];
                         const landed = [];
                         for (let i = 0; i < invites.length; i += INVITES_PER_REQUEST) {
+                            if (!stillOrg(askedOrg)) return stopped();
                             const chunk = invites.slice(i, i + INVITES_PER_REQUEST);
                             let res = null, d = {};
                             try {
@@ -634,6 +655,7 @@ export default function ModalLayer() {
                             } catch (e) {
                                 d = { error: e.message || 'The request did not complete.' };
                             }
+                            if (!stillOrg(askedOrg)) return stopped();
                             const answered = !!res && (res.status === 201 || (res.status === 400 && Array.isArray(d.errors)));
                             if (!answered) {
                                 receipt.failed += invites.length - i;
@@ -662,6 +684,7 @@ export default function ModalLayer() {
                         const { teams: joinedTeams, changed: teamsChanged } = teamsWithMembers(settings.teams, landed);
                         if (teamsChanged) {
                             const rt = await dbWrite('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ teams: joinedTeams }) });
+                            if (!stillOrg(askedOrg)) return stopped();
                             if (rt.ok) setSettings(prev => ({ ...prev, teams: joinedTeams }));
                             else warning = `The invitations went out, but the team list was not updated — ${rt.error}`;
                         }
@@ -677,6 +700,7 @@ export default function ModalLayer() {
                     activities={activities}
                     onClose={() => { document.activeElement?.blur(); setShowOutlookImportModal(false); }}
                     onImport={async (newActivities) => {
+                        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
                         const activitiesWithIds = newActivities.map((a) => ({
                             ...a,
                             id: 'id_' + crypto.randomUUID(),
@@ -693,6 +717,7 @@ export default function ModalLayer() {
                                 })
                             )
                         );
+                        if (!stillOrg(askedOrg)) return;
                         const activityFailed = activitySaveResults.filter(r => r.status === 'rejected').length;
                         if (activityFailed > 0) {
                             console.error(`${activityFailed} of ${activitiesWithIds.length} activities failed to save. Try re-importing the failed records.`);
@@ -726,7 +751,9 @@ export default function ModalLayer() {
                         // endpoint has never returned. Both halves were wrong and
                         // neither was reachable by a test. This uses the same
                         // chunked client as the other three importers.
-                        const res = await bulk.postNew('/.netlify/functions/leads', newLeads);
+                        const askedOrg = requestOrg();   // an import cut by an org switch stops (state §0.175)
+                        const res = await bulk.postNew('/.netlify/functions/leads', newLeads, { stillOrg: () => stillOrg(askedOrg) });
+                        if (!stillOrg(askedOrg)) return stopped();
 
                         // 18b15: commit what actually landed BEFORE raising, or a
                         // failure in a later chunk discards rows already written
@@ -906,7 +933,10 @@ export default function ModalLayer() {
                                         const ms = (taskReminderSnoozeH * 60 + taskReminderSnoozeM) * 60 * 1000;
                                         if (ms <= 0) return;
                                         setTaskReminderPopup(null);
-                                        setTimeout(() => setTaskReminderPopup(task), ms);
+                                        // Back after the snooze only in this org (state §0.175): it
+                                        // showed the last org's task over the new org's screen.
+                                        const askedOrg = requestOrg();
+                                        setTimeout(() => { if (stillOrg(askedOrg)) setTaskReminderPopup(task); }, ms);
                                     }}
                                     style={{ padding:'4px 14px', background:T.warn, color:T.surface, border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
                                     Snooze
@@ -918,7 +948,9 @@ export default function ModalLayer() {
                                         const task = taskReminderPopup;
                                         setTaskReminderPopup(null);
                                         setActiveTab('tasks');
+                                        const askedOrg = requestOrg();
                                         setTimeout(() => {
+                                            if (!stillOrg(askedOrg)) return;
                                             setTaskRailId(task.id);
                                             setTaskRailMode('view');
                                         }, 150);
@@ -1048,7 +1080,8 @@ export default function ModalLayer() {
                                             setTaskDuePopup(null);
                                         }
                                         setActiveTab('tasks');
-                                        setTimeout(() => { setTaskRailId(task.id); setTaskRailMode('view'); }, 150);
+                                        const askedOrg = requestOrg();
+                                        setTimeout(() => { if (!stillOrg(askedOrg)) return; setTaskRailId(task.id); setTaskRailMode('view'); }, 150);
                                     }}
                                     style={{ flex: 1, padding: '0.7rem 1rem', background: `linear-gradient(135deg, ${T.danger}, ${T.danger})`, color: T.surface, border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', boxShadow: '0 2px 8px rgba(220,38,38,0.3)' }}
                                     onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(220,38,38,0.45)'}
@@ -1179,6 +1212,7 @@ export default function ModalLayer() {
                                                     // dbFetch returns a Response and does NOT throw on 4xx/5xx.
                                                     setSpiffClaimError(null);
                                                     setSpiffClaimBusy(spiff.id);
+                                                    const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
                                                     try {
                                                         const res = await dbFetch('/.netlify/functions/spiff-claims', {
                                                             method: 'POST',
@@ -1187,6 +1221,7 @@ export default function ModalLayer() {
                                                         });
                                                         let payload = null;
                                                         try { payload = await res.json(); } catch { /* empty body */ }
+                                                        if (!stillOrg(askedOrg)) return;
                                                         if (!res.ok) {
                                                             setSpiffClaimError((payload && payload.error)
                                                                 || `Claim not submitted — the server returned ${res.status}.`);
@@ -1194,6 +1229,7 @@ export default function ModalLayer() {
                                                         }
                                                         setSpiffClaims(prev => [...prev, (payload && payload.spiffClaim) || newClaim]);
                                                     } catch (err) {
+                                                        if (!stillOrg(askedOrg)) return;
                                                         console.error('Failed to submit SPIFF claim:', err.message);
                                                         setSpiffClaimError('Claim not submitted — network error. Nothing was saved.');
                                                     } finally {

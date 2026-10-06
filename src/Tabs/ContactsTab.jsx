@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
-import { dbFetch, dbWrite } from '../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
 
 // ── Design tokens ─────────────────────────────────────────────
@@ -764,12 +764,14 @@ export default function ContactsTab() {
     const handleEditContact = (c) => { setContactRailId(c.id); setContactRailMode('edit'); };
 
     const handleDeleteOne = async (contact) => {
+        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
         const snapshot = [...(contacts || [])];
         setContacts(prev => prev.filter(c => c.id !== contact.id));
         // dbFetch resolves for ANY status (guide 18b1), so the old .catch fired on
         // a network failure only. A 403 left the contact gone from the list and
         // still in the database until the next reload.
         const r = await dbWrite(`/.netlify/functions/contacts?id=${contact.id}`, { method: 'DELETE' });
+        if (!stillOrg(askedOrg)) return;   // no Undo for the last org's contact on the new org's screen
         if (!r.ok) {
             setContacts(snapshot);
             setUndoToast({ error: `Contact not deleted — ${r.error}` });
@@ -785,7 +787,7 @@ export default function ContactsTab() {
                     method: 'POST',
                     body: JSON.stringify(contact),
                 });
-                if (!rr.ok) {
+                if (!rr.ok && stillOrg(askedOrg)) {
                     setContacts(prev => prev.filter(c => c.id !== contact.id));
                     setUndoToast({ error: `Could not restore ${label} — ${rr.error}` });
                 }
@@ -796,6 +798,7 @@ export default function ContactsTab() {
     const handleDeleteSelected = () => {
         if (!selectedIds.length) return;
         showConfirm(`Delete ${selectedIds.length} contact${selectedIds.length > 1 ? 's' : ''}? You'll have a few seconds to undo.`, async () => {
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const toDelete = [...selectedIds];
             const snapshot = [...(contacts || [])];
             setContacts(prev => prev.filter(c => !toDelete.includes(c.id)));
@@ -813,10 +816,12 @@ export default function ContactsTab() {
                 if (!r.ok) failedIds.push(...toDelete);
             } else {
                 for (const id of toDelete) {
+                    if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
                     const r = await dbWrite(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' });
                     if (!r.ok) failedIds.push(id);
                 }
             }
+            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
             if (failedIds.length) {
                 setContacts(prev => {
                     const have = new Set(prev.map(c => c.id));
@@ -834,6 +839,7 @@ export default function ContactsTab() {
                     (async () => {
                         const notRestored = [];
                         for (const c of deleted) {
+                            if (!stillOrg(askedOrg)) return;
                             const rr = await dbWrite('/.netlify/functions/contacts', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -841,6 +847,7 @@ export default function ContactsTab() {
                             });
                             if (!rr.ok) notRestored.push(c.id);
                         }
+                        if (!stillOrg(askedOrg)) return;
                         if (notRestored.length) {
                             setContacts(prev => prev.filter(c => !notRestored.includes(c.id)));
                             setUndoToast({ error: `${notRestored.length} contact(s) could not be restored.` });

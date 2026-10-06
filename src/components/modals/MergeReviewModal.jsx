@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../AppContext';
+import { requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
@@ -98,6 +99,7 @@ export default function MergeReviewModal() {
     };
 
     const onMerge = async () => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         const resolved = buildResolved();
         const survivorName = (resolved.name != null && String(resolved.name).trim()) ? resolved.name : survivor.name;
         const result = await handleMerge?.({
@@ -109,7 +111,7 @@ export default function MergeReviewModal() {
             survivorUpdatedAt: survivor.updatedAt,
             archivedUpdatedAt: archived.updatedAt,
         });
-        if (result) setMergeModal(null);
+        if (result && stillOrg(askedOrg)) setMergeModal(null);
     };
 
     const close = () => { setMergeError?.(null); setMergeModal(null); };

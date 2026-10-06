@@ -57,6 +57,7 @@ export function useAccounts(deps) {
 
         const subMsg = subs.length > 0 ? ` This will also delete ${subs.length} sub-account${subs.length > 1 ? 's' : ''}.` : '';
         showConfirm(`Are you sure you want to delete "${account.name}"?${subMsg}`, () => {
+            const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
             // Snapshot captured inside confirm callback — fresh state at time of confirmation
             let snapshot;
             setAccounts(prev => {
@@ -73,6 +74,7 @@ export function useAccounts(deps) {
             );
 
             Promise.allSettled(deletePromises).then(results => {
+                if (!stillOrg(askedOrg)) return;
                 const anyFailed = results.some(r => r.status === 'rejected');
                 if (anyFailed) {
                     console.error('One or more account deletes failed — restoring accounts');
@@ -95,6 +97,7 @@ export function useAccounts(deps) {
                     (async () => {
                         const notRestored = [];
                         for (const a of deletedAccounts) {
+                            if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
                             const r = await dbWrite('/.netlify/functions/accounts', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -102,6 +105,7 @@ export function useAccounts(deps) {
                             });
                             if (!r.ok) notRestored.push(a.id);
                         }
+                        if (!stillOrg(askedOrg)) return;
                         if (notRestored.length) {
                             setAccounts(prev => prev.filter(a => !notRestored.includes(a.id)));
                             setUndoToast({ error: `${notRestored.length} account(s) could not be restored.` });
@@ -125,6 +129,7 @@ export function useAccounts(deps) {
           setAccountCreatedFromOppForm, setPendingOppFormData,
           setOpportunities, setContacts }
     ) => {
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setAccountModalError(null);
         setAccountModalSaving(true);
         try {
@@ -161,6 +166,7 @@ export function useAccounts(deps) {
             }
             const res = await dbFetch('/.netlify/functions/accounts', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) { setAccountModalError(data.error || 'Failed to save account. Please try again.'); setAccountModalSaving(false); return; }
             const saved = data.account || payload;
             if (method === 'PUT') {
@@ -184,6 +190,7 @@ export function useAccounts(deps) {
             addAudit(auditAction, 'account', auditId, auditName, auditDetail);
             setShowAccountModal(false); setAccountModalError(null);
         } catch (err) {
+            if (!stillOrg(askedOrg)) return;
             console.error('Failed to save account:', err);
             setAccountModalError('Failed to save account. Please check your connection and try again.');
         } finally {

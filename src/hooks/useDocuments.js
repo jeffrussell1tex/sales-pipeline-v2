@@ -73,44 +73,51 @@ export function useDocuments(_deps = {}) {
 
     // ── Create: upload bytes to R2, persist metadata, prepend to state ──────
     // opts: { name, category, visibility, visibilityUserIds, links, note, onProgress }
+    // After an org switch an answer changes nothing on screen (state §0.175); the
+    // caller still gets its result.
     const createDocument = useCallback(async (file, opts = {}) => {
+        const askedOrg = requestOrg();
         const doc = await uploadNewDocument(dbFetch, { file, ...opts });
-        setDocuments((prev) => [doc, ...prev.filter((d) => d.id !== doc.id)]);
+        if (stillOrg(askedOrg)) setDocuments((prev) => [doc, ...prev.filter((d) => d.id !== doc.id)]);
         return doc;
     }, []);
 
     // ── New version: upload bytes, bump server, optimistically patch state ──
     const addDocumentVersion = useCallback(async (documentId, file, { note, onProgress } = {}) => {
+        const askedOrg = requestOrg();
         const version = await uploadNewVersion(dbFetch, { documentId, file, note, onProgress });
         const sizeKb = Math.max(1, Math.round(file.size / 1024));
-        setDocuments((prev) => prev.map((d) =>
+        if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) =>
             d.id === documentId ? { ...d, version, sizeKb, modifiedAt: new Date().toISOString() } : d));
         return version;
     }, []);
 
     // ── Metadata edit (name / category / note / visibility) ─────────────────
     const updateDocument = useCallback(async (id, patch) => {
+        const askedOrg = requestOrg();
         const r = await dbFetch(DOCS_FN, { method: 'PUT', body: JSON.stringify({ id, ...patch }) });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
         const updated = data.document || {};
-        setDocuments((prev) => prev.map((d) => (d.id === id ? { ...d, ...updated } : d)));
+        if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) => (d.id === id ? { ...d, ...updated } : d)));
         return updated;
     }, []);
 
     const removeDocument = useCallback(async (id) => {
+        const askedOrg = requestOrg();
         const r = await dbFetch(`${DOCS_FN}?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        setDocuments((prev) => prev.filter((d) => d.id !== id));
+        if (stillOrg(askedOrg)) setDocuments((prev) => prev.filter((d) => d.id !== id));
     }, []);
 
     const restoreVersion = useCallback(async (id, v) => {
+        const askedOrg = requestOrg();
         const r = await dbFetch(`${DOCS_FN}?action=restore-version`, {
             method: 'POST', body: JSON.stringify({ id, v }),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
-        setDocuments((prev) => prev.map((d) =>
+        if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) =>
             d.id === id ? { ...d, version: data.version, modifiedAt: new Date().toISOString() } : d));
         return data.version;
     }, []);
@@ -118,21 +125,23 @@ export function useDocuments(_deps = {}) {
     // ── Links (cross-entity associations) ───────────────────────────────────
     // links: [{ type, recordId|id, name, sub }]
     const linkDocument = useCallback(async (id, links) => {
+        const askedOrg = requestOrg();
         const r = await dbFetch(`${DOCS_FN}?action=link`, {
             method: 'POST', body: JSON.stringify({ id, links }),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
         const added = Array.isArray(data.links) ? data.links : [];
-        setDocuments((prev) => prev.map((d) =>
+        if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) =>
             d.id === id ? { ...d, links: [...(d.links || []), ...added] } : d));
         return added;
     }, []);
 
     const unlinkDocument = useCallback(async (id, linkId) => {
+        const askedOrg = requestOrg();
         const r = await dbFetch(`${DOCS_FN}?action=link&linkId=${encodeURIComponent(linkId)}`, { method: 'DELETE' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        setDocuments((prev) => prev.map((d) =>
+        if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) =>
             d.id === id ? { ...d, links: (d.links || []).filter((l) => l.id !== linkId) } : d));
     }, []);
 

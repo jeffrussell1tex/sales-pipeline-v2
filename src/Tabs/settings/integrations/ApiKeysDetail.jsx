@@ -1,6 +1,6 @@
 // settings/integrations/ApiKeysDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -26,12 +26,14 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
         if (!name.trim()) { setError('Key name is required'); return; }
         setStep('creating');
         setError('');
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const res  = await dbFetch('/.netlify/functions/api-keys', {
                 method: 'POST',
                 body: JSON.stringify({ name: name.trim(), scopes: [...scopes] }),
             });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || 'Failed to create key');
             setResult(data);
             if (onCreated) onCreated(data.key);
@@ -414,7 +416,9 @@ const RevokeKeyModal = ({ keyRecord, onClose, onRevoked }) => {
     const handleRevoke = async () => {
         setConfirming(true); setError('');
         try {
+            const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
             const res = await dbFetch(`/.netlify/functions/api-keys?id=${keyRecord.id}`, { method: 'DELETE' });
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
             if (onRevoked) onRevoked(keyRecord.id);
             onClose();

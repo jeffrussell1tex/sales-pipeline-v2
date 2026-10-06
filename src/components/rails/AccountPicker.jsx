@@ -5,7 +5,7 @@
 // The host resolves the selected name to an accountId on save (or uses onSelectAccount
 // for the full record). Create failures are reported via onError so the host can notify.
 import React, { useState } from 'react';
-import { dbFetch } from '../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import { useApp } from '../../AppContext';
 import { T } from '../../tokens.js';
 
@@ -34,17 +34,20 @@ export default function AccountPicker({ value, onChange, onSelectAccount, onErro
         if (!name || creating) return;
         setCreating(true);
         onError && onError(null);
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const newAccount = { id: 'id_' + crypto.randomUUID(), name, accountTier: 'account' };
             const res = await dbFetch('/.netlify/functions/accounts', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newAccount),
             });
             const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
             const saved = data.account || newAccount;
             setAccounts && setAccounts(prev => [...prev, saved]);
             pick(saved);
         } catch (e) {
+            if (!stillOrg(askedOrg)) return;
             onError && onError(`Couldn't create account "${name}". ${e.message || 'Please try again.'}`);
         } finally {
             setCreating(false);

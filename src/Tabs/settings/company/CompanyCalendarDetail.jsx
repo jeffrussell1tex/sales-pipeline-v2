@@ -1,6 +1,6 @@
 // settings/company/CompanyCalendarDetail.jsx
 import React, { useState, useEffect } from 'react';
-import { dbFetch, dbWrite } from '../../../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { CSectionCard, DetailPageChrome } from '../shared/form.jsx';
@@ -120,9 +120,11 @@ export const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     const handleSync = async () => {
         setSyncing(true);
         setSyncMsg('');
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const res  = await dbFetch(`/.netlify/functions/holidays?year=${year}`);
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data?.error || `Server error ${res.status}`);
             if (!data || !data.holidays) throw new Error('No holidays in response');
             // Merge: keep custom holidays, replace all observed/federal entries with fresh API data

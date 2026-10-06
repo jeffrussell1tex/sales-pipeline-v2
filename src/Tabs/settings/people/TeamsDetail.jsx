@@ -1,7 +1,7 @@
 // settings/people/TeamsDetail.jsx
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../../AppContext';
-import { dbFetch, dbWrite } from '../../../utils/storage';
+import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../../utils/storage';
 import { putSettings } from '../shared/saveSettings.js';
 import { T } from '../shared/tokens.js';
 import { UserAvatar } from '../shared/ui.jsx';
@@ -65,8 +65,10 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
             });
 
             // Persist to settings (teams + users)
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const res  = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || 'Save failed');
 
             // Persist changed user rows to /users
@@ -79,9 +81,11 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
             // row did not update is left pointing at the wrong team.
             const failed = [];
             for (const u of changedUsers) {
+                if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
                 const r = await dbWrite(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team: u.team, territory: u.territory, vertical: u.vertical, teamId: u.teamId }) });
                 if (!r.ok) failed.push(`${u.name || u.id}: ${r.error}`);
             }
+            if (!stillOrg(askedOrg)) return;
 
             if (failed.length) {
                 setErr(`Team saved, but ${failed.length} member record(s) did not update: ${failed.join('; ')}`);
@@ -357,6 +361,7 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
     const handleDelete = (team) => {
         setOpenKebab(null);
         showConfirm(`Delete team "${team.name}"? Members will become unassigned.`, async () => {
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const updatedTeams = teams.filter(t => t.id !== team.id);
             const members = allUsers.filter(u => u.teamId === team.id);
             setDeleteErr('');
@@ -371,9 +376,11 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
             // roster no longer has.
             const cleared = new Set(), failed = [];
             for (const u of members) {
+                if (!stillOrg(askedOrg)) return;
                 const r = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, team:'', teamId:'', territory:'', vertical:'' }) });
                 if (r.ok) cleared.add(u.id); else failed.push(`${u.name || u.id}: ${r.error}`);
             }
+            if (!stillOrg(askedOrg)) return;
             setSettings(prev => ({
                 ...prev,
                 teams: updatedTeams,
@@ -431,9 +438,12 @@ export const TeamsDetail = ({ settings, setSettings, onBack }) => {
                                             ? { ...u, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }
                                             : u);
                                         setAssignErr('');
+                                        const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
                                         const rt = await dbWrite('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
+                                        if (!stillOrg(askedOrg)) return;
                                         if (!rt.ok) { setAssignErr(`Not assigned — ${rt.error}`); return; }
                                         const ru = await dbWrite('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: assigningUser.id, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }) });
+                                        if (!stillOrg(askedOrg)) return;
                                         if (!ru.ok) { setAssignErr(`Team updated, but ${assigningUser.name || 'the user'} was not — ${ru.error}`); return; }
                                         setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
                                         setAssigningUser(null);

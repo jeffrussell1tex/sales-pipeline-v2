@@ -41,6 +41,10 @@ export const requestOrg = () => requestOrgId;
 // for an org the user has switched away from is dropped, never shown under the
 // new org's name.
 export const stillOrg = (askedOrgId) => !!askedOrgId && askedOrgId === requestOrgId;
+// An action cut by an org switch stops and never settles (state §0.175): what it
+// would do next — set the screen, send its next request — belongs to an org no
+// longer on screen, and whoever asked was remounted by the switch.
+export const stopped = () => new Promise(() => {});
 
 // Authenticated fetch — injects Clerk JWT
 // window.__getClerkToken is set by App.jsx after useAuth() initializes

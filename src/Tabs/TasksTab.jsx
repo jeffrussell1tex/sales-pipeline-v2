@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { isoLocal } from '../utils/dateLocal';
 import { T } from '../tokens.js';
 
@@ -250,6 +250,7 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
         setSnoozeOpen(false);
         if (!canEdit) return;
         const updated = { ...task, dueDate: newDate, status: 'Open', completed: false };
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
         // dbFetch returns a Response — check ok, then parse. This used to read
         // `data?.task` straight off the Response (always undefined), so the
@@ -258,8 +259,10 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
             const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             setTasks(prev => prev.map(t => t.id === task.id ? (data.task || updated) : t));
         } catch {
+            if (!stillOrg(askedOrg)) return;
             setTasks(prev => prev.map(t => t.id === task.id ? task : t));
         }
     };
@@ -581,6 +584,7 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
         setCompleting(true);
         const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
         const updated = { ...task, status: 'Completed', completed: true, completedDate: today };
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
         // dbFetch returns a Response — check ok, then parse. This used to read
         // `data?.task` straight off the Response (always undefined), so the
@@ -589,8 +593,10 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
             const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             setTasks(prev => prev.map(t => t.id === task.id ? (data.task || updated) : t));
         } catch {
+            if (!stillOrg(askedOrg)) return;
             setTasks(prev => prev.map(t => t.id === task.id ? task : t));
         } finally { setCompleting(false); }
     };
@@ -599,6 +605,7 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
         setSnoozeOpen(false);
         if (!canEdit) return;
         const updated = { ...task, dueDate: newDate, status: 'Open', completed: false };
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
         // dbFetch returns a Response — check ok, then parse. This used to read
         // `data?.task` straight off the Response (always undefined), so the
@@ -607,8 +614,10 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
             const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             setTasks(prev => prev.map(t => t.id === task.id ? (data.task || updated) : t));
         } catch {
+            if (!stillOrg(askedOrg)) return;
             setTasks(prev => prev.map(t => t.id === task.id ? task : t));
         }
     };
@@ -626,6 +635,7 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
     const saveContacts = async (newContacts) => {
         setLocalContacts(newContacts);
         const updated = { ...task, contacts: newContacts };
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
         // dbFetch returns a Response — check ok, then parse. This used to read
         // `data?.task` off the Response (always undefined), so the server row
@@ -635,10 +645,12 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
             const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             setTasks(prev => prev.map(t => t.id === task.id ? (data.task || updated) : t));
             // Do NOT clear localContacts — viewingTask still points to the old
             // task object so the rail would flash back to the pre-add state.
         } catch {
+            if (!stillOrg(askedOrg)) return;
             // Roll back BOTH copies so local state cannot drift from the DB.
             setLocalContacts(task.contacts || []);
             setTasks(prev => prev.map(t => t.id === task.id ? task : t));

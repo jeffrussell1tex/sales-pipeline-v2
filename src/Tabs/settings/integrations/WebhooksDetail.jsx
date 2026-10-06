@@ -1,6 +1,6 @@
 // settings/integrations/WebhooksDetail.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { dbFetch } from '../../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../../utils/storage';
 import { T } from '../shared/tokens.js';
 import { IntCrumb, IntTitle, IntBtn, IntModal, IntModalHeader, IntModalFooter, MenuRow, useRowMenu } from './shared.jsx';
 
@@ -41,12 +41,14 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
         if (!url.trim())  { setError('Endpoint URL is required'); return; }
         if (checked.size === 0) { setError('Select at least one event'); return; }
         setSaving(true); setError('');
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         try {
             const res  = await dbFetch('/.netlify/functions/webhooks', {
                 method: 'POST',
                 body: JSON.stringify({ name: name.trim(), targetUrl: url.trim(), eventTypes: [...checked] }),
             });
             const data = await res.json();
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || 'Failed to create');
             setSecret(data.secret || '');
             if (onCreated) onCreated(data.subscription);

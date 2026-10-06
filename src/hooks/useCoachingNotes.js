@@ -49,28 +49,33 @@ export function useCoachingNotes({ waitForToken, orgId = null, enabled = true } 
     }, [enabled, orgId, waitForToken, reload]);
 
     /** POST a payload from newNotePayload. Returns { ok, note?, error? }. */
+    // After an org switch an answer changes nothing on screen (state §0.175); the
+    // caller still gets its result.
     const addCoachingNote = useCallback(async (payload) => {
+        const askedOrg = requestOrg();
         const res = await dbFetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) return { ok: false, error: await errorOf(res, `The server returned ${res.status}.`) };
         const data = await res.json();
         const note = data?.coachingNote;
-        if (note) setCoachingNotes(prev => [note, ...prev.filter(n => n.id !== note.id)]);
+        if (note && stillOrg(askedOrg)) setCoachingNotes(prev => [note, ...prev.filter(n => n.id !== note.id)]);
         return { ok: true, note, created: res.status === 201 };
     }, []);
 
     const markCoachingNoteRead = useCallback(async (id) => {
+        const askedOrg = requestOrg();
         const res = await dbFetch(URL, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action: 'read' }) });
         if (!res.ok) return { ok: false, error: await errorOf(res, `The server returned ${res.status}.`) };
         const data = await res.json();
         const note = data?.coachingNote;
-        if (note) setCoachingNotes(prev => prev.map(n => (n.id === note.id ? note : n)));
+        if (note && stillOrg(askedOrg)) setCoachingNotes(prev => prev.map(n => (n.id === note.id ? note : n)));
         return { ok: true, note };
     }, []);
 
     const deleteCoachingNote = useCallback(async (id) => {
+        const askedOrg = requestOrg();
         const res = await dbFetch(`${URL}?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
         if (!res.ok) return { ok: false, error: await errorOf(res, `The server returned ${res.status}.`) };
-        setCoachingNotes(prev => prev.filter(n => n.id !== id));
+        if (stillOrg(askedOrg)) setCoachingNotes(prev => prev.filter(n => n.id !== id));
         return { ok: true };
     }, []);
 
