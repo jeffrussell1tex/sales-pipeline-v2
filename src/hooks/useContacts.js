@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
+import { activeDealsOf } from '../utils/contactDeals.js';
 
 export function useContacts(deps) {
-    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel, showBlockedDelete, opportunities } = deps;
+    const { addAudit, showConfirm, softDelete, setUndoToast, showBlockedDelete } = deps;
 
     const [contacts, setContacts] = useState([]);
     const [contactModalError, setContactModalError] = useState(null);
@@ -32,19 +33,13 @@ export function useContacts(deps) {
             return;
         }
 
-        // Block delete if contact is linked to any active (non-closed) opportunity
+        // Block delete if the contact has an open deal — the rail's list (state §0.176).
+        // By name it matched any name beginning with the contact's: a deal naming "Grace Kimball" blocked deleting "Grace Kim".
         const fullName = ((contact.firstName || '') + ' ' + (contact.lastName || '')).trim();
-        const closedStages = ['closed won', 'closed lost', 'won', 'lost'];
-        const linkedActiveOpp = (opportunities || []).find(opp => {
-            const isActive = !closedStages.includes((opp.stage || '').toLowerCase());
-            if (!isActive) return false;
-            // Match by contactIds array (primary) or contacts name string (legacy)
-            const byId = opp.contactIds && opp.contactIds.includes(contactId);
-            const byName = fullName && opp.contacts && opp.contacts.split(',')
-                .map(s => s.trim().toLowerCase())
-                .some(n => n.startsWith(fullName.toLowerCase()));
-            return byId || byName;
-        });
+        // The deals as they are now: App fills deps.opportunities after this hook has
+        // run in a render, so a copy taken at the hook's top is the render before's
+        // list — a deal saved in the last render was not in it.
+        const linkedActiveOpp = activeDealsOf(contact, deps.opportunities)[0];
         if (linkedActiveOpp) {
             showBlockedDelete(
                 `Cannot Delete "${fullName}"`,

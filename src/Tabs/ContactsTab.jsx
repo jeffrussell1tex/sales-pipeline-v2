@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useApp } from '../AppContext';
 import { canEditCrm } from '../utils/roles.js';
+import { activeDealsOf } from '../utils/contactDeals.js';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
 
@@ -708,16 +709,10 @@ export default function ContactsTab() {
         });
     }, [visibleContacts, search, contactsSortBy]);
 
-    // ── Opp count per contact ────────────────────────────────
+    // ── Open deals per contact (state §0.176) — the rail's list, counted ──
     const oppCount = useMemo(() => {
         const map = {};
-        (visibleContacts || []).forEach(c => {
-            const name = (c.firstName + ' ' + c.lastName).trim().toLowerCase();
-            map[c.id] = (opportunities || []).filter(o =>
-                (o.contactIds && o.contactIds.includes(c.id)) ||
-                (o.contacts && o.contacts.split(',').map(s => s.trim().toLowerCase()).some(n => n === name || n.startsWith(name + ' (')))
-            ).length;
-        });
+        (visibleContacts || []).forEach(c => { map[c.id] = activeDealsOf(c, opportunities).length; });
         return map;
     }, [visibleContacts, opportunities]);
 

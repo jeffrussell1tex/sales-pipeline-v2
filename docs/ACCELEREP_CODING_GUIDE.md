@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b68** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b69** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3841,3 +3841,12 @@ through `dbFetch`.
 3. **A shared helper whose callers a switch remounts may stop by never settling** (`stopped()`, storage.js) — `putSettings`, the document upload. A helper with callers that stay mounted takes their check instead (the bulk client's `stillOrg`).
 4. **The tests hold it:** tests/late-answers.test.mjs parses every async path in src and fails a late point with no check before it; tests/src-scope.test.mjs walks every name read under src and fails one nothing binds.
 5. **A late answer is tested in the pane by holding it:** a fetch wrapper holds the request and answers it with a made-up response after the switch — nothing is written in any org — and records every further request with its token's org; red with HEAD's file swapped in.
+
+## 18b69. A Count Is The Length Of The List It Counts; A Hook Reads App's Helpers When It Uses Them; A Catch Leaves (hard rule)
+
+**Origin (§0.176, 6 Oct 2026 — Jeff: "All I want showing are active deals - not closed").** Signed in as Karen, Jeff saw "2 opps" on four contacts whose rails listed one deal each, and 2 and 2 on two others: "I am concerned it is randomly correct and not accurately correct". The badge and the rail each had a filter — closed deals in one and not the other, three name matches across the badge, the rail and the delete check. Beside it: the data hooks copied App's helpers at their top, a render before App filled them (the deals load's quarter helper null on a remount; the delete check's deals and softDelete's toast a render old), and an activity save's catch fell through to the follow-up for an activity it had not saved.
+
+1. **A count is the length of the list it counts** — the same function builds both (`activeDealsOf(contact, deals).length` beside `activeDealsOf(contact, deals)`), never a second filter written beside the list. What a contact's deals are lives once: src/utils/contactDeals.js — open deals, by id or by the legacy name in any case, never a prefix.
+2. **A data hook reads App's helpers when it uses them** — in the handler, or in the answer — never while it renders: App fills the refs behind its deps after the hooks have run, so a copy taken at a hook's top is the render before's, and null on a mount's first render. A hook copies at its top only a helper that is the same from any render (tests/hook-deps.test.mjs names them, each with its reason).
+3. **A timer clears only what it set.** The undo toast's timer compares the toast's id with its own before it clears it, so a softDelete from any render leaves a later toast alone.
+4. **A catch leaves.** The code after a try is the success path; a catch that sets an error returns, or the follow-up, the reset and the close run for what was not saved. In src/hooks a test fails a catch that falls through (tests/activity-save.test.mjs).

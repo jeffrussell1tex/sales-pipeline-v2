@@ -19,7 +19,7 @@ async function fireMentionSms(payload) {
 }
 
 export function useTasks(deps) {
-    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
+    const { addAudit, showConfirm, softDelete, setUndoToast } = deps;
 
     const [tasks, setTasks] = useState([]);
     const [taskModalError, setTaskModalError] = useState(null);

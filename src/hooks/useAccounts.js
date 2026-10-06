@@ -3,7 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 
 export function useAccounts(deps) {
-    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel, showBlockedDelete } = deps;
+    const { addAudit, showConfirm, softDelete, setUndoToast, showBlockedDelete } = deps;
 
     const [accounts, setAccounts] = useState([]);
     const [accountModalError, setAccountModalError] = useState(null);

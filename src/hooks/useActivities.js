@@ -3,7 +3,7 @@ import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 
 export function useActivities(deps) {
-    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
+    const { addAudit, showConfirm, softDelete, setUndoToast } = deps;
 
     const [activities, setActivities] = useState([]);
     const [activityModalError, setActivityModalError] = useState(null);
@@ -132,6 +132,7 @@ export function useActivities(deps) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to update activity:', err);
                 setActivityModalError('Failed to save activity. Please check your connection and try again.');
+                return;   // not saved: no follow-up, and QuickLog keeps its draft (state §0.176)
             } finally { setActivityModalSaving(false); }
         } else {
             const newId = 'id_' + crypto.randomUUID();
@@ -148,6 +149,7 @@ export function useActivities(deps) {
                 if (!stillOrg(askedOrg)) return;
                 console.error('Failed to save activity:', err);
                 setActivityModalError('Failed to save activity. Please check your connection and try again.');
+                return;   // not saved: no follow-up, and QuickLog keeps its draft (state §0.176)
             } finally { setActivityModalSaving(false); }
         }
         if (!stillOrg(askedOrg)) return;

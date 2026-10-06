@@ -443,7 +443,11 @@ function App() {
         if (undoToast) clearTimeout(undoToast.timerId);
         deleteFunc();
         const askedOrg = requestOrg();   // after an org switch the timer clears nothing (state §0.175)
-        const timerId = setTimeout(() => { if (stillOrg(askedOrg)) setUndoToast(null); }, 5000);
+        // A timer clears only the toast it put up (state §0.176). The data hooks hold
+        // the softDelete of the render before the last, which read no toast when the
+        // last delete's toast had just gone up: that timer kept running and cleared
+        // the next delete's toast — and its Undo — when the first five seconds ran out.
+        const timerId = setTimeout(() => { if (stillOrg(askedOrg)) setUndoToast(t => (t && t.timerId === timerId ? null : t)); }, 5000);
         setUndoToast({ label, restore: restoreFunc, timerId });
     };
 

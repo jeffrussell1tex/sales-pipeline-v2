@@ -20,7 +20,7 @@ async function fireMentionSms(payload) {
 }
 
 export function useOpportunities(deps) {
-    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
+    const { addAudit, showConfirm, softDelete, setUndoToast } = deps;
 
     const [opportunities, setOpportunities] = useState([]);
     const [oppModalError, setOppModalError] = useState(null);
@@ -34,6 +34,12 @@ export function useOpportunities(deps) {
             .then(r => { if (!stillOrg(askedOrg)) return null; setDbOffline(dbStatusOf(r)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => {
                 if (!data || !stillOrg(askedOrg)) return;
+                // Read when the answer lands (state §0.176): App fills these refs during
+                // its render, after this hook has run, so a copy taken at the hook's top
+                // is null on a mount's first render — and a remount with Clerk already
+                // loaded (Vite's Fast Refresh) ran this load with it: "getQuarter is not
+                // a function", and no deals until the next load.
+                const { getQuarter, getQuarterLabel } = deps;
                 const loadedOpps = data.opportunities || [];
                 const updatedOpps = loadedOpps.map(opp => {
                     const normalized = {

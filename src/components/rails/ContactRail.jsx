@@ -7,6 +7,7 @@ import AccountPicker from './AccountPicker';
 import { cleanEmailTemplates, mergeContext, renderForContact, mailtoHref } from '../../utils/emailTemplates.js';
 import { T } from '../../tokens.js';
 import { NON_REP_ROLES } from '../../utils/roles.js';
+import { activeDealsOf } from '../../utils/contactDeals.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -247,15 +248,8 @@ export default function ContactRail() {
 
     const buyerPersonas = (settings?.buyerPersonas || []).filter(p => p.active !== false);
 
-    const openOpps = (opportunities || []).filter(o => {
-        if (!contact) return false;
-        const closed = ['closed won','closed lost','won','lost'];
-        if (closed.includes((o.stage || '').toLowerCase())) return false;
-        return (o.contactIds || []).includes(contact.id) ||
-            (o.contacts || '').split(',').map(s => s.trim()).includes(
-                ((contact.firstName || '') + ' ' + (contact.lastName || '')).trim()
-            );
-    });
+    // The contact's open deals (state §0.176) — the Contacts tab's badge counts the same list.
+    const openOpps = activeDealsOf(contact, opportunities);
 
     // Activities linked to this contact — by direct contactId or via involved opportunities
     const contactActivities = (activities || []).filter(a => {
