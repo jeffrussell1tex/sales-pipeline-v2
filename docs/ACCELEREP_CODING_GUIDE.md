@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b76** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b77** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3916,3 +3916,12 @@ through `dbFetch`.
 2. **A key the server signs names nothing that exists** — an upload URL for a new document is refused an id a document holds, this org's or another's.
 3. **A screen offers an edit to the roles the server lets write** — `canEditCrm`, requireWrite's list; a reader sees the record read-only (its pill, its text, a disabled control), never a control the server refuses. tests/document-access.test.mjs parses every document screen: each reference in the markup to a write, or to a function that reaches one, sits under `canEdit`.
 4. **A view follows what its write moved** — the rail's version history reloads when the version moves, keeping its list while it does.
+
+## 18b77. A Choice Of People Is A Type-Ahead Of This Org's Members, Stored By App Id And Checked By The Server; A Record Named In A Write Is The One The Server Finds (hard rule)
+
+**Origin (§0.183, 7 Oct 2026 — §0.182's found (a)–(d); Jeff: "for number 2 build a picker", "Owner or an Admin", "A type ahead multi select instead of a prebuilt list … it could be very unusable with a larger population of users").** A Specific document had no way to choose anyone, its list unchecked and compared with a Clerk id; anyone who could see a document could change who sees it or delete it; a link stored the record the browser named, under the browser's name. §18b76 (a write asks what its read asks) is its kin; §18b22 (the identity split) is why the id is the roster's.
+
+1. **A choice of people from the org is a type-ahead, never a list of everyone** — the deal Contacts field's kind: the chosen as chips with an ×, a search offering the names that match, a few at a time. A list of the whole org does not scale with the org.
+2. **People are stored by their app id (users.id) and checked by the server against this org's roster** — the id a rep's directory carries and an invited member already has; a Clerk id is not a member's id. A list the rule needs filled (Specific) is refused empty.
+3. **Who sees a record, and its delete, are named by one server rule that the record carries to the screen** (`mayManage` → `canManage`): the screen offers the control by the flag, the server refuses by the rule.
+4. **A record a write names is the one the server finds** — in this org, visible to the caller by its own list's rule, stored under its own name; one that is not there and one the caller cannot see answer alike (§18b71.3).

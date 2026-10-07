@@ -98,7 +98,8 @@ export default function DocumentsTab() {
         downloadDoc, previewDoc, removeDocument, showConfirm, userRole,
     } = useApp();
     // Upload and Delete are offered to whom the server lets write — canEditCrm,
-    // requireWrite's list (state §0.182); a reader browses, opens and downloads.
+    // requireWrite's list (state §0.182); a reader browses, opens and downloads. Delete is
+    // a document's owner's or an Admin's (doc.canManage, the server's rule — state §0.183).
     const canEdit = canEditCrm(userRole);
 
     const [search, setSearch] = useState('');
@@ -198,7 +199,7 @@ export default function DocumentsTab() {
                     onPreview={() => { setMenu(null); previewDoc && previewDoc(menu.doc.id); }}
                     onDownload={() => { setMenu(null); downloadDoc && downloadDoc(menu.doc.id); }}
                     onOpen={() => { setMenu(null); setDocumentRailId && setDocumentRailId(menu.doc.id); }}
-                    onDelete={canEdit ? () => handleDelete(menu.doc) : undefined} />
+                    onDelete={canEdit && menu.doc.canManage ? () => handleDelete(menu.doc) : undefined} />
             )}
         </div>
     );

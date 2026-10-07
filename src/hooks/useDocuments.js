@@ -148,8 +148,10 @@ export function useDocuments(_deps = {}) {
             method: 'POST', body: JSON.stringify({ id, v }),
         }));
         if (!r.ok) { report(_deps, askedOrg, `Version ${v} not restored — ${r.error}`); return r; }
+        // The document as the restore left it — its size and file the restored version's
+        // (state §0.183); the version and the time alone kept the size restored over.
         if (stillOrg(askedOrg)) setDocuments((prev) => prev.map((d) =>
-            d.id === id ? { ...d, version: r.data.version, modifiedAt: new Date().toISOString() } : d));
+            d.id === id ? { ...d, modifiedAt: new Date().toISOString(), ...(r.data.document || {}), version: r.data.version } : d));
         return { ok: true, version: r.data.version };
     }, []);
 

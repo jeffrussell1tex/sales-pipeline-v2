@@ -8,9 +8,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../AppContext';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { canEditCrm } from '../../utils/roles.js';
+import { sharablePeople, sharedNames, toggled } from '../../utils/documentPeople.js';
 import {
     T, fmtSize, fmtDateLong, fileMeta, FileTypeBadge, CategoryPill,
-    LinkChip, VisibilityControl, CATEGORIES,
+    LinkChip, VisibilityControl, PeopleChooser, CATEGORIES,
 } from './atoms';
 
 function DetailField({ label, children }) {
@@ -42,7 +43,7 @@ export default function DocumentRail() {
         setShowUploadRail, setUploadRailContext,
         setShowDocLinkPicker, setDocLinkPickerContext,
         showUploadRail, showDocLinkPicker, confirmModal, promptModal,
-        userRole,
+        userRole, settings, clerkUser, currentUserId,
     } = useApp();
 
     const doc = documentRailId ? (documents.find((d) => d.id === documentRailId) || null) : null;
@@ -51,6 +52,10 @@ export default function DocumentRail() {
     const [loadingVersions, setLoadingVersions] = useState(false);
     const [versionsFailed, setVersionsFailed] = useState(false);
     const [note, setNote] = useState('');
+    // Choosing the people a Specific document is shared with (state §0.183): the list
+    // ticked so far, saved with the visibility in one PUT.
+    const [choosing, setChoosing] = useState(false);
+    const [picked, setPicked] = useState([]);
 
     const close = useCallback(() => setDocumentRailId && setDocumentRailId(null), [setDocumentRailId]);
 
@@ -59,6 +64,7 @@ export default function DocumentRail() {
         if (!doc) return;
         setNote(doc.note || '');
         setVersions([]);
+        setChoosing(false);
     }, [doc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Load the version history when a document opens — and again when its version moves:
@@ -105,6 +111,24 @@ export default function DocumentRail() {
     const onAddLink = () => {
         setDocLinkPickerContext && setDocLinkPickerContext({ documentId: doc.id, currentLinks: doc.links || [] });
         setShowDocLinkPicker && setShowDocLinkPicker(true);
+    };
+    // Who sees it (state §0.183): its owner or an Admin changes it (doc.canManage, the
+    // server's own rule). Specific opens the people to tick first, and saves them with it.
+    const visibilityNow = doc.visibility || doc.visibilityKind || 'team';
+    const mine = !!doc.ownerId && doc.ownerId === clerkUser?.id;
+    const people = sharablePeople(settings?.users, { selfId: currentUserId, selfIsOwner: mine });
+    const onVisibility = (v) => {
+        if (v === 'specific') {
+            setPicked(Array.isArray(doc.visibilityUserIds) ? doc.visibilityUserIds : []);
+            setChoosing(true);
+            return;
+        }
+        setChoosing(false);
+        updateDocument && updateDocument(doc.id, { visibility: v });
+    };
+    const savePeople = async () => {
+        const r = updateDocument && await updateDocument(doc.id, { visibility: 'specific', visibilityUserIds: picked });
+        if (r && r.ok) setChoosing(false);   // a refusal says so in the app's message, the choice kept
     };
     // The delete is confirmed, then sent; the rail closes when the document leaves the
     // library (the effect above), so a refused one leaves it open and the app's message
@@ -183,7 +207,31 @@ export default function DocumentRail() {
 
                     {/* Visibility */}
                     <SectionHeading label="Visibility" />
-                    <VisibilityControl value={doc.visibility || doc.visibilityKind || 'team'} disabled={!canEdit} onChange={(v) => updateDocument && updateDocument(doc.id, { visibility: v })} />
+                    <VisibilityControl value={choosing ? 'specific' : visibilityNow} disabled={!canEdit || !doc.canManage} onChange={onVisibility} />
+                    {canEdit && doc.canManage && choosing ? (
+                        <div style={{ marginTop: 10 }}>
+                            <div style={{ fontSize: 12, color: T.inkMid }}>Share it with:</div>
+                            <PeopleChooser people={people} chosen={picked} onToggle={(id) => setPicked((prev) => toggled(prev, id))}
+                                nameOf={(id) => sharedNames([id], settings?.users)[0]} />
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+                                <button onClick={() => setChoosing(false)} style={{ background: 'none', border: `1px solid ${T.border}`, color: T.inkMid, borderRadius: T.r, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
+                                <button onClick={savePeople} disabled={picked.length === 0}
+                                    style={{ background: T.ink, border: 'none', color: '#f5f1eb', borderRadius: T.r, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: picked.length ? 'pointer' : 'default', opacity: picked.length ? 1 : 0.5, fontFamily: T.sans }}>
+                                    Share with {picked.length || 'no one yet'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : visibilityNow === 'specific' && (
+                        <div style={{ marginTop: 8, fontSize: 12, color: T.inkMid }}>
+                            Shared with {sharedNames(doc.visibilityUserIds, settings?.users).join(', ') || 'no one'}
+                            {canEdit && doc.canManage && (
+                                <button onClick={() => onVisibility('specific')} style={{ ...linkText, marginLeft: 8 }}>Edit people</button>
+                            )}
+                        </div>
+                    )}
+                    {canEdit && !doc.canManage && (
+                        <div style={{ marginTop: 6, fontSize: 11, color: T.inkMuted }}>Only its owner or an Admin can change who sees it.</div>
+                    )}
 
                     {/* Description */}
                     <SectionHeading label="Description" />
@@ -229,8 +277,8 @@ export default function DocumentRail() {
                         })
                     )}
 
-                    {/* Danger */}
-                    {canEdit && (
+                    {/* Danger — its owner's or an Admin's (state §0.183) */}
+                    {canEdit && doc.canManage && (
                         <div style={{ marginTop: 22, paddingTop: 14, borderTop: `1px solid ${T.border}` }}>
                             <button onClick={onDelete} style={{ background: 'none', border: `1px solid ${T.danger}`, color: T.danger, borderRadius: T.r, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                                 Delete document

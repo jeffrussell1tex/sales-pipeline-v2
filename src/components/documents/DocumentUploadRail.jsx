@@ -12,9 +12,10 @@ import { useApp } from '../../AppContext';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import {
     T, fmtSize, baseName, fileMeta, FileTypeBadge, CategoryPill, LinkChip,
-    VisibilityControl, CATEGORIES,
+    VisibilityControl, PeopleChooser, CATEGORIES,
 } from './atoms';
 import { validateFile } from '../../utils/documentsStorage';
+import { sharablePeople, toggled } from '../../utils/documentPeople.js';
 
 const ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.csv,.txt';
 
@@ -24,6 +25,7 @@ export default function DocumentUploadRail() {
         createDocument, addDocumentVersion,
         setShowDocLinkPicker, setDocLinkPickerContext,
         showDocLinkPicker, confirmModal, promptModal,
+        settings, currentUserId,
     } = useApp();
 
     const ctx = uploadRailContext || {};
@@ -34,6 +36,8 @@ export default function DocumentUploadRail() {
     const [category, setCategory] = useState('Contract');
     const [links, setLinks] = useState([]);
     const [visibility, setVisibility] = useState('team');
+    // The people a Specific upload is shared with — at least one (state §0.183).
+    const [sharedWith, setSharedWith] = useState([]);
     const [note, setNote] = useState('');
     const [progress, setProgress] = useState(null);
     const [uploading, setUploading] = useState(false);
@@ -53,7 +57,7 @@ export default function DocumentUploadRail() {
     const close = () => {
         setShowUploadRail(false);
         setUploadRailContext && setUploadRailContext(null);
-        setFile(null); setName(''); setCategory('Contract'); setLinks([]); setVisibility('team');
+        setFile(null); setName(''); setCategory('Contract'); setLinks([]); setVisibility('team'); setSharedWith([]);
         setNote(''); setProgress(null); setUploading(false); setError(null); setDrag(false);
     };
 
@@ -81,14 +85,17 @@ export default function DocumentUploadRail() {
         setShowDocLinkPicker && setShowDocLinkPicker(true);
     };
 
+    // Nothing to send yet: no file, an upload under way, or Specific with no one chosen.
+    const blocked = !file || uploading || (!isVersion && visibility === 'specific' && sharedWith.length === 0);
+
     const submit = async () => {
-        if (!file || uploading) return;
+        if (blocked) return;
         setUploading(true); setError(null); setProgress(0);
         try {
             if (isVersion) {
                 await addDocumentVersion(ctx.documentId, file, { note, onProgress: setProgress });
             } else {
-                await createDocument(file, { name: name || baseName(file.name), category, visibility, links, note, onProgress: setProgress });
+                await createDocument(file, { name: name || baseName(file.name), category, visibility, visibilityUserIds: visibility === 'specific' ? sharedWith : [], links, note, onProgress: setProgress });
             }
             close();
         } catch (e) {
@@ -210,6 +217,13 @@ export default function DocumentUploadRail() {
                             <div style={{ marginTop: 16 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Visibility</div>
                                 <VisibilityControl value={visibility} onChange={setVisibility} />
+                                {visibility === 'specific' && (
+                                    <>
+                                        <div style={{ fontSize: 12, color: T.inkMid, marginTop: 10 }}>Share it with:</div>
+                                        <PeopleChooser people={sharablePeople(settings?.users, { selfId: currentUserId, selfIsOwner: true })}
+                                            chosen={sharedWith} onToggle={(id) => setSharedWith((prev) => toggled(prev, id))} />
+                                    </>
+                                )}
                             </div>
                         </>
                     )}
@@ -220,8 +234,8 @@ export default function DocumentUploadRail() {
                     <span style={{ fontSize: 11, color: T.inkMuted }}>{!isVersion && links.length > 0 ? `Linked to ${links.length} record${links.length === 1 ? '' : 's'}` : ''}</span>
                     <div style={{ display: 'flex', gap: 8 }}>
                         <button onClick={close} disabled={uploading} style={{ background: 'none', border: `1px solid ${T.border}`, color: T.inkMid, borderRadius: T.r, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: uploading ? 'default' : 'pointer', fontFamily: T.sans, opacity: uploading ? 0.5 : 1 }}>Cancel</button>
-                        <button onClick={submit} disabled={!file || uploading}
-                            style={{ background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: (!file || uploading) ? 'default' : 'pointer', fontFamily: T.sans, opacity: (!file || uploading) ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button onClick={submit} disabled={blocked}
+                            style={{ background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: blocked ? 'default' : 'pointer', fontFamily: T.sans, opacity: blocked ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                             {uploading ? 'Uploading…' : (isVersion ? '↑ Upload version' : '↑ Upload document')}
                         </button>
                     </div>

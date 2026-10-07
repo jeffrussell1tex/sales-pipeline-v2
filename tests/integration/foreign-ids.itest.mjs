@@ -59,7 +59,7 @@ for (const name of ['users', 'documents', 'dispatch-jobs', 'dispatch-customers',
 const { db } = await import('../../db/index.js');
 const schema = await import('../../db/schema.js');
 const { settings, users, documents, documentVersions, documentLinks, dispatchJobs, dispatchJobStatusHistory, dispatchJobLineItems,
-        dispatchCustomers, dispatchServiceLocations, dispatchVehicles, contacts, tasks, spiffClaims, products, auditLog } = schema;
+        dispatchCustomers, dispatchServiceLocations, dispatchVehicles, contacts, tasks, spiffClaims, products, auditLog, accounts } = schema;
 const { eq, and, inArray } = await import('drizzle-orm');
 
 // ORG NAMESPACE: this file owns 'itest_fid_*' (rows, ids, emails).
@@ -82,7 +82,7 @@ const one = async (table, id, org) => (await db.select().from(table).where(and(e
 
 const cleanup = async () => {
     for (const t of [documentLinks, documentVersions, documents, dispatchJobStatusHistory, dispatchJobLineItems, dispatchJobs,
-                     dispatchServiceLocations, dispatchCustomers, dispatchVehicles, contacts, tasks, spiffClaims, products, users, auditLog, settings]) {
+                     dispatchServiceLocations, dispatchCustomers, dispatchVehicles, contacts, tasks, spiffClaims, products, accounts, users, auditLog, settings]) {
         await db.delete(t).where(inArray(t.orgId, ORGS));
     }
 };
@@ -97,6 +97,9 @@ before(async () => {
         // A's Admin as the mock signs them in — the name a document is owned by.
         { id: 'usr_itest_fid_a_admin', orgId: A, clerkUserId: `clerk_itest_fid_Admin_${A}`, name: 'Ada Fid', email: 'ada@itest-fid.local', role: 'Admin' },
     ]);
+    // The account a document is linked to: one of org A's, as a link must name since
+    // state §0.183 — the create is refused for the id, not the link.
+    await db.insert(accounts).values({ id: 'acc_itest_fid', orgId: A, name: 'Some account' });
     await db.insert(documents).values({ id: 'doc_itest_fid_b', orgId: B, name: 'B doc', storageKey: `${B}/doc_itest_fid_b/v1/b.pdf`, uploadedAt: now, modifiedAt: now, createdAt: now, updatedAt: now });
     await db.insert(dispatchCustomers).values([
         { id: 'cust_itest_fid_b', orgId: B, name: 'B Customer' },

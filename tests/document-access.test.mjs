@@ -33,19 +33,19 @@ test('writableDoc reads the document in the caller\'s org, and answers 403 to on
     const fn = between(code(read('netlify/functions/documents.mjs')), 'async function writableDoc(', '\n}\n');
     assert.ok(fn.includes('.where(and(eq(documents.id, id), eq(documents.orgId, orgId)));'), 'in this org only');
     assert.ok(fn.includes("if (!doc) return { refusal: { statusCode: 404, headers, body: JSON.stringify({ error: missing }) } };"));
-    assert.ok(fn.includes("if (!canSee(doc, userId, userRole)) return { refusal: { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) } };"), 'the reads\' own rule');
+    assert.ok(fn.includes("if (!canSee(doc, viewer)) return { refusal: { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) } };"), 'the reads\' own rule');
 });
 
 test('each write to an existing document reads it through writableDoc before it writes', () => {
     const s = code(read('netlify/functions/documents.mjs'));
     const branches = [
-        ['a version\'s upload URL', between(s, "if (kind === 'version') {", '} else {'), 'await writableDoc(documentId, orgId, userId, userRole, headers', 'v = (doc.version || 1) + 1;'],
-        ['a new version', between(s, "if (action === 'new-version') {", "if (action === 'restore-version') {"), 'await writableDoc(id, orgId, userId, userRole, headers)', 'await db.insert(documentVersions)'],
-        ['a restore', between(s, "if (action === 'restore-version') {", "if (action === 'link') {"), 'await writableDoc(id, orgId, userId, userRole, headers)', 'await db.insert(documentVersions)'],
-        ['a link', between(s, "if (action === 'link') {", "return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action' }) };"), 'await writableDoc(id, orgId, userId, userRole, headers)', 'await insertLinks(orgId, id, links)'],
-        ['a PUT', between(s, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {"), 'await writableDoc(data.id, orgId, userId, userRole, headers)', 'await db.update(documents)'],
-        ['an unlink', between(s, "if (event.httpMethod === 'DELETE') {", 'const id = qs.id;'), 'await writableDoc(link.documentId, orgId, userId, userRole, headers)', 'await db.delete(documentLinks)'],
-        ['a delete', s.slice(s.indexOf('const id = qs.id;'), s.indexOf("return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };")), 'await writableDoc(id, orgId, userId, userRole, headers)', 'await db.delete(documentVersions)'],
+        ['a version\'s upload URL', between(s, "if (kind === 'version') {", '} else {'), 'await writableDoc(documentId, orgId, viewer, headers', 'v = (doc.version || 1) + 1;'],
+        ['a new version', between(s, "if (action === 'new-version') {", "if (action === 'restore-version') {"), 'await writableDoc(id, orgId, viewer, headers)', 'await db.insert(documentVersions)'],
+        ['a restore', between(s, "if (action === 'restore-version') {", "if (action === 'link') {"), 'await writableDoc(id, orgId, viewer, headers)', 'await db.insert(documentVersions)'],
+        ['a link', between(s, "if (action === 'link') {", "return { statusCode: 400, headers, body: JSON.stringify({ error: 'Unknown action' }) };"), 'await writableDoc(id, orgId, viewer, headers)', 'await insertLinks(orgId, id, linked.rows)'],
+        ['a PUT', between(s, "if (event.httpMethod === 'PUT') {", "if (event.httpMethod === 'DELETE') {"), 'await writableDoc(data.id, orgId, viewer, headers)', 'await db.update(documents)'],
+        ['an unlink', between(s, "if (event.httpMethod === 'DELETE') {", 'const id = qs.id;'), 'await writableDoc(link.documentId, orgId, viewer, headers)', 'await db.delete(documentLinks)'],
+        ['a delete', s.slice(s.indexOf('const id = qs.id;'), s.indexOf("return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };")), 'await writableDoc(id, orgId, viewer, headers)', 'await db.delete(documentVersions)'],
     ];
     for (const [what, body, check, write] of branches) {
         before(body, check, write, `${what}: the document is checked before the write`);
@@ -92,7 +92,9 @@ const walk = (node, visit, anc = []) => {
 };
 const isCanEdit = (e) => !!e && ((e.type === 'Identifier' && e.name === 'canEdit')
     || (e.type === 'LogicalExpression' && e.operator === '&&' && (isCanEdit(e.left) || isCanEdit(e.right))));
-const isNotCanEdit = (e) => !!e && e.type === 'UnaryExpression' && e.operator === '!' && e.argument.type === 'Identifier' && e.argument.name === 'canEdit';
+// `!canEdit`, or an || whose either side is — `disabled={!canEdit || !doc.canManage}` (§0.183).
+const isNotCanEdit = (e) => !!e && ((e.type === 'UnaryExpression' && e.operator === '!' && e.argument.type === 'Identifier' && e.argument.name === 'canEdit')
+    || (e.type === 'LogicalExpression' && e.operator === '||' && (isNotCanEdit(e.left) || isNotCanEdit(e.right))));
 // Does this ancestor hold the path below it under the gate?
 const holds = (a, child) => {
     if (a.type === 'LogicalExpression' && a.operator === '&&' && child === a.right && isCanEdit(a.left)) return true;
@@ -173,11 +175,13 @@ test('the guard finds the shape it guards', () => {
         '        <select disabled={!canEdit} onChange={go} />',            // disabled for a reader
         '        {canEdit && !busy && <b onClick={() => setShowUploadRail(true)} />}',
         '        <i onClick={() => setDocumentRailId(1)} />',               // opening a document is a read
+        '        <s disabled={!canEdit || !mine} onChange={go} />',         // disabled for a reader, and for one who may not manage it (§0.183)
+        '        <u disabled={!mine} onChange={go} />',                     // a gate that is not the write list
         '    </div>);',
         '}',
     ].join('\n');
     assert.deepEqual(editsIn('fixture.jsx', fixture).map((e) => `${e.at.split(':')[1]} ${e.gated}`),
-        ['5 go false', '6 later true', '7 go false', '8 go true', '9 setShowUploadRail true']);
+        ['5 go false', '6 later true', '7 go false', '8 go true', '9 setShowUploadRail true', '11 go true', '12 go false']);
 });
 
 // ── the history; the loader ─────────────────────────────────────────────────

@@ -36,10 +36,12 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import { db } from '../../db/index.js';
-import { documents, documentLinks, documentVersions } from '../../db/schema.js';
+import { documents, documentLinks, documentVersions, users, accounts, contacts, opportunities, tasks, activities } from '../../db/schema.js';
 import { eq, and, inArray, desc } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, allowOrigin, auditAs, getCallerName } from './_lib.mjs';
+import { serverErrorBody, allowOrigin, auditAs, getCallerName, getCallerId } from './_lib.mjs';
+import { isAdmin, crmReadScope, dealVisibleTo } from '../../src/utils/roles.js';
+import { dealReadContext } from './_dealAccess.mjs';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -100,31 +102,95 @@ async function presignGet(key, filename, disposition = 'attachment') {
 // and is independent of who can see a linked record — a Private file stays
 // private even on a shared Account. (No admin bypass by default; flip here if
 // you want admins to see everything for governance.)
-function canSee(doc, userId /* , userRole */) {
+//
+// The viewer is who asks (state §0.183): their Clerk id — a document's owner is stored
+// by it — their role, and their app id (users.id), which a Specific document lists the
+// people it is shared with by: the roster's id, the one the picker offers.
+function canSee(doc, viewer) {
   if (doc.visibilityKind === 'team') return true;
-  if (doc.ownerId && doc.ownerId === userId) return true;
+  if (doc.ownerId && doc.ownerId === viewer.userId) return true;
   if (doc.visibilityKind === 'specific') {
     const ids = Array.isArray(doc.visibilityUserIds) ? doc.visibilityUserIds : [];
-    return ids.includes(userId);
+    return !!viewer.appId && ids.includes(viewer.appId);
   }
   return false; // 'private' and not owner
 }
+
+// Who may change who sees a document, or delete it (state §0.183; Jeff: "Owner or an
+// Admin"): its owner, or an Admin — one who can see it, since every write reads the
+// document through writableDoc first. Anyone else who can see it may still change its
+// name, category and description, its links and its versions.
+const mayManage = (doc, viewer) => (!!doc.ownerId && doc.ownerId === viewer.userId) || isAdmin(viewer.userRole);
 
 // The document a write acts on — in this org, and only when the caller may see it
 // (state §0.182). Every read asked canSee; no write did, so a document a user could not
 // see could still be changed, versioned, restored, linked, unlinked or deleted by its id.
 // Returns { doc }, or { refusal } — the answer to send, in the reads' own words.
-async function writableDoc(id, orgId, userId, userRole, headers, missing = 'Not found') {
+async function writableDoc(id, orgId, viewer, headers, missing = 'Not found') {
   if (!id) return { refusal: { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) } };
   const [doc] = await db.select().from(documents)
     .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
   if (!doc) return { refusal: { statusCode: 404, headers, body: JSON.stringify({ error: missing }) } };
-  if (!canSee(doc, userId, userRole)) return { refusal: { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) } };
+  if (!canSee(doc, viewer)) return { refusal: { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) } };
   return { doc };
 }
 
+// Whom a document is shown to besides its owner (state §0.183): for 'specific', the people
+// it names — this org's members, by their app id, at least one; for 'private' and 'team',
+// no one listed. The list was taken unchecked, and no screen could fill it (§0.182 found
+// (b)), so a Specific document was its owner's alone.
+const VISIBILITY_KINDS = new Set(['private', 'team', 'specific']);
+async function whoMaySee(orgId, kind, ids, headers) {
+  const refuse = (error) => ({ refusal: { statusCode: 400, headers, body: JSON.stringify({ error }) } });
+  if (!VISIBILITY_KINDS.has(kind)) return refuse('Unknown visibility.');
+  if (kind !== 'specific') return { ids: [] };
+  const wanted = [...new Set((Array.isArray(ids) ? ids : []).map(String).filter(Boolean))];
+  if (!wanted.length) return refuse('Choose at least one person to share it with.');
+  const found = await db.select({ id: users.id }).from(users)
+    .where(and(eq(users.orgId, orgId), inArray(users.id, wanted)));
+  if (found.length !== wanted.length) return refuse('Choose people from this organization.');
+  return { ids: wanted };
+}
+
+// The records a document is linked to (state §0.183): each one of this org's that the
+// caller can see — the read rule of its own list: a deal by dealVisibleTo, the others by
+// crmReadScope (a rep's own and the unassigned) — and stored under its own name. A link
+// took the record id, name and line the browser sent, unchecked (§0.182 found (d)). A
+// record that is not there and one the caller cannot see answer alike: 404.
+const LINKABLE = {
+  account:     { table: accounts,      name: (r) => r.name },
+  contact:     { table: contacts,      name: (r) => `${r.firstName || ''} ${r.lastName || ''}`.trim() },
+  opportunity: { table: opportunities, name: (r) => r.opportunityName || r.account },
+  task:        { table: tasks,         name: (r) => r.title },
+  activity:    { table: activities,    name: (r) => r.subject || r.type },
+};
+async function resolveLinks(auth, viewer, links, headers) {
+  const notFound = { refusal: { statusCode: 404, headers, body: JSON.stringify({ error: 'A record to link was not found.' }) } };
+  const rows = [];
+  let dealCtx = null;
+  for (const l of Array.isArray(links) ? links : []) {
+    const type = l && l.type;
+    const recordId = l ? String(l.recordId || l.id || '') : '';
+    if (!RECORD_TYPES.has(type) || !recordId) return { refusal: { statusCode: 400, headers, body: JSON.stringify({ error: 'A link needs a record type and id.' }) } };
+    const { table, name } = LINKABLE[type];
+    const [row] = await db.select().from(table).where(and(eq(table.id, recordId), eq(table.orgId, auth.orgId)));
+    if (!row) return notFound;
+    let visible;
+    if (type === 'opportunity') {
+      dealCtx = dealCtx || await dealReadContext(auth);
+      visible = dealVisibleTo(row, dealCtx);
+    } else {
+      const scope = crmReadScope(auth.userRole);
+      visible = scope === 'all' || (scope === 'own' && (!row.ownerId || row.ownerId === viewer.appId));
+    }
+    if (!visible) return notFound;
+    rows.push({ type, recordId, name: name(row) || null, sub: null });
+  }
+  return { rows };
+}
+
 // Attach each document's links (one query for the whole page, grouped in JS).
-async function withLinks(orgId, docs) {
+async function withLinks(orgId, docs, viewer) {
   if (!docs.length) return [];
   const ids = docs.map((d) => d.id);
   const links = await db.select().from(documentLinks)
@@ -137,6 +203,7 @@ async function withLinks(orgId, docs) {
   return docs.map((d) => ({
     ...d,
     visibility: d.visibilityKind, // flatten for the UI's VisibilityControl
+    canManage: mayManage(d, viewer), // the screens offer Visibility and Delete by it (state §0.183)
     links: byDoc.get(d.id) || [],
   }));
 }
@@ -163,6 +230,10 @@ export const handler = async (event) => {
   const action = qs.action || '';
 
   try {
+    // Who asks (state §0.183): the app id is the roster's — null for a caller with no row
+    // in this org, who then matches no Specific document.
+    const viewer = { userId, userRole, appId: await getCallerId(userId, orgId) };
+
     // ── GET ──────────────────────────────────────────────────────────────────
     if (event.httpMethod === 'GET') {
       // Presigned download / preview for one document (or a specific version)
@@ -171,7 +242,7 @@ export const handler = async (event) => {
         const [doc] = await db.select().from(documents)
           .where(and(eq(documents.id, qs.id), eq(documents.orgId, orgId)));
         if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
-        if (!canSee(doc, userId, userRole)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) };
+        if (!canSee(doc, viewer)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) };
 
         let key = doc.storageKey;
         let fname = `${doc.name}.${doc.ext || 'bin'}`;
@@ -193,7 +264,7 @@ export const handler = async (event) => {
         const [doc] = await db.select().from(documents)
           .where(and(eq(documents.id, qs.id), eq(documents.orgId, orgId)));
         if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
-        if (!canSee(doc, userId, userRole)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) };
+        if (!canSee(doc, viewer)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) };
         const vers = await db.select().from(documentVersions)
           .where(and(eq(documentVersions.orgId, orgId), eq(documentVersions.documentId, qs.id)))
           .orderBy(desc(documentVersions.v));
@@ -212,8 +283,8 @@ export const handler = async (event) => {
         if (!docIds.length) return { statusCode: 200, headers, body: JSON.stringify({ documents: [] }) };
         const docs = await db.select().from(documents)
           .where(and(eq(documents.orgId, orgId), inArray(documents.id, docIds)));
-        const visible = docs.filter((d) => canSee(d, userId, userRole));
-        return { statusCode: 200, headers, body: JSON.stringify({ documents: await withLinks(orgId, visible) }) };
+        const visible = docs.filter((d) => canSee(d, viewer));
+        return { statusCode: 200, headers, body: JSON.stringify({ documents: await withLinks(orgId, visible, viewer) }) };
       }
 
       // Global library — all docs for org the requester may see.
@@ -221,8 +292,8 @@ export const handler = async (event) => {
       // predicate + cursor pagination once an org passes a few thousand files.
       const docs = await db.select().from(documents)
         .where(eq(documents.orgId, orgId)).orderBy(desc(documents.modifiedAt));
-      const visible = docs.filter((d) => canSee(d, userId, userRole));
-      return { statusCode: 200, headers, body: JSON.stringify({ documents: await withLinks(orgId, visible) }) };
+      const visible = docs.filter((d) => canSee(d, viewer));
+      return { statusCode: 200, headers, body: JSON.stringify({ documents: await withLinks(orgId, visible, viewer) }) };
     }
 
     // ── POST ─────────────────────────────────────────────────────────────────
@@ -239,7 +310,7 @@ export const handler = async (event) => {
 
         let v = 1;
         if (kind === 'version') {
-          const { doc, refusal } = await writableDoc(documentId, orgId, userId, userRole, headers, 'Document not found');
+          const { doc, refusal } = await writableDoc(documentId, orgId, viewer, headers, 'Document not found');
           if (refusal) return refusal;
           v = (doc.version || 1) + 1;
         } else {
@@ -256,10 +327,17 @@ export const handler = async (event) => {
 
       // 2) Create the document row (after bytes are uploaded to storageKey)
       if (!action || action === 'create') {
-        const { id, name, ext, category, sizeKb, storageKey, contentType, visibility, visibilityUserIds, note, links } = data;
+        const { id, name, ext, category, sizeKb, storageKey, contentType, visibility, visibilityUserIds, note, links: asked } = data;
         if (!id || !name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id and name required' }) };
         if (!keyIs(storageKey, orgId, id, 1)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'storageKey/org mismatch' }) };
         if (ext && !ALLOWED_EXT.has(String(ext).toLowerCase())) return { statusCode: 415, headers, body: JSON.stringify({ error: 'Unsupported file type' }) };
+        // Who sees it, and what it is linked to, are checked before anything is written
+        // (state §0.183): the people this org's, the records ones the caller can see.
+        const who = await whoMaySee(orgId, visibility || 'team', visibilityUserIds, headers);
+        if (who.refusal) return who.refusal;
+        const linked = await resolveLinks(auth, viewer, asked, headers);
+        if (linked.refusal) return linked.refusal;
+        const links = linked.rows;
 
         const now = new Date();
         const row = {
@@ -268,7 +346,7 @@ export const handler = async (event) => {
           // userName, so every document and version read "Unknown"; a name the
           // client sends is not taken for who did it.
           sizeKb: Number(sizeKb) || 0, ownerId: userId, ownerName: (await getCallerName(userId, orgId)) || 'Unknown',
-          visibilityKind: visibility || 'team', visibilityUserIds: Array.isArray(visibilityUserIds) ? visibilityUserIds : [],
+          visibilityKind: visibility || 'team', visibilityUserIds: who.ids,
           version: 1, storageKey, contentType: contentType || null, note: note || null,
           uploadedAt: now, modifiedAt: now, createdAt: now, updatedAt: now,
         };
@@ -292,13 +370,13 @@ export const handler = async (event) => {
 
         const inserted = await insertLinks(orgId, id, links);
         await auditAs(orgId, userId, { action: 'document.created', entityType: 'document', entityId: id, entityName: name, detail: `${row.category} · ${row.ext || 'file'} · ${row.sizeKb} KB · ${row.visibilityKind}${inserted.length ? ` · linked to ${inserted.length}` : ''}` });
-        return { statusCode: 201, headers, body: JSON.stringify({ document: { ...row, visibility: row.visibilityKind, links: inserted } }) };
+        return { statusCode: 201, headers, body: JSON.stringify({ document: { ...row, visibility: row.visibilityKind, canManage: mayManage(row, viewer), links: inserted } }) };
       }
 
       // 3) Append a new version
       if (action === 'new-version') {
         const { id, storageKey, sizeKb, contentType, note } = data;
-        const { doc, refusal } = await writableDoc(id, orgId, userId, userRole, headers);
+        const { doc, refusal } = await writableDoc(id, orgId, viewer, headers);
         if (refusal) return refusal;
         const v = (doc.version || 1) + 1;
         if (!keyIs(storageKey, orgId, id, v)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'storageKey/org mismatch' }) };
@@ -318,7 +396,7 @@ export const handler = async (event) => {
       // 4) Restore a prior version (creates a NEW version pointing at the old blob)
       if (action === 'restore-version') {
         const { id, v: targetV } = data;
-        const { doc, refusal } = await writableDoc(id, orgId, userId, userRole, headers);
+        const { doc, refusal } = await writableDoc(id, orgId, viewer, headers);
         if (refusal) return refusal;
         const [src] = await db.select().from(documentVersions)
           .where(and(eq(documentVersions.orgId, orgId), eq(documentVersions.documentId, id), eq(documentVersions.v, Number(targetV))));
@@ -330,19 +408,24 @@ export const handler = async (event) => {
           storageKey: src.storageKey, sizeKb: src.sizeKb, contentType: src.contentType,
           byId: userId, byName: (await getCallerName(userId, orgId)) || 'Unknown', note: `Restored from v${src.v}`, createdAt: now,
         });
-        await db.update(documents)
+        const [restored] = await db.update(documents)
           .set({ version: v, storageKey: src.storageKey, sizeKb: src.sizeKb, modifiedAt: now, updatedAt: now })
-          .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
+          .where(and(eq(documents.id, id), eq(documents.orgId, orgId))).returning();
         await auditAs(orgId, userId, { action: 'document.version_restored', entityType: 'document', entityId: id, entityName: doc.name, detail: `v${v} restored from v${src.v}` });
-        return { statusCode: 200, headers, body: JSON.stringify({ ok: true, version: v }) };
+        // The document as the restore left it (state §0.183): its size and file are the
+        // restored version's — the answer was the number alone, and the screens kept the
+        // size of the version restored over.
+        return { statusCode: 200, headers, body: JSON.stringify({ ok: true, version: v, document: restored ? { ...restored, visibility: restored.visibilityKind } : null }) };
       }
 
       // 5) Add one or more links to an existing document
       if (action === 'link') {
-        const { id, links } = data;
-        const { doc, refusal } = await writableDoc(id, orgId, userId, userRole, headers);
+        const { id, links: asked } = data;
+        const { doc, refusal } = await writableDoc(id, orgId, viewer, headers);
         if (refusal) return refusal;
-        const inserted = await insertLinks(orgId, id, links);
+        const linked = await resolveLinks(auth, viewer, asked, headers);
+        if (linked.refusal) return linked.refusal;
+        const inserted = await insertLinks(orgId, id, linked.rows);
         if (inserted.length) await auditAs(orgId, userId, { action: 'document.linked', entityType: 'document', entityId: id, entityName: doc.name, detail: inserted.map(l => `${l.type} ${l.name || l.recordId}`).join(', ').slice(0, 300) });
         return { statusCode: 200, headers, body: JSON.stringify({ links: inserted }) };
       }
@@ -354,19 +437,27 @@ export const handler = async (event) => {
     if (event.httpMethod === 'PUT') {
       const data = JSON.parse(event.body || '{}');
       if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
-      const { refusal } = await writableDoc(data.id, orgId, userId, userRole, headers);
+      const { doc, refusal } = await writableDoc(data.id, orgId, viewer, headers);
       if (refusal) return refusal;
       const set = { updatedAt: new Date() };
       if ('name' in data) set.name = data.name;
       if ('category' in data) set.category = data.category;
       if ('note' in data) set.note = data.note;
-      if ('visibility' in data) set.visibilityKind = data.visibility;
-      if ('visibilityUserIds' in data) set.visibilityUserIds = Array.isArray(data.visibilityUserIds) ? data.visibilityUserIds : [];
+      // Who sees it is changed by its owner or an Admin (state §0.183), to a list this
+      // org's members fill — and a kind other than Specific keeps no list.
+      if ('visibility' in data || 'visibilityUserIds' in data) {
+        if (!mayManage(doc, viewer)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only the document\'s owner or an Admin can change who sees it.' }) };
+        const kind = 'visibility' in data ? data.visibility : doc.visibilityKind;
+        const who = await whoMaySee(orgId, kind, 'visibilityUserIds' in data ? data.visibilityUserIds : doc.visibilityUserIds, headers);
+        if (who.refusal) return who.refusal;
+        set.visibilityKind = kind;
+        set.visibilityUserIds = who.ids;
+      }
       const [updated] = await db.update(documents).set(set)
         .where(and(eq(documents.id, data.id), eq(documents.orgId, orgId))).returning();
       if (!updated) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
       await auditAs(orgId, userId, { action: 'document.updated', entityType: 'document', entityId: updated.id, entityName: updated.name, detail: Object.keys(set).filter(k => k !== 'updatedAt').join(', ') || null });
-      return { statusCode: 200, headers, body: JSON.stringify({ document: { ...updated, visibility: updated.visibilityKind } }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ document: { ...updated, visibility: updated.visibilityKind, canManage: mayManage(updated, viewer) } }) };
     }
 
     // ── DELETE — remove a link, or the whole document ─────────────────────────
@@ -379,7 +470,7 @@ export const handler = async (event) => {
         const [link] = await db.select({ documentId: documentLinks.documentId }).from(documentLinks)
           .where(and(eq(documentLinks.id, linkId), eq(documentLinks.orgId, orgId)));
         if (link) {
-          const { refusal } = await writableDoc(link.documentId, orgId, userId, userRole, headers);
+          const { refusal } = await writableDoc(link.documentId, orgId, viewer, headers);
           if (refusal) return refusal;
         }
         const [unlinked] = await db.delete(documentLinks).where(and(eq(documentLinks.id, linkId), eq(documentLinks.orgId, orgId)))
@@ -391,8 +482,10 @@ export const handler = async (event) => {
       if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
       // Only a document the caller may see is deleted (state §0.182); one that is not
       // there is not refused — it is deleted already, as before.
-      const { doc: doomed, refusal } = await writableDoc(id, orgId, userId, userRole, headers);
+      const { doc: doomed, refusal } = await writableDoc(id, orgId, viewer, headers);
       if (refusal && refusal.statusCode !== 404) return refusal;
+      // ...by its owner or an Admin (state §0.183; Jeff: "Owner or an Admin").
+      if (doomed && !mayManage(doomed, viewer)) return { statusCode: 403, headers, body: JSON.stringify({ error: 'Only the document\'s owner or an Admin can delete it.' }) };
       // best-effort blob cleanup (don't fail the row delete on storage error)
       try {
         const vers = await db.select().from(documentVersions)

@@ -60,7 +60,7 @@ mock.module('@aws-sdk/s3-request-presigner', {
 
 const { handler } = await import('../../netlify/functions/documents.mjs');
 const { db } = await import('../../db/index.js');
-const { documents, documentVersions, documentLinks, auditLog } = await import('../../db/schema.js');
+const { documents, documentVersions, documentLinks, auditLog, users, contacts } = await import('../../db/schema.js');
 const { eq, and, inArray } = await import('drizzle-orm');
 const { assertTestSchema } = await import('./_schema-guard.mjs');
 
@@ -70,6 +70,9 @@ const ORGS = [A, B];
 const OWNER = 'clerk_itest_docacc_owner', REP = 'clerk_itest_docacc_rep', NAMED = 'clerk_itest_docacc_named', ADMIN = 'clerk_itest_docacc_admin';
 const PRIV = 'doc_itest_docacc_priv', TEAM = 'doc_itest_docacc_team', SPEC = 'doc_itest_docacc_spec', B_DOC = 'doc_itest_docacc_b';
 const LINK_PRIV = 'dlk_itest_docacc_priv', LINK_TEAM = 'dlk_itest_docacc_team';
+// Their roster rows: a Specific document lists people by app id (state §0.183).
+const NAMED_ROW = 'usr_itest_docacc_named';
+const CONTACT = 'con_itest_docacc';
 
 const call = async (method, { org = A, user = REP, role = 'User', qs = {}, body } = {}) => {
     const res = await handler({
@@ -99,7 +102,7 @@ const WRITES = (id, linkId, as) => [
 ];
 
 const cleanup = async () => {
-    for (const t of [documentLinks, documentVersions, documents, auditLog]) {
+    for (const t of [documentLinks, documentVersions, documents, auditLog, contacts, users]) {
         await db.delete(t).where(inArray(t.orgId, ORGS));
     }
 };
@@ -116,9 +119,12 @@ before(async () => {
     await db.insert(documents).values([
         doc(PRIV, A, OWNER, 'private', 2),
         doc(TEAM, A, OWNER, 'team', 1),
-        doc(SPEC, A, OWNER, 'specific', 1, [NAMED]),
+        doc(SPEC, A, OWNER, 'specific', 1, [NAMED_ROW]),
         doc(B_DOC, B, 'clerk_itest_docacc_b', 'team', 1),
     ]);
+    await db.insert(users).values([['owner', OWNER], ['rep', REP], ['named', NAMED], ['admin', ADMIN]].map(([who, clerk]) => (
+        { id: `usr_itest_docacc_${who}`, orgId: A, clerkUserId: clerk, name: `Docacc ${who}`, email: `${who}@itest-docacc.local`, role: who === 'admin' ? 'Admin' : 'User' })));
+    await db.insert(contacts).values({ id: CONTACT, orgId: A, firstName: 'Cora', lastName: 'Contact' });   // unassigned: any rep may link it
     const ver = (docId, org, v) => ({ id: `dvr_itest_docacc_${docId.slice(-4)}_${v}`, orgId: org, documentId: docId, v, storageKey: `${org}/${docId}/v${v}/f.pdf`, sizeKb: 1, byId: OWNER, byName: 'Owner', createdAt: now });
     await db.insert(documentVersions).values([ver(PRIV, A, 1), ver(PRIV, A, 2), ver(TEAM, A, 1), ver(SPEC, A, 1), ver(B_DOC, B, 1)]);
     await db.insert(documentLinks).values([
@@ -156,7 +162,7 @@ test('the owner may do each — and a delete takes its versions, its links and t
     const put = await call('PUT', { ...asOwner, body: { id: PRIV, note: 'mine' } });
     assert.equal(put.status, 200);
     assert.equal(put.body.document.note, 'mine');
-    const link = await call('POST', { ...asOwner, qs: { action: 'link' }, body: { id: PRIV, links: [{ type: 'contact', recordId: 'con_itest_docacc', name: 'C' }] } });
+    const link = await call('POST', { ...asOwner, qs: { action: 'link' }, body: { id: PRIV, links: [{ type: 'contact', recordId: CONTACT, name: 'C' }] } });
     assert.equal(link.status, 200);
     assert.equal(link.body.links.length, 1);
     assert.equal((await call('DELETE', { ...asOwner, qs: { action: 'link', linkId: LINK_PRIV } })).status, 200);

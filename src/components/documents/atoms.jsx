@@ -7,9 +7,10 @@
 // sub-components).
 // ════════════════════════════════════════════════════════════════════════════
 
-import React from 'react';
+import React, { useState } from 'react';
 import { T } from '../../tokens.js';
 import { parseLocalDate } from '../../utils/dateLocal.js';
+import { peopleMatching } from '../../utils/documentPeople.js';
 export { T };   // the Documents surfaces import T from here
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -162,6 +163,58 @@ export function VisibilityControl({ value = 'team', onChange, disabled }) {
                     </button>
                 );
             })}
+        </div>
+    );
+}
+
+// ── People a Specific document is shared with (state §0.183) ─────────────────
+// The deal's Contacts field's way (Jeff: "the same style we use for attaching contacts to
+// deals … A type ahead multi select instead of a prebuilt list"): the chosen as chips with
+// an ×, and a search that offers the members whose names match — a list of the whole org
+// would not do for a large one. `people` from sharablePeople, `chosen` their ids, `nameOf`
+// a chip's name (a person no longer offered still shows).
+export function PeopleChooser({ people = [], chosen = [], onToggle, nameOf }) {
+    const [query, setQuery] = useState('');
+    const [open, setOpen] = useState(false);
+    const label = nameOf || ((id) => (people.find((p) => p.id === id) || {}).name || 'Former member');
+    const { shown, more } = peopleMatching(people, query, chosen);
+    const add = (id) => { if (onToggle) onToggle(id); setQuery(''); setOpen(false); };
+    return (
+        <div style={{ marginTop: 8 }}>
+            {chosen.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                    {chosen.map((id) => (
+                        <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '3px 8px', fontSize: 12, color: T.ink, fontFamily: T.sans }}>
+                            {label(id)}
+                            <button type="button" onClick={() => onToggle && onToggle(id)} title={`Remove ${label(id)}`}
+                                style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            <div style={{ position: 'relative' }}>
+                <input type="text" value={query} placeholder="Search people to share with…" autoComplete="off"
+                    onChange={(e) => { setQuery(e.target.value); setOpen(e.target.value.length > 0); }}
+                    onFocus={() => setOpen(query.length > 0)}
+                    onBlur={() => setTimeout(() => setOpen(false), 200)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && shown[0]) { e.preventDefault(); add(shown[0].id); } }}
+                    style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, background: T.surface, color: T.ink, boxSizing: 'border-box', outline: 'none' }} />
+                {open && (
+                    <div style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 3, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, maxHeight: 200, overflowY: 'auto', zIndex: 5, boxShadow: '0 4px 12px rgba(42,38,34,0.12)' }}>
+                        {shown.length === 0 ? (
+                            <div style={{ padding: '8px 10px', fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No one in this organization matches.</div>
+                        ) : shown.map((p) => (
+                            <div key={p.id} onMouseDown={(e) => e.preventDefault()} onClick={() => add(p.id)}
+                                style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: `1px solid ${T.border}`, fontWeight: 600, fontSize: 13, color: T.ink, fontFamily: T.sans }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = T.surface2; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                                {p.name}
+                            </div>
+                        ))}
+                        {more > 0 && <div style={{ padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{more} more — keep typing</div>}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
