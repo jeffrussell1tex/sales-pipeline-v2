@@ -39,9 +39,10 @@ const before = (s, first, second, why) => {
     assert.ok(b >= 0, `missing: ${second}`);
     assert.ok(a < b, why);
 };
-// Each state a hook declares: its name, and whether it is org-bound.
-const statesOf = (src) => [...src.matchAll(/const \[(\w+),\s+set\w+\]\s+= (useOrgBoundState\(resets, |useState\()/g)]
-    .map((m) => ({ name: m[1], bound: m[2].startsWith('useOrgBoundState') }));
+// Each state a hook declares: its name, whether it is org-bound, and the list it is
+// registered in (useModalState keeps what the reminders remember apart — §0.185).
+const statesOf = (src) => [...src.matchAll(/const \[(\w+),\s+set\w+\]\s+= (useOrgBoundState\((resets|remembered), |useState\()/g)]
+    .map((m) => ({ name: m[1], bound: m[2].startsWith('useOrgBoundState'), list: m[3] || null }));
 
 // ── 1. The hook itself — run ─────────────────────────────────────────────────
 
@@ -97,18 +98,21 @@ test('resetAllOf: one reset that runs every registered reset, in order — and n
 
 // ── 2. Which values belong to the org — scanned ──────────────────────────────
 
-const hookShape = (src, hook) => {
+const hookShape = (src, hook, { lists = ['resets'], reset = 'resetAllOf(resets)', from = './useOrgBoundState' } = {}) => {
     const c = code(src);
-    assert.equal(c.split('const resets = [];').length - 1, 1, `${hook}: one list of resets`);
-    assert.ok(c.includes('    return {\n        resetOnOrgSwitch: resetAllOf(resets),'), `${hook}: hands App its reset`);
-    assert.ok(c.includes("import { useOrgBoundState, resetAllOf } from './useOrgBoundState';"), `${hook}: imports the hook`);
+    for (const list of lists) assert.equal(c.split(`const ${list} = [];`).length - 1, 1, `${hook}: one list of ${list}`);
+    assert.ok(c.includes(`    return {\n        resetOnOrgSwitch: ${reset},`), `${hook}: hands App its reset`);
+    assert.ok(c.includes(`import { useOrgBoundState, resetAllOf } from '${from}';`), `${hook}: imports the hook`);
 };
 
-test('useModalState: every value is the org\'s — each modal, rail, confirm, undo and reminder (60), none plain', () => {
+test('useModalState: every value is the org\'s — each modal, rail, confirm, undo and reminder (60), none plain; what the reminders remember (3) apart, which a layer\'s crash keeps', () => {
     const src = read('src/hooks/useModalState.js');
-    hookShape(src, 'useModalState');
+    hookShape(src, 'useModalState', { lists: ['resets', 'remembered'], reset: 'resetAllOf([...resets, ...remembered])', from: './useOrgBoundState.js' });
+    assert.ok(code(src).includes('        closeLayers: resetAllOf(resets),'), 'a layer\'s crash closes what is open and keeps what the reminders remember (§0.185)');
     const states = statesOf(src);
     assert.equal(states.length, 60);
+    assert.deepEqual(states.filter((s) => s.list === 'remembered').map((s) => s.name), ['dismissedDueTodayAlerts', 'snoozedDueAlerts', 'dismissedReminders'],
+        'the alerts dismissed and snoozed, and the reminders fired: a crash that put them back brought every one back, with its chime');
     assert.deepEqual(states.filter((s) => !s.bound).map((s) => s.name), [],
         'a plain useState here outlives a switch — a modal or rail of the last org');
     assert.ok(!/\buseState\b/.test(code(src)), 'no plain useState at all');
@@ -168,7 +172,7 @@ test('App: the reset runs on a switch only — from one org to another or to non
         'calState.resetOnOrgSwitch();',
         '}, [activeOrgId]);',
     ], 'the ref moves before the check (or the first load never arms it); the first load and a re-render keep what is open');
-    assert.equal(app.split('resetOnOrgSwitch()').length - 1, 3, 'called from this effect only — the layer boundary is handed the modal one, to close every layer after a crash (§0.184)');
+    assert.equal(app.split('resetOnOrgSwitch()').length - 1, 3, 'called from this effect only — a layer\'s crash closes the layers alone (closeLayersAfterCrash, §0.185)');
 });
 
 test('App: the reset is declared before App\'s other effects, so what they start for the new org in the switch\'s commit is not put back', () => {

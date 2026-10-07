@@ -1,10 +1,15 @@
-import { useOrgBoundState, resetAllOf } from './useOrgBoundState';
+import { useOrgBoundState, resetAllOf } from './useOrgBoundState.js';
 
 export function useModalState() {
     // Every value here — each modal, rail, confirm, undo and reminder — belongs
     // to the org on screen (state §0.174): registered with useOrgBoundState, and
-    // put back by resetOnOrgSwitch when the org switches.
+    // put back by resetOnOrgSwitch when the org switches. What is open is
+    // registered in resets, which a crash in a layer puts back too (closeLayers —
+    // state §0.185); what the reminders remember — the alerts dismissed and
+    // snoozed, the reminders fired — in remembered, which only a switch puts back:
+    // a crash that put them back brought every one back, with its chime.
     const resets = [];
+    const remembered = [];
     const [showModal, setShowModal] = useOrgBoundState(resets, false);
     const [showSpiffClaimModal, setShowSpiffClaimModal] = useOrgBoundState(resets, false);
     const [spiffClaimContext, setSpiffClaimContext] = useOrgBoundState(resets, null);
@@ -93,12 +98,13 @@ export function useModalState() {
     const [taskDueQueue, setTaskDueQueue] = useOrgBoundState(resets, []);
     const [taskDueSnoozeH, setTaskDueSnoozeH] = useOrgBoundState(resets, 0);
     const [taskDueSnoozeM, setTaskDueSnoozeM] = useOrgBoundState(resets, 15);
-    const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useOrgBoundState(resets, []);
-    const [snoozedDueAlerts, setSnoozedDueAlerts] = useOrgBoundState(resets, {}); // { [taskId]: re-alert-at timestamp (ms) }
-    const [dismissedReminders, setDismissedReminders] = useOrgBoundState(resets, []);
+    const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useOrgBoundState(remembered, []);
+    const [snoozedDueAlerts, setSnoozedDueAlerts] = useOrgBoundState(remembered, {}); // { [taskId]: re-alert-at timestamp (ms) }
+    const [dismissedReminders, setDismissedReminders] = useOrgBoundState(remembered, []);
 
     return {
-        resetOnOrgSwitch: resetAllOf(resets),
+        resetOnOrgSwitch: resetAllOf([...resets, ...remembered]),
+        closeLayers: resetAllOf(resets),
         showModal, setShowModal,
         showSpiffClaimModal, setShowSpiffClaimModal,
         spiffClaimContext, setSpiffClaimContext,

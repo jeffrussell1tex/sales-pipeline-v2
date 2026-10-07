@@ -21,12 +21,14 @@ const FILES = [
     'src/components/modals/ContactModal.jsx',
     'src/components/modals/UserModal.jsx',
     'src/App.jsx',
+    // The meeting prep panel, cut out of App as it was (state §0.185): App's sweep goes with it.
+    'src/components/layout/MeetingPrepPanel.jsx',
 ];
 // The dark drag-handle header the guide allows, and the three data palettes
 // (a pipeline's stored default colour, the stage pill map, the avatar map).
 const ALLOWED_LINE = /#1c1917|avatarColors = \[|name: 'New Business', color: '#|^\s*\{ bg: '#[0-9a-f]{6}', text: '#|closed(Won|Lost)Color = \{ bg: '#/i;
 
-test('the six blue-era files carry no colour literal outside the allowed lines, and each imports the token object', () => {
+test('the six blue-era files (and the panel cut out of one) carry no colour literal outside the allowed lines, and each imports the token object', () => {
     for (const f of FILES) {
         const src = code(read(f));
         assert.match(src, /import \{ T \} from '[./]+tokens\.js';/, `${f} imports T`);
@@ -51,7 +53,8 @@ test('the blues went by role: a primary button is the ink button, a link or bord
     const app = code(read('src/App.jsx'));
     assert.ok(app.includes('<rect width="100" height="100" rx="20" fill={T.ink}/>'), 'the sign-in mark is ink');
     assert.ok(app.includes("background: dbOffline === 'auth' ? T.warn : T.danger"), 'the offline banner');
-    assert.ok(app.includes("const healthColor = health ? (health.score >= 70 ? T.ok : health.score >= 40 ? T.warn : T.danger) : T.inkMuted;"), 'the meeting-prep health colour');
+    const prep = code(read('src/components/layout/MeetingPrepPanel.jsx'));   // cut out of App (§0.185)
+    assert.ok(prep.includes("const healthColor = health ? (health.score >= 70 ? T.ok : health.score >= 40 ? T.warn : T.danger) : T.inkMuted;"), 'the meeting-prep health colour');
 });
 
 test('LeadImportModal wears CsvImportModal’s chrome: the warm surface, radius 12, a border, the dark drag-handle header', () => {

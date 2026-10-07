@@ -4,14 +4,15 @@
 // modals and app dialogs it holds — and the quick log sat outside every ErrorBoundary
 // (each tab has its own), so a render error there reached the root and React unmounted
 // the whole app: a blank page (§0.183: a stale module's "useState is not defined" in
-// the document rail's picker, with no boundary between it and the root). The layers
-// App renders itself — the meeting prep panel, the leave guard, the header's panels —
-// are not wrapped (state §9, §0.184's found (b)); a crash there reaches RootBoundary.
+// the document rail's picker, with no boundary between it and the root). Since §0.185
+// every layer App renders sits inside one — the header, the meeting prep panel, the
+// rails and modals, the quick log, the leave guard; tests/layer-boundary.test.mjs finds
+// any that does not.
 //
-// On a crash this runs onCrash — ModalLayer's puts the modal state back as on an org
-// switch, every layer closed; the quick log's closes its panel — so the state that
-// crashed is not rendered again, and says what happened in place of the layers until
-// it is dismissed; the page under it stays as it was.
+// On a crash this runs onCrash — ModalLayer's closes every layer and keeps what the
+// reminders remember (closeLayersAfterCrash); each other one closes its own — so the
+// state that crashed is not rendered again, and says what happened in place of the
+// layers until it is dismissed; the page under it stays as it was.
 import React from 'react';
 import { T } from '../tokens.js';
 

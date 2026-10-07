@@ -1,12 +1,12 @@
 // src/components/RootBoundary.jsx
 //
-// The last boundary (state §0.184): a render error that no other boundary catches — the
-// header and its panels, the navigation, a banner, the meeting prep panel, the leave
-// guard — reached the root, and React unmounted the whole app: a blank page with
-// nothing to say why. This keeps a page: what happened, and a Reload. The tabs have
-// their own boundaries (ErrorBoundary), and ModalLayer and the quick log theirs
-// (LayerBoundary), which keep the rest of the page; this is for the rest. Outside
-// ClerkProvider, so it holds no state of the app's.
+// The last boundary (state §0.184): a render error that no other boundary catches — in
+// App's own render: the frame, the banner, the TASKS badge's count — reached the root,
+// and React unmounted the whole app: a blank page with nothing to say why. This keeps a
+// page: what happened, and a Reload. The tabs have their own boundaries (ErrorBoundary),
+// and every layer App renders its own (LayerBoundary, §0.185), which keep the rest of
+// the page; this is for the rest. Outside ClerkProvider, so it holds no state of the
+// app's.
 import React from 'react';
 import { T } from '../tokens.js';
 
