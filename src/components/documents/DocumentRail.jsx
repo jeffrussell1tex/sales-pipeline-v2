@@ -47,6 +47,7 @@ export default function DocumentRail() {
 
     const [versions, setVersions] = useState([]);
     const [loadingVersions, setLoadingVersions] = useState(false);
+    const [versionsFailed, setVersionsFailed] = useState(false);
     const [note, setNote] = useState('');
 
     const close = useCallback(() => setDocumentRailId && setDocumentRailId(null), [setDocumentRailId]);
@@ -57,9 +58,11 @@ export default function DocumentRail() {
         setNote(doc.note || '');
         let cancelled = false;
         setLoadingVersions(true);
+        setVersionsFailed(false);
         Promise.resolve(fetchVersions ? fetchVersions(doc.id) : [])
             .then((vs) => { if (!cancelled) setVersions(Array.isArray(vs) ? vs : []); })
-            .catch(() => { if (!cancelled) setVersions([]); })
+            // A history that did not load says so (state §0.181) — it said "No version history."
+            .catch(() => { if (!cancelled) { setVersions([]); setVersionsFailed(true); } })
             .finally(() => { if (!cancelled) setLoadingVersions(false); });
         return () => { cancelled = true; };
     }, [doc?.id, fetchVersions]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -77,6 +80,8 @@ export default function DocumentRail() {
     if (!doc) return null;
 
     const m = fileMeta(doc.ext);
+    // The edits here are sent and left: each says in the app's message when it is refused
+    // (useDocuments, state §0.181) — a refused description stays as typed, to save again.
     const saveNote = () => { if ((note || '') !== (doc.note || '')) updateDocument && updateDocument(doc.id, { note }); };
     const onNewVersion = () => {
         setUploadRailContext && setUploadRailContext({ mode: 'version', documentId: doc.id, name: doc.name, ext: doc.ext });
@@ -86,10 +91,12 @@ export default function DocumentRail() {
         setDocLinkPickerContext && setDocLinkPickerContext({ documentId: doc.id, currentLinks: doc.links || [] });
         setShowDocLinkPicker && setShowDocLinkPicker(true);
     };
+    // The delete is confirmed, then sent; the rail closes when the document leaves the
+    // library (the effect above), so a refused one leaves it open and the app's message
+    // says why (state §0.181). It closed before the answer.
     const onDelete = () => {
         showConfirm(`Delete "${doc.name}"? This removes the file and all its versions.`, () => {
             removeDocument && removeDocument(doc.id);
-            close();
         });
     };
 
@@ -171,6 +178,8 @@ export default function DocumentRail() {
                     <SectionHeading label={`Version history${versions.length ? ` · ${versions.length} versions` : ''}`} action={<button style={linkText} onClick={onNewVersion}>↑ Upload new version</button>} />
                     {loadingVersions ? (
                         <div style={{ fontSize: 12, color: T.inkMuted }}>Loading…</div>
+                    ) : versionsFailed ? (
+                        <div style={{ fontSize: 12, color: T.inkMuted }}>Version history could not be loaded.</div>
                     ) : versions.length === 0 ? (
                         <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No version history.</div>
                     ) : (

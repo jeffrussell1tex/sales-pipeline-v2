@@ -316,7 +316,7 @@ export default function ActivityRail() {
                 {editingActivity && editingActivity.id && (
                     <>
                         <SectionHeading label="Attachments" />
-                        <AttachmentsStrip recordType="activity" recordId={editingActivity.id} recordName={editingActivity.name || editingActivity.type || 'Activity'} recordSub={editingActivity.date || ''} />
+                        <AttachmentsStrip recordType="activity" recordId={editingActivity.id} recordName={editingActivity.subject || editingActivity.type || 'Activity'} recordSub={editingActivity.date || ''} />
                     </>
                 )}
             </div>

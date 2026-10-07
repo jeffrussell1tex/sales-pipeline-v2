@@ -15,7 +15,7 @@ import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { T, fmtDate, EntityGlyph, ENTITY_META } from './atoms';
 
 const ORDER = ['account', 'opportunity', 'contact', 'task', 'activity'];
-const money = (v) => (v ? `$${Number(v).toLocaleString()}` : null);
+const money = (v) => (Number(v) ? `$${Number(v).toLocaleString()}` : null);
 const join = (parts) => parts.filter(Boolean).join(' · ');
 
 export default function DocumentLinkPicker() {
@@ -44,13 +44,19 @@ export default function DocumentLinkPicker() {
         setTypeFilter('all');
     }, [showDocLinkPicker]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Each record is offered by its own fields (state §0.181): a task by its title, an
+    // activity by its subject (its type when it has none), a deal's amount from its arr.
+    // The picker read `name` for the first two and `value` for the third — none of them a
+    // column — so every task was offered as "Task" and stored so on its link, every
+    // activity by its type, and no deal with its amount. tests/document-link-names.test.mjs
+    // checks every field read here against db/schema.ts.
     const candidates = useMemo(() => {
         const out = [];
         accounts.forEach((a) => out.push({ type: 'account', recordId: a.id, name: a.name, sub: join([a.verticalMarket || a.industry, join([a.city, a.state])]) }));
-        opportunities.forEach((o) => out.push({ type: 'opportunity', recordId: o.id, name: o.opportunityName || o.account || 'Opportunity', sub: join([o.stage, money(o.value)]) }));
+        opportunities.forEach((o) => out.push({ type: 'opportunity', recordId: o.id, name: o.opportunityName || o.account || 'Opportunity', sub: join([o.stage, money(o.arr)]) }));
         contacts.forEach((c) => out.push({ type: 'contact', recordId: c.id, name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Contact', sub: join([c.title, c.company]) }));
-        tasks.forEach((t) => out.push({ type: 'task', recordId: t.id, name: t.name || 'Task', sub: (t.dueDate || t.due) ? `Due ${fmtDate(t.dueDate || t.due)}` : '' }));
-        activities.forEach((a) => out.push({ type: 'activity', recordId: a.id, name: a.name || a.type || 'Activity', sub: join([a.type, a.date ? fmtDate(a.date) : null]) }));
+        tasks.forEach((t) => out.push({ type: 'task', recordId: t.id, name: t.title || 'Task', sub: t.dueDate ? `Due ${fmtDate(t.dueDate)}` : '' }));
+        activities.forEach((a) => out.push({ type: 'activity', recordId: a.id, name: a.subject || a.type || 'Activity', sub: join([a.type, a.date ? fmtDate(a.date) : null]) }));
         return out.filter((x) => x.recordId).map((x) => ({ ...x, key: `${x.type}:${x.recordId}` }));
     }, [accounts, opportunities, contacts, tasks, activities]);
 
@@ -94,10 +100,13 @@ export default function DocumentLinkPicker() {
             const selKeys = new Set(Object.keys(selected));
             const added = chosen.filter((l) => !curKeys.has(`${l.type}:${l.recordId}`));
             const removed = (ctx.currentLinks || []).filter((l) => !selKeys.has(`${l.type}:${l.recordId}`));
-            try {
-                if (added.length && linkDocument) await linkDocument(ctx.documentId, added);
-                for (const r of removed) { if (r.id && unlinkDocument) await unlinkDocument(ctx.documentId, r.id); }
-            } catch (e) { console.error('Link update failed:', e); }
+            // A refused link or unlink says so in the app's message (useDocuments) and leaves
+            // the picker open with the choice, to try again or close (state §0.181). It was
+            // logged to the console, and the picker closed as if it had saved.
+            if (added.length && linkDocument && !(await linkDocument(ctx.documentId, added)).ok) return;
+            for (const r of removed) {
+                if (r.id && unlinkDocument && !(await unlinkDocument(ctx.documentId, r.id)).ok) return;
+            }
         }
         close();
     };

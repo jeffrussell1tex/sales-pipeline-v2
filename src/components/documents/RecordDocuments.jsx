@@ -66,10 +66,12 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
         if (mine && mine.id && unlinkDocument) unlinkDocument(doc.id, mine.id);
     };
 
+    // A refused link says so in the app's message (useDocuments); the rest are not sent
+    // (state §0.181).
     const linkExisting = async (picked) => {
         setShowPicker(false);
         for (const d of picked) {
-            if (linkDocument) await linkDocument(d.id, [recordLink]);
+            if (linkDocument && !(await linkDocument(d.id, [recordLink])).ok) return;
         }
     };
 

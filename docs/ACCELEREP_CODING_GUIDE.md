@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b74** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b75** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3898,3 +3898,12 @@ through `dbFetch`.
 2. **Every keydown listener that reacts to Escape checks `e.defaultPrevented`.** tests/escape-layers.test.mjs parses every one under src.
 3. **A layer closes on Escape as it closes from its backdrop** — the document rail's description saves (the focused field blurred, so its own save runs); the upload rail does not close mid-upload; and every control that closes a layer keeps the same rule (the upload rail's ×).
 4. **The z-order is the Escape order.** A layer Escape closes first sits above what it closes after: the activity viewer above every record rail (tests/activity-view.test.mjs reads the rails' z-indexes).
+
+## 18b75. A Request A Screen Sends And Leaves Reports Its Own Refusal; A Record Is Named By Its Own Columns (hard rule)
+
+**Origin (§0.181, 7 Oct 2026 — §0.180's found (a) and (b)).** The documents hook threw on every refusal, and the screens that call it send and move on: a refused description, category, visibility, delete, restore, link, unlink, download or preview was an unhandled rejection with nothing on screen, and two screens acted as if it had worked — the rail closed on Delete before the answer, the link picker closed on Done. And the link picker named tasks, activities and deals by fields they do not have. §18b1 (dbFetch resolves on any status) and §18b71 (a delete's rules in its hook) are its kin.
+
+1. **A handler a screen calls and leaves reports its own refusal** — what was not done and why, in the app's message, in dbWrite's words (`refusalOf`), for the org that asked only — and resolves `{ ok }`; it never throws. A handler that throws (a load, an upload) is caught at every call: tests/document-refusals.test.mjs runs the documents hook and parses every call under src, and places every handler the hook returns.
+2. **A screen that waits for the answer acts on it** — it closes on success (the rail when its document leaves the library) and stays on a refusal (the link picker, with the choice).
+3. **A record is named by the fields its table has** — a task's `title`, an activity's `subject`, a deal's `arr`; tests/document-link-names.test.mjs reads db/schema.ts. A field no table has reads as undefined and the screen shows its fallback, quietly.
+4. **A yyyy-mm-dd day is read at local noon wherever it is shown** (`parseLocalDate`) — the documents' formats with the rest of the app (dateLocal.js).

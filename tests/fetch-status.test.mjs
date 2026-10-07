@@ -44,7 +44,7 @@ test('every loader reports through dbStatusOf; nothing sets the outage flag on a
         const src = read(f);
         assert.ok(!src.includes('setDbOffline(true)'), `${f}: a bare setDbOffline(true)`);
         assert.ok(src.includes('dbStatusOf('), `${f}: reports through dbStatusOf`);
-        assert.ok(src.includes("from '../utils/fetchStatus'") || src.includes("from './utils/fetchStatus'"), `${f}: imports the helper`);
+        assert.ok(/from '\.\.?\/utils\/fetchStatus(\.js)?'/.test(src), `${f}: imports the helper`);
     }
     const app = read('src/App.jsx');
     assert.ok(app.includes('<span>{bannerCopyOf(dbOffline).text}</span>'), 'the banner copy comes from the state');

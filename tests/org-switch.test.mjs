@@ -102,7 +102,7 @@ test('every shared list loader takes the asking org, and drops an answer for ano
         ['src/hooks/useCoachingNotes.js', 'const reload = useCallback(async () => {', '}, []);', 'setCoachingNotes(Array.isArray', 2],
     ]) {
         const s = code(read(file));
-        assert.ok(/import \{[^}]*\brequestOrg\b[^}]*\bstillOrg\b[^}]*\} from '\.\.\/utils\/storage';/.test(s), `${file}: imports the rule`);
+        assert.ok(/import \{[^}]*\brequestOrg\b[^}]*\bstillOrg\b[^}]*\} from '\.\.\/utils\/storage(\.js)?';/.test(s), `${file}: imports the rule`);
         const body = between(s, loader, end);
         before(body, 'const askedOrg = requestOrg();', 'stillOrg(askedOrg)', `${file}: the org is taken when the load starts`);
         before(body, 'stillOrg(askedOrg)', setter, `${file}: ${setter} only for the org that asked`);

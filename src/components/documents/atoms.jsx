@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { T } from '../../tokens.js';
+import { parseLocalDate } from '../../utils/dateLocal.js';
 export { T };   // the Documents surfaces import T from here
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -18,17 +19,18 @@ export function fmtSize(kb) {
     return `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} MB`;
 }
 
+// A yyyy-mm-dd day — a task's due date, an activity's date — is the local day, read at
+// local noon; a timestamp is an instant, read as-is (dateLocal.js parseLocalDate). Read as
+// UTC midnight, a day showed a day early west of Greenwich (state §0.181).
 export function fmtDate(d) {
-    if (!d) return '';
-    const dt = new Date(d);
-    if (isNaN(dt)) return '';
+    const dt = parseLocalDate(d);
+    if (!dt) return '';
     return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 export function fmtDateLong(d) {
-    if (!d) return '';
-    const dt = new Date(d);
-    if (isNaN(dt)) return '';
+    const dt = parseLocalDate(d);
+    if (!dt) return '';
     return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
