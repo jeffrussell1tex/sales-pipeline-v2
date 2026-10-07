@@ -329,7 +329,7 @@ function App() {
         oppModalError, setOppModalError,
         oppModalSaving, setOppModalSaving,
         loadOpportunities,
-        handleDelete, handleSave, completeLostSave, saveDealComments,
+        handleDeleteDeals, handleSave, completeLostSave, saveDealComments,
     } = useOpportunities(_deps);
 
     const {
@@ -338,7 +338,7 @@ function App() {
         accountModalSaving,
         setAccountModalSaving,
         loadAccounts, getSubAccounts,
-        handleDeleteAccount, handleDeleteSubAccount, handleSaveAccount,
+        handleDeleteAccounts, handleSaveAccount,
     } = useAccounts(_deps);
 
     const {
@@ -347,7 +347,7 @@ function App() {
         contactModalSaving,
         setContactModalSaving,
         loadContacts,
-        handleDeleteContact, handleSaveContact,
+        handleDeleteContacts, handleSaveContact,
     } = useContacts(_deps);
 
     const {
@@ -994,7 +994,7 @@ dbFetch('/.netlify/functions/users?me=true')
         setContactRailMode('view');
     };
 
-    // handleDeleteContact managed by useContacts hook
+    // handleDeleteContacts — every contact delete — managed by useContacts (state §0.178)
 
 
     // handleSaveContact managed by useContacts hook
@@ -1004,7 +1004,7 @@ dbFetch('/.netlify/functions/users?me=true')
         setShowModal(true);
     };
 
-    // handleDelete (opportunities) managed by useOpportunities hook
+    // handleDeleteDeals — every deal delete — managed by useOpportunities (state §0.178)
 
 
         // handleSave managed by useOpportunities hook
@@ -1028,9 +1028,7 @@ dbFetch('/.netlify/functions/users?me=true')
         setAccountRailMode('view');
     };
 
-    // handleDeleteAccount managed by useAccounts hook
-
-    // handleDeleteSubAccount managed by useAccounts hook
+    // handleDeleteAccounts — every account delete — managed by useAccounts (state §0.178)
 
 
     // handleSaveAccount managed by useAccounts hook
@@ -1761,14 +1759,13 @@ dbFetch('/.netlify/functions/users?me=true')
         stages,
         dbOffline,
         // Hook handlers
-        handleDelete,
+        handleDeleteDeals,
         handleSave,
         completeLostSave,
         handleAddAccountFromOpportunity,
-        handleDeleteAccount,
-        handleDeleteSubAccount,
+        handleDeleteAccounts,
         handleSaveAccount,
-        handleDeleteContact,
+        handleDeleteContacts,
         getSubAccounts,
         getAccountRollup,
         handleSaveContact,

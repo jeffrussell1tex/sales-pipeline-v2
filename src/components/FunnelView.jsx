@@ -248,7 +248,6 @@ export default function FunnelView({
     funnelExpandedStage,
     setFunnelExpandedStage,
     handleEdit,
-    handleDelete,
     selectMode = false,
     selectedOpps = [],
     setSelectedOpps,

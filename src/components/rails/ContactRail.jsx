@@ -183,12 +183,12 @@ export default function ContactRail() {
         railStack, setRailStack,
         showActivityModal, setShowActivityModal, setActivityInitialContext, setViewingActivity, viewingActivity,
         handleSaveContact,
-        handleDeleteContact,
         currentUserId, myProfile,
         handleAddActivity,
         contactModalError, setContactModalError,
         contactModalSaving,
         taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode,
+        confirmModal, promptModal,
     } = useApp();
 
     // ── Resolve the contact being viewed/edited ───────────────────────────────
@@ -429,11 +429,13 @@ export default function ContactRail() {
     useEffect(() => {
         if (!isOpen) return;
         // The activity viewer (§0.93) sits above the rail and App.jsx closes it on
-        // Escape first; without this guard the rail's own listener closed too.
-        const onKey = (e) => { if (e.key === 'Escape' && !isEditing && !viewingActivity) closeRail(); };
+        // Escape first; without this guard the rail's own listener closed too. The same
+        // for the app's confirm and prompt (state §0.178): a document's Delete asks over
+        // this rail.
+        const onKey = (e) => { if (e.key === 'Escape' && !isEditing && !viewingActivity && !confirmModal && !promptModal) closeRail(); };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [isOpen, isEditing, viewingActivity]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isOpen, isEditing, viewingActivity, confirmModal, promptModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!isOpen) return null;
 

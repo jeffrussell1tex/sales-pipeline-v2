@@ -131,10 +131,10 @@ test('the contact rail lists the contact\'s open deals', () => {
     assert.ok(!src.includes("['closed won','closed lost','won','lost']"), 'a second closed set');
 });
 
-test('the hook\'s contact delete check reads the same deals, never a prefix (no screen calls it yet — state §9)', () => {
+test('every contact delete keeps a contact on an open deal — the same deals, never a prefix (state §0.178)', () => {
     const src = read('src/hooks/useContacts.js');
     assert.ok(src.includes("import { activeDealsOf } from '../utils/contactDeals.js';"));
-    assert.ok(src.includes('const linkedActiveOpp = activeDealsOf(contact, deps.opportunities)[0];'), 'the delete check');
+    assert.ok(src.includes('const kept = wanted.map(c => ({ c, deal: activeDealsOf(c, deps.opportunities)[0] })).filter(k => k.deal);'), 'the delete check');
     assert.ok(!src.includes('n.startsWith(fullName'), 'the prefix match');
 });
 

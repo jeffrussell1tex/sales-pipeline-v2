@@ -86,7 +86,7 @@ test('the deals load reads getQuarter when its answer lands', () => {
 
 test('the contact delete check reads the deals as they are now', () => {
     const src = read('src/hooks/useContacts.js');
-    assert.ok(src.includes('const linkedActiveOpp = activeDealsOf(contact, deps.opportunities)[0];'));
+    assert.ok(src.includes('const kept = wanted.map(c => ({ c, deal: activeDealsOf(c, deps.opportunities)[0] })).filter(k => k.deal);'));
 });
 
 test('softDelete: a timer clears only the toast it put up', () => {

@@ -35,60 +35,45 @@ export function useTasks(deps) {
             .catch(err => console.error('Failed to load tasks:', err));
     };
 
-    const handleDeleteTask = (taskId) => {
-        let task;
-        setTasks(prev => { task = prev.find(t => t.id === taskId); return prev; });
+    // Deleting a task (state §0.178; Jeff: "add the delete to thee task rail") — the task
+    // rail's Delete calls it. A confirm, then the DELETE, then Undo once the DELETE has
+    // landed: a task's create fires nothing (tasks.mjs), so the Undo re-POSTs it. It had
+    // no caller — no screen deleted a task — and it read the task through a state updater
+    // and offered Undo while its DELETE was still out. opts.onConfirm runs when the user
+    // confirms. No audit line here: tasks.mjs writes task.deleted, with the row, once the
+    // row is gone — the line this had ran before the answer, so a refused delete was
+    // logged as one and a deleted one was logged twice.
+    const handleDeleteTask = (taskId, opts = {}) => {
+        const task = tasks.find(t => t.id === taskId);
         if (!task) return;
-
-        showConfirm('Are you sure you want to delete this task?', () => {
+        const title = task.title || task.subject || 'Untitled';
+        showConfirm(`Delete the task "${title}"? You'll have a few seconds to undo.`, async () => {
+            opts.onConfirm?.();
             const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
-            let snapshot;
-            setTasks(prev => {
-                snapshot = prev.slice();
-                return prev.filter(t => t.id !== taskId);
-            });
-
-            dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
-                .then(res => {
-                    if (!stillOrg(askedOrg)) return;
-                    if (!res.ok) {
-                        console.error('Failed to delete task on server, restoring. Status:', res.status);
-                        setTasks(prev => {
-                            if (prev.some(t => t.id === taskId)) return prev;
-                            return snapshot;
-                        });
-                    }
-                })
-                .catch(err => {
-                    if (!stillOrg(askedOrg)) return;
-                    console.error('Failed to delete task (network error), restoring:', err);
-                    setTasks(prev => {
-                        if (prev.some(t => t.id === taskId)) return prev;
-                        return snapshot;
-                    });
-                });
-
-            addAudit('delete', 'task', taskId, task.title || task.subject || taskId, '');
+            setTasks(prev => prev.filter(t => t.id !== taskId));
+            const r = await dbWrite(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' });
+            if (!stillOrg(askedOrg)) return;
+            if (!r.ok) {
+                setTasks(prev => (prev.some(t => t.id === taskId) ? prev : [...prev, task]));
+                setUndoToast({ error: `Task not deleted — ${r.error}` });
+                return;
+            }
             softDelete(
-                `Task "${task.title || task.subject || 'Untitled'}"`,
+                `Task "${title}"`,
                 () => {},
-                () => {
-                    setTasks(snapshot);
+                async () => {
                     setUndoToast(null);
-                    // Re-insert the deleted task back to the DB
-                    // Undo restores the row in the UI immediately, then re-POSTs it.
-                    // This used .catch() alone, which never fires on a 403/500 — so a
-                    // rejected restore left the task visible but deleted in the
-                    // database, and the divergence only surfaced on the next reload.
-                    dbWrite('/.netlify/functions/tasks', {
+                    setTasks(prev => (prev.some(t => t.id === taskId) ? prev : [...prev, task]));
+                    // Undo puts the row back on screen and re-POSTs it; a refused restore
+                    // takes it off again and says so.
+                    const rr = await dbWrite('/.netlify/functions/tasks', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(task),
-                    }).then(r => {
-                        if (r.ok || !stillOrg(askedOrg)) return;
-                        setTasks(prev => prev.filter(t => t.id !== task.id));   // undo did not take
-                        setUndoToast({ error: `Could not restore the task — ${r.error}` });
                     });
+                    if (rr.ok || !stillOrg(askedOrg)) return;
+                    setTasks(prev => prev.filter(t => t.id !== task.id));   // undo did not take
+                    setUndoToast({ error: `Could not restore the task — ${rr.error}` });
                 }
             );
         });

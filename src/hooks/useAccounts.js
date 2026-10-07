@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { dbStatusOf } from '../utils/fetchStatus';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
+import { isOpenDeal } from '../utils/contactDeals.js';
 
 export function useAccounts(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, showBlockedDelete } = deps;
@@ -33,91 +34,115 @@ export function useAccounts(deps) {
         return acc;
     };
 
-    const handleDeleteAccount = (accountId, opps) => {
-        const opportunities = opps;
-        const account = accounts.find(acc => acc.id === accountId);
-        if (!account) return;
-
-        const subs = getSubAccounts(accountId);
-        const allIds = [accountId, ...subs.map(s => s.id)];
-        const allNames = [account.name, ...subs.map(s => s.name)];
-
-        const closedStages = ['closed won', 'closed lost', 'won', 'lost'];
-        const hasActiveOpportunities = (opportunities || []).some(opp => {
-            const linked = opp.accountId ? allIds.includes(opp.accountId) : allNames.includes(opp.account);
-            return linked && !closedStages.includes((opp.stage || '').toLowerCase());
-        });
-        if (hasActiveOpportunities) {
+    // One delete path for accounts (state §0.178) — the Accounts tab's bulk Delete, an
+    // Admin's (accounts.mjs deletes an account for an Admin only). An account with an
+    // open deal is kept (Jeff: "Block it"), and accounts.mjs refuses one too. Its
+    // sub-accounts are not deleted with it: the server promotes them to the top level,
+    // the screen does the same, the confirm says so, and Undo puts them back under it.
+    //
+    // This hook's delete had no caller — the tab deleted with its own code, without the
+    // open-deal check — and it would have deleted the sub-accounts the server keeps.
+    // opts.onConfirm runs when the user confirms.
+    const handleDeleteAccounts = (ids, opts = {}) => {
+        const wanted = accounts.filter(a => (ids || []).includes(a.id));
+        if (!wanted.length) return;
+        const dealName = (o) => o.opportunityName || o.account || 'an open deal';
+        // An account's open deals: by its id, or by its name where a deal has no id — the
+        // rule accounts.mjs applies. The deals as they are now (§0.176).
+        const openDealOf = (a) => (deps.opportunities || []).find(o =>
+            isOpenDeal(o) && (o.accountId ? o.accountId === a.id : o.account === a.name));
+        const kept = wanted.map(a => ({ a, deal: openDealOf(a) })).filter(k => k.deal);
+        const going = wanted.filter(a => !kept.some(k => k.a.id === a.id));
+        if (!going.length) {
             showBlockedDelete(
-                `Cannot Delete "${account.name}"`,
-                `This account has active opportunities linked to it. Please close or reassign those opportunities before deleting this account.`
+                kept.length === 1 ? `Cannot Delete "${kept[0].a.name}"` : `Cannot Delete ${kept.length} Accounts`,
+                kept.length === 1
+                    ? `This account has an open deal ("${dealName(kept[0].deal)}"). Close the deal, or move it to another account, before deleting.`
+                    : `Each of these accounts has an open deal: ${kept.map(k => k.a.name).join(', ')}. Close the deals, or move them, before deleting.`
             );
             return;
         }
-
-        const subMsg = subs.length > 0 ? ` This will also delete ${subs.length} sub-account${subs.length > 1 ? 's' : ''}.` : '';
-        showConfirm(`Are you sure you want to delete "${account.name}"?${subMsg}`, () => {
-            const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
-            // Snapshot captured inside confirm callback — fresh state at time of confirmation
-            let snapshot;
-            setAccounts(prev => {
-                snapshot = prev.slice();
-                return prev.filter(a => !allIds.includes(a.id));
-            });
-
-            // Fire deletes for all IDs and restore if any fail
-            const deletePromises = allIds.map(id =>
-                dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
-                    .then(res => {
-                        if (!res.ok) throw new Error('HTTP ' + res.status);
-                    })
-            );
-
-            Promise.allSettled(deletePromises).then(results => {
-                if (!stillOrg(askedOrg)) return;
-                const anyFailed = results.some(r => r.status === 'rejected');
-                if (anyFailed) {
-                    console.error('One or more account deletes failed — restoring accounts');
-                    setAccounts(snapshot);
-                }
-            });
-
-            addAudit('delete', 'account', accountId, account.name, '');
+        const goingIds = going.map(a => a.id);
+        const parentOf = (a) => a.parentAccountId || a.parentId || null;
+        // The sub-accounts the server will promote, each with the account it stood under.
+        const children = accounts.filter(a => goingIds.includes(parentOf(a)) && !goingIds.includes(a.id))
+            .map(a => ({ id: a.id, parentId: parentOf(a) }));
+        const what = going.length === 1 ? `"${going[0].name}"` : `${going.length} accounts`;
+        const subLine = children.length
+            ? `\n\n${children.length} sub-account${children.length === 1 ? '' : 's'} will move to the top level.` : '';
+        const keptLine = kept.length ? `\n\nKept — open deals: ${kept.map(k => k.a.name).join(', ')}.` : '';
+        showConfirm(`Delete ${what}? You'll have a few seconds to undo.${subLine}${keptLine}`, async () => {
+            opts.onConfirm?.();
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
+            setAccounts(prev => prev.filter(a => !goingIds.includes(a.id)));
+            const failed = [];
+            for (const a of going) {
+                if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
+                const r = await dbWrite(`/.netlify/functions/accounts?id=${a.id}`, { method: 'DELETE' });
+                if (!r.ok) failed.push({ a, error: r.error });
+            }
+            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
+            const deleted = going.filter(a => !failed.some(f => f.a.id === a.id));
+            const deletedIds = deleted.map(a => a.id);
+            const promoted = children.filter(c => deletedIds.includes(c.parentId));
+            // The server promoted the deleted accounts' sub-accounts; the screen does the same.
+            setAccounts(prev => prev.map(a => (promoted.some(c => c.id === a.id) ? { ...a, parentAccountId: null } : a)));
+            if (failed.length) {
+                // What did not delete is put back, and the first refusal is shown — the
+                // server's open-deal refusal names the deal.
+                setAccounts(prev => {
+                    const have = new Set(prev.map(a => a.id));
+                    return [...prev, ...failed.map(f => f.a).filter(a => !have.has(a.id))];
+                });
+                setUndoToast({ error: going.length === 1
+                    ? `Account not deleted — ${failed[0].error}`
+                    : `${failed.length} of ${going.length} accounts not deleted — ${failed[0].error}` });
+                if (!deleted.length) return;   // nothing deleted, nothing to undo
+            }
             softDelete(
-                `Account "${account.name}"`,
+                deleted.length === 1 ? `Account "${deleted[0].name}"` : `${deleted.length} accounts`,
                 () => {},
-                () => {
-                    setAccounts(snapshot);
+                async () => {
                     setUndoToast(null);
-                    // Re-insert all deleted accounts back to the DB
-                    // Undo puts the rows back on screen and re-POSTs them. A failed
-                    // restore used to leave them visible but deleted in the database,
-                    // surfacing only on the next reload.
-                    const deletedAccounts = snapshot.filter(a => allIds.includes(a.id));
-                    (async () => {
-                        const notRestored = [];
-                        for (const a of deletedAccounts) {
-                            if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
-                            const r = await dbWrite('/.netlify/functions/accounts', {
-                                method: 'POST',
+                    setAccounts(prev => {
+                        const have = new Set(prev.map(a => a.id));
+                        const back = prev.map(a => {
+                            const c = promoted.find(p => p.id === a.id);
+                            return c ? { ...a, parentAccountId: c.parentId } : a;
+                        });
+                        return [...back, ...deleted.filter(a => !have.has(a.id))];
+                    });
+                    // Undo re-POSTs each account, then puts its sub-accounts back under it
+                    // (the PUT merges over the stored row, §0.169); a refusal says so.
+                    const notRestored = [];
+                    for (const a of deleted) {
+                        if (!stillOrg(askedOrg)) return;   // the next POST would carry the new org's token
+                        const rr = await dbWrite('/.netlify/functions/accounts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(a),
+                        });
+                        if (!rr.ok) { notRestored.push({ a, error: rr.error }); continue; }
+                        for (const c of promoted.filter(p => p.parentId === a.id)) {
+                            if (!stillOrg(askedOrg)) return;   // the next PUT would carry the new org's token
+                            const rp = await dbWrite('/.netlify/functions/accounts', {
+                                method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(a),
+                                body: JSON.stringify({ id: c.id, parentAccountId: c.parentId }),
                             });
-                            if (!r.ok) notRestored.push(a.id);
+                            if (!rp.ok) notRestored.push({ a, error: rp.error });
                         }
-                        if (!stillOrg(askedOrg)) return;
-                        if (notRestored.length) {
-                            setAccounts(prev => prev.filter(a => !notRestored.includes(a.id)));
-                            setUndoToast({ error: `${notRestored.length} account(s) could not be restored.` });
-                        }
-                    })();
+                    }
+                    if (!stillOrg(askedOrg)) return;
+                    if (notRestored.length) {
+                        // Undo did not take, or took in part: say so, and show the list as the
+                        // server has it rather than a guess at it.
+                        setUndoToast({ error: `Could not restore ${notRestored[0].a.name} — ${notRestored[0].error}` });
+                        loadAccounts(() => {});
+                    }
                 }
             );
         });
-    };
-
-    const handleDeleteSubAccount = (parentId, subAccountId, opportunities) => {
-        handleDeleteAccount(subAccountId, opportunities);
     };
 
     const handleSaveAccount = async (
@@ -208,8 +233,7 @@ export function useAccounts(deps) {
         loadAccounts,
         getSubAccounts,
         getAccountRollup,
-        handleDeleteAccount,
-        handleDeleteSubAccount,
+        handleDeleteAccounts,
         handleSaveAccount,
     };
 }

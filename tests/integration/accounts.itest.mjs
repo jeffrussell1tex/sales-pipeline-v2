@@ -306,3 +306,85 @@ test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 di
     assert.ok(ids.includes('acc_repget_b_none'),   'unassigned stays visible to a null caller under the permissive policy');
     assert.ok(!ids.includes('acc_repget_b_owned'), 'an owned row must be refused to a null caller — null === null must not match');
 });
+
+// ── §0.178 — an account with an open deal is kept (Jeff: "Block it") ──────────
+// A deal is the account's by accountId, or by the account's name where the deal has
+// no id (the rule the account rail and the old delete check used). Its own org
+// namespace; the deals written straight to the table as stored.
+const { opportunities } = await import('../../db/schema.js');
+const OA = 'itest_opendeal_acc_A', OA_OTHER = 'itest_opendeal_acc_B';
+const oaCleanup = async () => {
+    for (const o of [OA, OA_OTHER]) {
+        await db.delete(opportunities).where(eq(opportunities.orgId, o));
+        await db.delete(accounts).where(eq(accounts.orgId, o));
+    }
+};
+const seedAccount = async (org, id, name, parentAccountId) => {
+    const r = await handler(ev(org, 'POST', { id, name, ...(parentAccountId ? { parentAccountId } : {}) }));
+    assert.equal(r.statusCode, 201, `seed ${id}: ${r.statusCode} ${r.body}`);
+};
+const seedAccountDeal = (org, id, stage, accountId, account) => db.insert(opportunities).values({
+    id, orgId: org, pipelineId: 'default', opportunityName: 'Itest ' + id, stage, accountId, account,
+});
+const accountExists = async (id) => !!(await db.select().from(accounts).where(eq(accounts.id, id)))[0];
+
+test('§0.178 — an open deal on the account keeps it: 409 naming the deal, the row stays', async () => {
+    await oaCleanup();
+    try {
+        await seedAccount(OA, 'acc_od_byid', 'Itest Open Co');
+        await seedAccountDeal(OA, 'opp_oa_byid', 'Discovery', 'acc_od_byid', 'Itest Open Co');
+        const res = await handler(ev(OA, 'DELETE', null, { id: 'acc_od_byid' }));
+        assert.equal(res.statusCode, 409, res.body);
+        assert.match(JSON.parse(res.body).error, /has an open deal \("Itest opp_oa_byid"\)/);
+        assert.ok(await accountExists('acc_od_byid'));
+    } finally { await oaCleanup(); }
+});
+
+test('§0.178 — a deal with no account id keeps the account its name names', async () => {
+    await oaCleanup();
+    try {
+        await seedAccount(OA, 'acc_od_byname', 'Itest Named Co');
+        await seedAccountDeal(OA, 'opp_oa_byname', 'Proposal', null, 'Itest Named Co');
+        const res = await handler(ev(OA, 'DELETE', null, { id: 'acc_od_byname' }));
+        assert.equal(res.statusCode, 409, res.body);
+        assert.ok(await accountExists('acc_od_byname'));
+    } finally { await oaCleanup(); }
+});
+
+test('§0.178 — a closed deal does not keep it; a sub-account\'s open deal does not keep the parent — the child is promoted with its deal', async () => {
+    await oaCleanup();
+    try {
+        await seedAccount(OA, 'acc_od_parent', 'Itest Parent Co');
+        await seedAccount(OA, 'acc_od_child', 'Itest Child Co', 'acc_od_parent');
+        await seedAccountDeal(OA, 'opp_oa_closed', 'Closed Won', 'acc_od_parent', 'Itest Parent Co');
+        await seedAccountDeal(OA, 'opp_oa_child', 'Contracts', 'acc_od_child', 'Itest Child Co');
+        const res = await handler(ev(OA, 'DELETE', null, { id: 'acc_od_parent' }));
+        assert.equal(res.statusCode, 200, res.body);
+        assert.ok(!(await accountExists('acc_od_parent')), 'the parent is gone');
+        const [child] = await db.select().from(accounts).where(eq(accounts.id, 'acc_od_child'));
+        assert.ok(child && child.parentAccountId === null, 'the child stays, promoted');
+    } finally { await oaCleanup(); }
+});
+
+test('§0.178 — another org\'s open deal with the same account id does not keep it (isolation)', async () => {
+    await oaCleanup();
+    try {
+        await seedAccount(OA, 'acc_od_iso', 'Itest Iso Co');
+        await seedAccountDeal(OA_OTHER, 'opp_oa_iso', 'Discovery', 'acc_od_iso', 'Itest Iso Co');
+        const res = await handler(ev(OA, 'DELETE', null, { id: 'acc_od_iso' }));
+        assert.equal(res.statusCode, 200, res.body);
+        assert.ok(!(await accountExists('acc_od_iso')));
+    } finally { await oaCleanup(); }
+});
+
+test('§0.178 — clear=true is refused while an open deal is an account\'s, and nothing is deleted', async () => {
+    await oaCleanup();
+    try {
+        await seedAccount(OA, 'acc_od_clear_a', 'Itest Clear Kept');
+        await seedAccount(OA, 'acc_od_clear_b', 'Itest Clear Free');
+        await seedAccountDeal(OA, 'opp_oa_clear', 'Negotiation/Review', 'acc_od_clear_a', 'Itest Clear Kept');
+        const res = await handler(ev(OA, 'DELETE', null, { clear: 'true' }));
+        assert.equal(res.statusCode, 409, res.body);
+        assert.ok(await accountExists('acc_od_clear_a') && await accountExists('acc_od_clear_b'), 'both still there');
+    } finally { await oaCleanup(); }
+});

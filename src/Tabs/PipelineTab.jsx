@@ -331,7 +331,7 @@ export default function PipelineTab() {
         calculateDealHealth,
         visibleOpportunities: allVisibleOpportunities, getKpiColor,
         setUndoToast, activePipeline, allPipelines,
-        handleDelete, handleSave, completeLostSave,
+        handleDeleteDeals, handleSave, completeLostSave,
         viewingRep, viewingTeam, viewingTerritory,
         setViewingRep, setViewingTeam, setViewingTerritory,
         setEditingOpp, setShowModal,
@@ -688,24 +688,17 @@ export default function PipelineTab() {
                         </svg>
                         Filter{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
                     </button>
-                    {/* Select mode + bulk delete */}
-                    {canEdit && selectMode && selectedOpps.length > 0 && (
+                    {/* Select mode + bulk delete — an Admin's: opportunities.mjs deletes a deal for
+                        an Admin only. It goes through the deals hook's one delete path (state §0.178);
+                        it handed the old handler the deal instead of its id and threw. */}
+                    {isAdmin && selectMode && selectedOpps.length > 0 && (
                         <button
-                            onClick={() => {
-                                showConfirm(`Delete ${selectedOpps.length} deal${selectedOpps.length > 1 ? 's' : ''}? This cannot be undone.`, async () => {
-                                    for (const id of [...selectedOpps]) {
-                                        const opp = opportunities.find(o => o.id === id);
-                                        if (opp) await handleDelete(opp).catch(console.error);
-                                    }
-                                    setSelectedOpps([]);
-                                    setSelectMode(false);
-                                });
-                            }}
+                            onClick={() => handleDeleteDeals(selectedOpps, { onConfirm: () => { setSelectedOpps([]); setSelectMode(false); } })}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: T.danger, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans }}>
                             Delete ({selectedOpps.length})
                         </button>
                     )}
-                    {canEdit && (
+                    {isAdmin && (
                         <button
                             onClick={() => { setSelectMode(m => !m); setSelectedOpps([]); }}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', background: selectMode ? T.surface2 : 'transparent', border: `1px solid ${selectMode ? T.borderStrong : T.border}`, color: T.inkMid, fontSize: 12, fontWeight: selectMode ? 600 : 400, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans }}>
@@ -915,7 +908,6 @@ export default function PipelineTab() {
                         funnelExpandedStage={funnelExpandedStage}
                         setFunnelExpandedStage={setFunnelExpandedStage}
                         handleEdit={handleEdit}
-                        handleDelete={handleDelete}
                         selectMode={selectMode}
                         selectedOpps={selectedOpps}
                         setSelectedOpps={setSelectedOpps}

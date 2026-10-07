@@ -569,7 +569,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
         showConfirm, softDelete, setUndoToast,
         getSubAccounts, getAccountRollup,
         visibleAccounts: allVisibleAccounts,
-        handleDeleteAccount,
+        handleDeleteAccounts,
         setEditingAccount, setEditingSubAccount, setParentAccountForSub, setShowAccountModal,
         setCsvImportType, setShowCsvImportModal,
         accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
@@ -581,6 +581,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     // Who may change CRM records (src/utils/roles.js): Admin, Manager, a rep. A
     // Dispatcher and ReadOnly view; the server's requireWrite is the boundary.
     const canEdit    = canEditCrm(userRole);
+    const isAdmin    = userRole === 'Admin';   // accounts.mjs deletes an account for an Admin only (state §0.178)
 
     // ── Mine/All scope (§0.52) ─────────────────────────────
     // Persisted PREFERENCE only — never data. An unrecognised stored value
@@ -729,64 +730,12 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     const handleAddAccount  = () => { setAccountRailId('new'); setAccountRailMode('new'); };
     const handleEditAccount = (a) => { setAccountRailId(a.id); setAccountRailMode('edit'); };
 
+    // The bulk Delete goes through the accounts hook's one delete path (state §0.178): a
+    // confirm, an account with an open deal kept, its sub-accounts moved to the top level,
+    // Undo. It skipped the open-deal check, and said "This cannot be undone." over an Undo.
     const handleDeleteSelected = () => {
         if (!selectedIds.length) return;
-        const count = selectedIds.length;
-        showConfirm(`Delete ${count} account${count > 1 ? 's' : ''}? This cannot be undone.`, async () => {
-            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
-            const toDelete = [...selectedIds];
-            let snapshot;
-            setAccounts(prev => {
-                snapshot = prev.slice();
-                return prev.filter(a => !toDelete.includes(a.id));
-            });
-            setSelectedIds([]);
-            setSelectMode(false);
-
-            const deletedAccounts = snapshot.filter(a => toDelete.includes(a.id));
-
-            // dbFetch resolves for ANY status (guide 18b1), so the old .catch fired
-            // on a network failure only. Anything that did not delete is put back so
-            // the list matches the database rather than reappearing on reload.
-            const failedIds = [];
-            for (const id of toDelete) {
-                if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
-                const r = await dbWrite(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' });
-                if (!r.ok) failedIds.push(id);
-            }
-            if (!stillOrg(askedOrg)) return;   // no Undo for the last org's rows on the new org's screen
-            if (failedIds.length) {
-                setAccounts(prev => {
-                    const have = new Set(prev.map(a => a.id));
-                    return [...prev, ...snapshot.filter(a => failedIds.includes(a.id) && !have.has(a.id))];
-                });
-                setUndoToast({ error: `${failedIds.length} of ${toDelete.length} account(s) were not deleted.` });
-                if (failedIds.length === toDelete.length) return;   // nothing deleted, no undo
-            }
-
-            softDelete(
-                `${count} account${count > 1 ? 's' : ''}`,
-                () => {},
-                async () => {
-                    setAccounts(snapshot);
-                    const notRestored = [];
-                    for (const a of deletedAccounts.filter(a => !failedIds.includes(a.id))) {
-                        if (!stillOrg(askedOrg)) return;
-                        const rr = await dbWrite('/.netlify/functions/accounts', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(a),
-                        });
-                        if (!rr.ok) notRestored.push(a.id);
-                    }
-                    if (!stillOrg(askedOrg)) return;
-                    if (notRestored.length) {
-                        setAccounts(prev => prev.filter(a => !notRestored.includes(a.id)));
-                        setUndoToast({ error: `${notRestored.length} account(s) could not be restored.` });
-                    }
-                }
-            );
-        });
+        handleDeleteAccounts(selectedIds, { onConfirm: () => { setSelectedIds([]); setSelectMode(false); } });
     };
 
     const toggleSelect    = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -1038,12 +987,12 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
                     {exportingCSV === 'accounts' ? 'Exporting…' : 'Export'}
                 </button>
 
-                {canEdit && selectMode && selectedIds.length > 0 && (
+                {isAdmin && selectMode && selectedIds.length > 0 && (
                     <button onClick={handleDeleteSelected} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.danger, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
                         Delete ({selectedIds.length})
                     </button>
                 )}
-                {canEdit && (
+                {isAdmin && (   // Select serves Delete alone, an Admin's (state §0.178)
                     <button onClick={() => { setSelectMode(m => !m); setSelectedIds([]); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', background: selectMode ? T.surface2 : 'transparent', border: `1px solid ${selectMode ? T.borderStrong : T.border}`, color: T.inkMid, fontSize: 12, fontWeight: selectMode ? 600 : 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
                         {selectMode ? 'Cancel' : 'Select'}
                     </button>

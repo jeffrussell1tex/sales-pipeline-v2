@@ -276,3 +276,90 @@ test('unresolvable caller GET — only unassigned arrives (fail closed, 18b22 di
     assert.ok(!ids.includes('ct_repget_mine'),  'an owned row must be refused to a null caller — null === null must not match');
     assert.ok(!ids.includes('ct_repget_other'), 'another rep\'s row stays hidden from a null caller too');
 });
+
+// ── §0.178 — a contact on an open deal is kept (Jeff: "Block it") ──────────────
+// The screens ask too, but a rep's screen holds only the deals the rep may see; the
+// server reads every deal in the org with the screens' own rule (contactDeals.js,
+// through _openDeals.mjs). Its own org namespace, the deals written straight to the
+// table as stored, an Admin caller: what holds the contact is the deal, not the role.
+const { opportunities } = await import('../../db/schema.js');
+const OD = 'itest_opendeal_ct_A', OD_OTHER = 'itest_opendeal_ct_B';
+const evIn = (org, method, body, qs) => ({
+    httpMethod: method,
+    headers: { 'x-test-org': org, 'x-test-role': 'Admin', 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+    queryStringParameters: qs || {},
+});
+const odCleanup = async () => {
+    for (const o of [OD, OD_OTHER]) {
+        await db.delete(opportunities).where(eq(opportunities.orgId, o));
+        await db.delete(contacts).where(eq(contacts.orgId, o));
+    }
+};
+const seedContact = async (org, id, firstName, lastName) => {
+    const r = await handler(evIn(org, 'POST', { id, firstName, lastName }));
+    assert.equal(r.statusCode, 201, `seed ${id}: ${r.statusCode} ${r.body}`);
+};
+const seedDeal = (org, id, stage, contactIds, contactsText) => db.insert(opportunities).values({
+    id, orgId: org, pipelineId: 'default', opportunityName: 'Itest ' + id, stage, contactIds, contacts: contactsText,
+});
+const contactExists = async (id) => !!(await db.select().from(contacts).where(eq(contacts.id, id)))[0];
+
+test('§0.178 — an open deal naming a contact by id keeps it: 409, the row stays, and the refusal names no deal', async () => {
+    await odCleanup();
+    try {
+        await seedContact(OD, 'ct_od_byid', 'Grace', 'Kim');
+        await seedDeal(OD, 'opp_od_byid', 'Discovery', ['ct_od_byid'], null);
+        const res = await handler(evIn(OD, 'DELETE', null, { id: 'ct_od_byid' }));
+        assert.equal(res.statusCode, 409, res.body);
+        assert.match(JSON.parse(res.body).error, /on an open deal/);
+        assert.ok(!res.body.includes('opp_od_byid'), 'the deal is not named — a rep may not see it');
+        assert.ok(await contactExists('ct_od_byid'), 'the contact is still there');
+    } finally { await odCleanup(); }
+});
+
+test('§0.178 — a deal that names the contact only in its legacy text keeps it too ("First Last (role)", any case)', async () => {
+    await odCleanup();
+    try {
+        await seedContact(OD, 'ct_od_byname', 'Grace', 'Kim');
+        await seedDeal(OD, 'opp_od_byname', 'Proposal', [], 'Omar Haddad (IT Director), grace kim (VP Operations)');
+        const res = await handler(evIn(OD, 'DELETE', null, { id: 'ct_od_byname' }));
+        assert.equal(res.statusCode, 409, res.body);
+        assert.ok(await contactExists('ct_od_byname'));
+    } finally { await odCleanup(); }
+});
+
+test('§0.178 — a closed deal does not keep it, and neither does a name it only begins: both deleted', async () => {
+    await odCleanup();
+    try {
+        await seedContact(OD, 'ct_od_closed', 'Grace', 'Kim');
+        await seedDeal(OD, 'opp_od_closed', 'Closed Lost', ['ct_od_closed'], 'Grace Kim (VP Operations)');
+        await seedDeal(OD, 'opp_od_prefix', 'Discovery', [], 'Grace Kimball (CFO)');
+        const res = await handler(evIn(OD, 'DELETE', null, { id: 'ct_od_closed' }));
+        assert.equal(res.statusCode, 200, res.body);
+        assert.ok(!(await contactExists('ct_od_closed')), 'deleted');
+    } finally { await odCleanup(); }
+});
+
+test('§0.178 — another org\'s open deal naming the same id does not keep it (isolation)', async () => {
+    await odCleanup();
+    try {
+        await seedContact(OD, 'ct_od_iso', 'Iso', 'Contact');
+        await seedDeal(OD_OTHER, 'opp_od_iso', 'Discovery', ['ct_od_iso'], 'Iso Contact');
+        const res = await handler(evIn(OD, 'DELETE', null, { id: 'ct_od_iso' }));
+        assert.equal(res.statusCode, 200, res.body);
+        assert.ok(!(await contactExists('ct_od_iso')));
+    } finally { await odCleanup(); }
+});
+
+test('§0.178 — clear=true is refused while an open deal names a contact, and nothing is deleted', async () => {
+    await odCleanup();
+    try {
+        await seedContact(OD, 'ct_od_clear_a', 'Clear', 'Kept');
+        await seedContact(OD, 'ct_od_clear_b', 'Clear', 'Free');
+        await seedDeal(OD, 'opp_od_clear', 'Negotiation/Review', ['ct_od_clear_a'], null);
+        const res = await handler(evIn(OD, 'DELETE', null, { clear: 'true' }));
+        assert.equal(res.statusCode, 409, res.body);
+        assert.ok(await contactExists('ct_od_clear_a') && await contactExists('ct_od_clear_b'), 'both still there');
+    } finally { await odCleanup(); }
+});

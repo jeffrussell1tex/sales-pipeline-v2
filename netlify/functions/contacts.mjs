@@ -9,6 +9,7 @@ import {
 } from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
+import { openDealNamingContact, openDealNamingAnyContact, openDealRefusal } from './_openDeals.mjs';
 import { partialRows } from './_sanitize.mjs';
 
 export const handler = async (event) => {
@@ -179,6 +180,12 @@ export const handler = async (event) => {
                 // Org-wide wipe — Admin only. Non-admin bulk deletes use per-id DELETEs (see ContactsTab).
                 const forbidden = requireRole(auth, ['Admin'], headers);
                 if (forbidden) return forbidden;
+                // A contact on an open deal is kept (state §0.178): the wipe is refused while any is.
+                const everyone = await db.select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName })
+                    .from(contacts).where(eq(contacts.orgId, orgId));
+                if (await openDealNamingAnyContact(orgId, everyone)) {
+                    return openDealRefusal(headers, 'Contacts on open deals cannot be cleared. Take them off their deals, or close the deals, first.');
+                }
                 const deleted = await db.delete(contacts).where(eq(contacts.orgId, orgId)).returning({ id: contacts.id });
                 await writeAudit(orgId, {
                     action: 'contact.cleared', entityType: 'contact', entityId: 'ALL',
@@ -195,6 +202,14 @@ export const handler = async (event) => {
                 table: contacts, entity: 'contact', id, orgId, userId, userRole, headers,
             });
             if (forbiddenDel) return forbiddenDel;
+            // A contact on an open deal is kept (state §0.178; Jeff: "Block it") — the deal
+            // would name a contact that is gone. Asked here as well as on the screen: a rep's
+            // screen holds only the deals the rep may see, so the refusal names no deal.
+            const [target] = await db.select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName })
+                .from(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId)));
+            if (target && await openDealNamingContact(orgId, target)) {
+                return openDealRefusal(headers, 'This contact is on an open deal. Take them off the deal, or close it, before deleting.');
+            }
             // .returning() rather than a bare delete: a hard delete destroys the
             // audit trail's subject, so the row has to be captured in the same
             // statement that removes it. An id alone cannot be resolved back to a

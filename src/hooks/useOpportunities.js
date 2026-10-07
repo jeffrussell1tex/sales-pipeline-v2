@@ -62,47 +62,42 @@ export function useOpportunities(deps) {
             .catch(err => console.error('Failed to load opportunities:', err));
     };
 
-    const handleDelete = (id) => {
-        // Capture opp reference before confirm so it's available in callback
-        let opp;
-        setOpportunities(prev => { opp = prev.find(o => o.id === id); return prev; });
-        if (!opp) return;
-
-        showConfirm('Are you sure you want to delete this opportunity?', () => {
-            const askedOrg = requestOrg();   // after an org switch its answers change nothing (state §0.175)
-            let snapshot;
-            // Functional update: snapshot + filter in one atomic operation
-            setOpportunities(prev => {
-                snapshot = prev.slice();
-                return prev.filter(o => o.id !== id);
-            });
-
-            dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
-                .then(async res => {
-                    if (!stillOrg(askedOrg)) return;
-                    if (!res.ok) {
-                        console.error('Failed to delete opportunity on server, restoring. Status:', res.status);
-                        setOpportunities(prev => {
-                            if (prev.some(o => o.id === id)) return prev;
-                            return snapshot;
-                        });
-                    }
-                })
-                .catch(err => {
-                    if (!stillOrg(askedOrg)) return;
-                    console.error('Failed to delete opportunity (network error), restoring:', err);
-                    setOpportunities(prev => {
-                        if (prev.some(o => o.id === id)) return prev;
-                        return snapshot;
-                    });
+    // Deleting deals (state §0.178) — the Pipeline's Delete (N), an Admin's: the server
+    // deletes a deal for an Admin only. Confirmed, one DELETE each, and no Undo (Jeff:
+    // "Confirm, no Undo"): a deal re-POSTed is a new deal to the server — the rep's
+    // "new opportunity" email, the opportunity.created webhook and the automations —
+    // and the Pipeline's dialog has always said it cannot be undone.
+    //
+    // The Delete (N) handed the old handleDelete the deal instead of its id and read
+    // .catch off its answer: no deal could be deleted from the app since 20 Apr, and
+    // that handler's Undo put the row back on screen only. opts.onConfirm runs when the
+    // user confirms.
+    const handleDeleteDeals = (ids, opts = {}) => {
+        const going = opportunities.filter(o => (ids || []).includes(o.id));
+        if (!going.length) return;
+        const what = going.length === 1 ? `"${going[0].opportunityName || going[0].account || 'this deal'}"` : `${going.length} deals`;
+        showConfirm(`Delete ${what}? This cannot be undone.`, async () => {
+            opts.onConfirm?.();
+            const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
+            const goingIds = going.map(o => o.id);
+            setOpportunities(prev => prev.filter(o => !goingIds.includes(o.id)));
+            const failed = [];
+            for (const o of going) {
+                if (!stillOrg(askedOrg)) return;   // the next DELETE would carry the new org's token
+                const r = await dbWrite(`/.netlify/functions/opportunities?id=${o.id}`, { method: 'DELETE' });
+                if (!r.ok) failed.push({ o, error: r.error });
+            }
+            if (!stillOrg(askedOrg)) return;
+            if (failed.length) {
+                // What did not delete is put back, and the first refusal is shown.
+                setOpportunities(prev => {
+                    const have = new Set(prev.map(x => x.id));
+                    return [...prev, ...failed.map(f => f.o).filter(x => !have.has(x.id))];
                 });
-
-            addAudit('delete', 'opportunity', id, opp.opportunityName || opp.account || id, opp.account);
-            softDelete(
-                `Opportunity "${opp.opportunityName || opp.account}"`,
-                () => {},
-                () => { setOpportunities(snapshot); setUndoToast(null); }
-            );
+                setUndoToast({ error: going.length === 1
+                    ? `Deal not deleted — ${failed[0].error}`
+                    : `${failed.length} of ${going.length} deals not deleted — ${failed[0].error}` });
+            }
         });
     };
 
@@ -269,7 +264,7 @@ export function useOpportunities(deps) {
         oppModalSaving,
         setOppModalSaving,
         loadOpportunities,
-        handleDelete,
+        handleDeleteDeals,
         handleSave,
         completeLostSave,
     };

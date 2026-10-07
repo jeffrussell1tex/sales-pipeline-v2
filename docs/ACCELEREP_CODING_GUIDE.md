@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b70** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b71** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3860,3 +3860,15 @@ through `dbFetch`.
 3. **A delete that offers Undo waits for its DELETE first,** and a refused one puts the row back and says so — an Undo pressed while the DELETE is out could POST before it lands.
 4. **The app's dialogs and toasts sit above every layer** — the confirm and prompt and the blocked-delete dialog at 100100, the follow-up prompt at 100050, the Undo toast at 100200; tests/layers.test.mjs scans every z-index in src and fails a layer that rises above them. Check a dialog in the pane by what is on top at its button.
 5. **A handler that deals with an Escape marks it** (`e.preventDefault()`), and App's Escape — on window, after every handler on document — leaves a marked one alone; it closes an open confirm or prompt before anything under it.
+
+## 18b71. One Delete Path Per Record — In Its Hook, Called By Every Screen, Its Rules Held On The Screen And The Server (hard rule)
+
+**Origin (§0.178, 6 Oct 2026 — §0.176's found (a); Jeff: "Block it", "Confirm, no Undo", "add the delete to thee task rail").** The data hooks' delete handlers held the rules and had no callers; the screens deleted with their own code — a contact on an open deal went from the row menu without a confirm, no deal could be deleted at all, and no task from any screen.
+
+1. **A record's DELETE is sent from one function in its hook** — `handleDeleteContacts`, `handleDeleteAccounts`, `handleDeleteDeals`, `handleDeleteActivity`, `handleDeleteTask` — and every screen that deletes calls it. tests/one-delete-path.test.mjs parses every DELETE under src and fails one sent anywhere else, or a delete function nothing calls (outside its named allowance — empty).
+2. **The function holds the rules:** a confirm before any request; a record a rule keeps is kept and named; Undo only where a re-create is quiet (contacts, accounts, activities, tasks — never a deal, whose POST emails, fires webhooks and runs automations); Undo once the DELETEs have landed.
+3. **A rule the screen checks over what it can see is the server's too** — the server reads the whole org with the same function (contactDeals.js through _openDeals.mjs), after its gates, and refuses with 409; a refusal names nothing the caller may not see.
+4. **The button is offered to whom the server allows** — account and deal deletes to an Admin.
+5. **A delete follows what the server does with what hangs off the record** — an account's sub-accounts are promoted, not deleted; the confirm says so and Undo puts them back.
+6. **A delete's audit line is the server's.** Each DELETE writes `<record>.deleted` with the row, once the row is gone; the screen writes none of its own — a line written before the answer logs a refused delete as one, and a deleted one twice. tests/one-delete-path.test.mjs pins both halves.
+7. **A layer's own Escape yields to every layer above it.** A rail's listener is on document and runs before App's on window, so it skips an Escape while the app's confirm or prompt is open — as it does for the activity viewer — and App closes the dialog; without that, one Escape closed the dialog and the rail under it. The test scans every rail's Escape listener.

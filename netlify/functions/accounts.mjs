@@ -9,6 +9,7 @@ import {
 } from './_lib.mjs';
 import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
+import { openDealOfAccount, openDealOfAnyAccount, openDealRefusal, dealLabel } from './_openDeals.mjs';
 import { partialRows } from './_sanitize.mjs';
 
 // ── Website normalizer ────────────────────────────────────────────────────────
@@ -267,6 +268,12 @@ export const handler = async (event) => {
                 // Org-wide wipe — Admin only, scoped to this org.
                 const forbidden = requireRole(auth, ['Admin'], headers);
                 if (forbidden) return forbidden;
+                // An account with an open deal is kept (state §0.178): the wipe is refused while any is.
+                const everyAccount = await db.select({ id: accounts.id, name: accounts.name }).from(accounts).where(eq(accounts.orgId, orgId));
+                const holding = await openDealOfAnyAccount(orgId, everyAccount);
+                if (holding) {
+                    return openDealRefusal(headers, `Accounts with open deals cannot be cleared — "${dealLabel(holding)}" is open. Close the deals, or move them, first.`);
+                }
                 const deleted = await db.delete(accounts).where(eq(accounts.orgId, orgId)).returning({ id: accounts.id });
                 await writeAudit(orgId, {
                     action: 'account.cleared', entityType: 'account', entityId: 'ALL',
@@ -297,6 +304,15 @@ export const handler = async (event) => {
             // always been gated; this one never was.
             const forbiddenDelete = requireRole(auth, ['Admin'], headers);
             if (forbiddenDelete) return forbiddenDelete;
+            // An account with an open deal is kept (state §0.178; Jeff: "Block it"). Its
+            // sub-accounts are not deleted with it — they are promoted below — so its own
+            // deals are what hold it.
+            const [target] = await db.select({ id: accounts.id, name: accounts.name })
+                .from(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId)));
+            const holding = target ? await openDealOfAccount(orgId, target) : null;
+            if (holding) {
+                return openDealRefusal(headers, `This account has an open deal ("${dealLabel(holding)}"). Close the deal, or move it to another account, before deleting.`);
+            }
             // .returning() rather than a bare delete: a hard delete destroys the
             // audit trail's subject, so the row has to be captured in the same
             // statement that removes it. An id alone cannot be resolved back to a

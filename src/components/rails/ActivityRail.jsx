@@ -135,6 +135,7 @@ export default function ActivityRail() {
         contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
+        confirmModal, promptModal,
     } = useApp();
 
     const isOpen    = !!showActivityModal;
@@ -227,10 +228,12 @@ export default function ActivityRail() {
     // ESC to close
     useEffect(() => {
         if (!isOpen) return;
-        const onKey = (e) => { if (e.key === 'Escape') closeRail(); };
+        // Not under the app's confirm or prompt, which App.jsx closes first (state §0.178):
+        // a document's Delete asks over this rail.
+        const onKey = (e) => { if (e.key === 'Escape' && !confirmModal && !promptModal) closeRail(); };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isOpen, confirmModal, promptModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!isOpen) return null;
 

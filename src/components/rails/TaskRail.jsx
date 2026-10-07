@@ -4,6 +4,7 @@ import ActivityRowText from './ActivityRowText';
 import AttachmentsStrip from '../documents/AttachmentsStrip';
 import TimeDropdown from '../ui/TimeDropdown';
 import { T } from '../../tokens.js';
+import { canEditCrm } from '../../utils/roles.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -125,6 +126,8 @@ export default function TaskRail() {
         setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults,
         taskModalError, setTaskModalError,
         taskModalSaving,
+        userRole,
+        confirmModal, promptModal,
     } = useApp();
 
     const isNew     = taskRailId === 'new';
@@ -318,11 +321,13 @@ export default function TaskRail() {
     useEffect(() => {
         if (!isOpen) return;
         // The activity viewer (§0.93) sits above the rail and App.jsx closes it on
-        // Escape first; without this guard the rail's own listener closed too.
-        const onKey = (e) => { if (e.key === 'Escape' && !isEditing && !viewingActivity) closeRail(); };
+        // Escape first; without this guard the rail's own listener closed too. The same
+        // for the app's confirm and prompt (state §0.178): the task's Delete asks over
+        // this rail, and a document's Delete over any rail.
+        const onKey = (e) => { if (e.key === 'Escape' && !isEditing && !viewingActivity && !confirmModal && !promptModal) closeRail(); };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [isOpen, isEditing, viewingActivity]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isOpen, isEditing, viewingActivity, confirmModal, promptModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!isOpen) return null;
 
@@ -649,6 +654,18 @@ export default function TaskRail() {
                     )}
                 </div>
             </div>
+
+            {/* ── Footer: Delete (view mode) — the task's one delete path (state §0.178) ──
+                A writer's: tasks.mjs lets a rep delete their own or an unassigned task and
+                refuses the rest, which the hook puts back and says why. */}
+            {!isEditing && !isNew && task && canEditCrm(userRole) && (
+                <div style={{ flexShrink: 0, borderTop: `1px solid ${T.border}`, padding: '10px 16px', background: T.surface, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button onClick={() => handleDeleteTask(task.id, { onConfirm: closeRail })}
+                        style={{ padding: '6px 12px', background: 'none', color: T.danger, border: `1px solid ${T.danger}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                        Delete task
+                    </button>
+                </div>
+            )}
 
             {/* ── Footer: Save/Discard (edit mode) ─────────────────────────── */}
             {isEditing && (
