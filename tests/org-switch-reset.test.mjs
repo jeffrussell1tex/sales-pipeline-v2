@@ -168,7 +168,7 @@ test('App: the reset runs on a switch only — from one org to another or to non
         'calState.resetOnOrgSwitch();',
         '}, [activeOrgId]);',
     ], 'the ref moves before the check (or the first load never arms it); the first load and a re-render keep what is open');
-    assert.equal(app.split('resetOnOrgSwitch()').length - 1, 3, 'called from this effect only');
+    assert.equal(app.split('resetOnOrgSwitch()').length - 1, 3, 'called from this effect only — the layer boundary is handed the modal one, to close every layer after a crash (§0.184)');
 });
 
 test('App: the reset is declared before App\'s other effects, so what they start for the new org in the switch\'s commit is not put back', () => {

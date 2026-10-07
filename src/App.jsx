@@ -42,6 +42,7 @@ import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
 import DispatchTab from './Tabs/DispatchTab';
 import ErrorBoundary from './components/ErrorBoundary';
+import LayerBoundary from './components/LayerBoundary';
 import { T } from './tokens.js';
 
 
@@ -2373,9 +2374,15 @@ dbFetch('/.netlify/functions/users?me=true')
         </div>
         {/* The modals and rails remount on an org switch (state §0.175): eleven
             rails and dialogs stay mounted while hidden, and kept their drafts and
-            busy flags — the last org's — to show when next opened. */}
+            busy flags — the last org's — to show when next opened. A crash in one
+            keeps the page (state §0.184): the boundary closes every layer — the
+            modal state put back, as on a switch — and says so. */}
+        <LayerBoundary key={activeOrgId || 'no-org'} onCrash={modalState.resetOnOrgSwitch}>
         <ModalLayer key={activeOrgId || 'no-org'} />
+        </LayerBoundary>
+        <LayerBoundary onCrash={() => setQuickLogOpen(false)}>
         <QuickLogFab />
+        </LayerBoundary>
 
             {showNavGuard && (
                 <LeaveGuardModal saving={navGuardSaving} failed={navGuardFailed}

@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b77** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 7, 2026 · rules current through **§18b78** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3925,3 +3925,13 @@ through `dbFetch`.
 2. **People are stored by their app id (users.id) and checked by the server against this org's roster** — the id a rep's directory carries and an invited member already has; a Clerk id is not a member's id. A list the rule needs filled (Specific) is refused empty.
 3. **Who sees a record, and its delete, are named by one server rule that the record carries to the screen** (`mayManage` → `canManage`): the screen offers the control by the flag, the server refuses by the rule.
 4. **A record a write names is the one the server finds** — in this org, visible to the caller by its own list's rule, stored under its own name; one that is not there and one the caller cannot see answer alike (§18b71.3).
+
+## 18b78. A Crash In A Layer Keeps The Page; A Crash Nothing Else Catches Shows A Reload, Never A Blank Page (hard rule)
+
+**Origin (§0.184, 7 Oct 2026 — §0.183's found (a); Jeff: "Add the boundary (Recommended)").** Each tab had its own ErrorBoundary and nothing else did: ModalLayer's rails, modals and app dialogs and the quick log sat outside every boundary, and nothing wrapped the root, so a render error in a rail — §0.183's stale module, "useState is not defined" in the document rail's picker — took the whole app with it. §18b70.4 (the app's dialogs above every layer) is its kin.
+
+1. **A layer host sits inside a LayerBoundary** — ModalLayer and QuickLogFab do, and tests/layer-boundary.test.mjs fails either outside one; a new host goes inside one and into the guard's list. The layers App renders itself — the meeting prep panel, the leave guard, the header's panels — do not yet (state §9, §0.184's found (b)).
+2. **A crash closes what crashed and says so** — `onCrash` puts back the state that rendered it (ModalLayer's: the org switch's reset, every layer closed; the quick log's: its panel), so it is not rendered again; the message says what was lost and offers Dismiss; the page under it stays as it was.
+3. **The boundary's message sits above every rail and modal and under the app's dialogs and toasts** (§18b70.4; tests/layers.test.mjs).
+4. **The root has a boundary outside every provider** — a crash nothing else catches shows a page and a Reload, never a blank one.
+5. **A boundary is proved by a real crash in the pane** — react-dom/server does not run one, so the tests pin its parts and the pane catches a crash a made-up answer causes, nothing written.
