@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../AppContext';
 import { requestOrg, stillOrg } from '../../utils/storage';
 import { T } from '../../tokens.js';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 
 // ── Palette (Accelerep warm-stone, per style guide) ───────────────────────────
 const C = {
@@ -46,7 +47,12 @@ export default function ContactMergeReviewModal() {
         contactMergeModal, setContactMergeModal,
         contacts, opportunities, activities, tasks,
         handleContactMerge, mergeSaving, mergeError, setMergeError,
+        escapeBlocked,
     } = useApp();
+
+    // Escape closes it, as its × does — never mid-merge (state §0.186) — while no layer
+    // above it is open.
+    useEscapeLayer(!!contactMergeModal, () => { if (!mergeSaving) { setMergeError?.(null); setContactMergeModal(null); } }, escapeBlocked('merge'));
 
     const aId = contactMergeModal?.aId;
     const bId = contactMergeModal?.bId;

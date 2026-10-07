@@ -27,6 +27,7 @@ import ContactMergeReviewModal from '../modals/ContactMergeReviewModal';
 import { CoachingNoteDialogHost } from '../modals/CoachingNoteDialog';
 import { ActivityDetailDialogHost } from '../modals/ActivityDetailDialog';
 import { T } from '../../tokens.js';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 // ViewingContactPanel and ViewingAccountPanel replaced by ContactRail and AccountRail
 
 // Chunked bulk transport for the CSV importer.
@@ -139,6 +140,7 @@ export default function ModalLayer() {
         viewingContact, setViewingContact, viewingAccount, setViewingAccount,
         viewingTask, setViewingTask,
         isMobile,
+        escapeBlocked,
     } = useApp();
 
     // A deal's team notes, saved as they change (state §0.177): the list on screen
@@ -152,6 +154,27 @@ export default function ModalLayer() {
         if (r.ok) setEditingOpp(prev => (prev && prev.id === oppId ? { ...prev, comments: next } : prev));
         return r;
     };
+
+    // The due-task reminder's Dismiss — its button, its backdrop and its Escape. Closing
+    // without acting counts as dismissing the current alert, or the checker would re-fire
+    // it on the next tick; the next one queued shows.
+    const dismissDueAlert = () => {
+        if (taskDuePopup) setDismissedDueTodayAlerts(prev => prev.includes(taskDuePopup.id) ? prev : [...prev, taskDuePopup.id]);
+        if (taskDueQueue.length > 0) {
+            setTaskDuePopup(taskDueQueue[0]);
+            setTaskDueQueue(prev => prev.slice(1));
+        } else {
+            setTaskDuePopup(null);
+        }
+    };
+    const closeClaimModal = () => { setSpiffClaimError(null); setSpiffClaimBusy(null); setShowSpiffClaimModal(false); };
+    // The layers drawn here that had no Escape take their own (state §0.186), each while no
+    // layer above it is open: the blocked-delete notice closes, a claim not being submitted
+    // closes, and each reminder is dismissed.
+    useEscapeLayer(!!blockedDeleteModal, () => setBlockedDeleteModal(null), escapeBlocked('blockedDelete'));
+    useEscapeLayer(!!(showSpiffClaimModal && spiffClaimContext), () => { if (!spiffClaimBusy) closeClaimModal(); }, escapeBlocked('spiffClaim'));
+    useEscapeLayer(!!taskDuePopup, dismissDueAlert, escapeBlocked('duePopup'));
+    useEscapeLayer(!!taskReminderPopup, () => setTaskReminderPopup(null), escapeBlocked('reminderPopup'));
 
     return (
         <>
@@ -962,17 +985,7 @@ export default function ModalLayer() {
             {/* Task Due Today Popup */}
             {taskDuePopup && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    onClick={() => {
-                        // Closing without acting counts as dismissing the current alert —
-                        // otherwise the checker would re-fire it on the next tick.
-                        if (taskDuePopup) setDismissedDueTodayAlerts(prev => prev.includes(taskDuePopup.id) ? prev : [...prev, taskDuePopup.id]);
-                        if (taskDueQueue.length > 0) {
-                            setTaskDuePopup(taskDueQueue[0]);
-                            setTaskDueQueue(prev => prev.slice(1));
-                        } else {
-                            setTaskDuePopup(null);
-                        }
-                    }}
+                    onClick={dismissDueAlert}
                 >
                     <div style={{ background: T.surface, borderRadius: isMobile ? '16px 16px 0 0' : '16px', padding: '0', width: isMobile ? '100%' : '440px', maxWidth: isMobile ? '100%' : '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.35)', overflow: 'hidden', animation: 'slideUp 0.25s ease' }}
                         onClick={e => e.stopPropagation()}
@@ -1076,15 +1089,7 @@ export default function ModalLayer() {
                                     onMouseLeave={e => e.currentTarget.style.boxShadow = '0 2px 8px rgba(220,38,38,0.3)'}
                                 >Open Task</button>
                                 <button
-                                    onClick={() => {
-                                        if (taskDuePopup) setDismissedDueTodayAlerts(prev => prev.includes(taskDuePopup.id) ? prev : [...prev, taskDuePopup.id]);
-                                        if (taskDueQueue.length > 0) {
-                                            setTaskDuePopup(taskDueQueue[0]);
-                                            setTaskDueQueue(prev => prev.slice(1));
-                                        } else {
-                                            setTaskDuePopup(null);
-                                        }
-                                    }}
+                                    onClick={dismissDueAlert}
                                     style={{ flex: 1, padding: '0.7rem 1rem', background: T.surface, color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: '8px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
                                     onMouseEnter={e => { e.currentTarget.style.background = T.surface2; e.currentTarget.style.color = T.inkMid; }}
                                     onMouseLeave={e => { e.currentTarget.style.background = T.surface; e.currentTarget.style.color = T.inkMid; }}
@@ -1098,7 +1103,6 @@ export default function ModalLayer() {
             {/* ════ SPIFF CLAIM MODAL ════ */}
             {showSpiffClaimModal && spiffClaimContext && (() => {
                 const { opp } = spiffClaimContext;
-                const closeClaimModal = () => { setSpiffClaimError(null); setSpiffClaimBusy(null); setShowSpiffClaimModal(false); };
                 const activeSpiffsList = (settings.spiffs||[]).filter(s => s.active);
                 const existingClaims = spiffClaims.filter(c => c.opportunityId === opp.id);
                 const claimedSpiffIds = new Set(existingClaims.map(c => c.spiffId));

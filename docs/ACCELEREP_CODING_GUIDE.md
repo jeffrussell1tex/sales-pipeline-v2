@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 7, 2026 · rules current through **§18b79** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 7, 2026 · rules current through **§18b80** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3944,3 +3944,14 @@ through `dbFetch`.
 2. **What was open at a crash, and would open itself again, counts as seen** — the due-task reminder open then may be what crashed; its checker would reopen it, and it would crash again.
 3. **A boundary catches only what renders below it** — markup worked out in the parent's render (an inline function, a list computed in the return) throws in the parent, above the boundary: cut it into a component of its own, and render that inside the boundary.
 4. **The guard finds the layers, not a list of them** — tests/layer-boundary.test.mjs parses App's render: a component outside a boundary must be the frame, nothing outside one is drawn fixed, no boundary holds markup App's render works out, and every LayerBoundary closes something (`onCrash`).
+
+## 18b80. Every App Layer Has A Place In The Escape Order, And Takes Its Escape While Nothing Above It Is Open (hard rule)
+
+**Origin (§0.186, 7 Oct 2026 — §0.185's found (a); Jeff: "fix the escape one too when you have the chance", then "App-level 12 now").** Twelve app layers had no Escape at all — the meeting prep panel, the three import windows, the two merge reviews, the SPIFF claim, the blocked-delete notice, both task reminders, the quick log and its follow-up, the leave guard — while the shortcuts list promised "Esc — Close modal or popover". §18b74 (the layer on top takes the Escape and marks it) is the rule this completes.
+
+1. **The app's layers have one order, top first, by the z each draws** — `ESCAPE_ORDER` (src/utils/escapeOrder.js); at one z, the one later in the page. A new layer takes a place in it: tests/escape-order.test.mjs fails a layer without one, a place without a layer, the order out of z order, and a z its file does not draw.
+2. **A layer's own Escape passes while one above it is open** — `useEscapeLayer(open, close, escapeBlocked('<its name>'))`, App's `openLayers` saying which are open: one Escape closes the layer on top, and only that one, whatever order the listeners were added in.
+3. **Escape does what the layer's own close does** — its ×, Cancel, Skip or backdrop, one function for all of them: a reminder is dismissed and the next shows, the quick log closes with its draft kept, the leave guard is Stay.
+4. **Nothing mid-save closes on Escape** — an import running, a merge saving, a claim being submitted, a guard's save out: the Escape is refused.
+5. **The draggable windows share one place** — each rises when clicked (useDraggable), so among themselves the order is the order clicked.
+6. **In-tab layers are not yet in the order** — state §9, §0.186's found (a), the audit: fifteen files draw fixed layers with no Escape at all, and eleven more are to be checked layer by layer.

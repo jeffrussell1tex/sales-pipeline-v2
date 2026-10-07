@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
+import { useApp } from '../../AppContext';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 
 const LEAD_FIELDS = [
     { key: 'firstName',    label: 'First Name',     required: true },
@@ -29,6 +31,10 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
     const [parseError, setParseError]   = useState('');
     const [importStats, setImportStats] = useState(null);
     const [importing, setImporting]     = useState(false);
+    // Escape closes it, as its × does — never mid-import (state §0.186) — while no layer
+    // above the draggable windows is open.
+    const { escapeBlocked } = useApp();
+    useEscapeLayer(true, () => { if (!importing) onClose(); }, escapeBlocked('draggable'));
     const fileRef = useRef();
 
     // ── CSV parser ────────────────────────────────────────────────────────────

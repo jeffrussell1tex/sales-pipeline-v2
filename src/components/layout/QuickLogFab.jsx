@@ -3,6 +3,7 @@ import { useApp } from '../../AppContext';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../utils/storage';
 import { isoLocal } from '../../utils/dateLocal';
 import { T } from '../../tokens.js';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 
 export default function QuickLogFab() {
     const {
@@ -13,7 +14,13 @@ export default function QuickLogFab() {
         followUpPrompt, setFollowUpPrompt,
         setEditingTask, setTaskRailId, setTaskRailMode, isMobile,
         setUndoToast,
+        escapeBlocked,
     } = useApp();
+
+    // Escape closes the panel as its backdrop does, the draft kept, and the follow-up as
+    // its × does (state §0.186) — each while no layer above it is open.
+    useEscapeLayer(quickLogOpen, () => setQuickLogOpen(false), escapeBlocked('quickLog'));
+    useEscapeLayer(!!followUpPrompt, () => setFollowUpPrompt(null), escapeBlocked('followUp'));
 
     const inputStyle = {
         width: '100%', fontSize: '0.875rem', border: '1px solid #e5e2db',

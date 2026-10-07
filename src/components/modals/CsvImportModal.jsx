@@ -10,6 +10,8 @@ import {
 import { USER_IMPORT_FIELDS, userConflicts, inviteFrom, roleLabelOf } from '../../utils/userImport.js';
 import { DEFAULT_INVITE_EXPIRY_DAYS } from '../../utils/inviteExpiry.js';
 import { T } from '../../tokens.js';
+import { useApp } from '../../AppContext';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 
 const modalActions = { display:'flex', justifyContent:'flex-end', gap:8, marginTop:20, paddingTop:16, borderTop:`1px solid ${T.border}` };
 const priBtn = { padding:'8px 16px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans };
@@ -117,6 +119,10 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
     // A team list the import could not save after the invitations went out.
     const [importWarning, setImportWarning] = useState(null);
     const [importing, setImporting] = useState(false);
+    // Escape closes it, as its × does — never mid-import (state §0.186) — while no layer
+    // above the draggable windows is open.
+    const { escapeBlocked } = useApp();
+    useEscapeLayer(true, () => { if (!importing) onClose(); }, escapeBlocked('draggable'));
     const [importProgress, setImportProgress] = useState(0);
 
     // conflicts: array of { incomingIndex, incoming, existing, matchReason, action }

@@ -4,13 +4,22 @@
 // own, which nothing ever opened — leaving Settings by the top nav dropped an
 // unsaved edit without a word.
 //
+// Escape is Stay, as its backdrop is (state §0.186) — never while a save is out — and
+// it is the guard's alone while it is open: it takes the Escape before anything under
+// it, and passes it on only to the app's dialogs above it (escapeBlocked).
+//
 // Module scope — a component defined inside its parent would be a new type on
 // every render and remount mid-save.
 import React from 'react';
 import { T } from './tokens.js';
+import { useApp } from '../../../AppContext';
+import { useEscapeLayer } from '../../../hooks/useEscapeLayer';
 
-export const LeaveGuardModal = ({ saving, canSave, failed, onStay, onSave, onDiscard,
-    message = 'This panel has changes that have not been saved. Save them, or discard and continue.' }) => (
+export function LeaveGuardModal({ saving, canSave, failed, onStay, onSave, onDiscard,
+    message = 'This panel has changes that have not been saved. Save them, or discard and continue.' }) {
+    const app = useApp();
+    useEscapeLayer(true, () => { if (!saving) onStay(); }, app && app.escapeBlocked ? app.escapeBlocked('leaveGuard') : false);
+    return (
     <div style={{ position:'fixed', inset:0, zIndex:99999, display:'flex', alignItems:'center', justifyContent:'center',
         background:'rgba(42,38,34,0.55)' }} onClick={saving ? undefined : onStay}>
         <div onClick={e => e.stopPropagation()}
@@ -50,4 +59,5 @@ export const LeaveGuardModal = ({ saving, canSave, failed, onStay, onSave, onDis
             </div>
         </div>
     </div>
-);
+    );
+}

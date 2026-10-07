@@ -3,9 +3,15 @@ import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { isoLocal } from '../../utils/dateLocal';
 import { T } from '../../tokens.js';
+import { useApp } from '../../AppContext';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 
 export default function OutlookImportModal({ contacts, opportunities, activities, onClose, onImport }) {
     const [step, setStep] = useState('upload'); // upload, preview, results
+    // Escape closes it, as its × does (state §0.186) — the import is one call, nothing is
+    // out — while no layer above the draggable windows is open.
+    const { escapeBlocked } = useApp();
+    useEscapeLayer(true, onClose, escapeBlocked('draggable'));
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(900, 580, 560, 360);
     const [parsedEmails, setParsedEmails] = useState([]);

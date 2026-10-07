@@ -9,13 +9,17 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
 import { T } from '../../tokens.js';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 
 export default function MeetingPrepPanel() {
     const {
         meetingPrepOpen, meetingPrepEvent, meetingPrepOppId, setMeetingPrepOpen, setMeetingPrepOppId,
         opportunities, contacts, accounts, activities, tasks, calculateDealHealth,
         handleAddActivity, setTaskRailId, setTaskRailMode, setEditingTask,
+        escapeBlocked,
     } = useApp();
+    // Escape closes it, as its ✕ and its backdrop do (state §0.186), while no layer above it is open.
+    useEscapeLayer(!!(meetingPrepOpen && meetingPrepEvent), () => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }, escapeBlocked('meetingPrep'));
     if (!meetingPrepOpen || !meetingPrepEvent) return null;
 
     const ev = meetingPrepEvent;

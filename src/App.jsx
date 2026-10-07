@@ -44,6 +44,7 @@ import DispatchTab from './Tabs/DispatchTab';
 import ErrorBoundary from './components/ErrorBoundary';
 import LayerBoundary from './components/LayerBoundary';
 import MeetingPrepPanel from './components/layout/MeetingPrepPanel';
+import { layersAbove } from './utils/escapeOrder.js';
 import { T } from './tokens.js';
 
 
@@ -1717,8 +1718,26 @@ dbFetch('/.netlify/functions/users?me=true')
     }
 
 
+    // Which layers are open, by their names in the Escape order (state §0.186): a layer
+    // that takes its own Escape passes it on while one above it is open (escapeBlocked).
+    const openLayers = {
+        coachingNote: !!coachingNoteModal, blockedDelete: !!blockedDeleteModal, prompt: !!promptModal, confirm: !!confirmModal,
+        followUp: !!followUpPrompt, leaveGuard: showNavGuard,
+        linkPicker: showDocLinkPicker, uploadRail: showUploadRail, documentRail: !!documentRailId,
+        activityDetail: !!viewingActivity, taskRail: !!taskRailId, activityRail: !!showActivityModal,
+        accountRail: !!accountRailId, contactRail: !!contactRailId,
+        spiffClaim: !!(showSpiffClaimModal && spiffClaimContext), duePopup: !!taskDuePopup, reminderPopup: !!taskReminderPopup,
+        draggable: !!(showModal || showUserModal || lostReasonModal || showCsvImportModal || showOutlookImportModal || showLeadImportModal),
+        shortcuts: showShortcuts, quickLog: quickLogOpen, meetingPrep: !!(meetingPrepOpen && meetingPrepEvent),
+        leadModal: showLeadModal, merge: !!(mergeModal || contactMergeModal),
+        search: showSearchResults, profile: showProfilePanel, notifications: showNotifications, notes: !!notesPopover,
+    };
+    const escapeBlocked = (name) => layersAbove(name, openLayers);
+
     // ── AppContext value ─────────────────────────────────────────────
     const appContextValue = {
+        // ── Escape: the layer on top takes it (state §0.186) ──
+        escapeBlocked,
         // ── Documents ──
         ...documentsHook,
         documentRailId, setDocumentRailId,
