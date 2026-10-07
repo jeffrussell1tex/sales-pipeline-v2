@@ -645,7 +645,7 @@ export default function TaskRail() {
                 <div style={{ marginTop: 14 }}>
                     <SectionHeading label="Documents" />
                     {!isNew && task ? (
-                        <AttachmentsStrip recordType="task" recordId={task.id} recordName={task.title}recordSub={task.dueDate ? `Due ${task.dueDate}` : ''} />
+                        <AttachmentsStrip recordType="task" recordId={task.id} recordName={task.title} recordSub={task.dueDate ? `Due ${task.dueDate}` : ''} />
                     ) : isNew && newTaskId ? (
                         <AttachmentsStrip recordType="task" recordId={newTaskId} recordName={formData.title || 'New task'} recordSub={formData.dueDate ? `Due ${formData.dueDate}` : ''} />
                     ) : (

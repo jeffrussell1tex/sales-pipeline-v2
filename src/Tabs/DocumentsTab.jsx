@@ -5,6 +5,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useApp } from '../AppContext';
+import { canEditCrm } from '../utils/roles.js';
 import {
     T, fmtSize, fmtDate, fileMeta, FileTypeBadge, CategoryPill, LinkedToRow, CATEGORIES,
 } from '../components/documents/atoms';
@@ -34,8 +35,12 @@ function RowMenu({ anchor, onClose, onPreview, onDownload, onOpen, onDelete }) {
             <button style={item} onClick={onPreview}>Preview</button>
             <button style={item} onClick={onDownload}>Download</button>
             <button style={item} onClick={onOpen}>Open details</button>
-            <div style={{ height: 1, background: T.border, margin: '4px 0' }} />
-            <button style={{ ...item, color: T.danger }} onClick={onDelete}>Delete</button>
+            {onDelete && (
+                <>
+                    <div style={{ height: 1, background: T.border, margin: '4px 0' }} />
+                    <button style={{ ...item, color: T.danger }} onClick={onDelete}>Delete</button>
+                </>
+            )}
         </div>,
         document.body,
     );
@@ -90,8 +95,11 @@ export default function DocumentsTab() {
     const {
         documents = [], docsLoading,
         setDocumentRailId, setShowUploadRail, setUploadRailContext,
-        downloadDoc, previewDoc, removeDocument, showConfirm,
+        downloadDoc, previewDoc, removeDocument, showConfirm, userRole,
     } = useApp();
+    // Upload and Delete are offered to whom the server lets write — canEditCrm,
+    // requireWrite's list (state §0.182); a reader browses, opens and downloads.
+    const canEdit = canEditCrm(userRole);
 
     const [search, setSearch] = useState('');
     const [cat, setCat] = useState('all');
@@ -138,10 +146,12 @@ export default function DocumentsTab() {
                         <span style={{ fontWeight: 600, color: T.ink }}>{fmtSize(totalSize)}</span>
                     </div>
                 </div>
-                <button onClick={openUpload}
-                    style={{ background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
-                    ↑ Upload document
-                </button>
+                {canEdit && (
+                    <button onClick={openUpload}
+                        style={{ background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                        ↑ Upload document
+                    </button>
+                )}
             </div>
 
             {/* Toolbar */}
@@ -172,7 +182,7 @@ export default function DocumentsTab() {
                     <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>Loading documents…</div>
                 ) : filtered.length === 0 ? (
                     <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 13, color: T.inkMuted }}>
-                        {documents.length === 0 ? 'No documents yet. Upload your first file to get started.' : 'No documents match your filters.'}
+                        {documents.length === 0 ? (canEdit ? 'No documents yet. Upload your first file to get started.' : 'No documents yet.') : 'No documents match your filters.'}
                     </div>
                 ) : (
                     filtered.map((doc) => (
@@ -188,7 +198,7 @@ export default function DocumentsTab() {
                     onPreview={() => { setMenu(null); previewDoc && previewDoc(menu.doc.id); }}
                     onDownload={() => { setMenu(null); downloadDoc && downloadDoc(menu.doc.id); }}
                     onOpen={() => { setMenu(null); setDocumentRailId && setDocumentRailId(menu.doc.id); }}
-                    onDelete={() => handleDelete(menu.doc)} />
+                    onDelete={canEdit ? () => handleDelete(menu.doc) : undefined} />
             )}
         </div>
     );

@@ -7,12 +7,17 @@
 import React, { useMemo } from 'react';
 import { useApp } from '../../AppContext';
 import { T, fmtSize, FileTypeBadge } from './atoms';
+import { canEditCrm } from '../../utils/roles.js';
 
 export default function AttachmentsStrip({ recordType, recordId, recordName, recordSub }) {
     const {
         documents = [],
         unlinkDocument, setDocumentRailId, setShowUploadRail, setUploadRailContext,
+        userRole,
     } = useApp();
+    // Attach and Remove are offered to whom the server lets write — canEditCrm,
+    // requireWrite's list (state §0.182).
+    const canEdit = canEditCrm(userRole);
 
     const recordLink = { type: recordType, recordId, name: recordName, sub: recordSub };
     const docs = useMemo(
@@ -35,10 +40,12 @@ export default function AttachmentsStrip({ recordType, recordId, recordName, rec
                 <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                     Attachments{docs.length ? ` · ${docs.length}` : ''}
                 </div>
-                <button onClick={attach}
-                    style={{ background: 'none', border: 'none', color: T.info, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: T.sans, padding: 0 }}>
-                    ＋ Attach file
-                </button>
+                {canEdit && (
+                    <button onClick={attach}
+                        style={{ background: 'none', border: 'none', color: T.info, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: T.sans, padding: 0 }}>
+                        ＋ Attach file
+                    </button>
+                )}
             </div>
             {docs.length === 0 ? (
                 <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No attachments.</div>
@@ -51,8 +58,10 @@ export default function AttachmentsStrip({ recordType, recordId, recordName, rec
                             <FileTypeBadge ext={doc.ext} size={24} />
                             <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</span>
                             <span style={{ fontSize: 10, color: T.inkMuted, flexShrink: 0 }}>{fmtSize(doc.sizeKb)}</span>
-                            <button onClick={(e) => { e.stopPropagation(); unlinkHere(doc); }} title="Remove attachment"
-                                style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '1px 3px', flexShrink: 0 }}>×</button>
+                            {canEdit && (
+                                <button onClick={(e) => { e.stopPropagation(); unlinkHere(doc); }} title="Remove attachment"
+                                    style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '1px 3px', flexShrink: 0 }}>×</button>
+                            )}
                         </div>
                     ))}
                 </div>

@@ -152,7 +152,7 @@ test('a download or a preview refused says so; one that gets its link opens it',
 const REPORTS = ['updateDocument', 'removeDocument', 'restoreVersion', 'linkDocument', 'unlinkDocument', 'downloadDoc', 'previewDoc'];
 // it throws, and every call is caught where it is made (scanned below) — the uploads,
 // whose screen holds the file and shows the error beside it, and the reads —
-const THROWS = ['createDocument', 'addDocumentVersion', 'fetchVersions', 'fetchRecordDocuments'];
+const THROWS = ['createDocument', 'addDocumentVersion', 'fetchVersions'];   // fetchRecordDocuments had no caller — removed (§0.182)
 // not a request, or the library's load, which the app's banner reports (dbStatusOf).
 const OTHER = ['documents', 'setDocuments', 'docsLoading', 'docsError', 'loadDocuments'];
 

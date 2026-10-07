@@ -88,16 +88,6 @@ export function useDocuments(_deps = {}) {
         }
     }, []);
 
-    // ── Reverse view: a single record's linked docs (Account/Opp/Contact/Task/Activity) ──
-    const fetchRecordDocuments = useCallback(async (recordType, recordId) => {
-        const params = new URLSearchParams({ linkedTo: recordId });
-        if (recordType) params.set('type', recordType);
-        const r = await dbFetch(`${DOCS_FN}?${params.toString()}`);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const data = await r.json();
-        return Array.isArray(data.documents) ? data.documents : [];
-    }, []);
-
     // ── Version history for one document (detail rail) ──────────────────────
     // NOTE: backed by GET ?action=versions&id= — that endpoint ships in the
     // documents.mjs update that accompanies the Documents UI batch.
@@ -194,7 +184,6 @@ export function useDocuments(_deps = {}) {
         documents, setDocuments,
         docsLoading, docsError,
         loadDocuments,
-        fetchRecordDocuments,
         fetchVersions,
         createDocument,
         addDocumentVersion,

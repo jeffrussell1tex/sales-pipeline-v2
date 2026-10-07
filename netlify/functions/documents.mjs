@@ -110,6 +110,19 @@ function canSee(doc, userId /* , userRole */) {
   return false; // 'private' and not owner
 }
 
+// The document a write acts on — in this org, and only when the caller may see it
+// (state §0.182). Every read asked canSee; no write did, so a document a user could not
+// see could still be changed, versioned, restored, linked, unlinked or deleted by its id.
+// Returns { doc }, or { refusal } — the answer to send, in the reads' own words.
+async function writableDoc(id, orgId, userId, userRole, headers, missing = 'Not found') {
+  if (!id) return { refusal: { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) } };
+  const [doc] = await db.select().from(documents)
+    .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
+  if (!doc) return { refusal: { statusCode: 404, headers, body: JSON.stringify({ error: missing }) } };
+  if (!canSee(doc, userId, userRole)) return { refusal: { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden' }) } };
+  return { doc };
+}
+
 // Attach each document's links (one query for the whole page, grouped in JS).
 async function withLinks(orgId, docs) {
   if (!docs.length) return [];
@@ -141,7 +154,8 @@ export const handler = async (event) => {
   if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
   const { userId, orgId, userRole } = auth;
 
-  // canSee() below governs read visibility only; mutations were entirely ungated.
+  // The role gate for every write; then canSee() decides each read and — through
+  // writableDoc() — each write to an existing document (state §0.182).
   const forbidden = requireWrite(auth, event, headers);
   if (forbidden) return forbidden;
 
@@ -225,10 +239,15 @@ export const handler = async (event) => {
 
         let v = 1;
         if (kind === 'version') {
-          const [doc] = await db.select().from(documents)
-            .where(and(eq(documents.id, documentId), eq(documents.orgId, orgId)));
-          if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Document not found' }) };
+          const { doc, refusal } = await writableDoc(documentId, orgId, userId, userRole, headers, 'Document not found');
+          if (refusal) return refusal;
           v = (doc.version || 1) + 1;
+        } else {
+          // A new document's id is new (state §0.182): an id a document already holds —
+          // this org's or another's — is refused, so an upload URL is never minted for an
+          // existing document's version-1 object, which a PUT to it would overwrite.
+          const [taken] = await db.select({ id: documents.id }).from(documents).where(eq(documents.id, documentId));
+          if (taken) return { statusCode: 409, headers, body: JSON.stringify({ error: 'That document id is already in use.' }) };
         }
         const key = buildKey(orgId, documentId, v, filename);
         const uploadUrl = await presignPut(key, contentType || 'application/octet-stream');
@@ -279,9 +298,8 @@ export const handler = async (event) => {
       // 3) Append a new version
       if (action === 'new-version') {
         const { id, storageKey, sizeKb, contentType, note } = data;
-        const [doc] = await db.select().from(documents)
-          .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
-        if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+        const { doc, refusal } = await writableDoc(id, orgId, userId, userRole, headers);
+        if (refusal) return refusal;
         const v = (doc.version || 1) + 1;
         if (!keyIs(storageKey, orgId, id, v)) return { statusCode: 400, headers, body: JSON.stringify({ error: 'storageKey/org mismatch' }) };
         const now = new Date();
@@ -300,9 +318,8 @@ export const handler = async (event) => {
       // 4) Restore a prior version (creates a NEW version pointing at the old blob)
       if (action === 'restore-version') {
         const { id, v: targetV } = data;
-        const [doc] = await db.select().from(documents)
-          .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
-        if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+        const { doc, refusal } = await writableDoc(id, orgId, userId, userRole, headers);
+        if (refusal) return refusal;
         const [src] = await db.select().from(documentVersions)
           .where(and(eq(documentVersions.orgId, orgId), eq(documentVersions.documentId, id), eq(documentVersions.v, Number(targetV))));
         if (!src) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Version not found' }) };
@@ -323,9 +340,8 @@ export const handler = async (event) => {
       // 5) Add one or more links to an existing document
       if (action === 'link') {
         const { id, links } = data;
-        const [doc] = await db.select().from(documents)
-          .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
-        if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+        const { doc, refusal } = await writableDoc(id, orgId, userId, userRole, headers);
+        if (refusal) return refusal;
         const inserted = await insertLinks(orgId, id, links);
         if (inserted.length) await auditAs(orgId, userId, { action: 'document.linked', entityType: 'document', entityId: id, entityName: doc.name, detail: inserted.map(l => `${l.type} ${l.name || l.recordId}`).join(', ').slice(0, 300) });
         return { statusCode: 200, headers, body: JSON.stringify({ links: inserted }) };
@@ -338,6 +354,8 @@ export const handler = async (event) => {
     if (event.httpMethod === 'PUT') {
       const data = JSON.parse(event.body || '{}');
       if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+      const { refusal } = await writableDoc(data.id, orgId, userId, userRole, headers);
+      if (refusal) return refusal;
       const set = { updatedAt: new Date() };
       if ('name' in data) set.name = data.name;
       if ('category' in data) set.category = data.category;
@@ -356,6 +374,14 @@ export const handler = async (event) => {
       if (action === 'link') {
         const linkId = qs.linkId || (JSON.parse(event.body || '{}').linkId);
         if (!linkId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'linkId required' }) };
+        // The link's document must be one the caller may see (state §0.182); a link that
+        // is not there is not refused — it is unlinked already.
+        const [link] = await db.select({ documentId: documentLinks.documentId }).from(documentLinks)
+          .where(and(eq(documentLinks.id, linkId), eq(documentLinks.orgId, orgId)));
+        if (link) {
+          const { refusal } = await writableDoc(link.documentId, orgId, userId, userRole, headers);
+          if (refusal) return refusal;
+        }
         const [unlinked] = await db.delete(documentLinks).where(and(eq(documentLinks.id, linkId), eq(documentLinks.orgId, orgId)))
           .returning({ documentId: documentLinks.documentId, recordType: documentLinks.recordType, recordName: documentLinks.recordName, recordId: documentLinks.recordId });
         if (unlinked) await auditAs(orgId, userId, { action: 'document.unlinked', entityType: 'document', entityId: unlinked.documentId, entityName: null, detail: `${unlinked.recordType} ${unlinked.recordName || unlinked.recordId}` });
@@ -363,8 +389,10 @@ export const handler = async (event) => {
       }
       const id = qs.id;
       if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
-      const [doomed] = await db.select({ name: documents.name, version: documents.version }).from(documents)
-        .where(and(eq(documents.id, id), eq(documents.orgId, orgId)));
+      // Only a document the caller may see is deleted (state §0.182); one that is not
+      // there is not refused — it is deleted already, as before.
+      const { doc: doomed, refusal } = await writableDoc(id, orgId, userId, userRole, headers);
+      if (refusal && refusal.statusCode !== 404) return refusal;
       // best-effort blob cleanup (don't fail the row delete on storage error)
       try {
         const vers = await db.select().from(documentVersions)

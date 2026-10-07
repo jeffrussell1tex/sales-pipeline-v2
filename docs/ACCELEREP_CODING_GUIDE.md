@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b75** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b76** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3907,3 +3907,12 @@ through `dbFetch`.
 2. **A screen that waits for the answer acts on it** — it closes on success (the rail when its document leaves the library) and stays on a refusal (the link picker, with the choice).
 3. **A record is named by the fields its table has** — a task's `title`, an activity's `subject`, a deal's `arr`; tests/document-link-names.test.mjs reads db/schema.ts. A field no table has reads as undefined and the screen shows its fallback, quietly.
 4. **A yyyy-mm-dd day is read at local noon wherever it is shown** (`parseLocalDate`) — the documents' formats with the rest of the app (dateLocal.js).
+
+## 18b76. A Write Asks What Its Read Asks; A Control Is Offered To The Roles That Write (hard rule)
+
+**Origin (§0.182, 7 Oct 2026 — §0.181's found (a)–(d)).** documents.mjs read every document through `canSee` and wrote none through it: a document a user could not see could still be changed, versioned, restored, linked, unlinked or deleted by its id, and an upload URL could be minted for an existing document's version-1 object. And every document screen offered every edit to roles the server refuses. §18b72 (a control is offered only where it acts) is its kin for views, §18b45 (a read scope is not a write authority) for the CRM records.
+
+1. **A write to a record the caller reads through a rule reads it through that rule first** — documents.mjs's `writableDoc`: in this org, and `canSee` — and answers in the read's words (403 Forbidden, 404 Not found). A delete or an unlink of nothing is done, not refused. tests/integration/documents-access.itest.mjs proves it as a rep, an Admin (no bypass, on reads or writes), the owner and a named person; tests/document-access.test.mjs pins each branch.
+2. **A key the server signs names nothing that exists** — an upload URL for a new document is refused an id a document holds, this org's or another's.
+3. **A screen offers an edit to the roles the server lets write** — `canEditCrm`, requireWrite's list; a reader sees the record read-only (its pill, its text, a disabled control), never a control the server refuses. tests/document-access.test.mjs parses every document screen: each reference in the markup to a write, or to a function that reaches one, sits under `canEdit`.
+4. **A view follows what its write moved** — the rail's version history reloads when the version moves, keeping its list while it does.

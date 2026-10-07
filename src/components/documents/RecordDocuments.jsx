@@ -9,14 +9,19 @@ import { useApp } from '../../AppContext';
 import { T, fmtSize, fmtDate, FileTypeBadge, CategoryPill, baseName } from './atoms';
 import DocumentPicker from './DocumentPicker';
 import { validateFile } from '../../utils/documentsStorage';
+import { canEditCrm } from '../../utils/roles.js';
 
 export default function RecordDocuments({ recordType, recordId, recordName, recordSub }) {
     const {
         documents = [],
         createDocument, linkDocument, unlinkDocument,
         setDocumentRailId, setShowUploadRail, setUploadRailContext,
-        downloadDoc,
+        downloadDoc, userRole,
     } = useApp();
+    // Upload, Link existing, a dropped file and Unlink are offered to whom the server lets
+    // write — canEditCrm, requireWrite's list (state §0.182); a reader sees the list and
+    // downloads.
+    const canEdit = canEditCrm(userRole);
 
     const [drag, setDrag] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -77,10 +82,10 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
 
     return (
         <div
-            onDragEnter={(e) => { e.preventDefault(); dragDepth.current += 1; setDrag(true); }}
-            onDragOver={(e) => e.preventDefault()}
-            onDragLeave={() => { dragDepth.current -= 1; if (dragDepth.current <= 0) setDrag(false); }}
-            onDrop={onDrop}
+            onDragEnter={canEdit ? (e) => { e.preventDefault(); dragDepth.current += 1; setDrag(true); } : undefined}
+            onDragOver={canEdit ? (e) => e.preventDefault() : undefined}
+            onDragLeave={canEdit ? () => { dragDepth.current -= 1; if (dragDepth.current <= 0) setDrag(false); } : undefined}
+            onDrop={canEdit ? onDrop : undefined}
             style={{ position: 'relative', fontFamily: T.sans }}>
 
             {/* Header */}
@@ -88,16 +93,18 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
                 <div style={{ fontSize: 10, fontWeight: 700, color: T.gold, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                     Documents · {docs.length} file{docs.length === 1 ? '' : 's'}
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => setShowPicker(true)}
-                        style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.inkMid, borderRadius: T.r, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
-                        🔗 Link existing
-                    </button>
-                    <button onClick={openUpload}
-                        style={{ background: T.ink, border: 'none', color: '#f5f1eb', borderRadius: T.r, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
-                        ↑ Upload
-                    </button>
-                </div>
+                {canEdit && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => setShowPicker(true)}
+                            style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.inkMid, borderRadius: T.r, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                            🔗 Link existing
+                        </button>
+                        <button onClick={openUpload}
+                            style={{ background: T.ink, border: 'none', color: '#f5f1eb', borderRadius: T.r, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                            ↑ Upload
+                        </button>
+                    </div>
+                )}
             </div>
 
             {error && (
@@ -105,9 +112,11 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
             )}
 
             {/* Drag hint */}
-            <div style={{ border: `1px dashed ${T.border}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: T.inkMuted, textAlign: 'center' }}>
-                {busy ? 'Uploading…' : 'Drag files here to attach them to this record'}
-            </div>
+            {canEdit && (
+                <div style={{ border: `1px dashed ${T.border}`, borderRadius: T.r, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: T.inkMuted, textAlign: 'center' }}>
+                    {busy ? 'Uploading…' : 'Drag files here to attach them to this record'}
+                </div>
+            )}
 
             {/* List */}
             {docs.length === 0 ? (
@@ -131,8 +140,10 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
                             </div>
                             <button onClick={(e) => { e.stopPropagation(); downloadDoc && downloadDoc(doc.id); }} title="Download"
                                 style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, cursor: 'pointer', fontSize: 12, padding: '3px 7px', flexShrink: 0 }}>↓</button>
-                            <button onClick={(e) => { e.stopPropagation(); unlinkHere(doc); }} title="Unlink from this record"
-                                style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '2px 4px', flexShrink: 0 }}>×</button>
+                            {canEdit && (
+                                <button onClick={(e) => { e.stopPropagation(); unlinkHere(doc); }} title="Unlink from this record"
+                                    style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '2px 4px', flexShrink: 0 }}>×</button>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -147,12 +158,14 @@ export default function RecordDocuments({ recordType, recordId, recordName, reco
                 </div>
             )}
 
-            <DocumentPicker
-                open={showPicker}
-                excludeIds={docs.map((d) => d.id)}
-                onConfirm={linkExisting}
-                onClose={() => setShowPicker(false)}
-            />
+            {canEdit && (
+                <DocumentPicker
+                    open={showPicker}
+                    excludeIds={docs.map((d) => d.id)}
+                    onConfirm={linkExisting}
+                    onClose={() => setShowPicker(false)}
+                />
+            )}
         </div>
     );
 }

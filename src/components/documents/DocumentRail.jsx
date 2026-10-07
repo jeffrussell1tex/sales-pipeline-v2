@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../AppContext';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
+import { canEditCrm } from '../../utils/roles.js';
 import {
     T, fmtSize, fmtDateLong, fileMeta, FileTypeBadge, CategoryPill,
     LinkChip, VisibilityControl, CATEGORIES,
@@ -41,6 +42,7 @@ export default function DocumentRail() {
         setShowUploadRail, setUploadRailContext,
         setShowDocLinkPicker, setDocLinkPickerContext,
         showUploadRail, showDocLinkPicker, confirmModal, promptModal,
+        userRole,
     } = useApp();
 
     const doc = documentRailId ? (documents.find((d) => d.id === documentRailId) || null) : null;
@@ -52,10 +54,19 @@ export default function DocumentRail() {
 
     const close = useCallback(() => setDocumentRailId && setDocumentRailId(null), [setDocumentRailId]);
 
-    // Load version history + seed the editable note whenever the open doc changes.
+    // Seed the editable note, and empty the last document's history, when a document opens.
     useEffect(() => {
         if (!doc) return;
         setNote(doc.note || '');
+        setVersions([]);
+    }, [doc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Load the version history when a document opens — and again when its version moves:
+    // a restore or a new version adds one on the server, and the list stayed as it opened
+    // until the rail was reopened, no row Current and the new version missing (state
+    // §0.182). The list on screen stays while it refreshes.
+    useEffect(() => {
+        if (!doc) return;
         let cancelled = false;
         setLoadingVersions(true);
         setVersionsFailed(false);
@@ -65,7 +76,7 @@ export default function DocumentRail() {
             .catch(() => { if (!cancelled) { setVersions([]); setVersionsFailed(true); } })
             .finally(() => { if (!cancelled) setLoadingVersions(false); });
         return () => { cancelled = true; };
-    }, [doc?.id, fetchVersions]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [doc?.id, doc?.version, fetchVersions]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Close if the doc disappears (deleted elsewhere).
     useEffect(() => { if (documentRailId && !doc) close(); }, [documentRailId, doc, close]);
@@ -80,6 +91,10 @@ export default function DocumentRail() {
     if (!doc) return null;
 
     const m = fileMeta(doc.ext);
+    // Every edit here is offered to whom the server lets write — canEditCrm, requireWrite's
+    // list (state §0.182). A ReadOnly user, a Technician or a Dispatcher saw each one and
+    // was refused; they see the document, its links and its history, and download it.
+    const canEdit = canEditCrm(userRole);
     // The edits here are sent and left: each says in the app's message when it is refused
     // (useDocuments, state §0.181) — a refused description stays as typed, to save again.
     const saveNote = () => { if ((note || '') !== (doc.note || '')) updateDocument && updateDocument(doc.id, { note }); };
@@ -129,20 +144,20 @@ export default function DocumentRail() {
                 <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: T.surface2, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
                     {actionBtn('↓ Download', () => downloadDoc && downloadDoc(doc.id), true)}
                     {actionBtn('⤢ Preview', () => previewDoc && previewDoc(doc.id))}
-                    {actionBtn('＋ New version', onNewVersion)}
+                    {canEdit && actionBtn('＋ New version', onNewVersion)}
                 </div>
 
                 {/* Body */}
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '14px 18px' }}>
 
                     {/* Linked to */}
-                    <SectionHeading label={`Linked to · ${(doc.links || []).length} records`} action={<button style={linkText} onClick={onAddLink}>＋ Add link</button>} />
+                    <SectionHeading label={`Linked to · ${(doc.links || []).length} records`} action={canEdit ? <button style={linkText} onClick={onAddLink}>＋ Add link</button> : null} />
                     {(doc.links || []).length === 0 ? (
                         <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>Not linked to any records yet.</div>
                     ) : (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                             {(doc.links || []).map((l) => (
-                                <LinkChip key={l.id || `${l.type}:${l.recordId}`} link={l} onRemove={(lk) => unlinkDocument && unlinkDocument(doc.id, lk.id)} />
+                                <LinkChip key={l.id || `${l.type}:${l.recordId}`} link={l} onRemove={canEdit ? (lk) => unlinkDocument && unlinkDocument(doc.id, lk.id) : undefined} />
                             ))}
                         </div>
                     )}
@@ -152,10 +167,12 @@ export default function DocumentRail() {
                     <SectionHeading label="Details" />
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
                         <DetailField label="Category">
-                            <select value={doc.category || 'Note'} onChange={(e) => updateDocument && updateDocument(doc.id, { category: e.target.value })}
-                                style={{ padding: '4px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, background: T.surface, color: T.ink, fontFamily: T.sans, cursor: 'pointer' }}>
-                                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                            </select>
+                            {canEdit ? (
+                                <select value={doc.category || 'Note'} onChange={(e) => updateDocument && updateDocument(doc.id, { category: e.target.value })}
+                                    style={{ padding: '4px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, background: T.surface, color: T.ink, fontFamily: T.sans, cursor: 'pointer' }}>
+                                    {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            ) : (doc.category ? <CategoryPill category={doc.category} /> : '—')}
                         </DetailField>
                         <DetailField label="Owner">{doc.ownerName || '—'}</DetailField>
                         <DetailField label="Uploaded">{fmtDateLong(doc.uploadedAt)}</DetailField>
@@ -166,17 +183,23 @@ export default function DocumentRail() {
 
                     {/* Visibility */}
                     <SectionHeading label="Visibility" />
-                    <VisibilityControl value={doc.visibility || doc.visibilityKind || 'team'} onChange={(v) => updateDocument && updateDocument(doc.id, { visibility: v })} />
+                    <VisibilityControl value={doc.visibility || doc.visibilityKind || 'team'} disabled={!canEdit} onChange={(v) => updateDocument && updateDocument(doc.id, { visibility: v })} />
 
                     {/* Description */}
                     <SectionHeading label="Description" />
-                    <textarea value={note} onChange={(e) => setNote(e.target.value)} onBlur={saveNote}
-                        placeholder="Add a description…" rows={3}
-                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', resize: 'vertical', outline: 'none' }} />
+                    {canEdit ? (
+                        <textarea value={note} onChange={(e) => setNote(e.target.value)} onBlur={saveNote}
+                            placeholder="Add a description…" rows={3}
+                            style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', resize: 'vertical', outline: 'none' }} />
+                    ) : doc.note ? (
+                        <div style={{ fontSize: 13, color: T.ink, whiteSpace: 'pre-wrap' }}>{doc.note}</div>
+                    ) : (
+                        <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic' }}>No description.</div>
+                    )}
 
                     {/* Version history */}
-                    <SectionHeading label={`Version history${versions.length ? ` · ${versions.length} versions` : ''}`} action={<button style={linkText} onClick={onNewVersion}>↑ Upload new version</button>} />
-                    {loadingVersions ? (
+                    <SectionHeading label={`Version history${versions.length ? ` · ${versions.length} versions` : ''}`} action={canEdit ? <button style={linkText} onClick={onNewVersion}>↑ Upload new version</button> : null} />
+                    {loadingVersions && versions.length === 0 ? (
                         <div style={{ fontSize: 12, color: T.inkMuted }}>Loading…</div>
                     ) : versionsFailed ? (
                         <div style={{ fontSize: 12, color: T.inkMuted }}>Version history could not be loaded.</div>
@@ -199,7 +222,7 @@ export default function DocumentRail() {
                                     </div>
                                     <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                                         <button onClick={() => downloadDoc && downloadDoc(doc.id, ver.v)} title="Download this version" style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, cursor: 'pointer', fontSize: 11, padding: '3px 7px', fontFamily: T.sans }}>↓</button>
-                                        {!isCurrent && <button onClick={() => restoreVersion && restoreVersion(doc.id, ver.v)} title="Restore this version" style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, cursor: 'pointer', fontSize: 11, padding: '3px 7px', fontFamily: T.sans }}>↺</button>}
+                                        {canEdit && !isCurrent && <button onClick={() => restoreVersion && restoreVersion(doc.id, ver.v)} title="Restore this version" style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, cursor: 'pointer', fontSize: 11, padding: '3px 7px', fontFamily: T.sans }}>↺</button>}
                                     </div>
                                 </div>
                             );
@@ -207,11 +230,13 @@ export default function DocumentRail() {
                     )}
 
                     {/* Danger */}
-                    <div style={{ marginTop: 22, paddingTop: 14, borderTop: `1px solid ${T.border}` }}>
-                        <button onClick={onDelete} style={{ background: 'none', border: `1px solid ${T.danger}`, color: T.danger, borderRadius: T.r, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
-                            Delete document
-                        </button>
-                    </div>
+                    {canEdit && (
+                        <div style={{ marginTop: 22, paddingTop: 14, borderTop: `1px solid ${T.border}` }}>
+                            <button onClick={onDelete} style={{ background: 'none', border: `1px solid ${T.danger}`, color: T.danger, borderRadius: T.r, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                Delete document
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </>
