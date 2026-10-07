@@ -219,7 +219,7 @@ const StatusPickerPopover = ({ anchor, onPick, onClose }) => {
     const ref = useRef(null);
     useEffect(() => {
         const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-        const onKey  = (e) => { if (e.key === 'Escape') onClose(); };
+        const onKey  = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
         document.addEventListener('mousedown', onDown);
         document.addEventListener('keydown', onKey);
         return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
@@ -270,7 +270,7 @@ const RepPickerPopover = ({ reps, anchor, onPick, onClose, onClear }) => {
     const ref = useRef(null);
     useEffect(() => {
         const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-        const onKey  = (e) => { if (e.key === 'Escape') onClose(); };
+        const onKey  = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
         document.addEventListener('mousedown', onDown);
         document.addEventListener('keydown', onKey);
         return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };

@@ -90,5 +90,6 @@ test('Escape: a handler that dealt with it marks it, App leaves a marked one alo
     }
     assert.equal(esc.split('setConfirmModal(null)').length - 1, 1, 'once');
     const lead = read('src/components/modals/LeadModal.jsx');
-    assert.match(lead, /if \(e\.key !== 'Escape'\) return;\s*e\.preventDefault\(\);/, 'the lead form marks the Escape it handles');
+    // And leaves one a layer above took alone (§0.180, escape-layers.test.mjs).
+    assert.match(lead, /if \(e\.key !== 'Escape' \|\| e\.defaultPrevented\) return;[^\n]*\s*e\.preventDefault\(\);/, 'the lead form marks the Escape it handles');
 });

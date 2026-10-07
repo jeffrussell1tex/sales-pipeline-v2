@@ -84,7 +84,14 @@ test('the host is rendered once, from ModalLayer, and decides Edit through canEd
     assert.ok(dlg.includes('const onEdit = () => { setViewingActivity(null); setEditingActivity(a); setShowActivityModal(true); };'), 'Edit hands the row to the existing editor');
     assert.ok(dlg.includes("whiteSpace: 'pre-wrap'"), 'the body keeps its line breaks');
     assert.ok(dlg.includes('if (!viewingActivity) return null;'));
-    assert.ok(dlg.includes('zIndex: 11000'), 'above the rails (10999)');
+    // Above every record rail, the task rail's 11003 among them (the pin read 11000, "above
+    // the rails (10999)", and the task rail opened it from under itself), and under the
+    // documents (state §0.180).
+    const z = Number((dlg.match(/zIndex: (\d+), background: 'rgba\(42,38,34,0\.40\)'/) || [])[1]);
+    const railTop = Math.max(...['TaskRail', 'ContactRail', 'AccountRail', 'ActivityRail']
+        .flatMap((f) => [...read(`src/components/rails/${f}.jsx`).matchAll(/zIndex: (\d{4,})/g)].map((m) => Number(m[1]))));
+    assert.ok(railTop >= 11003 && z > railTop, `above every rail (${railTop}); it is ${z}`);
+    assert.ok(z < 11100, 'under the document rail');
     assert.ok(!dlg.includes('dbFetch'), 'a viewer reads context; it fetches nothing');
 });
 

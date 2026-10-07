@@ -15,7 +15,7 @@ export default function LostReasonModal({ oppName, onSave, onSkip }) {
     // Esc closes the modal (routes to the existing safe exit — save is skipped,
     // the deal still becomes Closed Lost with no reason recorded)
     useEffect(() => {
-        const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); onSkip(); } };
+        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); onSkip(); } };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [onSkip]);

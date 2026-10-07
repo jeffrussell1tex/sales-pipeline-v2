@@ -204,7 +204,7 @@ export const AdminView = ({ activeOrgId = null, settings, setSettings, currentUs
             const btn  = document.getElementById('na-btn-'  + naMenuOpen);
             if (menu && !menu.contains(e.target) && btn && !btn.contains(e.target)) setNaMenuOpen(null);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setNaMenuOpen(null); };
+        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) setNaMenuOpen(null); };
         document.addEventListener('mousedown', onDoc);
         document.addEventListener('keydown',   onKey);
         return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };

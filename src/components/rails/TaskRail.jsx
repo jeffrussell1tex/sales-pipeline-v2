@@ -324,7 +324,8 @@ export default function TaskRail() {
         // Escape first; without this guard the rail's own listener closed too. The same
         // for the app's confirm and prompt (state §0.178): the task's Delete asks over
         // this rail, and a document's Delete over any rail.
-        const onKey = (e) => { if (e.key === 'Escape' && !isEditing && !viewingActivity && !confirmModal && !promptModal) closeRail(); };
+        // An Escape a layer above took — marked, as a document's is (§0.180) — is left alone.
+        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && !isEditing && !viewingActivity && !confirmModal && !promptModal) closeRail(); };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
     }, [isOpen, isEditing, viewingActivity, confirmModal, promptModal]); // eslint-disable-line react-hooks/exhaustive-deps

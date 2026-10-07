@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b73** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b74** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3889,3 +3889,12 @@ through `dbFetch`.
 2. **A part changing under a fixed whole is fine** — `border: 'none'` beside a changing `borderBottom` draws as meant.
 3. tests/border-sides.test.mjs parses every style object under src and fails a changing border property that overlaps one it is not a part of. Style objects merged by spreading are not followed: a spread that brings a side under a changing shorthand needs the same care.
 4. **A React warning in the console is read, not skipped** — this one named the bug before anyone saw it.
+
+## 18b74. Escape Closes The Layer On Top, And Only That One — A Layer Above The Rails Takes It First And Marks It; Every Listener Leaves A Marked One Alone (hard rule)
+
+**Origin (§0.180, 7 Oct 2026 — §0.178's found (a)).** The document layers open above the record rails and the deal modal and had no Escape of their own: an Escape over a document closed the rail or the modal under it and left the document open. Fourteen other listeners acted on an Escape a layer above had already handled, and the activity viewer opened under the task rail that opens it. §18b70.5 (a handler marks the Escape it deals with) and §18b71.7 (a rail yields to the dialogs) are its first two steps.
+
+1. **A layer that opens above the rails takes its Escape first** — `useEscapeLayer`: on document, in the capture phase, before every rail's listener (document, bubble) and App's (window). It marks the Escape it takes, and lets it pass unmarked while a layer above it is open (the app's confirm or prompt, another document layer).
+2. **Every keydown listener that reacts to Escape checks `e.defaultPrevented`.** tests/escape-layers.test.mjs parses every one under src.
+3. **A layer closes on Escape as it closes from its backdrop** — the document rail's description saves (the focused field blurred, so its own save runs); the upload rail does not close mid-upload; and every control that closes a layer keeps the same rule (the upload rail's ×).
+4. **The z-order is the Escape order.** A layer Escape closes first sits above what it closes after: the activity viewer above every record rail (tests/activity-view.test.mjs reads the rails' z-indexes).

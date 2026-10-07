@@ -335,7 +335,7 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
     useEffect(() => {
         const isDirty = Object.values(form).some(v => v !== '');
         const handler = e => {
-            if (e.key !== 'Escape') return;
+            if (e.key !== 'Escape' || e.defaultPrevented) return;   // one a layer above took is theirs (§0.180)
             e.preventDefault();   // handled here — App's Escape leaves it alone (state §0.177)
             if (isDirty) {
                 showConfirm('Discard this lead?', onClose);

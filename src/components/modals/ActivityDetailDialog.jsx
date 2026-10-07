@@ -31,8 +31,10 @@ export default function ActivityDetailDialog({ activity, contactName = '', accou
     const envelope = emailEnvelopeOf(activity);   // item 27: From / To / Cc / Message-ID, when the row has them
     const type = activity?.type || 'Note';
     const links = [contactName, accountName, dealName].filter(Boolean);
+    // Above every record rail — the task rail (11003) opens it from its history too, and
+    // at 11000 it opened under that rail — and under the documents (11100+; state §0.180).
     return (
-        <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(42,38,34,0.40)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: T.sans }}>
+        <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 11010, background: 'rgba(42,38,34,0.40)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: T.sans }}>
             <div role="dialog" aria-modal="true" aria-label={`${type}${subject ? ': ' + subject : ''}`} onClick={e => e.stopPropagation()}
                 style={{ width: isMobile ? '100%' : 600, maxWidth: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, boxShadow: '0 18px 48px rgba(42,38,34,0.22)' }}>
                 <div style={{ padding: '14px 18px 12px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'flex-start', gap: 10, flexShrink: 0 }}>

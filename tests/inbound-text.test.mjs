@@ -60,7 +60,7 @@ test('email-inbound stores through the pure module, and the rails give the viewe
     for (const f of ['src/components/rails/ContactRail.jsx', 'src/components/rails/AccountRail.jsx', 'src/components/rails/TaskRail.jsx']) {
         const r = code(read(f));
         // The app's confirm and prompt joined the viewer in §0.178 (one-delete-path.test.mjs).
-        assert.ok(r.includes("const onKey = (e) => { if (e.key === 'Escape' && !isEditing && !viewingActivity && !confirmModal && !promptModal) closeRail(); };"), f + ': the rail yields Escape to the viewer');
+        assert.ok(r.includes("const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && !isEditing && !viewingActivity && !confirmModal && !promptModal) closeRail(); };"), f + ': the rail yields Escape to the viewer');
         assert.ok(r.includes('}, [isOpen, isEditing, viewingActivity, confirmModal, promptModal]);'), f + ': and re-binds when the viewer opens or closes');
     }
 });

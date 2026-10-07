@@ -1,11 +1,12 @@
 // src/components/documents/DocumentRail.jsx
 // Document detail rail (handoff artboard 1). Uses the production rail shell
-// (dark T.ink header, width 480, backdrop @ z10998 / panel @ z10999) so it sits
-// natively beside ContactRail / AccountRail. Reads its open-state + handlers
-// from useApp(); mounted once in ModalLayer.
+// (dark T.ink header, width 480, backdrop @ z11100 / panel @ z11101 — above every
+// record rail and the deal modal). Reads its open-state + handlers from useApp();
+// mounted once in ModalLayer. Escape closes it, not what is under it (state §0.180).
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../AppContext';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import {
     T, fmtSize, fmtDateLong, fileMeta, FileTypeBadge, CategoryPill,
     LinkChip, VisibilityControl, CATEGORIES,
@@ -39,6 +40,7 @@ export default function DocumentRail() {
         downloadDoc, previewDoc, unlinkDocument,
         setShowUploadRail, setUploadRailContext,
         setShowDocLinkPicker, setDocLinkPickerContext,
+        showUploadRail, showDocLinkPicker, confirmModal, promptModal,
     } = useApp();
 
     const doc = documentRailId ? (documents.find((d) => d.id === documentRailId) || null) : null;
@@ -64,6 +66,13 @@ export default function DocumentRail() {
 
     // Close if the doc disappears (deleted elsewhere).
     useEffect(() => { if (documentRailId && !doc) close(); }, [documentRailId, doc, close]);
+
+    // Escape closes this rail, not the record under it (state §0.180) — once a layer above
+    // it (an upload, the link picker, the app's confirm or prompt) is closed. The focused
+    // field is blurred first, so the description saves as it does when the backdrop is
+    // clicked (its own blur).
+    useEscapeLayer(!!doc, () => { document.activeElement?.blur?.(); close(); },
+        !!(showUploadRail || showDocLinkPicker || confirmModal || promptModal));
 
     if (!doc) return null;
 

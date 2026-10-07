@@ -230,7 +230,8 @@ export default function ActivityRail() {
         if (!isOpen) return;
         // Not under the app's confirm or prompt, which App.jsx closes first (state §0.178):
         // a document's Delete asks over this rail.
-        const onKey = (e) => { if (e.key === 'Escape' && !confirmModal && !promptModal) closeRail(); };
+        // An Escape a layer above took — marked, as a document's is (§0.180) — is left alone.
+        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && !confirmModal && !promptModal) closeRail(); };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
     }, [isOpen, confirmModal, promptModal]); // eslint-disable-line react-hooks/exhaustive-deps

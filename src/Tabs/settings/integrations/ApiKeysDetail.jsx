@@ -223,7 +223,7 @@ const DocsPopoverB = ({ keys = [], onClose, btnRef }) => {
     }, []);
 
     React.useEffect(() => {
-        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
     }, []);

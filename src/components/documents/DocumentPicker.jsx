@@ -5,10 +5,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../AppContext';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { T, fmtSize, fmtDate, FileTypeBadge, CategoryPill } from './atoms';
 
 export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClose }) {
-    const { documents = [] } = useApp();
+    const { documents = [], confirmModal, promptModal } = useApp();
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState({}); // id -> doc
 
@@ -19,6 +20,10 @@ export default function DocumentPicker({ open, excludeIds = [], onConfirm, onClo
         const q = search.trim().toLowerCase();
         return documents.filter((d) => !exclude.has(d.id) && (!q || (d.name || '').toLowerCase().includes(q)));
     }, [documents, exclude, search]);
+
+    // Escape closes the picker as its backdrop does (state §0.180) — once the app's confirm
+    // or prompt above it is closed.
+    useEscapeLayer(open, () => onClose && onClose(), !!(confirmModal || promptModal));
 
     if (!open) return null;
 

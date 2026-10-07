@@ -187,7 +187,7 @@ const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
     });
     React.useEffect(() => {
         const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target) && btnRef?.current && !btnRef.current.contains(e.target)) onClose(); };
-        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
         document.addEventListener('mousedown', onDoc);
         document.addEventListener('keydown', onKey);
         return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };

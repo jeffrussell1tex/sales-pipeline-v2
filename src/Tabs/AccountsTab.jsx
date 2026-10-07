@@ -184,7 +184,7 @@ function SubAccountDrawer({ parentAccount, subAccounts, contacts, onClose, onVie
 
     // Close on Escape
     React.useEffect(() => {
-        const handler = e => { if (e.key === 'Escape') onClose(); };
+        const handler = e => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
     }, [onClose]);

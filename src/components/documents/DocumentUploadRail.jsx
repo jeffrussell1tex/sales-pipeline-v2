@@ -9,6 +9,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../AppContext';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import {
     T, fmtSize, baseName, fileMeta, FileTypeBadge, CategoryPill, LinkChip,
     VisibilityControl, CATEGORIES,
@@ -22,6 +23,7 @@ export default function DocumentUploadRail() {
         showUploadRail, setShowUploadRail, uploadRailContext, setUploadRailContext,
         createDocument, addDocumentVersion,
         setShowDocLinkPicker, setDocLinkPickerContext,
+        showDocLinkPicker, confirmModal, promptModal,
     } = useApp();
 
     const ctx = uploadRailContext || {};
@@ -48,14 +50,20 @@ export default function DocumentUploadRail() {
         }
     }, [showUploadRail]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    if (!showUploadRail) return null;
-
     const close = () => {
         setShowUploadRail(false);
         setUploadRailContext && setUploadRailContext(null);
         setFile(null); setName(''); setCategory('Contract'); setLinks([]); setVisibility('team');
         setNote(''); setProgress(null); setUploading(false); setError(null); setDrag(false);
     };
+
+    // Escape closes this rail as its backdrop and Cancel do — not while a file is uploading —
+    // once the link picker or the app's confirm or prompt above it is closed (state §0.180).
+    // An Escape mid-upload is still taken, so nothing under the rail closes.
+    useEscapeLayer(showUploadRail, () => { if (!uploading) close(); },
+        !!(showDocLinkPicker || confirmModal || promptModal));
+
+    if (!showUploadRail) return null;
 
     const pickFile = (f) => {
         if (!f) return;
@@ -106,7 +114,8 @@ export default function DocumentUploadRail() {
                             {isVersion ? `of ${ctx.name || 'document'}` : 'Add a file, categorize it and link it to records.'}
                         </div>
                     </div>
-                    <button onClick={close} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+                    {/* Not mid-upload, as the backdrop and Cancel (state §0.180) */}
+                    <button onClick={!uploading ? close : undefined} style={{ background: 'none', border: 'none', color: 'rgba(245,241,235,0.5)', fontSize: 18, cursor: uploading ? 'default' : 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
                 </div>
 
                 {/* Body */}

@@ -268,7 +268,7 @@ export const EditBrandModal = ({ initial = BRAND_PRESET, onClose }) => {
     onClose();
   };
   React.useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) close(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   });

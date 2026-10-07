@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../AppContext';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import { T, fmtDate, EntityGlyph, ENTITY_META } from './atoms';
 
 const ORDER = ['account', 'opportunity', 'contact', 'task', 'activity'];
@@ -23,6 +24,7 @@ export default function DocumentLinkPicker() {
         docLinkPickerContext, setDocLinkPickerContext,
         accounts = [], contacts = [], opportunities = [], tasks = [], activities = [],
         linkDocument, unlinkDocument,
+        confirmModal, promptModal,
     } = useApp();
 
     const ctx = docLinkPickerContext || {};
@@ -67,6 +69,12 @@ export default function DocumentLinkPicker() {
         return ORDER.filter((t) => g[t] && g[t].length).map((t) => [t, g[t]]);
     }, [filtered]);
 
+    const close = () => { setShowDocLinkPicker(false); setDocLinkPickerContext && setDocLinkPickerContext(null); };
+
+    // Escape closes the picker as its backdrop does, the links left as they were (state
+    // §0.180) — once the app's confirm or prompt above it is closed.
+    useEscapeLayer(showDocLinkPicker, close, !!(confirmModal || promptModal));
+
     if (!showDocLinkPicker) return null;
 
     const selectedCount = Object.keys(selected).length;
@@ -76,8 +84,6 @@ export default function DocumentLinkPicker() {
         else next[cand.key] = { type: cand.type, recordId: cand.recordId, name: cand.name, sub: cand.sub };
         return next;
     });
-
-    const close = () => { setShowDocLinkPicker(false); setDocLinkPickerContext && setDocLinkPickerContext(null); };
 
     const done = async () => {
         const chosen = Object.values(selected);
