@@ -1045,6 +1045,8 @@
             /* ── Pipeline: show mobile cards, hide desktop views ── */
             .spt-pipeline-mobile  { display: block !important; }
             .spt-pipeline-desktop { display: none !important; }
+            /* The cards tick nothing, so Select and Delete (N) are not offered (state §0.179) */
+            .spt-pipeline-select  { display: none !important; }
 
             /* ── Pipeline mobile card styles ── */
             .spt-pipeline-card {

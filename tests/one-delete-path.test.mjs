@@ -169,7 +169,7 @@ test('deals: confirmed, one DELETE each by id, no Undo — and an Admin\'s', () 
     assert.ok(fn.includes("const r = await dbWrite(`/.netlify/functions/opportunities?id=${o.id}`, { method: 'DELETE' });"));
     assert.ok(!fn.includes('softDelete('), 'no Undo: a deal re-POSTed is a new deal to the server');
     const pipeline = read('src/Tabs/PipelineTab.jsx');
-    assert.ok(pipeline.includes('{isAdmin && selectMode && selectedOpps.length > 0 && ('));
+    assert.ok(pipeline.includes('{isAdmin && selectableView && selectMode && selectedOpps.length > 0 && ('), 'and where rows can be ticked (§0.179)');
     assert.ok(pipeline.includes('onClick={() => handleDeleteDeals(selectedOpps, { onConfirm: () => { setSelectedOpps([]); setSelectMode(false); } })}'), 'the ids, not the deals');
     assert.ok(!pipeline.includes('handleDelete(opp)'), 'the deal handed over as an id');
     assert.ok(!read('src/components/FunnelView.jsx').includes('handleDelete'), 'the prop it never called');

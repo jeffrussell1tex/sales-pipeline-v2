@@ -232,13 +232,16 @@ function ViewIcon({ name, active }) {
 
 // ── Chip button ──────
 function Chip({ label, active, count, onClick, onDelete }) {
+    // Each side by itself: a changed `border` shorthand overwrote the side set apart from it
+    // when a chip turned active or back (state §0.179).
+    const edge = `1px solid ${active ? T.ink : T.border}`;
     return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
         <button onClick={onClick} style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             padding: '5px 10px', paddingRight: onDelete ? 7 : 10,
-            border: `1px solid ${active ? T.ink : T.border}`,
-            borderRight: onDelete ? 'none' : undefined,
+            borderTop: edge, borderBottom: edge, borderLeft: edge,
+            borderRight: onDelete ? 'none' : edge,
             borderRadius: onDelete ? `${T.rSm}px 0 0 ${T.rSm}px` : T.rSm,
             background: active ? T.ink : 'transparent',
             color: active ? T.surface : T.ink,
@@ -254,7 +257,7 @@ function Chip({ label, active, count, onClick, onDelete }) {
             <button onClick={onDelete} style={{
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 width: 20, padding: '5px 0',
-                border: `1px solid ${active ? T.ink : T.border}`,
+                borderTop: edge, borderRight: edge, borderBottom: edge,
                 borderLeft: `1px solid ${active ? 'rgba(255,255,255,0.2)' : T.border}`,
                 borderRadius: `0 ${T.rSm}px ${T.rSm}px 0`,
                 background: active ? T.ink : 'transparent',
@@ -611,11 +614,12 @@ export default function PipelineTab() {
         { id: 'forecast', label: 'Forecast', icon: <ViewIcon name="forecast" active={pipelineView === 'forecast'} /> },
     ];
 
-    // ── Grid template — rep col only for canSeeAll ────────────
-    // Columns: [checkbox] [deal] [account] [rep?] [stage] [arr] [close] [ai] [health] [days] [⋯]
-    const listGridCols = canSeeAll
-        ? (selectMode ? '36px 1.4fr 0.9fr 100px 100px 90px 90px 60px 70px 55px 24px' : '28px 1.4fr 0.9fr 100px 100px 90px 90px 60px 70px 55px 24px')
-        : (selectMode ? '36px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px'          : '28px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px');
+    // Select ticks rows in the List, Funnel and Kanban views. Forecast's lanes and a
+    // phone's card list tick nothing (state §0.179; Jeff: "Hide Select there"): Select and
+    // Delete (N) are not offered in Forecast, the `spt-pipeline-select` class hides them on a
+    // phone (index.css), and entering Forecast leaves Select mode. (The List view's grid
+    // lived here, unused, after the view moved to ListView.jsx.)
+    const selectableView = pipelineView !== 'forecast';
 
     return (
         <div className="tab-page" style={{ fontFamily: T.sans }} onClick={() => filterOpen && false}>
@@ -690,16 +694,17 @@ export default function PipelineTab() {
                     </button>
                     {/* Select mode + bulk delete — an Admin's: opportunities.mjs deletes a deal for
                         an Admin only. It goes through the deals hook's one delete path (state §0.178);
-                        it handed the old handler the deal instead of its id and threw. */}
-                    {isAdmin && selectMode && selectedOpps.length > 0 && (
-                        <button
+                        it handed the old handler the deal instead of its id and threw. Offered only
+                        where rows can be ticked (selectableView, state §0.179). */}
+                    {isAdmin && selectableView && selectMode && selectedOpps.length > 0 && (
+                        <button className="spt-pipeline-select"
                             onClick={() => handleDeleteDeals(selectedOpps, { onConfirm: () => { setSelectedOpps([]); setSelectMode(false); } })}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: T.danger, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans }}>
                             Delete ({selectedOpps.length})
                         </button>
                     )}
-                    {isAdmin && (
-                        <button
+                    {isAdmin && selectableView && (
+                        <button className="spt-pipeline-select"
                             onClick={() => { setSelectMode(m => !m); setSelectedOpps([]); }}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', background: selectMode ? T.surface2 : 'transparent', border: `1px solid ${selectMode ? T.borderStrong : T.border}`, color: T.inkMid, fontSize: 12, fontWeight: selectMode ? 600 : 400, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans }}>
                             {selectMode ? 'Cancel' : 'Select'}
@@ -801,7 +806,7 @@ export default function PipelineTab() {
                     const active = pipelineView === v.id;
                     return (
                         <button key={v.id}
-                            onClick={() => { setPipelineView(v.id); setFunnelExpandedStage(null); }}
+                            onClick={() => { setPipelineView(v.id); setFunnelExpandedStage(null); if (v.id === 'forecast') { setSelectMode(false); setSelectedOpps([]); } }}
                             style={{
                                 display: 'inline-flex', alignItems: 'center', gap: 6,
                                 padding: '8px 16px', border: 'none',
@@ -898,6 +903,9 @@ export default function PipelineTab() {
                     <ListView
                         pipelineFilteredOpps={smartFilteredOpps}
                         handleEdit={handleEdit}
+                        selectMode={selectMode}
+                        selectedOpps={selectedOpps}
+                        setSelectedOpps={setSelectedOpps}
                     />
                 )}
 

@@ -6,6 +6,10 @@ import { T } from '../shared/tokens.js';
 import { putSettings } from '../shared/saveSettings.js';
 import { CategoryDetailChrome } from '../shared/CategoryDetailChrome.jsx';
 
+// Each side by itself, not the `border` shorthand: a changed shorthand overwrote the crew's
+// colour edge when the crew was selected (state §0.179).
+const crewEdge = (selected) => `1.5px solid ${selected ? T.goldInk : T.border}`;
+
 export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.dispatchCrews || [];
     const skills = settings?.dispatchSkills || [];
@@ -143,7 +147,7 @@ export const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettings
                         {crews.map(crew => (
                             <div key={crew.id} onClick={() => setSelectedId(crew.id)}
                                 style={{ padding: '12px 14px', marginBottom: 6, borderRadius: T.r, cursor: 'pointer',
-                                    background: T.surface, border: `1.5px solid ${selectedId === crew.id ? T.goldInk : T.border}`,
+                                    background: T.surface, borderTop: crewEdge(selectedId === crew.id), borderRight: crewEdge(selectedId === crew.id), borderBottom: crewEdge(selectedId === crew.id),
                                     borderLeft: `4px solid ${crew.color || T.inkMuted}`,
                                     boxShadow: selectedId === crew.id ? '0 2px 8px rgba(42,38,34,0.08)' : 'none' }}>
                                 <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 3 }}>{crew.name}</div>

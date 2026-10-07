@@ -463,10 +463,13 @@ const LeadSourcesPanel = ({ leads }) => {
 // ─────────────────────────────────────────────────────────────
 const TriageCard = ({ lead, accent, onClick }) => {
     const [hov, setHov] = useState(false);
+    // Each side by itself: a changed `border` shorthand overwrote the accent edge on the
+    // first hover (state §0.179).
+    const edge = `1px solid ${hov ? T.borderStrong : T.border}`;
     return (
         <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
             onClick={onClick}
-            style={{ flex:'0 0 260px', background:T.surface, border:`1px solid ${hov ? T.borderStrong : T.border}`, borderLeft:`3px solid ${accent}`, borderRadius:T.r, padding:'10px 12px', cursor:'pointer', transition:'all 120ms', transform: hov ? 'translateY(-1px)' : 'none' }}>
+            style={{ flex:'0 0 260px', background:T.surface, borderTop:edge, borderRight:edge, borderBottom:edge, borderLeft:`3px solid ${accent}`, borderRadius:T.r, padding:'10px 12px', cursor:'pointer', transition:'all 120ms', transform: hov ? 'translateY(-1px)' : 'none' }}>
             <div style={{ display:'flex', alignItems:'flex-start', gap:8, marginBottom:8 }}>
                 <LeadScore lead={lead} size="sm"/>
                 <div style={{ flex:1, minWidth:0 }}>

@@ -1217,11 +1217,14 @@ const CrewBuilderView = ({ jobs, techs, allTechs, skills, equipUnits = [], vehic
                     {sortedQueue.map(j => {
                         const pc = prioColor(j.priority);
                         const isSel = j.id === selectedJob?.id;
+                        // Each side by itself: a changed `border` shorthand overwrote the
+                        // priority edge when a job was selected (state §0.179).
+                        const edge = `1.5px solid ${isSel ? T.goldInk : T.border}`;
                         return (
                             <div key={j.id} onClick={() => onSelectJob(j.id)}
                                 style={{ padding: '10px 12px', marginBottom: 6,
                                     background: T.surface, borderRadius: T.r, cursor: 'pointer',
-                                    border: `1.5px solid ${isSel ? T.goldInk : T.border}`,
+                                    borderTop: edge, borderRight: edge, borderBottom: edge,
                                     borderLeft: `4px solid ${pc}`,
                                     boxShadow: isSel ? '0 2px 8px rgba(42,38,34,0.08)' : 'none' }}>
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>

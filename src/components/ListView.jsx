@@ -50,19 +50,21 @@ function StagePill({ stage }) {
     );
 }
 
-// ── Table header ──────────────────────────────────────────────
-// Grid mirrors PipelineTab's list view but without checkbox/rep/days cols —
-// the quarter rail already organises by date so Days is redundant here.
-// canSeeAll adds a Rep column.
-function TableHeader({ canSeeAll }) {
-    const cols = canSeeAll
-        ? '1.4fr 0.9fr 100px 100px 90px 90px 60px 70px 24px'
-        : '1.6fr 1fr 100px 90px 90px 60px 70px 24px';
+// ── Grid ──────────────────────────────────────────────────────
+// The header and every row share one grid. canSeeAll adds a Rep column; Select mode
+// adds a leading checkbox column (state §0.179 — the List view is the Pipeline's
+// default, and its Select ticked nothing). The quarter rail already organises by
+// date, so there is no Days column.
+const listCols = (canSeeAll, selectMode) => (selectMode ? '32px ' : '') + (canSeeAll
+    ? '1.4fr 0.9fr 100px 100px 90px 90px 60px 70px 24px'
+    : '1.6fr 1fr 100px 90px 90px 60px 70px 24px');
 
+// ── Table header ──────────────────────────────────────────────
+function TableHeader({ canSeeAll, selectMode }) {
     return (
         <div style={{
             display: 'grid',
-            gridTemplateColumns: cols,
+            gridTemplateColumns: listCols(canSeeAll, selectMode),
             alignItems: 'center',
             padding: '0 14px', height: 34,
             background: T.surface2,
@@ -70,6 +72,7 @@ function TableHeader({ canSeeAll }) {
             ...eyebrow,
             position: 'sticky', top: 0, zIndex: 1,
         }}>
+            {selectMode && <div/>}
             <div>Deal</div>
             <div>Account</div>
             {canSeeAll && <div>Rep</div>}
@@ -84,12 +87,8 @@ function TableHeader({ canSeeAll }) {
 }
 
 // ── Table row ─────────────────────────────────────────────────
-function TableRow({ opp, canSeeAll, calculateDealHealth, onEdit }) {
+function TableRow({ opp, canSeeAll, calculateDealHealth, onEdit, selectMode, isSelected, onToggleSelect }) {
     const [hover, setHover] = useState(false);
-
-    const cols = canSeeAll
-        ? '1.4fr 0.9fr 100px 100px 90px 90px 60px 70px 24px'
-        : '1.6fr 1fr 100px 90px 90px 60px 70px 24px';
 
     const health    = calculateDealHealth(opp);
     const hColor    = health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger;
@@ -101,21 +100,31 @@ function TableRow({ opp, canSeeAll, calculateDealHealth, onEdit }) {
 
     return (
         <div
-            onClick={() => onEdit(opp)}
+            onClick={() => (selectMode ? onToggleSelect(opp.id) : onEdit(opp))}
             onMouseEnter={() => setHover(true)}
             onMouseLeave={() => setHover(false)}
             style={{
                 display: 'grid',
-                gridTemplateColumns: cols,
+                gridTemplateColumns: listCols(canSeeAll, selectMode),
                 alignItems: 'center',
                 padding: '0 14px', height: 42,
                 borderBottom: `1px solid ${T.border}`,
-                background: hover ? T.surface2 : 'transparent',
+                background: isSelected ? 'rgba(42,38,34,0.05)' : hover ? T.surface2 : 'transparent',
                 fontSize: 12, color: T.ink,
                 cursor: 'pointer', fontFamily: T.sans,
                 transition: 'background 100ms',
             }}
         >
+            {/* Checkbox — Select mode only, as in the Funnel and Kanban views */}
+            {selectMode && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={e => { e.stopPropagation(); onToggleSelect(opp.id); }}>
+                    <div style={{ width: 15, height: 15, borderRadius: 3, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                        {isSelected && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fbf8f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
+                    </div>
+                </div>
+            )}
+
             {/* Deal name + next step hint */}
             <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}
                 title={opp.nextStep ? `Next step: ${opp.nextStep}` : undefined}>
@@ -315,8 +324,9 @@ function StatStrip({ sum, activeGroup, fiscalStart }) {
 
 // ── ListView — exported component ─────────────────────────────
 // Props passed from PipelineTab, same pattern as KanbanView/FunnelView.
-export default function ListView({ pipelineFilteredOpps, handleEdit }) {
+export default function ListView({ pipelineFilteredOpps, handleEdit, selectMode = false, selectedOpps = [], setSelectedOpps }) {
     const { canSeeAll, calculateDealHealth, settings } = useApp();
+    const toggleSelect = (id) => setSelectedOpps && setSelectedOpps(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
     const fiscalStart = parseInt(settings?.fiscalYearStart) || 1;
 
     // The tab decides what the list shows. Its "All open" default already
@@ -381,7 +391,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit }) {
                     flex: 1,
                     overflow: 'auto',
                 }}>
-                    <TableHeader canSeeAll={canSeeAll}/>
+                    <TableHeader canSeeAll={canSeeAll} selectMode={selectMode}/>
 
                     {activeGroup && activeGroup.opps.length > 0 ? (
                         activeGroup.opps
@@ -394,6 +404,9 @@ export default function ListView({ pipelineFilteredOpps, handleEdit }) {
                                     canSeeAll={canSeeAll}
                                     calculateDealHealth={calculateDealHealth}
                                     onEdit={handleEdit}
+                                    selectMode={selectMode}
+                                    isSelected={selectedOpps.includes(opp.id)}
+                                    onToggleSelect={toggleSelect}
                                 />
                             ))
                     ) : (

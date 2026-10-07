@@ -58,6 +58,11 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities,
 
     const atRisk = opp.aiScore && opp.aiScore.score < 50;
 
+    // Each side by itself, not the `border` shorthand: React re-sets only what changed,
+    // and a changed shorthand overwrote the stage's top edge when a card was ticked
+    // (state §0.179).
+    const edge = `1px solid ${isSelected ? T.ink : T.border}`;
+
     // Last activity date
     const oppActivities = (activities || []).filter(a => a.opportunityId === opp.id);
     const lastAct = oppActivities.length > 0
@@ -71,8 +76,8 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities,
             onClick={() => selectMode ? onSelect(opp.id) : onOpen(opp)}
             style={{
                 background: T.surface,
-                border: `1px solid ${isSelected ? T.ink : T.border}`,
                 borderTop: `2px solid ${sc(opp.stage)}`,
+                borderRight: edge, borderBottom: edge, borderLeft: edge,
                 borderRadius: T.rMd,
                 padding: '10px 11px',
                 marginBottom: 8,
@@ -86,8 +91,10 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities,
                 fontFamily: T.sans,
             }}>
 
-            {/* Checkbox — visible on hover or when selected, matches mockup exactly */}
-            {(hover || isSelected || selectMode) && (
+            {/* Checkbox — in Select mode only (state §0.179; Jeff: "Only in Select mode"). It
+                showed on hover for everyone and ticked a card outside Select mode, where
+                nothing acts on a selection. */}
+            {selectMode && (
                 <div
                     onClick={e => { e.stopPropagation(); onSelect(opp.id); }}
                     style={{
@@ -104,7 +111,7 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities,
             {/* Deal name — from mockup: fontSize 13, fontWeight 600, 2-line clamp */}
             <div style={{
                 fontSize: 13, fontWeight: 600, color: T.ink, lineHeight: 1.3,
-                paddingRight: (hover || isSelected) ? 22 : 0,
+                paddingRight: selectMode ? 22 : 0,
                 marginBottom: 2,
                 textOverflow: 'ellipsis', overflow: 'hidden',
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',

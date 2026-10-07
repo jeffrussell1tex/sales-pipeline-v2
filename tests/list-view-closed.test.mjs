@@ -29,5 +29,6 @@ test('the tab still hides closed deals by default, and only by default', () => {
         '"All open" with no stage filter excludes closed deals — the default the list used to duplicate');
     assert.ok(s.includes("            if (pipelineStageFilter.includes('__allOpen__')) return opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost';"));
     assert.ok(s.includes('<option value="Closed Won">Closed Won</option>'), 'the popover offers Closed Won — so the list must be able to show it');
-    assert.ok(s.includes('pipelineFilteredOpps={smartFilteredOpps}\n                        handleEdit={handleEdit}\n                    />'), 'ListView receives the smart-filtered set');
+    // Its selection props follow since §0.179 (select-where-tickable.test.mjs).
+    assert.ok(s.includes('<ListView\n                        pipelineFilteredOpps={smartFilteredOpps}\n                        handleEdit={handleEdit}\n'), 'ListView receives the smart-filtered set');
 });

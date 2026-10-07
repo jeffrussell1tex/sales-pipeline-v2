@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 6, 2026 · rules current through **§18b71** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 6, 2026 · rules current through **§18b73** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3872,3 +3872,20 @@ through `dbFetch`.
 5. **A delete follows what the server does with what hangs off the record** — an account's sub-accounts are promoted, not deleted; the confirm says so and Undo puts them back.
 6. **A delete's audit line is the server's.** Each DELETE writes `<record>.deleted` with the row, once the row is gone; the screen writes none of its own — a line written before the answer logs a refused delete as one, and a deleted one twice. tests/one-delete-path.test.mjs pins both halves.
 7. **A layer's own Escape yields to every layer above it.** A rail's listener is on document and runs before App's on window, so it skips an Escape while the app's confirm or prompt is open — as it does for the activity viewer — and App closes the dialog; without that, one Escape closed the dialog and the rail under it. The test scans every rail's Escape listener.
+
+## 18b72. A Control Is Offered Only Where It Acts — Select Where Rows Can Be Ticked, A Row's Checkbox In Select Mode Alone (hard rule)
+
+**Origin (§0.179, 7 Oct 2026 — §0.178's found (c) and (d); Jeff: "Hide Select there", "Only in Select mode").** The Pipeline's default List view offered Select and ticked nothing, so an Admin's deal delete hid behind a view switch; Select showed in the Forecast view, on a phone and in Contacts' Company layout, none of which tick a row; and a Kanban card ticked on hover outside Select mode. §18b50 is its kin for settings: offered only where enforced.
+
+1. **A control is offered where it does something.** Select and its Delete (N) show only in a view whose rows tick; a view that ticks nothing hides them, and entering it leaves Select mode. tests/select-where-tickable.test.mjs lists every Select toggle under src and fails a new one until it is checked there.
+2. **A row's checkbox shows in Select mode alone**, in every view; outside it a click opens the record.
+3. **A view's header and rows share one grid** (`listCols`): a column added to one is added to both.
+
+## 18b73. A Changing Border Is Written Side By Side (hard rule)
+
+**Origin (§0.179, 7 Oct 2026).** React re-sets only the style properties whose values changed. A style that set a changing `border` beside one side of its own lost that side whenever the shorthand changed — a ticked Kanban card's stage edge and a hovered lead card's accent (observed), a selected dispatch job's priority edge, a selected crew's colour edge, a chip's divider. React's console warning named it first: "Updating border borderTop".
+
+1. **When a border changes with state, set each side by itself** — the changing edge on the sides that change, the accent on its own — never the `border` shorthand (nor `borderColor`, `borderWidth` or `borderStyle`) beside a side it overlaps.
+2. **A part changing under a fixed whole is fine** — `border: 'none'` beside a changing `borderBottom` draws as meant.
+3. tests/border-sides.test.mjs parses every style object under src and fails a changing border property that overlaps one it is not a part of. Style objects merged by spreading are not followed: a spread that brings a side under a changing shorthand needs the same care.
+4. **A React warning in the console is read, not skipped** — this one named the bug before anyone saw it.

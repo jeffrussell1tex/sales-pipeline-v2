@@ -674,6 +674,15 @@ export default function ContactsTab() {
     const [selectedCompany, setSelectedCompany] = useState(null);
     const [openRowMenu,     setOpenRowMenu]     = useState(null);
 
+    // The Company layout's rows tick nothing (state §0.179; Jeff: "Hide Select there"): Select
+    // and Delete (N) are offered in the name-sorted list alone, and choosing Company leaves
+    // Select mode.
+    const selectableLayout = contactsSortBy !== 'company';
+    const chooseSort = (key) => {
+        setContactsSortBy(key);
+        if (key === 'company') { setSelectMode(false); setSelectedIds([]); }
+    };
+
     // ── Sort field mapping ────────────────────────────────────
     const sortField = contactsSortBy === 'firstName' ? 'firstName'
                     : contactsSortBy === 'company'   ? 'company'
@@ -838,7 +847,7 @@ export default function ContactsTab() {
                     </div>
 
                     {/* Delete (select mode) */}
-                    {canEdit && selectMode && selectedIds.length > 0 && (
+                    {canEdit && selectableLayout && selectMode && selectedIds.length > 0 && (
                         <button onClick={handleDeleteSelected} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: T.danger, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
                             Delete ({selectedIds.length})
                         </button>
@@ -866,8 +875,8 @@ export default function ContactsTab() {
                         {exportingCSV === 'contacts' ? 'Exporting…' : 'Export'}
                     </button>
 
-                    {/* Select toggle */}
-                    {canEdit && (
+                    {/* Select toggle — the name-sorted list's alone (selectableLayout) */}
+                    {canEdit && selectableLayout && (
                         <button onClick={() => { setSelectMode(m => !m); setSelectedIds([]); }}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', background: selectMode ? T.surface2 : 'transparent', border: `1px solid ${selectMode ? T.borderStrong : T.border}`, color: T.inkMid, fontSize: 12, fontWeight: selectMode ? 600 : 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
                             {selectMode ? 'Cancel' : 'Select'}
@@ -887,7 +896,7 @@ export default function ContactsTab() {
             <div style={{ flexShrink: 0 }}>
                 <SortTabs
                     contactsSortBy={contactsSortBy}
-                    setContactsSortBy={setContactsSortBy}
+                    setContactsSortBy={chooseSort}
                     sorted={sorted}
                     companyList={companyList}
                 />
