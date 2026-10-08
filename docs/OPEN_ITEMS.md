@@ -72,9 +72,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     Compliance Module" answered 200 (28, Critical, 21:41:10 UTC), kept on
     that QA deal. "Claude reads report prompts" switched off again; "Claude
     scores deals" left on, as Jeff asked.
+  - **The unscoped key is deleted** (Jeff, 8 Oct: "i deleted the extra claude key").
   - **Left (Jeff):**
-    - delete the unscoped key, and any other unused key, in Anthropic's
-      Console;
     - prod (`6ac80d1a…`, redeployed with the new key) has run no AI call
       yet: one AI score there proves its key;
     - whether the Accelerep Test org's own key (BYOK, Settings → Features &
