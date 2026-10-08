@@ -30,27 +30,24 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **Push §0.188 to dev** (Jeff's word). It is committed on `dev` as
-   `095c973` and not pushed: the AI score works end to end, and "Claude scores
-   deals" sits in Settings → Features & AI.
-2. **The Anthropic site key** (§2.1): check it before AI scoring is relied on.
+1. **The Anthropic site key** (§2.1): check it before AI scoring is relied on.
    Dev's key answered 401 on 15 Sep, so an org with no key of its own may get
    an error instead of a score.
-3. **Small security closes** (§4.6):
+2. **Small security closes** (§4.6):
    - the audit log's allowlist for client events;
    - role scoping on the recommendation log's GET;
    - the Leads tab's `canEdit`.
-4. **Per-contact engagement on `contactIds`** (§4.2). These counts are wrong
+3. **Per-contact engagement on `contactIds`** (§4.2). These counts are wrong
    everywhere, and they are an input to AI scoring's next batch.
-5. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
+4. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
-6. **Escape, finished** (§4.1): App's own handler in the screen's order, then
+5. **Escape, finished** (§4.1): App's own handler in the screen's order, then
    the in-tab layers.
-7. **Deal data** (§4.2):
+6. **Deal data** (§4.2):
    - the deal endpoint saving `accountId`;
    - notes appended on the server;
    - an Undo keeping the row's owner.
-8. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
+7. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
 ---
