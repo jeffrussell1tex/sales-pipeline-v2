@@ -30,11 +30,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **The Anthropic keys: why Anthropic refuses the calls** (§2.1). Every call
-   is refused, the new service-account key's too (8 Oct: the report reader
-   400, the AI score 502), on two models and two request shapes, so the cause
-   is the key or the account. Next: Anthropic's own message, read from a
-   local run (the key's "Local development" value on `accelerep`).
+1. **The Anthropic keys: a key scoped to the Default workspace** (§2.1).
+   Found 8 Oct, in Anthropic's own words: the new service-account key is
+   not scoped to a workspace, and our calls send no `anthropic-workspace-id`.
+   Next (Jeff): a key linked to `accelerep-server` and scoped to Default, on
+   both sites and deployed; then one call of each on the dev site.
 2. **Small security closes** (§4.6):
    - the audit log's allowlist for client events;
    - role scoping on the recommendation log's GET;
@@ -102,8 +102,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     identity-linked API key"). Our two calls send only `x-api-key` and
     `anthropic-version` (ai-score.mjs:162, report-prompt.mjs:82). It fits the
     400 and the empty Logs. Whether the deleted key was scoped cannot now be
-    read: a candidate, not established.
-  - **Next (Jeff):** a service account (`accelerep-server`, role Developer,
+    read; the new key's refusal (below) is this one, in Anthropic's words.
+  - **Asked (8 Oct):** a service account (`accelerep-server`, role Developer,
     the Default workspace) and a key linked to it, scoped to the Default
     workspace; expiration Never recommended (an expired key answers 401, and
     the only warning is an email). Then the key in `ANTHROPIC_API_KEY` on both
@@ -124,17 +124,43 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     an account can draw (a spend limit reached, for one) are candidates, not
     established; Anthropic's message names the cause, and only a local run
     shows it.
-  - Left on for the local test: "Claude reads report prompts" in Accelerep QA
-    (switched on 8 Oct for this test; to be switched off after it).
-  - **Localhost:** the repo is linked to the dev site (`accelerep`) through
-    `C:\Users\jeffr\.netlify\state.json` in the home folder; the repo has no
-    `.netlify/state.json` (`netlify status`, 8 Oct). netlify dev injects a
-    secret variable only from its "Local development" value, which
-    `ANTHROPIC_API_KEY` lacked on 8 Oct: the server's own "Injected project
-    settings env vars" line (~20:45 UTC) does not name it. With one, a local
-    run prints Anthropic's whole answer. Before that, a local call sent a key
-    Anthropic answered 401, its source not established (`.env` names no
-    `ANTHROPIC_API_KEY`, nor does this machine's shell, 8 Oct).
+  - **Found: the cause, in Anthropic's words** (8 Oct, ~21:35 UTC). With the
+    new key in the repo's `.env` (Jeff: "done added to env"), one minimal
+    request per model straight to Anthropic, with the functions' own headers
+    (a one-off script printing only the status and the answer), drew 400
+    `invalid_request_error` for both `claude-haiku-4-5-20251001` and
+    `claude-opus-5`: "This API key is not scoped to a workspace, so this
+    request must include the anthropic-workspace-id header with the ID of
+    the workspace to use. Add the header, or use an API key that is scoped
+    to a workspace." The service-account dialog's "Workspaces: Default" set
+    the account's membership; a key's own workspace is chosen when the key
+    is made, and this one was left unscoped.
+  - **Next (Jeff):** Create key → Linked account `accelerep-server` →
+    workspace Default (one) → expiration Never; the key in
+    `ANTHROPIC_API_KEY` on both sites (secret) and in `.env` (the same
+    request can check it before a deploy); Trigger deploy on each; one
+    report-reader sentence and one AI score in Accelerep QA on the dev site;
+    then the unscoped key deleted in the Console. The other road, the
+    `anthropic-workspace-id` header from a new variable, is not recommended:
+    one more setting, and an org's own key (BYOK) would need it too.
+  - Left on for that re-test: "Claude reads report prompts" in Accelerep QA
+    (switched on 8 Oct ~20:45 UTC; to be switched off after it).
+  - **Localhost runs the app's AI calls on Netlify's token, not ours** (read
+    8 Oct in the installed CLI, netlify-cli 27.6.0: `commands/dev/dev.js`,
+    `@netlify/ai/dist/bootstrap/main.js`). For a linked site with a deploy,
+    `netlify dev` fetches a Netlify AI Gateway token and sets each provider's
+    variable to it, `ANTHROPIC_API_KEY` among them (and `ANTHROPIC_BASE_URL`
+    to the site's `/.netlify/ai`), marked "internal": no `.env` or Netlify
+    value overrides it, and the server's log names neither. Our functions
+    send it to `api.anthropic.com`, which answers 401: the "key from
+    elsewhere" a local call sent earlier. The repo is linked to the dev site
+    through `C:\Users\jeffr\.netlify\state.json` in the home folder
+    (`netlify status`; the repo has no `.netlify/state.json`). The deployed
+    answers were 400s, not the 401 a gateway token drew, so the deployed
+    functions sent the site's own key (read from the answers, not from
+    Netlify's docs). Recommended (Jeff decides): the functions read a name
+    the gateway does not set (e.g. `ACCELEREP_ANTHROPIC_API_KEY`), so a
+    local run uses our key.
   - Source: §0.141; handoff §5 (16 Sep).
 - **QuickBooks setup, before the export can be built (§3.2).**
   - In the Intuit developer portal: an app with two redirect URIs, and a
@@ -527,8 +553,10 @@ model's pattern to deals.
   cause (a rejected key, the account, the model, busy). Found 8 Oct. The
   same day showed the status alone is not enough: both calls keep only the
   status, and Anthropic's error message, which names the cause (for one,
-  "anthropic-workspace-id is required…"), reaches only the console. Keep its
-  error type and message (never the key) in the answer and the audit row.
+  "This API key is not scoped to a workspace…", 8 Oct), reaches only the
+  console. Keep its error type and message (never the key) in the answer
+  and the audit row: an org's own key (BYOK) can be unscoped too, and its
+  Admin should read that.
   While there: Anthropic's docs call `x-api-key` legacy, still supported;
   `Authorization: Bearer` is the current header.
 
