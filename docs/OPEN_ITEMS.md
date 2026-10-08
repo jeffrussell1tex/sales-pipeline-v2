@@ -478,6 +478,13 @@ model's pattern to deals.
   Admin should read that.
   While there: Anthropic's docs call `x-api-key` legacy, still supported;
   `Authorization: Bearer` is the current header.
+- **The AI score's text is cut mid-sentence.** ai-score keeps the first 150
+  characters of the recommendation, 120 of the headline and 100 of each
+  signal (`slice`, ai-score.mjs:195-200). On 8 Oct the deal window showed
+  "…escalate to Sofia Rossi. Verify close date" for "Ironwood Manufacturing
+  — Safety Compliance Module" (Accelerep QA). Recommended: cut at the last
+  full sentence or word, or ask for shorter text and keep a longer cap.
+  Found 8 Oct.
 
 ### 4.3 Settings
 
