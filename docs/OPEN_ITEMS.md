@@ -31,10 +31,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
 1. **The Anthropic keys: why Anthropic refuses the calls** (§2.1). Every call
-   is refused with 400. The leading candidate (8 Oct) is the key's type: a key
-   tied to a person or service account, not scoped to one workspace, needs an
-   `anthropic-workspace-id` header our calls do not send. Next: a
-   service-account key scoped to the Default workspace, deployed, and one call.
+   is refused, the new service-account key's too (8 Oct: the report reader
+   400, the AI score 502), on two models and two request shapes, so the cause
+   is the key or the account. Next: Anthropic's own message, read from a
+   local run (the key's "Local development" value on `accelerep`).
 2. **Small security closes** (§4.6):
    - the audit log's allowlist for client events;
    - role scoping on the recommendation log's GET;
@@ -111,13 +111,29 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     and a deploy of each. Then one report-reader sentence and one AI score in
     Accelerep QA on the dev site: a scoped key needs no header, so this tests
     the candidate directly.
+  - **The new key, tried** (Jeff: "deployed with new keys"; both sites
+    redeployed, every function rebuilt: dev `6ac7f7b9…` on `5458da1`,
+    published 20:07:12 UTC; prod `6ac7f7b0…` on `a38e0c6`, 20:07:05 UTC).
+    In Accelerep QA on the dev site, ~20:47 UTC, the report reader ("Open
+    deals by stage") answered
+    `{"unavailable":true,"reason":"error","status":400}`, and an AI score of
+    "Ironwood Manufacturing — Safety Compliance Module" answered 502; no
+    score kept. Two models and two request shapes refused alike: the cause
+    is the key or the account, not one request. Whether the new key is
+    scoped to the Default workspace is not seen (Jeff's Console). Other 400s
+    an account can draw (a spend limit reached, for one) are candidates, not
+    established; Anthropic's message names the cause, and only a local run
+    shows it.
+  - Left on for the local test: "Claude reads report prompts" in Accelerep QA
+    (switched on 8 Oct for this test; to be switched off after it).
   - **Localhost:** the repo is linked to the dev site (`accelerep`) through
     `C:\Users\jeffr\.netlify\state.json` in the home folder; the repo has no
     `.netlify/state.json` (`netlify status`, 8 Oct). netlify dev injects a
     secret variable only from its "Local development" value, which
-    `ANTHROPIC_API_KEY` lacked on 8 Oct; with one, a local run prints
-    Anthropic's whole answer. Before that, a local call sent a key Anthropic
-    answered 401, its source not established (`.env` names no
+    `ANTHROPIC_API_KEY` lacked on 8 Oct: the server's own "Injected project
+    settings env vars" line (~20:45 UTC) does not name it. With one, a local
+    run prints Anthropic's whole answer. Before that, a local call sent a key
+    Anthropic answered 401, its source not established (`.env` names no
     `ANTHROPIC_API_KEY`, nor does this machine's shell, 8 Oct).
   - Source: §0.141; handoff §5 (16 Sep).
 - **QuickBooks setup, before the export can be built (§3.2).**
