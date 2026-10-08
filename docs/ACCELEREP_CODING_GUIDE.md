@@ -2439,6 +2439,36 @@ docs-outran-the-disk with a delay fuse: the queue itself is the defect,
 because everything between "known" and "applied" is a window where the
 docs lie.
 
+### One list of open items — `docs/OPEN_ITEMS.md` (7 Oct 2026)
+
+Jeff, 7 Oct: "can you make one central master open items/to-do list. It is
+not smart to try and manage multiple lists across multiple conversations". The
+rule:
+
+1. **Every open item lives in `docs/OPEN_ITEMS.md`** — a bug found and not
+   fixed, a decision waiting on Jeff, a planned feature, a check owed — and
+   in no other list. A batch's "found, not changed" items are written there
+   in the batch's own commit; the state doc's entry may name them, the list
+   holds them.
+2. **An item leaves the list in the commit that closes it.** The state doc's
+   batch entry records the work; the list holds only what is open.
+3. **Each item says what it waits on and where it came from** (its §, its
+   date), with the recommendation where one is recorded. "As recorded" marks
+   an item not re-read since it was written — read the code before acting on
+   it (verify the repo, not the doc, above).
+4. **The handoff points at the list** for everything past the next session's
+   first steps; it keeps no list of its own.
+5. **State §9 is frozen history** from 7 Oct 2026 — the list started from it
+   and from the handoff's §5. CLAUDE.md's session start names the list.
+
+Origin: by 7 Oct the open items stood in three places — state §9 (192
+entries, struck and open together), the handoff's §5 (1,500 lines of session
+preps back to the seventh session) and each batch entry's own "found"
+paragraph — and one item could be closed in one place and open in another:
+§0.169's record of the AI Score tab's missing deal id stood open beside
+§0.187's record of the same bug, and "`currentUser` from the roster" stood
+open six weeks after `77e119c` fixed it.
+
 ### Starting a new conversation
 
 1. Upload this guide file first

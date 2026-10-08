@@ -20,6 +20,7 @@ Neon Postgres (dev and prod SHARE the `main` branch), Clerk Organizations.
    `docs/ACCELEREP_CURRENT_STATE.md` and `docs/ACCELEREP_CODING_GUIDE.md`.
 2. `npm run check:handoff` — root and `docs/` handoff copies byte-identical.
 3. `git status` — a dirty tree at session start is a finding, not noise.
+4. Read `docs/OPEN_ITEMS.md` — the one list of everything still open.
 
 "Delivered is not committed. The repo's copy is the only committed truth."
 
