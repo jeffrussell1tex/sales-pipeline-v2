@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 7, 2026 · rules current through **§18b82** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 7, 2026 · rules current through **§18b83** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3973,3 +3973,12 @@ through `dbFetch`.
 2. **A fallback is harmless; a missing name read alone is the bug** — `o.arr || o.revenue` reads `arr`; `o.value ? … : ''` reads nothing.
 3. **A list built with more says so** — a map returning `{ ...o, flags }` — and the names it adds are read off that list only.
 4. **The guard is a parse, not a list** — tests/deal-fields.test.mjs walks src/ and netlify/functions/: every field read off an element of a deal list, or off a variable named for a deal, against the table. The reads left are recorded with their reasons (KNOWN), and a recorded read no longer made fails too.
+
+## 18b83. A Value One Endpoint Computes Is Written By That Endpoint Alone; A Switch The Server Reads Has A Control (hard rule)
+
+**Origin (§0.188, 7 Oct 2026 — §0.187's found (b); Jeff: "fix the AI score one when you have the chance").** A deal save sent the deal the window opened — its AI score too — and the deal PUT, applying every key it is sent, wrote it back over the score ai-score.mjs had just kept. And ai-score.mjs, the deal window and the Pipeline all read `aiScoringEnabled`, which settings.mjs saved and no screen sent: a feature built, and off in every workspace for good.
+
+1. **A value an endpoint computes is not taken from a save** — the deal's sanitize builds no `aiScore`; ai-score.mjs alone writes it (tests/ai-score.test.mjs, a parse of every function file). A form that starts as a copy of the record carries every column back on every save; a column the form does not own must not be read from the body.
+2. **A switch the server reads has a control, or is recorded as having none** — a key in both halves of settings.mjs with no screen that sends it is a feature nobody can turn on. The control sits with its kin (Features & AI) and its caption says what it sends.
+3. **A score is the user's to ask for** — nothing scores a deal on open: a score sends the deal to Anthropic and writes the audit log.
+4. **A detail tab's Save calls the save** — never `requestSubmit` on a form the tab unmounts; a missing field opens the form, where its error shows.

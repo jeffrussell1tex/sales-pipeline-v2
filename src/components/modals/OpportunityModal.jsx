@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
 import { parseLocalDate } from '../../utils/dateLocal';
-import { dbFetch } from '../../utils/storage';
+import { dbFetch, requestOrg, stillOrg } from '../../utils/storage';
 import { useApp } from '../../AppContext';
 import AccountPicker from '../rails/AccountPicker';
 import RecordDocuments from '../documents/RecordDocuments';
@@ -9,6 +9,7 @@ import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
 import { contactsToAdd } from '../../utils/buyingCommittee.js';
+import { storedScore, signalKind } from '../../utils/aiScore.js';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (inline — no build-time import needed)
@@ -90,6 +91,7 @@ const RoleBadge = ({ role }) => (
 const SIGNAL = {
     positive: { bg: 'rgba(77,107,61,0.09)',  border: 'rgba(77,107,61,0.3)',  icon: T.ok,     ic: 'check' },
     neutral:  { bg: T.surface2,              border: T.border,               icon: T.inkMid, ic: 'clock'  },
+    warning:  { bg: 'rgba(184,115,51,0.09)', border: 'rgba(184,115,51,0.3)', icon: T.warn,   ic: 'alert'  },   // an AI signal's warning (state §0.188)
     risk:     { bg: 'rgba(156,58,46,0.07)',  border: 'rgba(156,58,46,0.28)', icon: T.danger, ic: 'alert'  },
 };
 const SignalChip = ({ kind = 'neutral', text }) => {
@@ -623,26 +625,38 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
 }
 
 // ─────────────────────────────────────────────────────────────
-//  AI Score Tab (preserved)
+//  AI Score Tab — the deal's score, asked of ai-score.mjs (state §0.188)
 // ─────────────────────────────────────────────────────────────
-function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate }) {
-    const [score, setScore] = useState(null);
+// The tab read its score from `cachedScore` and its history from `scoreHistory` — a
+// deal has neither; its score is `aiScore` — asked for a score with no `opportunityId`,
+// which ai-score.mjs answers 400, and kept `data.score`, a number, where it reads an
+// object. It shows the window's score (the deal's, or the one it just asked for), asks
+// with the deal's id, and hands the answer to the window and the lists.
+function AiScoreTab({ opportunity, aiScore, onScored, onClose, onUpdate }) {
+    const { setOpportunities } = useApp();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [scoreHistory, setScoreHistory] = useState(opportunity?.scoreHistory || []);
+    const [off, setOff] = useState(false);   // the org's switch, as the endpoint read it
 
     const fetchScore = async (forceRefresh = false) => {
+        const dealId = opportunity?.id;
+        if (!dealId) return;
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
         setLoading(true); setError(null);
         try {
             const res = await dbFetch('/.netlify/functions/ai-score', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ opportunity, activities: oppActivities, currentUser, forceRefresh }),
+                body: JSON.stringify({ opportunityId: dealId, forceRefresh }),
             });
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
             if (!res.ok) throw new Error(data.error || 'Scoring failed');
-            setScore(data.score);
-            if (data.score) setScoreHistory(prev => [data.score, ...prev.slice(0, 4)]);
+            if (data.disabled) { setOff(true); return; }
+            const score = storedScore(data);
+            if (!score) throw new Error('The answer carried no score.');
+            setOpportunities(prev => prev.map(o => (o.id === dealId ? { ...o, aiScore: score } : o)));
+            onScored(score);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -650,20 +664,16 @@ function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate
         }
     };
 
-    useEffect(() => {
-        if (opportunity?.cachedScore && !score) {
-            setScore(opportunity.cachedScore);
-            if (opportunity.scoreHistory) setScoreHistory(opportunity.scoreHistory);
-        }
-    }, [opportunity?.id]);
-
     const verdictConfig = {
         'Strong':   { color: T.ok,     bg: 'rgba(77,107,61,0.09)',  border: 'rgba(77,107,61,0.3)'   },
+        'On Track': { color: T.ok,     bg: 'rgba(77,107,61,0.09)',  border: 'rgba(77,107,61,0.3)'   },   // one of ai-score's four (state §0.188)
         'Healthy':  { color: T.ok,     bg: 'rgba(77,107,61,0.09)',  border: 'rgba(77,107,61,0.3)'   },
         'Neutral':  { color: T.inkMid, bg: T.surface2,              border: T.border                 },
         'At Risk':  { color: T.warn,   bg: 'rgba(184,115,51,0.09)', border: 'rgba(184,115,51,0.3)'  },
         'Critical': { color: T.danger, bg: 'rgba(156,58,46,0.09)',  border: 'rgba(156,58,46,0.3)'  },
     };
+    const score = aiScore;
+    const history = Array.isArray(score?.history) ? score.history : [];
 
     return (
         <div style={{ paddingBottom: '1rem' }}>
@@ -676,6 +686,11 @@ function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate
             {error && (
                 <div style={{ padding: '1rem', background: 'rgba(156,58,46,0.07)', border: `1px solid rgba(156,58,46,0.3)`, borderRadius: T.r, color: T.danger, fontSize: '0.875rem', marginBottom: '1rem', fontFamily: T.sans }}>
                     {error}
+                </div>
+            )}
+            {off && (
+                <div style={{ padding: '1rem', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, fontSize: '0.875rem', marginBottom: '1rem', fontFamily: T.sans }}>
+                    AI scoring is off for this workspace — an Admin turns it on in Settings → Features &amp; AI.
                 </div>
             )}
             {!loading && score && (() => {
@@ -695,7 +710,7 @@ function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate
                         {score.signals && score.signals.length > 0 && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
                                 {score.signals.map((s, i) => (
-                                    <SignalChip key={i} kind={s.kind} text={s.text}/>
+                                    <SignalChip key={i} kind={signalKind(s)} text={s.text}/>
                                 ))}
                             </div>
                         )}
@@ -705,11 +720,11 @@ function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate
                             </div>
                             <GhostBtn onClick={() => fetchScore(true)}>↻ Refresh score</GhostBtn>
                         </div>
-                        {scoreHistory.length > 0 && (
+                        {history.length > 0 && (
                             <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: `1px solid ${T.border}` }}>
-                                <div style={{ ...ey(), marginBottom: 8 }}>Score history</div>
+                                <div style={{ ...ey(), marginBottom: 8 }}>Earlier scores</div>
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                    {scoreHistory.map((h, i) => {
+                                    {history.map((h, i) => {
                                         const hvc = verdictConfig[h.verdict] || verdictConfig['Neutral'];
                                         const ageLabel = h.scoredAt ? (() => {
                                             const m = Math.floor((Date.now() - new Date(h.scoredAt).getTime()) / 60000);
@@ -729,7 +744,7 @@ function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate
                     </div>
                 );
             })()}
-            {!loading && !error && !score && (
+            {!loading && !error && !off && !score && (
                 <div style={{ textAlign: 'center', padding: '3rem' }}>
                     <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🤖</div>
                     <div style={{ fontSize: '0.875rem', fontWeight: '600', color: T.ink, marginBottom: '4px', fontFamily: T.sans }}>No score yet</div>
@@ -852,7 +867,7 @@ function NestedNewContactForm({ firstName, lastName, onSave, onCancel }) {
 // ─────────────────────────────────────────────────────────────
 //  Right Rail — 3 sections (AI, Contacts, Activity)
 // ─────────────────────────────────────────────────────────────
-function RightRail({ opportunity, oppActivities, contacts, settings, onOpenActivity, onOpenContact, onOpenHistory, onOpenAi, onOpenContacts }) {
+function RightRail({ opportunity, aiScore, aiOn, oppActivities, contacts, settings, onOpenActivity, onOpenContact, onOpenHistory, onOpenAi, onOpenContacts }) {
     const { setViewingActivity } = useApp();   // a recent-activity row opens the read-only viewer (§0.93)
 
     // Last touch recency → engagement level
@@ -882,10 +897,11 @@ function RightRail({ opportunity, oppActivities, contacts, settings, onOpenActiv
         return { name, title: contact?.title || '', lastTouch: lastAct, engagement: engLevel(lastAct) };
     });
 
-    // AI signals from cachedScore or empty
-    const aiSignals = opportunity?.cachedScore?.signals || [];
-    const aiScore   = opportunity?.cachedScore?.score || null;
-    const aiVerdict = opportunity?.cachedScore?.verdict || null;
+    // The deal's AI score — the window's (state §0.188): the one the deal was opened with,
+    // or the one its AI Score tab just asked for. The rail read `cachedScore`, which no
+    // deal has, so it never showed one.
+    const aiSignals = aiScore?.signals || [];
+    const aiNumber  = aiScore?.score ?? null;
 
     // Recent activities for timeline (top 5)
     const recentActs = oppActivities.slice(0, 5);
@@ -897,23 +913,26 @@ function RightRail({ opportunity, oppActivities, contacts, settings, onOpenActiv
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
 
-            {/* ── AI Read ─────────────────────────────────────── */}
+            {/* ── AI Read — the deal's score; Score and the full analysis while the org's switch
+                is on (state §0.188): off, the AI Score tab is not offered, and "Score this deal"
+                led to a tab whose every answer was "disabled". ── */}
+            {(aiOn || aiScore) && (
             <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div style={{ ...ey(T.goldInk) }}>AI read</div>
-                    {aiScore != null && (
+                    {aiNumber != null && (
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                            <span style={{ fontSize: 18, fontWeight: 800, color: T.ink, fontFeatureSettings: '"tnum"', fontFamily: T.sans }}>{aiScore}</span>
+                            <span style={{ fontSize: 18, fontWeight: 800, color: T.ink, fontFeatureSettings: '"tnum"', fontFamily: T.sans }}>{aiNumber}</span>
                             <span style={{ fontSize: 10, color: T.ok, fontWeight: 700, fontFamily: T.sans }}>/ 100</span>
                         </div>
                     )}
                 </div>
-                {aiSignals.length > 0 ? (
+                {aiScore ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {aiSignals.slice(0, 4).map((s, i) => (
-                            <SignalChip key={i} kind={s.kind} text={s.text}/>
+                            <SignalChip key={i} kind={signalKind(s)} text={s.text}/>
                         ))}
-                        {(aiSignals.length > 4 || true) && (
+                        {aiOn && (
                             <button type="button" onClick={onOpenAi}
                                 style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', fontSize: 11, color: T.inkMuted, cursor: 'pointer', fontFamily: T.sans, textDecoration: 'underline', textDecorationColor: T.border }}>
                                 Full AI analysis →
@@ -927,6 +946,7 @@ function RightRail({ opportunity, oppActivities, contacts, settings, onOpenActiv
                     </div>
                 )}
             </div>
+            )}
 
             {/* ── Buying committee ────────────────────────────── */}
             <div>
@@ -1074,6 +1094,12 @@ export default function OpportunityModal({
     // null = show rail, 'history' | 'contacts' | 'ai-score' | 'quotes' = show full-width tab
     const [detailTab, setDetailTab] = useState(null);
 
+    // The deal's AI score (state §0.188): the one it was opened with, or the one the AI
+    // Score tab has just asked for — the right rail and the tab read this one.
+    const [scoredNow, setScoredNow] = useState(null);   // { id, score }
+    const aiScore = (scoredNow && scoredNow.id === opportunity?.id) ? scoredNow.score : (opportunity?.aiScore || null);
+    const aiOn = !!settings?.aiScoringEnabled;
+
     // Comment thread state (fully preserved)
     const [commentDraft, setCommentDraft]               = useState('');
     const [editingCommentId, setEditingCommentId]       = useState(null);
@@ -1191,8 +1217,10 @@ export default function OpportunityModal({
     };
 
     // ── Submit handler (fully preserved) ─────────────────────
-    const handleSubmit = (e) => {
-        e.preventDefault();
+    // The deal's save — the form's, and every detail tab's (state §0.188): the History and
+    // AI Score tabs' Save submitted #opp-form, which a detail tab unmounts, so it did
+    // nothing. A field missing opens the form, where its error shows.
+    const saveDeal = () => {
         const errors = {};
         if (!formData.opportunityName || !formData.opportunityName.trim()) errors.opportunityName = 'Opportunity name is required';
         // Resolve the account from the picker text (source of truth), so a typed exact
@@ -1209,12 +1237,14 @@ export default function OpportunityModal({
             errors.arr = 'Revenue is required';
         if (Object.keys(errors).length > 0) {
             setValidationErrors(errors);
+            setDetailTab(null);
             setTimeout(() => { const el = document.querySelector('.opp-field-error'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
             return;
         }
         setValidationErrors({});
         onSave({ ...formData, account: resolvedAccount.name, accountId: resolvedAccount.id, arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
     };
+    const handleSubmit = (e) => { e.preventDefault(); saveDeal(); };
 
     // ── @mention helpers (fully preserved) ───────────────────
     const extractMentions = (text) => {
@@ -1461,7 +1491,7 @@ export default function OpportunityModal({
                                 <DealHistoryTab opportunity={opportunity} oppActivities={oppActivities} oppTasks={oppTasks} stages={stages} settings={settings} contacts={contacts}
                                     activityTypeIcon={activityTypeIcon} onSaveActivity={onSaveActivity} onDeleteActivity={onDeleteActivity}
                                     currentUser={currentUser} onClose={onClose} saving={saving}
-                                    onUpdate={() => { const f = document.getElementById('opp-form'); if (f) f.requestSubmit(); }}/>
+                                    onUpdate={saveDeal}/>
                             )}
                             {detailTab === 'contacts' && (
                                 <ContactEngagementTab opportunity={opportunity} oppActivities={oppActivities} contacts={contacts}
@@ -1474,9 +1504,10 @@ export default function OpportunityModal({
                                     }}/>
                             )}
                             {detailTab === 'ai-score' && (
-                                <AiScoreTab opportunity={opportunity} oppActivities={oppActivities} currentUser={currentUser}
+                                <AiScoreTab opportunity={opportunity} aiScore={aiScore}
+                                    onScored={(score) => setScoredNow({ id: opportunity.id, score })}
                                     onClose={onClose}
-                                    onUpdate={() => { const f = document.getElementById('opp-form'); if (f) f.requestSubmit(); }}/>
+                                    onUpdate={saveDeal}/>
                             )}
                             {detailTab === 'quotes' && (
                                 <OppQuotesPanel opportunity={opportunity} contacts={contacts} onClose={onClose}/>
@@ -2192,6 +2223,8 @@ export default function OpportunityModal({
                                     {opportunity ? (
                                         <RightRail
                                             opportunity={opportunity}
+                                            aiScore={aiScore}
+                                            aiOn={aiOn}
                                             oppActivities={oppActivities}
                                             contacts={contacts}
                                             settings={settings}

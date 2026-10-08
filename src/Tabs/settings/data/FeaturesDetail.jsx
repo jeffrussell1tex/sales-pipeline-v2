@@ -99,6 +99,10 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
     // §0.141 — Claude reads the report builder's prompts (settings.aiReportPromptsEnabled).
     // Off, the builder's own reader runs and says AI assistance is available here.
     const [aiPrompts, setAiPrompts] = React.useState(false);
+    // §0.188 — Claude scores deals (settings.aiScoringEnabled): the deal window's AI Score
+    // and the Pipeline's "Score all deals". settings.mjs read and saved the switch, and no
+    // screen showed it — so AI scoring was off in every workspace, for good.
+    const [aiScoring, setAiScoring] = React.useState(false);
 
 
     // ── Initialise from settings prop (same pattern as all other panels) ───────
@@ -131,6 +135,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
             });
             setAiSettings(settings.aiSettings || AI_DEFAULTS);
             setAiPrompts(settings.aiReportPromptsEnabled === true);
+            setAiScoring(settings.aiScoringEnabled === true);
         }
         setLoading(false);
     }, [settings]);
@@ -163,6 +168,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 quotesEnabled:  tabViz.quotesEnabled,
                 dispatchEnabled: tabViz.dispatchEnabled,
                 repsCanUseDispatch: tabViz.repsCanUseDispatch,
+                aiScoringEnabled: aiScoring,
                 aiReportPromptsEnabled: aiPrompts,
             };
             if (keyAction === 'set' && apiKeyInput.trim()) payload.anthropicApiKey = apiKeyInput.trim();
@@ -190,6 +196,7 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                 quotesEnabled:  tabViz.quotesEnabled,
                 dispatchEnabled: tabViz.dispatchEnabled,
                 repsCanUseDispatch: tabViz.repsCanUseDispatch,
+                aiScoringEnabled: aiScoring,
                 aiReportPromptsEnabled: aiPrompts,
                 // Reflect the new key state locally. The plaintext is never held
                 // in app state, so the last-4 hint is dropped until the next load.
@@ -386,8 +393,8 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                         </select>
                     </FL>
                 </div>
-                {/* §0.141 — the one switch that sends anything to Claude today. Off: the
-                    report builder's own reader runs and tells members this is available. */}
+                {/* §0.141 — Claude reads report prompts. Off: the report builder's own reader
+                    runs and tells members this is available. */}
                 <div onClick={() => { setAiPrompts(v => !v); setDirty(true); }} role="switch" aria-checked={aiPrompts}
                     style={{ marginTop:14, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: aiPrompts ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
                     <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${aiPrompts?T.ok:T.border}`, background:aiPrompts?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
@@ -399,6 +406,22 @@ export const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty
                             {aiPrompts
                                 ? `On · the report builder's "Ask AI" sends the prompt sentence (never your records) to Claude${keyIsSet ? ' with your BYOK key' : ' with the site key (no BYOK key installed)'}; the built-in reader takes over if Claude cannot answer.`
                                 : 'Off · the report builder reads prompts with its built-in interpreter and tells members AI assistance is available here.'}
+                        </div>
+                    </div>
+                </div>
+                {/* §0.188 — Claude scores deals. Off: the deal window offers no AI Score and the
+                    Pipeline no "Score all deals"; a score a deal already has still shows. */}
+                <div onClick={() => { setAiScoring(v => !v); setDirty(true); }} role="switch" aria-checked={aiScoring}
+                    style={{ marginTop:10, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: aiScoring ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
+                    <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${aiScoring?T.ok:T.border}`, background:aiScoring?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
+                        {aiScoring ? '✓' : ''}
+                    </span>
+                    <div>
+                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Claude scores deals</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>
+                            {aiScoring
+                                ? `On · a deal's AI Score, and the Pipeline's "Score all deals", send the deal — its fields, notes and last ten activities — to Claude${keyIsSet ? ' with your BYOK key' : ' with the site key (no BYOK key installed)'}; each score is kept on the deal and written to the audit log.`
+                                : 'Off · no deal is scored: the deal window offers no AI Score and the Pipeline no "Score all deals". A score a deal already has still shows.'}
                         </div>
                     </div>
                 </div>

@@ -5,7 +5,8 @@
  * Body: { opportunityId }
  *
  * Returns:
- *   { score, verdict, headline, signals, recommendation, scoredAt }
+ *   { score, verdict, headline, signals, recommendation, scoredAt, history }
+ *   — the score as the deal keeps it, its earlier scores in `history` (state §0.188)
  *
  * Requires:
  *   ANTHROPIC_API_KEY in Netlify environment variables
@@ -28,6 +29,8 @@ import { serverErrorBody, auditAs, assertOwnership } from './_lib.mjs';
 // The org's BYOK key, else the site's — one helper for every Anthropic call
 // (state §0.141; this file carried its own copy of the decrypt before).
 import { resolveAnthropicKey } from './_aiKey.mjs';
+// The score's shape, the server's and the deal window's (state §0.188).
+import { withHistory } from '../../src/utils/aiScore.js';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -199,9 +202,12 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
         };
 
         // ── Cache score on opportunity record ─────────────────────────────────
+        // The score it replaces heads its history (state §0.188): the deal window
+        // showed a history nothing kept.
+        const stored = withHistory(cached, scoreData);
         try {
             await db.update(opportunities)
-                .set({ aiScore: scoreData, updatedAt: new Date() })
+                .set({ aiScore: stored, updatedAt: new Date() })
                 .where(and(eq(opportunities.id, opportunityId), eq(opportunities.orgId, orgId)));
         } catch (cacheErr) {
             console.error('Failed to cache AI score:', cacheErr.message);
@@ -213,7 +219,7 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
             action: 'ai.deal_scored', entityType: 'opportunity', entityId: opportunityId, entityName: opp.opportunityName || opp.account || 'Unnamed',
             detail: `claude-haiku-4-5 · ${usingOrgKey ? 'the workspace’s key' : 'the site key'} · score ${scoreData.score} (${scoreData.verdict})`,
         });
-        return { statusCode: 200, headers, body: JSON.stringify({ ...scoreData, usingOrgKey }) };
+        return { statusCode: 200, headers, body: JSON.stringify({ ...stored, usingOrgKey }) };
 
     } catch (err) {
         console.error('ai-score error:', err.message);

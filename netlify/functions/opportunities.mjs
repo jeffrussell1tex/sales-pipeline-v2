@@ -129,7 +129,9 @@ const sanitize = (data) => ({
     createdBy:          data.createdBy           || null,
     stageHistory:       data.stageHistory        || [],
     comments:           data.comments            || [],
-    aiScore:            data.aiScore             ?? null,
+    // No aiScore: a deal's AI score is ai-score.mjs's alone (state §0.188). The deal
+    // window saves the deal it opened — its score too — so a save after a scoring
+    // wrote the old score back over the new one.
 });
 
 // ── Handler ───────────────────────────────────────────────────────────────────

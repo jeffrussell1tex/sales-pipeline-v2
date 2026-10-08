@@ -157,10 +157,9 @@ function dealReads(src) {
 }
 
 // The reads left, each recorded with its reason. A key is the file and the read.
+// The deal window's AI read and AI Score tab read opportunity.cachedScore and
+// .scoreHistory — §0.187's found (b) — until §0.188 read the deal's aiScore.
 const KNOWN = new Map([
-    ['src/components/modals/OpportunityModal.jsx opportunity.cachedScore',
-        "the AI score: a deal's is aiScore — the deal window's AI read and AI Score tab are their own repair (§0.187's found (b))"],
-    ['src/components/modals/OpportunityModal.jsx opportunity.scoreHistory', "the same (§0.187's found (b))"],
     ['src/Tabs/ReportsTab.jsx o.competitor', "a deal has no competitor: the competitor table counts no win (§0.187's found (c))"],
     ['netlify/functions/send-slack.mjs d.name', "the Slack digest's top deals — its payload's shape, which no caller sends (§0.187's found (d))"],
 ]);
