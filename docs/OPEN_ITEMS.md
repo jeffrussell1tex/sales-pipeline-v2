@@ -30,9 +30,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **The Anthropic site key** (§2.1): check it before AI scoring is relied on.
-   Dev's key answered 401 on 15 Sep, so an org with no key of its own may get
-   an error instead of a score.
+1. **Update the Anthropic keys** (§2.1), before AI scoring is relied on. Dev's
+   key answered 401 on 15 Sep, so an org with no key of its own may get an
+   error instead of a score.
 2. **Small security closes** (§4.6):
    - the audit log's allowlist for client events;
    - role scoping on the recommendation log's GET;
@@ -56,15 +56,22 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.1 Checks and setup only Jeff can do
 
-- **The Anthropic site key: dev answered 401 on 15 Sep; prod was never
-  checked.**
+- **Update the Anthropic keys** (Jeff, 8 Oct: "add updating the anthropic keys
+  to the to-do list"). Dev's site key answered 401 on 15 Sep; prod's was
+  never checked.
   - Through `netlify dev`, the dev site's `ANTHROPIC_API_KEY` answered
     `401 invalid x-api-key`. Prod's key is unknown, and ai-score.mjs uses the
     same site key.
   - Since §0.188 an Admin can switch on "Claude scores deals". An org with no
     key of its own (BYOK) then scores with the site key.
-  - To do: check or replace the key in Netlify, both sites. A key never
-    enters chat.
+  - To do: a new key in `ANTHROPIC_API_KEY` on both Netlify sites (dev,
+    "accelerep"; prod, "sales-pipeline-v2"), kept marked secret; then a
+    deploy of each, since a changed variable reaches the functions on the
+    next deploy. A key never enters chat.
+  - Also, if it is to be replaced too: the Accelerep Test org's own key
+    (BYOK, Settings → Features & AI), installed 15 Sep.
+  - Then: one AI score on a QA deal, in an org with no key of its own,
+    proves the site key. It sends that deal to Anthropic.
   - Source: §0.141; handoff §5 (16 Sep). Not re-checked since 15 Sep.
 - **QuickBooks setup, before the export can be built (§3.2).**
   - In the Intuit developer portal: an app with two redirect URIs, and a
