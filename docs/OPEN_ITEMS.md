@@ -30,9 +30,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **The Anthropic keys: deploy and prove** (§2.1). Jeff replaced them on 8 Oct;
-   each site's functions get the new key on its next deploy, and one AI score
-   proves it.
+1. **The Anthropic keys: why Anthropic refuses the calls** (§2.1). The new key
+   is recognised; every call is refused with 400. Anthropic's Console shows the
+   reason (Logs, or the account's billing).
 2. **Small security closes** (§4.6):
    - the audit log's allowlist for client events;
    - role scoping on the recommendation log's GET;
@@ -68,13 +68,31 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     `ANTHROPIC_API_KEY` on the Netlify sites (dev, "accelerep"; prod,
     "sales-pipeline-v2"). Whether the Accelerep Test org's own key (BYOK,
     Settings → Features & AI, installed 15 Sep) was replaced too: not said.
-  - Left: a deploy of each site, since a changed variable reaches the
-    functions on the next deploy — dev's comes with the next push; prod's is
-    Netlify's "Trigger deploy" (the current `master`, no code change) or the
-    next ship. Locally, `netlify dev` reads the dev site's variables when it
-    starts.
-  - Then: one AI score on a QA deal, in an org with no key of its own,
-    proves the site key. It sends that deal to Anthropic.
+  - **Deployed** (Jeff, 8 Oct): both sites at 15:56 UTC — dev `6ac7bcfa…` on
+    `5458da1`, prod `6ac7bd07…` on `a38e0c6` — every function rebuilt.
+  - **Tried, 8 Oct, Accelerep QA (no key of its own), on the dev site:**
+    - An AI score of `opp_qa_10` answered 502 "AI scoring service
+      unavailable" — Anthropic refused; ai-score does not say why, and
+      Netlify keeps no console output for it ("No log").
+    - The report reader's "Ask AI" ("Open deals by stage") answered Anthropic's
+      **400** — the reader returns the status. Read with the record: on 15 Sep
+      this same request body drew a 401 with a bad key (Anthropic checks the
+      key first) and worked with Jeff's own key; Anthropic's model table lists
+      both models in use (`claude-haiku-4-5-20251001`, `claude-opus-5`) active.
+      So the new key is recognised, and the refusal is the account's, not the
+      code's. Its words are not seen: a 400 is how Anthropic answers, for one,
+      an account with too little credit — a candidate, not established.
+    - "Claude scores deals" left on, as Jeff asked; the report reader turned
+      on for the one test and off again. No score or report kept; the audit
+      log holds the settings saves and the reader's attempt ("claude-opus-5 ·
+      the site key · error 400", 19:36:56 UTC).
+  - **Next (Jeff):** Anthropic's Console for the account the new key belongs
+    to — Logs (the two requests, 8 Oct, 1:34 PM and 2:37 PM Chicago, with
+    their error message) or Billing (the credit balance).
+  - Localhost cannot prove the key: netlify dev injects no
+    `ANTHROPIC_API_KEY` (a secret needs a "Local development" value), and it
+    sent a key from elsewhere that Anthropic answered 401 — its source not
+    established.
   - Source: §0.141; handoff §5 (16 Sep).
 - **QuickBooks setup, before the export can be built (§3.2).**
   - In the Intuit developer portal: an app with two redirect URIs, and a
@@ -459,6 +477,12 @@ model's pattern to deals.
   its own. §0.176 (d).
 - **Kanban:** check that closed deals leave the board now that closing is
   reachable. As recorded (Sep).
+- **The AI score's refusal says nothing of why.** ai-score answers every
+  refusal from Anthropic with 502 "AI scoring service unavailable", and the
+  status goes to a console Netlify does not keep. The report reader returns
+  the status, and the page names a rejected key (§0.141). Recommended: the
+  same — Anthropic's status in the answer, and the AI Score tab naming the
+  cause (a rejected key, the account, the model, busy). Found 8 Oct.
 
 ### 4.3 Settings
 
