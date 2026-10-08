@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 7, 2026 · rules current through **§18b80** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 7, 2026 · rules current through **§18b82** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3955,3 +3955,21 @@ through `dbFetch`.
 4. **Nothing mid-save closes on Escape** — an import running, a merge saving, a claim being submitted, a guard's save out: the Escape is refused.
 5. **The draggable windows share one place** — each rises when clicked (useDraggable), so among themselves the order is the order clicked.
 6. **In-tab layers are not yet in the order** — state §9, §0.186's found (a), the audit: fifteen files draw fixed layers with no Escape at all, and eleven more are to be checked layer by layer.
+
+## 18b81. A Layer Drawn Over The Page Is Drawn Outside .app-container; A Screen Replaced Keeps Its Ways In (hard rule)
+
+**Origin (§0.187, 7 Oct 2026 — §0.186's found (c); Jeff: "the prep panels were opening underneath and not visible unless you click away from them").** The meeting prep panel opened under the rail its Prep was pressed in: App drew it inside `.app-container` — `position: relative; z-index: 1`, a stacking context — so it sat under every layer drawn outside it, whatever its own z. And it had no way in for months: the Prep the contact and account panels offered went with them when the rails replaced them (27 May), and nothing said so. §16's menu rule (an ancestor's transform traps a fixed box) is its kin.
+
+1. **A layer that must sit over a rail, a modal or the deal window is drawn outside `.app-container`** — beside ModalLayer in App's render, inside its own LayerBoundary (§18b78), or through `createPortal(…, document.body)`.
+2. **A z-index orders only inside its stacking context** — every z inside `.app-container` sits under the container's 1. The escape order (§18b80) puts the layers drawn there — the header's panels — last, under every layer drawn outside it: the notes popover at 998 above the search results at 1199.
+3. **The guard reads App's render** — tests/escape-order.test.mjs: the container is a stacking context, and the layers drawn inside it are the header's panels and no other, last in the order.
+4. **A screen replaced keeps its ways in** — list what the old screen opened, and carry each to the new one or record its removal. tests/meeting-prep.test.mjs pins the meeting prep panel's three: the contact rail, the account rail, the deal window.
+
+## 18b82. A Deal Is Read By The Names A Deal Has (hard rule)
+
+**Origin (§0.187, 7 Oct 2026 — Jeff: "finish it and include the open pipeline fix").** The rails' open-deal rows read each deal's amount from `o.value` — a deal's is `arr` — and showed none, ever. The class, found by a parse: the account rail's close date from `o.closeDate` (a deal's is `forecastedCloseDate`), the Pipeline list's next step from `opp.nextStep` (a deal's is `nextSteps`). A name a deal does not have reads `undefined`; a display that reads only it renders nothing — no error, nothing to see but an absence.
+
+1. **The names are the opportunities table's** (db/schema.ts) — the client keeps them (useOpportunities makes `arr` a number and adds `closeQuarter`).
+2. **A fallback is harmless; a missing name read alone is the bug** — `o.arr || o.revenue` reads `arr`; `o.value ? … : ''` reads nothing.
+3. **A list built with more says so** — a map returning `{ ...o, flags }` — and the names it adds are read off that list only.
+4. **The guard is a parse, not a list** — tests/deal-fields.test.mjs walks src/ and netlify/functions/: every field read off an element of a deal list, or off a variable named for a deal, against the table. The reads left are recorded with their reasons (KNOWN), and a recorded read no longer made fails too.

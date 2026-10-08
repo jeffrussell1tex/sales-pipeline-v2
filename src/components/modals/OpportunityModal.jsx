@@ -1013,6 +1013,7 @@ export default function OpportunityModal({
     onClose, onSave, onAddAccount, onSaveNewContact, onSaveNewAccount, onAddContact,
     lastCreatedAccountName, onAddRep, lastCreatedRepName,
     errorMessage, onDismissError, saving, onOpenNestedContact, onOpenNestedAccount }) {
+    const { openMeetingPrep } = useApp();   // the header's Prep (state §0.187)
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
         ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
         : ['Qualification', 'Discovery', 'Evaluation (Demo)', 'Proposal', 'Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'];
@@ -1434,6 +1435,14 @@ export default function OpportunityModal({
                                     </button>
                                 ))}
                             </div>
+                        )}
+                        {/* Meeting prep on this deal (state §0.187) */}
+                        {opportunity && openMeetingPrep && (
+                            <button type="button" onClick={() => openMeetingPrep(`Meeting with ${opportunity.account || opportunity.opportunityName || 'the customer'}`, opportunity.id)}
+                                title="Meeting prep for this deal"
+                                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: T.r, color: T.surfaceInkFg, cursor: 'pointer', height: 28, padding: '0 10px', fontSize: 11, fontWeight: 600, fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 4, whiteSpace: 'nowrap' }}>
+                                📋 Prep
+                            </button>
                         )}
                         <button type="button" onClick={onClose}
                             style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: T.r, color: T.surfaceInkFg, cursor: 'pointer', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 4 }}>

@@ -78,7 +78,8 @@ function TableHeader({ canSeeAll, selectMode }) {
             {canSeeAll && <div>Rep</div>}
             <div>Stage</div>
             <div style={{ textAlign: 'right' }}>Revenue</div>
-            <div>Close</div>
+            {/* Revenue sits right, Close left: the gap between them is Close's (state §0.187) */}
+            <div style={{ paddingLeft: 16 }}>Close</div>
             <div>AI</div>
             <div>Health</div>
             <div/>
@@ -125,13 +126,14 @@ function TableRow({ opp, canSeeAll, calculateDealHealth, onEdit, selectMode, isS
                 </div>
             )}
 
-            {/* Deal name + next step hint */}
+            {/* Deal name + next step hint — a deal's next step is nextSteps; the hint read
+                nextStep, which a deal does not have, and never showed (state §0.187) */}
             <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}
-                title={opp.nextStep ? `Next step: ${opp.nextStep}` : undefined}>
+                title={opp.nextSteps ? `Next step: ${opp.nextSteps}` : undefined}>
                 {opp.opportunityName || opp.account}
-                {opp.nextStep && (
+                {opp.nextSteps && (
                     <span style={{ marginLeft: 5, fontSize: 10, color: T.goldInk, fontWeight: 400 }}>
-                        → {opp.nextStep.length > 40 ? opp.nextStep.slice(0, 40) + '…' : opp.nextStep}
+                        → {opp.nextSteps.length > 40 ? opp.nextSteps.slice(0, 40) + '…' : opp.nextSteps}
                     </span>
                 )}
             </div>
@@ -157,7 +159,7 @@ function TableRow({ opp, canSeeAll, calculateDealHealth, onEdit, selectMode, isS
             </div>
 
             {/* Close date */}
-            <div style={{ fontSize: 11, color: overdue ? T.danger : T.inkMid, fontWeight: overdue ? 600 : 400 }}>
+            <div style={{ fontSize: 11, color: overdue ? T.danger : T.inkMid, fontWeight: overdue ? 600 : 400, paddingLeft: 16 }}>
                 {relativeDay(opp.forecastedCloseDate)}
             </div>
 

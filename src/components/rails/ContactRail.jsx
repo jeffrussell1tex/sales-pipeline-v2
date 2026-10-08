@@ -8,6 +8,7 @@ import { cleanEmailTemplates, mergeContext, renderForContact, mailtoHref } from 
 import { T } from '../../tokens.js';
 import { NON_REP_ROLES } from '../../utils/roles.js';
 import { activeDealsOf } from '../../utils/contactDeals.js';
+import DealPrepPicker from './DealPrepPicker';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -189,6 +190,7 @@ export default function ContactRail() {
         contactModalSaving,
         taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode,
         confirmModal, promptModal,
+        openMeetingPrep,
     } = useApp();
 
     // ── Resolve the contact being viewed/edited ───────────────────────────────
@@ -407,6 +409,9 @@ export default function ContactRail() {
     const mergeCtx = mergeContext({ contact, rep: myProfile, org: settings });
     const [showTemplates, setShowTemplates] = useState(false);
     useEffect(() => { setShowTemplates(false); }, [contactRailId]);
+    // Prep's list of open deals (state §0.187) — closed again when the rail shows another contact.
+    const [showPrepPick, setShowPrepPick] = useState(false);
+    useEffect(() => { setShowPrepPick(false); }, [contactRailId]);
 
     const openCommLog = (type, extra = {}) => {
         if (!contact) return;
@@ -523,7 +528,7 @@ export default function ContactRail() {
                         </a>
                     )}
                     {contact.email && emailTemplates.length > 0 && (
-                        <button type="button" onClick={() => setShowTemplates(v => !v)} aria-expanded={showTemplates} title="Email with a template, or a blank email"
+                        <button type="button" onClick={() => { setShowTemplates(v => !v); setShowPrepPick(false); }} aria-expanded={showTemplates} title="Email with a template, or a blank email"
                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: showTemplates ? T.ink : T.surface, border: `1px solid ${showTemplates ? T.ink : T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: showTemplates ? '#f5f1eb' : T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                             ✉ Email ▾
                         </button>
@@ -539,6 +544,19 @@ export default function ContactRail() {
                         style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
                         ✎ Log
                     </button>
+                    {/* Meeting prep on this contact's open deal — one opens it, more offer the list (state §0.187) */}
+                    {openOpps.length > 0 && (
+                        <button
+                            onClick={() => {
+                                if (openOpps.length > 1) { setShowPrepPick(v => !v); setShowTemplates(false); return; }
+                                if (openMeetingPrep) openMeetingPrep(`Meeting with ${fullName}`, openOpps[0].id);
+                            }}
+                            aria-expanded={openOpps.length > 1 ? showPrepPick : undefined}
+                            title={openOpps.length > 1 ? `Meeting prep — choose one of ${openOpps.length} open deals` : `Meeting prep — ${openOpps[0].opportunityName || openOpps[0].account || 'their open deal'}`}
+                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: showPrepPick ? T.ink : T.surface, border: `1px solid ${showPrepPick ? T.ink : T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, color: showPrepPick ? '#f5f1eb' : T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                            📋 Prep{openOpps.length > 1 ? ' ▾' : ''}
+                        </button>
+                    )}
                     <button
                         onClick={() => setContactRailMode('edit')}
                         style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', background: T.ink, border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, color: '#f5f1eb', cursor: 'pointer', fontFamily: T.sans }}>
@@ -553,6 +571,10 @@ export default function ContactRail() {
                         setShowTemplates(false);
                         openCommLog('Email', { notes: `Template: ${t.name}${r.subject ? ` — ${r.subject}` : ''}` });
                     }}/>
+            )}
+            {!isEditing && contact && showPrepPick && openOpps.length > 1 && (
+                <DealPrepPicker deals={openOpps}
+                    onPick={(d) => { setShowPrepPick(false); if (openMeetingPrep) openMeetingPrep(`Meeting with ${fullName}`, d.id); }}/>
             )}
 
             {/* ── Sub-tabs ───────────────────────────────────────────────────── */}
@@ -812,7 +834,8 @@ export default function ContactRail() {
                             </div>
                         )}
 
-                        {/* Open pipeline summary (view only) */}
+                        {/* Open pipeline summary (view only) — a deal's amount is its arr; a deal has no
+                            value, so the amount never showed (state §0.187) */}
                         {!isEditing && openOpps.length > 0 && (
                             <div style={{ marginTop: 6 }}>
                                 <SectionHeading label="Open Pipeline" />
@@ -820,7 +843,7 @@ export default function ContactRail() {
                                     {openOpps.slice(0, 5).map(o => (
                                         <div key={o.id} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '7px 10px', fontSize: 12 }}>
                                             <div style={{ fontWeight: 600, color: T.ink }}>{o.opportunityName || o.account}</div>
-                                            <div style={{ color: T.inkMuted, marginTop: 2 }}>{o.stage} {o.value ? `· $${Number(o.value).toLocaleString()}` : ''}</div>
+                                            <div style={{ color: T.inkMuted, marginTop: 2 }}>{o.stage} {o.arr ? `· $${Number(o.arr).toLocaleString()}` : ''}</div>
                                         </div>
                                     ))}
                                 </div>
@@ -908,7 +931,7 @@ export default function ContactRail() {
                                     <div key={o.id} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '8px 10px' }}>
                                         <div style={{ fontSize: 12, fontWeight: 600, color: T.ink }}>{o.opportunityName || o.account}</div>
                                         <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2 }}>
-                                            {o.stage}{o.value ? ` · $${Number(o.value).toLocaleString()}` : ''}
+                                            {o.stage}{o.arr ? ` · $${Number(o.arr).toLocaleString()}` : ''}
                                         </div>
                                     </div>
                                 ))}

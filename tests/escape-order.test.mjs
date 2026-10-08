@@ -16,6 +16,12 @@
 // and an Escape — App's handler names it, or its own listener takes it, or it takes it
 // through useEscapeLayer with its own place — and every place in the order is a layer that
 // exists. The order is z order, and each z is the one its file draws.
+//
+// And the order is what the page shows (state §0.187): .app-container is a stacking context
+// at z-index 1, so a layer drawn inside it sits under every layer drawn outside it, whatever
+// its own z — the meeting prep panel, drawn there, opened under the rail its Prep was
+// pressed in. A parse of App's render says which layers are drawn inside: the header's
+// panels, last in the order, and no other.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -43,40 +49,91 @@ const walk = (node, visit, anc = []) => {
 
 test('layersAbove: a layer passes the Escape on while one above it is open, and only then', () => {
     for (const name of NAMES) assert.equal(layersAbove(name, {}), false, `${name}: nothing open, the Escape is its own`);
-    assert.equal(layersAbove('meetingPrep', { quickLog: true }), true, 'the quick log sits above the meeting prep panel');
-    assert.equal(layersAbove('meetingPrep', { merge: true, search: true }), false, 'the merge review and the search sit below it');
+    assert.equal(layersAbove('meetingPrep', { contactRail: true, accountRail: true, draggable: true, quickLog: true }), false,
+        'the meeting prep panel opens over the rails and the deal window its Prep is pressed in (§0.187)');
+    assert.equal(layersAbove('meetingPrep', { documentRail: true }), true, 'a document opened over it');
+    assert.equal(layersAbove('contactRail', { meetingPrep: true }), true, 'the rail under it waits');
     assert.equal(layersAbove('duePopup', { contactRail: true }), true, 'a rail sits above the reminders');
     assert.equal(layersAbove('duePopup', { draggable: true, shortcuts: true }), false, 'the deal modal and the shortcuts sit below them');
     assert.equal(layersAbove('draggable', { reminderPopup: true }), true, 'a reminder is drawn over the import windows');
     assert.equal(layersAbove('leaveGuard', { confirm: true }), true, 'the app\'s dialogs sit above every layer (§18b70.4)');
     assert.equal(layersAbove('leaveGuard', { documentRail: true, taskRail: true }), false, 'the leave guard sits above the rails');
     assert.equal(layersAbove('coachingNote', { confirm: true, blockedDelete: true }), false, 'nothing sits above the top');
+    assert.equal(layersAbove('search', { notes: true }), true, 'the notes popover draws over the header\'s panels, whatever their z (§0.187)');
     assert.throws(() => layersAbove('nope', {}), /no layer named nope/);
 });
 
-test('one Escape, one layer: the meeting prep panel under the quick log stays; the next Escape closes it', () => {
-    const open = { quickLog: true, meetingPrep: true };
+test('one Escape, one layer: the meeting prep panel over the rail its Prep was pressed in closes alone; the next Escape closes the rail', () => {
+    const open = { contactRail: true, meetingPrep: true };
     const closed = [];
     const press = () => {
         const e = { key: 'Escape', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
-        // Both listen on document in the capture phase, in the order they mounted — the
-        // meeting prep panel's first, as it opened first.
-        takeEscape(e, layersAbove('meetingPrep', open), () => { closed.push('meetingPrep'); open.meetingPrep = false; });
-        takeEscape(e, layersAbove('quickLog', open), () => { closed.push('quickLog'); open.quickLog = false; });
+        // The panel listens on document in the capture phase while it is open; the rail on
+        // document in the bubble phase, leaving a marked Escape alone (§18b74).
+        if (open.meetingPrep) takeEscape(e, layersAbove('meetingPrep', open), () => { closed.push('meetingPrep'); open.meetingPrep = false; });
+        if (open.contactRail && e.key === 'Escape' && !e.defaultPrevented) { closed.push('contactRail'); open.contactRail = false; }
     };
     press();
-    assert.deepEqual(closed, ['quickLog'], 'the quick log, on top, alone — the panel under it passed the Escape on');
+    assert.deepEqual(closed, ['meetingPrep'], 'the panel, on top, alone — the rail under it left the marked Escape');
     press();
-    assert.deepEqual(closed, ['quickLog', 'meetingPrep']);
+    assert.deepEqual(closed, ['meetingPrep', 'contactRail']);
 });
 
 // ── the order ───────────────────────────────────────────────────────────────
 
-test('the order is z order, highest first, each name once', () => {
+// The layers drawn inside .app-container: the header's (THE GUARD below reads it from App's
+// render). They sit in its stacking context, under every layer outside it (§0.187).
+const IN_APP_CONTAINER = ['search', 'profile', 'notifications'];
+
+test('the order is z order, highest first, each name once — the layers inside .app-container last, under every layer outside it', () => {
     assert.equal(new Set(NAMES).size, NAMES.length);
+    const rank = ([n, z]) => [IN_APP_CONTAINER.includes(n) ? 0 : 1, z];
     for (let i = 1; i < ESCAPE_ORDER.length; i++) {
-        assert.ok(ESCAPE_ORDER[i - 1][1] >= ESCAPE_ORDER[i][1], `${ESCAPE_ORDER[i - 1][0]} (${ESCAPE_ORDER[i - 1][1]}) above ${ESCAPE_ORDER[i][0]} (${ESCAPE_ORDER[i][1]})`);
+        const [a, b] = [rank(ESCAPE_ORDER[i - 1]), rank(ESCAPE_ORDER[i])];
+        assert.ok(a[0] > b[0] || (a[0] === b[0] && a[1] >= b[1]), `${ESCAPE_ORDER[i - 1][0]} (${ESCAPE_ORDER[i - 1][1]}) above ${ESCAPE_ORDER[i][0]} (${ESCAPE_ORDER[i][1]})`);
     }
+});
+
+// The component that draws each layer; ModalLayer draws the rest.
+const DRAWN_BY = {
+    search: 'AppHeader', profile: 'AppHeader', notifications: 'AppHeader',
+    quickLog: 'QuickLogFab', followUp: 'QuickLogFab', meetingPrep: 'MeetingPrepPanel', leaveGuard: 'LeaveGuardModal',
+};
+const drawnBy = (name) => DRAWN_BY[name] || 'ModalLayer';
+
+// Each component App's render draws a layer with, and whether it is drawn inside .app-container.
+const DRAWERS = new Set(NAMES.map(drawnBy));
+const appComponents = (src) => {
+    const ast = parse(src, { sourceType: 'module', plugins: ['jsx'] });
+    const app = ast.program.body.find((n) => n.type === 'FunctionDeclaration' && n.id && n.id.name === 'App');
+    assert.ok(app, 'App');
+    const where = new Map();
+    walk(app, (n, anc) => {
+        if (n.type !== 'JSXElement' || n.openingElement.name.type !== 'JSXIdentifier' || !DRAWERS.has(n.openingElement.name.name)) return;
+        const inside = anc.some((a) => a.type === 'JSXElement' && a.openingElement.attributes.some((at) =>
+            at.type === 'JSXAttribute' && at.name.name === 'className' && at.value && at.value.type === 'StringLiteral' && at.value.value.split(/\s+/).includes('app-container')));
+        const name = n.openingElement.name.name;
+        assert.ok(!where.has(name) || where.get(name) === inside, `${name} drawn both inside .app-container and outside it`);
+        where.set(name, inside);
+    });
+    return where;
+};
+const insideNames = (src) => {
+    const where = appComponents(src);
+    for (const c of DRAWERS) assert.ok(where.has(c), `App draws ${c}`);
+    return NAMES.filter((n) => where.get(drawnBy(n)));
+};
+
+test('THE GUARD: the layers drawn inside .app-container — a stacking context at z-index 1 — are the header\'s panels, and the order puts them under every other (§0.187)', () => {
+    assert.ok(/\n\s*\.app-container \{[^}]*position: relative;[^}]*z-index: 1;/.test(read('src/index.css')), 'the container is a stacking context at 1');
+    assert.deepEqual(insideNames(read('src/App.jsx')), IN_APP_CONTAINER, 'a layer that must sit over a rail is drawn outside .app-container');
+    assert.deepEqual(NAMES.slice(-IN_APP_CONTAINER.length), IN_APP_CONTAINER, 'last in the order');
+});
+
+test('the guard finds the shape as it was: the meeting prep panel drawn inside .app-container', () => {
+    const src = 'function App() { return (<AppProvider><div className="app-container"><AppHeader /><MeetingPrepPanel /></div>'
+        + '<ModalLayer /><QuickLogFab /><LeaveGuardModal /></AppProvider>); }';
+    assert.deepEqual(insideNames(src), ['meetingPrep', 'search', 'profile', 'notifications']);
 });
 
 // Where each layer draws its z — the order's number must be the file's.

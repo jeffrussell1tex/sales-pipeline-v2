@@ -137,7 +137,7 @@ test('each boundary closes what it holds — every layer, the reminders\' memory
             'the rails and modals: every one closed, so the state that crashed is not rendered again — and a switch starts the boundary afresh'],
         ["<LayerBoundary onCrash={() => { setGlobalSearch(''); setShowSearchResults(false); setShowNotifications(false); setShowProfilePanel(false); }}>\n            <AppHeader\n",
             'the header: its panels closed, the search emptied'],
-        ['<LayerBoundary onCrash={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}>\n            <MeetingPrepPanel />\n            </LayerBoundary>',
+        ['<LayerBoundary onCrash={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}>\n        <MeetingPrepPanel />\n        </LayerBoundary>',
             'the meeting prep panel: closed, its deal let go'],
         ['<LayerBoundary onCrash={() => setQuickLogOpen(false)}>\n        <QuickLogFab />\n        </LayerBoundary>',
             'the quick log: its panel closed'],

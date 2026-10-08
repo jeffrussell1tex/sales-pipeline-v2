@@ -71,10 +71,11 @@ export default function MeetingPrepPanel() {
         <>
             {/* Backdrop */}
             <div onClick={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}
-                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 9000 }} />
+                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 11020 }} />
 
             {/* Slide-in panel */}
-            <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: T.surface, zIndex: 9001, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            {/* Above the rails and the deal window it is opened from (state §0.187); under the document layers. */}
+            <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: T.surface, zIndex: 11021, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
                 {/* Header */}
                 <div style={{ background: '#1c1917', padding: '1.25rem 1.5rem', color: T.surface, flexShrink: 0 }}>
@@ -133,7 +134,7 @@ export default function MeetingPrepPanel() {
                     {matchedAccount && (
                         <div>
                             <div style={{ fontSize: '0.625rem', fontWeight: '700', color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Account</div>
-                            <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '0.75rem 1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                            <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: '8px', padding: '0.75rem 1rem', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '0.5rem' }}>{/* minmax(0, …): a long value is cut off with "…", not widened past the panel (state §0.187) */}
                                 {[
                                     ['Industry', matchedAccount.industry],
                                     ['Owner', matchedAccount.accountOwner],

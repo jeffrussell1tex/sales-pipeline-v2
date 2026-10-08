@@ -12,6 +12,10 @@
 // the page sits on top. The draggable windows (the deal and user modals, the imports, the
 // lost reason) share one place: each is raised when clicked (useDraggable), so their order
 // among themselves is the order they were clicked, and a z here is where they start.
+// A layer drawn inside .app-container — the header's panels — draws in that container's
+// stacking context, z-index 1: under every layer drawn outside it, whatever its own z
+// (state §0.187 — the meeting prep panel, drawn there, opened under the rails). Those
+// layers come last, the notes popover at 998 above the search results at 1199.
 // tests/escape-order.test.mjs keeps every app layer in this list, the list in z order,
 // and each z true to the file that draws it.
 export const ESCAPE_ORDER = [
@@ -24,6 +28,7 @@ export const ESCAPE_ORDER = [
     ['linkPicker', 11105],
     ['uploadRail', 11103],
     ['documentRail', 11101],
+    ['meetingPrep', 11021],      // over the rail or the deal window its Prep was pressed in (§0.187)
     ['activityDetail', 11010],
     ['taskRail', 11003],
     ['activityRail', 11001],
@@ -35,13 +40,13 @@ export const ESCAPE_ORDER = [
     ['draggable', 10000],
     ['shortcuts', 9998],
     ['quickLog', 9990],
-    ['meetingPrep', 9001],
     ['leadModal', 9000],
     ['merge', 4000],
+    ['notes', 998],
+    // inside .app-container, its z-index 1 — under every layer above (§0.187)
     ['search', 1199],
     ['profile', 1099],
     ['notifications', 1000],
-    ['notes', 998],
 ];
 
 // Whether a layer above `name` is open — the Escape is that layer's, and passes on.

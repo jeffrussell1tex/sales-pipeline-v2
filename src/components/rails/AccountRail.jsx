@@ -4,6 +4,16 @@ import ActivityRowText from './ActivityRowText';
 import RecordDocuments from '../documents/RecordDocuments';
 import { T } from '../../tokens.js';
 import { NON_REP_ROLES } from '../../utils/roles.js';
+import DealPrepPicker from './DealPrepPicker';
+import { parseLocalDate } from '../../utils/dateLocal.js';
+
+// A deal's close date as "Nov 30, 2026"; a value that is not a date shows as it is
+// written. The row read closeDate, which a deal does not have — its close date is
+// forecastedCloseDate — so the date never showed (state §0.187).
+const closeLabel = (v) => {
+    const d = parseLocalDate(v);
+    return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : String(v);
+};
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -149,6 +159,7 @@ export default function AccountRail() {
         pendingOppFormData, setPendingOppFormData,
         setEditingOpp, setShowModal,
         confirmModal, promptModal,
+        openMeetingPrep,
     } = useApp();
 
     const isNew    = accountRailId === 'new';
@@ -167,6 +178,9 @@ export default function AccountRail() {
     const [dupWarning,        setDupWarning]        = useState(null);
     const [dirty,             setDirty]             = useState(false);
     const [saveError,         setSaveError]         = useState(null);
+    // Prep's list of open deals (state §0.187) — closed again when the rail shows another account.
+    const [showPrepPick,      setShowPrepPick]      = useState(false);
+    useEffect(() => { setShowPrepPick(false); }, [accountRailId]);
 
     // Holds the in-progress NEW account while the user peeks at an existing
     // dup via "Open existing", so "← Back" can restore it intact.
@@ -523,13 +537,32 @@ export default function AccountRail() {
                             <div style={{ fontSize: 9, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
                         </div>
                     ))}
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {/* The actions take the width they need, the counts share the rest: with Prep
+                        beside it, Edit had overflowed the rail's edge (state §0.187). */}
+                    <div style={{ flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 12px' }}>
+                        {/* Meeting prep on this account's open deal (state §0.187) */}
+                        {openOpps.length > 0 && (
+                            <button onClick={() => {
+                                    if (openOpps.length > 1) { setShowPrepPick(v => !v); return; }
+                                    if (openMeetingPrep) openMeetingPrep(`Meeting with ${account.name}`, openOpps[0].id);
+                                }}
+                                aria-expanded={openOpps.length > 1 ? showPrepPick : undefined}
+                                title={openOpps.length > 1 ? `Meeting prep — choose one of ${openOpps.length} open deals` : `Meeting prep — ${openOpps[0].opportunityName || account.name}`}
+                                style={{ padding: '6px 10px', background: showPrepPick ? T.ink : T.surface, color: showPrepPick ? '#f5f1eb' : T.inkMid, border: `1px solid ${showPrepPick ? T.ink : T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                                📋 Prep{openOpps.length > 1 ? ' ▾' : ''}
+                            </button>
+                        )}
                         <button onClick={() => setAccountRailMode('edit')}
                             style={{ padding: '6px 14px', background: T.ink, color: '#f5f1eb', border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                             Edit
                         </button>
                     </div>
                 </div>
+            )}
+
+            {!isEditing && account && showPrepPick && openOpps.length > 1 && (
+                <DealPrepPicker deals={openOpps}
+                    onPick={(d) => { setShowPrepPick(false); if (openMeetingPrep) openMeetingPrep(`Meeting with ${account.name}`, d.id); }}/>
             )}
 
             {/* ── Sub-tabs ───────────────────────────────────────────────────── */}
@@ -891,8 +924,8 @@ export default function AccountRail() {
                                     <div key={o.id} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '8px 10px' }}>
                                         <div style={{ fontSize: 12, fontWeight: 600, color: T.ink }}>{o.opportunityName || o.account}</div>
                                         <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2 }}>
-                                            {o.stage}{o.value ? ` · $${Number(o.value).toLocaleString()}` : ''}
-                                            {o.closeDate ? ` · Close ${o.closeDate}` : ''}
+                                            {o.stage}{o.arr ? ` · $${Number(o.arr).toLocaleString()}` : ''}
+                                            {o.forecastedCloseDate ? ` · Close ${closeLabel(o.forecastedCloseDate)}` : ''}
                                         </div>
                                     </div>
                                 ))}

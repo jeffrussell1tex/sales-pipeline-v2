@@ -4,7 +4,7 @@ import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, Organ
 import { safeStorage, dbFetch, waitForToken, setRequestOrg, requestOrg, stillOrg } from './utils/storage';
 import { useCoachingNotes } from './hooks/useCoachingNotes';
 import { unreadFor } from './utils/coachingNotes';
-import { isoLocal } from './utils/dateLocal';
+import { isoLocal, todayLocal } from './utils/dateLocal';
 import { isDispatcher, canUseDispatch, NON_REP_ROLES } from './utils/roles.js';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import { useSettings } from './hooks/useSettings';
@@ -1734,10 +1734,20 @@ dbFetch('/.netlify/functions/users?me=true')
     };
     const escapeBlocked = (name) => layersAbove(name, openLayers);
 
+    // Meeting prep for a record (state §0.187): a contact's, an account's or a deal's Prep
+    // opens the panel on that deal, over the record it was opened from — the meeting named
+    // for the record, today.
+    const openMeetingPrep = (title, dealId) => {
+        setMeetingPrepEvent({ summary: title, start: { date: todayLocal() }, attendeeCount: 0 });
+        setMeetingPrepOppId(dealId);
+        setMeetingPrepOpen(true);
+    };
+
     // ── AppContext value ─────────────────────────────────────────────
     const appContextValue = {
         // ── Escape: the layer on top takes it (state §0.186) ──
         escapeBlocked,
+        openMeetingPrep,
         // ── Documents ──
         ...documentsHook,
         documentRailId, setDocumentRailId,
@@ -2190,11 +2200,7 @@ dbFetch('/.netlify/functions/users?me=true')
             )}
             </React.Fragment>
 
-            {/* ════ MEETING PREP PANEL ════ — its own component, below its own boundary
-                (state §0.185): a crash in it closes it and keeps the page. */}
-            <LayerBoundary onCrash={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}>
-            <MeetingPrepPanel />
-            </LayerBoundary>
+
 
         </div>
         {/* The modals and rails remount on an org switch (state §0.175): eleven
@@ -2204,6 +2210,13 @@ dbFetch('/.netlify/functions/users?me=true')
             what the reminders remember (closeLayersAfterCrash, §0.185), and says so. */}
         <LayerBoundary key={activeOrgId || 'no-org'} onCrash={closeLayersAfterCrash}>
         <ModalLayer key={activeOrgId || 'no-org'} />
+        </LayerBoundary>
+        {/* ════ MEETING PREP PANEL ════ — its own component, below its own boundary (state
+            §0.185), and outside .app-container (state §0.187): that container is a stacking
+            context at z-index 1, so a panel drawn inside it sits under every rail and modal
+            whatever its own z — a Prep pressed in a rail opened the panel behind the rail. */}
+        <LayerBoundary onCrash={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}>
+        <MeetingPrepPanel />
         </LayerBoundary>
         <LayerBoundary onCrash={() => setQuickLogOpen(false)}>
         <QuickLogFab />
