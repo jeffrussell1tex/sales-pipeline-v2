@@ -132,6 +132,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   know.** Prod runs code from before §0.153, whose sync writes `'User'` over
   any role missing from its list. So no Dispatcher on prod, and no sync there
   once one exists. §0.153, as recorded.
+- **Until that ship, prod's AI Score tab asks with no deal id.** Prod runs
+  `a38e0c6`, before §0.188: its tab sends `{ opportunity, activities,
+  currentUser, forceRefresh }`, and its ai-score answers 400 "opportunityId
+  required" before calling Anthropic (Jeff, 8 Oct, UKG on
+  salespipelinetracker.com: the deal window showed that line for
+  "Resinall Hattiesburg – Shiftboard Onboarding"; nothing written). §0.188
+  fixed it on dev. After the ship: one AI score on prod, which also proves
+  prod's site key. Before it, prod's report reader (§0.141, on prod) can
+  prove the key: its result names who read it ("Claude" or "Built-in
+  interpreter").
 
 ### 2.3 Before selling
 
