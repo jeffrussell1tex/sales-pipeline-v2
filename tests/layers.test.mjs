@@ -14,6 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { topLayer } from '../src/utils/escapeOrder.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
@@ -74,22 +75,22 @@ test('the dialogs sit above the toasts\' layers only where they must: a toast ab
 test('Escape: a handler that dealt with it marks it, App leaves a marked one alone, and the dialogs close first', () => {
     // The lead form's Escape opened "Discard this lead?" on document; App's handler,
     // on window, ran next in the same keypress and closed it 2 ms later (observed). And
-    // App closed the deal modal before a confirm open over it.
+    // App closed the deal modal before a confirm open over it. Since §0.189 App closes the
+    // layer on top by the order (escape-order.test.mjs) — the app's dialogs above the deal
+    // window, the viewer and every rail.
     const app = read('src/App.jsx');
     const esc = app.slice(app.indexOf("if (e.key === 'Escape') {"), app.indexOf('// Don\'t fire shortcuts while typing'));
     assert.ok(esc.length > 0, 'the Escape branch');
     const marked = esc.indexOf('if (e.defaultPrevented) return;');
-    assert.ok(marked > 0, 'a marked Escape is left alone');
-    const firstClose = esc.search(/if \(\w+\) \{ set\w+\(/);
-    assert.ok(marked < firstClose, 'before anything is closed');
-    const confirmAt = esc.indexOf('if (confirmModal) { setConfirmModal(null); return; }');
-    const promptAt = esc.indexOf('if (promptModal) { setPromptModal(null); return; }');
-    assert.ok(confirmAt > 0 && promptAt > 0, 'the confirm and prompt close on Escape');
-    for (const other of ['if (viewingActivity)', 'if (showActivityModal)', 'if (showModal)', 'if (taskRailId)']) {
-        assert.ok(confirmAt < esc.indexOf(other) && promptAt < esc.indexOf(other), `a dialog closes before ${other}`);
+    const decided = esc.indexOf('switch (topLayer(openLayersRef.current || {})) {');
+    assert.ok(marked > 0 && decided > marked, 'a marked Escape is left alone, before anything is closed');
+    assert.ok(esc.includes("case 'confirm': setConfirmModal(null); return;") && esc.includes("case 'prompt': setPromptModal(null); return;"), 'the confirm and prompt close on Escape');
+    for (const other of ['draggable', 'activityDetail', 'taskRail', 'activityRail']) {
+        assert.equal(topLayer({ confirm: true, [other]: true }), 'confirm', `the confirm closes before ${other}`);
+        assert.equal(topLayer({ prompt: true, [other]: true }), 'prompt', `the prompt closes before ${other}`);
     }
     assert.equal(esc.split('setConfirmModal(null)').length - 1, 1, 'once');
     const lead = read('src/components/modals/LeadModal.jsx');
-    // And leaves one a layer above took alone (§0.180, escape-layers.test.mjs).
-    assert.match(lead, /if \(e\.key !== 'Escape' \|\| e\.defaultPrevented\) return;[^\n]*\s*e\.preventDefault\(\);/, 'the lead form marks the Escape it handles');
+    // And leaves one a layer above took alone (§0.180, escape-layers.test.mjs), or holds (§0.189).
+    assert.match(lead, /if \(e\.key !== 'Escape' \|\| e\.defaultPrevented \|\| escapeHeld\) return;[^\n]*\s*e\.preventDefault\(\);/, 'the lead form marks the Escape it handles');
 });

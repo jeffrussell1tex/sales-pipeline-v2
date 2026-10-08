@@ -18,6 +18,13 @@
 // layers come last, the notes popover at 998 above the search results at 1199.
 // tests/escape-order.test.mjs keeps every app layer in this list, the list in z order,
 // and each z true to the file that draws it.
+//
+// Every app layer's Escape decides by this order (state §0.189): a layer's own listener
+// asks escapeBlocked('<its name>') and marks the Escape it takes; App's handler closes
+// the layer on top (topLayer) when it is one of App's, and leaves the Escape to it when
+// it is not. Before, App closed from a list of its own and each rail, the lead and
+// lost-reason windows and the document layers kept a list of what sat above them — each
+// list missed a layer, and one Escape could close the lower layer, or two.
 export const ESCAPE_ORDER = [
     ['coachingNote', 100100],    // .modal-overlay, later in ModalLayer than the three below
     ['blockedDelete', 100100],
@@ -55,4 +62,11 @@ export function layersAbove(name, open) {
     const i = ESCAPE_ORDER.findIndex(([n]) => n === name);
     if (i < 0) throw new Error(`layersAbove: no layer named ${name} in ESCAPE_ORDER`);
     return ESCAPE_ORDER.slice(0, i).some(([n]) => !!open[n]);
+}
+
+// The layer on top: the first open one, top first — or null, nothing drawn over the page
+// (state §0.189). `open` as for layersAbove.
+export function topLayer(open) {
+    const top = ESCAPE_ORDER.find(([n]) => !!open[n]);
+    return top ? top[0] : null;
 }

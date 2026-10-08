@@ -135,7 +135,7 @@ export default function ActivityRail() {
         contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
-        confirmModal, promptModal,
+        escapeBlocked,
     } = useApp();
 
     const isOpen    = !!showActivityModal;
@@ -225,16 +225,23 @@ export default function ActivityRail() {
         });
     };
 
-    // ESC to close
+    // ESC to close — the rail's Escape while no layer above it is open (state §0.189): the
+    // one order (escapeBlocked), not a list of its own — the app's confirm and prompt were on
+    // it (§0.178), the activity viewer and the coaching note were not. It marks the Escape it
+    // takes, so nothing under the rail acts on it too: App closed this rail a second time,
+    // and anything of App's under it.
+    // An Escape a layer above took — marked, as a document's is (§0.180) — is left alone.
+    const escapeHeld = escapeBlocked('activityRail');
     useEffect(() => {
         if (!isOpen) return;
-        // Not under the app's confirm or prompt, which App.jsx closes first (state §0.178):
-        // a document's Delete asks over this rail.
-        // An Escape a layer above took — marked, as a document's is (§0.180) — is left alone.
-        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && !confirmModal && !promptModal) closeRail(); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;
+            e.preventDefault();
+            closeRail();
+        };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [isOpen, confirmModal, promptModal]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isOpen, escapeHeld]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!isOpen) return null;
 

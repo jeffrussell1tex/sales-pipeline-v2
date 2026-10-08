@@ -42,7 +42,7 @@ export default function DocumentRail() {
         downloadDoc, previewDoc, unlinkDocument,
         setShowUploadRail, setUploadRailContext,
         setShowDocLinkPicker, setDocLinkPickerContext,
-        showUploadRail, showDocLinkPicker, confirmModal, promptModal,
+        escapeBlocked,
         userRole, settings, clerkUser, currentUserId,
     } = useApp();
 
@@ -87,12 +87,14 @@ export default function DocumentRail() {
     // Close if the doc disappears (deleted elsewhere).
     useEffect(() => { if (documentRailId && !doc) close(); }, [documentRailId, doc, close]);
 
-    // Escape closes this rail, not the record under it (state §0.180) — once a layer above
-    // it (an upload, the link picker, the app's confirm or prompt) is closed. The focused
+    // Escape closes this rail, not the record under it (state §0.180) — while no layer above
+    // it is open: the one order (escapeBlocked, state §0.189), not the list it kept (an
+    // upload, the link picker, the app's confirm or prompt — the coaching note, the
+    // blocked-delete notice, the follow-up and the leave guard were not on it). The focused
     // field is blurred first, so the description saves as it does when the backdrop is
     // clicked (its own blur).
     useEscapeLayer(!!doc, () => { document.activeElement?.blur?.(); close(); },
-        !!(showUploadRail || showDocLinkPicker || confirmModal || promptModal));
+        escapeBlocked('documentRail'));
 
     if (!doc) return null;
 

@@ -38,8 +38,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
    everywhere, and they are an input to AI scoring's next batch.
 3. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
-4. **Escape, finished** (§4.1): App's own handler in the screen's order, then
-   the in-tab layers.
+4. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
+   app layer did in §0.189.
 5. **Deal data** (§4.2):
    - the deal endpoint saving `accountId`;
    - notes appended on the server;
@@ -398,20 +398,29 @@ model's pattern to deals.
 
 ### 4.1 Layers, Escape and the screen
 
-- **App's own Escape handler does not close its layers in the screen's
-  order.**
-  - Its list is its own: the coaching note (the top) is checked after nine
-    layers below it, and the shortcuts before layers drawn above them.
-  - Two open, one Escape can close the lower.
-  - Recommended: drive it from `ESCAPE_ORDER`.
-  - Source: §0.187 (a), 7 Oct.
 - **In-tab layers without Escape.**
   - Fifteen files under src/Tabs draw fixed layers and handle no Escape:
     DispatchTab (9), DispatchSkillsDetail (6), TasksTab (5) and twelve more.
   - Eleven others handle an Escape somewhere; each layer is still to be
     checked.
-  - None is in `ESCAPE_ORDER` yet.
+  - None is in `ESCAPE_ORDER` yet. The document picker (inside the deal window
+    and the two record rails) joins it with them: it holds by its own list, the
+    app's confirm and prompt (§0.189 (c)).
   - Source: §0.186 (a), 7 Oct.
+- **The Company view's "Add contact" opens nothing.**
+  - In the Contacts tab's Company view it sets `showContactModal`, which no
+    screen draws (the contact rail replaced ContactModal).
+  - The flag, left set, holds the body's scroll lock and keeps the number
+    shortcuts off (`anyModalOpen`) until an Escape clears it.
+  - Recommended: open the contact rail as the list's "New contact" does
+    (`handleAddContact`); then retire `showAccountModal`, `showContactModal`
+    and `showTaskModal`, and the deal window's unused `onAddAccount` with App's
+    `handleAddAccountFromOpportunity`.
+  - Source: §0.189 (a), 8 Oct. Read from code.
+- **The shortcuts list opens under an open rail or the deal window.** Its z
+  is 9998, under every rail and the draggable windows; "?" opened it with a
+  contact rail and with a new-task rail open. A z above them, with its place
+  in the order, is the fix. §0.189 (b), 8 Oct.
 - **Two layers nothing reaches.** Nothing sets `showOutlookImportModal`, and
   ContactModal is rendered nowhere: the contact rail replaced it.
   §0.186 (b).

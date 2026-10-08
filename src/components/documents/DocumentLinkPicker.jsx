@@ -24,7 +24,7 @@ export default function DocumentLinkPicker() {
         docLinkPickerContext, setDocLinkPickerContext,
         accounts = [], contacts = [], opportunities = [], tasks = [], activities = [],
         linkDocument, unlinkDocument,
-        confirmModal, promptModal,
+        escapeBlocked,
     } = useApp();
 
     const ctx = docLinkPickerContext || {};
@@ -78,8 +78,9 @@ export default function DocumentLinkPicker() {
     const close = () => { setShowDocLinkPicker(false); setDocLinkPickerContext && setDocLinkPickerContext(null); };
 
     // Escape closes the picker as its backdrop does, the links left as they were (state
-    // §0.180) — once the app's confirm or prompt above it is closed.
-    useEscapeLayer(showDocLinkPicker, close, !!(confirmModal || promptModal));
+    // §0.180) — while no layer above it is open: the one order (escapeBlocked, state
+    // §0.189), not the app's confirm and prompt alone.
+    useEscapeLayer(showDocLinkPicker, close, escapeBlocked('linkPicker'));
 
     if (!showDocLinkPicker) return null;
 

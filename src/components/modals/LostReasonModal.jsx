@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useApp } from '../../AppContext';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
 
@@ -13,12 +15,12 @@ export default function LostReasonModal({ oppName, onSave, onSkip }) {
     const { size, getResizeHandleProps } = useResizable(480, 460, 380, 340);
 
     // Esc closes the modal (routes to the existing safe exit — save is skipped,
-    // the deal still becomes Closed Lost with no reason recorded)
-    useEffect(() => {
-        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); onSkip(); } };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [onSkip]);
+    // the deal still becomes Closed Lost with no reason recorded) — while no layer above the
+    // draggable windows is open, as the import windows' Escape (state §0.189). On window it
+    // ran after App's own handler whenever App's was added first, and took the Escape
+    // whatever was open above it.
+    const { escapeBlocked } = useApp();
+    useEscapeLayer(true, onSkip, escapeBlocked('draggable'));
 
     return (
         <>

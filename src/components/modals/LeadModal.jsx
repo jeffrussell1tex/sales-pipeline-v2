@@ -263,7 +263,7 @@ const BLANK = { firstName:'', lastName:'', company:'', email:'', phone:'', title
 const UNASSIGNED = '__unassigned__';
 
 export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
-    const { leads, contacts, settings, showConfirm, canSeeAll, currentUser } = useApp();
+    const { leads, contacts, settings, showConfirm, canSeeAll, currentUser, escapeBlocked } = useApp();
 
     const repNames = useMemo(() =>
         (settings?.users || []).filter(u => u.name && u.role !== 'ReadOnly').map(u => u.name).sort()
@@ -332,10 +332,14 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
     }, [showAssigneePicker]);
 
     // ── Esc key ─────────────────────────────────────────────────
+    // The form's Escape while no layer above it is open (state §0.189): the shortcuts and
+    // the deal window draw over it and take no Escape of their own, so the form closed — or
+    // asked to discard — under them, and they stayed open.
+    const escapeHeld = escapeBlocked('leadModal');
     useEffect(() => {
         const isDirty = Object.values(form).some(v => v !== '');
         const handler = e => {
-            if (e.key !== 'Escape' || e.defaultPrevented) return;   // one a layer above took is theirs (§0.180)
+            if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;   // one a layer above took, or holds, is theirs (§0.180, §0.189)
             e.preventDefault();   // handled here — App's Escape leaves it alone (state §0.177)
             if (isDirty) {
                 showConfirm('Discard this lead?', onClose);
@@ -345,7 +349,7 @@ export default function LeadModal({ onClose, onSaved, onSavedOpenCockpit }) {
         };
         document.addEventListener('keydown', handler);
         return () => document.removeEventListener('keydown', handler);
-    }, [form, onClose, showConfirm]);
+    }, [form, onClose, showConfirm, escapeHeld]);
 
     // ── Validation ───────────────────────────────────────────────
     const validate = () => {

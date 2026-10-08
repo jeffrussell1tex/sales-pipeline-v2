@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 7, 2026 · rules current through **§18b83** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 7, 2026 · rules current through **§18b84** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -3985,7 +3985,7 @@ through `dbFetch`.
 3. **Escape does what the layer's own close does** — its ×, Cancel, Skip or backdrop, one function for all of them: a reminder is dismissed and the next shows, the quick log closes with its draft kept, the leave guard is Stay.
 4. **Nothing mid-save closes on Escape** — an import running, a merge saving, a claim being submitted, a guard's save out: the Escape is refused.
 5. **The draggable windows share one place** — each rises when clicked (useDraggable), so among themselves the order is the order clicked.
-6. **In-tab layers are not yet in the order** — state §9, §0.186's found (a), the audit: fifteen files draw fixed layers with no Escape at all, and eleven more are to be checked layer by layer.
+6. **In-tab layers are not yet in the order** — docs/OPEN_ITEMS.md (§0.186's found (a), the audit): fifteen files draw fixed layers with no Escape at all, and eleven more are to be checked layer by layer.
 
 ## 18b81. A Layer Drawn Over The Page Is Drawn Outside .app-container; A Screen Replaced Keeps Its Ways In (hard rule)
 
@@ -4013,3 +4013,12 @@ through `dbFetch`.
 2. **A switch the server reads has a control, or is recorded as having none** — a key in both halves of settings.mjs with no screen that sends it is a feature nobody can turn on. The control sits with its kin (Features & AI) and its caption says what it sends.
 3. **A score is the user's to ask for** — nothing scores a deal on open: a score sends the deal to Anthropic and writes the audit log.
 4. **A detail tab's Save calls the save** — never `requestSubmit` on a form the tab unmounts; a missing field opens the form, where its error shows.
+
+## 18b84. Every App Layer's Escape Decides By The One Order — App Closes The Layer On Top, And Whatever Takes An Escape Marks It (hard rule)
+
+**Origin (§0.189, 8 Oct 2026 — §0.187's found (a) and its class; Jeff: "fix the Escape handler order next").** App's own Escape handler closed from a list of its own, not the order the screen draws: the shortcuts before the rails drawn over them, the notifications before the search results, the coaching note after layers under it. And every listener that decided whether an Escape was its own kept a list of what sat above it — each missing a layer — while the rails took an Escape without marking it, so App closed a layer of its own under the rail on the same keypress. Seen with HEAD's files: one Escape closed a contact rail and the shortcuts list under it; a task being written lost its draft to the second Escape after the shortcuts list had opened and closed. §18b74 (the layer on top takes the Escape and marks it) and §18b80 (one order, by the z each layer draws) are the rules this completes.
+
+1. **App closes the layer on top, and only when it is App's** — `topLayer(openLayers)` names it; a layer that takes its own Escape (a rail, a document, a window) is left to it, and nothing under it closes. The open layers reach the handler through a ref, set every render before the early returns.
+2. **A layer's own listener asks the order** — `escapeBlocked('<its name>')`, never a list of what sits above it. A layer that keeps itself open on Escape (a rail keeping its draft) still takes the Escape.
+3. **Whatever takes an Escape marks it** — `e.preventDefault()`, so every listener under it leaves it alone.
+4. **The guard runs every pair** — tests/escape-order.test.mjs: of any two layers open, one Escape closes the upper, however each takes its Escape and whichever listener was added first; parses tie the model to the code (App's cases, each listener's hold and its mark).

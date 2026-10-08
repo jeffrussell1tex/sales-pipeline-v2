@@ -70,13 +70,13 @@ test('the four document layers each take their Escape, before their early return
     const before = (src, hook, ret) => { const h = src.indexOf(hook); assert.ok(h >= 0, hook); assert.ok(h < src.indexOf(ret), `${hook.slice(0, 40)} … before ${ret}`); };
     const rail = read('src/components/documents/DocumentRail.jsx');
     before(rail, 'useEscapeLayer(!!doc, () => { document.activeElement?.blur?.(); close(); },', 'if (!doc) return null;');
-    assert.ok(rail.includes('!!(showUploadRail || showDocLinkPicker || confirmModal || promptModal));'), 'the document rail waits for an upload, the link picker and the app\'s dialogs');
+    assert.ok(rail.includes("        escapeBlocked('documentRail'));"), 'the document rail waits while a layer above it is open — an upload, the link picker, the app\'s dialogs (the one order since §0.189)');
     const upload = read('src/components/documents/DocumentUploadRail.jsx');
     before(upload, 'useEscapeLayer(showUploadRail, () => { if (!uploading) close(); },', 'if (!showUploadRail) return null;');
-    assert.ok(upload.includes('!!(showDocLinkPicker || confirmModal || promptModal));'));
+    assert.ok(upload.includes("        escapeBlocked('uploadRail'));"), 'the upload rail waits while a layer above it is open (§0.189)');
     assert.equal(upload.split('onClick={!uploading ? close : undefined}').length - 1, 2, 'its backdrop and its × close nothing mid-upload, as Cancel');
     const link = read('src/components/documents/DocumentLinkPicker.jsx');
-    before(link, 'useEscapeLayer(showDocLinkPicker, close, !!(confirmModal || promptModal));', 'if (!showDocLinkPicker) return null;');
+    before(link, "useEscapeLayer(showDocLinkPicker, close, escapeBlocked('linkPicker'));", 'if (!showDocLinkPicker) return null;');
     assert.equal(link.split('const close = () =>').length - 1, 1, 'one close');
     const picker = read('src/components/documents/DocumentPicker.jsx');
     before(picker, 'useEscapeLayer(open, () => onClose && onClose(), !!(confirmModal || promptModal));', 'if (!open) return null;');
@@ -139,7 +139,7 @@ test('THE GUARD — every keydown listener under src that reacts to Escape leave
     const unread = all.filter((l) => l.body === null);
     assert.deepEqual(unread.map((l) => `${l.file}:${l.line}`), [], 'every handler found');
     const escapes = all.filter((l) => l.body.includes("'Escape'"));
-    assert.ok(escapes.length >= 15, `the Escape listeners (${escapes.length})`);
+    assert.ok(escapes.length >= 14, `the Escape listeners (${escapes.length}; 14 since §0.189 — the lost-reason window takes its Escape through useEscapeLayer)`);
     const blind = escapes.filter((l) => !l.body.includes('defaultPrevented'));
     assert.deepEqual(blind.map((l) => `${l.file}:${l.line}`), []);
 });

@@ -19,6 +19,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { parse } from '@babel/parser';
+import { layersAbove } from '../src/utils/escapeOrder.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
@@ -196,18 +197,16 @@ test('tasks: the task rail\'s Delete — a confirm, the DELETE, then Undo; a wri
 // ── the rails' Escape ───────────────────────────────────────────────────────
 
 test('a rail\'s Escape never closes it under the app\'s confirm or prompt — App closes those first, and the task\'s Delete asks over its rail', () => {
+    // Since §0.189 a rail asks the one order — escapeBlocked('<its name>') — not a list of its
+    // own (escape-order.test.mjs runs every pair); the app's dialogs sit above every rail in it.
     const dir = 'src/components/rails/';
-    const rails = readdirSync(new URL(dir, ROOT)).filter((f) => f.endsWith('.jsx'))
-        .map((f) => [f, read(dir + f)]).filter(([, s]) => /if \(e\.key === 'Escape'[^\n]*closeRail\(\)/.test(s));
-    for (const f of ['TaskRail.jsx', 'ContactRail.jsx', 'AccountRail.jsx', 'ActivityRail.jsx']) {
-        assert.ok(rails.some(([n]) => n === f), `${f}: its Escape listener found`);
-    }
-    for (const [f, s] of rails) {
-        const line = s.match(/const onKey = \(e\) => \{ if \(e\.key === 'Escape'[^\n]*closeRail\(\); \};/);
-        assert.ok(line, `${f}: its Escape listener`);
-        assert.ok(line[0].includes('&& !confirmModal && !promptModal)'), `${f}: it closes the rail under a confirm or a prompt`);
-        const deps = s.slice(line.index).match(/\}, \[([^\]]*)\]\);/);
-        assert.ok(deps && /\bconfirmModal\b/.test(deps[1]) && /\bpromptModal\b/.test(deps[1]), `${f}: its listener reads the confirm of the render it was made in`);
+    for (const [f, name] of [['TaskRail.jsx', 'taskRail'], ['ContactRail.jsx', 'contactRail'], ['AccountRail.jsx', 'accountRail'], ['ActivityRail.jsx', 'activityRail']]) {
+        const s = read(dir + f);
+        assert.ok(s.includes(`    const escapeHeld = escapeBlocked('${name}');`), `${f}: its Escape is held while a layer above it is open`);
+        assert.ok(s.includes("            if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;"), `${f}: its listener leaves a held Escape`);
+        const deps = s.slice(s.indexOf('    const escapeHeld = escapeBlocked(')).match(/\}, \[([^\]]*)\]\);/);
+        assert.ok(deps && /\bescapeHeld\b/.test(deps[1]), `${f}: its listener reads the hold of the render it was made in`);
+        assert.ok(layersAbove(name, { confirm: true }) && layersAbove(name, { prompt: true }), `${name}: under the app's confirm and prompt`);
     }
 });
 

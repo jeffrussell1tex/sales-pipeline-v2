@@ -66,8 +66,9 @@ test('viewingActivity is wired: state, App destructure, context, Escape, body lo
     const app = code(read('src/App.jsx'));
     assert.ok(app.includes('        viewingActivity, setViewingActivity,'), 'destructured and in the context');
     assert.equal((app.match(/^        viewingActivity, setViewingActivity,$/gm) || []).length, 2, 'once out of useModalState, once into appContextValue');
-    assert.ok(app.includes('if (viewingActivity) { setViewingActivity(null); return; }'), 'Escape closes the viewer first');
-    assert.ok(app.indexOf('if (viewingActivity) { setViewingActivity(null); return; }') < app.indexOf('if (showShortcuts) { setShowShortcuts(false); return; }'), 'before everything else');
+    // App's Escape closes the viewer when it is the layer on top (§0.189) — above every rail
+    // and the deal window by its z (escape-order.test.mjs keeps the order and the z true).
+    assert.ok(app.includes("case 'activityDetail': setViewingActivity(null); return;"), 'Escape closes the viewer');
     assert.ok(app.includes('|| coachingNoteModal || viewingActivity;'), 'shortcuts stay quiet while the viewer is open');
     assert.ok(app.includes('viewingContact || viewingAccount || viewingTask || viewingActivity ||'), 'the body scroll lock');
     assert.ok(app.includes('        viewingContact, viewingAccount, viewingTask, viewingActivity,'), 'and its deps');

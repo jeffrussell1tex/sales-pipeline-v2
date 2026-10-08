@@ -44,7 +44,7 @@ import DispatchTab from './Tabs/DispatchTab';
 import ErrorBoundary from './components/ErrorBoundary';
 import LayerBoundary from './components/LayerBoundary';
 import MeetingPrepPanel from './components/layout/MeetingPrepPanel';
-import { layersAbove } from './utils/escapeOrder.js';
+import { layersAbove, topLayer } from './utils/escapeOrder.js';
 import { T } from './tokens.js';
 
 
@@ -547,6 +547,9 @@ dbFetch('/.netlify/functions/users?me=true')
     // The guarded tab switch (navigateTo, below — state §0.170) for the shortcuts,
     // read at key time, so the handler needs no dependency on unsaved state.
     const navigateToRef = useRef(null);
+    // The layers open at this render (openLayers, below — state §0.189), for the Escape:
+    // read at key time, as navigateToRef is.
+    const openLayersRef = useRef(null);
 
     // ── Global keyboard shortcuts ─────────────────────────────
     useEffect(() => {
@@ -554,31 +557,43 @@ dbFetch('/.netlify/functions/users?me=true')
             const tag = document.activeElement?.tagName?.toLowerCase();
             const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select' || document.activeElement?.isContentEditable;
 
-            // Escape — close topmost open thing
+            // Escape — the layer on top, by the screen's order (state §0.189): ESCAPE_ORDER and
+            // the layers open at this render name it, and App closes it when it is one of
+            // App's. A layer that takes its own Escape — a rail, a document, a window — took it
+            // on document before this handler ran, and marked it; one that keeps itself open
+            // (a rail keeping its draft) is still the one on top, and nothing under it closes.
+            // Before, App closed from a list of its own: the coaching note after layers drawn
+            // under it, the shortcuts before the rails drawn over them, the notifications
+            // before the search results — and, under a rail's unmarked Escape, the shortcuts
+            // or a header panel closed on the same keypress.
             if (e.key === 'Escape') {
                 // A dialog, menu or form that handled this Escape marked it (state §0.177): the
                 // lead form's Escape opened "Discard this lead?" and this handler — on window,
                 // after the form's on document — closed it 2 ms later, in the same keypress.
                 if (e.defaultPrevented) return;
-                // The app's dialogs sit above every rail and modal (§0.177), so they close first:
-                // an Escape with a confirm open over the deal modal closed the deal modal.
-                if (confirmModal) { setConfirmModal(null); return; }
-                if (promptModal) { setPromptModal(null); return; }
-                if (viewingActivity) { setViewingActivity(null); return; }
-                if (showShortcuts) { setShowShortcuts(false); return; }
-                if (showActivityModal) { setShowActivityModal(false); return; }
-                if (showModal) { setShowModal(false); setEditingOpp(null); return; }
+                switch (topLayer(openLayersRef.current || {})) {
+                    case 'coachingNote': setCoachingNoteModal(null); return;
+                    case 'prompt': setPromptModal(null); return;
+                    case 'confirm': setConfirmModal(null); return;
+                    case 'activityDetail': setViewingActivity(null); return;
+                    case 'draggable':   // the deal and user windows; an import or the lost reason takes its own
+                        if (showModal) { setShowModal(false); setEditingOpp(null); return; }
+                        if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
+                        return;
+                    case 'shortcuts': setShowShortcuts(false); return;
+                    case 'notes': setNotesPopover(null); return;
+                    case 'search': setShowSearchResults(false); setGlobalSearch(''); return;
+                    case 'profile': setShowProfilePanel(false); return;
+                    case 'notifications': setShowNotifications(false); return;
+                    case null: break;   // nothing is drawn over the page
+                    default: return;    // the layer on top takes its own Escape
+                }
+                // Not layers: three flags no screen draws (state §0.189's found (a)) — an Escape
+                // clears one left set, as it always has; then the undo toast.
                 if (showAccountModal) { setShowAccountModal(false); setEditingAccount(null); return; }
                 if (showContactModal) { setShowContactModal(false); setEditingContact(null); return; }
-                if (taskRailId) { setTaskRailId(null); setTaskRailMode('view'); return; }
                 if (showTaskModal) { setShowTaskModal(false); setEditingTask(null); return; }
-                if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
-                if (showProfilePanel) { setShowProfilePanel(false); return; }
-                if (coachingNoteModal) { setCoachingNoteModal(null); return; }
-                if (notesPopover) { setNotesPopover(null); return; }
                 if (undoToast) { clearTimeout(undoToast.timerId); setUndoToast(null); return; }
-                if (showNotifications) { setShowNotifications(false); return; }
-                if (showSearchResults) { setShowSearchResults(false); setGlobalSearch(''); return; }
                 return;
             }
 
@@ -1608,6 +1623,25 @@ dbFetch('/.netlify/functions/users?me=true')
     }, [activeTab, settingsDirty, setActiveTab]);
     navigateToRef.current = navigateTo;
 
+    // Which layers are open, by their names in the Escape order (state §0.186): a layer
+    // that takes its own Escape passes it on while one above it is open (escapeBlocked),
+    // and App's own Escape closes the one on top (openLayersRef — state §0.189). Here,
+    // before the early returns, so the ref always holds this render's.
+    const openLayers = {
+        coachingNote: !!coachingNoteModal, blockedDelete: !!blockedDeleteModal, prompt: !!promptModal, confirm: !!confirmModal,
+        followUp: !!followUpPrompt, leaveGuard: showNavGuard,
+        linkPicker: showDocLinkPicker, uploadRail: showUploadRail, documentRail: !!documentRailId,
+        activityDetail: !!viewingActivity, taskRail: !!taskRailId, activityRail: !!showActivityModal,
+        accountRail: !!accountRailId, contactRail: !!contactRailId,
+        spiffClaim: !!(showSpiffClaimModal && spiffClaimContext), duePopup: !!taskDuePopup, reminderPopup: !!taskReminderPopup,
+        draggable: !!(showModal || showUserModal || lostReasonModal || showCsvImportModal || showOutlookImportModal || showLeadImportModal),
+        shortcuts: showShortcuts, quickLog: quickLogOpen, meetingPrep: !!(meetingPrepOpen && meetingPrepEvent),
+        leadModal: showLeadModal, merge: !!(mergeModal || contactMergeModal),
+        search: showSearchResults, profile: showProfilePanel, notifications: showNotifications, notes: !!notesPopover,
+    };
+    openLayersRef.current = openLayers;
+    const escapeBlocked = (name) => layersAbove(name, openLayers);
+
     // "Save changes and continue": the page's own save (settingsSaveRef — the
     // open panel's, or the Sales Manager's), which throws when it does not save;
     // the page shows why, and the dialog stays.
@@ -1717,22 +1751,6 @@ dbFetch('/.netlify/functions/users?me=true')
         );
     }
 
-
-    // Which layers are open, by their names in the Escape order (state §0.186): a layer
-    // that takes its own Escape passes it on while one above it is open (escapeBlocked).
-    const openLayers = {
-        coachingNote: !!coachingNoteModal, blockedDelete: !!blockedDeleteModal, prompt: !!promptModal, confirm: !!confirmModal,
-        followUp: !!followUpPrompt, leaveGuard: showNavGuard,
-        linkPicker: showDocLinkPicker, uploadRail: showUploadRail, documentRail: !!documentRailId,
-        activityDetail: !!viewingActivity, taskRail: !!taskRailId, activityRail: !!showActivityModal,
-        accountRail: !!accountRailId, contactRail: !!contactRailId,
-        spiffClaim: !!(showSpiffClaimModal && spiffClaimContext), duePopup: !!taskDuePopup, reminderPopup: !!taskReminderPopup,
-        draggable: !!(showModal || showUserModal || lostReasonModal || showCsvImportModal || showOutlookImportModal || showLeadImportModal),
-        shortcuts: showShortcuts, quickLog: quickLogOpen, meetingPrep: !!(meetingPrepOpen && meetingPrepEvent),
-        leadModal: showLeadModal, merge: !!(mergeModal || contactMergeModal),
-        search: showSearchResults, profile: showProfilePanel, notifications: showNotifications, notes: !!notesPopover,
-    };
-    const escapeBlocked = (name) => layersAbove(name, openLayers);
 
     // Meeting prep for a record (state §0.187): a contact's, an account's or a deal's Prep
     // opens the panel on that deal, over the record it was opened from — the meeting named

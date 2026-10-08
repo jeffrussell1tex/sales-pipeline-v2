@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { layersAbove } from '../src/utils/escapeOrder.js';
 import { normaliseBodyText, htmlToText, attachmentNamesOf, notesOf, envelopeOf, headerMapOf, emailAddressesIn } from '../netlify/functions/_inboundText.mjs';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
@@ -57,11 +58,13 @@ test('email-inbound stores through the pure module, and the rails give the viewe
     assert.ok(s.includes('const attachmentNames = attachmentNamesOf(full ? full.attachments : mail.attachments);'));
     assert.ok(s.includes("notes: notesOf({ subject, body: text, attachmentNames }, NOTES_MAX) || 'Email (no body captured)',"));
     assert.ok(!s.includes('function htmlToText('), 'one htmlToText, in the pure module');
-    for (const f of ['src/components/rails/ContactRail.jsx', 'src/components/rails/AccountRail.jsx', 'src/components/rails/TaskRail.jsx']) {
+    for (const [f, name] of [['src/components/rails/ContactRail.jsx', 'contactRail'], ['src/components/rails/AccountRail.jsx', 'accountRail'], ['src/components/rails/TaskRail.jsx', 'taskRail']]) {
         const r = code(read(f));
-        // The app's confirm and prompt joined the viewer in §0.178 (one-delete-path.test.mjs).
-        assert.ok(r.includes("const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && !isEditing && !viewingActivity && !confirmModal && !promptModal) closeRail(); };"), f + ': the rail yields Escape to the viewer');
-        assert.ok(r.includes('}, [isOpen, isEditing, viewingActivity, confirmModal, promptModal]);'), f + ': and re-binds when the viewer opens or closes');
+        // The viewer sits above every record rail (its z — escape-order.test.mjs), and since
+        // §0.189 a rail's Escape is held while any layer above it is open (one-delete-path.test.mjs).
+        assert.ok(r.includes(`const escapeHeld = escapeBlocked('${name}');`), f + ': the rail yields Escape to the viewer');
+        assert.ok(r.includes('}, [isOpen, isEditing, escapeHeld]);'), f + ': and re-binds when the viewer opens or closes');
+        assert.ok(layersAbove(name, { activityDetail: true }), f + ': the viewer is above it');
     }
 });
 

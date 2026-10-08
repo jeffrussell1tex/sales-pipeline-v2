@@ -22,11 +22,18 @@
 // its own z — the meeting prep panel, drawn there, opened under the rail its Prep was
 // pressed in. A parse of App's render says which layers are drawn inside: the header's
 // panels, last in the order, and no other.
+//
+// And every layer decides by the order (state §0.189): App's handler closes the layer on
+// top (topLayer) when it is App's and leaves the Escape to it when it is not; a layer's own
+// listener asks escapeBlocked('<its name>') and marks the Escape it takes. Before, App closed
+// from a list of its own, and the rails, the lead and lost-reason windows and the document
+// layers each kept a list of what sat above them: one Escape could close the lower of two
+// layers, or both. THE GUARD runs every pair.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
-import { ESCAPE_ORDER, layersAbove } from '../src/utils/escapeOrder.js';
+import { ESCAPE_ORDER, layersAbove, topLayer } from '../src/utils/escapeOrder.js';
 import { takeEscape } from '../src/utils/escapeLayer.js';
 
 const ROOT = new URL('../', import.meta.url);
@@ -61,6 +68,15 @@ test('layersAbove: a layer passes the Escape on while one above it is open, and 
     assert.equal(layersAbove('coachingNote', { confirm: true, blockedDelete: true }), false, 'nothing sits above the top');
     assert.equal(layersAbove('search', { notes: true }), true, 'the notes popover draws over the header\'s panels, whatever their z (§0.187)');
     assert.throws(() => layersAbove('nope', {}), /no layer named nope/);
+});
+
+test('topLayer: the first open layer, top first — null when nothing is drawn over the page (state §0.189)', () => {
+    assert.equal(topLayer({}), null);
+    for (const name of NAMES) assert.equal(topLayer({ [name]: true }), name);
+    assert.equal(topLayer({ notifications: true, search: true }), 'search', 'the search results draw over the notifications');
+    assert.equal(topLayer({ profile: true, notes: true, coachingNote: true }), 'coachingNote', 'the coaching note over the notes popover, over the profile');
+    assert.equal(topLayer({ shortcuts: true, taskRail: true, draggable: true }), 'taskRail', 'a rail over the deal window, over the shortcuts');
+    assert.equal(topLayer({ notes: false, search: 0, profile: true }), 'profile', 'a closed layer is not on top');
 });
 
 test('one Escape, one layer: the meeting prep panel over the rail its Prep was pressed in closes alone; the next Escape closes the rail', () => {
@@ -205,8 +221,9 @@ test('App says which layers are open, by every name in the order and no other, e
 // ── THE GUARD ───────────────────────────────────────────────────────────────
 
 // Each layer the app renders: its place in the order, and how its Escape is taken.
-//   app: the flag App's Escape handler closes; own: the file whose listener takes it;
-//   layer: the file that takes it through useEscapeLayer with its own place.
+//   app: the flag App's Escape handler closes, when the layer is on top; own: the file whose
+//   listener (document, bubble) takes it; layer: the file that takes it through
+//   useEscapeLayer (document, capture). Each decides by the order (state §0.189).
 const LAYERS = {
     // ModalLayer
     showModal: { name: 'draggable', app: 'showModal' },
@@ -218,7 +235,7 @@ const LAYERS = {
     showOutlookImportModal: { name: 'draggable', layer: 'src/components/modals/OutlookImportModal.jsx' },
     showLeadModal: { name: 'leadModal', own: 'src/components/modals/LeadModal.jsx' },
     showLeadImportModal: { name: 'draggable', layer: 'src/components/modals/LeadImportModal.jsx' },
-    lostReasonModal: { name: 'draggable', own: 'src/components/modals/LostReasonModal.jsx' },
+    lostReasonModal: { name: 'draggable', layer: 'src/components/modals/LostReasonModal.jsx' },
     confirmModal: { name: 'confirm', app: 'confirmModal' },
     promptModal: { name: 'prompt', app: 'promptModal' },
     blockedDeleteModal: { name: 'blockedDelete', layer: 'src/components/layout/ModalLayer.jsx' },
@@ -229,9 +246,9 @@ const LAYERS = {
     TaskRail: { name: 'taskRail', own: 'src/components/rails/TaskRail.jsx' },
     ContactRail: { name: 'contactRail', own: 'src/components/rails/ContactRail.jsx' },
     AccountRail: { name: 'accountRail', own: 'src/components/rails/AccountRail.jsx' },
-    DocumentRail: { name: 'documentRail', own: 'src/components/documents/DocumentRail.jsx' },
-    DocumentUploadRail: { name: 'uploadRail', own: 'src/components/documents/DocumentUploadRail.jsx' },
-    DocumentLinkPicker: { name: 'linkPicker', own: 'src/components/documents/DocumentLinkPicker.jsx' },
+    DocumentRail: { name: 'documentRail', layer: 'src/components/documents/DocumentRail.jsx' },
+    DocumentUploadRail: { name: 'uploadRail', layer: 'src/components/documents/DocumentUploadRail.jsx' },
+    DocumentLinkPicker: { name: 'linkPicker', layer: 'src/components/documents/DocumentLinkPicker.jsx' },
     MergeReviewModal: { name: 'merge', layer: 'src/components/modals/MergeReviewModal.jsx' },
     ContactMergeReviewModal: { name: 'merge', layer: 'src/components/modals/ContactMergeReviewModal.jsx' },
     CoachingNoteDialogHost: { name: 'coachingNote', app: 'coachingNoteModal' },
@@ -245,6 +262,17 @@ const LAYERS = {
     showNotifications: { name: 'notifications', app: 'showNotifications' },
     MeetingPrepPanel: { name: 'meetingPrep', layer: 'src/components/layout/MeetingPrepPanel.jsx' },
     LeaveGuardModal: { name: 'leaveGuard', layer: 'src/Tabs/settings/shared/LeaveGuardModal.jsx' },
+};
+
+// What holds each useEscapeLayer in a file — its third argument, as written.
+const escapeLayerHolds = (src) => {
+    const out = [];
+    walk(parse(src, { sourceType: 'module', plugins: ['jsx'] }), (n) => {
+        if (n.type === 'CallExpression' && n.callee.type === 'Identifier' && n.callee.name === 'useEscapeLayer') {
+            out.push(n.arguments[2] ? src.slice(n.arguments[2].start, n.arguments[2].end) : '(none)');
+        }
+    });
+    return out;
 };
 
 // The layers a component renders at the top of what it returns: a condition's first
@@ -280,9 +308,17 @@ test('THE GUARD: every layer the app renders has a place in the order and an Esc
     const appEscape = between(app, "            if (e.key === 'Escape') {", '\n                return;\n            }');
     for (const [key, how] of Object.entries(LAYERS)) {
         if (how.name) assert.ok(NAMES.includes(how.name), `${key}: ${how.name} is in the order`);
-        if (how.app) assert.ok(appEscape.includes(`if (${how.app})`), `${key}: App's Escape closes it`);
+        if (how.app) {
+            // A layer of its own place is closed by its case; the deal and user windows share
+            // the draggable case; the undo toast is not a layer (§0.189).
+            const closes = how.name && how.name !== 'draggable' ? `case '${how.name}': ` : `if (${how.app})`;
+            assert.ok(appEscape.includes(closes), `${key}: App's Escape closes it — ${closes}`);
+        }
         if (how.own) assert.ok(/'Escape'|useEscapeLayer\(/.test(read(how.own)), `${key}: its own listener takes the Escape`);
-        if (how.layer) assert.ok(read(how.layer).includes(`escapeBlocked('${how.name}')`), `${key}: it takes the Escape, passing it on while a layer above ${how.name} is open`);
+        if (how.layer) {
+            assert.ok(read(how.layer).includes(`escapeBlocked('${how.name}')`), `${key}: it takes the Escape, passing it on while a layer above ${how.name} is open`);
+            for (const held of escapeLayerHolds(read(how.layer))) assert.ok(held.includes('escapeBlocked('), `${key}: every useEscapeLayer in ${how.layer} is held by the order, not a list — ${held}`);
+        }
     }
     const named = new Set(Object.values(LAYERS).map((h) => h.name).filter(Boolean));
     assert.deepEqual(NAMES.filter((n) => !named.has(n)), [], 'a place in the order no layer holds');
@@ -294,6 +330,132 @@ test('the guard finds the shape as it was: a layer with no Escape and no place',
     walk(parse(src, { sourceType: 'module', plugins: ['jsx'] }), (n) => { if (!ret && n.type === 'ReturnStatement') ret = n.argument; });
     const keys = ret.children.map((c) => (c.type === 'JSXElement' ? c.openingElement.name.name : c.expression.left.name));
     assert.deepEqual(keys.filter((k) => !(k in LAYERS)), ['somethingNew', 'Fresh']);
+    assert.deepEqual(escapeLayerHolds("function L() { useEscapeLayer(open, close, !!(confirmModal || promptModal)); useEscapeLayer(open, close); }"),
+        ['!!(confirmModal || promptModal)', '(none)'], 'a hold the guard refuses: a list, or nothing');
+});
+
+// ── every layer decides by the order (state §0.189) ─────────────────────────
+
+test('App\'s Escape closes the layer on top when it is App\'s, and leaves the Escape to it when it is not', () => {
+    const app = read('src/App.jsx');
+    const appEscape = between(app, "            if (e.key === 'Escape') {", '\n                return;\n            }');
+    const marked = appEscape.indexOf('                if (e.defaultPrevented) return;');
+    const decided = appEscape.indexOf('                switch (topLayer(openLayersRef.current || {})) {');
+    assert.ok(marked > 0 && decided > marked, 'a marked Escape is left alone; then the layer on top, by the order');
+    const cases = [...between(appEscape, 'switch (topLayer(', '\n                }').matchAll(/case '(\w+)':/g)].map((m) => m[1]);
+    const appNames = [...new Set(Object.values(LAYERS).filter((h) => h.app && h.name).map((h) => h.name))];
+    assert.deepEqual([...cases].sort(), [...appNames].sort(), 'a case for each of App\'s layers, and for no other');
+    assert.ok(appEscape.includes('                    case null: break;   // nothing is drawn over the page'), 'nothing on top: the toast and the stray flags');
+    assert.ok(appEscape.includes('                    default: return;    // the layer on top takes its own Escape'), 'a layer that takes its own: App leaves it');
+    assert.ok(appEscape.includes('                        if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }\n                        return;'), 'a draggable that takes its own — an import, the lost reason: App leaves it, the toast too');
+    assert.ok(appEscape.indexOf('if (undoToast)') > appEscape.indexOf('default: return;'), 'the undo toast once nothing is drawn over the page');
+    for (const flag of ['showAccountModal', 'showContactModal', 'showTaskModal', 'showActivityModal', 'taskRailId']) {
+        assert.ok(!between(appEscape, 'switch (topLayer(', '\n                }').includes(flag), `${flag}: not a layer App closes`);
+    }
+    assert.ok(!appEscape.includes('if (taskRailId)') && !appEscape.includes('if (showActivityModal)'), 'the task and activity rails take their own: App closed them too — the task rail while it kept its draft');
+    assert.ok(app.includes('    const openLayersRef = useRef(null);'));
+    const assigned = app.indexOf('    openLayersRef.current = openLayers;');
+    assert.ok(assigned > app.indexOf('    const openLayers = {') && assigned < app.indexOf('    if (!clerkLoaded || !orgLoaded) {'), 'the open layers handed over every render, before the early returns');
+});
+
+test('THE GUARD: a layer\'s own listener decides by the order — escapeBlocked(its name), never a list of its own — and marks the Escape it takes', () => {
+    const own = Object.entries(LAYERS).filter(([, h]) => h.own);
+    assert.deepEqual(own.map(([k]) => k).sort(), ['AccountRail', 'ActivityRail', 'ContactRail', 'TaskRail', 'showLeadModal']);
+    for (const [key, how] of own) {
+        const src = read(how.own);
+        const held = `    const escapeHeld = escapeBlocked('${how.name}');`;
+        assert.equal(src.split(held).length - 1, 1, `${key}: held while a layer above ${how.name} is open`);
+        const at = src.indexOf("if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;", src.indexOf(held));
+        assert.ok(at > 0, `${key}: its listener leaves a marked or held Escape`);
+        const body = src.slice(at, src.indexOf('addEventListener', at));
+        assert.ok(/\n\s*e\.preventDefault\(\);/.test(body), `${key}: it marks the Escape it takes`);
+        assert.ok(!/\b(confirmModal|promptModal|viewingActivity|showDocLinkPicker|showUploadRail)\b/.test(body), `${key}: no list of its own`);
+        const deps = src.slice(at).match(/\}, \[([^\]]*)\]\);/);
+        assert.ok(deps && /\bescapeHeld\b/.test(deps[1]), `${key}: its listener reads the hold of the render it was made in`);
+    }
+    // The rails keep a draft: editing, the Escape is the rail's and the rail stays.
+    for (const f of ['ContactRail', 'AccountRail', 'TaskRail']) {
+        assert.ok(read(`src/components/rails/${f}.jsx`).includes('            e.preventDefault();\n            if (!isEditing) closeRail();'), `${f}: marked, editing or not`);
+    }
+    // The header's search box closes the results itself — while nothing is open above them.
+    assert.ok(read('src/components/layout/AppHeader.jsx').includes("onKeyDown={e => { if (e.key === 'Escape' && !escapeBlocked('search')) { e.preventDefault(); setShowSearchResults(false); setGlobalSearch(''); } }}"));
+});
+
+// A keypress, as the page meets it: each open layer's listener by how it takes its Escape —
+// layer: document, capture; own: document, bubble; App: window, last — in the order given.
+const press = (open, kinds, order = Object.keys(open)) => {
+    const closed = [];
+    const e = { key: 'Escape', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+    const names = order.filter((n) => open[n]);
+    for (const n of names.filter((x) => kinds[x] === 'layer')) takeEscape(e, layersAbove(n, open), () => closed.push(n));
+    for (const n of names.filter((x) => kinds[x] === 'own')) {
+        if (e.key !== 'Escape' || e.defaultPrevented || layersAbove(n, open)) continue;
+        e.preventDefault();
+        closed.push(n);
+    }
+    if (!e.defaultPrevented) {
+        const top = topLayer(open);
+        if (top && kinds[top] === 'app') closed.push(top);
+    }
+    return closed;
+};
+// How each place's layers take their Escape, from THE GUARD's table.
+const KINDS = {};
+for (const how of Object.values(LAYERS)) {
+    if (how.name) (KINDS[how.name] ||= new Set()).add(how.app ? 'app' : how.own ? 'own' : 'layer');
+}
+
+test('THE GUARD: of any two layers open, one Escape closes the upper and only it — however each takes its Escape, whichever listener was added first', () => {
+    assert.deepEqual(Object.keys(KINDS).sort(), [...NAMES].sort(), 'every place, its kinds');
+    let runs = 0;
+    for (let i = 0; i < NAMES.length; i++) {
+        for (let j = i + 1; j < NAMES.length; j++) {
+            const [upper, lower] = [NAMES[i], NAMES[j]];
+            for (const ku of KINDS[upper]) {
+                for (const kl of KINDS[lower]) {
+                    const open = { [upper]: true, [lower]: true };
+                    const kinds = { [upper]: ku, [lower]: kl };
+                    for (const order of [[upper, lower], [lower, upper]]) {
+                        assert.deepEqual(press(open, kinds, order), [upper], `${upper} (${ku}) over ${lower} (${kl})`);
+                        runs += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert.ok(runs >= NAMES.length * (NAMES.length - 1), `every pair, both orders (${runs})`);
+    // The next Escape closes the lower.
+    assert.deepEqual(press({ contactRail: false, shortcuts: true }, { contactRail: 'own', shortcuts: 'app' }), ['shortcuts']);
+});
+
+test('a rail that keeps its draft keeps the Escape: nothing under it closes', () => {
+    const e = { key: 'Escape', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+    const open = { taskRail: true, shortcuts: true };
+    // The rail's listener, editing: the Escape is its own — marked — and the rail stays.
+    if (!(e.defaultPrevented || layersAbove('taskRail', open))) e.preventDefault();
+    assert.equal(e.defaultPrevented, true);
+    assert.equal(topLayer(open), 'taskRail', 'and were it unmarked, App would leave it to the rail on top');
+});
+
+test('the guard finds the shape as it was (HEAD before §0.189): App\'s own list, and a rail\'s unmarked Escape', () => {
+    // App closed the first of its own list that was open; a rail closed on any Escape the
+    // viewer and the app's dialogs did not hold, and left it unmarked.
+    const OLD_APP = ['confirm', 'prompt', 'activityDetail', 'shortcuts', 'activityRail', 'draggable', 'taskRail', 'profile', 'coachingNote', 'notes', 'notifications', 'search'];
+    const pressAsItWas = (open) => {
+        const closed = [];
+        if (open.contactRail && !open.activityDetail && !open.confirm && !open.prompt) closed.push('contactRail');
+        const first = OLD_APP.find((n) => open[n]);
+        if (first) closed.push(first);
+        return closed;
+    };
+    assert.deepEqual(pressAsItWas({ contactRail: true, shortcuts: true }), ['contactRail', 'shortcuts'], 'two layers, one Escape');
+    assert.deepEqual(pressAsItWas({ search: true, notifications: true }), ['notifications'], 'the lower of two');
+    assert.deepEqual(pressAsItWas({ coachingNote: true, profile: true }), ['profile'], 'the profile under the coaching note');
+    assert.deepEqual(pressAsItWas({ coachingNote: true, contactRail: true }), ['contactRail', 'coachingNote'], 'a rail under the coaching note');
+    assert.deepEqual(press({ contactRail: true, shortcuts: true }, { contactRail: 'own', shortcuts: 'app' }), ['contactRail']);
+    assert.deepEqual(press({ search: true, notifications: true }, { search: 'app', notifications: 'app' }), ['search']);
+    assert.deepEqual(press({ coachingNote: true, profile: true }, { coachingNote: 'app', profile: 'app' }), ['coachingNote']);
+    assert.deepEqual(press({ coachingNote: true, contactRail: true }, { coachingNote: 'app', contactRail: 'own' }), ['coachingNote']);
 });
 
 // ── what each new Escape does ───────────────────────────────────────────────

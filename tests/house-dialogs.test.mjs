@@ -35,7 +35,7 @@ test('the house prompt dialog is wired: state, opener, context, renderer', () =>
     assert.ok(app.includes('promptModal, setPromptModal,'), 'App destructures the state');
     assert.ok(app.includes('const showPrompt = ('), 'App defines showPrompt');
     assert.ok(app.includes('        showPrompt,'), 'App exposes showPrompt in the context');
-    assert.ok(app.includes('if (promptModal) { setPromptModal(null); return; }'), 'Escape closes it');
+    assert.ok(app.includes("case 'prompt': setPromptModal(null); return;"), 'Escape closes it — when it is the layer on top (§0.189)');
     const ml = read('src/components/layout/ModalLayer.jsx');
     assert.ok(ml.includes('{promptModal && ('), 'ModalLayer renders it');
     assert.ok(ml.includes("autoFocus"), 'the input takes focus');

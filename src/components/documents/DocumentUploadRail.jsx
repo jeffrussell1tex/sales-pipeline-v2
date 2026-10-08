@@ -24,7 +24,7 @@ export default function DocumentUploadRail() {
         showUploadRail, setShowUploadRail, uploadRailContext, setUploadRailContext,
         createDocument, addDocumentVersion,
         setShowDocLinkPicker, setDocLinkPickerContext,
-        showDocLinkPicker, confirmModal, promptModal,
+        escapeBlocked,
         settings, currentUserId,
     } = useApp();
 
@@ -62,10 +62,11 @@ export default function DocumentUploadRail() {
     };
 
     // Escape closes this rail as its backdrop and Cancel do — not while a file is uploading —
-    // once the link picker or the app's confirm or prompt above it is closed (state §0.180).
+    // while no layer above it is open (state §0.180): the one order (escapeBlocked, state
+    // §0.189), not the list it kept (the link picker, the app's confirm or prompt).
     // An Escape mid-upload is still taken, so nothing under the rail closes.
     useEscapeLayer(showUploadRail, () => { if (!uploading) close(); },
-        !!(showDocLinkPicker || confirmModal || promptModal));
+        escapeBlocked('uploadRail'));
 
     if (!showUploadRail) return null;
 

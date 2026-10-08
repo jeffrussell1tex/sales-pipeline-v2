@@ -182,14 +182,14 @@ export default function ContactRail() {
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
         railStack, setRailStack,
-        showActivityModal, setShowActivityModal, setActivityInitialContext, setViewingActivity, viewingActivity,
+        showActivityModal, setShowActivityModal, setActivityInitialContext, setViewingActivity,
         handleSaveContact,
         currentUserId, myProfile,
         handleAddActivity,
         contactModalError, setContactModalError,
         contactModalSaving,
         taskRailId: _taskRailId, setTaskRailId, taskRailMode: _taskRailMode, setTaskRailMode,
-        confirmModal, promptModal,
+        escapeBlocked,
         openMeetingPrep,
     } = useApp();
 
@@ -430,18 +430,24 @@ export default function ContactRail() {
         setShowActivityModal(true);
     };
 
-    // ESC key closes
+    // ESC key closes — the rail's Escape while no layer above it is open (state §0.189): the
+    // one order (escapeBlocked), not a list of its own — the activity viewer and the app's
+    // confirm and prompt were on it (§0.93, §0.178), the coaching note was not. It marks the
+    // Escape it takes, so nothing under the rail acts on it too: App closed the shortcuts or
+    // a header panel under it on the same keypress. Editing, the rail keeps its draft, as its
+    // backdrop does — the Escape is still the rail's.
+    // An Escape a layer above took — marked, as a document's is (§0.180) — is left alone.
+    const escapeHeld = escapeBlocked('contactRail');
     useEffect(() => {
         if (!isOpen) return;
-        // The activity viewer (§0.93) sits above the rail and App.jsx closes it on
-        // Escape first; without this guard the rail's own listener closed too. The same
-        // for the app's confirm and prompt (state §0.178): a document's Delete asks over
-        // this rail.
-        // An Escape a layer above took — marked, as a document's is (§0.180) — is left alone.
-        const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && !isEditing && !viewingActivity && !confirmModal && !promptModal) closeRail(); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape' || e.defaultPrevented || escapeHeld) return;
+            e.preventDefault();
+            if (!isEditing) closeRail();
+        };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [isOpen, isEditing, viewingActivity, confirmModal, promptModal]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isOpen, isEditing, escapeHeld]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!isOpen) return null;
 

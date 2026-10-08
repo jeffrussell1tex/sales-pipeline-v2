@@ -55,6 +55,7 @@ export default function AppHeader({
         calendarConnected, calendarEvents, calendarLoading, calendarError, fetchCalendarEvents,
         calConnectResult, setCalConnectResult,
         activeOrgId,
+        escapeBlocked,
     } = useApp();
 
     const isAdmin    = userRole === 'Admin';
@@ -388,7 +389,7 @@ export default function AppHeader({
                                 placeholder="Search accounts, contacts, deals…"
                                 value={globalSearch}
                                 onChange={e => setGlobalSearch(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Escape') { setShowSearchResults(false); setGlobalSearch(''); } }}
+                                onKeyDown={e => { if (e.key === 'Escape' && !escapeBlocked('search')) { e.preventDefault(); setShowSearchResults(false); setGlobalSearch(''); } }}
                                 style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 15, color: T.ink, padding: 0, fontFamily: T.sans }}
                             />
                             {globalSearch && (
