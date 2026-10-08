@@ -30,9 +30,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **Update the Anthropic keys** (§2.1), before AI scoring is relied on. Dev's
-   key answered 401 on 15 Sep, so an org with no key of its own may get an
-   error instead of a score.
+1. **The Anthropic keys: deploy and prove** (§2.1). Jeff replaced them on 8 Oct;
+   each site's functions get the new key on its next deploy, and one AI score
+   proves it.
 2. **Small security closes** (§4.6):
    - the audit log's allowlist for client events;
    - role scoping on the recommendation log's GET;
@@ -64,15 +64,18 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     same site key.
   - Since §0.188 an Admin can switch on "Claude scores deals". An org with no
     key of its own (BYOK) then scores with the site key.
-  - To do: a new key in `ANTHROPIC_API_KEY` on both Netlify sites (dev,
-    "accelerep"; prod, "sales-pipeline-v2"), kept marked secret; then a
-    deploy of each, since a changed variable reaches the functions on the
-    next deploy. A key never enters chat.
-  - Also, if it is to be replaced too: the Accelerep Test org's own key
-    (BYOK, Settings → Features & AI), installed 15 Sep.
+  - **Replaced** (Jeff, 8 Oct: "keys are replaced") — a new key in
+    `ANTHROPIC_API_KEY` on the Netlify sites (dev, "accelerep"; prod,
+    "sales-pipeline-v2"). Whether the Accelerep Test org's own key (BYOK,
+    Settings → Features & AI, installed 15 Sep) was replaced too: not said.
+  - Left: a deploy of each site, since a changed variable reaches the
+    functions on the next deploy — dev's comes with the next push; prod's is
+    Netlify's "Trigger deploy" (the current `master`, no code change) or the
+    next ship. Locally, `netlify dev` reads the dev site's variables when it
+    starts.
   - Then: one AI score on a QA deal, in an org with no key of its own,
     proves the site key. It sends that deal to Anthropic.
-  - Source: §0.141; handoff §5 (16 Sep). Not re-checked since 15 Sep.
+  - Source: §0.141; handoff §5 (16 Sep).
 - **QuickBooks setup, before the export can be built (§3.2).**
   - In the Intuit developer portal: an app with two redirect URIs, and a
     sandbox company:
