@@ -54,8 +54,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 ### 2.1 Checks and setup only Jeff can do
 
 - **The Anthropic keys: what is left** (Jeff, 8 Oct: "add updating the
-  anthropic keys to the to-do list"). The keys work on the dev site since
-  8 Oct; the workspace rule is in the guide's secrets rules.
+  anthropic keys to the to-do list"). The keys work on both sites — dev
+  since 8 Oct, prod since the twenty-ninth ship (9 Oct: Jeff's screenshot of
+  an AI score of "EDF Energy – HPC Project", 35, Critical); the workspace
+  rule is in the guide's secrets rules.
   - **Resolved, 8 Oct:** `ANTHROPIC_API_KEY` on both sites (dev "accelerep",
     prod "sales-pipeline-v2") is "Accelerep Key2": linked to the service
     account `accelerep-server`, scoped to the Default workspace, no expiry,
@@ -79,8 +81,6 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     scores deals" left on, as Jeff asked.
   - **The unscoped key is deleted** (Jeff, 8 Oct: "i deleted the extra claude key").
   - **Left (Jeff):**
-    - prod (shipped 9 Oct, deploy `6ac8541b…`, the new key in its
-      environment) has run no AI call yet: one AI score there proves its key;
     - whether the Accelerep Test org's own key (BYOK, Settings → Features &
       AI, installed 15 Sep) still works: not checked. A key an org brings
       must be scoped to a workspace too.
@@ -479,7 +479,10 @@ model's pattern to deals.
   "…escalate to Sofia Rossi. Verify close date" for "Ironwood Manufacturing
   — Safety Compliance Module" (Accelerep QA). Recommended: cut at the last
   full sentence or word, or ask for shorter text and keep a longer cap.
-  Found 8 Oct.
+  Found 8 Oct. On prod too (9 Oct, "EDF Energy – HPC Project": "…schedule
+  specific check-in with legal team. Confir"). The same score's signal read
+  "foreclosed in 20 days" for forecast to close: the model's wording, a
+  prompt matter for §3.1's batches.
 
 ### 4.3 Settings
 
