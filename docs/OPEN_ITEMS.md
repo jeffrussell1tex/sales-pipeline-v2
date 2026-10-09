@@ -118,17 +118,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **Now that prod has shipped (the twenty-ninth ship, 9 Oct): clear prod
-  Clerk's leftover user-level roles.**
-  - Run `scripts/clear-clerk-roles.mjs --apply --live` with Jeff's key.
-  - Prod's roles are its roster rows since the ship (§0.163), accepted as
-    read before it (Jeff: "yes, accept the rows and ship"): the first org
-    Jeff Admin, Travis Shipley Manager, four Sales Reps (one a second
-    "Jeff Russell" row); the second org Jeff Admin. Dev was cleared on 4 Oct.
-  - Source: §0.164.
-- **The ship closed two items:** prod's "Sync from Clerk" no longer writes
-  `'User'` over a role it does not know (§0.153), and prod's AI Score tab
-  asks with the deal's id (§0.188).
+- Nothing open. The twenty-ninth ship (9 Oct) and the Clerk cleanup after it
+  are recorded in the state header.
 
 ### 2.3 Before selling
 
