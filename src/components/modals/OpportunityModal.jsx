@@ -10,6 +10,7 @@ import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
 import { contactsToAdd } from '../../utils/buyingCommittee.js';
 import { storedScore, signalKind } from '../../utils/aiScore.js';
+import { dealCommittee, engagedContacts, listedContacts, onDealOf, personLabel, withoutPerson } from '../../utils/dealEngagement.js';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (inline — no build-time import needed)
@@ -78,6 +79,9 @@ const ENG = { hot: T.danger, warm: T.warn, cool: T.info, stale: T.inkMuted };
 const EngDot = ({ level = 'stale', size = 8 }) => (
     <span style={{ display: 'inline-block', width: size, height: size, borderRadius: '50%', background: ENG[level] || T.inkMuted, flexShrink: 0 }}/>
 );
+
+// A person on a deal the caller's contacts do not hold and the deal's text does not name (state §0.192).
+const UNLISTED_CONTACT = 'Contact not in your list';
 
 // Role badge
 const RoleBadge = ({ role }) => (
@@ -219,13 +223,18 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
     // The activity is saved, not only shown (state §0.177): it set the list on
     // screen and was gone on reload. A failed save keeps the form and says why.
     const [logState, setLogState] = React.useState({ saving: false, error: null });
+    // Who the activity was with — the deal's people, nobody picked to start (state §0.192;
+    // Jeff, 9 Oct: "Add it, nobody pre-picked"). It saved no contact, so nothing logged
+    // here ever counted for anyone on the deal.
+    const [logWith, setLogWith] = React.useState([]);
     const logActivity = async () => {
         if (!onSaveActivity || logState.saving) return;
         setLogState({ saving: true, error: null });
-        const r = await onSaveActivity({ ...newActivity, opportunityId: opportunity.id, contactName: '' });
+        const r = await onSaveActivity({ ...newActivity, opportunityId: opportunity.id, contactIds: logWith });
         if (!r?.ok) { setLogState({ saving: false, error: r?.error || 'The activity was not saved.' }); return; }
         setLogState({ saving: false, error: null });
         setNewActivity({ type: 'Call', date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'), notes: '' });
+        setLogWith([]);
         setShowLogActivity(false);
     };
     const activityTypes = ['Call', 'Email', 'Meeting', 'Demo', 'Proposal Sent', 'Follow-up', 'Other'];
@@ -269,18 +278,12 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
     const timeInStage = opportunity.stageChangedDate ? Math.floor((today - new Date(opportunity.stageChangedDate + 'T12:00:00')) / 86400000) : null;
     const actCounts = oppActivities.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {});
 
-    const contactEngagement = {};
-    oppActivities.forEach(a => {
-        if (a.contactName) {
-            if (!contactEngagement[a.contactName]) contactEngagement[a.contactName] = { calls: 0, emails: 0, meetings: 0, last: a.date };
-            if (a.type === 'Call' || a.type === 'Follow-up') contactEngagement[a.contactName].calls++;
-            else if (a.type === 'Email' || a.type === 'Proposal Sent') contactEngagement[a.contactName].emails++;
-            else contactEngagement[a.contactName].meetings++;
-            if (a.date > contactEngagement[a.contactName].last) contactEngagement[a.contactName].last = a.date;
-        }
-    });
-    const oppContactNames = (opportunity.contacts || '').split(', ').filter(Boolean).map(c => c.split(' (')[0]);
-    oppContactNames.forEach(n => { if (!contactEngagement[n]) contactEngagement[n] = { calls: 0, emails: 0, meetings: 0, last: null }; });
+    // Contacts engaged: the people this deal's activities were logged with, by the contact
+    // ids they carry (state §0.192). It read activity.contactName, which no activity has,
+    // and seeded every name on the deal with a zero row — so it showed the contacts LISTED.
+    const contactsEngaged = engagedContacts(oppActivities, contacts).length;
+    // The deal's people the log form's "With" offers — those with an id and a name.
+    const logPeople = dealCommittee(opportunity, contacts, []).filter((p) => p.id && p.name);
 
     // Timeline items fall back to a task's createdAt (an instant) when it has no due
     // date; parseLocalDate reads both kinds and never yields "Invalid Date" (0.62).
@@ -325,7 +328,7 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                     { val: dealAge !== null ? `${dealAge}d` : '—', lbl: 'Deal age', color: dealAge > 90 ? T.danger : dealAge > 60 ? T.warn : T.ok },
                     { val: timeInStage !== null ? `${timeInStage}d` : '—', lbl: 'In this stage', color: timeInStage > 30 ? T.danger : timeInStage > 14 ? T.warn : T.ok },
                     { val: oppActivities.length + oppTasks.length, lbl: 'Activities', color: T.info },
-                    { val: Object.keys(contactEngagement).length, lbl: 'Contacts engaged', color: T.inkMid },
+                    { val: contactsEngaged, lbl: 'Contacts engaged', color: T.inkMid },
                 ].map(({ val, lbl, color }) => (
                     <div key={lbl} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '10px 12px' }}>
                         <div style={{ fontSize: '1.25rem', fontWeight: '700', color }}>{val}</div>
@@ -458,6 +461,23 @@ function DealHistoryTab({ opportunity, oppActivities, oppTasks = [], stages, set
                                 rows={2} placeholder="What happened?"
                                 style={{ width: '100%', padding: '0.5rem 0.625rem', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: '0.8125rem', fontFamily: T.sans, resize: 'vertical', background: T.surface, color: T.ink, boxSizing: 'border-box' }}/>
                         </div>
+                        {logPeople.length > 0 && (
+                            <div style={{ marginBottom: '0.625rem' }}>
+                                <label style={{ ...ey(), display: 'block', marginBottom: 4 }}>With</label>
+                                <div role="group" aria-label="Who the activity was with" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                    {logPeople.map((p) => {
+                                        const on = logWith.includes(p.id);
+                                        return (
+                                            <button key={p.key} type="button" aria-pressed={on}
+                                                onClick={() => setLogWith((w) => (w.includes(p.id) ? w.filter((x) => x !== p.id) : [...w, p.id]))}
+                                                style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, fontFamily: T.sans, borderRadius: T.r, cursor: 'pointer', border: `1px solid ${on ? T.ink : T.border}`, background: on ? T.ink : T.surface, color: on ? T.surface : T.inkMid }}>
+                                                {p.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                             <GhostBtn onClick={() => setShowLogActivity(false)}>Cancel</GhostBtn>
                             <PrimaryBtn type="button" saving={logState.saving} onClick={logActivity}>Save Activity</PrimaryBtn>
@@ -514,24 +534,11 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
     const fmtDate = (d) => parseLocalDate(d)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '—';
     const [ctSearch, setCtSearch] = useState('');
 
-    const contactEngagement = {};
-    oppActivities.forEach(a => {
-        if (a.contactName) {
-            if (!contactEngagement[a.contactName]) contactEngagement[a.contactName] = { calls: 0, emails: 0, meetings: 0, last: a.date };
-            if (a.type === 'Call' || a.type === 'Follow-up') contactEngagement[a.contactName].calls++;
-            else if (a.type === 'Email' || a.type === 'Proposal Sent') contactEngagement[a.contactName].emails++;
-            else contactEngagement[a.contactName].meetings++;
-            if (a.date > contactEngagement[a.contactName].last) contactEngagement[a.contactName].last = a.date;
-        }
-    });
-    const oppContactNames = (opportunity.contacts || '').split(', ').filter(Boolean).map(c => c.split(' (')[0]);
-    oppContactNames.forEach(n => { if (!contactEngagement[n]) contactEngagement[n] = { calls: 0, emails: 0, meetings: 0, last: null }; });
-
-    const enriched = Object.entries(contactEngagement).map(([name, data]) => {
-        const firstName = name.split(' (')[0];
-        const contact = (contacts || []).find(c => `${c.firstName} ${c.lastName}`.toLowerCase() === firstName.toLowerCase());
-        return { name: firstName, title: contact?.title || '', company: contact?.company || '', ...data };
-    });
+    // The deal's people as the form holds them now — a contact added here shows at once —
+    // each with this deal's calls, emails and meetings and the last touch, by the contact
+    // ids its activities carry (state §0.192). It read activity.contactName, which no
+    // activity has (0 / 0 / 0 and "—" for everyone), and listed the saved names only.
+    const committee = dealCommittee({ contactIds: selectedContactIds || [], contacts: (selectedContacts || []).join(', ') }, contacts, oppActivities);
 
     return (
         <div style={{ paddingBottom: '1rem' }}>
@@ -539,7 +546,8 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
             {selectedContacts !== undefined && (() => {
                 // A search, not a list: nothing is offered until the rep types, and a
                 // contact already on the deal is not offered again (§0.154).
-                const filtered = contactsToAdd(contacts, ctSearch, selectedContacts);
+                const onDeal = onDealOf(committee, contacts);
+                const filtered = contactsToAdd(contacts, ctSearch, selectedContacts).filter((c) => !onDeal(c));
                 return (
                     <div style={{ marginBottom: 16 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8, fontFamily: T.sans }}>Add to buying committee</div>
@@ -587,21 +595,21 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
                     </div>
                 );
             })()}
-            {enriched.length === 0 ? (
+            {committee.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: T.inkMuted, fontSize: '0.8125rem', background: T.surface, borderRadius: T.r, border: `1px dashed ${T.border}`, fontFamily: T.sans }}>
                     No contacts linked yet.
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {enriched.map(c => (
-                        <div key={c.name} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '0.75rem 0.875rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <Avatar name={c.name} size={36}/>
+                    {committee.map(c => (
+                        <div key={c.key} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '0.75rem 0.875rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <Avatar name={c.name || '?'} size={36}/>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: '0.875rem', fontWeight: '700', color: T.ink, fontFamily: T.sans }}>{c.name}</div>
+                                <div style={{ fontSize: '0.875rem', fontWeight: '700', color: T.ink, fontFamily: T.sans }}>{c.name || UNLISTED_CONTACT}</div>
                                 {c.title && <div style={{ fontSize: '0.75rem', color: T.inkMid, fontFamily: T.sans }}>{c.title}</div>}
                             </div>
                             <div style={{ display: 'flex', gap: '1rem', flexShrink: 0 }}>
-                                {[['📞', c.calls], ['✉️', c.emails], ['🤝', c.meetings]].map(([icon, count], i) => (
+                                {[['📞', c.engagement.calls], ['✉️', c.engagement.emails], ['🤝', c.engagement.meetings]].map(([icon, count], i) => (
                                     <div key={i} style={{ textAlign: 'center' }}>
                                         <div style={{ fontSize: '0.75rem' }}>{icon}</div>
                                         <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: T.ink, fontFamily: T.sans }}>{count}</div>
@@ -610,7 +618,7 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
                             </div>
                             <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                 <div style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>Last touch</div>
-                                <div style={{ fontSize: '0.75rem', fontWeight: '600', color: T.ink, fontFamily: T.sans }}>{c.last ? fmtDate(c.last) : '—'}</div>
+                                <div style={{ fontSize: '0.75rem', fontWeight: '600', color: T.ink, fontFamily: T.sans }}>{c.engagement.lastTouch ? fmtDate(c.engagement.lastTouch) : '—'}</div>
                             </div>
                         </div>
                     ))}
@@ -783,19 +791,16 @@ function OppQuotesPanel({ opportunity, contacts, onClose }) {
         if (setActiveTab) setActiveTab('quotes');
         if (onClose) onClose();
     };
-    const primaryContact = React.useMemo(() => {
-        const contactNames = (opportunity?.contacts || '').split(', ').filter(Boolean);
-        if (!contactNames.length) return null;
-        const firstName = contactNames[0].split(' (')[0];
-        return (contacts || []).find(c => `${c.firstName} ${c.lastName}` === firstName) || null;
-    }, [opportunity, contacts]);
+    // The deal's first person, by id (state §0.192): it matched the first name in the text
+    // to the contacts in exact case.
+    const primaryContact = React.useMemo(() => dealCommittee(opportunity, contacts, []).find((p) => p.name) || null, [opportunity, contacts]);
 
     return (
         <div style={{ padding: '0.5rem 0' }}>
             <div style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '0.875rem 1.125rem', marginBottom: '1.25rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
                 <div><div style={{ ...ey(), marginBottom: 2 }}>Opportunity</div><div style={{ fontSize: '0.875rem', fontWeight: '700', color: T.ink, fontFamily: T.sans }}>{opportunity?.opportunityName || opportunity?.account || '—'}</div></div>
                 <div><div style={{ ...ey(), marginBottom: 2 }}>Account</div><div style={{ fontSize: '0.875rem', fontWeight: '600', color: T.inkMid, fontFamily: T.sans }}>{opportunity?.account || '—'}</div></div>
-                {primaryContact && <div><div style={{ ...ey(), marginBottom: 2 }}>Primary Contact</div><div style={{ fontSize: '0.875rem', fontWeight: '600', color: T.inkMid, fontFamily: T.sans }}>{primaryContact.firstName} {primaryContact.lastName}{primaryContact.title ? ` · ${primaryContact.title}` : ''}</div></div>}
+                {primaryContact && <div><div style={{ ...ey(), marginBottom: 2 }}>Primary Contact</div><div style={{ fontSize: '0.875rem', fontWeight: '600', color: T.inkMid, fontFamily: T.sans }}>{primaryContact.name}{primaryContact.title ? ` · ${primaryContact.title}` : ''}</div></div>}
                 <div><div style={{ ...ey(), marginBottom: 2 }}>Revenue</div><div style={{ fontSize: '0.875rem', fontWeight: '700', color: T.ink, fontFamily: T.sans }}>{fmtCurrency(opportunity?.arr)}</div></div>
             </div>
             {oppQuotes.length === 0 ? (
@@ -880,22 +885,11 @@ function RightRail({ opportunity, aiScore, aiOn, oppActivities, contacts, settin
         return 'stale';
     };
 
-    // Build contact engagement map from activities
-    const contactEngMap = {};
-    oppActivities.forEach(a => {
-        if (a.contactName) {
-            if (!contactEngMap[a.contactName]) contactEngMap[a.contactName] = { last: a.date };
-            if (a.date > contactEngMap[a.contactName].last) contactEngMap[a.contactName].last = a.date;
-        }
-    });
-
-    // Enrich contacts linked to this opp
-    const oppContactNames = (opportunity?.contacts || '').split(', ').filter(Boolean).map(c => c.split(' (')[0]);
-    const enrichedContacts = oppContactNames.slice(0, 5).map(name => {
-        const contact = (contacts || []).find(c => `${c.firstName} ${c.lastName}`.toLowerCase() === name.toLowerCase());
-        const lastAct = contactEngMap[name]?.last || null;
-        return { name, title: contact?.title || '', lastTouch: lastAct, engagement: engLevel(lastAct) };
-    });
+    // The deal's people — everyone on it in the count, the first five listed — each with
+    // their last touch on this deal, by the contact ids its activities carry (state
+    // §0.192). It read activity.contactName, which no activity has: every dot was stale.
+    const committee = dealCommittee(opportunity, contacts, oppActivities);
+    const shownCommittee = committee.slice(0, 5);
 
     // The deal's AI score — the window's (state §0.188): the one the deal was opened with,
     // or the one its AI Score tab just asked for. The rail read `cachedScore`, which no
@@ -951,32 +945,32 @@ function RightRail({ opportunity, aiScore, aiOn, oppActivities, contacts, settin
             {/* ── Buying committee ────────────────────────────── */}
             <div>
                 <RailLabel color={T.goldInk} action="Add" onAction={onOpenContact}>
-                    Buying committee{enrichedContacts.length > 0 ? ` · ${enrichedContacts.length}` : ''}
+                    Buying committee{committee.length > 0 ? ` · ${committee.length}` : ''}
                 </RailLabel>
-                {enrichedContacts.length === 0 ? (
+                {committee.length === 0 ? (
                     <div style={{ fontSize: 12, color: T.inkMuted, fontFamily: T.sans, fontStyle: 'italic', padding: '8px 0' }}>No contacts linked yet.</div>
                 ) : (
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
-                        {enrichedContacts.map((c, i) => (
-                            <div key={c.name} style={{ display: 'flex', gap: 10, padding: '9px 12px', alignItems: 'center', borderTop: i === 0 ? 'none' : `1px solid ${T.border}` }}>
-                                <Avatar name={c.name} size={30}/>
+                        {shownCommittee.map((c, i) => (
+                            <div key={c.key} style={{ display: 'flex', gap: 10, padding: '9px 12px', alignItems: 'center', borderTop: i === 0 ? 'none' : `1px solid ${T.border}` }}>
+                                <Avatar name={c.name || '?'} size={30}/>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{c.name}</span>
-                                        <EngDot level={c.engagement} size={7}/>
+                                        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{c.name || UNLISTED_CONTACT}</span>
+                                        <EngDot level={engLevel(c.engagement.lastTouch)} size={7}/>
                                     </div>
                                     {c.title && <div style={{ fontSize: 11, color: T.inkMid, marginTop: 1, fontFamily: T.sans }}>{c.title}</div>}
                                 </div>
-                                {c.lastTouch && (
+                                {c.engagement.lastTouch && (
                                     <div style={{ fontSize: 10, color: T.inkMuted, flexShrink: 0, fontFamily: T.sans }}>
-                                        {fmtDateShort(c.lastTouch)}
+                                        {fmtDateShort(c.engagement.lastTouch)}
                                     </div>
                                 )}
                             </div>
                         ))}
                     </div>
                 )}
-                {enrichedContacts.length > 0 && (
+                {committee.length > 0 && (
                     <button type="button" onClick={onOpenContacts}
                         style={{ background: 'none', border: 'none', padding: '6px 0 0', textAlign: 'left', fontSize: 11, color: T.inkMuted, cursor: 'pointer', fontFamily: T.sans, textDecoration: 'underline', textDecorationColor: T.border }}>
                         Engagement details →
@@ -1084,10 +1078,15 @@ export default function OpportunityModal({
     const [showSiteSuggestions, setShowSiteSuggestions] = useState(false);
     const [repSearch, setRepSearch]                     = useState(opportunity?.salesRep || '');
     const [showRepSuggestions, setShowRepSuggestions]   = useState(false);
-    const [selectedContacts, setSelectedContacts]       = useState(opportunity?.contacts ? opportunity.contacts.split(', ').filter(c => c) : []);
+    const [selectedContacts, setSelectedContacts]       = useState(() => listedContacts(opportunity?.contacts).map((t) => t.raw));
     const [selectedContactIds, setSelectedContactIds]   = useState(opportunity?.contactIds || []);
     const [nestedModal, setNestedModal]                 = useState(null);
     const [validationErrors, setValidationErrors]       = useState({});
+    // The form's people (state §0.192): its ids and its names read together, so a chip is a
+    // person and its × removes that person whole — it removed the name and the id at one
+    // index, and the two lists can be out of step.
+    const formCommittee = dealCommittee({ contactIds: selectedContactIds, contacts: selectedContacts.join(', ') }, contacts, []);
+    const formOnDeal = onDealOf(formCommittee, contacts);
 
 
     // Rail drawer state — which detail panel is open
@@ -1845,17 +1844,16 @@ export default function OpportunityModal({
                                     {/* ── Contacts ── */}
                                     <div style={{ marginBottom: 16, position: 'relative' }}>
                                         <label style={fieldLabelStyle}>Contacts</label>
-                                        {selectedContacts.length > 0 && (
+                                        {formCommittee.length > 0 && (
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                                                {selectedContacts.map((contact, idx) => (
-                                                    <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '3px 8px', fontSize: 12, color: T.ink, fontFamily: T.sans }}>
-                                                        {contact}
+                                                {formCommittee.map(p => (
+                                                    <span key={p.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '3px 8px', fontSize: 12, color: T.ink, fontFamily: T.sans }}>
+                                                        {p.name ? personLabel(p) : UNLISTED_CONTACT}
                                                         <button type="button" onClick={() => {
-                                                            const newContacts = selectedContacts.filter((_, i) => i !== idx);
-                                                            const newIds = selectedContactIds.filter((_, i) => i !== idx);
-                                                            setSelectedContacts(newContacts);
-                                                            setSelectedContactIds(newIds);
-                                                            handleChange('contacts', newContacts.join(', '));
+                                                            const next = withoutPerson(selectedContacts, selectedContactIds, p);
+                                                            setSelectedContacts(next.contacts);
+                                                            setSelectedContactIds(next.contactIds);
+                                                            handleChange('contacts', next.contacts.join(', '));
                                                         }} style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '0.875rem', padding: 0, lineHeight: 1 }}
                                                             onMouseEnter={e => e.currentTarget.style.color = T.danger}
                                                             onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>
@@ -1874,7 +1872,9 @@ export default function OpportunityModal({
                                             <div style={{ ...suggestionDropStyle, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 3 }}>
                                                 {(contacts || []).filter(c => {
                                                     const fullName = `${c.firstName} ${c.lastName}`;
-                                                    return fullName.toLowerCase().includes(contactSearch.toLowerCase()) && !selectedContacts.some(s => s.startsWith(fullName));
+                                                    // Not one already on the deal — by id (state §0.192); it hid any
+                                                    // name another linked name began with ("Dana Whit" / "Dana Whitaker").
+                                                    return fullName.toLowerCase().includes(contactSearch.toLowerCase()) && !formOnDeal(c);
                                                 }).map(contact => (
                                                     <div key={contact.id}
                                                         onMouseDown={e => e.preventDefault()}

@@ -80,9 +80,10 @@ test('every reference resolves — the Test org\'s failure, made impossible here
 });
 
 test('every deal carries its contacts\' names beside their ids, as the app stores them; no two contacts share a name', () => {
-    // The Contacts tab and the buying committee read the deal's `contacts` TEXT; the
-    // first cut wrote the ids alone and every deal read "No contacts linked yet." The
-    // app links by name, so a name used twice is one contact to it (§0.154).
+    // The deal's people are its contactIds (src/utils/dealEngagement.js, §0.192). Its
+    // contacts TEXT names an id a rep's list does not hold, in the ids' order, and is the
+    // only list a deal saved before ids has — where a name used twice is one contact. The
+    // first cut wrote the ids alone and every deal read "No contacts linked yet." (§0.154).
     const contacts = byId(R.contacts);
     for (const o of R.opportunities) {
         assert.ok(o.contactIds.length > 0, `${o.id}: a buying committee to show`);

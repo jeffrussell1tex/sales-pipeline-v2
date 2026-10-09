@@ -63,7 +63,7 @@ async function checkResolved(log, orgId) {
                 return isClosedOrUpdated;
             }
             case 'coverage': {
-                // Resolved if a new activity with a contactName was logged since dismissal
+                // Resolved if any activity was logged on the deal since dismissal (no writer logs a 'coverage' row; Home's Missing stakeholder card is client-side)
                 if (!oppId) return false;
                 const acts = await db.select({ id: activities.id })
                     .from(activities)

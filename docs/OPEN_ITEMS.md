@@ -30,12 +30,35 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **Per-contact engagement on `contactIds`** (§4.2). These counts are wrong
-   everywhere, and they are an input to AI scoring's next batch.
+1. **PROD: a deal cannot be saved as Closed Lost — the reason dialog sticks**
+   (Jeff, 9 Oct, on salespipelinetracker.com: "I cant close lost a deal. it is
+   stuck here"; "OxyChem - Muscle Shoals", Pricing / Budget). Read, not yet
+   changed:
+   - **Why the save is refused.** Since 7 Oct two roster rows in Jeff's prod
+     org read "Jeff Russell": the Admin `Jeff Russell` and the User
+     `Jeff Russell   ` (jeffrussell1@live.com, renamed from "jeffrussell1" on
+     7 Oct — audit `user.updated`). Every deal PUT names its rep, and
+     resolveOwnerId (\_lib.mjs) trims and lowercases, finds two, and answers
+     409 "Ambiguous owner". Read in the shared database, SELECT only: the deal
+     is still `Proposal`, last written 29 Sep. Any deal save naming Jeff
+     Russell in that org is refused the same way.
+   - **Why it says nothing.** completeLostSave (useOpportunities.js) puts a
+     refused save's error in the deal window's `oppModalError`, and the deal
+     window closed when the reason dialog opened; the dialog stays open with
+     no message. Skip takes the same path.
+   - **Why the names could collide.** users.mjs refuses a duplicate email, not
+     a duplicate name, and keeps a name's trailing spaces when it is the
+     `name` sent.
+   - Fix (recommended, one batch): the reason dialog shows the refusal and
+     keeps the choice; a user name is trimmed and refused when another member
+     of the org has it (any case or spacing); the 409's words name the fix.
+   - Jeff's now: rename the second user (Settings → Users, jeffrussell1@live.com)
+     to a name of its own; the dialog's Save then goes through.
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
-   app layer did in §0.189.
+   app layer did in §0.189. Designed 9 Oct (three batches and a fourth; ten
+   questions for Jeff first — §4.1).
 4. **Deal data** (§4.2):
    - the deal endpoint saving `accountId`;
    - notes appended on the server;
@@ -258,10 +281,10 @@ model's pattern to deals.
   and free to compute. Claude's own 0–100 judgment retires once an org has
   enough history.
 - **Before batch 2:**
-  - Per-contact engagement (§4.2): `ai-score.mjs` counts engaged contacts from
-    `activity.contactName`, a field no activity has.
   - The close-date history column (below): without it, the slip count cannot
     be learned.
+  - (Per-contact engagement, done 9 Oct: §0.192. The prompt now names who was
+    engaged, with last touch and count; `dealEngagement.js` is the input.)
 
 **Batch 3: next-step suggestions from past wins (built on batch 2).**
 
@@ -381,6 +404,19 @@ model's pattern to deals.
     and the two record rails) joins it with them: it holds by its own list, the
     app's confirm and prompt (§0.189 (c)).
   - Source: §0.186 (a), 7 Oct.
+  - **Designed 9 Oct** (a read-only inventory of src/Tabs, about 74 layers;
+    nothing built): a registry of in-tab layers in App, a `useLocalLayer`
+    hook, a guard that finds every fixed layer; three batches — the CRM tabs
+    and the mechanism, Dispatch, Settings — and a fourth for inline-input
+    Escapes and nested popovers. Questions for Jeff first: what Escape does to
+    typed work (ask "Discard?", or discard); the show-once secrets (API key,
+    webhook secret); portal the document picker above the rail it opens from;
+    AdminView's unsaved-changes guard inside or outside the Settings tab; the
+    letter and number shortcuts while a tab layer is open (typing "837" in a
+    report's time picker sends "3" to Tasks); one Escape in an inline edit
+    under a menu; Accounts' Filters panel drawn twice; TaskViewRail (never
+    opens); Pipelines' ⋯ menus never closing on an outside click; the
+    shortcuts list above the rails now or later.
 - **The shortcuts list opens under an open rail or the deal window.** Its z
   is 9998, under every rail and the draggable windows; "?" opened it with a
   contact rail and with a new-task rail open. A z above them, with its place
@@ -423,20 +459,48 @@ model's pattern to deals.
 
 ### 4.2 Deals, activities and pipeline
 
-- **Per-contact engagement is always zero** (§0.154; re-read 7 Oct).
-  - The deal's Contacts tab, the buying-committee last touch, Home's "no
-    economic buyer" insight and `ai-score.mjs` all count from
-    `activity.contactName`, which nothing writes.
-  - A deal's contacts are matched by name, though the ids ride beside them.
-  - What it does to an AI score (seen on dev 9 Oct, Jeff's screenshot; read
-    in the database): "Bluebird HVAC Supply — Warehouse Scheduling" scored
-    "Priya Shah and Tom Becker unresponsive", though the deal's one activity,
-    a 30 Sep email, carries Priya Shah's id (`contact_ids` `["con_qa_03"]`).
-    The activities table has `contact_id` and `contact_ids` and no contact
-    name, so ai-score.mjs:115 tells the model "Contacts engaged: none" for
-    every deal, on both sites.
-  - Recommended: key both on `contactIds`. Decided 1 Oct: after (C), which is
-    done.
+- **What the AI score's prompt may name, within an org** (§0.192's review,
+  9 Oct). ai-score looks up the deal's and its activities' contacts in the
+  org, so for a rep it can name a contact owned by another rep — as it
+  already sent the deal's whole contacts text and every rep's activity notes
+  on the deal. Never another org's. Jeff decides: org-wide (as now), or the
+  caller's read scope (`crmReadScope` 'own': their contacts and the
+  unassigned, and their activities).
+- **One person shown twice** when a deal's names and ids are out of step and
+  the caller's list lacks that contact: once unnamed with their touches, once
+  by name without. dealEngagement.js never pairs an unheld id with a name by
+  position, so a wrong name is never shown; Jeff decides whether to pair the
+  newest names with the ids (suffix alignment) instead. §0.192.
+- **The deal's contacts after a merge, a rename, a Reports edit** (§0.192's
+  read, as recorded):
+  - merge.mjs rewrites `activities.contactId` and `opportunities.contactIds`,
+    not `activities.contactIds`, `tasks.contacts` or the deal's text; the
+    readers fold a duplicate into its survivor (mergedIntoId), the rows stay.
+  - A contact rename does not reach a deal's text (an account rename does).
+  - ReportsTab's add/remove on "Contacts on this deal" rebuilds the text from
+    the names the viewer's list resolves ("First Last", no title), never
+    updates the app's copy, and KanbanView's stage drag resends the stale
+    row.
+  - The activities and deal endpoints take contact ids without checking they
+    are this org's; every reader looks them up in the org.
+- **Other single-contact and by-name readers of the same class** (§0.192, as
+  recorded): quote-email's fallback recipient matches the deal text's first
+  name in exact case; MeetingPrepPanel lists the account's contacts by
+  company name, not the deal's own; TaskRail's related activities and
+  ContactMergeReviewModal's counts read `contactId` only; QuickLog and a task
+  completion log one contact; ActivityDetailDialog shows the first; the
+  public API gives `contact_id`, not `contact_ids`; an inbound email's
+  activity has no deal, so it counts for no deal's engagement.
+- **Accounts matched by name where an id exists** (§0.192's sweep, as
+  recorded): AccountsTab's warmth and the Contacts tab's company "Last touch"
+  read `a.company` (no such column) and deals by account name; App's
+  getAccountRollup and Reports' account timeline match by name.
+- **Activity fields no column holds** (as recorded): `a.company`,
+  `activity.companyName`, `a.salesRep` are read in places; QuickLogFab writes
+  `salesRep`, `companyName`, `opportunityName`. A guard like
+  tests/deal-fields.test.mjs's, for activities, would hold the class.
+- **The deal form's "+ New Contact" does nothing** (sets a state nothing
+  draws; ModalLayer passes no handler). §0.192, as recorded.
 - **The deal endpoint never saves `accountId`.** Its sanitize has none, though
   the form sends one. Accepting it needs a check that the account is this
   org's. §0.176 (e).
@@ -495,6 +559,8 @@ model's pattern to deals.
   task-reminders' `taskReminder` rows (outcome `sent`) in the total, with no
   label. Recommended: the sweep in the nightly alerts job, and the GET
   leaving the reminder rows out as it does the renewal rows. §0.191 (9 Oct).
+  Its 'coverage' resolution branch has no writer (Home's Missing stakeholder
+  is client-side); its comment is corrected, the branch kept. §0.192.
 
 ### 4.3 Settings
 

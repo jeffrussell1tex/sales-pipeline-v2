@@ -7,7 +7,10 @@
 // head of the deal's history, four kept, newest first; a deal save never writes the
 // score — the deal window saved the deal it opened, its old score too, over the new
 // one — and a create carries none; with the org's switch off the answer is
-// { disabled: true }; org B's rep reaches nothing of org A's.
+// { disabled: true }; org B's rep reaches nothing of org A's; and the model is told who
+// on the deal was engaged — by the contact ids the deal's activities carry, a merged
+// duplicate as the contact it was merged into, each with their last touch and count, the
+// names looked up in this org only (state §0.192).
 //
 // Claude is never called: a fetch to api.anthropic.com is answered here, as the
 // endpoint reads the model's reply; every other fetch — the database's own HTTP
@@ -74,7 +77,7 @@ const FN = {
     opps:  (await import('../../netlify/functions/opportunities.mjs')).handler,
 };
 const { db } = await import('../../db/index.js');
-const { settings, users, opportunities, auditLog } = await import('../../db/schema.js');
+const { settings, users, opportunities, auditLog, activities, contacts } = await import('../../db/schema.js');
 const { eq, and, inArray } = await import('drizzle-orm');
 
 // ORG NAMESPACE: this file owns 'itest_aiscore_*' (rows, ids, Clerk ids, emails).
@@ -87,6 +90,13 @@ const WHO = {
 };
 const DEAL = 'opp_itest_aiscore_a';
 const DEAL_B = 'opp_itest_aiscore_b';
+// §0.192: a deal with people, its activities naming them by id.
+const DEAL_PEOPLE = 'opp_itest_aiscore_people';
+const CON = {
+    priya: 'con_itest_aiscore_priya', tom: 'con_itest_aiscore_tom', dup: 'con_itest_aiscore_dup',
+    ollie: 'con_itest_aiscore_ollie', bea: 'con_itest_aiscore_bea', una: 'con_itest_aiscore_una',
+    chainA: 'con_itest_aiscore_chain_a', chainB: 'con_itest_aiscore_chain_b',
+};
 
 const call = async (fn, who, method, body, org = A) => {
     const res = await fn({
@@ -108,7 +118,7 @@ const reply = (score, verdict) => ({
 const withoutFlags = ({ fromCache: _c, usingOrgKey: _k, ...score }) => score;
 
 const cleanup = async () => {
-    for (const t of [opportunities, users, auditLog, settings]) await db.delete(t).where(inArray(t.orgId, ORGS));
+    for (const t of [activities, contacts, opportunities, users, auditLog, settings]) await db.delete(t).where(inArray(t.orgId, ORGS));
 };
 
 before(async () => {
@@ -126,6 +136,32 @@ before(async () => {
           salesRep: 'Rhea Aiscore', arr: '48000', forecastedCloseDate: '2026-12-01', ownerId: 'usr_itest_aiscore_rep' },
         { id: DEAL_B, orgId: B, pipelineId: 'default', stage: 'Proposal', opportunityName: 'B deal', salesRep: 'Bo Aiscore',
           ownerId: 'usr_itest_aiscore_repb' },
+        // Bea is org B's contact; her id on A's deal names nobody here.
+        { id: DEAL_PEOPLE, orgId: A, pipelineId: 'default', stage: 'Negotiation/Review', opportunityName: 'Aiscore people deal',
+          account: 'Aiscore Co', salesRep: 'Rhea Aiscore', arr: '30000', ownerId: 'usr_itest_aiscore_rep',
+          contactIds: [CON.priya, CON.tom, CON.bea, CON.una], contacts: 'Priya Itest (Procurement Lead), Tom Itest (Plant Manager)' },
+    ]);
+    await db.insert(contacts).values([
+        { id: CON.priya, orgId: A, firstName: 'Priya', lastName: 'Itest', title: 'Procurement Lead', ownerId: 'usr_itest_aiscore_rep' },
+        { id: CON.tom,   orgId: A, firstName: 'Tom',   lastName: 'Itest', title: 'Plant Manager' },
+        { id: CON.dup,   orgId: A, firstName: 'Priya', lastName: 'Itest', mergeArchived: true, mergedIntoId: CON.priya },
+        { id: CON.ollie, orgId: A, firstName: 'Ollie', lastName: 'Itest' },
+        { id: CON.bea,   orgId: B, firstName: 'Bea',   lastName: 'Outsider', title: 'CFO' },
+        // On the deal by id alone — the text never named her; no activity.
+        { id: CON.una,   orgId: A, firstName: 'Una',   lastName: 'Itest', title: 'CFO' },
+        // Two steps: A was merged into B, and B into Priya. Only A is named by an activity.
+        { id: CON.chainA, orgId: A, firstName: 'Priya', lastName: 'Itest', mergeArchived: true, mergedIntoId: CON.chainB },
+        { id: CON.chainB, orgId: A, firstName: 'Priya', lastName: 'Itest', mergeArchived: true, mergedIntoId: CON.priya },
+    ]);
+    // As stored: the seeded and merged shapes the endpoint must read (contactIds alone;
+    // a merge's leftover duplicate; a legacy single contactId), and two that must name nobody.
+    await db.insert(activities).values([
+        { id: 'act_itest_aiscore_1', orgId: A, opportunityId: DEAL_PEOPLE, type: 'Email',   date: '2026-09-30', contactIds: [CON.priya] },
+        { id: 'act_itest_aiscore_2', orgId: A, opportunityId: DEAL_PEOPLE, type: 'Meeting', date: '2026-09-15', contactIds: [CON.dup] },
+        { id: 'act_itest_aiscore_3', orgId: A, opportunityId: DEAL_PEOPLE, type: 'Call',    date: '2026-08-01', contactId: CON.tom, contactIds: [] },
+        { id: 'act_itest_aiscore_4', orgId: A, opportunityId: DEAL_PEOPLE, type: 'Call',    date: '2026-10-01', contactIds: [CON.bea] },
+        { id: 'act_itest_aiscore_5', orgId: B, opportunityId: DEAL_PEOPLE, type: 'Meeting', date: '2026-10-05', contactIds: [CON.ollie] },
+        { id: 'act_itest_aiscore_6', orgId: A, opportunityId: DEAL_PEOPLE, type: 'Call',    date: '2026-09-10', contactIds: [CON.chainA] },
     ]);
 });
 after(cleanup);
@@ -206,4 +242,21 @@ test("org B reaches nothing of org A's — its rep scoring A's deal is refused, 
     assert.equal(r.status, 404);
     assert.equal(MODEL.calls.length, calls);
     assert.deepEqual(await kept(DEAL), score);
+});
+
+test('the model is told who was engaged — by id, a merged duplicate as its survivor, with last touch and count; nothing from org B (§0.192)', async () => {
+    MODEL.calls.length = 0;
+    MODEL.reply = reply(61, 'At Risk');
+    const r = await call(FN.score, WHO.rep, 'POST', { opportunityId: DEAL_PEOPLE });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(MODEL.calls.length, 1);
+    const prompt = MODEL.calls[0].body.messages[0].content;
+    assert.equal(prompt.match(/^- Contacts engaged: (.*)$/m)?.[1],
+        'Priya Itest (last touch 2026-09-30, 3 activities), Tom Itest (last touch 2026-08-01, 1 activity)',
+        'Priya by her id, her merged duplicate\'s and a two-step chain\'s — one person; Tom by his legacy single id; latest touch first');
+    assert.equal(prompt.match(/^- Contacts listed: (.*)$/m)?.[1], 'Priya Itest (Procurement Lead), Tom Itest (Plant Manager), Una Itest (CFO)',
+        'the deal\'s ids — Una by id alone — named in this org');
+    assert.ok(!prompt.includes('Outsider'), 'an org-B contact\'s id on this deal names nobody');
+    assert.ok(!prompt.includes('Ollie'), 'org B\'s activity on this deal\'s id is not read');
+    assert.ok(!/Contacts engaged: none/.test(prompt));
 });

@@ -134,9 +134,9 @@ export function buildQaSeed({ orgId, today, roster }) {
         };
     });
     // Sixteen people for sixteen contacts — two per account, no name twice, none a
-    // lead's. The first cut cycled eight, so every name sat at two companies, and
-    // the app links a deal's contacts BY NAME: two Omar Haddads are one to the
-    // Contacts tab (§0.154).
+    // lead's. The first cut cycled eight, so every name sat at two companies, and a
+    // deal's contacts text is matched BY NAME where it has no id: two Omar Haddads
+    // are one to a deal saved before ids (§0.154, §0.192).
     const people = [['Dana', 'Whitaker', 'Facilities Director'], ['Luis', 'Ortega', 'Operations Manager'],
                     ['Priya', 'Shah', 'Procurement Lead'], ['Tom', 'Becker', 'Plant Manager'],
                     ['Grace', 'Kim', 'VP Operations'], ['Omar', 'Haddad', 'IT Director'],
@@ -159,8 +159,8 @@ export function buildQaSeed({ orgId, today, roster }) {
     });
     const contactsOf = (acctId) => contacts.filter(c => c.accountId === acctId);
     // A deal's contacts the way the app stores them: the ids AND the names beside
-    // them, in OpportunityModal's "First Last (Title)" form — the Contacts tab and
-    // the buying committee read the names. The first cut wrote the ids alone, so
+    // them, in OpportunityModal's "First Last (Title)" form — the names an id a rep's
+    // list does not hold is shown by (§0.192). The first cut wrote the ids alone, so
     // every seeded deal read "No contacts linked yet." (§0.154).
     const contactLabel = (c) => `${c.firstName} ${c.lastName}${c.title ? ` (${c.title})` : ''}`;
 

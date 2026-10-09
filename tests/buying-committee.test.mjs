@@ -36,7 +36,8 @@ test('a contact already on the deal is not offered again — by its WHOLE name, 
 test('the tab asks the rule, and an empty box no longer matches everyone', () => {
     const s = readFileSync(new URL('../src/components/modals/OpportunityModal.jsx', import.meta.url), 'utf8');
     assert.ok(s.includes("import { contactsToAdd } from '../../utils/buyingCommittee.js';"));
-    assert.ok(s.includes('const filtered = contactsToAdd(contacts, ctSearch, selectedContacts);'));
+    // ...and, since §0.192, not one already on the deal by id (a renamed contact).
+    assert.ok(s.includes('const filtered = contactsToAdd(contacts, ctSearch, selectedContacts).filter((c) => !onDeal(c));'));
     assert.ok(!s.includes('const matchesSearch = !ctSearch'), 'the blank-matches-all filter is gone');
     assert.ok(s.includes('{ctSearch.trim() && filtered.length === 0 && ('), '"No contacts found" only for a real search');
     assert.ok(!s.includes('showCtSuggestions'), 'the unused suggestions flag is gone');

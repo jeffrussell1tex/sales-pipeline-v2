@@ -10,10 +10,10 @@
 // this is that rule, in one place a test can run (state §0.154).
 //
 // Offered: a contact whose name or company contains the search (any case) and
-// who is not already on the deal. The deal stores its contacts as NAMES
-// ("First Last (Title)" from the modal, "First Last" from Reports), so "already
-// on the deal" compares whole names — the old prefix test hid "Dana Whit" once
-// "Dana Whitaker" was linked.
+// who is not already on the deal. `linked` is the form's names ("First Last
+// (Title)" from the modal, "First Last" from Reports), so "already on the deal"
+// compares whole names — the old prefix test hid "Dana Whit" once "Dana
+// Whitaker" was linked. The deal's people are its ids (dealEngagement.js, §0.192).
 export function contactsToAdd(contacts, search, linked) {
     const q = String(search ?? '').trim().toLowerCase();
     if (!q) return [];

@@ -13,6 +13,7 @@ import { startCalendarConnect } from '../utils/calendarConnect.js';
 // Pinned saved reports (state §0.135): the same engine and chart the Reports tab uses.
 import { runReport, REPORT_CHARTS } from '../utils/reportQuery.js';
 import ReportChart from '../components/ReportChart.jsx';
+import { contactIndex, dealCommittee } from '../utils/dealEngagement.js';
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens (V1 — matches variation1.jsx TOKENS exactly)
@@ -483,6 +484,7 @@ export default function HomeTab() {
     const worthAttention = (() => {
         const items = [];
         const activeOpps = visibleOpportunities.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
+        const directory = contactIndex(contacts);   // the caller's contacts, indexed once for every deal below
 
         activeOpps.forEach(opp => {
             const oppActs     = (activities||[]).filter(a => a.opportunityId === opp.id).sort((a,b) => (b.date||'').localeCompare(a.date||''));
@@ -502,15 +504,19 @@ export default function HomeTab() {
                     borderColor: T.danger,
                 });
             }
-            // Missing stakeholder
-            const contactNames    = (opp.contacts||'').split(', ').filter(Boolean);
-            const engagedContacts = new Set(oppActs.map(a => a.contactName).filter(Boolean));
-            if (contactNames.length >= 2 && engagedContacts.size < 2 && arr >= 20000) {
+            // Missing stakeholder (state §0.192): two or more people on a $20k deal and fewer
+            // than two of them engaged — by the contact ids its activities carry. It read
+            // activity.contactName, which no activity has, so it fired on every such deal, and
+            // its title claimed an economic buyer it never looked for (Jeff, 9 Oct: "Reword,
+            // same rule").
+            const committee = dealCommittee(opp, directory, oppActs);
+            const engagedHere = committee.filter(p => p.engagement.count > 0);
+            if (committee.length >= 2 && engagedHere.length < 2 && arr >= 20000) {
                 items.push({
                     id: `coverage-${opp.id}`, priority: 2,
                     category: 'Missing stakeholder', categoryColor: T.warn,
-                    title: `${name} has ${contactNames.length} contacts, no economic buyer`,
-                    body: `${contactNames.filter(n => !engagedContacts.has(n.split(' (')[0]))[0]?.split(' (')[0] || 'Key contact'} not engaged.`,
+                    title: `${name} has ${committee.length} contacts, ${engagedHere.length} engaged`,
+                    body: `${committee.find(p => p.engagement.count === 0 && p.name)?.name || 'Key contact'} not engaged.`,
                     onClick: () => { setEditingOpp(opp); setShowModal(true); },
                     borderColor: T.warn,
                 });

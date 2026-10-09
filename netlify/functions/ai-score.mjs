@@ -22,8 +22,8 @@
  */
 
 import { db } from '../../db/index.js';
-import { opportunities, activities, settings } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { opportunities, activities, settings, contacts } from '../../db/schema.js';
+import { eq, and, inArray } from 'drizzle-orm';
 import { verifyAuth, requireWrite } from './auth.mjs';
 import { serverErrorBody, auditAs, assertOwnership } from './_lib.mjs';
 // The org's BYOK key, else the site's — one helper for every Anthropic call
@@ -31,6 +31,8 @@ import { serverErrorBody, auditAs, assertOwnership } from './_lib.mjs';
 import { resolveAnthropicKey } from './_aiKey.mjs';
 // The score's shape, the server's and the deal window's (state §0.188).
 import { withHistory } from '../../src/utils/aiScore.js';
+// A deal's people and who was engaged, by contact id — the deal window's own rule (state §0.192).
+import { activityContactIds, dealCommittee, engagedContacts, engagedLabel, personLabel } from '../../src/utils/dealEngagement.js';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -112,7 +114,29 @@ export const handler = async (event) => {
             : null;
         const stageHistory   = (opp.stageHistory || []).map(h => `${h.prevStage || '?'} → ${h.stage} on ${h.date}`).join('; ');
         const activitySummary = recentActs.map(a => `${a.date}: ${a.type}${a.outcome ? ' (' + a.outcome + ')' : ''}${a.notes ? ' — ' + a.notes.slice(0, 80) : ''}`).join('\n');
-        const engagedContacts = [...new Set(oppActivities.map(a => a.contactName).filter(Boolean))];
+        // The deal's people, and who its activities were logged with — by contact id (state
+        // §0.192). This read activity.contactName, which no activity has, and told the model
+        // "Contacts engaged: none" for every deal. Exactly the ids the deal and its activities
+        // name are looked up, in this org only: an id from anywhere else names nobody. Each
+        // engaged person carries their last touch and count (Jeff, 9 Oct).
+        const namedIds = [...new Set([
+            ...(Array.isArray(opp.contactIds) ? opp.contactIds : []),
+            ...oppActivities.flatMap(activityContactIds),
+        ].filter((id) => typeof id === 'string' && id))];
+        const contactsIn = (ids) => db.select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName, title: contacts.title, mergedIntoId: contacts.mergedIntoId })
+            .from(contacts)
+            .where(and(eq(contacts.orgId, orgId), inArray(contacts.id, ids)));
+        let directory = namedIds.length ? await contactsIn(namedIds) : [];
+        // A duplicate merged into a contact merged on again: follow the chain, in this org,
+        // as far as contactIndex does (five steps), so one person is never two.
+        for (let n = 0; n < 5; n++) {
+            const have = new Set(directory.map((c) => c.id));
+            const next = [...new Set(directory.map((c) => c.mergedIntoId).filter((id) => id && !have.has(id)))];
+            if (!next.length) break;
+            directory = directory.concat(await contactsIn(next));
+        }
+        const listedPeople = dealCommittee(opp, directory, oppActivities).filter((p) => p.name);
+        const engagedPeople = engagedContacts(oppActivities, directory).filter((p) => p.name);
 
         const prompt = `You are an expert B2B sales analyst. Score this sales opportunity and provide coaching.
 
@@ -125,8 +149,8 @@ DEAL DATA:
 - Days in current stage: ${daysInStage !== null ? daysInStage + ' days' : 'unknown'}
 - Days since last activity: ${daysSilent !== null ? daysSilent + ' days' : 'unknown'}
 - Forecasted close: ${closeDate || 'not set'}${daysToClose !== null ? ` (${daysToClose > 0 ? daysToClose + ' days away' : Math.abs(daysToClose) + ' days PAST DUE'})` : ''}
-- Contacts listed: ${opp.contacts || 'none'}
-- Contacts engaged: ${engagedContacts.length > 0 ? engagedContacts.join(', ') : 'none'}
+- Contacts listed: ${listedPeople.length ? listedPeople.map(personLabel).join(', ') : 'none'}
+- Contacts engaged: ${engagedPeople.length ? engagedPeople.map(engagedLabel).join(', ') : 'none'}
 - Stage history: ${stageHistory || 'none'}
 - Next steps: ${opp.nextSteps || 'none logged'}
 - Notes: ${(opp.notes || '').slice(0, 200) || 'none'}

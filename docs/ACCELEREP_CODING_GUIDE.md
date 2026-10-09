@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 9, 2026 · rules current through **§18b86** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 9, 2026 · rules current through **§18b87** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4041,3 +4041,12 @@ through `dbFetch`.
 3. **The list and the call sites are one set** — a parse of every call site resolves each pair and finds it listed, and every listed pair has a call site (tests/security-closes.test.mjs); a new call site adds its pair in the same batch.
 4. **A read or write keyed by person holds a caller who cannot see the whole org to their own key**, from the server's own lookup of the caller — never the query string's or the body's; no key found reads and writes nothing (18b19).
 5. **A CRM screen draws its write controls for `canEditCrm(userRole)` alone**, as the server's `requireWrite` allows; a control the server refuses is not drawn.
+
+## 18b87. A Person On A Record Is Their Id — A Name Is For Display, And Two Lists Are Never Paired By Position (hard rule)
+
+**Origin (§0.192, 9 Oct 2026 — OPEN_ITEMS §4.2; Jeff, 1 Oct: "key both on contactIds").** Five places counted a deal's engagement from `activity.contactName`, a field nothing writes: the Contacts tab read 0 / 0 / 0 for everyone, the rail's dots were all stale, Home warned on every $20k deal, and the AI score was told "Contacts engaged: none" and called an emailed contact unresponsive. The deal form removed a contact by removing the name and the id at one index of two lists that can be out of step.
+
+1. **Who is on a record, and who an activity was with, is read from the ids** (`contactIds`, and the legacy `contactId`), one rule for every screen and the server — `src/utils/dealEngagement.js`. A name is looked up from the id (the caller's list, or an org-scoped query), and a merged duplicate reads as its survivor.
+2. **A record's name text is display, and the fallback for a record saved before ids** — matched by whole name in any case, never a prefix, never a guess between two.
+3. **Two lists that describe one set are never paired by position** unless they are proved in line; a row records the ids and the places it stands for, and a remove removes those.
+4. **A field nothing writes is not read** — tests/deal-engagement.test.mjs's G1 holds `contactName`; a guard per phantom class.
