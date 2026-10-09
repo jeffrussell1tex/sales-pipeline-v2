@@ -7,6 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { CLIENT_AUDIT_ENTRIES, clientAuditKind } from '../netlify/functions/_auditClientEntries.mjs';
 import {
     APPROVAL_EVENT, APPROVAL_FLOW_ACTIONS, SENT_BACK_MARK, sendBackNoteOf,
     decisionsFrom, approvalSummary, formatHours, approvalTierStats,
@@ -170,9 +171,16 @@ test('quotes.mjs: the record reaches a caller for the quotes she can see — one
 });
 
 test('audit-log.mjs: a member cannot post a quote event — the record the numbers read is the server\'s', () => {
+    // Since §0.191 the POST takes only the app's own entries, and none names a
+    // quote (tests/security-closes.test.mjs holds the endpoint's shape).
     const s = code(read('netlify/functions/audit-log.mjs'));
-    assert.ok(s.includes("const isQuoteEvent = String(data.action).trim().toLowerCase().startsWith('quote.') || String(data.entityType).trim().toLowerCase() === 'quote';"));
-    assert.ok(s.indexOf('if (isQuoteEvent) {') > 0 && s.indexOf('if (isQuoteEvent) {') < s.indexOf('const [inserted] = await db.insert(auditLog)'), 'refused before anything is written');
+    assert.ok(s.indexOf('if (!kind) {') > 0 && s.indexOf('if (!kind) {') < s.indexOf('const [inserted] = await db.insert(auditLog)'), 'refused before anything is written');
+    for (const [a, t] of [['quote.approved', 'quote'], ['quote.sentback', 'account'], ['update', 'quote'], ['create', 'quote']]) {
+        assert.equal(clientAuditKind(a, t), null, `${a} ${t}`);
+    }
+    for (const actions of Object.values(CLIENT_AUDIT_ENTRIES)) {
+        for (const [a, types] of Object.entries(actions)) assert.ok(!a.toLowerCase().startsWith('quote') && !types.includes('quote'), a);
+    }
 });
 
 test('the Approvals tab and a quote\'s history read the record; the words say who acts; a move names only its status', () => {

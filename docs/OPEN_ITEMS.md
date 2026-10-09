@@ -30,21 +30,17 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **Small security closes** (§4.6):
-   - the audit log's allowlist for client events;
-   - role scoping on the recommendation log's GET;
-   - the Leads tab's `canEdit`.
-2. **Per-contact engagement on `contactIds`** (§4.2). These counts are wrong
+1. **Per-contact engagement on `contactIds`** (§4.2). These counts are wrong
    everywhere, and they are an input to AI scoring's next batch.
-3. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
+2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
-4. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
+3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189.
-5. **Deal data** (§4.2):
+4. **Deal data** (§4.2):
    - the deal endpoint saving `accountId`;
    - notes appended on the server;
    - an Undo keeping the row's owner.
-6. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
+5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
 ---
@@ -491,6 +487,15 @@ model's pattern to deals.
   "foreclosed in 20 days" for forecast to close: the model's wording, a
   prompt matter for §3.1's batches.
 
+- **The Recommendation report's outcomes never move.** Nothing calls
+  `recommendation-log.mjs`'s PUT, the sweep that marks a pending alert
+  resolved or ignored (its comment says Home calls it on load; nothing under
+  src does), nor its POST. pipeline-alerts writes every row `pending`, so the
+  report's resolve rate and "ignored" count stay at zero. Its GET also counts
+  task-reminders' `taskReminder` rows (outcome `sent`) in the total, with no
+  label. Recommended: the sweep in the nightly alerts job, and the GET
+  leaving the reminder rows out as it does the renewal rows. §0.191 (9 Oct).
+
 ### 4.3 Settings
 
 - **Sixteen settings keys no screen sets by name** (an unverified scan; read
@@ -558,10 +563,6 @@ model's pattern to deals.
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
-- **The audit log takes any other invented event from a member** (§0.156;
-  re-read 7 Oct). Only quote events are refused. Recommended: an allowlist of
-  the client's own entries (`create`, `update`, `delete`, `merge`,
-  `dispatch.*`).
 - **The audit log after §0.143:**
   - (1) Thirteen files audit only their mass paths. A plain PUT on a deal,
     account, contact, lead, task or activity writes no server row; the
@@ -569,10 +570,11 @@ model's pattern to deals.
   - (2) Rows carry no caller role.
   - (3) The panel reads the last 500 rows and wants paging.
   - Source: §0.143.
-- **`recommendation-log.mjs`'s GET has no role scoping.** A rep reads another
-  rep's log through `?rep=`. §0.151.
-- **The Leads tab has no `canEdit`.** ReadOnly users and Dispatchers see edit
-  controls and meet a 403. §0.151.
+- **The recommendation log names its rep by display name** (`repName`, the
+  deal's `salesRep`; no owner id). §0.191 holds a rep to the rows bearing
+  their roster name, so a renamed rep loses sight of their older rows, and
+  pipeline-alerts' "already alerted" check, keyed the same way, alerts again.
+  An owner id column is a schema change (§2.4). §0.191 (9 Oct).
 - **Ten owner pickers use three role rules,** so a Technician or Dispatcher
   can own a deal. A sweep, with a decision: may an Admin own a deal?
   §0.151.
@@ -641,6 +643,8 @@ model's pattern to deals.
 - **Five native time inputs:** AppHeader's digest time, and four in
   DispatchTab. They become the house TimeDropdown. Re-read 7 Oct: five
   sites.
+- **The Leads Cockpit's "···" button does nothing** (no handler). Give it a
+  menu or remove it. §0.191 (9 Oct).
 - **The reminder modal takes the first click on the Reports tab.** §0.140,
   as recorded.
 - **AccountsTab layout polish.** As recorded.
@@ -676,6 +680,13 @@ model's pattern to deals.
   read a name the gateway does not set (e.g. `ACCELEREP_ANTHROPIC_API_KEY`,
   on both sites and in `.env`). Until then, a key is checked by one minimal
   request with the key from `.env` (the guide's secrets rules).
+- **Local `netlify dev` can serve a function older than the file** (9 Oct,
+  §0.191). Edited while the server ran, audit-log.mjs was reloaded twice
+  (the log: "Reloaded function audit-log") and then served the code before
+  the last edit: an invented event answered 201 (the row it wrote is
+  deleted). A restart with
+  `.netlify/functions-serve` cleared served the file. A standing note: after
+  editing a function, restart before a pane check of it.
 - **The stray fixture** `tests/fixtures/scanners/dupes-jsx-attribute - Copy.jsx`
   is still tracked (re-read 7 Oct). A one-line delete.
 - **Never `npm audit fix --force`:** it installs vite@8. The remaining

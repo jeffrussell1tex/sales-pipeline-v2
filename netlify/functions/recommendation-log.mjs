@@ -1,8 +1,8 @@
 import { db } from '../../db/index.js';
 import { recommendationLog, opportunities, activities, tasks } from '../../db/schema.js';
 import { eq, and, desc, gte, notLike } from 'drizzle-orm';
-import { verifyAuth, requireWrite } from './auth.mjs';
-import { serverErrorBody, auditAs } from './_lib.mjs';
+import { verifyAuth, requireWrite, canSeeAll } from './auth.mjs';
+import { serverErrorBody, auditAs, getCallerName } from './_lib.mjs';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -10,6 +10,21 @@ const headers = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
+
+// ── Whose log a call reads or writes (state §0.191) ─────────────────────────
+// An Admin or Manager names any rep (or none: the whole org); everyone else is
+// held to their own. The log's rows name their rep (repName, the deal's
+// salesRep) and carry no owner id, so "their own" is the caller's roster name.
+// Before this, `?rep=` read any teammate's log, and a POST could write a row in
+// a teammate's name — which pipeline-alerts reads as "already alerted", and
+// stays quiet on that deal. Returns { repName } (null: every rep) or { none }
+// when the caller has no roster name: they own no row, so they read and write
+// none (fail closed, guide 18b19).
+async function repScopeOf(auth, requested) {
+    if (canSeeAll(auth.userRole)) return { repName: requested || null };
+    const own = await getCallerName(auth.userId, auth.orgId);
+    return own ? { repName: own } : { none: true };
+}
 
 // ── Resolution check per action type ─────────────────────────────────────────
 // Returns true if the underlying signal has been resolved since dismissedAt
@@ -95,7 +110,8 @@ export const handler = async (event) => {
     try {
         // ── GET: fetch logs + summary stats for a rep ─────────────────────────
         if (event.httpMethod === 'GET') {
-            const repName = event.queryStringParameters?.rep;
+            const scope   = await repScopeOf(auth, event.queryStringParameters?.rep);
+            const repName = scope.repName;
             const days    = parseInt(event.queryStringParameters?.days || '90');
             const since   = new Date(); since.setDate(since.getDate() - days);
 
@@ -111,7 +127,7 @@ export const handler = async (event) => {
                 .where(and(...base, ...(repName ? [eq(recommendationLog.repName, repName)] : [])))
                 .orderBy(desc(recommendationLog.dismissedAt));
 
-            const logs = await query;
+            const logs = scope.none ? [] : await query;
 
             // Summary stats
             const total      = logs.length;
@@ -143,10 +159,14 @@ export const handler = async (event) => {
             if (!data.id || !data.repName || !data.actionType) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id, repName, actionType required' }) };
             }
+            const scope = await repScopeOf(auth, data.repName);
+            if (scope.none) {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: "Your account is not in this organization's roster." }) };
+            }
             const [inserted] = await db.insert(recommendationLog).values({
                 id:            data.id,
                 orgId,
-                repName:       data.repName,
+                repName:       scope.repName,
                 actionType:    data.actionType,
                 opportunityId: data.opportunityId || null,
                 dealName:      data.dealName      || null,
@@ -163,7 +183,9 @@ export const handler = async (event) => {
         // ── PUT: evaluate pending items and mark resolved/ignored ─────────────
         // Called on home tab load — evaluates items older than 3 days that are still pending
         if (event.httpMethod === 'PUT') {
-            const repName = event.queryStringParameters?.rep;
+            const scope   = await repScopeOf(auth, event.queryStringParameters?.rep);
+            if (scope.none) return { statusCode: 200, headers, body: JSON.stringify({ evaluated: [] }) };
+            const repName = scope.repName;
             const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
             const pendingQuery = repName

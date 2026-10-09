@@ -13,7 +13,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { armRestoreOnExit, withMutant } from './_mutant.mjs';
 
-const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs tests/settings-org-load.test.mjs tests/org-roles.test.mjs tests/settings-leave-guard.test.mjs tests/member-status.test.mjs tests/invitations.test.mjs tests/foreign-ids.test.mjs tests/user-import.test.mjs tests/team-membership.test.mjs tests/in-org-gates.test.mjs tests/save-buttons.test.mjs tests/audit-close.test.mjs tests/org-switch.test.mjs tests/org-switch-reset.test.mjs tests/late-answers.test.mjs tests/src-scope.test.mjs tests/contact-deals.test.mjs tests/hook-deps.test.mjs tests/activity-save.test.mjs tests/deal-modal-saves.test.mjs tests/layers.test.mjs tests/one-delete-path.test.mjs tests/select-where-tickable.test.mjs tests/border-sides.test.mjs tests/escape-layers.test.mjs tests/document-link-names.test.mjs tests/document-refusals.test.mjs tests/document-access.test.mjs tests/document-sharing.test.mjs tests/layer-boundary.test.mjs tests/escape-order.test.mjs tests/meeting-prep.test.mjs tests/deal-fields.test.mjs tests/ai-score.test.mjs tests/open-states.test.mjs';
+const SUITES = 'tests/bulk-client.test.mjs tests/import-receipt.test.mjs tests/csv-mapping.test.mjs tests/partial-sanitize.test.mjs tests/bulk-upsert.test.mjs tests/function-imports.test.mjs tests/import-rows.test.mjs tests/delete-and-stage.test.mjs tests/stage-batch.test.mjs tests/date-local.test.mjs tests/user-identity-schema.test.mjs tests/ownership-registry.test.mjs tests/role-vocabulary.test.mjs tests/leads-scope.test.mjs tests/lead-requests.test.mjs tests/settings-hygiene.test.mjs tests/api-surface.test.mjs tests/session-status.test.mjs tests/loss-analysis.test.mjs tests/report-scope.test.mjs tests/report-period.test.mjs tests/opp-text.test.mjs tests/pipeline-report.test.mjs tests/stage-order.test.mjs tests/reports-controls.test.mjs tests/history-feed.test.mjs tests/fetch-status.test.mjs tests/house-dialogs.test.mjs tests/current-quarter.test.mjs tests/settings-cards.test.mjs tests/coaching-notes.test.mjs tests/forecast-call.test.mjs tests/rep-deals.test.mjs tests/honest-panels.test.mjs tests/audit-stream.test.mjs tests/settings-counts.test.mjs tests/connected-apps.test.mjs tests/slack-webhook.test.mjs tests/activity-view.test.mjs tests/inbound-text.test.mjs tests/pipeline-alerts.test.mjs tests/slack-alerts.test.mjs tests/calendar-return.test.mjs tests/job-heartbeat.test.mjs tests/digest-prefs.test.mjs tests/mutant-restore.test.mjs tests/check-fnscope.test.mjs tests/roster-provision.test.mjs tests/self-profile.test.mjs tests/settings-cascade-errors.test.mjs tests/dispatch-stubs.test.mjs tests/plan-visits.test.mjs tests/agreement-renewals.test.mjs tests/customer-notifications.test.mjs tests/crew-scoring.test.mjs tests/work-week.test.mjs tests/job-editor-save.test.mjs tests/crew-next-step.test.mjs tests/job-equipment.test.mjs tests/list-view-closed.test.mjs tests/pipeline-time-window.test.mjs tests/lead-intake.test.mjs tests/email-templates.test.mjs tests/score-lead.test.mjs tests/lead-scoring-defaults.test.mjs tests/automation-events.test.mjs tests/auth-gated-loads.test.mjs tests/lead-score-popover.test.mjs tests/single-token-file.test.mjs tests/train-now.test.mjs tests/report-query.test.mjs tests/week-drop.test.mjs tests/report-delivery.test.mjs tests/blue-era-sweep.test.mjs tests/plate-row.test.mjs tests/report-prompt.test.mjs tests/quote-templates.test.mjs tests/audit-coverage.test.mjs tests/itest-targets-test-db.test.mjs tests/invoices.test.mjs tests/roles.test.mjs tests/dispatch-gate.test.mjs tests/qa-seed.test.mjs tests/buying-committee.test.mjs tests/quote-rules.test.mjs tests/approval-stats.test.mjs tests/approval-routing.test.mjs tests/approval-notices.test.mjs tests/job-roster.test.mjs tests/org-scoping.test.mjs tests/calendar-oauth-state.test.mjs tests/settings-uniqueness.test.mjs tests/settings-org-load.test.mjs tests/org-roles.test.mjs tests/settings-leave-guard.test.mjs tests/member-status.test.mjs tests/invitations.test.mjs tests/foreign-ids.test.mjs tests/user-import.test.mjs tests/team-membership.test.mjs tests/in-org-gates.test.mjs tests/save-buttons.test.mjs tests/audit-close.test.mjs tests/org-switch.test.mjs tests/org-switch-reset.test.mjs tests/late-answers.test.mjs tests/src-scope.test.mjs tests/contact-deals.test.mjs tests/hook-deps.test.mjs tests/activity-save.test.mjs tests/deal-modal-saves.test.mjs tests/layers.test.mjs tests/one-delete-path.test.mjs tests/select-where-tickable.test.mjs tests/border-sides.test.mjs tests/escape-layers.test.mjs tests/document-link-names.test.mjs tests/document-refusals.test.mjs tests/document-access.test.mjs tests/document-sharing.test.mjs tests/layer-boundary.test.mjs tests/escape-order.test.mjs tests/meeting-prep.test.mjs tests/deal-fields.test.mjs tests/ai-score.test.mjs tests/open-states.test.mjs tests/security-closes.test.mjs';
 
 // LINE ENDINGS. The anchors below are written with \n, and most of the tree is
 // checked out CRLF. A single-line anchor is unaffected; a MULTI-LINE anchor never
@@ -3338,10 +3338,52 @@ const mutations = [
         "approvalTierStats(await approvalEvents(orgId), orgQuotes, await getApprovalTiers(orgId), { days: APPROVAL_EVENTS_DAYS })",
         "approvalTierStats([], orgQuotes, await getApprovalTiers(orgId), { days: APPROVAL_EVENTS_DAYS })"],
 
-    ['audit log: a member posts a quote event again',
+    // ── The small security closes (state §0.191) ────────────────────────────
+    // Caught by tests/security-closes.test.mjs (and approval-stats for the list).
+    ['audit log: a member posts any invented event again (the list is skipped)',
         'netlify/functions/audit-log.mjs',
-        "            if (isQuoteEvent) {",
+        "            if (!kind) {",
         "            if (false) {"],
+    ['audit log: a Dispatch entry skips the Dispatch gate',
+        'netlify/functions/audit-log.mjs',
+        "                if (gate.response) return gate.response;",
+        "                if (false) return gate.response;"],
+    ['audit log: a CRM entry skips the CRM write roles',
+        'netlify/functions/audit-log.mjs',
+        "                if (forbidden) return forbidden;",
+        "                if (false) return forbidden;"],
+    ['audit log: the list takes a pair no call site sends',
+        'netlify/functions/_auditClientEntries.mjs',
+        "        create: Object.freeze(['opportunity', 'account', 'contact', 'task']),",
+        "        create: Object.freeze(['opportunity', 'account', 'contact', 'task', 'lead']),"],
+    ['audit log: the list matches a near-miss spelling',
+        'netlify/functions/_auditClientEntries.mjs',
+        "        if (types && types.includes(entityType)) return kind;",
+        "        if (types && types.some(t => t.toLowerCase() === String(entityType).trim().toLowerCase())) return kind;"],
+    ['audit log: the list reads an inherited key (__proto__, toString) as an action',
+        'netlify/functions/_auditClientEntries.mjs',
+        "        const types = Object.hasOwn(CLIENT_AUDIT_ENTRIES[kind], action) ? CLIENT_AUDIT_ENTRIES[kind][action] : null;",
+        "        const types = CLIENT_AUDIT_ENTRIES[kind][action] || null;"],
+    ['recommendation log: a rep reads any teammate\'s log again',
+        'netlify/functions/recommendation-log.mjs',
+        "    if (canSeeAll(auth.userRole)) return { repName: requested || null };",
+        "    return { repName: requested || null };"],
+    ['recommendation log: a caller with no roster name reads the whole org',
+        'netlify/functions/recommendation-log.mjs',
+        "    return own ? { repName: own } : { none: true };",
+        "    return { repName: own };"],
+    ['recommendation log: a POST writes in the name the body gives',
+        'netlify/functions/recommendation-log.mjs',
+        "                repName:       scope.repName,",
+        "                repName:       data.repName,"],
+    ['leads tab: a ReadOnly user and a Dispatcher are offered the write controls again',
+        'src/Tabs/LeadsTab.jsx',
+        "    const canEdit = canEditCrm(userRole);",
+        "    const canEdit = true;"],
+    ['leads tab: the bulk bar shows to a role that cannot edit',
+        'src/Tabs/LeadsTab.jsx',
+        "{canEdit && selCount > 0 && (",
+        "{selCount > 0 && ("],
 
     ['quotes tab: a rep is offered Approve and Send back',
         'src/Tabs/QuotesTab.jsx',

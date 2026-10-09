@@ -4,6 +4,7 @@ import { useApp } from '../AppContext';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { popoverPlacement } from '../utils/popoverPlacement.js';
 import { T } from '../tokens.js';
+import { canEditCrm } from '../utils/roles.js';
 
 // ── Design tokens ────────────────────────────────────────────
 
@@ -519,7 +520,7 @@ const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
     );
 };
 
-const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canDistribute, canDelete, deleteLead, leadRequests, requestLead, cancelRequest, resolveRequest, showAllScope }) => {
+const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity, canEdit, canDistribute, canDelete, deleteLead, leadRequests, requestLead, cancelRequest, resolveRequest, showAllScope }) => {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
@@ -638,7 +639,7 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                             </div>
                         </div>
 
-                        {selCount > 0 && (
+                        {canEdit && selCount > 0 && (
                             <div style={{ marginBottom:8, padding:'8px 14px', background:T.ink, color:T.surface, borderRadius:T.r, display:'flex', alignItems:'center', gap:12, fontSize:12, fontFamily:T.sans }}>
                                 <span style={{ fontWeight:600 }}>{selCount} selected</span>
                                 {/* Bulk assign is a managed action (§0.58) — reps get no entry point. */}
@@ -683,10 +684,14 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                                         style={{ display:'grid', gridTemplateColumns:'26px 50px 2fr 1fr 110px 1fr 90px 70px', gap:10, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, alignItems:'center', cursor:'pointer', background: isSel ? 'rgba(200,185,154,0.12)' : 'transparent', transition:'background 100ms' }}
                                         onMouseEnter={e => { if (!isSel) e.currentTarget.style.background='rgba(200,185,154,0.06)'; }}
                                         onMouseLeave={e => { if (!isSel) e.currentTarget.style.background=isSel?'rgba(200,185,154,0.12)':'transparent'; }}>
+                                        {/* The selection feeds only the bulk bar's writes, so a
+                                            role that cannot edit gets no checkbox (state §0.191). */}
+                                        {canEdit ? (
                                         <div onClick={e => { e.stopPropagation(); setSelected(s => ({ ...s, [l.id]:!s[l.id] })); }}
                                             style={{ width:16, height:16, borderRadius:3, border:`1.5px solid ${isSel ? T.ink : T.borderStrong}`, background: isSel ? T.ink : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
                                             {isSel && <span style={{ color:T.surface, fontSize:9, fontWeight:800 }}>✓</span>}
                                         </div>
+                                        ) : <div/>}
                                         <LeadScore lead={l}/>
                                         <div style={{ minWidth:0 }}>
                                             <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{l.first} {l.last}</div>
@@ -701,6 +706,8 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                                             <LeadAssignee name={l.assignee} onClick={e => {
                                                 setRepPick({ rect: e.currentTarget.getBoundingClientRect(), leadId: l.id });
                                             }}/>
+                                        ) : !canEdit ? (
+                                            <LeadAssignee name={l.assignee}/>
                                         ) : (() => {
                                             const myPending = (leadRequests || []).find(r => r.leadId === l.id && r.status === 'pending');
                                             return (
@@ -712,7 +719,7 @@ const TriageView = ({ leads, allLeads, reps, onOpenLead, setLeads, showConfirm, 
                                         })()}
                                         <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{fmtRev(l.rev)}</div>
                                         <div style={{ display:'flex', gap:4, justifyContent:'flex-end' }}>
-                                            <button onClick={e => { e.stopPropagation(); convertLead(l); }} title="Convert to opportunity" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, fontSize:11 }}>↗</button>
+                                            {canEdit && <button onClick={e => { e.stopPropagation(); convertLead(l); }} title="Convert to opportunity" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, fontSize:11 }}>↗</button>}
                                             {/* Admin-only: the server's DELETE is requireRole(Admin) —
                                                 reps and Managers were offered a button whose click was
                                                 also never sent to the server at all (setLeads-only). */}
@@ -761,7 +768,7 @@ const CockpitListRow = ({ lead, active, onClick }) => (
     </div>
 );
 
-const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showConfirm, canAssign, leadRequests, requestLead, cancelRequest }) => {
+const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showConfirm, canEdit, canAssign, leadRequests, requestLead, cancelRequest }) => {
     // Assignee picker anchor (DOMRect); null = closed. Declared before the
     // empty-state return — hooks must run on every render path.
     const [repPick, setRepPick] = useState(null);
@@ -775,7 +782,7 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
     // this lead in the list is theirs — no identity needed client-side.
     const myPending = !canAssign && (leadRequests || []).find(r => r.leadId === lead.id && r.status === 'pending');
 
-    const nextAction = lead.status === 'New' && !lead.assignee ? (canAssign ? 'Assign to a rep' : myPending ? 'Requested — awaiting approval' : 'Request this lead')
+    const nextAction = lead.status === 'New' && !lead.assignee ? (canAssign ? 'Assign to a rep' : !canEdit ? 'Waiting to be assigned' : myPending ? 'Requested — awaiting approval' : 'Request this lead')
         : lead.status === 'New'       ? 'Send first-touch email'
         : lead.status === 'Contacted' ? 'Schedule qualification call'
         : lead.status === 'Working'   ? 'Check in — keep the ball moving'
@@ -822,14 +829,16 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                         </div>
                     </div>
                 </div>
-                <div style={{ display:'flex', gap:6, marginTop:12, flexWrap:'wrap' }}>
+                {/* Every button here writes (a deal, an activity) — none for a role
+                    that cannot edit (state §0.191). */}
+                {canEdit && <div style={{ display:'flex', gap:6, marginTop:12, flexWrap:'wrap' }}>
                     <button onClick={() => convertLead && convertLead(lead)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>↗ Convert to opportunity</button>
                     {['Email','Call','Schedule'].map(a => (
                         <button key={a} onClick={() => logActivity && logActivity(lead, a)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>{a}</button>
                     ))}
                     <div style={{ flex:1 }}/>
                     <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>···</button>
-                </div>
+                </div>}
             </div>
 
             {/* Next action */}
@@ -837,7 +846,7 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                 <div style={{ fontSize:11, fontWeight:700, color:T.goldInk, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans }}>Recommended next action</div>
                 <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(200,185,154,0.15)', border:`1px solid ${T.gold}`, borderRadius:T.r }}>
                     <div style={{ flex:1, fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{nextAction}</div>
-                    <button onClick={e => {
+                    {canEdit && <button onClick={e => {
                         if (!lead) return;
                         if (lead.status === 'New' && !lead.assignee) {
                             // Managers pick a rep; a rep files/cancels a claim
@@ -854,7 +863,7 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                         }
                     }} style={{ background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
                         {lead.status === 'New' && !lead.assignee && !canAssign ? (myPending ? 'Cancel' : 'Request') : 'Do it'}
-                    </button>
+                    </button>}
                 </div>
             </div>
 
@@ -885,7 +894,7 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
                             <button onClick={e => {
                                 setRepPick(e.currentTarget.getBoundingClientRect());
                             }} style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Assign now</button>
-                        ) : myPending ? (
+                        ) : !canEdit ? null : myPending ? (
                             <button onClick={() => cancelRequest && cancelRequest(myPending.id)} style={{ padding:'6px 12px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Cancel request</button>
                         ) : (
                             <button onClick={() => requestLead && requestLead(lead.id)} style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Request assignment</button>
@@ -932,7 +941,7 @@ const CockpitDetail = ({ lead, reps, saveLead, convertLead, logActivity, showCon
     );
 };
 
-const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConfirm, canAssign, leadRequests, requestLead, cancelRequest }) => {
+const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConfirm, canEdit, canAssign, leadRequests, requestLead, cancelRequest }) => {
     const sorted = useMemo(() => [...leads].sort((a,b) => b.score - a.score), [leads]);
     const [filter,     setFilter    ] = useState('all');
     // A deep-link id (row click, request Review, save-and-open) wins over the
@@ -995,7 +1004,7 @@ const CockpitView = ({ leads, reps, saveLead, convertLead, logActivity, showConf
             {/* Detail pane */}
             <div style={{ flex:1, minWidth:0 }}>
                 <CockpitDetail lead={selected} reps={reps} saveLead={saveLead} convertLead={convertLead} logActivity={logActivity} showConfirm={showConfirm}
-                    canAssign={canAssign} leadRequests={leadRequests} requestLead={requestLead} cancelRequest={cancelRequest}/>
+                    canEdit={canEdit} canAssign={canAssign} leadRequests={leadRequests} requestLead={requestLead} cancelRequest={cancelRequest}/>
             </div>
         </div>
     );
@@ -1016,6 +1025,11 @@ export default function LeadsTab() {
         showLeadModal, setShowLeadModal,
         setUndoToast,
     } = useApp();
+
+    // The CRM write roles (state §0.191): a ReadOnly user or a Dispatcher reads
+    // the leads and is offered nothing the server refuses them (requireWrite on
+    // leads, lead-requests and the activity and deal saves behind each button).
+    const canEdit = canEditCrm(userRole);
 
     const [tab, setTab] = useState(() => {
         try { return localStorage.getItem('tab:leads:subTab') || 'triage'; } catch { return 'triage'; }
@@ -1240,10 +1254,10 @@ export default function LeadsTab() {
                     <div style={{ fontSize:28, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, letterSpacing:-0.8, color:T.ink, lineHeight:1, marginBottom:5 }}>Leads</div>
                     <div style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>{subtitle}</div>
                 </div>
-                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                {canEdit && <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                     <button onClick={() => setShowLeadImportModal(true)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>↗ Import</button>
                     <button onClick={() => setShowLeadModal(true)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ New lead</button>
-                </div>
+                </div>}
             </div>
 
             {/* Sub-tab strip */}
@@ -1287,6 +1301,7 @@ export default function LeadsTab() {
                         saveLead={saveLead}
                         convertLead={convertLead}
                         logActivity={logActivity}
+                        canEdit={canEdit}
                         canDistribute={canSeeAll}
                         canDelete={userRole === 'Admin'}
                         deleteLead={deleteLead}
@@ -1305,6 +1320,7 @@ export default function LeadsTab() {
                         convertLead={convertLead}
                         logActivity={logActivity}
                         showConfirm={showConfirm}
+                        canEdit={canEdit}
                         canAssign={canSeeAll}
                         leadRequests={leadRequests}
                         requestLead={requestLead}

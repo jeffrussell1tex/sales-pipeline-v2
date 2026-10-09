@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 7, 2026 · rules current through **§18b85** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 9, 2026 · rules current through **§18b86** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4031,3 +4031,13 @@ through `dbFetch`.
 2. **One name, one meaning** — when App's context gives a hook's name a value of its own (`setViewingTask`; `setActiveTab`, which is `navigateTo`), App hands a component the context's value, never the hook's setter under that name.
 3. **A state drawn and never opened is recorded with its reason** — tests/open-states.test.mjs, KNOWN — until it is given a way in or retired.
 4. **The guard parses** — every open-state the two hooks keep is drawn (in JSX, or a render guard) and opened, or recorded; App's context gives no hook name a second meaning but those recorded, and none is handed on raw.
+
+## 18b86. A Record Of Evidence Takes Only The Entries The App Sends, Each Behind The Gate Of The Work It Records; A Read Keyed By Person Holds The Caller To Their Own (hard rule)
+
+**Origin (§0.191, 9 Oct 2026 — OPEN_ITEMS §1's small security closes; Jeff: "start with fixing 1-4 above").** audit-log.mjs's POST wrote any `action` and `entityType` a member sent (only quote events were refused, §0.156), so a rep could post `user.role` under their own name; and its one gate, `requireWrite`, refused a Dispatcher the Dispatch entries their own work makes. recommendation-log.mjs took `?rep=` and the body's `repName` as given: a rep read a teammate's log, and wrote rows in a teammate's name that silence that teammate's alerts. The Leads tab offered every write control to roles the server refuses.
+
+1. **An endpoint a client writes evidence through takes a list, not a deny-list** — the exact pairs the app's own call sites send (`_auditClientEntries.mjs`), refused before anything is written; every other event is the server's to write as the work happens.
+2. **Each entry sits behind the gate of the work it records** — a CRM entry the CRM write roles, a Dispatch entry the Dispatch gate — not one gate for the endpoint.
+3. **The list and the call sites are one set** — a parse of every call site resolves each pair and finds it listed, and every listed pair has a call site (tests/security-closes.test.mjs); a new call site adds its pair in the same batch.
+4. **A read or write keyed by person holds a caller who cannot see the whole org to their own key**, from the server's own lookup of the caller — never the query string's or the body's; no key found reads and writes nothing (18b19).
+5. **A CRM screen draws its write controls for `canEditCrm(userRole)` alone**, as the server's `requireWrite` allows; a control the server refuses is not drawn.
