@@ -57,11 +57,14 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   anthropic keys to the to-do list"). The keys work on the dev site since
   8 Oct; the workspace rule is in the guide's secrets rules.
   - **Resolved, 8 Oct:** `ANTHROPIC_API_KEY` on both sites (dev "accelerep",
-    prod "sales-pipeline-v2") is a key of the service account
-    `accelerep-server`, scoped to the Default workspace. The keys before it
-    were refused: the old site key with 401 (15 Sep); a personal key with
-    400, its words never read (deleted 8 Oct); and an unscoped
-    service-account key with 400, whose words, read by one minimal request
+    prod "sales-pipeline-v2") is a new key scoped to the Default workspace
+    (Jeff: "new key added to env and netlify"); the `.env` copy resolved to
+    workspace `wrkspc_01R7so…` and answered 200 on both models. Which
+    account it is linked to was not read. The keys before it were refused:
+    the old site key with 401 (15 Sep); a personal key with 400, its words
+    never read (deleted 8 Oct); and an unscoped key, made after the
+    service-account dialog (its account not read), with 400, whose words,
+    read by one minimal request
     with the key from `.env`, were "This API key is not scoped to a
     workspace, so this request must include the anthropic-workspace-id
     header…". Our calls send no such header.
