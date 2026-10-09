@@ -1030,7 +1030,7 @@ export default function OpportunityModal({
     opportunity, accounts, contacts, settings, pipelines, activePipelineId,
     currentUser, activities, tasks, onSaveActivity, onDeleteActivity,
     onSaveComment, onEditComment, onDeleteComment,
-    onClose, onSave, onAddAccount, onSaveNewContact, onSaveNewAccount, onAddContact,
+    onClose, onSave, onSaveNewContact, onSaveNewAccount, onAddContact,
     lastCreatedAccountName, onAddRep, lastCreatedRepName,
     errorMessage, onDismissError, saving, onOpenNestedContact, onOpenNestedAccount }) {
     const { openMeetingPrep } = useApp();   // the header's Prep (state §0.187)

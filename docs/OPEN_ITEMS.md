@@ -406,23 +406,21 @@ model's pattern to deals.
     and the two record rails) joins it with them: it holds by its own list, the
     app's confirm and prompt (§0.189 (c)).
   - Source: §0.186 (a), 7 Oct.
-- **The Company view's "Add contact" opens nothing.**
-  - In the Contacts tab's Company view it sets `showContactModal`, which no
-    screen draws (the contact rail replaced ContactModal).
-  - The flag, left set, holds the body's scroll lock and keeps the number
-    shortcuts off (`anyModalOpen`) until an Escape clears it.
-  - Recommended: open the contact rail as the list's "New contact" does
-    (`handleAddContact`); then retire `showAccountModal`, `showContactModal`
-    and `showTaskModal`, and the deal window's unused `onAddAccount` with App's
-    `handleAddAccountFromOpportunity`.
-  - Source: §0.189 (a), 8 Oct. Read from code.
 - **The shortcuts list opens under an open rail or the deal window.** Its z
   is 9998, under every rail and the draggable windows; "?" opened it with a
   contact rail and with a new-task rail open. A z above them, with its place
   in the order, is the fix. §0.189 (b), 8 Oct.
-- **Two layers nothing reaches.** Nothing sets `showOutlookImportModal`, and
-  ContactModal is rendered nowhere: the contact rail replaced it.
-  §0.186 (b).
+- **Layers drawn that nothing opens** (tests/open-states.test.mjs records each
+  in KNOWN; giving one a way in, or retiring it, updates KNOWN):
+  - nothing sets `showOutlookImportModal` (§0.186 (b));
+  - ContactModal is rendered nowhere: the contact rail replaced it
+    (§0.186 (b));
+  - TaskViewRail draws on `viewingTask`, which nothing opens: the context's
+    `setViewingTask` opens the task rail (§0.190 (a), 8 Oct);
+  - the notes popover: ModalLayer draws it, App's Escape and the order name
+    it, and nothing has set `notesPopover` since c3842cf (12 Mar 2026), when
+    the side detail panel replaced the pipeline table's notes and comments
+    cells (§0.190 (b), 8 Oct, found by the guard's parse).
 - **Home's meetings.** "Open prep" needs a deal no calendar event carries.
   The line under a meeting reads `ev.attendees`, which `calendar-events.mjs`
   does not return (it returns a count). §0.186 (c)'s remainder, 7 Oct.

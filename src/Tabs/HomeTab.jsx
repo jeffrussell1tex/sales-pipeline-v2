@@ -156,7 +156,7 @@ export default function HomeTab() {
         coachingNotes, markCoachingNoteRead, currentUserId,
         myProfile, leads,
         setEditingOpp, setShowModal,
-        setEditingTask, setShowTaskModal,
+        setEditingTask,
         setTaskRailId, setTaskRailMode,
         setActivityInitialContext, setEditingActivity, setShowActivityModal,
         meetingPrepEvent, setMeetingPrepEvent,

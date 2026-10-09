@@ -225,7 +225,7 @@ function SnoozePicker({ onSnooze, onClose, anchorRect }) {
 
 // ── QRow — the new clean task row ───────────────────────────────
 // Module-scope component (NOT defined inside TasksTab) — avoids React #310 remount bug.
-function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, onOpen }) {
+function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, onOpen }) {
     const [hov, setHov]                   = useState(false);
     const [snoozeOpen, setSnoozeOpen]     = useState(false);
     const [snoozeRect, setSnoozeRect]     = useState(null);
@@ -530,7 +530,7 @@ function ContactRowMenu({ contact, isPrimary, onSetPrimary, onRemove, onClose, a
 
 // ── TaskViewRail — right-rail task detail panel ─────────────────
 // Module-scope so React never unmounts on re-render.
-function TaskViewRail({ task, opportunities, contacts, accounts, activities, canEdit, currentUser, handleCompleteTask, handleSaveTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, setTaskRailId, setTaskRailMode, setActivityInitialContext, setEditingActivity, setShowActivityModal }) {
+function TaskViewRail({ task, opportunities, contacts, accounts, activities, canEdit, currentUser, handleCompleteTask, handleSaveTask, setTasks, setViewingTask, setEditingTask, setTaskRailId, setTaskRailMode, setActivityInitialContext, setEditingActivity, setShowActivityModal }) {
     const [completing,    setCompleting]    = useState(false);
     const [snoozeOpen,    setSnoozeOpen]    = useState(false);
     const [snoozeRect,    setSnoozeRect]    = useState(null);
@@ -1109,7 +1109,7 @@ export default function TasksTab() {
         handleCompleteTask, handleSaveTask, setTasks,
         calendarEvents, calendarConnected, calendarLoading,
         allPipelines, activePipeline,
-        setEditingTask, setShowTaskModal,
+        setEditingTask,
         taskRailId, setTaskRailId, taskRailMode, setTaskRailMode,
         setActivityInitialContext, setEditingActivity, setShowActivityModal,
         viewingTask, setViewingTask,
@@ -1239,7 +1239,7 @@ export default function TasksTab() {
             setViewingTask(item);
         }
     };
-    const qRowProps = { opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, onOpen: openFeedItem };
+    const qRowProps = { opportunities, canEdit, handleCompleteTask, setTasks, setViewingTask, setEditingTask, onOpen: openFeedItem };
     const handleAddTask = () => { setTaskRailId('new'); setTaskRailMode('new'); };
 
     // ── View tabs config ───────────────────────────────────────
@@ -1268,7 +1268,6 @@ export default function TasksTab() {
                     setTasks={setTasks}
                     setViewingTask={setViewingTask}
                     setEditingTask={setEditingTask}
-                    setShowTaskModal={setShowTaskModal}
                     setTaskRailId={setTaskRailId}
                     setTaskRailMode={setTaskRailMode}
                     setActivityInitialContext={setActivityInitialContext}

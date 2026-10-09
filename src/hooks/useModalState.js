@@ -13,10 +13,7 @@ export function useModalState() {
     const [showModal, setShowModal] = useOrgBoundState(resets, false);
     const [showSpiffClaimModal, setShowSpiffClaimModal] = useOrgBoundState(resets, false);
     const [spiffClaimContext, setSpiffClaimContext] = useOrgBoundState(resets, null);
-    const [showAccountModal, setShowAccountModal] = useOrgBoundState(resets, false);
     const [showUserModal, setShowUserModal] = useOrgBoundState(resets, false);
-    const [showTaskModal, setShowTaskModal] = useOrgBoundState(resets, false);
-    const [showContactModal, setShowContactModal] = useOrgBoundState(resets, false);
     const [showActivityModal, setShowActivityModal] = useOrgBoundState(resets, false);
     const [showShortcuts, setShowShortcuts] = useOrgBoundState(resets, false);
     const [showCsvImportModal, setShowCsvImportModal] = useOrgBoundState(resets, false);
@@ -108,10 +105,7 @@ export function useModalState() {
         showModal, setShowModal,
         showSpiffClaimModal, setShowSpiffClaimModal,
         spiffClaimContext, setSpiffClaimContext,
-        showAccountModal, setShowAccountModal,
         showUserModal, setShowUserModal,
-        showTaskModal, setShowTaskModal,
-        showContactModal, setShowContactModal,
         showActivityModal, setShowActivityModal,
         showShortcuts, setShowShortcuts,
         showCsvImportModal, setShowCsvImportModal,

@@ -105,12 +105,12 @@ const hookShape = (src, hook, { lists = ['resets'], reset = 'resetAllOf(resets)'
     assert.ok(c.includes(`import { useOrgBoundState, resetAllOf } from '${from}';`), `${hook}: imports the hook`);
 };
 
-test('useModalState: every value is the org\'s — each modal, rail, confirm, undo and reminder (60), none plain; what the reminders remember (3) apart, which a layer\'s crash keeps', () => {
+test('useModalState: every value is the org\'s — each modal, rail, confirm, undo and reminder (57), none plain; what the reminders remember (3) apart, which a layer\'s crash keeps', () => {
     const src = read('src/hooks/useModalState.js');
     hookShape(src, 'useModalState', { lists: ['resets', 'remembered'], reset: 'resetAllOf([...resets, ...remembered])', from: './useOrgBoundState.js' });
     assert.ok(code(src).includes('        closeLayers: resetAllOf(resets),'), 'a layer\'s crash closes what is open and keeps what the reminders remember (§0.185)');
     const states = statesOf(src);
-    assert.equal(states.length, 60);
+    assert.equal(states.length, 57, 'the three flags of the modals the rails replaced are gone (§0.190)');
     assert.deepEqual(states.filter((s) => s.list === 'remembered').map((s) => s.name), ['dismissedDueTodayAlerts', 'snoozedDueAlerts', 'dismissedReminders'],
         'the alerts dismissed and snoozed, and the reminders fired: a crash that put them back brought every one back, with its chime');
     assert.deepEqual(states.filter((s) => !s.bound).map((s) => s.name), [],
@@ -130,14 +130,14 @@ const UI_KEPT = ['activeTab', 'isMobile', 'showProfilePanel', 'accountsSortDir',
 const CAL_KEPT = ['calView', 'calOffset', 'calShowGcal', 'calShowCalls', 'calShowMeetings', 'calShowWeekends', 'calProvider',
     'logFromCalDateFrom', 'logFromCalDateTo'];
 
-test('useUIState: a record, an id, a name or a form is the org\'s (34); the tab, the device and the view preferences stay (16)', () => {
+test('useUIState: a record, an id, a name or a form is the org\'s (32); the tab, the device and the view preferences stay (16)', () => {
     const src = read('src/hooks/useUIState.js');
     hookShape(src, 'useUIState');
     const states = statesOf(src);
     assert.deepEqual(states.filter((s) => !s.bound).map((s) => s.name), UI_KEPT,
         'a new plain state: decide whether it is the org\'s (useOrgBoundState) or a view preference (add it to UI_KEPT)');
-    assert.equal(states.filter((s) => s.bound).length, 34);
-    for (const name of ['activePipelineId', 'viewingContact', 'viewingAccount', 'viewingTask', 'viewingRep', 'selectedAccounts', 'selectedContacts',
+    assert.equal(states.filter((s) => s.bound).length, 32, 'viewingContact and viewingAccount, which nothing drew, are gone (§0.190)');
+    for (const name of ['activePipelineId', 'viewingTask', 'viewingRep', 'selectedAccounts', 'selectedContacts',
         'myProfile', 'profileForm', 'notifications', 'globalSearch', 'quickLogForm', 'settingsView', 'quotaForecastFilter', 'commissionsFilter']) {
         assert.ok(states.some((s) => s.name === name && s.bound), `${name} is org-bound`);
     }

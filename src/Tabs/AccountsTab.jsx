@@ -570,10 +570,10 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
         getSubAccounts, getAccountRollup,
         visibleAccounts: allVisibleAccounts,
         handleDeleteAccounts,
-        setEditingAccount, setEditingSubAccount, setParentAccountForSub, setShowAccountModal,
+        setEditingAccount, setEditingSubAccount, setParentAccountForSub,
         setCsvImportType, setShowCsvImportModal,
         accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
-        viewingAccount, setViewingAccount,
+        setViewingAccount,
         selectedAccounts, setSelectedAccounts,
         isMobile,
     } = useApp();

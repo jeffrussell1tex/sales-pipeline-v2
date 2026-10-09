@@ -33,9 +33,7 @@ export function useUIState() {
     const [viewingTerritory, setViewingTerritory] = useOrgBoundState(resets, null);
 
     // Detail panels
-    const [viewingContact, setViewingContact] = useOrgBoundState(resets, null);
     const [contactShowAllDeals, setContactShowAllDeals] = useOrgBoundState(resets, false);
-    const [viewingAccount, setViewingAccount] = useOrgBoundState(resets, null);
     const [accShowAllClosed, setAccShowAllClosed] = useOrgBoundState(resets, false);
     const [accShowAllContacts, setAccShowAllContacts] = useOrgBoundState(resets, false);
     const [viewingTask, setViewingTask] = useOrgBoundState(resets, null);
@@ -100,9 +98,7 @@ export function useUIState() {
         viewingRep, setViewingRep,
         viewingTeam, setViewingTeam,
         viewingTerritory, setViewingTerritory,
-        viewingContact, setViewingContact,
         contactShowAllDeals, setContactShowAllDeals,
-        viewingAccount, setViewingAccount,
         accShowAllClosed, setAccShowAllClosed,
         accShowAllContacts, setAccShowAllContacts,
         viewingTask, setViewingTask,

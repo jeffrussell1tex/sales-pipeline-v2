@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 7, 2026 · rules current through **§18b84** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 7, 2026 · rules current through **§18b85** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4022,3 +4022,12 @@ through `dbFetch`.
 2. **A layer's own listener asks the order** — `escapeBlocked('<its name>')`, never a list of what sits above it. A layer that keeps itself open on Escape (a rail keeping its draft) still takes the Escape.
 3. **Whatever takes an Escape marks it** — `e.preventDefault()`, so every listener under it leaves it alone.
 4. **The guard runs every pair** — tests/escape-order.test.mjs: of any two layers open, one Escape closes the upper, however each takes its Escape and whichever listener was added first; parses tie the model to the code (App's cases, each listener's hold and its mark).
+
+## 18b85. A Control Opens A Screen That Is Drawn — A Replaced Screen's Open-State Goes With It; A Name The Context Gives A Meaning Of Its Own Is Never Handed On Raw (hard rule)
+
+**Origin (§0.190, 8 Oct 2026 — §0.189's found (a) and its class; Jeff: "fix the Add contact one when you have the chance").** The rails replaced the contact, account and task modals and the contact and account panels, and their open-states stayed. The Company view's "Add contact" set `showContactModal`, which nothing drew: it opened nothing and locked the page's scroll. The header's search results set App's own `viewingContact` and `viewingAccount` — the context's setters of those names open the rails, and App handed the header its own — so a contact picked in the search opened nothing and locked the page until a reload.
+
+1. **A replaced screen's open-state goes with it** — every control that set it opens the replacement, and the state, its terms in the scroll lock and the key handler, and its destructures go in the same batch.
+2. **One name, one meaning** — when App's context gives a hook's name a value of its own (`setViewingTask`; `setActiveTab`, which is `navigateTo`), App hands a component the context's value, never the hook's setter under that name.
+3. **A state drawn and never opened is recorded with its reason** — tests/open-states.test.mjs, KNOWN — until it is given a way in or retired.
+4. **The guard parses** — every open-state the two hooks keep is drawn (in JSX, or a render guard) and opened, or recorded; App's context gives no hook name a second meaning but those recorded, and none is handed on raw.

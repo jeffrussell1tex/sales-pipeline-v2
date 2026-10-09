@@ -165,8 +165,8 @@ function App() {
         showProfilePanel, setShowProfilePanel, myProfile, setMyProfile,
         profileForm, setProfileForm,
         viewingRep, setViewingRep, viewingTeam, setViewingTeam, viewingTerritory, setViewingTerritory,
-        viewingContact, setViewingContact, contactShowAllDeals, setContactShowAllDeals,
-        viewingAccount, setViewingAccount, accShowAllClosed, setAccShowAllClosed, accShowAllContacts, setAccShowAllContacts,
+        contactShowAllDeals, setContactShowAllDeals,
+        accShowAllClosed, setAccShowAllClosed, accShowAllContacts, setAccShowAllContacts,
         viewingTask, setViewingTask,
         expandedAccounts, setExpandedAccounts, expandedIndustry, setExpandedIndustry,
         accountsSortDir, setAccountsSortDir, accountsViewMode, setAccountsViewMode, selectedAccounts, setSelectedAccounts,
@@ -231,8 +231,7 @@ function App() {
     const {
         showModal, setShowModal, showSpiffClaimModal, setShowSpiffClaimModal,
         spiffClaimContext, setSpiffClaimContext,
-        showAccountModal, setShowAccountModal, showUserModal, setShowUserModal,
-        showTaskModal, setShowTaskModal, showContactModal, setShowContactModal,
+        showUserModal, setShowUserModal,
         showActivityModal, setShowActivityModal, showShortcuts, setShowShortcuts,
         viewingActivity, setViewingActivity,
         showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
@@ -588,11 +587,8 @@ dbFetch('/.netlify/functions/users?me=true')
                     case null: break;   // nothing is drawn over the page
                     default: return;    // the layer on top takes its own Escape
                 }
-                // Not layers: three flags no screen draws (state §0.189's found (a)) — an Escape
-                // clears one left set, as it always has; then the undo toast.
-                if (showAccountModal) { setShowAccountModal(false); setEditingAccount(null); return; }
-                if (showContactModal) { setShowContactModal(false); setEditingContact(null); return; }
-                if (showTaskModal) { setShowTaskModal(false); setEditingTask(null); return; }
+                // Nothing drawn over the page: the undo toast. (The three flags no screen drew,
+                // which an Escape cleared here, are gone — state §0.190.)
                 if (undoToast) { clearTimeout(undoToast.timerId); setUndoToast(null); return; }
                 return;
             }
@@ -600,7 +596,7 @@ dbFetch('/.netlify/functions/users?me=true')
             // Don't fire shortcuts while typing
             if (isTyping) return;
             // Don't fire if any modal is open (except ? for help)
-            const anyModalOpen = showModal || showAccountModal || showContactModal || showTaskModal || showUserModal || showActivityModal || confirmModal || promptModal || coachingNoteModal || viewingActivity;
+            const anyModalOpen = showModal || showUserModal || showActivityModal || confirmModal || promptModal || coachingNoteModal || viewingActivity;
 
             if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
                 e.preventDefault();
@@ -669,7 +665,7 @@ dbFetch('/.netlify/functions/users?me=true')
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [showModal, showAccountModal, showContactModal, showTaskModal, showUserModal, showActivityModal, viewingActivity,
+    }, [showModal, showUserModal, showActivityModal, viewingActivity,
         confirmModal, promptModal, coachingNoteModal, notesPopover, undoToast, showNotifications, showSearchResults, showShortcuts]);
 
 
@@ -917,17 +913,6 @@ dbFetch('/.netlify/functions/users?me=true')
     const handleAddNew = () => {
         setEditingOpp(null);
         setShowModal(true);
-    };
-
-    const handleAddAccountFromOpportunity = (currentFormData) => {
-        setShowModal(false);
-        setShowAccountModal(true);
-        setAccountCreatedFromOppForm(true);
-        setPendingOppFormData(currentFormData || null);
-        setEditingAccount(null);
-        setEditingSubAccount(null);
-        setParentAccountForSub(null);
-        setLastCreatedAccountName(null);
     };
 
     const {
@@ -1581,24 +1566,22 @@ dbFetch('/.netlify/functions/users?me=true')
     // Placed here so ALL state variables it depends on are already initialized.
     useEffect(() => {
         const anyOpen = !!(
-            showModal || showAccountModal || showContactModal || showTaskModal ||
-            showActivityModal || showUserModal || showShortcuts || showProfilePanel ||
+            showModal || showActivityModal || showUserModal || showShortcuts || showProfilePanel ||
             showCsvImportModal || showLeadImportModal || showLeadModal ||
             showOutlookImportModal || showSpiffClaimModal ||
             confirmModal || promptModal || coachingNoteModal || blockedDeleteModal || lostReasonModal ||
-            viewingContact || viewingAccount || viewingTask || viewingActivity ||
+            viewingTask || viewingActivity ||
             meetingPrepOpen || logFromCalOpen || showCalConfig ||
             quickLogOpen || showNavGuard
         );
         document.body.style.overflow = anyOpen ? 'hidden' : '';
         return () => { document.body.style.overflow = ''; };
     }, [
-        showModal, showAccountModal, showContactModal, showTaskModal,
-        showActivityModal, showUserModal, showShortcuts, showProfilePanel,
+        showModal, showActivityModal, showUserModal, showShortcuts, showProfilePanel,
         showCsvImportModal, showLeadImportModal, showLeadModal,
         showOutlookImportModal, showSpiffClaimModal,
         confirmModal, blockedDeleteModal, lostReasonModal,
-        viewingContact, viewingAccount, viewingTask, viewingActivity,
+        viewingTask, viewingActivity,
         meetingPrepOpen, logFromCalOpen, showCalConfig,
         quickLogOpen, showNavGuard,
     ]);
@@ -1752,6 +1735,14 @@ dbFetch('/.netlify/functions/users?me=true')
     }
 
 
+    // A record's rail, opened (state §0.190): the context's setViewingContact and
+    // setViewingAccount, and the header's search results. App kept a viewingContact and a
+    // viewingAccount of its own, which nothing drew once the rails replaced the panels, and
+    // handed the header its own setters of those names — an account or a contact picked in
+    // the search opened nothing, and held the body's scroll lock.
+    const openContactRail = (c) => { if (c) { setContactRailId(c.id); setContactRailMode('view'); } else { setContactRailId(null); } };
+    const openAccountRail = (a) => { if (a) { setRailStack(a.parentAccountId ? [{ type: 'account', id: a.parentAccountId, mode: 'view' }] : []); setAccountRailId(a.id); setAccountRailMode('view'); } else { setAccountRailId(null); setRailStack([]); } };
+
     // Meeting prep for a record (state §0.187): a contact's, an account's or a deal's Prep
     // opens the panel on that deal, over the record it was opened from — the meeting named
     // for the record, today.
@@ -1821,7 +1812,6 @@ dbFetch('/.netlify/functions/users?me=true')
         handleDeleteDeals,
         handleSave,
         completeLostSave,
-        handleAddAccountFromOpportunity,
         handleDeleteAccounts,
         handleSaveAccount,
         handleDeleteContacts,
@@ -1845,10 +1835,8 @@ dbFetch('/.netlify/functions/users?me=true')
         loadTasks,
         loadActivities,
         // Detail panel state
-        viewingContact,
-        setViewingContact: (c) => { if (c) { setContactRailId(c.id); setContactRailMode('view'); } else { setContactRailId(null); } },
-        viewingAccount,
-        setViewingAccount: (a) => { if (a) { setRailStack(a.parentAccountId ? [{ type: 'account', id: a.parentAccountId, mode: 'view' }] : []); setAccountRailId(a.id); setAccountRailMode('view'); } else { setAccountRailId(null); setRailStack([]); } },
+        setViewingContact: openContactRail,
+        setViewingAccount: openAccountRail,
         viewingTask,
         setViewingTask: (t) => { if (t) { setTaskRailId(t.id); setTaskRailMode('view'); } else { setTaskRailId(null); } },
         contactShowAllDeals, setContactShowAllDeals,
@@ -1909,7 +1897,6 @@ dbFetch('/.netlify/functions/users?me=true')
         editingOpp, setEditingOpp,
         oppModalError, setOppModalError,
         oppModalSaving, setOppModalSaving,
-        showAccountModal, setShowAccountModal,
         editingAccount, setEditingAccount,
         editingSubAccount, setEditingSubAccount,
         accountModalError, setAccountModalError,
@@ -1918,7 +1905,6 @@ dbFetch('/.netlify/functions/users?me=true')
         lastCreatedAccountName, setLastCreatedAccountName,
         lastCreatedRepName, setLastCreatedRepName,
         parentAccountForSub, setParentAccountForSub,
-        showContactModal, setShowContactModal,
         editingContact, setEditingContact,
         contactModalError, setContactModalError,
         contactModalSaving, setContactModalSaving,
@@ -1929,7 +1915,6 @@ dbFetch('/.netlify/functions/users?me=true')
         accountRailId, setAccountRailId,
         accountRailMode, setAccountRailMode,
         railStack, setRailStack,
-        showTaskModal, setShowTaskModal,
         editingTask, setEditingTask,
         taskModalError, setTaskModalError,
         taskModalSaving, setTaskModalSaving,
@@ -2014,8 +1999,8 @@ dbFetch('/.netlify/functions/users?me=true')
                 handleLogout={handleLogout}
                 setShowModal={setShowModal}
                 setEditingOpp={setEditingOpp}
-                setViewingAccount={setViewingAccount}
-                setViewingContact={setViewingContact}
+                setViewingAccount={openAccountRail}
+                setViewingContact={openContactRail}
                 dbOffline={dbOffline}
                 setDbOffline={setDbOffline}
             />

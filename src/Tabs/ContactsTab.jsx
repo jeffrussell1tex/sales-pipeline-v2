@@ -318,7 +318,7 @@ function CompanyTwoPane({
     accounts, opportunities, activities, tasks, oppCount,
     getAccountRollup, canEdit,
     setViewingContact, setViewingAccount,
-    setEditingContact, setShowContactModal,
+    onAddContact,
     handleEditContact, handleDeleteOne,
 }) {
     const [coSearch, setCoSearch] = useState('');
@@ -527,9 +527,10 @@ function CompanyTwoPane({
                                 Open account
                             </button>
                         )}
+                        {/* A new contact, in the contact rail, as the list's "New contact" opens one (state §0.190): this set showContactModal, which nothing drew since the rail replaced ContactModal — it opened nothing, and held the body's scroll lock. */}
                         {canEdit && (
                             <button
-                                onClick={() => { setEditingContact(null); setShowContactModal(true); }}
+                                onClick={onAddContact}
                                 style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.ink, border: 'none', borderRadius: T.r, color: T.surface, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
                                 <Icon name="plus" size={12} color={T.surface} />
                                 Add contact
@@ -639,10 +640,9 @@ export default function ContactsTab() {
         showConfirm, softDelete,
         visibleContacts: allVisibleContacts,
         handleDeleteContacts,
-        setEditingContact, setShowContactModal,
         contactRailId, setContactRailId, contactRailMode, setContactRailMode,
-        viewingContact, setViewingContact,
-        viewingAccount, setViewingAccount,
+        setViewingContact,
+        setViewingAccount,
         contactsSortBy, setContactsSortBy,
         selectedContacts, setSelectedContacts,
         exportToCSV, exportingCSV,
@@ -920,8 +920,7 @@ export default function ContactsTab() {
                             canEdit={canEdit}
                             setViewingContact={setViewingContact}
                             setViewingAccount={setViewingAccount}
-                            setEditingContact={setEditingContact}
-                            setShowContactModal={setShowContactModal}
+                            onAddContact={handleAddContact}
                             handleEditContact={handleEditContact}
                             handleDeleteOne={handleDeleteOne}
                           />

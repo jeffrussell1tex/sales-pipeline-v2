@@ -83,19 +83,19 @@ export default function ModalLayer() {
     const {
         showModal, setShowModal, editingOpp, setEditingOpp,
         oppModalError, setOppModalError, oppModalSaving, setOppModalSaving,
-        showAccountModal, setShowAccountModal, editingAccount, setEditingAccount,
+        editingAccount, setEditingAccount,
         editingSubAccount, setEditingSubAccount,
         accountModalError, setAccountModalError, accountModalSaving, setAccountModalSaving,
         accountCreatedFromOppForm, setAccountCreatedFromOppForm,
         lastCreatedAccountName, setLastCreatedAccountName,
         lastCreatedRepName, setLastCreatedRepName,
         parentAccountForSub, setParentAccountForSub,
-        showContactModal, setShowContactModal, editingContact, setEditingContact,
+        editingContact, setEditingContact,
         contactModalError, setContactModalError, contactModalSaving, setContactModalSaving,
         contactRailId, setContactRailId, contactRailMode, setContactRailMode,
         accountRailId, setAccountRailId, accountRailMode, setAccountRailMode,
         railStack, setRailStack,
-        showTaskModal, setShowTaskModal, editingTask, setEditingTask,
+        editingTask, setEditingTask,
         taskModalError, setTaskModalError, taskModalSaving, setTaskModalSaving,
         taskRailId, setTaskRailId, taskRailMode, setTaskRailMode,
         showUserModal, setShowUserModal, editingUser, setEditingUser,
@@ -133,11 +133,10 @@ export default function ModalLayer() {
         spiffClaims, setSpiffClaims,
         handleSave, handleSaveAccount, handleSaveContact, handleSaveTask, handleSaveActivity,
         handleDeleteActivity, handleDeleteTask, handleCompleteTask, handleLogActivity, saveDealComments,
-        handleAddAccountFromOpportunity,
         addAudit, softDelete, showConfirm, loadOpportunities, loadAccounts,
         loadContacts, loadTasks, loadActivities,
         setActiveTab, activeTab,
-        viewingContact, setViewingContact, viewingAccount, setViewingAccount,
+        setViewingContact, setViewingAccount,
         viewingTask, setViewingTask,
         isMobile,
         escapeBlocked,
@@ -206,7 +205,6 @@ export default function ModalLayer() {
                     onSave={(formData) => handleSave(formData, editingOpp, activePipeline, currentUser, setShowModal, setLostReasonModal)}
                     errorMessage={oppModalError}
                     saving={oppModalSaving}
-                    onAddAccount={handleAddAccountFromOpportunity}
                     lastCreatedAccountName={lastCreatedAccountName}
                     lastCreatedRepName={lastCreatedRepName}
                     onSaveNewContact={(data) => {
