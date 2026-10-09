@@ -432,6 +432,13 @@ model's pattern to deals.
     economic buyer" insight and `ai-score.mjs` all count from
     `activity.contactName`, which nothing writes.
   - A deal's contacts are matched by name, though the ids ride beside them.
+  - What it does to an AI score (seen on dev 9 Oct, Jeff's screenshot; read
+    in the database): "Bluebird HVAC Supply — Warehouse Scheduling" scored
+    "Priya Shah and Tom Becker unresponsive", though the deal's one activity,
+    a 30 Sep email, carries Priya Shah's id (`contact_ids` `["con_qa_03"]`).
+    The activities table has `contact_id` and `contact_ids` and no contact
+    name, so ai-score.mjs:115 tells the model "Contacts engaged: none" for
+    every deal, on both sites.
   - Recommended: key both on `contactIds`. Decided 1 Oct: after (C), which is
     done.
 - **The deal endpoint never saves `accountId`.** Its sanitize has none, though
