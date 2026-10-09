@@ -79,8 +79,8 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     scores deals" left on, as Jeff asked.
   - **The unscoped key is deleted** (Jeff, 8 Oct: "i deleted the extra claude key").
   - **Left (Jeff):**
-    - prod (`6ac80d1a…`, redeployed with the new key) has run no AI call
-      yet: one AI score there proves its key;
+    - prod (shipped 9 Oct, deploy `6ac8541b…`, the new key in its
+      environment) has run no AI call yet: one AI score there proves its key;
     - whether the Accelerep Test org's own key (BYOK, Settings → Features &
       AI, installed 15 Sep) still works: not checked. A key an org brings
       must be scoped to a workspace too.
@@ -118,34 +118,17 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- **Before the ship: prod's roles move to prod's roster rows.**
-  - From §0.163, a role is the roster row's, per org.
-  - The two prod orgs' rows were read on 3 Oct:
-    - `org_3Cwn…` (6 rows) and `org_3Dwny…` (1 row);
-    - Jeff is Admin in both, Travis Shipley a Manager, the rest reps.
-  - They were not compared with prod Clerk's values.
-  - To do: compare them read-only first (the dev comparison's script, run by
-    Jeff with the prod key), or accept the rows.
-  - Source: §0.163.
-- **Only after that ship: clear prod Clerk's leftover user-level roles.**
+- **Now that prod has shipped (the twenty-ninth ship, 9 Oct): clear prod
+  Clerk's leftover user-level roles.**
   - Run `scripts/clear-clerk-roles.mjs --apply --live` with Jeff's key.
-  - Never before the ship, or every prod Admin becomes a rep. Dev was cleared
-    on 4 Oct.
+  - Prod's roles are its roster rows since the ship (§0.163), accepted as
+    read before it (Jeff: "yes, accept the rows and ship"): the first org
+    Jeff Admin, Travis Shipley Manager, four Sales Reps (one a second
+    "Jeff Russell" row); the second org Jeff Admin. Dev was cleared on 4 Oct.
   - Source: §0.164.
-- **Until that ship, prod's "Sync from Clerk" downgrades a role it does not
-  know.** Prod runs code from before §0.153, whose sync writes `'User'` over
-  any role missing from its list. So no Dispatcher on prod, and no sync there
-  once one exists. §0.153, as recorded.
-- **Until that ship, prod's AI Score tab asks with no deal id.** Prod runs
-  `a38e0c6`, before §0.188: its tab sends `{ opportunity, activities,
-  currentUser, forceRefresh }`, and its ai-score answers 400 "opportunityId
-  required" before calling Anthropic (Jeff, 8 Oct, UKG on
-  salespipelinetracker.com: the deal window showed that line for
-  "Resinall Hattiesburg – Shiftboard Onboarding"; nothing written). §0.188
-  fixed it on dev. After the ship: one AI score on prod, which also proves
-  prod's site key. Before it, prod's report reader (§0.141, on prod) can
-  prove the key: its result names who read it ("Claude" or "Built-in
-  interpreter").
+- **The ship closed two items:** prod's "Sync from Clerk" no longer writes
+  `'User'` over a role it does not know (§0.153), and prod's AI Score tab
+  asks with the deal's id (§0.188).
 
 ### 2.3 Before selling
 
