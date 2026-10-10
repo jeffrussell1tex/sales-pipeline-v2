@@ -184,11 +184,31 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 - **Prod's Jobs tile.** Settings → Jobs → Report delivery "ok" has not been
   observed on prod; the delivery itself is proven. Handoff §5 (16 Sep).
 - **How long a Google calendar connection lasts, and whether both sites can
-  read it** (read 10 Oct; open questions, not checked):
-  - Google Cloud Console → OAuth consent screen → Publishing status. If it
-    reads "Testing", Google ends a connection's refresh token after 7 days
-    (Google's documentation). That would explain the refused connection
-    (§4.4), and would end the connection made 10 Oct around 17 Oct.
+  read it** (read 10 Oct):
+  - **Answered 10 Oct (Jeff's screenshot):** Google Auth Platform → Audience
+    on project `sales-pipeline-tracker` reads **Testing**, user type
+    External, with one test user (jeffrussell1@gmail.com), 1 of 100 counted.
+    Per Google's documentation (not tested here), while in Testing:
+    - a connection's refresh token ends after 7 days. That likely explains
+      the refused connection (§4.4), and the connection made 10 Oct would
+      end around 17 Oct;
+    - only listed test users may connect, so no rep or customer can connect
+      a calendar today.
+  - **Jeff's step:** "Publish app" is greyed out until the Branding page has
+    an app name, a support email, a home page and a privacy policy link.
+    - What to enter: the home page is `https://salespipelinetracker.com`;
+      the privacy policy is
+      `https://salespipelinetracker.com/privacy-policy.html` (live 10 Oct;
+      its §2.3 covers Google Calendar); the terms link, optional, is
+      `/terms-and-conditions.html`; `salespipelinetracker.com` goes under
+      Authorized domains.
+    - Then Audience → Publish app.
+    - After publishing, per Google, connections stop ending after 7 days
+      and anyone may connect. Until Google verifies the app (calendar
+      access is a "sensitive" scope), users see an "unverified app" warning
+      and a 100-user limit. Verification is §2.3's.
+  - Still open: whether dev (accelerep.netlify.app) connects through this
+    same Google project.
   - Dev and prod share one database, so a calendar connection made on one
     site is read by the other. If the two sites' `GOOGLE_CLIENT_ID` /
     `GOOGLE_CLIENT_SECRET` or `SETTINGS_ENCRYPTION_KEY` differ, the other
@@ -205,6 +225,17 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.3 Before selling
 
+- **Google's verification of the calendar app** (10 Oct; from Google's
+  documentation, not tried). Calendar access is a "sensitive" scope.
+  - A published but unverified app shows customers "Google hasn't verified
+    this app" and stops at 100 users.
+  - Verification is done in Google Auth Platform → Verification Center. It
+    asks for proof the domain is owned (Google Search Console), a short demo
+    video of each permission in use, and a written reason for each. It can
+    take days to weeks.
+  - Recommended: publish now (§2.1), and submit once §3.6's real Google
+    meetings are built. That work adds the events permission, and one
+    verification then covers both.
 - **Clerk's membership cap.**
   - Production's default limit has not been read; only the dev key is on
     this machine. At 5, a customer's sixth invite fails.
