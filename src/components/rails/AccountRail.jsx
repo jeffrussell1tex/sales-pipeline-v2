@@ -3,6 +3,7 @@ import { useApp } from '../../AppContext';
 import ActivityRowText from './ActivityRowText';
 import RecordDocuments from '../documents/RecordDocuments';
 import { T } from '../../tokens.js';
+import { matchSearch } from '../../utils/searchMatch.js';
 import { NON_REP_ROLES } from '../../utils/roles.js';
 import DealPrepPicker from './DealPrepPicker';
 import { parseLocalDate } from '../../utils/dateLocal.js';
@@ -87,7 +88,7 @@ function TextInput({ value, onChange, placeholder, type = 'text' }) {
 function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp }) {
     const [open, setOpen] = useState(false);
     const safeVal = value || '';
-    const filtered = (suggestions || []).filter(s => (s || '').toLowerCase().includes(safeVal.toLowerCase()));
+    const { shown, more } = open ? matchSearch(suggestions, safeVal) : { shown: [], more: 0 };   // ranked while the list is open, the cut announced (state §0.194)
     return (
         <div style={{ position: 'relative' }}>
             <input
@@ -99,7 +100,7 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                 placeholder={placeholder}
                 style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, background: T.surface, color: T.ink, fontFamily: T.sans, boxSizing: 'border-box', outline: 'none' }}
             />
-            {open && filtered.length > 0 && (
+            {open && shown.length > 0 && (
                 <div style={{
                     position: 'absolute', [dropUp ? 'bottom' : 'top']: '100%', left: 0, right: 0,
                     background: '#fff', border: `1px solid ${T.border}`, borderRadius: T.r,
@@ -107,7 +108,7 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                     maxHeight: 180, overflowY: 'auto', zIndex: 200,
                     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                 }}>
-                    {filtered.slice(0, 20).map((s, i) => (
+                    {shown.map((s, i) => (
                         <div key={i}
                             onMouseDown={e => e.preventDefault()}
                             onClick={() => { onSelect(s); setOpen(false); }}
@@ -116,6 +117,7 @@ function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >{s}</div>
                     ))}
+                    {more > 0 && <div onMouseDown={e => e.preventDefault()} style={{ position: 'sticky', bottom: 0, background: 'inherit', padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{more} more — keep typing</div>}
                 </div>
             )}
         </div>

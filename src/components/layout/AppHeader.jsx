@@ -6,6 +6,7 @@ import { calendarReturnMessage } from '../../utils/calendarReturn.js';
 import { startCalendarConnect } from '../../utils/calendarConnect.js';
 import { isDispatcher, canUseDispatch } from '../../utils/roles.js';
 import { T } from '../../tokens.js';
+import { matchSearch, searchKey } from '../../utils/searchMatch.js';
 
 // ── Design tokens ────────────────────────────────────────────
 
@@ -400,17 +401,18 @@ export default function AppHeader({
                         </div>
                         {/* Results */}
                         <div style={{ overflowY: 'auto', flex: 1 }}>
-                        {globalSearch.length === 0 ? (
+                        {/* Only punctuation typed is no search yet: the matcher reads it as nothing (state §0.194). */}
+                        {!searchKey(globalSearch) ? (
                             <div style={{ padding: 32, textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
                                 Start typing to search accounts, contacts, and deals…
                             </div>
                         ) : (
                         <div className="spt-search-results">
                             {(() => {
-                                const q = globalSearch.toLowerCase();
-                                const mA = accounts.filter(a => (a.name||'').toLowerCase().includes(q) || (a.accountOwner||'').toLowerCase().includes(q)).slice(0,5);
-                                const mC = contacts.filter(c => ((c.firstName||'')+' '+(c.lastName||'')).toLowerCase().includes(q) || (c.company||'').toLowerCase().includes(q) || (c.email||'').toLowerCase().includes(q)).slice(0,5);
-                                const mO = opportunities.filter(o => (o.opportunityName||'').toLowerCase().includes(q) || (o.account||'').toLowerCase().includes(q)).slice(0,5);
+                                // The shared matcher (state §0.194): five a group (Jeff, 9 Oct: "Keep 5 per group"), best first, the rest announced.
+                                const { shown: mA, more: moreA } = matchSearch(accounts, globalSearch, { text: a => a.name, also: a => [a.accountOwner], limit: 5 });
+                                const { shown: mC, more: moreC } = matchSearch(contacts, globalSearch, { text: c => (c.firstName||'')+' '+(c.lastName||''), also: c => [c.company, c.email], limit: 5 });
+                                const { shown: mO, more: moreO } = matchSearch(opportunities, globalSearch, { text: o => o.opportunityName || o.account, also: o => [o.account], limit: 5 });
                                 if (!mA.length && !mC.length && !mO.length) return <div style={{ padding: '1.5rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No results found</div>;
                                 const GH = ({ label }) => <div style={{ padding: '6px 12px', fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', background: T.bg, borderBottom: `1px solid ${T.border}`, fontFamily: T.sans }}>{label}</div>;
                                 const RR = ({ primary, secondary, meta, onClick }) => (
@@ -425,9 +427,9 @@ export default function AppHeader({
                                 );
                                 return (
                                     <>
-                                        {mA.length > 0 && <div><GH label="Accounts"/>{mA.map(a => { const od = opportunities.filter(o => (o.account||'').toLowerCase() === (a.name||'').toLowerCase() && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length; return <RR key={'sa-'+a.id} primary={a.name} secondary={a.accountOwner ? `${a.accountOwner}${od > 0 ? ` · ${od} open deal${od>1?'s':''}` : ''}` : undefined} meta="Account" onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingAccount(a); }, 100); } }}/>; })}</div>}
-                                        {mC.length > 0 && <div><GH label="Contacts"/>{mC.map(c => <RR key={'sc-'+c.id} primary={`${c.firstName} ${c.lastName}`} secondary={[c.title,c.company].filter(Boolean).join(' · ')} meta="Contact" onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('contacts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingContact(c); }, 100); } }}/>)}</div>}
-                                        {mO.length > 0 && <div><GH label="Opportunities"/>{mO.map(o => <RR key={'so-'+o.id} primary={o.opportunityName || o.account || 'Unnamed'} secondary={`${o.account} · ${o.stage}`} meta={`$${(o.arr||0).toLocaleString()}`} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('pipeline'); { const askedOrg = requestOrg(); setTimeout(() => { if (!stillOrg(askedOrg)) return; setEditingOpp(o); setShowModal(true); }, 150); } }}/>)}</div>}
+                                        {mA.length > 0 && <div><GH label="Accounts"/>{mA.map(a => { const od = opportunities.filter(o => (o.account||'').toLowerCase() === (a.name||'').toLowerCase() && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length; return <RR key={'sa-'+a.id} primary={a.name} secondary={a.accountOwner ? `${a.accountOwner}${od > 0 ? ` · ${od} open deal${od>1?'s':''}` : ''}` : undefined} meta="Account" onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingAccount(a); }, 100); } }}/>; })}{moreA > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreA} more — keep typing</div>}</div>}
+                                        {mC.length > 0 && <div><GH label="Contacts"/>{mC.map(c => <RR key={'sc-'+c.id} primary={`${c.firstName} ${c.lastName}`} secondary={[c.title,c.company].filter(Boolean).join(' · ')} meta="Contact" onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('contacts'); { const askedOrg = requestOrg(); setTimeout(() => { if (stillOrg(askedOrg)) setViewingContact(c); }, 100); } }}/>)}{moreC > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreC} more — keep typing</div>}</div>}
+                                        {mO.length > 0 && <div><GH label="Opportunities"/>{mO.map(o => <RR key={'so-'+o.id} primary={o.opportunityName || o.account || 'Unnamed'} secondary={`${o.account} · ${o.stage}`} meta={`$${(o.arr||0).toLocaleString()}`} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('pipeline'); { const askedOrg = requestOrg(); setTimeout(() => { if (!stillOrg(askedOrg)) return; setEditingOpp(o); setShowModal(true); }, 150); } }}/>)}{moreO > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreO} more — keep typing</div>}</div>}
                                     </>
                                 );
                             })()}

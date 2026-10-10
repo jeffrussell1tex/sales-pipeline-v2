@@ -3,6 +3,7 @@ import { useApp } from '../../AppContext';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../../utils/storage';
 import { isoLocal } from '../../utils/dateLocal';
 import { T } from '../../tokens.js';
+import { rankMatches, capMatches, searchKey } from '../../utils/searchMatch.js';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
 
 export default function QuickLogFab() {
@@ -32,6 +33,8 @@ export default function QuickLogFab() {
         display: 'block', fontSize: '0.75rem', fontWeight: '600',
         color: T.inkMid, marginBottom: '0.375rem',
     };
+    // The contact search's matches, best first (state §0.194): six drawn, the rest announced.
+    const { shown: quickLogShown, more: quickLogMore } = capMatches(quickLogContactResults, 6);
 
     return (
         <>
@@ -77,13 +80,9 @@ export default function QuickLogFab() {
                                     onChange={e => {
                                         const q = e.target.value;
                                         setQuickLogForm(f => ({ ...f, contactSearch: q, contactId: '' }));
-                                        if (q.trim().length < 1) { setQuickLogContactResults([]); return; }
-                                        const ql = q.toLowerCase();
-                                        setQuickLogContactResults((contacts || []).filter(c =>
-                                            ((c.firstName || '') + ' ' + (c.lastName || '')).toLowerCase().includes(ql) ||
-                                            (c.company || '').toLowerCase().includes(ql) ||
-                                            (c.email || '').toLowerCase().includes(ql)
-                                        ).slice(0, 6));
+                                        // Only punctuation typed is no search yet: the matcher reads it as nothing (state §0.194).
+                                        if (!searchKey(q)) { setQuickLogContactResults([]); return; }
+                                        setQuickLogContactResults(rankMatches(contacts || [], q, (c) => (c.firstName || '') + ' ' + (c.lastName || ''), (c) => [c.company, c.email]));
                                     }}
                                     placeholder="Type contact name…"
                                     style={{ ...inputStyle, paddingRight: '2rem' }}
@@ -95,12 +94,12 @@ export default function QuickLogFab() {
                             </div>
                             {quickLogContactResults.length > 0 && !quickLogForm.contactId && (
                                 <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0, background: '#fff', border: '1px solid #e5e2db', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 10, overflow: 'hidden' }}>
-                                    {quickLogContactResults.map((c, idx) => {
+                                    {quickLogShown.map((c, idx) => {
                                         const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ');
                                         const sub = [c.title, c.company].filter(Boolean).join(' · ');
                                         return (
                                             <div key={c.id} onClick={() => { setQuickLogForm(f => ({ ...f, contactId: c.id, contactSearch: fullName })); setQuickLogContactResults([]); }}
-                                                style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: idx < quickLogContactResults.length - 1 ? `1px solid ${T.surface2}` : 'none' }}
+                                                style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: idx < quickLogShown.length - 1 ? `1px solid ${T.surface2}` : 'none' }}
                                                 onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                 onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                                                 <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1c1917' }}>{fullName || '—'}</div>
@@ -108,6 +107,7 @@ export default function QuickLogFab() {
                                             </div>
                                         );
                                     })}
+                                    {quickLogMore > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{quickLogMore} more — keep typing</div>}
                                 </div>
                             )}
                         </div>

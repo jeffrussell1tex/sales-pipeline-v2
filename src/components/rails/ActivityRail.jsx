@@ -4,6 +4,7 @@ import AttachmentsStrip from '../documents/AttachmentsStrip';
 import AccountPicker from './AccountPicker';
 import { dbFetch } from '../../utils/storage';
 import { T } from '../../tokens.js';
+import { matchSearch, searchKey } from '../../utils/searchMatch.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -34,19 +35,23 @@ function TextInput({ value, onChange, placeholder, type = 'text' }) {
 
 function Typeahead({ value, onChange, suggestions, onSelect, placeholder, dropUp }) {
     const [open, setOpen] = useState(false);
-    const filtered = (suggestions || []).filter(s => (s || '').toLowerCase().includes((value || '').toLowerCase()));
+    // The shared matcher (state §0.194), while the list is open: ranked, the cut announced.
+    // It opens as one types; nothing typed lists every suggestion, as it did, and only
+    // punctuation typed lists none (the matcher reads it as nothing).
+    const { shown, more } = open && (searchKey(value) || !(value || '').trim()) ? matchSearch(suggestions, value) : { shown: [], more: 0 };
     return (
         <div style={{ position: 'relative' }}>
             <TextInput value={value} onChange={v => { onChange(v); setOpen(true); }} placeholder={placeholder} />
-            {open && filtered.length > 0 && (
+            {open && shown.length > 0 && (
                 <div style={{ position: 'absolute', [dropUp ? 'bottom' : 'top']: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.border}`, borderRadius: T.r, marginTop: dropUp ? 0 : 2, marginBottom: dropUp ? 2 : 0, maxHeight: 180, overflowY: 'auto', zIndex: 300, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                    {filtered.slice(0, 8).map((s, i) => (
+                    {shown.map((s, i) => (
                         <div key={i} onMouseDown={e => e.preventDefault()} onClick={() => { onSelect(s); setOpen(false); }}
                             style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
                             onMouseEnter={e => e.currentTarget.style.background = T.bg}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >{s}</div>
                     ))}
+                    {more > 0 && <div onMouseDown={e => e.preventDefault()} style={{ position: 'sticky', bottom: 0, background: 'inherit', padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{more} more — keep typing</div>}
                 </div>
             )}
         </div>
@@ -60,11 +65,7 @@ function ContactMultiSelect({ contacts, value, onChange, placeholder }) {
     const [open, setOpen]   = useState(false);
     const selected = value || [];
     const nameOf = (c) => ((c?.firstName || '') + ' ' + (c?.lastName || '')).trim() || (c?.email || 'Unknown contact');
-    const q = query.toLowerCase();
-    const suggestions = (contacts || [])
-        .filter(c => !selected.includes(c.id))
-        .filter(c => !q || nameOf(c).toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q))
-        .slice(0, 8);
+    const { shown: suggestions, more } = open ? matchSearch((contacts || []).filter(c => !selected.includes(c.id)), query, { text: nameOf, also: c => [c.company] }) : { shown: [], more: 0 };   // ranked while the list is open, the cut announced (state §0.194)
     const add    = (id) => { onChange([...selected, id]); setQuery(''); setOpen(false); };
     const remove = (id) => onChange(selected.filter(x => x !== id));
     return (
@@ -102,6 +103,7 @@ function ContactMultiSelect({ contacts, value, onChange, placeholder }) {
                             {nameOf(c)}{c.company ? <span style={{ color: T.inkMuted }}> · {c.company}</span> : ''}
                         </div>
                     ))}
+                    {more > 0 && <div onMouseDown={e => e.preventDefault()} style={{ position: 'sticky', bottom: 0, background: 'inherit', padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{more} more — keep typing</div>}
                 </div>
             )}
         </div>

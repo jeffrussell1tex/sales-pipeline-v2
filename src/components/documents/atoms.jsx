@@ -11,6 +11,7 @@ import React, { useState } from 'react';
 import { T } from '../../tokens.js';
 import { parseLocalDate } from '../../utils/dateLocal.js';
 import { peopleMatching } from '../../utils/documentPeople.js';
+import { searchKey } from '../../utils/searchMatch.js';
 export { T };   // the Documents surfaces import T from here
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -177,6 +178,8 @@ export function PeopleChooser({ people = [], chosen = [], onToggle, nameOf }) {
     const [query, setQuery] = useState('');
     const [open, setOpen] = useState(false);
     const label = nameOf || ((id) => (people.find((p) => p.id === id) || {}).name || 'Former member');
+    // The shared matcher (state §0.194): fifty, best first, the rest announced at the list's
+    // foot; the list opens for a word typed, not for punctuation alone.
     const { shown, more } = peopleMatching(people, query, chosen);
     const add = (id) => { if (onToggle) onToggle(id); setQuery(''); setOpen(false); };
     return (
@@ -194,8 +197,8 @@ export function PeopleChooser({ people = [], chosen = [], onToggle, nameOf }) {
             )}
             <div style={{ position: 'relative' }}>
                 <input type="text" value={query} placeholder="Search people to share with…" autoComplete="off"
-                    onChange={(e) => { setQuery(e.target.value); setOpen(e.target.value.length > 0); }}
-                    onFocus={() => setOpen(query.length > 0)}
+                    onChange={(e) => { setQuery(e.target.value); setOpen(!!searchKey(e.target.value)); }}
+                    onFocus={() => setOpen(!!searchKey(query))}
                     onBlur={() => setTimeout(() => setOpen(false), 200)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && shown[0]) { e.preventDefault(); add(shown[0].id); } }}
                     style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, background: T.surface, color: T.ink, boxSizing: 'border-box', outline: 'none' }} />
@@ -211,7 +214,7 @@ export function PeopleChooser({ people = [], chosen = [], onToggle, nameOf }) {
                                 {p.name}
                             </div>
                         ))}
-                        {more > 0 && <div style={{ padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{more} more — keep typing</div>}
+                        {more > 0 && <div onMouseDown={e => e.preventDefault()} style={{ position: 'sticky', bottom: 0, background: T.surface, padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{more} more — keep typing</div>}
                     </div>
                 )}
             </div>

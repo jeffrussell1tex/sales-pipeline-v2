@@ -55,17 +55,18 @@ test('choosing a person puts them in, and a chip\'s × takes them out', () => {
     assert.deepEqual(toggled(['a', 'b'], 'a'), ['b']);
 });
 
-test('a search offers the members whose names hold what was typed — not those chosen, eight at a time (Jeff: "A type ahead multi select")', () => {
+test('a search offers the members whose names hold what was typed — not those chosen, fifty at a time (Jeff: "A type ahead multi select"; state §0.194)', () => {
     const people = sharablePeople(ROSTER, { selfId: 'usr_me', selfIsOwner: true });
     assert.deepEqual(peopleMatching(people, '', []), { shown: [], more: 0 }, 'nothing typed, nothing offered');
     assert.deepEqual(peopleMatching(people, '   ', []), { shown: [], more: 0 });
+    assert.deepEqual(peopleMatching(people, ' - ', []), { shown: [], more: 0 }, 'only punctuation typed is nothing typed (state §0.194)');
     assert.deepEqual(peopleMatching(people, 'BROOK', []).shown.map((p) => p.id), ['usr_abe'], 'in any case');
     assert.deepEqual(peopleMatching(people, 'a', []).shown.map((p) => p.id), ['usr_abe', 'usr_cara']);
     assert.deepEqual(peopleMatching(people, 'a', ['usr_cara']).shown.map((p) => p.id), ['usr_abe'], 'one chosen already is not offered again');
-    const many = Array.from({ length: 11 }, (_, i) => ({ id: `usr_${i}`, name: `Sam ${String(i).padStart(2, '0')}` }));
+    const many = Array.from({ length: 60 }, (_, i) => ({ id: `usr_${i}`, name: `Sam ${String(i).padStart(2, '0')}` }));
     const found = peopleMatching(many, 'sam', []);
-    assert.equal(found.shown.length, 8);
-    assert.equal(found.more, 3, 'and how many more — keep typing');
+    assert.equal(found.shown.length, 50);
+    assert.equal(found.more, 10, 'and how many more — keep typing');
 });
 
 test('the chooser is the deal\'s Contacts field\'s kind: chips with an ×, and a search', () => {

@@ -18,6 +18,7 @@ import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import TimeDropdown from '../components/ui/TimeDropdown';
 import { dbFetch, dbWrite, requestOrg, stillOrg } from '../utils/storage';
 import { T } from '../tokens.js';
+import { matchSearch } from '../utils/searchMatch.js';
 // The report builder's query engine and its chart (state §0.133): the preview
 // and an opened saved report are the same runReport() over the tab's scoped
 // sets, drawn by the same component.
@@ -5806,11 +5807,11 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                         const isOwner = o.salesRep === currentUserName;
                         if (!isOwner) return false;
                     }
-                    if (!oppSearch) return true;
-                    const s = oppSearch.toLowerCase();
-                    return (o.account||'').toLowerCase().includes(s) ||
-                           (o.opportunityName||'').toLowerCase().includes(s);
+                    return true;
                 });
+                // The picker's search, by the shared matcher (state §0.194): best first, the rest
+                // announced. The deal chosen stays on the page while another is sought.
+                const { shown: shownOpps, more: oppsMore } = matchSearch(visibleOpps, oppSearch, { text: o => `${o.account || ''} ${o.opportunityName || o.name || ''}` });
 
                 const selectedOpp = visibleOpps.find(o => o.id === selectedOppId) || null;
                 const selectedAccount = selectedOpp ? (accounts||[]).find(a => (a.name||'').toLowerCase() === (selectedOpp.account||'').toLowerCase()) : null;
@@ -5959,7 +5960,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                     color:T.ink, fontFamily:T.sans, outline:'none', boxSizing:'border-box' }}/>
                                         </div>
                                         <div style={{ maxHeight:260, overflowY:'auto' }}>
-                                            {visibleOpps.slice(0,12).map(o => (
+                                            {shownOpps.map(o => (
                                                 <div key={o.id}
                                                     onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); setLocalContactIds(null); setShowAddContact(false); setLocalPersonaMap({}); }}
                                                     style={{ padding:'9px 12px', borderRadius:T.r, cursor:'pointer',
@@ -5979,7 +5980,8 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                     {o.id === selectedOppId && <span style={{ color:T.goldInk, fontSize:11, fontWeight:700 }}>✓</span>}
                                                 </div>
                                             ))}
-                                            {visibleOpps.length === 0 && (
+                                            {oppsMore > 0 && <div onMouseDown={e => e.preventDefault()} style={{ position: 'sticky', bottom: 0, background: T.surface, padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{oppsMore} more — keep typing</div>}
+                                            {shownOpps.length === 0 && (
                                                 <div style={{ padding:'16px 12px', fontSize:12.5, color:T.inkMuted, textAlign:'center', fontStyle:'italic' }}>
                                                     No opportunities found
                                                 </div>

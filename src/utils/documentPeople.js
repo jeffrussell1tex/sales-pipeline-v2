@@ -7,6 +7,7 @@
 // id, the id the server checks each one against and a Specific document lists.
 //
 // Pure, so a test can run it.
+import { matchSearch, searchKey, SEARCH_LIMIT } from './searchMatch.js';
 
 // The people a document can be shared with: the org's active members, by name — without
 // the one choosing when the document is theirs (its owner always sees it).
@@ -18,13 +19,15 @@ export function sharablePeople(roster, { selfId = null, selfIsOwner = false } = 
 }
 
 // The members a search finds, to add (Jeff: "A type ahead multi select instead of a
-// prebuilt list" — the whole org as a list would not do for a large one): names holding
-// what was typed, in any case, not chosen already — the first `limit`, and how many more.
-export function peopleMatching(people, query, chosen = [], limit = 8) {
-    const q = String(query || '').trim().toLowerCase();
+// prebuilt list" — the whole org as a list would not do for a large one): the shared
+// matcher's answer (state §0.194) — every word typed, in any case, best first — over those
+// not chosen already; the first `limit` (fifty: the list scrolls), and how many more.
+// Nothing typed, or only punctuation, offers no one.
+export function peopleMatching(people, query, chosen = [], limit = SEARCH_LIMIT) {
+    const q = searchKey(query);
     if (!q) return { shown: [], more: 0 };
-    const hits = (Array.isArray(people) ? people : []).filter((p) => !chosen.includes(p.id) && p.name.toLowerCase().includes(q));
-    return { shown: hits.slice(0, limit), more: Math.max(0, hits.length - limit) };
+    const offered = (Array.isArray(people) ? people : []).filter((p) => !chosen.includes(p.id));
+    return matchSearch(offered, query, { text: (p) => p.name, limit });
 }
 
 // The names of the people a document is shared with, as the roster names them — one no

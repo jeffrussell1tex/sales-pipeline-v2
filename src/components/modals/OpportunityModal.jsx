@@ -8,6 +8,7 @@ import RecordDocuments from '../documents/RecordDocuments';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 import { T } from '../../tokens.js';
+import { capMatches } from '../../utils/searchMatch.js';
 import { contactsToAdd } from '../../utils/buyingCommittee.js';
 import { storedScore, signalKind } from '../../utils/aiScore.js';
 import { dealCommittee, engagedContacts, listedContacts, onDealOf, personLabel, withoutPerson } from '../../utils/dealEngagement.js';
@@ -1145,25 +1146,7 @@ export default function OpportunityModal({
     };
     const closeQuarter = calculateCloseQuarter(formData.forecastedCloseDate);
 
-    // ── Account/site option builders (fully preserved) ───────
-    const allAccountOptions = [];
-    const topLevel = (accounts || []).filter(a => !a.parentAccountId);
-    topLevel.forEach(account => {
-        allAccountOptions.push({ value: account.name, label: account.name, tier: 'account', id: account.id });
-        const bus = (accounts || []).filter(a => a.parentAccountId === account.id);
-        bus.forEach(bu => {
-            allAccountOptions.push({ value: bu.name, label: `${account.name} › ${bu.name}`, tier: 'business_unit', id: bu.id, parentName: account.name });
-            (accounts || []).filter(a => a.parentAccountId === bu.id).forEach(site => {
-                allAccountOptions.push({ value: site.name, label: `${account.name} › ${bu.name} › ${site.name}`, tier: 'site', id: site.id, parentName: bu.name });
-            });
-        });
-        const directSites = (accounts || []).filter(a => a.parentAccountId === account.id && a.accountTier === 'site');
-        directSites.forEach(site => {
-            if (!allAccountOptions.find(o => o.id === site.id))
-                allAccountOptions.push({ value: site.name, label: `${account.name} › ${site.name}`, tier: 'site', id: site.id, parentName: account.name });
-        });
-    });
-
+    // ── The chosen account's sites ───────────────────────────
     const getSitesForAccount = (accountName) => {
         if (!accountName) return [];
         const matched = (accounts || []).find(a => a.name.toLowerCase() === accountName.toLowerCase());
@@ -1288,7 +1271,9 @@ export default function OpportunityModal({
         setMentionQuery(null);
         if (commentTextareaRef.current) commentTextareaRef.current.focus();
     };
-    const filteredMentions = mentionQuery !== null ? teamMembers.filter(m => m.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0, 6) : [];
+    // A mention matches the start of a name, as before (OPEN_ITEMS §4.8 holds the every-word
+    // alternative, Jeff's to decide); six drawn, the rest announced (state §0.194).
+    const { shown: filteredMentions, more: moreMentions } = capMatches(mentionQuery !== null ? teamMembers.filter(m => m.toLowerCase().startsWith(mentionQuery.toLowerCase())) : [], 6);
 
     // ── Activity data for this opp ────────────────────────────
     const oppActivities = opportunity
@@ -1674,6 +1659,7 @@ export default function OpportunityModal({
                                                 value={accountSearch}
                                                 onChange={(v) => { setAccountSearch(v); if (validationErrors.account) setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); if (!v.trim()) setFormData(prev => ({ ...prev, account: '', accountId: '' })); }}
                                                 onSelectAccount={(acc) => { setAccountSearch(acc.name); setFormData(prev => ({ ...prev, account: acc.name, accountId: acc.id, site: '' })); setSiteSearch(''); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); const sites = getSitesForAccount(acc.name); if (sites.length > 0) setShowSiteSuggestions(true); }}
+                                                onSelectSite={(site, parent) => { setAccountSearch(parent.name); setFormData(prev => ({ ...prev, account: parent.name, accountId: parent.id, site: site.name })); setSiteSearch(site.name); setShowSiteSuggestions(false); setValidationErrors(prev => { const n = { ...prev }; delete n.account; return n; }); }}
                                                 onError={(msg) => setValidationErrors(prev => { const n = { ...prev }; if (msg) n.account = msg; else delete n.account; return n; })}
                                                 filterFn={(a) => a.accountTier !== 'site'}
                                                 placeholder="Start typing account name…"
@@ -2135,6 +2121,7 @@ export default function OpportunityModal({
                                                                     <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{name}</span>
                                                                 </div>
                                                             ))}
+                                                            {moreMentions > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{moreMentions} more — keep typing</div>}
                                                         </div>
                                                     )}
                                                     {commentDraft.trim() && (

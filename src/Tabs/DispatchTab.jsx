@@ -13,6 +13,7 @@ import { INVOICE_STATUSES, invoiceStatusLabel, invoiceTotals, cleanInvoiceLines,
     JOB_LINE_TYPES, todayYmd as invoiceToday, fmtMoney, sortInvoicesForList } from '../utils/invoices.js';
 import TimeDropdown from '../components/ui/TimeDropdown.jsx';
 import { T as TOKENS } from '../tokens.js';
+import { matchSearch } from '../utils/searchMatch.js';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 // Dispatch keeps its own base radius (4, not the app's 3) — the one deliberate
@@ -320,19 +321,18 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
     const [open, setOpen] = React.useState(false);
     const q = (query || '').trim().toLowerCase();
 
-    const byName = (list) => (q ? list.filter(x => (x.name || '').toLowerCase().includes(q)) : list);
+    const byName = { text: x => x.name, limit: 6 };   // the shared matcher, six a group (Jeff, 9 Oct: "Keep 6 per group"), the rest announced (state §0.194)
 
     // Group 1 — existing dispatch customers (already have a customerNumber).
-    const custMatches = byName(customers || []).slice(0, 6);
+    const { shown: custMatches, more: custMore } = matchSearch(customers, query, byName);
 
     // Group 2 — CRM accounts with no dispatch customer yet. Picking one creates
     // the dispatch customer on save, linked back via accountId, so the same
     // company is not duplicated across the CRM and Dispatch.
     const linkedAccountIds = new Set((customers || []).map(c => c.accountId).filter(Boolean));
     const linkedNames      = new Set((customers || []).map(c => (c.name || '').trim().toLowerCase()));
-    const acctMatches = byName(accounts || [])
-        .filter(a => !linkedAccountIds.has(a.id) && !linkedNames.has((a.name || '').trim().toLowerCase()))
-        .slice(0, 6);
+    const { shown: acctMatches, more: acctMore } = matchSearch((accounts || [])
+        .filter(a => !linkedAccountIds.has(a.id) && !linkedNames.has((a.name || '').trim().toLowerCase())), query, byName);
 
     const exact = [...(customers || []), ...(accounts || [])]
         .some(x => (x.name || '').trim().toLowerCase() === q);
@@ -383,6 +383,7 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
                             )}
                         </div>
                     ))}
+                    {custMore > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{custMore} more — keep typing</div>}
                     {acctMatches.length > 0 && (
                         <div style={hdrSt}>CRM accounts — not yet in Dispatch</div>
                     )}
@@ -397,6 +398,7 @@ const CustomerTypeahead = ({ customers, accounts, query, selectedId, selectedAcc
                             )}
                         </div>
                     ))}
+                    {acctMore > 0 && <div onMouseDown={e => e.preventDefault()} style={{ padding: '6px 10px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{acctMore} more — keep typing</div>}
                     {showCreate && (
                         <div style={{ ...rowSt, borderBottom: 'none', color: T.info, fontWeight: 600 }}
                             onMouseDown={e => { e.preventDefault(); onCreateIntent(); setOpen(false); }}>

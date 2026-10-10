@@ -4,6 +4,7 @@ import { canEditCrm } from '../utils/roles.js';
 import { dbFetch, requestOrg, stillOrg } from '../utils/storage';
 import { isoLocal } from '../utils/dateLocal';
 import { T } from '../tokens.js';
+import { matchSearch } from '../utils/searchMatch.js';
 
 // ── Design tokens ──────────────────────────────────────────────
 
@@ -420,10 +421,7 @@ function ContactPicker({ contacts, existingIds, onAdd, onClose, anchorRect }) {
     useEffect(() => { inputRef.current?.focus(); }, []);
 
     const q = query.trim().toLowerCase();
-    const filtered = contacts
-        .filter(c => !existingIds.has(c.id))
-        .filter(c => !q || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q))
-        .slice(0, 8);
+    const { shown: filtered, more } = matchSearch(contacts.filter(c => !existingIds.has(c.id)), query, { text: c => `${c.firstName || ''} ${c.lastName || ''}`, also: c => [c.company] });
 
     // Position: open above the anchor if too close to bottom
     const POPOVER_H = 280;
@@ -485,6 +483,7 @@ function ContactPicker({ contacts, existingIds, onAdd, onClose, anchorRect }) {
                         </div>
                     ))
                 )}
+                {more > 0 && <div onMouseDown={e => e.preventDefault()} style={{ position: 'sticky', bottom: 0, background: T.surface, padding: '6px 12px', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{more} more — keep typing</div>}
             </div>
         </div>
     );

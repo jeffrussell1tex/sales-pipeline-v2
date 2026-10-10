@@ -30,31 +30,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **The account search's silent cut at 8** (§4.8, seen on PROD 9 Oct;
-   Jeff, 9 Oct: "Account search fix first", i.e. before batch B). One shared
-   matcher for every typed list that cuts. A duplicate account is one click
-   away while it stands. Planned and reviewed 9 Oct (workflow: four readers,
-   two designs, a judge, three critics). The class sweep found 16 live silent
-   cuts. Jeff's answers, 9 Oct:
-   - New Deal → Account: "List matching sites below". Only sites whose own
-     name matches are listed, after the accounts, labelled "site of …".
-     Picking one fills Account with its parent and Site Name with the site.
-   - "50, then 'N more'" in lists that scroll, the contact pickers that open
-     on a click included. The quick log keeps 6, because its box does not
-     scroll.
-   - Claude first said the header search does not scroll. It does, and Jeff
-     was told so. His answer: "Keep 5 per group". Dispatch's New Job customer
-     field: "Keep 6 per group". Both are grouped boxes with more than one
-     list in view.
-   - A sub-account is also found by its parent's name: "Yes, listed below
-     own-name matches". In the deal window a site still appears only by its
-     own name.
-   - The parent label on the four other account lists (New Task → Account,
-     an account's Parent field, the header search, Dispatch): "Next batch",
-     with the save fix below.
-   - A save keeping the record picked, not the first of its name: "After
-     batch B" (item 3).
-2. **One name per member of an org — batch B of the PROD Closed Lost fix**
+1. **One name per member of an org — batch B of the PROD Closed Lost fix**
    (§0.193; Jeff, 9 Oct: "Split: prod fix first", "Number it", "Yes, Full name
    wins"). Batch A (§0.193) stopped the harm: a save that reassigns nothing
    keeps its owner, and the dialog says why a save was refused. Two members of
@@ -88,7 +64,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
          The front part is its own later item (§4.6).
        - "Full name wins" is enforced on the Settings → Users screen only.
        - Pairs found are renamed by hand.
-3. **A pick is saved as the record picked** (Jeff, 9 Oct: "After batch
+2. **A pick is saved as the record picked** (Jeff, 9 Oct: "After batch
    B"). Every Company, Account, Deal and Parent save resolves the TYPED NAME
    to the first record of that name, not the row picked. The parent label
    goes on the four account lists that lack it in the same batch.
@@ -98,16 +74,45 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      sub-account of Shell, so the empty one is a stray copy (§2.4).
    - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived.
      It still lists, because the accounts GET does not filter archived rows.
-4. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
+   - Where each save resolves by name (read 9 Oct, §0.194): ContactRail's
+     and ActivityRail's handleSave take the Company as the first account of
+     that name, in any case and any tier; the deal window's saveDeal and its
+     Contacts-tab Save do the same for the Account, so a site's name typed
+     and saved without picking makes the site the deal's account (a
+     designer's SELECT counted 6 such deals in UKG, not re-read); TaskRail's
+     handleSave takes the account, deal and contact by exact name, and a
+     cleared field keeps the old id, so a task's account or deal cannot be
+     cleared; AccountRail's Parent pick takes the first account of the name.
+   - Since §0.194 the account picker offers no Create for another spelling
+     of a saved name ("Ineos - Acetyls" reads as INEOS Acetyls). Picking the
+     row works; a Save without picking still refuses the typed spelling,
+     and tells the user to use a Create neither field offers for that name
+     now: the rails' handleSave with "isn't a saved account. Pick one from
+     the list, or use “Create” in the Company field", the deal window's
+     saveDeal with "Pick an account from the list, or use “Create” in the
+     Account field". The fix keeps the id picked, and compares a typed name
+     by `searchKey`.
+   - In the deal window, a site's exact name whose account is not in the
+     user's list (a rep's scope) draws a line since §0.194 — "“…” is a
+     site — pick the account it belongs to" — where it drew nothing (no
+     line when another account of that name has a row: UKG's unit "Shell -
+     Port Allen"); a Save of that typed name still takes the first account
+     of the name, the site included (as above).
+   - The parent label: §0.194 puts it on the account picker's rows only (New
+     Contact's and Log Activity's Company, New Deal's Account). New Task →
+     Account, an account's Parent field, the header search and Dispatch
+     still draw bare names, so the two "Shell - Port Allen" rows read alike
+     there.
+3. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
-5. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
+4. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. Designed 9 Oct (three batches and a fourth; ten
    questions for Jeff first — §4.1).
-6. **Deal data** (§4.2):
+5. **Deal data** (§4.2):
    - the deal endpoint saving `accountId`;
    - notes appended on the server;
    - an Undo keeping the row's owner.
-7. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
+6. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
 ---
@@ -224,7 +229,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     two writes at one moment can still make a pair. It cannot be built while
     any pair exists, and Postgres's whitespace class differs slightly from
     JS's. Jeff, 9 Oct: "Record now, decide later", after batch B's
-    read-only check shows no pairs (§1 item 2).
+    read-only check shows no pairs (§1 item 1).
 - **Data changes, by Jeff's hand:**
   - The job editor's jsonb lists are stored as strings. The app reads them as
     arrays; SQL over the column does not. Rewrite the stored strings.
@@ -239,6 +244,13 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     site of that name, which has 2 contacts (SELECT 9 Oct). Jeff, 9 Oct: it
     is one sub-account of Shell. Merge the empty copy into the real one in
     the app.
+  - PROD, UKG: "INEOS WL Plastics - Bowie" sits under INEOS Pigments, not
+    "INEOS - WL Plastics" (SELECT 9 Oct). The 6 deals whose account is a
+    site (a designer's SELECT 9 Oct, not re-read) each want the site's
+    parent as the account and the site as the Site Name.
+  - DEV (Accelerep Test, org_3BDQ): two names saved twice in two
+    spellings, "INEOS"/"Ineos" and "TransMountain"/"Transmountain" (a
+    designer's SELECT 9 Oct, not re-read). Merge each pair in the app.
 - **The signal migration: ON HOLD.**
   - Jeff, 14 Sep: "leave things as are for now. I am not sure that is the
     direction I want to go". Build nothing from it unless he resumes.
@@ -481,7 +493,9 @@ model's pattern to deals.
   in KNOWN; giving one a way in, or retiring it, updates KNOWN):
   - nothing sets `showOutlookImportModal` (§0.186 (b));
   - ContactModal is rendered nowhere: the contact rail replaced it
-    (§0.186 (b));
+    (§0.186 (b)); its contact search still cuts at 8 without a count,
+    named in tests/search-match.test.mjs's G1_ALLOWED until the file goes
+    (§0.194);
   - TaskViewRail draws on `viewingTask`, which nothing opens: the context's
     `setViewingTask` opens the task rail (§0.190 (a), 8 Oct);
   - the notes popover: ModalLayer draws it, App's Escape and the order name
@@ -502,6 +516,8 @@ model's pattern to deals.
   click is that fast. §0.170 (h).
 - **Popovers** (§0.127 / §0.128, as recorded):
   - the three integration row menus are fixed but not portaled;
+  - TasksTab's ContactPicker (a task's contact search) is `position: fixed`
+    and not portaled (§0.194's review, 9 Oct);
   - `menuPlacement` should fold into `popoverPlacement`;
   - the menu card's height allowance is a constant (300);
   - RepPickerPopover and the status picker are not audited.
@@ -556,7 +572,24 @@ model's pattern to deals.
   `salesRep`, `companyName`, `opportunityName`. A guard like
   tests/deal-fields.test.mjs's, for activities, would hold the class.
 - **The deal form's "+ New Contact" does nothing** (sets a state nothing
-  draws; ModalLayer passes no handler). §0.192, as recorded.
+  draws; ModalLayer passes no handler). §0.192, as recorded. Dead beside it
+  in OpportunityModal (read 9 Oct, §0.194): `NestedNewContactForm` (defined,
+  drawn nowhere in the file), `showAccountSuggestions` (set and read
+  nowhere), and the props `onSaveNewAccount`, `onAddContact` and
+  `onOpenNestedAccount` (taken, never used). §0.194 removed
+  `allAccountOptions`, built on every render and never read.
+- **An account's Parent field offers any account** — sites and the
+  account's own sub-accounts included, by bare name (AccountRail's Parent
+  Typeahead leaves out only the account itself) — and the accounts
+  endpoint takes `parentAccountId` as sent, with no tier or cycle check
+  (`sanitize`): a site can become a parent, and an account can be put
+  under one of its own sub-accounts. Read 9 Oct (§0.194's review).
+- **The deal window reads two names with no null guard:**
+  `getSitesForAccount`'s `a.name.toLowerCase()` and the Sales Rep list's
+  `u.name.toLowerCase()`. `accounts.name` is NOT NULL in the schema;
+  whether any `settings.users` entry lacks a name was not checked. A row
+  without one would throw while the window draws. Read 9 Oct (§0.194's
+  review).
 - **The deal endpoint never saves `accountId`.** Its sanitize has none, though
   the form sends one. Accepting it needs a check that the account is this
   org's. §0.176 (e).
@@ -652,6 +685,10 @@ model's pattern to deals.
 
 ### 4.3 Settings
 
+- **The settings search ignores the org's Dispatch switch.** AdminView's
+  search filters every workspace item, skipping the `dispatchEnabled` rule
+  the tabs apply, so Dispatch settings are found by search in an org with
+  Dispatch off. Read 9 Oct (§0.194's review).
 - **Sixteen settings keys no screen sets by name** (an unverified scan; read
   each before saying anything of it). §0.188 (b), 7 Oct.
 - **Funnel stages keeps its own default stages,** in another shape.
@@ -682,6 +719,16 @@ model's pattern to deals.
 
 ### 4.4 Dispatch
 
+- **A new job's customer is made from typed text.** handleSaveNewJob POSTs a
+  new dispatch customer whenever none was picked, so "Acme Inc" typed
+  beside a saved "Acme, Inc." makes a second; the field's `linkedNames`
+  compares raw lower-cased names, so that account still shows under "CRM
+  accounts — not yet in Dispatch". §0.194 gave the field's two groups the
+  matcher and a count, and left its exact check, Create and save as they
+  were. The field lists on focus, so since §0.194 punctuation alone ("-")
+  lists the first six of each group, as the empty field does (the old
+  filter listed only names holding "-"), and Create “-” is offered as
+  before. Read 9 Oct.
 - **Technician mode loads four lists TechnicianView never shows.**
   §0.172 (c).
 - **DispatchTab's job-template note** calls `equipmentIds` FK ids; they are
@@ -717,7 +764,7 @@ model's pattern to deals.
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
-- **Two member-name items around batch B** (§1 item 2; Jeff, 9 Oct: "Record
+- **Two member-name items around batch B** (§1 item 1; Jeff, 9 Oct: "Record
   it for later"):
   - The "+ New Rep" window (UserModal) paints Work Email red for every
     refusal, a taken name included. The fix carries the 409's `field`
@@ -733,6 +780,10 @@ model's pattern to deals.
     client's bare `update` rows stand in.
   - (2) Rows carry no caller role.
   - (3) The panel reads the last 500 rows and wants paging.
+  - (4) An account made by the account picker's Create writes no row at
+    all (no server row, no client one), and the accounts POST checks no
+    name against the org's: the dev org (Accelerep Test, org_3BDQ) holds
+    "INEOS"/"Ineos" (§2.4). Read 9 Oct (§0.194).
   - Source: §0.143.
 - **The recommendation log names its rep by display name** (`repName`, the
   deal's `salesRep`; no owner id). §0.191 holds a rep to the rows bearing
@@ -804,39 +855,52 @@ model's pattern to deals.
 
 ### 4.8 Other UI
 
-- **The account search hides matches past the eighth, without saying so.**
-  Seen on PROD 9 Oct (Jeff: New Contact's Company field, then New Deal's
-  Account field; read in the database, SELECT only). `AccountPicker.jsx:68`
-  draws `filtered.slice(0, 8)`, where `filtered` is one substring match. The
-  list is in the order the GET returns: by name, in the database's
-  `C.UTF-8` collation, so every capital "INEOS…" comes before any "Ineos…".
-  In the UKG org, 55 accounts contain "ineos". "Ineos Acetyls - Texas City"
-  (a site under the business unit "INEOS Acetyls") is 55th of 55. Typing
-  "ineos" shows INEOS and seven "INEOS - …" units, with nothing about the
-  other 47.
-  - The deal window's Account field (`OpportunityModal.jsx:1673`) also
-    hides every `site` account, by design. A site goes in Site Name, which
-    lists the chosen account's sites with no cap. There, "INEOS Acetyls" is
-    14th of 15.
-  - One substring means "Ineos - Acetyls" matches nothing, because the
-    stored name has its dash after "Acetyls". The list then offers "Create …
-    as a new account": a duplicate account is one click away.
-  - Workaround until fixed: type a later word, such as "acetyl" (2 matches)
-    or "texas city" (7).
-  - The same silent cut is in five more search lists: `ContactModal.jsx:47`
-    (contacts, 8), the Typeaheads at `ActivityRail.jsx:43` and
-    `TaskRail.jsx:76` (8), and `AccountRail.jsx:110` and
-    `ContactRail.jsx:104` (20).
-  - Recommended fix, the class at once: one shared matcher.
-    - Every typed word must appear, ignoring punctuation.
-    - Ranking is exact, then starts-with, then a word start, then anywhere,
-      then A–Z ignoring case.
-    - The list scrolls, as it already has a max height. It keeps a higher
-      cap with a "N more — keep typing" line.
-    - Units and sites show their parent.
-    - A parse-scan test proves no search list slices without that line.
-  - Also found: `allAccountOptions` (`OpportunityModal.jsx:1149`) is built
-    on every render and never read.
+- **Typed lists still drawn whole, with no cut and no ranking** (§0.194 put
+  the matcher on every live typed list that cut, but for the duplicate
+  warnings and the @mention below; these never cut):
+  - the deal window's Contacts (about 1,500 rows on one letter in UKG, a
+    designer's count), "Add to buying committee" (no max height), Site
+    Name, Sales Rep (a prefix match);
+  - DocumentLinkPicker (every record on an empty query), Reports'
+    EntitySelector and AddContactToOppPanel;
+  - as recorded by §0.194's review, not re-read one by one: DocumentPicker,
+    QuotesTab's two searches, AdminView's settings search, the Leads tab's
+    status and rep popovers, CoachingNoteDialog, AuditDetail's actor list,
+    AccountsTab's sub-account drawer, ContactsTab's company list, and the
+    tab tables' filters.
+  - Recommended: the matcher where a list can be long, and G1
+    (tests/search-match.test.mjs) taught to fail a typed filter drawn with
+    no cut.
+- **The search fields' keys and blur** (as recorded by §0.194's readers):
+  AccountPicker and the activity rail's Opportunity field never close on
+  blur; no list takes arrow keys, Enter or Escape; Enter in the deal
+  window's Account field submits the form; Escape with the activity rail's
+  list open closes the rail; the four rail Typeahead copies remain.
+  Recommended: one shared, module-scope, portaled field (guide §16), as its
+  own batch.
+- **The duplicate warnings cut at three, unranked and silent** (AccountRail's
+  and ContactRail's `dupWarning.slice(0, 3)`); "Open existing" opens the
+  first. G1 cannot see a list held in React state, so tests/search-match
+  names them in G1_BLIND; they are not held. §0.194.
+- **The deal notes' @mention matches the start of a name** (the text after
+  "@" as typed, which can hold spaces), in the roster's A–Z order, six with
+  the count since §0.194. The alternative — any word of the name, ranked
+  ("@smi" would find Ann Smith) — is Jeff's to decide: the mention is read
+  out of the note as it is typed, so a looser match keeps the list open
+  mid-sentence, where Enter inserts a mention. §0.194.
+- **A rail type-ahead over plain names works every key out on every
+  keystroke** (New Task → Account, an account's Parent field, the activity
+  and task rails' Opportunity fields): a list of names has no row to keep
+  keys with (§0.194). Measured 9 Oct in node on Jeff's machine (median ms a
+  keystroke, synthetic names): 668 accounts 0.17–0.27 (before §0.194:
+  0.02), 5,000 accounts 1.0–2.0 (0.15), 20,000 accounts 4.1–8.2 (0.6); the
+  higher figure when one name in five has an accent. The alternative: a
+  memo of names emptied when the org changes (a one-line hook in App.jsx's
+  org switch, and a test). Recommended: leave it; revisit if an org passes
+  ~10,000 accounts. Jeff's to decide.
+- **The Leads Cockpit's "Search leads…" is a label, not a field** (a
+  `<span>` in CockpitView; the Triage view's search is an input). Read
+  9 Oct (§0.194's review).
 - **Five native time inputs:** AppHeader's digest time, and four in
   DispatchTab. They become the house TimeDropdown. Re-read 7 Oct: five
   sites.
@@ -847,7 +911,8 @@ model's pattern to deals.
 - **AccountsTab layout polish.** As recorded.
 - **70 churn-only inline components** (`npm run check:inline -- --churn`;
   counted 7 Oct, §9 said 76). SalesManagerTab's SubTabs, TeamTab and AuditTab
-  are among them, per §0.84. Opportunistic.
+  are among them, per §0.84, and AppHeader's search results' `GH` and `RR`,
+  beside §0.194's lines. Opportunistic.
 
 ---
 
@@ -884,6 +949,13 @@ model's pattern to deals.
   deleted). A restart with
   `.netlify/functions-serve` cleared served the file. A standing note: after
   editing a function, restart before a pane check of it.
+- **TaskRail's `contactNames` is computed and never read** (read 9 Oct,
+  §0.194). A one-line delete.
+- **A memory-note amendment for Jeff to approve** (to
+  bash-heredoc-backslashes): the Write tool is safe for a backslash before
+  `(` or `{`, but turns a backslash, "u" and four hex digits into that
+  character. Copy such a file, or build the backslash in a script with
+  `String.fromCharCode(92)` — §0.194's test does the latter.
 - **The stray fixture** `tests/fixtures/scanners/dupes-jsx-attribute - Copy.jsx`
   is still tracked (re-read 7 Oct). A one-line delete.
 - **Never `npm audit fix --force`:** it installs vite@8. The remaining
