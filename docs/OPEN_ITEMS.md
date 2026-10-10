@@ -183,6 +183,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   - Source: §0.158 (2 Oct), as recorded.
 - **Prod's Jobs tile.** Settings → Jobs → Report delivery "ok" has not been
   observed on prod; the delivery itself is proven. Handoff §5 (16 Sep).
+- **How long a Google calendar connection lasts, and whether both sites can
+  read it** (read 10 Oct; open questions, not checked):
+  - Google Cloud Console → OAuth consent screen → Publishing status. If it
+    reads "Testing", Google ends a connection's refresh token after 7 days
+    (Google's documentation). That would explain the refused connection
+    (§4.4), and would end the connection made 10 Oct around 17 Oct.
+  - Dev and prod share one database, so a calendar connection made on one
+    site is read by the other. If the two sites' `GOOGLE_CLIENT_ID` /
+    `GOOGLE_CLIENT_SECRET` or `SETTINGS_ENCRYPTION_KEY` differ, the other
+    site's reads fail with no message and show an empty calendar (§4.4).
 
 ### 2.2 Around the next ship to prod
 
@@ -215,6 +225,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 - **QuickLog's "📅 Add to Google Calendar"** promises an event and makes
   none. Wire it to `fireActivityCalendarEvent`, or remove the box.
   §0.169 (f).
+  - Read 10 Oct: wired, it would add an all-day event dated today, recording
+    the activity logged. That is not a meeting. The read-only Google
+    permission would most likely refuse it, with only a console warning.
+  - With §3.6's real Google meetings (Jeff, 10 Oct), recommended: remove the
+    box.
 - **Field-level security, made real:** design questions before any code.
   See §3.3.
 - **"Send to customer"** marks a quote Sent and emails nothing. Decided: a
@@ -427,7 +442,13 @@ model's pattern to deals.
   it). The SPIFF panel, desktop-only today, belongs in it.
 - **E2E tests (Playwright):** a thin happy path. The hurdle is automating
   Clerk's sign-in.
-- **Microsoft (Azure) OAuth and Yahoo Calendar:** deferred.
+- **Microsoft (Azure) OAuth and Yahoo Calendar:** deferred. Read 10 Oct:
+  the code that reads Outlook meetings exists, offered only in the
+  Admin-only Settings → Connected apps (Home and the profile's Calendar tab
+  offer Google only). It passes Outlook's times on with no time zone, and
+  Microsoft answers in UTC unless asked otherwise (its documentation; not
+  tested), so Outlook meetings would likely show at the wrong hour. Yahoo is
+  not read at all.
 - **`dispatchJobTypes` and `dispatchTrades` settings panels.** `jobType` and
   `trade` are hard-coded and nothing branches on them.
 - **A dispatch job create in one transaction.** Today the New Job flow is three
@@ -456,6 +477,53 @@ model's pattern to deals.
   - no "next send" time on the card;
   - the library's four hard-coded "Pinned" tiles;
   - a pinned report on Home uses the app's visibility, the tab its own scope.
+
+### 3.6 The calendar: a real view, and real Google meetings (Jeff, 10 Oct)
+
+Read 10 Oct (a workflow: three readers and a skeptic; the code at `c9d4b17`;
+the database, SELECT only). Jeff asked whether, once the calendar items are
+done, he can see his calendar on a day with no meetings, and add meetings to
+it. Today the Tasks tab's Calendar view (beside List) draws one day, 8 am to
+6 pm: Google meetings in green, timed tasks in blue, booked or not. Home shows
+only a status line. No other item on this list adds a calendar view or a way
+to add meetings. Nothing in the app adds a meeting to Google:
+- the connection asks Google for `calendar.readonly`
+  (calendar-oauth-start.mjs);
+- the one add-event function (calendar-add-event.mjs) makes all-day events
+  only;
+- no screen ever sends it a request.
+
+- **The view** (Jeff: "Build up Tasks → Calendar"):
+  - it loads its own meetings for the day or week on screen. Today it reads
+    what Home fetched: today and the next six days, after Home has been
+    opened in that org;
+  - a Week view;
+  - all-day meetings drawn (today they are counted in "This week", not
+    drawn);
+  - the real last-synced time ("Synced · Google · 2m ago" is fixed text);
+  - Home's meeting line links to it;
+  - a block opens what it shows, and an empty hour offers a new meeting
+    (nothing on the grid can be clicked today);
+  - one clock for Google times: the grid places a meeting at the clock time
+    in its own offset, Home in the browser's time, so the two can disagree.
+- **Real Google meetings** (Jeff: "Yes, real Google meetings"):
+  - a "New meeting" with a start and end time, a place and invitees, put on
+    the user's Google calendar with invites sent;
+  - editing and deleting follow it (Google's event id kept);
+  - a success or failure message;
+  - the Google permission widened from read-only to events
+    (calendar-oauth-start.mjs), and that permission added on the Google Cloud
+    consent screen (Jeff's step);
+  - every connected person presses Reconnect once (today: Jeff's three
+    connections, one per org);
+  - decide who may add to a company calendar: calendar-add-event falls back
+    to it with no role check today;
+  - recommended: remove QuickLog's "Add to Google Calendar" box rather than
+    wire it (§2.4).
+- **A question for Jeff:** only the main (primary) Google calendar is read,
+  100 events at most. Meetings kept on other Google calendars do not show; a
+  calendar picker would fix it.
+- Its place in §1's order: not yet set.
 
 ---
 
@@ -523,7 +591,17 @@ model's pattern to deals.
   - RepPickerPopover and the status picker are not audited.
 - **Home's calendar strip keeps the previous org's events** while the new
   org's fetch runs. §0.125, as recorded. §0.173's per-org clearing may have
-  closed it; re-read it.
+  closed it. Read 10 Oct: App.jsx empties the events on an org switch,
+  before the new org's load. This was read in the code, not seen in the pane.
+  Likely closed: confirm in the pane, then remove.
+- **Home says "Connect your calendar" while it loads, and when the load
+  fails.** HomeTab checks only the connected flag, which is off until the
+  answer arrives. A connected user sees the prompt for a moment on every load
+  and org switch, and in place of an error. The profile's Calendar tab shows
+  the error. Recommended: "Checking…", then an error with Retry. Read 10 Oct.
+- **The profile's Calendar tab reads what Home fetched.** After an org switch
+  made from another tab, a connected user sees "Not connected", OFF and
+  "Connect Google Calendar", with no Refresh. Read 10 Oct.
 - **Three dialogs on the legacy `.modal` class** (confirm, prompt, blocked
   delete). The guide wants inline chrome. §0.136, as recorded.
 - **Log from calendar is dead code.** Its state and two handlers have no
@@ -716,6 +794,12 @@ model's pattern to deals.
   use it. As recorded.
 - **The nightly lead-model batch's whole-blob settings write** could lose a
   concurrent Admin save. §0.123, as recorded.
+- **The Company calendar page's "Connected holiday sources" card does
+  nothing.**
+  - Its Connect and Disconnect labels have no handler.
+  - Its "Google Calendar · holidays@accelerep.com" row reads
+    `settings.googleCalendarConnected`, which nothing sets.
+  - Read 10 Oct.
 
 ### 4.4 Dispatch
 
@@ -736,6 +820,17 @@ model's pattern to deals.
 - **The accounts on-create duplicate probe has no caller.** §0.172 (d).
 - **A user's Google calendar refresh token is refused** (`invalid_grant`) in
   the dev log. §0.173 (c).
+  - Read 10 Oct (SELECT only): the three saved connections are all Jeff's
+    (13 Aug, 15 Sep, 10 Oct, one per org). The refused one is one of the
+    two older ones, or one since disconnected.
+  - A refused connection, or one the other site cannot decrypt (§2.1),
+    reads exactly like an empty calendar: calendar-events answers
+    "connected" with no events, and Home says "Calendar connected — no
+    meetings today".
+  - Recommended: the server says "reconnect needed" for each refused
+    connection, shown on Home, in the profile's Calendar tab and on Tasks →
+    Calendar.
+  - Filed here under Dispatch by its origin; it is the calendar's.
 - **Dispatch load errors show only the status code,** not the server's
   message. As recorded.
 - **CrewBuilderView's `unscheduledJobs` / `scheduledJobs`** are computed and
