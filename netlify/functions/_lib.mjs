@@ -4,7 +4,7 @@ import { db } from '../../db/index.js';
 import { auditLog, users } from '../../db/schema.js';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { bulkInsert as coreBulkInsert, bulkUpsert as coreBulkUpsert } from './_bulk.mjs';
-import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor, mayMutate, OWNERSHIP_FORBIDDEN, isAppUserId } from './_ownership.mjs';
+import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor, mayMutate, OWNERSHIP_FORBIDDEN, isAppUserId, keepsOwner } from './_ownership.mjs';
 // Audit streaming (state §0.87): every row written here is delivered to the
 // org's destinations after the insert. _auditStream.mjs must not import this file.
 import { streamAudit } from './_auditStream.mjs';
@@ -253,14 +253,16 @@ export async function resolveOwnerId(name, orgId) {
 
     if (matches.length === 0) return null;
     if (matches.length > 1) {
+        // The words say what to do, and carry no member's email: a rep reads this, and
+        // the directory keeps addresses from reps (state §0.193).
         const err = new Error(
-            `Ambiguous owner: ${matches.length} users in this organization are named ` +
-            `"${String(name).trim()}" (${matches.map((m) => m.email || m.id).join(', ')}). ` +
-            `Rename one of them, or assign this record by picking the user directly.`
+            `${matches.length} members of this organization are named "${String(name).trim()}", ` +
+            `so the app cannot tell which one is meant. An Admin can rename one of them in ` +
+            `Settings → Users; then choose the right person on this record and save again.`
         );
         err.statusCode = 409;
         err.ambiguous = true;
-        err.candidates = matches.map((m) => ({ id: m.id, email: m.email }));
+        err.candidates = matches.map((m) => ({ id: m.id }));
         throw err;
     }
     return matches[0].id;
@@ -378,12 +380,67 @@ export async function stampOwnerIds(rows, entity, { clerkUserId, orgId, defaultT
  * builder, so every owner key exists in its output whether or not the caller
  * sent one, and `nameKey in clean` is therefore always true.
  */
-export async function ownerIdForUpdate({ payload, entity, orgId }) {
+export async function ownerIdForUpdate({ payload, entity, orgId, stored }) {
     const nameKey = ownerNameKeyFor(entity);
     if (!payload || !(nameKey in payload)) return { change: false };
+    // The name the row already holds, on a row with an owner id: its owner is kept,
+    // never resolved again (state §0.193) — a save that reassigns nothing is never
+    // refused for a name two members share, and never moves the record after a rename.
+    if (keepsOwner(stored, payload, entity)) return { change: false };
     const supplied = String(payload[nameKey] ?? '').trim();
     if (!supplied) return { change: true, ownerId: null };      // explicitly cleared
     return { change: true, ownerId: await resolveOwnerId(supplied, orgId) };
+}
+
+/**
+ * A bulk overwrite's owner ids (state §0.193). bulkUpsert writes the columns it is
+ * given and resolves no name, and no sanitize() carries ownerId: a CSV overwrite that
+ * changed a deal's Sales Rep wrote the name and left the old owner id. Until §0.193
+ * the next whole-row save resolved the name and healed it; now an unchanged name
+ * KEEPS its owner (keepsOwner), so the name and the id must move together here.
+ *
+ * When the batch names the owner (partialRows gives every row the batch's keys),
+ * every row carries an owner id: the stored one where the name is the stored text,
+ * else the name resolved — a cleared name unassigns, a name no member holds
+ * unassigns and is reported, an ambiguous name keeps the stored owner and is
+ * reported. Read in this org only; a row not found keeps no id (bulkUpsert skips it).
+ */
+export async function rekeyBulkOwners(rows, entity, { table, orgId }) {
+    if (!orgId) throw new Error('_lib.rekeyBulkOwners: orgId is required.');
+    const nameKey = ownerNameKeyFor(entity);
+    const idKey = ownerKeyFor(entity);
+    if (!Array.isArray(rows) || !rows.some((r) => r && nameKey in r)) return { rows, ambiguousOwners: [], unmatchedOwners: [] };
+    const stored = await db.select({ id: table.id, name: table[nameKey], ownerId: table[idKey] }).from(table)
+        .where(and(eq(table.orgId, orgId), inArray(table.id, rows.map((r) => r.id))));
+    const priors = new Map(stored.map((s) => [s.id, { [nameKey]: s.name, [idKey]: s.ownerId }]));
+    const ambiguous = new Set();
+    const unmatched = new Set();
+    const out = [];
+    for (const row of rows) {
+        const prior = priors.get(row.id) || null;
+        const kept = prior ? (prior[idKey] ?? null) : null;
+        let ownerId = kept;
+        let held = false;   // an ambiguous name: the row keeps its stored name AND id, never one without the other
+        if (nameKey in row && !keepsOwner(prior, row, entity)) {
+            const supplied = String(row[nameKey] ?? '').trim();
+            if (!supplied) ownerId = null;
+            else {
+                try {
+                    ownerId = await resolveOwnerId(supplied, orgId);
+                    if (ownerId === null) unmatched.add(supplied);
+                } catch (err) {
+                    if (!err?.ambiguous) throw err;
+                    ambiguous.add(supplied);
+                    ownerId = kept;
+                    held = true;
+                }
+            }
+        }
+        out.push(held && prior
+            ? { ...row, [nameKey]: prior[nameKey], [idKey]: kept }
+            : { ...row, [idKey]: ownerId });
+    }
+    return { rows: out, ambiguousOwners: [...ambiguous], unmatchedOwners: [...unmatched] };
 }
 
 /**

@@ -133,8 +133,11 @@ export function useOpportunities(deps) {
         };
 
         if (formData.stage === 'Closed Lost' && (!prevOpp || prevOpp.stage !== 'Closed Lost')) {
+            setOppModalError(null); setOppModalSaving(false);   // the deal window closes clean, as its onClose does
             setShowModal(false);
-            setLostReasonModal({ pendingFormData: enrichedData, editingOpp });
+            // A new deal is given its id once, here: the dialog's retry sends the same
+            // deal, never a second one (state §0.193).
+            setLostReasonModal({ pendingFormData: (editingOpp && editingOpp.id) ? enrichedData : { ...enrichedData, id: 'id_' + crypto.randomUUID() }, editingOpp });
             return;
         }
 
@@ -193,8 +196,15 @@ export function useOpportunities(deps) {
         }
     };
 
+    // The reason dialog's save answers the dialog (state §0.193): { ok: true } once
+    // stored, the dialog closed — or { ok: false, error } with the deal as it was, and
+    // the dialog shows why and keeps the choice. A refusal went to the deal window's
+    // oppModalError, and the deal window had closed when the dialog opened: the dialog
+    // sat there without a word (prod, 9 Oct — a 409 for a rep name two members
+    // shared), and the next deal window opened on a stale error.
     const completeLostSave = async (formData, editingOppRef, lostReason, lostCategory, activePipeline, currentUser, setLostReasonModal) => {
         const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
+        const stopped = () => ({ ok: false, error: '' });   // the org changed: the dialog is gone, nothing to say
         const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
         const prevOppRef = editingOppRef ? opportunities.find(o => o.id === editingOppRef.id) : null;
         const enriched = {
@@ -210,32 +220,33 @@ export function useOpportunities(deps) {
         // AUDIT LOG ASSERTING it was lost, and the row in the database still open.
         // Closed Lost feeds revenue reporting, so a silent divergence there is the
         // worst of the six sites found in the hooks.
-        if (editingOppRef) {
+        // A deal seeded without an id (a lead's convert, an account's new deal) is new:
+        // a PUT with no id answers 400, and the retry could never land.
+        if (editingOppRef && editingOppRef.id) {
             const updatedOpp = { ...enriched, id: editingOppRef.id };
-            const snapshot = opportunities;
+            const before = opportunities.find(o => o.id === editingOppRef.id);
             setOpportunities(prev => prev.map(opp => opp.id === editingOppRef.id ? updatedOpp : opp));
             const r = await dbWrite('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOpp) });
-            if (!stillOrg(askedOrg)) return;
+            if (!stillOrg(askedOrg)) return stopped();
             if (!r.ok) {
-                setOpportunities(snapshot);                       // never show what was not stored
-                setOppModalError(`Not saved as Closed Lost — ${r.error}`);
-                return;                                            // keep the modal open, no audit
+                setOpportunities(prev => prev.map(o => (o.id === editingOppRef.id && before ? before : o)));   // never show what was not stored; nothing else is undone
+                return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };   // the dialog says why; no audit
             }
             addAudit('update', 'opportunity', editingOppRef.id, enriched.opportunityName || enriched.account || editingOppRef.id, `Closed Lost: ${lostCategory || lostReason || ''}`);
         } else {
-            const newId = 'id_' + crypto.randomUUID();
+            const newId = formData.id || ('id_' + crypto.randomUUID());   // given when the dialog opened: a retry is the same deal
             const newOpp = { ...enriched, id: newId, pipelineId: activePipeline.id };
             setOpportunities(prev => [...prev, newOpp]);
             const r = await dbWrite('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) });
-            if (!stillOrg(askedOrg)) return;
+            if (!stillOrg(askedOrg)) return stopped();
             if (!r.ok) {
                 setOpportunities(prev => prev.filter(o => o.id !== newId));
-                setOppModalError(`Not saved as Closed Lost — ${r.error}`);
-                return;
+                return { ok: false, error: `Not saved as Closed Lost — ${r.error}` };
             }
             addAudit('create', 'opportunity', newId, enriched.opportunityName || enriched.account || newId, `Closed Lost: ${lostCategory || lostReason || ''}`);
         }
         setLostReasonModal(null);
+        return { ok: true };
     };
 
     // A deal's team notes are saved the moment one is posted, edited or deleted

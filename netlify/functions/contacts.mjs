@@ -5,7 +5,7 @@ import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './
 import { crmReadScope } from '../../src/utils/roles.js';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
-    stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse,
 } from './_lib.mjs';
 import { ownerColumnOf, ownerKeyFor } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
@@ -133,9 +133,11 @@ export const handler = async (event) => {
                     // arrays sanitize had just invented. 18b13: the fix belongs
                     // here, in the endpoint. The previous one was in the caller and
                     // sanitize put the columns straight back.
+                // The owner id moves with the owner name (state §0.193).
+                const keyed = await rekeyBulkOwners(partialRows(data, sanitize), 'contact', { table: contacts, orgId });
                 const result = await bulkUpsert({
                     table: contacts,
-                    rows: partialRows(data, sanitize),
+                    rows: keyed.rows,
                     orgId,
                     // Was `contacts.createdBy` -- a property that does not exist on
                     // this table. bulkUpsert does `if (ownerColumn)`, so undefined
@@ -147,7 +149,7 @@ export const handler = async (event) => {
                     callerId,
                     canSeeAll: canSeeAll(userRole),
                 });
-                return { statusCode: 200, headers, body: JSON.stringify(result) };
+                return { statusCode: 200, headers, body: JSON.stringify({ ...result, ambiguousOwners: keyed.ambiguousOwners, unmatchedOwners: keyed.unmatchedOwners }) };
             }
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             // PUT is strictly an update: unknown ids 404 instead of silently creating.
@@ -160,7 +162,7 @@ export const handler = async (event) => {
                 return { statusCode: 404, headers, body: JSON.stringify({ error: 'Contact not found' }) };
             }
             const clean = sanitize({ ...target, ...data });
-            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'contact', orgId });
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'contact', orgId, stored: target });
             if (ownPut.change) clean.ownerId = ownPut.ownerId;
             const { id, ...updateData } = clean;
             // Object-level authorization. Previously selected contacts.createdBy,

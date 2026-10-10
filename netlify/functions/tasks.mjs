@@ -122,7 +122,7 @@ export const handler = async (event) => {
             const clean = sanitize({ ...existing, ...data });
             // Reassigning a task re-keys its ownership; a PUT that never
             // mentioned the assignee leaves it alone (18b13).
-            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'task', orgId });
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'task', orgId, stored: existing });
             if (ownPut.change) clean.ownerId = ownPut.ownerId;
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(tasks).values({ ...clean, orgId })

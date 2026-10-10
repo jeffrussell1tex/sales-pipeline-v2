@@ -133,7 +133,7 @@ export const handler = async (event) => {
             if (forbiddenPut) return forbiddenPut;
             // Changing the author re-keys ownership; a PUT that never mentioned
             // it leaves it alone (18b13).
-            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'activity', orgId });
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'activity', orgId, stored: target });
             if (ownPut.change) { clean.ownerId = ownPut.ownerId; updateData.ownerId = ownPut.ownerId; }
             const [upserted] = await db.insert(activities).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: activities.id, setWhere: eq(activities.orgId, orgId), set: { ...updateData, updatedAt: new Date() } })

@@ -30,40 +30,84 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **PROD: a deal cannot be saved as Closed Lost — the reason dialog sticks**
-   (Jeff, 9 Oct, on salespipelinetracker.com: "I cant close lost a deal. it is
-   stuck here"; "OxyChem - Muscle Shoals", Pricing / Budget). Read, not yet
-   changed:
-   - **Why the save is refused.** Since 7 Oct two roster rows in Jeff's prod
-     org read "Jeff Russell": the Admin `Jeff Russell` and the User
-     `Jeff Russell   ` (jeffrussell1@live.com, renamed from "jeffrussell1" on
-     7 Oct — audit `user.updated`). Every deal PUT names its rep, and
-     resolveOwnerId (\_lib.mjs) trims and lowercases, finds two, and answers
-     409 "Ambiguous owner". Read in the shared database, SELECT only: the deal
-     is still `Proposal`, last written 29 Sep. Any deal save naming Jeff
-     Russell in that org is refused the same way.
-   - **Why it says nothing.** completeLostSave (useOpportunities.js) puts a
-     refused save's error in the deal window's `oppModalError`, and the deal
-     window closed when the reason dialog opened; the dialog stays open with
-     no message. Skip takes the same path.
-   - **Why the names could collide.** users.mjs refuses a duplicate email, not
-     a duplicate name, and keeps a name's trailing spaces when it is the
-     `name` sent.
-   - Fix (recommended, one batch): the reason dialog shows the refusal and
-     keeps the choice; a user name is trimmed and refused when another member
-     of the org has it (any case or spacing); the 409's words name the fix.
-   - Jeff's now: rename the second user (Settings → Users, jeffrussell1@live.com)
-     to a name of its own; the dialog's Save then goes through.
-2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
+1. **The account search's silent cut at 8** (§4.8, seen on PROD 9 Oct;
+   Jeff, 9 Oct: "Account search fix first", i.e. before batch B). One shared
+   matcher for every typed list that cuts. A duplicate account is one click
+   away while it stands. Planned and reviewed 9 Oct (workflow: four readers,
+   two designs, a judge, three critics). The class sweep found 16 live silent
+   cuts. Jeff's answers, 9 Oct:
+   - New Deal → Account: "List matching sites below". Only sites whose own
+     name matches are listed, after the accounts, labelled "site of …".
+     Picking one fills Account with its parent and Site Name with the site.
+   - "50, then 'N more'" in lists that scroll, the contact pickers that open
+     on a click included. The quick log keeps 6, because its box does not
+     scroll.
+   - Claude first said the header search does not scroll. It does, and Jeff
+     was told so. His answer: "Keep 5 per group". Dispatch's New Job customer
+     field: "Keep 6 per group". Both are grouped boxes with more than one
+     list in view.
+   - A sub-account is also found by its parent's name: "Yes, listed below
+     own-name matches". In the deal window a site still appears only by its
+     own name.
+   - The parent label on the four other account lists (New Task → Account,
+     an account's Parent field, the header search, Dispatch): "Next batch",
+     with the save fix below.
+   - A save keeping the record picked, not the first of its name: "After
+     batch B" (item 3).
+2. **One name per member of an org — batch B of the PROD Closed Lost fix**
+   (§0.193; Jeff, 9 Oct: "Split: prod fix first", "Number it", "Yes, Full name
+   wins"). Batch A (§0.193) stopped the harm: a save that reassigns nothing
+   keeps its owner, and the dialog says why a save was refused. Two members of
+   one name can still be made, and a NEW assignment by that name is refused.
+   Designed, not built (the design: every writer of `users.name` decides it
+   through one pure module):
+   - users.mjs self PUT, Admin/Manager PUT, POST create, invite: refuse a name
+     another member of the org holds (whitespace-collapsed, any case), with a
+     409 the screen shows; trim on write; an Admin's Full name wins over the
+     stored first/last.
+   - ensureRosterRow (first sign-in), users-sync (new member), a no-name
+     invite, backup restore: number a taken name, "Pat Smith (2)".
+   - the profile panel's save shows a refusal (it only logged it) and sends
+     only what changed; the team CSV import's duplicate check uses the same key.
+   - Jeff's prod pair is fixed by hand already (the UKG row is "Jeff Russell
+     (UKG)", 9 Oct). Read-only first: any other org with two members of one
+     name, and any member whose next save would rebuild a taken name from
+     their First/Last. Any such pair is renamed by hand in Settings → Users,
+     never by a script.
+   - Re-validated against the tree 9 Oct (after batch A). The plan is exact
+     to the line and builds on batch A, so batch A is committed first.
+     Jeff's answers, 9 Oct:
+     - Team CSV import, a no-name row whose address's front part a member
+       already has: "Refuse at Review".
+     - The database unique index on (org, name key): "Record now, decide
+       later", after the read-only check shows no pairs (§2.4).
+     - The "+ New Rep" window painting Work Email red for a taken name:
+       "Record it for later" (§4.6).
+     - The plan's three other questions take its recommendations:
+       - First sign-in with no Clerk name keeps the full email as the name.
+         The front part is its own later item (§4.6).
+       - "Full name wins" is enforced on the Settings → Users screen only.
+       - Pairs found are renamed by hand.
+3. **A pick is saved as the record picked** (Jeff, 9 Oct: "After batch
+   B"). Every Company, Account, Deal and Parent save resolves the TYPED NAME
+   to the first record of that name, not the row picked. The parent label
+   goes on the four account lists that lack it in the same batch.
+   - Seen in the UKG data (SELECT 9 Oct): two "Shell - Port Allen" records
+     under Shell. One is a business unit with no sub-accounts, deals or
+     contacts; the other is a site with 2 contacts. Jeff: it is one
+     sub-account of Shell, so the empty one is a stray copy (§2.4).
+   - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived.
+     It still lists, because the accounts GET does not filter archived rows.
+4. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
-3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
+5. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. Designed 9 Oct (three batches and a fourth; ten
    questions for Jeff first — §4.1).
-4. **Deal data** (§4.2):
+6. **Deal data** (§4.2):
    - the deal endpoint saving `accountId`;
    - notes appended on the server;
    - an Undo keeping the row's owner.
-5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
+7. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
 ---
@@ -174,6 +218,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   - an owner id on `spiff_claims` (§0.169 (d));
   - `org_id` in `document_links_unique_idx` (§0.166 (2));
   - a close-date history column on deals (§3.1).
+  - A unique index on `users`, on the org plus the name with whitespace
+    collapsed, trimmed and lowercased. It closes the race batch B leaves:
+    two writes at one moment can still make a pair. It cannot be built while
+    any pair exists, and Postgres's whitespace class differs slightly from
+    JS's. Jeff, 9 Oct: "Record now, decide later", after batch B's
+    read-only check shows no pairs (§1 item 2).
 - **Data changes, by Jeff's hand:**
   - The job editor's jsonb lists are stored as strings. The app reads them as
     arrays; SQL over the column does not. Rewrite the stored strings.
@@ -183,6 +233,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   - The legacy `job_heartbeats` DROP, both databases. Handoff, carried since
     the eleventh session.
   - The Accelerep Test org's 32 unowned demo deals: keep or clear. §0.151.
+  - PROD, UKG: the empty "Shell - Port Allen" copy. It is a business unit
+    under Shell with no sub-accounts, deals or contacts, beside the real
+    site of that name, which has 2 contacts (SELECT 9 Oct). Jeff, 9 Oct: it
+    is one sub-account of Shell. Merge the empty copy into the real one in
+    the app.
 - **The signal migration: ON HOLD.**
   - Jeff, 14 Sep: "leave things as are for now. I am not sure that is the
     direction I want to go". Build nothing from it unless he resumes.
@@ -521,6 +576,38 @@ model's pattern to deals.
   `o.competitor`. §0.187 (c).
 - **Reports' account and contact timelines** date a won or lost deal by its
   last edit, where the deal has `wonDate` / `lostDate`. §0.187 (e).
+- **A retried new deal whose first save landed** (§0.193's review, low). The
+  Closed Lost dialog retries a new deal with the same id; if the first POST
+  stored the row but answered a failure (a throw after the insert, a timeout),
+  the retry fails on the primary key ("Internal server error") and the deal
+  shows only after a reload. An idempotent POST (insert on conflict do
+  nothing, then answer the stored row) must first check the caller may READ
+  that row — answering it to anyone who names its id would let a rep read
+  another rep's deal. Recorded, not changed.
+- **An import's owner report is not shown.** The bulk POST (create) and, since
+  §0.193, the bulk PUT (overwrite) answer `ambiguousOwners` and
+  `unmatchedOwners`; bulkClient and the results tile read neither, so a row
+  whose rep was not set (an ambiguous or unknown name) is not named to the
+  user. §0.193's review.
+- **A lost reason cannot be edited after the save** (Jeff's OxyChem, 9 Oct: the
+  note was not stored and there is no way to add it after). The deal window
+  shows `lostReason` read-only. §0.193.
+- **Records named by an old roster name.** The 5 contacts the UKG org's
+  "Jeff Russell (UKG)" owns name their rep "jeffrussell1" (its name before
+  7 Oct). Since §0.193 a save keeps their owner; a reassignment by name needs
+  the current name. A rename does not cascade to records' name text (§0.192's
+  list). §0.193, read 9 Oct.
+- **From §0.193's design read, as recorded:** a Manager can rename any member,
+  Admins included (only active/inactive is Admin-gated); a users PUT naming an
+  id unknown in the org INSERTS a member with the client's id; the self PUT
+  inserts before it updates (a just-deleted member's preference save
+  re-creates them); after a self-rename the app keeps the old name until a
+  reload; Kanban's drag and Reports' deal-contact PUTs and the Tasks
+  complete/snooze paths show a refused save nowhere; SalesManagerTab's user
+  save writes its cached name back; users.mjs does not cut a name to 255; a
+  SPIFF claim edit is authorized by name; the deal form's "Reason Lost" select
+  writes a field nothing reads, and the reason dialog's eight categories are
+  hard-coded, not the org's "Reasons lost".
 - **A save from the activity rail closes QuickLog and empties its draft.**
   `handleSaveActivity`'s tail resets QuickLog's form, though QuickLog saves on
   its own. §0.176 (d).
@@ -629,6 +716,16 @@ model's pattern to deals.
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
+- **Two member-name items around batch B** (§1 item 2; Jeff, 9 Oct: "Record
+  it for later"):
+  - The "+ New Rep" window (UserModal) paints Work Email red for every
+    refusal, a taken name included. The fix carries the 409's `field`
+    through useUserHandlers → App.jsx → ModalLayer → UserModal.
+  - A first sign-in with no name in Clerk names the row by the FULL email
+    (ensureRosterRow; asserted at integration-requests.itest.mjs:186), so
+    reps see the address in every picker. The sync and a no-name invite use
+    the address's front part. Recommended: switch to the front part, as its
+    own small item.
 - **The audit log after §0.143:**
   - (1) Thirteen files audit only their mass paths. A plain PUT on a deal,
     account, contact, lead, task or activity writes no server row; the
@@ -706,6 +803,39 @@ model's pattern to deals.
 
 ### 4.8 Other UI
 
+- **The account search hides matches past the eighth, without saying so.**
+  Seen on PROD 9 Oct (Jeff: New Contact's Company field, then New Deal's
+  Account field; read in the database, SELECT only). `AccountPicker.jsx:68`
+  draws `filtered.slice(0, 8)`, where `filtered` is one substring match. The
+  list is in the order the GET returns: by name, in the database's
+  `C.UTF-8` collation, so every capital "INEOS…" comes before any "Ineos…".
+  In the UKG org, 55 accounts contain "ineos". "Ineos Acetyls - Texas City"
+  (a site under the business unit "INEOS Acetyls") is 55th of 55. Typing
+  "ineos" shows INEOS and seven "INEOS - …" units, with nothing about the
+  other 47.
+  - The deal window's Account field (`OpportunityModal.jsx:1673`) also
+    hides every `site` account, by design. A site goes in Site Name, which
+    lists the chosen account's sites with no cap. There, "INEOS Acetyls" is
+    14th of 15.
+  - One substring means "Ineos - Acetyls" matches nothing, because the
+    stored name has its dash after "Acetyls". The list then offers "Create …
+    as a new account": a duplicate account is one click away.
+  - Workaround until fixed: type a later word, such as "acetyl" (2 matches)
+    or "texas city" (7).
+  - The same silent cut is in five more search lists: `ContactModal.jsx:47`
+    (contacts, 8), the Typeaheads at `ActivityRail.jsx:43` and
+    `TaskRail.jsx:76` (8), and `AccountRail.jsx:110` and
+    `ContactRail.jsx:104` (20).
+  - Recommended fix, the class at once: one shared matcher.
+    - Every typed word must appear, ignoring punctuation.
+    - Ranking is exact, then starts-with, then a word start, then anywhere,
+      then A–Z ignoring case.
+    - The list scrolls, as it already has a max height. It keeps a higher
+      cap with a "N more — keep typing" line.
+    - Units and sites show their parent.
+    - A parse-scan test proves no search list slices without that line.
+  - Also found: `allAccountOptions` (`OpportunityModal.jsx:1149`) is built
+    on every render and never read.
 - **Five native time inputs:** AppHeader's digest time, and four in
   DispatchTab. They become the house TimeDropdown. Re-read 7 Oct: five
   sites.

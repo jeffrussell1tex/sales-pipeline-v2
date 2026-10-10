@@ -1,6 +1,6 @@
 # Accelerep — Claude Coding Guide
 
-**Updated:** October 9, 2026 · rules current through **§18b87** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
+**Updated:** October 9, 2026 · rules current through **§18b88** (the line read §18b38 while §18b39 and §18b40 stood in the body, and §18b62 through §18b63 and §18b64 — the header has lagged three times; the body is the record).
 A missing date line here is why a reader once judged this file stale from its
 header while the body was current — check the highest §18b number, not the date.
 
@@ -4050,3 +4050,12 @@ through `dbFetch`.
 2. **A record's name text is display, and the fallback for a record saved before ids** — matched by whole name in any case, never a prefix, never a guess between two.
 3. **Two lists that describe one set are never paired by position** unless they are proved in line; a row records the ids and the places it stands for, and a remove removes those.
 4. **A field nothing writes is not read** — tests/deal-engagement.test.mjs's G1 holds `contactName`; a guard per phantom class.
+
+## 18b88. An Owner Id Moves Only With Its Owner Name — A Save That Sends The Stored Name Keeps The Owner; A Refusal Is Shown Where The User Is (hard rule)
+
+**Origin (§0.193, 9 Oct 2026 — PROD; Jeff: "I am in production and I cant close lost a deal. it is stuck here").** Two members of one org read "Jeff Russell". Every update resolved the owner name it was sent, changed or not, so every save of a deal naming him answered 409; and the Closed Lost dialog put the refusal in the deal window, which had closed — and the deal window drew its own refusal under itself.
+
+1. **An update re-resolves an owner name only when the name changed** — `keepsOwner` (exact stored text, a row with an owner id), asked by `ownerIdForUpdate`; every update path passes the row it loaded (tests/owner-kept.test.mjs parses the calls).
+2. **Every writer that changes a stored owner name writes the owner id with it** — the bulk PUTs through `rekeyBulkOwners`, merge.mjs through `mergedOwnerId` — so an unchanged name always means an unchanged owner. An ambiguous name changes neither.
+3. **A refusal is shown in the layer the user is looking at** — a dialog that saves answers `{ ok, error }` and shows it; an overlay a window owns is drawn by that window; Escape over it dismisses it, not the work under it.
+4. **The ambiguous-owner 409 says what to do and carries no member's email.**

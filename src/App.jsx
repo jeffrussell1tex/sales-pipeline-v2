@@ -576,7 +576,10 @@ dbFetch('/.netlify/functions/users?me=true')
                     case 'confirm': setConfirmModal(null); return;
                     case 'activityDetail': setViewingActivity(null); return;
                     case 'draggable':   // the deal and user windows; an import or the lost reason takes its own
-                        if (showModal) { setShowModal(false); setEditingOpp(null); return; }
+                        // A refused save showing over the deal window: Escape dismisses it, not the
+                        // window and its form (state §0.193).
+                        if (showModal && oppModalError) { setOppModalError(null); return; }
+                        if (showModal) { setShowModal(false); setEditingOpp(null); setOppModalError(null); setOppModalSaving(false); return; }
                         if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
                         return;
                     case 'shortcuts': setShowShortcuts(false); return;
@@ -596,7 +599,9 @@ dbFetch('/.netlify/functions/users?me=true')
             // Don't fire shortcuts while typing
             if (isTyping) return;
             // Don't fire if any modal is open (except ? for help)
-            const anyModalOpen = showModal || showUserModal || showActivityModal || confirmModal || promptModal || coachingNoteModal || viewingActivity;
+            // The lost-reason dialog too (state §0.193): N opened a deal window over it, and a
+            // second Closed Lost from there replaced the first deal's pending save.
+            const anyModalOpen = showModal || showUserModal || showActivityModal || confirmModal || promptModal || coachingNoteModal || viewingActivity || lostReasonModal;
 
             if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
                 e.preventDefault();
@@ -665,7 +670,7 @@ dbFetch('/.netlify/functions/users?me=true')
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [showModal, showUserModal, showActivityModal, viewingActivity,
+    }, [showModal, showUserModal, showActivityModal, viewingActivity, lostReasonModal, oppModalError,
         confirmModal, promptModal, coachingNoteModal, notesPopover, undoToast, showNotifications, showSearchResults, showShortcuts]);
 
 

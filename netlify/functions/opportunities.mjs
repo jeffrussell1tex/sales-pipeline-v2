@@ -12,7 +12,7 @@ import { dispatchAutomations } from './dispatch-automations.mjs';
 import { dealEventData } from '../../src/utils/automationEvents.js';
 import {
     serverErrorBody, writeAudit, getCallerName, getCallerId, bulkInsert, bulkUpsert, assertOwnership,
-    stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse,
 } from './_lib.mjs';
 import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
@@ -305,9 +305,11 @@ export const handler = async (event) => {
                     // arrays sanitize had just invented. 18b13: the fix belongs
                     // here, in the endpoint. The previous one was in the caller and
                     // sanitize put the columns straight back.
+                // The owner id moves with the owner name (state §0.193).
+                const keyed = await rekeyBulkOwners(partialRows(staged.rows, sanitize), 'opportunity', { table: opportunities, orgId });
                 const result = await bulkUpsert({
                     table: opportunities,
-                    rows: partialRows(staged.rows, sanitize),
+                    rows: keyed.rows,
                     orgId,
                     // Through the registry, never named at the call site (18b19).
                     ownerColumn: ownerColumnOf(opportunities, 'opportunity'),
@@ -327,7 +329,7 @@ export const handler = async (event) => {
                     // 'stageChanged' switch, never one post per deal. Never throws.
                     await postBulkStageMove(orgId, { summary: bulkStageSummary(staged.rows, priors), total: data.length, mover: await getCallerName(userId, orgId) });
                 }
-                return { statusCode: 200, headers, body: JSON.stringify({ ...result, stageChanged: staged.changedCount }) };
+                return { statusCode: 200, headers, body: JSON.stringify({ ...result, stageChanged: staged.changedCount, ambiguousOwners: keyed.ambiguousOwners, unmatchedOwners: keyed.unmatchedOwners }) };
             }
 
             if (!data.id) {
@@ -367,7 +369,7 @@ export const handler = async (event) => {
             const clean = sanitize({ ...existing, ...data });
             // Reassigning a deal re-keys its ownership; a PUT that never
             // mentioned salesRep leaves it alone (18b13).
-            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'opportunity', orgId });
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'opportunity', orgId, stored: existing });
             if (ownPut.change) clean.ownerId = ownPut.ownerId;
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(opportunities)

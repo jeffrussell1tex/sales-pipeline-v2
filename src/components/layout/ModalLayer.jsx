@@ -207,6 +207,7 @@ export default function ModalLayer() {
                     saving={oppModalSaving}
                     lastCreatedAccountName={lastCreatedAccountName}
                     lastCreatedRepName={lastCreatedRepName}
+                    onLastCreatedRepUsed={() => setLastCreatedRepName(null)}
                     onSaveNewContact={(data) => {
                         const newId = 'id_' + crypto.randomUUID();
                         const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
@@ -503,6 +504,8 @@ export default function ModalLayer() {
                             const ow = await bulk.putBulk('/.netlify/functions/contacts', overwritesWithIds, { onProgress, progressOffset: contactsWithIds.length, progressTotal: totalProgress, stillOrg: still });
                             if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setContacts, overwritesWithIds, ow.appliedIds);
+                            // The server moved owner ids with the rep names (state §0.193); the app's copy reads them back.
+                            if (ow.appliedIds.length && overwritesWithIds.some(r => 'assignedRep' in r)) loadContacts(() => {});
                             phases.push(receiptFromUpdate(ow));
                         }
 
@@ -569,6 +572,8 @@ export default function ModalLayer() {
                             const ow = await bulk.putBulk('/.netlify/functions/accounts', overwritesWithIds, { onProgress, progressOffset: allWithIds.length, progressTotal: totalProgress, stillOrg: still });
                             if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setAccounts, overwritesWithIds, ow.appliedIds);
+                            // The server moved owner ids with the owner names (state §0.193); the app's copy reads them back.
+                            if (ow.appliedIds.length && overwritesWithIds.some(r => 'accountOwner' in r)) loadAccounts(() => {});
                             phases.push(receiptFromUpdate(ow));
                         }
 
@@ -629,6 +634,8 @@ export default function ModalLayer() {
                             const ow = await bulk.putBulk('/.netlify/functions/opportunities', overwritesBuilt, { onProgress, progressOffset: newOpps.length, progressTotal: totalProgress, stillOrg: still });
                             if (!stillOrg(askedOrg)) return stopped();
                             applyOverwrites(setOpportunities, overwritesBuilt, ow.appliedIds);
+                            // The server moved owner ids with the rep names (state §0.193); the app's copy reads them back.
+                            if (ow.appliedIds.length && overwritesBuilt.some(r => 'salesRep' in r)) loadOpportunities(() => {});
                             phases.push(receiptFromUpdate(ow));
                         }
 
@@ -780,6 +787,7 @@ export default function ModalLayer() {
                     oppName={lostReasonModal.pendingFormData.opportunityName || lostReasonModal.pendingFormData.account}
                     onSave={(category, reason) => completeLostSave(lostReasonModal.pendingFormData, lostReasonModal.editingOpp, reason, category, activePipeline, currentUser, setLostReasonModal)}
                     onSkip={() => completeLostSave(lostReasonModal.pendingFormData, lostReasonModal.editingOpp, '', '', activePipeline, currentUser, setLostReasonModal)}
+                    onCancel={() => setLostReasonModal(null)}
                 />
             )}
 

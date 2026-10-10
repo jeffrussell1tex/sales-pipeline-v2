@@ -253,7 +253,7 @@ export const handler = async (event) => {
             // Reassigning a lead re-keys its ownership; a PUT that never
             // mentioned assignedTo leaves it alone (18b13). Applied to `clean`
             // AFTER sanitize, which would otherwise not carry the column.
-            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'lead', orgId });
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'lead', orgId, stored: existing });
             // Assignment is a MANAGED action (§0.58, Jeff's call 2 Sep): only
             // Admin/Manager may change who owns a lead. Reps claim through the
             // request flow (lead-requests.mjs), never by writing the owner —

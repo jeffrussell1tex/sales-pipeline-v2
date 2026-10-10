@@ -69,7 +69,7 @@ test('viewingActivity is wired: state, App destructure, context, Escape, body lo
     // App's Escape closes the viewer when it is the layer on top (§0.189) — above every rail
     // and the deal window by its z (escape-order.test.mjs keeps the order and the z true).
     assert.ok(app.includes("case 'activityDetail': setViewingActivity(null); return;"), 'Escape closes the viewer');
-    assert.ok(app.includes('|| coachingNoteModal || viewingActivity;'), 'shortcuts stay quiet while the viewer is open');
+    assert.ok(app.includes('|| coachingNoteModal || viewingActivity || lostReasonModal;'), 'shortcuts stay quiet while the viewer is open (and the lost-reason dialog, §0.193)');
     // The scroll lock and the key handler name no state the rails replaced (§0.190: App's
     // viewingContact and viewingAccount, and the three modal flags, are gone).
     assert.ok(app.includes('            viewingTask || viewingActivity ||'), 'the body scroll lock');

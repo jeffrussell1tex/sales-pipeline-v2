@@ -1025,7 +1025,7 @@ export default function OpportunityModal({
     currentUser, activities, tasks, onSaveActivity, onDeleteActivity,
     onSaveComment, onEditComment, onDeleteComment,
     onClose, onSave, onSaveNewContact, onSaveNewAccount, onAddContact,
-    lastCreatedAccountName, onAddRep, lastCreatedRepName,
+    lastCreatedAccountName, onAddRep, lastCreatedRepName, onLastCreatedRepUsed,
     errorMessage, onDismissError, saving, onOpenNestedContact, onOpenNestedAccount }) {
     const { openMeetingPrep } = useApp();   // the header's Prep (state §0.187)
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
@@ -1119,11 +1119,14 @@ export default function OpportunityModal({
         }
     }, [lastCreatedAccountName]);
 
-    // Auto-populate rep when a new one is created
+    // Auto-populate rep when a new one is created — once (state §0.193). The name was
+    // never cleared, so every deal window opened after a "+ New Rep" put that rep in its
+    // Sales Rep, and a save reassigned the deal.
     useEffect(() => {
         if (lastCreatedRepName) {
             setRepSearch(lastCreatedRepName);
             setFormData(prev => ({ ...prev, salesRep: lastCreatedRepName }));
+            if (onLastCreatedRepUsed) onLastCreatedRepUsed();
         }
     }, [lastCreatedRepName]);
 
@@ -1367,19 +1370,6 @@ export default function OpportunityModal({
         <>
             <style>{`@keyframes opp-spin { to { transform: rotate(360deg); } }`}</style>
 
-            {/* Error overlay (fully preserved) */}
-            {errorMessage && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
-                    onClick={e => e.stopPropagation()}>
-                    <div style={{ background: T.surface, borderRadius: 8, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: '420px', width: '90%', textAlign: 'center', fontFamily: T.sans }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(156,58,46,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.5rem' }}>⚠️</div>
-                        <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.0625rem', fontWeight: '700', color: T.ink }}>Failed to Save Opportunity</h3>
-                        <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: T.inkMid, lineHeight: 1.6 }}>{errorMessage}</p>
-                        <GhostBtn onClick={onDismissError}>OK</GhostBtn>
-                    </div>
-                </div>
-            )}
-
             {/* Three-div overlay pattern — UNCHANGED */}
             <div style={{ ...overlayStyle }} />
             <div {...clickCatcherProps} />
@@ -1399,6 +1389,23 @@ export default function OpportunityModal({
                     overflow: 'hidden', fontFamily: T.sans,
                 }}
             >
+            {/* A refused save, drawn by the WINDOW, over it (state §0.193). It was a fixed
+                overlay at z 9999 beside a window at 10000 and up (useDraggable): on a
+                desktop the message sat under the window it belonged to, and a refused
+                deal save said nothing — the other half of the prod 9 Oct report. Fixed,
+                so it covers and centres on the screen (the window can be wider than a
+                phone, or dragged); a child of the window, so it draws above it. */}
+            {errorMessage && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+                    onClick={e => e.stopPropagation()}>
+                    <div style={{ background: T.surface, borderRadius: 8, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: '420px', width: '90%', textAlign: 'center', fontFamily: T.sans }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(156,58,46,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.5rem' }}>⚠️</div>
+                        <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.0625rem', fontWeight: '700', color: T.ink }}>Failed to Save Opportunity</h3>
+                        <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: T.inkMid, lineHeight: 1.6 }}>{errorMessage}</p>
+                        <GhostBtn onClick={onDismissError}>OK</GhostBtn>
+                    </div>
+                </div>
+            )}
                 {/* ── Header bar ─────────────────────────────────── */}
                 <div {...dragHandleProps} style={{
                     ...dragHandleProps.style,

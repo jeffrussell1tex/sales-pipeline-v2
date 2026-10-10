@@ -35,6 +35,21 @@ const CONTACT_FIELDS = [
     'doNotContact', 'buyerPersona',
 ];
 
+// The survivor's owner id when a merge resolves its owner name (state §0.193): the
+// owner id of the record whose name was kept — the archived one's when its name
+// won, else the survivor's own. A merge wrote the name and left the id, and a save
+// that keeps the name keeps the owner, so the screen named one owner and another
+// held the record.
+// The merge screens send only the archived record's value; a name that is neither
+// record's is refused rather than paired with an owner it never had.
+const mergedOwnerId = (key, resolved, surv, arch) => {
+    const name = String(resolved[key] ?? '');
+    if (!name.trim()) return { ownerId: null };                                         // no owner kept
+    if (name === String(surv[key] ?? '')) return { ownerId: surv.ownerId ?? null };     // the survivor's (or both records')
+    if (name === String(arch[key] ?? '')) return { ownerId: arch.ownerId ?? null };     // the archived record's won
+    return { error: 'The owner must be one of the two records being merged.' };
+};
+
 // Lookup used by the reversal path to resolve a snapshotted table name back to its
 // Drizzle table object.
 const TABLE_BY_NAME = {
@@ -112,6 +127,9 @@ export const handler = async (event) => {
         // Resolve the surviving field values (whitelist only).
         const resolved = {};
         for (const f of ACCOUNT_FIELDS) if (f in resolvedFields) resolved[f] = resolvedFields[f];
+        // The owner id with the owner name (§0.193), decided before anything is written.
+        const owner = 'accountOwner' in resolved ? mergedOwnerId('accountOwner', resolved, surv, arch) : null;
+        if (owner?.error) return { statusCode: 400, headers, body: JSON.stringify({ error: owner.error }) };
         const oldSurvName = surv.name;
         const survName = (resolved.name != null && String(resolved.name).trim()) ? resolved.name : oldSurvName;
         const archName = arch.name;
@@ -174,6 +192,7 @@ export const handler = async (event) => {
 
         // Apply resolved field values to the survivor (+ name, + cycle-safe parent).
         const survSet = { ...resolved, name: survName, updatedAt: now };
+        if (owner) survSet.ownerId = owner.ownerId;   // the id with the name (§0.193)
         delete survSet.parentAccountId; // never resolved via the field map
         if (surv.parentAccountId === archivedId) survSet.parentAccountId = arch.parentAccountId || null;
         ops.push(db.update(accounts).set(survSet).where(and(eq(accounts.id, survivorId), eq(accounts.orgId, orgId))));
@@ -248,6 +267,9 @@ async function reverseAccountMerge({ body, orgId, userId, headers }) {
         if (k === 'name' || k === 'parentAccountId') continue;
         restore[k] = snapS[k] ?? null;
     }
+    // The id went with the name (§0.193) — restored from a snapshot that holds one (a log
+    // written before the owner id column keeps the row's current id).
+    if ('accountOwner' in (log.resolvedFields || {}) && 'ownerId' in snapS) restore.ownerId = snapS.ownerId ?? null;
     ops.push(db.update(accounts).set(restore).where(and(eq(accounts.id, log.survivorId), eq(accounts.orgId, orgId))));
 
     ops.push(db.update(mergeLog).set({ status: 'reversed', reversedAt: now }).where(and(eq(mergeLog.id, mergeLogId), eq(mergeLog.orgId, orgId))));
@@ -288,6 +310,9 @@ async function mergeContacts({ body, orgId, userId, headers }) {
 
     const resolved = {};
     for (const f of CONTACT_FIELDS) if (f in resolvedFields) resolved[f] = resolvedFields[f];
+    // The owner id with the owner name (§0.193), decided before anything is written.
+    const owner = 'assignedRep' in resolved ? mergedOwnerId('assignedRep', resolved, surv, arch) : null;
+    if (owner?.error) return { statusCode: 400, headers, body: JSON.stringify({ error: owner.error }) };
 
     const nameOf = (c) => [c.firstName, c.lastName].filter(Boolean).join(' ').trim() || c.email || c.id;
     const survFirst = resolved.firstName != null ? resolved.firstName : surv.firstName;
@@ -373,6 +398,7 @@ async function mergeContacts({ body, orgId, userId, headers }) {
         directReports: unionObjArr(surv.directReports, arch.directReports),
         updatedAt: now,
     };
+    if (owner) survSet.ownerId = owner.ownerId;   // the id with the name (§0.193)
     ops.push(db.update(contacts).set(survSet).where(and(eq(contacts.id, survivorId), eq(contacts.orgId, orgId))));
 
     // 5) Soft-archive the loser.
@@ -437,6 +463,8 @@ async function reverseContactMerge({ body, orgId, userId, headers }) {
         if (k === 'firstName' || k === 'lastName') continue;
         restore[k] = snapS[k] ?? null;
     }
+    // The id went with the name (§0.193) — restored from a snapshot that holds one.
+    if ('assignedRep' in (log.resolvedFields || {}) && 'ownerId' in snapS) restore.ownerId = snapS.ownerId ?? null;
     ops.push(db.update(contacts).set(restore).where(and(eq(contacts.id, log.survivorId), eq(contacts.orgId, orgId))));
 
     ops.push(db.update(mergeLog).set({ status: 'reversed', reversedAt: now }).where(and(eq(mergeLog.id, mergeLogId), eq(mergeLog.orgId, orgId))));

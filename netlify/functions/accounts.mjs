@@ -5,7 +5,7 @@ import { verifyAuth, requireRole, canSeeAll, isReadOnly, requireWrite } from './
 import { crmReadScope } from '../../src/utils/roles.js';
 import {
     serverErrorBody, writeAudit, getCallerId, bulkUpsert, bulkInsert, assertOwnership,
-    stampOwnerId, stampOwnerIds, ownerIdForUpdate, ambiguousOwnerResponse,
+    stampOwnerId, stampOwnerIds, ownerIdForUpdate, rekeyBulkOwners, ambiguousOwnerResponse,
 } from './_lib.mjs';
 import { ownerColumnOf } from './_ownership.mjs';
 import { deletionAudit } from './_audit.mjs';
@@ -204,9 +204,11 @@ export const handler = async (event) => {
                     // arrays sanitize had just invented. 18b13: the fix belongs
                     // here, in the endpoint. The previous one was in the caller and
                     // sanitize put the columns straight back.
+                // The owner id moves with the owner name (state §0.193).
+                const keyed = await rekeyBulkOwners(partialRows(data, sanitize), 'account', { table: accounts, orgId });
                 const result = await bulkUpsert({
                     table: accounts,
-                    rows: partialRows(data, sanitize),
+                    rows: keyed.rows,
                     orgId,
                     // Through the registry, never named here. A column named at
                     // the call site is a column nothing checks against the real
@@ -217,7 +219,7 @@ export const handler = async (event) => {
                     callerId,
                     canSeeAll: canSeeAll(userRole),
                 });
-                return { statusCode: 200, headers, body: JSON.stringify(result) };
+                return { statusCode: 200, headers, body: JSON.stringify({ ...result, ambiguousOwners: keyed.ambiguousOwners, unmatchedOwners: keyed.unmatchedOwners }) };
             }
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             // Read the stored row first: a rename is detected and cascaded below, and
@@ -244,7 +246,7 @@ export const handler = async (event) => {
             const mergedPut = { ...clean, ...(territoryAssignPut || {}) };
             // Re-key ownership only when the payload actually mentioned the owner.
             // A partial PUT that says nothing about it must not blank it (18b13).
-            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'account', orgId });
+            const ownPut = await ownerIdForUpdate({ payload: data, entity: 'account', orgId, stored: prior });
             if (ownPut.change) mergedPut.ownerId = ownPut.ownerId;
             const { id: _putId, ...updateDataMerged } = mergedPut;
             const [upserted] = await db.insert(accounts).values({ ...mergedPut, orgId })

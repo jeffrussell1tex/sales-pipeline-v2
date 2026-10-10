@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../../AppContext';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import { useEscapeLayer } from '../../hooks/useEscapeLayer';
@@ -7,20 +7,38 @@ import { T } from '../../tokens.js';
 
 // Warm stone / ink design tokens
 
-export default function LostReasonModal({ oppName, onSave, onSkip }) {
+export default function LostReasonModal({ oppName, onSave, onSkip, onCancel }) {
     const lostCategories = ['Pricing / Budget', 'Competitor', 'No Decision / Stalled', 'Product Fit', 'Timing', 'Relationship / Trust', 'Internal Priority Change', 'Other'];
     const [category, setCategory] = useState('');
     const [notes, setNotes] = useState('');
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherProps, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(480, 460, 380, 340);
 
-    // Esc closes the modal (routes to the existing safe exit — save is skipped,
-    // the deal still becomes Closed Lost with no reason recorded) — while no layer above the
-    // draggable windows is open, as the import windows' Escape (state §0.189). On window it
-    // ran after App's own handler whenever App's was added first, and took the Escape
-    // whatever was open above it.
+    // A refused save is shown HERE, and the choice kept (state §0.193). onSave and onSkip
+    // answer { ok: true } once stored — completeLostSave has closed the dialog — or
+    // { ok: false, error }. The refusal went to the deal window, which had closed when
+    // this opened: the dialog sat there with no word (prod, 9 Oct).
+    const [refusal, setRefusal] = useState('');
+    const [busy, setBusy] = useState(false);
+    const inFlight = useRef(false);   // synchronous: two clicks, or an Escape, in one tick send one save
+    const send = async (save) => {
+        if (inFlight.current) return;
+        inFlight.current = true; setBusy(true); setRefusal('');
+        let r;
+        try { r = await save(); } catch { r = { ok: false, error: 'The change was not saved. Try again.' }; }
+        if (r && !r.ok) { inFlight.current = false; setRefusal(r.error); setBusy(false); }
+    };
+    const skip = () => send(() => onSkip());
+    // × and Escape: the safe exit was Skip — the deal becomes Closed Lost with no reason.
+    // After a refusal Skip would be refused the same way, so they close without saving
+    // and the deal keeps its stage (Jeff, 9 Oct: "Close without saving").
+    const leave = () => { if (inFlight.current) return; if (refusal) onCancel(); else skip(); };
+
+    // Escape while no layer above the draggable windows is open, as the import windows'
+    // Escape (state §0.189). On window it ran after App's own handler whenever App's was
+    // added first, and took the Escape whatever was open above it.
     const { escapeBlocked } = useApp();
-    useEscapeLayer(true, onSkip, escapeBlocked('draggable'));
+    useEscapeLayer(true, leave, escapeBlocked('draggable'));
 
     return (
         <>
@@ -42,7 +60,7 @@ export default function LostReasonModal({ oppName, onSave, onSkip }) {
                     <div style={{ fontWeight: 700, fontSize: 15, color: '#f5f1eb' }}>Opportunity Closed Lost</div>
                     <div style={{ fontSize: 11.5, color: '#a8a196', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oppName || 'This opportunity'}</div>
                 </div>
-                <button type="button" onClick={onSkip} aria-label="Close"
+                <button type="button" onClick={leave} aria-label="Close"
                     style={{ background: 'none', border: 'none', color: '#a8a196', fontSize: 20, lineHeight: 1, cursor: 'pointer', padding: '2px 4px', flexShrink: 0, fontFamily: T.sans }}>×</button>
             </div>
 
@@ -82,16 +100,27 @@ export default function LostReasonModal({ oppName, onSave, onSkip }) {
                 </div>
             </div>
 
+            {/* A refused save, and the way out — the deal keeps its stage */}
+            {refusal && (
+                <div role="alert" style={{ flexShrink: 0, margin: '0 18px 12px', padding: '10px 12px', background: 'rgba(156,58,46,0.10)', border: '1px solid rgba(156,58,46,0.25)', borderRadius: T.r, fontSize: 12.5, lineHeight: 1.5, color: T.danger, fontFamily: T.sans }}>
+                    <div>{refusal}</div>
+                    <button type="button" onClick={onCancel}
+                        style={{ marginTop: 8, padding: '6px 12px', background: T.surface, color: T.inkMid, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: T.sans }}>
+                        Close without saving
+                    </button>
+                </div>
+            )}
+
             {/* Footer actions — pinned, never clipped */}
             <div style={{ display: 'flex', gap: 10, padding: '12px 18px', borderTop: `1px solid ${T.border}`, background: T.surface, flexShrink: 0 }}>
-                <button type="button" onClick={() => onSave(category, notes.trim())} disabled={!category}
+                <button type="button" onClick={() => send(() => onSave(category, notes.trim()))} disabled={!category || busy}
                     style={{ flex: 1, padding: '10px 16px', border: 'none', borderRadius: T.r, fontWeight: 700, fontSize: 13, fontFamily: T.sans,
-                        transition: 'all 0.12s', cursor: category ? 'pointer' : 'not-allowed',
-                        background: category ? T.danger : T.bg,
-                        color: category ? '#fef4e6' : T.inkMuted }}>
-                    Save Loss Reason
+                        transition: 'all 0.12s', cursor: category && !busy ? 'pointer' : 'not-allowed',
+                        background: category && !busy ? T.danger : T.bg,
+                        color: category && !busy ? '#fef4e6' : T.inkMuted }}>
+                    {busy ? 'Saving…' : 'Save Loss Reason'}
                 </button>
-                <button type="button" onClick={onSkip}
+                <button type="button" onClick={skip} disabled={busy}
                     style={{ padding: '10px 16px', background: T.surface, color: T.inkMid, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: T.sans }}>
                     Skip
                 </button>

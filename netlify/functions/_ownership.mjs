@@ -134,6 +134,38 @@ export function ownerNameKeyFor(entity) {
 }
 
 /**
+ * Whether an update KEEPS the record's owner (state §0.193): the payload names the
+ * owner in exactly the text the stored row holds — the deal window, Kanban and every
+ * row editor send the stored row back unchanged — and the row already holds an owner
+ * id. Exact, not resolveOwnerId's trimmed, any-case comparison: picking the other of
+ * two members whose names differ only by case or spacing must reach the resolver
+ * (and its 409), never keep the first. Not an authorization decision (mayMutate
+ * is): it decides only whether the name is resolved again. Every writer that
+ * changes the stored name re-keys the owner id with it (the bulk PUTs, merge.mjs),
+ * so an unchanged name means an unchanged owner.
+ *
+ * Every update resolved the name it was sent, changed or not, and the deal window,
+ * the Kanban drag and every row editor send the whole row. So a save that changed
+ * nothing about ownership was refused 409 when two members' names collided (prod,
+ * 9 Oct: no deal naming "Jeff Russell" could be saved — Closed Lost stuck), and
+ * after a member's rename it moved their records to whoever now holds the old name,
+ * or unassigned them. A row with no owner id yet still resolves, so a record saved
+ * before ids keeps gaining one.
+ */
+export function keepsOwner(stored, payload, entity) {
+    const nameKey = ownerNameKeyFor(entity);
+    if (!stored || !payload) return false;
+    if (!isAppUserId(stored[ownerKeyFor(entity)])) return false;   // saved before ids: resolve, and heal
+    const sent = String(payload[nameKey] ?? '');
+    const held = String(stored[nameKey] ?? '');
+    // A blank name sent: kept only where the row's own name is blank too — an owned row
+    // whose name text is empty (an account saved with only its id) is not unassigned by
+    // a save that never named anyone. Blank over a name is a clear.
+    if (!sent.trim()) return !held.trim();
+    return sent === held;
+}
+
+/**
  * The Drizzle column object for an entity's owner id, resolved against its table.
  *
  * This is the guard that `contacts.createdBy` needed. A property missing from
