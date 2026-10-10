@@ -196,9 +196,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- Nothing open. The thirtieth ship (10 Oct: §0.191, §0.192 and §0.193, the
-  PROD Closed Lost fix among them) is recorded in the state header, as are the
-  twenty-ninth (9 Oct) and the Clerk cleanup after it.
+- Nothing open. The thirty-first ship (10 Oct, 21:08 UTC: §0.194, the
+  account search fix) and the thirtieth (10 Oct, 15:06 UTC: §0.191, §0.192
+  and §0.193, the PROD Closed Lost fix among them) are recorded in the state
+  header, as are the twenty-ninth (9 Oct) and the Clerk cleanup after it.
+- Jeff's own look on PROD: "ineos" and "arkema" in New Contact → Company and
+  New Deal → Account (the pane check used made-up rows, not UKG's).
 
 ### 2.3 Before selling
 
