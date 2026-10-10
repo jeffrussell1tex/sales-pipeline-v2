@@ -271,7 +271,7 @@ export const runDigest = async ({ now = new Date() } = {}) => {
                                 .footer{background:#f4f6f8;padding:16px 32px;border-top:1px solid #e5e7eb;font-size:11px;color:#8b92a9;text-align:center}
                                 .footer a{color:#3b82f6;text-decoration:none}
                             </style></head><body><div class="wrapper">
-                                <div class="header"><p class="header-title">Sales Pipeline Tracker</p></div>
+                                <div class="header"><p class="header-title">AcceleRep</p></div>
                                 <div class="body">
                                     <h2>Your daily pipeline digest</h2>
                                     <p>Hi ${user.name}, here are the deals that were updated in the last 24 hours.</p>

@@ -116,14 +116,14 @@ function layout(title, bodyHtml) {
 <body>
   <div class="wrapper">
     <div class="header">
-      <p class="header-title">Sales Pipeline Tracker</p>
+      <p class="header-title">AcceleRep</p>
       <p class="header-sub">Automated notification</p>
     </div>
     <div class="body">
       ${bodyHtml}
     </div>
     <div class="footer">
-      <p>You're receiving this because you have an account on <a href="${appUrl}">Sales Pipeline Tracker</a>.</p>
+      <p>You're receiving this because you have an account on <a href="${appUrl}">AcceleRep</a>.</p>
       <p><a href="${appUrl}/settings">Manage notification preferences</a></p>
     </div>
   </div>

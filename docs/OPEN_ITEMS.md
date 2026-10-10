@@ -207,8 +207,31 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
       and anyone may connect. Until Google verifies the app (calendar
       access is a "sensitive" scope), users see an "unverified app" warning
       and a 100-user limit. Verification is §2.3's.
-  - Still open: whether dev (accelerep.netlify.app) connects through this
-    same Google project.
+  - **Done 10 Oct (Jeff's screenshots):** the Branding page saved the
+    logo (Claude's 120×120 PNG of the rising-bars icon), the home page,
+    privacy and terms links, and two authorized domains
+    (`salespipelinetracker.com`, `accelerep.netlify.app`, so dev connects
+    through this same project). Google then ran its branding check
+    ("Branding verification issues") and found two problems:
+    - "The website of your home page URL … is not registered to you."
+      **Jeff's step:** Google Search Console, signed in as
+      jeffrussell1@gmail.com: add a Domain property for
+      `salespipelinetracker.com`, put its TXT record in the registrar's DNS,
+      press Verify, then wait 24 hours as Google asks.
+      `accelerep.netlify.app` will want the same before verification
+      (§2.3).
+    - "Your home page does not explain the purpose of your app." It was
+      true: a signed-out visitor saw only "Sales Pipeline Tracker — Sign in
+      to continue". §0.195 puts the purpose and the privacy and terms links
+      on the sign-in page; it counts from its ship.
+  - **The app name** (Jeff, 10 Oct: "AcceleRep"). Google's App name still
+    reads "Sales Pipeline Tracker", and so does Clerk's sign-in box ("Sign
+    in to Sales Pipeline Tracker", Clerk's own application name). **Jeff's
+    steps:** set "AcceleRep" in both, Google → Branding → App name and Clerk
+    → the application's name (both instances). §0.195 renamed the app's own
+    screens and emails.
+  - **Then:** in the branding panel, choose "I have fixed the issues" →
+    Proceed, and on Audience → Publish app.
   - Dev and prod share one database, so a calendar connection made on one
     site is read by the other. If the two sites' `GOOGLE_CLIENT_ID` /
     `GOOGLE_CLIENT_SECRET` or `SETTINGS_ENCRYPTION_KEY` differ, the other

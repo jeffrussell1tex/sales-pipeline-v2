@@ -1677,7 +1677,11 @@ dbFetch('/.netlify/functions/users?me=true')
     if (!clerkUser) {
         return (
             <div className="login-page">
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '2rem' }}>
+                {/* The home page a signed-out visitor (and Google's reviewer) sees: it names the
+                    app, says what it does and links the privacy policy and terms (state §0.195;
+                    Google's branding check, 10 Oct). Positioned so it sits above .login-page's
+                    decorative ::before layer and its links take the click. */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '2rem', position: 'relative', zIndex: 1 }}>
                     <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
                         <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ width: '56px', height: '56px', display: 'block', margin: '0 auto 0.75rem' }}>
                             <rect width="100" height="100" rx="20" fill={T.ink}/>
@@ -1685,10 +1689,16 @@ dbFetch('/.netlify/functions/users?me=true')
                             <path d="M22 40 L45 25 L68 32 L80 20" stroke={T.ok} strokeWidth="4" fill="none" strokeLinecap="round"/>
                             <circle cx="80" cy="20" r="4" fill={T.ok}/>
                         </svg>
-                        <h1 style={{ color: T.surface, fontSize: '1.5rem', fontWeight: '700', margin: '0 0 0.25rem' }}>Sales Pipeline Tracker</h1>
+                        <h1 style={{ color: T.surface, fontSize: '1.5rem', fontWeight: '700', margin: '0 0 0.5rem' }}>AcceleRep</h1>
+                        <p style={{ color: T.gold, fontSize: '0.9375rem', lineHeight: 1.6, maxWidth: 460, margin: '0 auto 0.75rem', fontFamily: T.sans }}>CRM and crew-dispatching software for field-service businesses: your sales pipeline, accounts and contacts, quotes, scheduling and dispatch, documents and reports in one place. Connect your Google Calendar to see your meetings beside your deals and tasks.</p>
                         <p style={{ color: T.inkMuted, fontSize: '0.875rem', margin: 0 }}>Sign in to continue</p>
                     </div>
                     <SignIn routing="hash" />
+                    <p style={{ color: T.inkMuted, fontSize: '0.8125rem', margin: 0, fontFamily: T.sans }}>
+                        <a href="/privacy-policy.html" style={{ color: T.gold }}>Privacy Policy</a>
+                        {' · '}
+                        <a href="/terms-and-conditions.html" style={{ color: T.gold }}>Terms and Conditions</a>
+                    </p>
                 </div>
             </div>
         );
