@@ -181,8 +181,9 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- Nothing open. The twenty-ninth ship (9 Oct) and the Clerk cleanup after it
-  are recorded in the state header.
+- Nothing open. The thirtieth ship (10 Oct: §0.191, §0.192 and §0.193, the
+  PROD Closed Lost fix among them) is recorded in the state header, as are the
+  twenty-ninth (9 Oct) and the Clerk cleanup after it.
 
 ### 2.3 Before selling
 
