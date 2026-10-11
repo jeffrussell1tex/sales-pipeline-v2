@@ -30,45 +30,72 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **A pick is saved as the record picked** (Jeff, 9 Oct: "After batch
-   B"). Every Company, Account, Deal and Parent save resolves the TYPED NAME
-   to the first record of that name, not the row picked. The parent label
-   goes on the four account lists that lack it in the same batch.
-   - Seen in the UKG data (SELECT 9 Oct): two "Shell - Port Allen" records
-     under Shell. One is a business unit with no sub-accounts, deals or
-     contacts; the other is a site with 2 contacts. Jeff: it is one
-     sub-account of Shell, so the empty one is a stray copy (§2.4).
-   - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived.
-     It still lists, because the accounts GET does not filter archived rows.
-   - Where each save resolves by name (read 9 Oct, §0.194): ContactRail's
-     and ActivityRail's handleSave take the Company as the first account of
-     that name, in any case and any tier; the deal window's saveDeal and its
-     Contacts-tab Save do the same for the Account, so a site's name typed
-     and saved without picking makes the site the deal's account (a
-     designer's SELECT counted 6 such deals in UKG, not re-read); TaskRail's
-     handleSave takes the account, deal and contact by exact name, and a
-     cleared field keeps the old id, so a task's account or deal cannot be
-     cleared; AccountRail's Parent pick takes the first account of the name.
-   - Since §0.194 the account picker offers no Create for another spelling
-     of a saved name ("Ineos - Acetyls" reads as INEOS Acetyls). Picking the
-     row works; a Save without picking still refuses the typed spelling,
-     and tells the user to use a Create neither field offers for that name
-     now: the rails' handleSave with "isn't a saved account. Pick one from
-     the list, or use “Create” in the Company field", the deal window's
-     saveDeal with "Pick an account from the list, or use “Create” in the
-     Account field". The fix keeps the id picked, and compares a typed name
-     by `searchKey`.
-   - In the deal window, a site's exact name whose account is not in the
-     user's list (a rep's scope) draws a line since §0.194 — "“…” is a
-     site — pick the account it belongs to" — where it drew nothing (no
-     line when another account of that name has a row: UKG's unit "Shell -
-     Port Allen"); a Save of that typed name still takes the first account
-     of the name, the site included (as above).
-   - The parent label: §0.194 puts it on the account picker's rows only (New
-     Contact's and Log Activity's Company, New Deal's Account). New Task →
-     Account, an account's Parent field, the header search and Dispatch
-     still draw bare names, so the two "Shell - Port Allen" rows read alike
-     there.
+1. **A pick is saved as the record picked: four batches** (Jeff, 11 Oct:
+   "Split into batches"). A read-only map of every linking save (11 Oct, over
+   7e68f26; its central lines re-read by Claude) found the class wider than
+   recorded. Every save that links an account, deal or contact looks the
+   record up again by NAME and takes the first of that name, in any case and
+   any tier, merge-archived rows included. The accounts GET orders by name
+   only (accounts.mjs), so which of two twins comes first is not fixed. Four
+   of the five rails (ContactRail, ActivityRail, TaskRail, the deal window)
+   do it on EVERY save, not only after typing: a notes-only edit can move a
+   contact, activity, task or deal to a same-named twin (UKG's two "Shell -
+   Port Allen": an empty business unit, and the site with 2 contacts, §2.4).
+   An account's Parent takes the first of the name at the click.
+   - **Jeff's rules (11 Oct), for every batch:**
+     - a name typed in full that matches exactly one account by `searchKey`
+       saves as that account, under its own spelling. Two or more are
+       refused (pick from the list, which names each parent). None is
+       refused. A field nobody touched keeps its saved link as stored ("One
+       match saves, two refuse");
+     - merge-archived accounts and contacts leave the pickers. A record
+       already linked to one keeps its link ("Yes, hide them").
+   - **Batch 1 (designing, 11 Oct):**
+     - ContactRail, ActivityRail, TaskRail, the deal window and an
+       account's Parent keep the id picked.
+     - The deals endpoint saves `accountId` (§4.2), and the deal's
+       Contacts-tab Save runs the main Save's checks ("Yes, same batch").
+     - Parent: not itself, not its own sub-accounts, not a site. The tier
+       is recomputed when the parent changes, and the server refuses a bad
+       parent ("No self, no loops, no sites").
+     - New Task -> Account becomes the account picker, with no Create
+       ("No Create on tasks").
+     - Same-named deals read "account · stage" in Log Activity and New Task
+       ("Account · stage").
+     - Log Activity saves what Company shows: a picked deal fills an empty
+       Company, and a cleared Company means no account ("Save what the field
+       shows").
+     - In the deal window, a site's full name typed = picking the site
+       ("Same as clicking the site"). A rep whose site's parent account is
+       outside their list is refused: "'…' is a site of an account you
+       can't open — ask your manager to link it." ("Refuse, name the
+       reason").
+     - An account's "+ Add task" and "+ Log Activity" open with the account
+       picked ("Yes, fill it in").
+     - The unreachable ContactModal, OutlookImportModal and "account created
+       from the deal form" branch are deleted ("Delete them"), and with them
+       the Tasks tab's task view panel (never opened), the deal window's
+       unused New Contact form and props, App's handleAddSubAccount and
+       AccountRail's unused values ("Delete them too").
+     - The server checks a NEW or changed deal account id: this org's, not a
+       site; the deal takes that account's name ("Check it now"). A merge
+       moves deals' account id to the survivor ("Yes, in batch 1").
+     - The deal window's Site Name lists only sites ("Only real sites").
+     - A link the user can't open reads "An account you can't open" (or "A
+       deal you can't open") with an × to remove it, on all five screens
+       ("Say so, allow removing").
+     - Tiers: a moved branch is recomputed, refused if any account would land
+       below a site ("Recompute the branch"); a deleted account's promoted
+       sub-accounts become top-level accounts ("Yes, make them 'account'").
+     - Every Log button on a contact's page fills the contact's account and
+       single open deal, and its "+ Add Task" fills the contact ("Yes, all
+       the same").
+   - **Batch 2:** Dispatch and quote -> job (§4.4), the header search (§4.8).
+   - **Batch 3:** CSV import and merge (§4.7).
+   - **Batch 4:** the server refuses linked ids from another org (§4.6).
+   - Also seen: "Evonik - Lafayette", two sites, one of them merge-archived,
+     still lists, because the accounts GET does not filter archived rows
+     (SELECT 9 Oct).
 2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
 3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
@@ -305,6 +332,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     site of that name, which has 2 contacts (SELECT 9 Oct). Jeff, 9 Oct: it
     is one sub-account of Shell. Merge the empty copy into the real one in
     the app.
+    **Keep the site as the survivor** (read 11 Oct, merge.mjs): a merge
+    re-points tasks, activities and dispatch rows by id, but contacts and
+    deals only by name, and both copies share the name. Archive the site
+    and its 2 contacts keep its id and leave the survivor's People list.
   - PROD, UKG: "INEOS WL Plastics - Bowie" sits under INEOS Pigments, not
     "INEOS - WL Plastics" (SELECT 9 Oct). The 6 deals whose account is a
     site (a designer's SELECT 9 Oct, not re-read) each want the site's
@@ -707,7 +738,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   Typeahead leaves out only the account itself) — and the accounts
   endpoint takes `parentAccountId` as sent, with no tier or cycle check
   (`sanitize`): a site can become a parent, and an account can be put
-  under one of its own sub-accounts. Read 9 Oct (§0.194's review).
+  under one of its own sub-accounts. Read 9 Oct (§0.194's review). **In §1
+  item 1's batch 1** (Jeff, 11 Oct: "No self, no loops, no sites"). Also
+  read 11 Oct: the pick takes the first account of the clicked NAME, the
+  account itself included, so a twin's row can make an account its own
+  parent, and it then leaves the Accounts tab. The tier stays as saved
+  when the parent changes. A typed parent that was not picked is dropped
+  without a word.
 - **The deal window reads two names with no null guard:**
   `getSitesForAccount`'s `a.name.toLowerCase()` and the Sales Rep list's
   `u.name.toLowerCase()`. `accounts.name` is NOT NULL in the schema;
@@ -716,7 +753,13 @@ to add meetings. Nothing in the app adds a meeting to Google:
   review).
 - **The deal endpoint never saves `accountId`.** Its sanitize has none, though
   the form sends one. Accepting it needs a check that the account is this
-  org's. §0.176 (e).
+  org's. §0.176 (e). **In §1 item 1's batch 1** (Jeff, 11 Oct: "Yes, same
+  batch"): the deal window's fix stores nothing without it.
+- **The account delete guard reads a deal with no `accountId` by name**
+  (useAccounts.js and _openDeals.mjs, read 11 Oct). No deal carries one yet
+  (above), so an open deal on "Shell - Port Allen" blocks deleting EITHER
+  account of that name. Deals saved after batch 1 carry the id; the old ones
+  keep the name rule.
 - **A deal's notes are saved as the whole list.** Two people saving at once
   keep the last list, so a note is dropped. Recommended: a server-side
   append, or a version check. §0.177 (a).
@@ -872,7 +915,24 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.4 Dispatch
 
-- **A new job's customer is made from typed text.** handleSaveNewJob POSTs a
+- **Batch 2 of §1 item 1: Dispatch takes the first of a name** (read
+  11 Oct over 7e68f26):
+  - A won deal's job placeholder finds its account with `a.id ===
+    o.accountId || a.name === o.account` in one find (DispatchTab.jsx
+    buildWonBridgeJobs), so a same-named account earlier in the list beats
+    the deal's own id. The dispatch customer is found the same way. The New
+    Job form saves both.
+  - Quote -> job takes the first dispatch customer with the deal's account
+    name (invoices.js resolveCustomerForOpp, over an unordered org list in
+    quote-to-job.mjs). Its id-first step cannot apply while deals carry no
+    `accountId` (§4.2).
+  - New Job's "CRM accounts — not yet in Dispatch" hides an account
+    whenever a customer has its name, so one twin vanishes once the other
+    is linked. The customer form's "Linked CRM account" select lists bare
+    names (the map; not re-read).
+  - What these do with two matches (open New Job with no customer picked,
+    or refuse quote -> job and name both) is designed with Jeff in batch 2.
+- **A new job's customer is made from typed text** (batch 2). handleSaveNewJob POSTs a
   new dispatch customer whenever none was picked, so "Acme Inc" typed
   beside a saved "Acme, Inc." makes a second; the field's `linkedNames`
   compares raw lower-cased names, so that account still shows under "CRM
@@ -932,6 +992,26 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
+- **Linked ids are stored with no org check: batch 4 of §1 item 1** (the
+  map and its critic, 11 Oct; not re-read line by line). The fields are:
+  - contacts' `accountId`;
+  - activities' `accountId`, `opportunityId` and `contactIds`;
+  - tasks' `accountId`, `opportunityId`, `contactId` and `contacts`;
+  - accounts' `parentAccountId` (batch 1 refuses a bad parent);
+  - deals' `contactIds` (batch 1 checks a new or changed `accountId`);
+  - dispatch customers' `accountId`;
+  - dispatch jobs' `customerId`, `locationId`, `accountId` and
+    `opportunityId`.
+  - The readers found all look ids up in the org, so no other org's row was
+    seen to show. A crafted request can still store another org's id, or a
+    dangling one. §0.166's refusal (tests/foreign-ids.test.mjs) is the
+    pattern. Its read-scope check belongs only on an id that differs from
+    the stored row's, or a rep's untouched save of a link outside their
+    list is refused. tests/integration/accounts.itest.mjs posts a foreign
+    parent and expects 201; batch 1 rewrites it.
+  - The five CRM creates (contacts, tasks, activities, accounts, deals)
+    answer 500 for an id another org holds. Dispatch creates answer 409
+    since §0.166.
 - **Member names after §0.196** (the first two, Jeff, 9 Oct: "Record it for
   later"):
   - The "+ New Rep" window (UserModal) paints Work Email red for every
@@ -1040,8 +1120,27 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - "Client `managedReps` narrowing is the only Manager scoping": the server
     narrows a Manager's deals too (`dealVisibleTo`, §0.155).
 
-### 4.7 Imports
+### 4.7 Imports and merge
 
+- **Batch 3 of §1 item 1: CSV import and merge link by name** (read 11 Oct
+  over 7e68f26):
+  - The account import gives a sub-account the first account whose name
+    matches the Parent Account cell, in any case and any tier, with
+    existing accounts searched before the file's own parents
+    (ModalLayer.jsx). No refusal, and no line on the receipt.
+  - A conflict is the first existing account of the same name
+    (CsvImportModal.jsx), and Overwrite writes onto that one. The row
+    shows the name and phone only. A deal's conflict is the first deal with
+    the same name and account name.
+  - The contact import makes an account for each company not in the
+    caller's list (exact spelling within the file), posts contacts with no
+    `accountId`, and its Overwrite changes `company` while keeping the stored
+    `accountId`. Deals import with the account name only (the map; not
+    re-read).
+  - An account merge rewrites contacts and deals by NAME and never their
+    `accountId` (merge.mjs; batch 1 moves deals' id, so contacts' is what
+    is left). Its comment says contacts have no account
+    link; `contacts.account_id` exists and AccountRail lists by it.
 - **Restyle LeadImportModal onto CsvImportModal's chrome,** retiring its old
   first-match column matcher. As recorded.
 - **An end-to-end importer test:** a fixture CSV through all six modules.
@@ -1122,6 +1221,14 @@ to add meetings. Nothing in the app adds a meeting to Google:
 - **Five native time inputs:** AppHeader's digest time, and four in
   DispatchTab. They become the house TimeDropdown. Re-read 7 Oct: five
   sites.
+- **The header search's account rows show no parent** (batch 2 of §1 item
+  1), and the open-deal count beside each counts deals by name (AppHeader,
+  read 11 Oct), so two twins show the same count.
+- **Twins are still easy to make** (the map, 11 Oct; not re-read):
+  - The account picker's Create checks only the caller's list, so a rep
+    can create a second account under the name of one another rep owns.
+  - Renaming an account to another account's name runs no duplicate
+    check (AccountRail checks only a new account).
 - **The Leads Cockpit's "···" button does nothing** (no handler). Give it a
   menu or remove it. §0.191 (9 Oct).
 - **The reminder modal takes the first click on the Reports tab.** §0.140,
@@ -1167,6 +1274,10 @@ to add meetings. Nothing in the app adds a meeting to Google:
   deleted). A restart with
   `.netlify/functions-serve` cleared served the file. A standing note: after
   editing a function, restart before a pane check of it.
+- **A mislabelled harness entry:** "off-brand sweep: AccountRail's
+  do-not-contact notice is the Tailwind amber wash again" anchors the
+  "Similar account found" warning box (T.warn), not the Do Not Contact
+  notice. Rename it when the file is next edited (read 11 Oct).
 - **TaskRail's `contactNames` is computed and never read** (read 9 Oct,
   §0.194). A one-line delete.
 - **A memory-note amendment for Jeff to approve** (to
