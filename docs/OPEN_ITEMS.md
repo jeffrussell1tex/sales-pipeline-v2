@@ -254,8 +254,10 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ### 2.2 Around the next ship to prod
 
-- Nothing open. The thirty-second ship (11 Oct, 13:36 UTC: §0.195, the
-  AcceleRep sign-in page), the thirty-first (10 Oct, 21:08 UTC: §0.194, the
+- Nothing open. The thirty-third ship (11 Oct, 23:42 UTC: §0.196, one name
+  per member of an org, and §0.197, the "Accelerep" spelling), the
+  thirty-second (11 Oct, 13:36 UTC: §0.195, the AcceleRep sign-in page), the
+  thirty-first (10 Oct, 21:08 UTC: §0.194, the
   account search fix) and the thirtieth (10 Oct, 15:06 UTC: §0.191, §0.192
   and §0.193, the PROD Closed Lost fix among them) are recorded in the state
   header, as are the twenty-ninth (9 Oct) and the Clerk cleanup after it.
