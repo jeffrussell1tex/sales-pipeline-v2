@@ -915,9 +915,13 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
     const allTerr  = [...new Set((settings.territories || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean))].sort();
 
     const [roleNote, setRoleNote] = useState('');
-    const handleChange = (field, val) => setForm(prev => ({ ...prev, [field]: val }));
+    // An Admin's Full name is the member's name once it is edited (state §0.196; Jeff:
+    // "Yes, Full name wins"): the server builds the name from First and Last before the
+    // name it is sent (users.mjs sanitize), so editing it clears them.
+    const handleChange = (field, val) => setForm(prev => ({ ...prev, [field]: val, ...(field === 'name' ? { firstName: null, lastName: null } : {}) }));
 
     const handleSave = async () => {
+        if (!String(form.name ?? '').trim()) { setError('A member needs a name.'); return; }
         setSaving(true); setError('');
         try {
             // The member's teamId is the id of the team the form names, on every
@@ -928,8 +932,11 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
             const toSave = { ...form, teamId: teamIdNamed(settings.teams, form.team) };
             const askedOrg = requestOrg();   // cut by an org switch, it stops (state §0.175)
             const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(toSave) });
+            const d = await resp.json().catch(() => ({}));
             if (!stillOrg(askedOrg)) return;
-            if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Save failed'); }
+            if (!resp.ok) throw new Error(d.error || 'Save failed');
+            // The server trims the name it stores (state §0.196): the roster on screen holds what was stored.
+            const storedName = d.user?.name ?? toSave.name;
 
             // A role change goes to user-role.mjs, the one path that changes a
             // role: the PUT above keeps the stored one. The role is this org's
@@ -991,9 +998,10 @@ const UserProfilePage = ({ user, settings, onBack, onUsers, mfaByEmail }) => {
             // Update local settings state
             setSettings(prev => ({
                 ...prev,
-                users: (prev.users||[]).map(u => u.id === toSave.id ? { ...u, ...toSave } : u),
+                users: (prev.users||[]).map(u => u.id === toSave.id ? { ...u, ...toSave, name: storedName } : u),
                 teams: updatedTeams,
             }));
+            setForm(prev => ({ ...prev, name: storedName }));
             setSaved(true); setTimeout(() => setSaved(false), 2500);
         } catch(err) {
             setError(err.message || 'Failed to save. Please try again.');

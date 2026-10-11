@@ -2,7 +2,8 @@
 //
 // Clerk is the source of truth for who is in the org. This endpoint pulls the
 // full org membership list and:
-//   • CREATES a users row for any Clerk member missing from the DB
+//   • CREATES a users row for any Clerk member missing from the DB — a name a
+//     member already has is numbered, "Pat Smith (2)" (state §0.196)
 //   • UPDATES existing rows conservatively (safe defaults):
 //       - role: NEVER changed. The role is the row's, per org — what the server
 //         enforces (state §0.163) — and only an Admin changes it (user-role).
@@ -26,6 +27,8 @@ import { verifyAuth, requireRole } from './auth.mjs';
 import { serverErrorBody, invalidateRoster, isOpenInvitationRow } from './_lib.mjs';
 import { streamAudit } from './_auditStream.mjs';
 import { randomUUID } from 'crypto';
+// One name per member of an org (state §0.196).
+import { firstFreeName, numbered } from '../../src/utils/memberName.js';
 
 const newUserId = () => 'usr_' + randomUUID();
 
@@ -85,6 +88,10 @@ export const handler = async (event) => {
             if (r.email) dbByEmail.set(r.email.toLowerCase(), r);
             if (r.clerkUserId) dbByClerkId.set(r.clerkUserId, r);
         }
+        // One name per member of an org (state §0.196): a new member whose name a
+        // member here already has is numbered, "Pat Smith (2)" — nobody can be
+        // asked mid-sync. Kept current through the run, a dry run included.
+        const named = dbRows.map((r) => ({ id: r.id, name: r.name }));
 
         // Dry run (?check=true): compute exactly the same reconciliation but write
         // nothing. Lets the Users screen show "N users out of sync" on load, so
@@ -120,12 +127,14 @@ export const handler = async (event) => {
             if (!existing) {
                 // CREATE — new roster row from Clerk. The id is ours; the Clerk
                 // identity goes in its own column.
+                const rowId = newUserId();
+                const rowName = firstFreeName(named, numbered(name)) || rowId;
                 if (!dryRun) {
                     await db.insert(users).values({
-                        id:          newUserId(),
+                        id:          rowId,
                         clerkUserId,
                         orgId,
-                        name,
+                        name:        rowName,
                         email,
                         role,
                         team,
@@ -135,7 +144,8 @@ export const handler = async (event) => {
                         updatedAt:   new Date(),
                     }).onConflictDoNothing();
                 }
-                summary.created.push({ email, name, role });
+                named.push({ id: rowId, name: rowName });
+                summary.created.push({ email, name: rowName, role });
                 continue;
             }
 

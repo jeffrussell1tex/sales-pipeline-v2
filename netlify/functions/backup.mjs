@@ -9,7 +9,9 @@ import {
 } from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { serverErrorBody, auditAs } from './_lib.mjs';
+import { serverErrorBody, auditAs, memberNamesOf } from './_lib.mjs';
+// One name per member of an org (state §0.196).
+import { restorableMembers, restoreNotes, droppedErrors } from '../../src/utils/memberName.js';
 
 const headers = {
     'Content-Type': 'application/json',
@@ -324,6 +326,18 @@ export const handler = async (event) => {
 
             let imported = 0;
             const errs = [];
+            // One name per member of an org (state §0.196): a member the file brings in
+            // under a name a member here already has is restored numbered, "Pat Smith
+            // (2)" — nobody can be asked mid-restore — and said so below once the row has
+            // landed. A row whose id or address is blank or not text, or that no free
+            // name is left for, is not restored, and is an error. Fails closed: names
+            // that cannot be checked restore no member.
+            const notes = [];
+            let renamedMembers = [];
+            if (Array.isArray(ents.users) && ents.users.length) {
+                try { const own = restorableMembers(await memberNamesOf(orgId), ents.users); ents.users = own.rows; renamedMembers = own.renamed; errs.push(...droppedErrors(own.dropped)); }
+                catch (e) { ents.users = []; console.warn('backup: the names of the members could not be read:', e.message); errs.push('users: not restored — the names of the members could not be checked. Try again.'); }
+            }
 
             // Standard CRM entities
             const crmEntities = [
@@ -345,6 +359,14 @@ export const handler = async (event) => {
                 if (!Array.isArray(rows) || rows.length === 0) continue;
                 try { imported += await upsertChunked(table, key === 'settings' ? ownSettings(rows) : rows); }
                 catch (e) { errs.push(`${key}: ${e.message}`); }
+            }
+            // A renamed member is reported only once its row is here — a row whose id
+            // another org holds was skipped by the insert, and was never restored.
+            if (renamedMembers.length) {
+                try {
+                    const landed = new Set((await memberNamesOf(orgId)).map((u) => u.id));
+                    notes.push(...restoreNotes(renamedMembers.filter((m) => landed.has(m.id))));
+                } catch { /* the restore stands; only its note is lost */ }
             }
 
             // Dispatch entities (nested under entities.dispatch)
@@ -390,7 +412,7 @@ export const handler = async (event) => {
             return {
                 statusCode: errs.length && imported === 0 ? 500 : 200,
                 headers,
-                body: JSON.stringify({ ok: imported > 0, imported, errors: errs, snapId }),
+                body: JSON.stringify({ ok: imported > 0, imported, errors: errs, notes, snapId }),
             };
         }
 

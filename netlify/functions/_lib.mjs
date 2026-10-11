@@ -8,6 +8,8 @@ import { ownerColumnOf, ownerKeyFor, ownerNameKeyFor, mayMutate, OWNERSHIP_FORBI
 // Audit streaming (state §0.87): every row written here is delivered to the
 // org's destinations after the insert. _auditStream.mjs must not import this file.
 import { streamAudit } from './_auditStream.mjs';
+// One name per member of an org (state §0.196) — the pure rule the screens share.
+import { firstFreeName, numbered } from '../../src/utils/memberName.js';
 
 // Browser origins allowed to call the API. Kept in sync with the Clerk
 // authorizedParties list in auth.mjs. Exported for the CORS follow-up; any
@@ -167,8 +169,11 @@ export async function getCallerId(clerkUserId, orgId) {
 // a CSV column, a roster picker that still sends a label, a legacy payload.
 //
 // AMBIGUITY IS REFUSED, NOT GUESSED. If two roster rows in one org share a
-// display name, this throws a 409 naming both. That collision is precisely what
-// Phase 2 exists to eliminate, and the alternatives are both worse:
+// display name, this throws a 409 that names no member (a rep reads it — state
+// §0.193). No writer makes such a pair since state §0.196: every write of
+// users.name decides through src/utils/memberName.js. A pair made before then,
+// or by two writes racing, still meets this refusal, and the alternatives are
+// both worse:
 //
 //   - picking the first match assigns the record to an arbitrary one of two
 //     people, permanently, in a column nobody will ever re-check;
@@ -206,6 +211,17 @@ export async function rosterUserById(id, orgId) {
     const wanted = String(id ?? '').trim();
     if (!wanted) return null;
     return (await orgRoster(orgId)).find((u) => u.id === wanted) || null;
+}
+
+/**
+ * Every member's id, name, email and Clerk id in THIS org — invited and
+ * deactivated rows too, as the resolver counts them — read fresh, never through
+ * the 30 s roster cache: the one-name rule (src/utils/memberName.js, state
+ * §0.196) decides a write on it.
+ */
+export async function memberNamesOf(orgId) {
+    if (!orgId) throw new Error('_lib.memberNamesOf: orgId is required.');
+    return db.select({ id: users.id, name: users.name, email: users.email, clerkUserId: users.clerkUserId }).from(users).where(eq(users.orgId, orgId));
 }
 
 /**
@@ -638,7 +654,10 @@ export async function ensureRosterRow({ clerkUserId, orgId, clerkUser, orgRole }
                 .where(and(eq(users.orgId, orgId), eq(users.role, 'Admin'))).limit(1);
             if (!anAdmin) role = 'Admin';
         }
-        const name = ((cu?.firstName || '') + ' ' + (cu?.lastName || '')).trim() || email || clerkUserId;
+        // One name per member of an org (state §0.196): nobody can be asked at a
+        // first sign-in, so a name a member here already has is numbered, "Pat Smith (2)".
+        const clerkName = ((cu?.firstName || '') + ' ' + (cu?.lastName || '')).trim();
+        const name = firstFreeName(await memberNamesOf(orgId), numbered(clerkName || email || clerkUserId)) || clerkUserId;
         const [row] = await db.insert(users).values({
             id: 'usr_' + randomUUID(), clerkUserId, orgId, name, email: email || `${clerkUserId}@no-email.invalid`, role,
             active: true, profile: { status: 'Active', userType: role }, updatedAt: new Date(),

@@ -8,6 +8,7 @@
 import { ROLE_OPTIONS } from './roles.js';
 import { memberStatus } from '../Tabs/settings/people/memberStatus.js';
 import { teamIdNamed } from './teamMembership.js';
+import { nameKey } from './memberName.js';
 
 const norm = (s) => String(s ?? '').trim().toLowerCase();
 const text = (v) => String(v ?? '').trim() || null;
@@ -77,9 +78,9 @@ export function inviteFrom(record, { teams, territories } = {}) {
 // deactivated member — inviting again is Resend on Pending invites), an address
 // already invited earlier in the file (twice would revoke the first invitation
 // and send a second email), a role, team or territory this workspace does not
-// have, and a name already on the team or earlier in the file — owners are
-// resolved by name, trimmed and in any case, and two members of one name make
-// every assignment by that name a 409 (_lib.mjs, resolveOwnerId).
+// have, and a name already on the team or earlier in the file — one name per
+// member of an org, the same in any case or spacing (src/utils/memberName.js,
+// state §0.196); the server refuses it too.
 const reasonNotInvited = (rec, invite, { byEmail, rosterNames, teamNames, terrNames, seenEmails, seenNames }) => {
     if (!EMAIL_SHAPE.test(invite.email)) return 'not an email address';
     const existing = byEmail.get(invite.email);
@@ -91,8 +92,8 @@ const reasonNotInvited = (rec, invite, { byEmail, rosterNames, teamNames, terrNa
     if (text(rec.role) && !ROLE_OPTIONS.some((o) => o.value === invite.role)) return `"${text(rec.role)}" is not a role`;
     if (text(rec.team) && !canonical(rec.team, teamNames)) return `no team named "${text(rec.team)}"`;
     if (text(rec.territory) && !canonical(rec.territory, terrNames)) return `no territory named "${text(rec.territory)}"`;
-    if (rosterNames.has(norm(invite.name))) return `a member is already named "${invite.name}"`;
-    if (seenNames.has(norm(invite.name))) return `an earlier row is also named "${invite.name}"`;
+    if (rosterNames.has(nameKey(invite.name))) return `a member is already named "${invite.name}"`;
+    if (seenNames.has(nameKey(invite.name))) return `an earlier row is also named "${invite.name}"`;
     return null;
 };
 
@@ -105,7 +106,7 @@ export function userConflicts(records, { roster, teams, territories } = {}) {
     for (const u of roster || []) {
         const e = norm(u.email);
         if (e) byEmail.set(e, u);
-        if (norm(u.name)) rosterNames.add(norm(u.name));
+        if (nameKey(u.name)) rosterNames.add(nameKey(u.name));
     }
     const ctx = {
         byEmail, rosterNames,
@@ -123,7 +124,7 @@ export function userConflicts(records, { roster, teams, territories } = {}) {
         // Only a row that WILL be invited claims its address and its name: a later
         // row repeating a refused one is judged on its own.
         ctx.seenEmails.add(invite.email);
-        ctx.seenNames.add(norm(invite.name));
+        ctx.seenNames.add(nameKey(invite.name));
     });
     return conflicts;
 }

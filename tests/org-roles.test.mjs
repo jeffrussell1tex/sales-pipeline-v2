@@ -207,6 +207,6 @@ test('a create never overwrites a row: an id already in the org answers 409 — 
     const guard = u.indexOf('                if (taken) {');
     assert.ok(guard > 0, 'REGRESSION: a create naming an existing id overwrites the row again');
     assert.ok(u.slice(guard, guard + 220).includes("return { statusCode: 409, headers, body: JSON.stringify({ error: 'That member already exists — edit them instead.' }) };"));
-    const upsert = u.indexOf('const result = await upsertUser(withRole(sanitize({ ...data, id: newUserId() }), createRole));');
+    const upsert = u.indexOf('const clean = withRole(sanitize({ ...data, id: newUserId() }), createRole);');
     assert.ok(upsert > 0 && guard < upsert, 'before the upsert — whose id the server mints (§0.166)');
 });

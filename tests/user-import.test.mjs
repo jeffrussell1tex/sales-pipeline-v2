@@ -198,7 +198,7 @@ test('MFA status: loading is not failure — the card and the Security page say 
 test('the server: an invitation\'s row takes the name it was sent, cut to the column — and Clear revokes the pending invitations before a row goes', () => {
     const u = code(read('netlify/functions/users.mjs'));
     assert.ok(u.includes("const givenName = typeof invite.name === 'string' ? invite.name.trim().slice(0, 255) : '';"));
-    assert.ok(u.includes("name:      givenName || email.split('@')[0],"));
+    assert.ok(u.includes('name:      rowName ?? email,'));
     const clear = between(u, "if (event.queryStringParameters?.clear === 'true') {", 'cleared: true');
     const revokeAt = clear.indexOf('revokeOrganizationInvitation');
     const deleteAt = clear.indexOf('db.delete(users)');

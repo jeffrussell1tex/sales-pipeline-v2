@@ -21,7 +21,7 @@ const fn = (name) => code(read(`netlify/functions/${name}.mjs`));
 
 test('a new member\'s id is minted by the server — the screen sends none, and the create never adopts one', () => {
     const u = fn('users');
-    assert.ok(u.includes('const result = await upsertUser(withRole(sanitize({ ...data, id: newUserId() }), createRole));'), 'REGRESSION: a create adopts the id it is sent');
+    assert.ok(u.includes('const clean = withRole(sanitize({ ...data, id: newUserId() }), createRole);'), 'REGRESSION: a create adopts the id it is sent');
     assert.ok(!u.includes('data.id || newUserId()'));
     const h = code(read('src/hooks/useUserHandlers.js'));
     assert.ok(h.includes('const { id: _noClientId, ...fields } = userData;'), 'the screen sends no id');

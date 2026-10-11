@@ -109,7 +109,7 @@ test('a team changed on the profile moves the member\'s teamId with the name —
     assert.ok(!profile.includes('form.team !== user.team'), 'never compared with the page\'s first copy of the member — an id already wrong would be kept');
     assert.ok(profile.includes('body:JSON.stringify(toSave) });'));
     assert.ok(!profile.includes('body:JSON.stringify(form) });'), 'the form as loaded is not what is saved');
-    assert.ok(profile.includes('users: (prev.users||[]).map(u => u.id === toSave.id ? { ...u, ...toSave } : u),'), 'and the roster on screen holds what was saved');
+    assert.ok(profile.includes('users: (prev.users||[]).map(u => u.id === toSave.id ? { ...u, ...toSave, name: storedName } : u),'), 'and the roster on screen holds what was saved');
 });
 
 test('every revoke takes the row off the roster and off its team\'s list', () => {

@@ -46,7 +46,7 @@ export default function AppHeader({
     mentionCount,
 }) {
     const {
-        settings, currentUser, userRole, clerkUser, isMobile,
+        settings, setSettings, currentUser, userRole, clerkUser, isMobile,
         accounts, contacts, opportunities, tasks,
         activeTab, setActiveTab,
         getQuarter, getQuarterLabel,
@@ -84,6 +84,7 @@ export default function AppHeader({
     const { openUserProfile } = useClerk();
     const [profilePanelTab, setProfilePanelTab] = useState('profile');
     const [profileSaving, setProfileSaving]     = useState(false);
+    const [profileError, setProfileError]       = useState('');
 
     const userInitials = (currentUser || 'A').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
@@ -157,19 +158,42 @@ export default function AppHeader({
     const digestTime   = myProfile?.digestTime || '08:00';
     const userTimezone = myProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+    // The member's own row, partial (state §0.196): the server merges what is not sent
+    // (mergeForUpdate), so only what changed goes — the whole cached row re-sent a stale
+    // First and Last on every toggle, undoing a rename made elsewhere. A refusal is shown
+    // and undone, not only logged. The stored row is adopted (the shape of ReportsTab's
+    // pinned-report save), and its name goes into the roster on screen too (UsersDetail's
+    // map): currentUser is the profile's name, and Home, Reports and a Manager's reps list
+    // find "me" in settings.users by it, so a First/Last rename reaches the header and the
+    // roster at once. Records keep the name they were saved with (a deal's salesRep).
     const saveProfile = async (updates) => {
+        if (!myProfile?.id) { setProfileError('Your profile has not loaded yet — try again in a moment.'); return; }
+        const askedOrg = requestOrg();   // after an org switch its answer changes nothing (state §0.175)
+        const undo = Object.fromEntries(Object.keys(updates).map((k) => [k, myProfile[k]]));
+        setProfileError('');
         setProfileSaving(true);
         setMyProfile(prev => ({ ...(prev||{}), ...updates }));
         try {
-            const myDbUser = (settings.users || []).find(u => (myProfile?.id && u.id === myProfile.id) || u.name === currentUser);
             const res = await dbFetch('/.netlify/functions/users?me=true', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...(myDbUser || myProfile || {}), ...updates }),
+                body: JSON.stringify({ id: myProfile.id, ...updates }),
             });
-            if (!res.ok) console.error('saveProfile failed', res.status);
+            const data = await res.json().catch(() => ({}));
+            if (!stillOrg(askedOrg)) return;
+            if (!res.ok) {
+                setMyProfile(prev => ({ ...(prev||{}), ...undo }));
+                setProfileError(`Not saved — ${data.error || `the server returned ${res.status}`}`);
+                return;
+            }
+            if (data.user) {
+                setMyProfile(prev => ({ ...(prev||{}), ...data.user }));
+                setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === data.user.id ? { ...u, name: data.user.name } : u) }));
+            }
         } catch (err) {
-            console.error('Failed to save profile:', err);
+            if (!stillOrg(askedOrg)) return;
+            setMyProfile(prev => ({ ...(prev||{}), ...undo }));
+            setProfileError('Not saved — the change did not reach the server. Try again.');
         } finally {
             setProfileSaving(false);
         }
@@ -250,6 +274,9 @@ export default function AppHeader({
         setCalConn(null); setCalConnLoaded(false);
         setMyBcc(null); setMyBccLoaded(false); setMyBccCopied(false);
     }, [activeOrgId]);
+    // A refusal belongs to the save that drew it: gone when the panel opens or
+    // closes, and on an org switch (the header is not remounted).
+    useEffect(() => { setProfileError(''); }, [showProfilePanel, activeOrgId]);
     const copyMyBcc = async () => {
         if (!myBcc?.myAddress) return;
         try { await navigator.clipboard.writeText(myBcc.myAddress); setMyBccCopied(true); setTimeout(() => setMyBccCopied(false), 1800); }
@@ -827,6 +854,7 @@ export default function AppHeader({
 
                             </div>
                             {profileSaving && <div style={{ padding: '0.5rem 1.5rem', background: T.bg, borderTop: `1px solid ${T.border}`, fontSize: 12, color: T.inkMid, fontWeight: 600, fontFamily: T.sans }}>✓ Saving preferences…</div>}
+                            {profileError && <div role="alert" style={{ padding: '0.5rem 1.5rem', background: 'rgba(156,58,46,0.10)', borderTop: '1px solid rgba(156,58,46,0.25)', fontSize: 12, lineHeight: 1.5, color: T.danger, fontWeight: 600, fontFamily: T.sans }}>{profileError}</div>}
                         </div>
                         </>
                     )}

@@ -74,7 +74,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                     <button
                         onClick={onDismissError}
                         style={{ padding: '0.5rem 1.5rem', borderRadius: '6px', border: `1px solid ${T.border}`, background: T.surface2, color: T.ink, fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        Fix Email
+                        Back to the form
                     </button>
                 </div>
             </div>

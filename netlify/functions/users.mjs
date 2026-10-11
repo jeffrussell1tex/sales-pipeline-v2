@@ -3,7 +3,7 @@ import { users } from '../../db/schema.js';
 import { eq, asc, and, sql } from 'drizzle-orm';
 import { verifyAuth, requireRole, isAppRole, APP_ROLES } from './auth.mjs';
 import { auditLog } from '../../db/schema.js';
-import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName, ensureRosterRow, isOpenInvitationRow } from './_lib.mjs';
+import { serverErrorBody, resolveCaller, invalidateRoster, getCallerName, ensureRosterRow, isOpenInvitationRow, memberNamesOf } from './_lib.mjs';
 import { pickSelfEditable } from './_selfProfile.mjs';
 import { randomUUID } from 'crypto';
 // Pure, shared with the Sales Manager tab (the _stage.mjs / stageClock.js
@@ -12,6 +12,8 @@ import { cleanForecastCalls } from '../../src/utils/forecastCall.js';
 import { streamAudit } from './_auditStream.mjs';
 import { crmReadScope } from '../../src/utils/roles.js';
 import { INVITE_EXPIRY_DAYS, DEFAULT_INVITE_EXPIRY_DAYS } from '../../src/utils/inviteExpiry.js';
+// One name per member of an org (state §0.196): every write of users.name here decides through it.
+import { nameRefusal, firstFreeName, numbered, nameTakenMessage } from '../../src/utils/memberName.js';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
 
@@ -92,7 +94,7 @@ export const handler = async (event) => {
         // Carried through so an update cannot blank the Clerk link. Absent on
         // create (an invited row has no Clerk identity until acceptance).
         clerkUserId:  data.clerkUserId ?? null,
-        name:         ((data.firstName || '') + ' ' + (data.lastName || '')).trim() || data.name || 'Unnamed User',
+        name:         ((data.firstName || '') + ' ' + (data.lastName || '')).trim() || String(data.name ?? '').trim() || 'Unnamed User',
         // email is notNull + unique in schema — use a unique placeholder if not provided
         email:        (data.email && data.email.trim()) ? data.email.trim() : `${data.id}@placeholder.local`,
         team:         data.team     || null,
@@ -155,6 +157,9 @@ export const handler = async (event) => {
     // on a create or an invitation it is the role the request names, and only
     // an Admin names one above Sales Rep (state §0.163).
     const withRole = (clean, known) => (known ? { ...clean, role: known } : clean);
+
+    // The one-name refusal (state §0.196): the screens show `error`; `field` says which.
+    const nameTaken = (message) => ({ statusCode: 409, headers, body: JSON.stringify({ error: message, field: 'name', code: 'NAME_TAKEN' }) });
 
     // Preserve the stored role when updating an existing row, so an update that
     // does not carry a role cannot blank it (the column is notNull default 'User').
@@ -375,6 +380,10 @@ export const handler = async (event) => {
             const own  = { id: data.id, ...pickSelfEditable(data) };
             const storedRole = await roleOf(data.id) || 'User';
             const clean = withRole(sanitize({ ...(await mergeForUpdate(own)), userType: storedRole }), storedRole);
+            // One name per member of an org (state §0.196): a First/Last that spells
+            // another member's name is refused — every assignment by it would be a 409.
+            const selfNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);
+            if (selfNameTaken) return nameTaken(selfNameTaken);
             const { id, ...updateData } = clean;
             let upsertResult;
             try {
@@ -639,6 +648,9 @@ export const handler = async (event) => {
                 const results = [];
                 const errors  = [];
                 const inviterName = await getCallerName(userId, orgId);
+                // Every member's name in this org, kept current through the batch
+                // (state §0.196): two invitations of one name are two members of it.
+                const roster = await memberNamesOf(orgId);
 
                 for (const invite of invites) {
                     const email = (invite.email || '').trim().toLowerCase();
@@ -661,6 +673,19 @@ export const handler = async (event) => {
                         errors.push({ email, error: `An invitation lasts ${INVITE_EXPIRY_DAYS.join(', ')} days — not "${invite.expiresInDays}".` });
                         continue;
                     }
+
+                    // The row's name, decided BEFORE Clerk is called (state §0.196) — a
+                    // refused row never reaches Clerk. A name another member holds is
+                    // refused: the Admin chose it and is told. None given, the address's
+                    // front part, numbered when taken — "pat (2)" — as nobody can be
+                    // asked. A re-invite keeps its row and its name. Cut to the column's
+                    // 255: the row is written after Clerk has sent the invitation, so a
+                    // name it cannot hold must never reach the insert (state §0.167).
+                    const givenName = typeof invite.name === 'string' ? invite.name.trim().slice(0, 255) : '';
+                    const localPart = email.split('@')[0] || email;
+                    const newRow = !roster.some((u) => u.email === email);   // the row lookup below: this org, the exact address
+                    const rowName = givenName ? (nameRefusal(roster, givenName) ? null : givenName) : firstFreeName(roster, numbered(localPart));
+                    if (newRow && !rowName) { errors.push({ email, error: nameTakenMessage(givenName || localPart) }); continue; }
 
                     try {
                         // 1. Revoke any existing pending invitation for this email so the
@@ -714,18 +739,16 @@ export const handler = async (event) => {
                             // and acceptance fills that in without touching the id.
                             // The old `pending_` id was a placeholder that later got
                             // overwritten -- the rewrite this batch removes.
-                            // The name the invitation carries (state §0.167 — the
-                            // team import sends each row's): the first sign-in links
-                            // this row and never renames it (GET ?me — ownership stores
-                            // names), so it is the name the member keeps. Cut to the
-                            // column's 255 here: the row is written after Clerk has sent
-                            // the invitation, so a name the column cannot hold must never
-                            // reach the insert. None given, the address's local part, as before.
-                            const givenName = typeof invite.name === 'string' ? invite.name.trim().slice(0, 255) : '';
+                            // The name decided above, before Clerk (state §0.196; the
+                            // team import sends each row's, §0.167): the first sign-in
+                            // links this row and never renames it (GET ?me — ownership
+                            // stores names), so it is the name the member keeps. Only a
+                            // row removed between the roster read and the lookup above
+                            // comes here undecided: its address, unique in the org, names it.
                             const row = await upsertUser(withRole(sanitize({
                                 id:        newUserId(),
                                 email,
-                                name:      givenName || email.split('@')[0],
+                                name:      rowName ?? email,
                                 userType:  invite.role      || 'User',
                                 team:      invite.team      || null,
                                 // The team's id with its name (state §0.168): teamId is
@@ -738,6 +761,7 @@ export const handler = async (event) => {
                                 status:    'Invited',
                             }), invite.role || 'User'));
                             results.push(flatten(row));
+                            roster.push({ id: row.id, name: row.name, email: row.email });
                         }
                         // Who invited whom, as what (state §0.165) — an invitation grants
                         // access and a role, and it was the one change to who has access
@@ -791,7 +815,12 @@ export const handler = async (event) => {
             // another org's (it answered 500 when the id was held there). An id
             // naming this org's member is refused above (§0.164); any other is ignored.
             try {
-                const result = await upsertUser(withRole(sanitize({ ...data, id: newUserId() }), createRole));
+                const clean = withRole(sanitize({ ...data, id: newUserId() }), createRole);
+                // One name per member of an org (state §0.196): a name another member
+                // holds is refused — the Admin chose it and is told.
+                const newNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name);
+                if (newNameTaken) return nameTaken(newNameTaken);
+                const result = await upsertUser(clean);
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
                 }
@@ -849,6 +878,10 @@ export const handler = async (event) => {
                     }
                     clean.profile = { ...clean.profile, status: nowActive ? (before.clerkUserId ? 'Active' : 'Invited') : 'Deactivated' };
                 }
+                // One name per member of an org (state §0.196) — after the access
+                // checks, so a Manager's deactivate is still the 403 it was.
+                const putNameTaken = nameRefusal(await memberNamesOf(orgId), clean.name, data.id);
+                if (putNameTaken) return nameTaken(putNameTaken);
                 const result = await upsertUser(clean);
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };

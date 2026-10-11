@@ -30,43 +30,7 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
 
 ## 1. Next up — Claude's recommended order (Jeff sets it)
 
-1. **One name per member of an org — batch B of the PROD Closed Lost fix**
-   (§0.193; Jeff, 9 Oct: "Split: prod fix first", "Number it", "Yes, Full name
-   wins"). Batch A (§0.193) stopped the harm: a save that reassigns nothing
-   keeps its owner, and the dialog says why a save was refused. Two members of
-   one name can still be made, and a NEW assignment by that name is refused.
-   Designed, not built (the design: every writer of `users.name` decides it
-   through one pure module):
-   - users.mjs self PUT, Admin/Manager PUT, POST create, invite: refuse a name
-     another member of the org holds (whitespace-collapsed, any case), with a
-     409 the screen shows; trim on write; an Admin's Full name wins over the
-     stored first/last.
-   - ensureRosterRow (first sign-in), users-sync (new member), a no-name
-     invite, backup restore: number a taken name, "Pat Smith (2)".
-   - the profile panel's save shows a refusal (it only logged it) and sends
-     only what changed; the team CSV import's duplicate check uses the same key.
-   - Jeff's prod pair is fixed by hand already (the UKG row is "Jeff Russell
-     (UKG)", 9 Oct). Read-only first: any other org with two members of one
-     name, and any member whose next save would rebuild a taken name from
-     their First/Last. Any such pair is renamed by hand in Settings → Users,
-     never by a script. **Read 11 Oct (SELECT only), before batch B: no
-     pairs, no such member, no name with stray spaces**. That covered 6
-     orgs and 23 members (the plan's step 0, its three queries).
-   - Re-validated against the tree 9 Oct (after batch A). The plan is exact
-     to the line and builds on batch A, so batch A is committed first.
-     Jeff's answers, 9 Oct:
-     - Team CSV import, a no-name row whose address's front part a member
-       already has: "Refuse at Review".
-     - The database unique index on (org, name key): "Record now, decide
-       later", after the read-only check shows no pairs (§2.4).
-     - The "+ New Rep" window painting Work Email red for a taken name:
-       "Record it for later" (§4.6).
-     - The plan's three other questions take its recommendations:
-       - First sign-in with no Clerk name keeps the full email as the name.
-         The front part is its own later item (§4.6).
-       - "Full name wins" is enforced on the Settings → Users screen only.
-       - Pairs found are renamed by hand.
-2. **A pick is saved as the record picked** (Jeff, 9 Oct: "After batch
+1. **A pick is saved as the record picked** (Jeff, 9 Oct: "After batch
    B"). Every Company, Account, Deal and Parent save resolves the TYPED NAME
    to the first record of that name, not the row picked. The parent label
    goes on the four account lists that lack it in the same batch.
@@ -105,16 +69,16 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
      Account, an account's Parent field, the header search and Dispatch
      still draw bare names, so the two "Shell - Port Allen" rows read alike
      there.
-3. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
+2. **AI scoring batch 1, the model choice** (§3.1), once Jeff has made the
    four decisions.
-4. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
+3. **Escape in the tabs** (§4.1): the in-tab layers join the order, as every
    app layer did in §0.189. Designed 9 Oct (three batches and a fourth; ten
    questions for Jeff first — §4.1).
-5. **Deal data** (§4.2):
+4. **Deal data** (§4.2):
    - the deal endpoint saving `accountId`;
    - notes appended on the server;
    - an Undo keeping the row's owner.
-6. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
+5. **Email links** (§4.5): the `?deal=` reader, and the footer's preferences
    link.
 
 ---
@@ -219,7 +183,12 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
       **Jeff's step:** Google Search Console, signed in as
       jeffrussell1@gmail.com: add a Domain property for
       `salespipelinetracker.com`, put its TXT record in the registrar's DNS,
-      press Verify, then wait 24 hours as Google asks.
+      press Verify, then wait 24 hours as Google asks. **Done 11 Oct, about
+      20:30 UTC (Jeff's screenshot "Ownership verified"):** a URL-prefix
+      property `https://salespipelinetracker.com/`, verified by "Domain name
+      provider". The TXT record is in Netlify DNS (the domain's nameservers
+      are `dns1–4.p02.nsone.net`, Netlify's). Keep the record: Google
+      re-checks it. The 24 hours end about 20:30 UTC on 12 Oct.
       `accelerep.netlify.app` will want the same before verification
       (§2.3).
     - "Your home page does not explain the purpose of your app." It was
@@ -235,6 +204,21 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
     screens and emails.
   - **Then:** in the branding panel, choose "I have fixed the issues" →
     Proceed, and on Audience → Publish app.
+  - **Branding verified (Jeff's screenshot, 11 Oct):** Google → Branding
+    reads "Your branding has been verified and is being shown to users".
+    The App name is "Accelerep" (the screens say "AcceleRep"; Google's
+    check passed with it). Clerk's application name reads "Accelerep" too
+    (Jeff's screenshot; both sites' sign-in boxes, read signed out 11 Oct:
+    "Sign in to Accelerep"). **Published 11 Oct (Jeff's screenshot):**
+    Audience reads "In production", user type External, 1 of the 100-user
+    cap; the project's display name is now "Accelerep" (its id is still
+    `sales-pipeline-tracker`). Until Google verifies the app (§2.3), people
+    who connect see the "unverified app" screen. **Reconnected 11 Oct
+    (SELECT only, `user_calendar_connections.updated_at`):** all three of
+    Jeff's connections were refreshed after the publish — UKG (prod)
+    21:02:20 UTC, `org_3B8Tg9Ot…` 21:03:52, Accelerep Test (`org_3BDQ…`, the
+    13 Aug connection) 21:04:51. A token issued in Testing may keep its 7-day
+    life (Google's documentation, not tried), so none is left from Testing.
   - Dev and prod share one database, so a calendar connection made on one
     site is read by the other. If the two sites' `GOOGLE_CLIENT_ID` /
     `GOOGLE_CLIENT_SECRET` or `SETTINGS_ENCRYPTION_KEY` differ, the other
@@ -301,11 +285,11 @@ fixed · 5. Design questions · 6. Tooling and housekeeping
   - `org_id` in `document_links_unique_idx` (§0.166 (2));
   - a close-date history column on deals (§3.1).
   - A unique index on `users`, on the org plus the name with whitespace
-    collapsed, trimmed and lowercased. It closes the race batch B leaves:
-    two writes at one moment can still make a pair. It cannot be built while
-    any pair exists, and Postgres's whitespace class differs slightly from
-    JS's. Jeff, 9 Oct: "Record now, decide later", after batch B's
-    read-only check shows no pairs (§1 item 1).
+    collapsed, trimmed and lowercased. It closes the race §0.196 leaves: every
+    check reads, then writes, so two writes at one moment can still make a
+    pair. It cannot be built while any pair exists — none did when read 11
+    Oct (SELECT only: 6 orgs, 23 members) — and Postgres's whitespace class
+    differs slightly from JS's. Jeff, 9 Oct: "Record now, decide later".
 - **Data changes, by Jeff's hand:**
   - The job editor's jsonb lists are stored as strings. The app reads them as
     arrays; SQL over the column does not. Rewrite the stored strings.
@@ -861,6 +845,29 @@ to add meetings. Nothing in the app adds a meeting to Google:
   - Its "Google Calendar · holidays@accelerep.com" row reads
     `settings.googleCalendarConnected`, which nothing sets.
   - Read 10 Oct.
+- **Two saves PUT a member's whole cached row:** SalesManagerTab's quota
+  and forecast save (`saveUser`) and the Settings → Users profile page. A
+  rename made in another session is undone by the next such save (the stale
+  First/Last rebuild the old name), or, since §0.196, refused when another
+  member holds the old name by then. SalesManagerTab shows "the server
+  returned 409" without the server's words. Recommended: partial PUTs, as
+  the Teams page and the profile panel send. Read 11 Oct (§0.196).
+- **The Settings → Users profile page after a save:** its title band and
+  crumb read the member as the page opened, so a rename shows the old name
+  until the page is left; "Save changes" stays (the form is compared with that
+  first copy); and an Admin renaming their own row there keeps the old name
+  in the header until a reload (nothing sets their profile). §0.196.
+- **The backup import window says "Existing records with matching IDs will be
+  updated."** The restore inserts with `onConflictDoNothing`: a record whose
+  id is already there is left as it is. Recommended: reword it ("… are left
+  as they are") with the backup page's next pass, not in §0.196. Read 11 Oct
+  (§0.196).
+- **A restore that drops every member row and imports nothing else reads
+  only "Import failed".** Since §0.196 a member row with no usable id or
+  email is dropped and reported in `errors`; backup.mjs then answers 500,
+  and BackupDetail shows `data.error` only. Before, such a hand-edited file
+  imported. Recommended: show `data.errors` when the answer is not OK (one
+  line), with the backup page's next pass. Read 11 Oct (§0.196's review).
 
 ### 4.4 Dispatch
 
@@ -880,7 +887,11 @@ to add meetings. Nothing in the app adds a meeting to Google:
   kinds. §0.172 (b).
 - **The accounts on-create duplicate probe has no caller.** §0.172 (d).
 - **A user's Google calendar refresh token is refused** (`invalid_grant`) in
-  the dev log. §0.173 (c).
+  the dev log. §0.173 (c). **11 Oct: likely closed by the cause's fix.** The
+  consent screen had been in Testing, where Google ends a token after 7
+  days. It is published now, and every connection was reconnected after the
+  publish (§2.1). Remove this item if no `invalid_grant` shows in a later
+  log; the "reads like an empty calendar" gap below stands either way.
   - Read 10 Oct (SELECT only): the three saved connections are all Jeff's
     (13 Aug, 15 Sep, 10 Oct, one per org). The refused one is one of the
     two older ones, or one since disconnected.
@@ -920,16 +931,46 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.6 Security, roles and audit (all within one org unless stated)
 
-- **Two member-name items around batch B** (§1 item 1; Jeff, 9 Oct: "Record
-  it for later"):
+- **Member names after §0.196** (the first two, Jeff, 9 Oct: "Record it for
+  later"):
   - The "+ New Rep" window (UserModal) paints Work Email red for every
     refusal, a taken name included. The fix carries the 409's `field`
-    through useUserHandlers → App.jsx → ModalLayer → UserModal.
+    through useUserHandlers → App.jsx → ModalLayer → UserModal. Since
+    §0.196 its button reads "Back to the form" and the words say "name".
   - A first sign-in with no name in Clerk names the row by the FULL email
     (ensureRosterRow; asserted at integration-requests.itest.mjs:186), so
     reps see the address in every picker. The sync and a no-name invite use
     the address's front part. Recommended: switch to the front part, as its
     own small item.
+  - A rename — what the name refusal asks for — leaves a rep's
+    `profile.manager` on the old display name (the Settings → Users manager
+    select stores names, and so would a Manager's `profile.managedReps`,
+    which `dealVisibleTo` narrows by). Ids would end it. Read 11 Oct (§0.196).
+  - users-sync reports every numbered member as name drift on every sync
+    ("Pat Smith" in Clerk, "Pat Smith (2)" here). Nothing on screen reads
+    `nameDrift` (the drift banner counts created, updated and dbOnly). §0.196.
+  - The restore: a file row whose id another org holds is kept out by the
+    insert, but while names are decided it still holds its name, so a later
+    file row of that name can be numbered without need. Its note leaves the
+    kept-out row out, and then says a member already has the name though
+    only the kept-out row held it. A row with no name whose address
+    variants are all taken is named by its id while the note says "by their
+    address". Neither makes a pair. Recommended: say "already has theirs"
+    only when a landed member holds the name, and "by their id" for the
+    fallback. §0.196 (its review's fuzz: 5,767 of 300,000 made-up files).
+  - The restore renames only the member. The records restored from the same
+    file (deals, tasks, leads …) still carry the member's old name, which is
+    now another member's: (1) a record with no app owner id (a backup from
+    before owner ids) is resolved by that name on its next save
+    (`keepsOwner` → `resolveOwnerId`) and moves to the member who has it;
+    (2) a record with the restored member's id keeps its owner but shows the
+    other member's name, and a Manager narrowed by name (`dealVisibleTo`,
+    where `profile.managedReps` is set) follows the name. Before §0.196 the
+    same restore made a pair, and every assignment by the name was a 409.
+    Recommended: in the same restore, rewrite the owner name to the numbered
+    one on this org's restored records whose owner id is a renamed member's
+    and whose name is that member's old one; or say it in the note. Read 11
+    Oct (§0.196's review).
 - **The audit log after §0.143:**
   - (1) Thirteen files audit only their mass paths. A plain PUT on a deal,
     account, contact, lead, task or activity writes no server row; the
@@ -1011,6 +1052,26 @@ to add meetings. Nothing in the app adds a meeting to Google:
 
 ### 4.8 Other UI
 
+- **The profile panel's Email signature box reads blank once the panel is
+  opened.** The avatar's click re-seeds the form without the signature
+  (App.jsx seeds it on load). A save then sends none and the stored one is
+  kept, so nothing is lost, but the box misleads. The fix is one key in
+  AppHeader.jsx's avatar onClick (`emailSignature: myProfile?.emailSignature
+  || ''`): its own one-line item, after §0.196. Read 11 Oct (§0.196).
+- **The profile panel's automatic timezone save shows "Not saved".** Each
+  click on the avatar (open or close) saves the browser's timezone when the
+  stored one differs or is empty (`saveProfile({ timezone })`). Since §0.196
+  a refused or failed save shows the red "Not saved — …" alert — for a save
+  the member never made — and is undone, so the timezone still differs and
+  the next click sends it again: while the server refuses it, the alert
+  comes back after every open. Before §0.196 it was only logged. (A
+  timezone-only self save is refused for real by a 403 — a caller with no
+  roster row — or by the name rule's 409 when the stored First/Last spell
+  another member's name (none did, read 11 Oct), or fails on a server or
+  network error. Found in the pane check's design, where the fixture
+  answers every held write 409.) Recommended: the drift save stays
+  quiet and keeps the optimistic timezone, or its alert says it is the
+  timezone. Read 11 Oct (§0.196).
 - **Typed lists still drawn whole, with no cut and no ranking** (§0.194 put
   the matcher on every live typed list that cut, but for the duplicate
   warnings and the @mention below; these never cut):

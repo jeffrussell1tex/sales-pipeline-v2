@@ -146,6 +146,12 @@ const ImportBackupModal = ({ onClose, onSuccess }) => {
                                 Some entities had errors: {result.errors.join(', ')}
                             </div>
                         )}
+                        {/* Who was restored under another name, or named by their address (state §0.196) — not an error; each on its own line. */}
+                        {result.notes?.length > 0 && (
+                            <div style={{ marginTop:12, fontSize:12, color:T.inkMid }}>
+                                {result.notes.map((note, i) => <div key={i}>{note}</div>)}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
